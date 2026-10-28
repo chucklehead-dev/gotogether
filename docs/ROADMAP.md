@@ -96,7 +96,8 @@ navigator); what it gives up is the independent spec, which every bug
 the newcomer's three tasks found needed, so "the program is the model"
 is not taken. The maintainer's decisions of 2026-10-28, as recommended:
 
-- **P1. Blocking rules in grist (M).** `grist.NewRule(App, name, Event,
+- **P1. Blocking rules in grist (M). Done** (docs/grist.md §2.4.1;
+  HISTORY: "P1: blocking rules"). `grist.NewRule(App, name, Event,
   func(r *grist.Reads, e E) error)`: whenever a decision would append an
   event of that type, the rule runs in that command's transaction on its
   Reads, before the append; its reads join the command's condition (a

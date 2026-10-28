@@ -1743,6 +1743,55 @@ program run by its model checker), their findings ROADMAP's P track:
   choices, and grist's blocks are data-shaped enough to explore
   in-process; the way to pavlov's checking for free runs through qeval.
 
+### P1: blocking rules (grist)
+
+ROADMAP's P1 as built (docs/grist.md §2.4.1). The decisions it left:
+- **Which commands a rule guards** needs a static fact the catalog
+  lacked: what a command appends (a decision returns `[]Event`). Commands
+  declare it, `grist.Appends(Event...)`, like a processor's `Emits`; a
+  command appending a ruled event without declaring it is the code's
+  error at that append, so the catalog's guards and the model's guarded
+  actions are exactly the commands that can run the rule. Verify's
+  impossible event is then "no command's Appends, no processor's Emits
+  or Delivers success". The price: one declaration on each command that
+  appends the event, once, not the rule's check in each.
+- **Refusals are declared by the rule** (`Refuses`, required), so the
+  catalog can add them to each guarded command (`Refuses`, with `Rules`
+  and `RuleRefuses` saying which are the rules'); a rule's undeclared
+  rejection is the code's error, as a decision's is.
+- **Order**: the batch's events in order, one event's rules in
+  registration order, the first refusal winning; rules run only after
+  an ok decision (a decision's own refusal comes first). This changed
+  the library's refusal order: a member at the limit asking for a book
+  with no copy free is now `unavailable` (the decision's) where it was
+  `limit`, the model's `borrowOutcome` with it.
+- **The hole's shape** is a refusal result, not a bool, so a rule may
+  declare several: `<rule>Refusal(log, e): str` (`""` admits) and
+  `<rule>Needs(e, refusal): Set[Read]`, the same pair a command's
+  Outcome and Needs are. The guard (`<command>Ruled`, `rulesOf`) is
+  generated in both steps modules only for an App with rules, so the
+  vendored grist.qnt and every rule-less model are unchanged; a command
+  whose rule refused has its decision's needs taken at `"ok"`.
+- **Processors** fail visibly: a refused Emit or OnSuccess fails its
+  trigger (`grist.failed` after its tries) with the rule named in the
+  step's error (`rowStep.Error`, shown in the report), the first
+  processor step to carry one.
+- **The generated mutant** drops the rule in the test binary alone:
+  `grist/internal/ruledrop`, set by gristtest's init from
+  `GRIST_MUTANT=drop-<rule>`, so no production binary can drop a rule;
+  `Mutants.App` runs it without an overlay and `DroppedRule` gives its
+  claim, `Some(Rejects(<guarded command>))`.
+
+examples/library's three-loan limit moved from `decideBorrow` into the
+`loan-limit` rule, every claim kept and every mutant caught, and the
+generated `drop-loan-limit` caught at `greedy`. One more read per borrow
+moved every run's choices: `TestFaithful`'s first four seeds no longer
+lost a mailer's answer, so it runs eight under -short. Its -short suite,
+cold caches: 91.7 → 111.9 CPU s (68.7 → 79.8 s wall), the new mutant's
+build and run and the four seeds. `grist new`'s capacity is a rule
+too (its overlay mutant now `noInvalid`, the generated `drop-capacity`
+beside it).
+
 ### E: a run gotogether did not drive
 
 From the feedback of an agent using gotogether in another project (an

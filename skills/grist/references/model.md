@@ -48,7 +48,10 @@ error, with the move: module `<app>Rules` as it is to
   steps and the site's (`bankPayCalls`, `bankPayRecords`); per
   command an action (a reused key; a `conflict` if it is conditioned;
   ok and each declared refusal, with `freshKey`, `covers` of its rule's
-  needs and `conditionHolds`), per query one, per processor those of
+  needs and `conditionHolds`; a command a rule guards takes its outcome
+  from `<c>Ruled`: its decision's, then, when ok, the first refusal of
+  `rulesOf` over what it appends, its read set covering every rule's
+  needs that ran), per query one, per processor those of
   its declared shape (`Emits`: one action; `Delivers(AtLeastOnce)`: the
   effect step, the checkpoint over `atLeastOnceDone`, an outcome step
   that never happens; `Delivers(AtMostOnce)`: checkpoint, effect,
@@ -92,6 +95,19 @@ Per command `c` (its arguments a record: `c.counter`, `c.principal`):
   outcome; the committed step's read set must cover each, so a lost
   read is caught at every commit. A refusal decided before any read
   (an invalid request) needs `Set()`.
+
+Per rule `r` (`grist.NewRule`, on event type T): `<r>Refusal(log, e):
+str`, its verdict on `e`, a T event a guarded command appends, on the
+log the command read (`""` admits it, else one of the rule's declared
+refusals), and `<r>Needs(e, refusal): Set[Read]`, the reads that verdict
+needs (`loansReads(bookBorrowedMember(e))`). The generated guard runs
+them only after an ok `<c>Outcome`, so `<c>Outcome` and `<c>Needs`
+leave the rule out (`<c>Needs` is called with `"ok"` when a rule
+refused); every action of a command declaring T in `grist.Appends`
+requires the step's outcome to be the guarded one and its read set to
+cover each rule's needs. A run with the rule dropped (gristtest's
+generated `drop-<rule>` mutant) commits where `<r>Refusal` refuses: a
+`Rejects` of the command.
 
 Per query `q`: `<q>Answer(log, q)`, the result's scalar fields as a
 record (or the scalar), compared with the step's at its position.

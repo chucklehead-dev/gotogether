@@ -56,7 +56,15 @@ for it. No binding is written by hand.
    `App.Catalog()` is the registry as data.
 2. **Declare the shapes, generate, fill the holes**: each command's
    refusals (`grist.Refuses(ErrA, ErrB)`; another rejection is the
-   decision's error), each processor's result (`grist.Emits(Type)` or
+   decision's error); a requirement on every append of an event, whichever
+   command makes it, as a rule (`grist.NewRule(App, "loan-limit",
+   Borrowed, func(r *grist.Reads, e BookBorrowed) error {...},
+   grist.Refuses(ErrLimit))`: it runs after an ok decision on the
+   command's own reads, which join the condition, and its rejection is
+   the command's refusal, added to its catalog's refusals; the commands
+   appending the event declare it, `grist.Appends(Borrowed)`; Verify
+   refuses a rule on an event no block appends; a processor's Emit a rule
+   refuses fails its trigger, naming the rule), each processor's result (`grist.Emits(Type)` or
    `grist.Delivers(grist.AtLeastOnce|grist.AtMostOnce, SuccessType)`;
    another result fails the trigger), a remote party an effect calls as
    a declared dependency and its typed calls (`var Bank =
@@ -176,7 +184,7 @@ for it. No binding is written by hand.
    **Claim the runs reached the app**: a faithful test adds
    `gristtest.Exercised(App, except...)`, every block of the catalog
    taken in some run (each command by `ok` and each declared refusal,
-   every query, a processor's handling, effect and checkpoint, every
+   its rules' included, every query, a processor's handling, effect and checkpoint, every
    site's record), naming each missed with how to reach it; except
    names a block (`"receipts"`), a command's outcome (`"borrow.limit"`)
    or a command whole, each with its reason. A run that took none of the
@@ -190,7 +198,12 @@ for it. No binding is written by hand.
    by `gristtest.Mutants{Names: ..., FullOnly: ...}.Run(t)` from a
    `TestMutants`, each binary's `TestMutant` switching on
    `gristtest.Mutant()`, as examples/counters' `blind` and
-   `dispatchDirect`; a mutant carries the declarations its code needs),
+   `dispatchDirect`; a mutant carries the declarations its code needs;
+   `Mutants{..., App: App}` adds a generated `drop-<rule>` per rule, the
+   app with the rule dropped, which `TestMutant` handles before its
+   switch: `if _, caught, ok := gristtest.DroppedRule(App); ok {
+   system(...).Explore(...).Expect(t, caught); return }`, at a workload
+   where the rule refuses, as examples/library's `drop-loan-limit`),
    and the faithful
    app at the mutant's configuration with the opposite claim
    (`None(Rejects("createCounter"))`): an `Unconditioned` create is

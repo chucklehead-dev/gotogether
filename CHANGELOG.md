@@ -42,6 +42,23 @@ The first release. What a user meets, by module:
   `RunRequest.Fold` (`GOTOGETHER_NAV_FOLD=1`, `gotogether nav -fold`)
   advance through a linear stretch to the next decision and say how
   many they folded (`Node.Folded`, `RunNode.Folded`).
+- grist, blocking rules (ROADMAP P1, docs/grist.md §2.4.1; api/grist.txt):
+  `grist.NewRule(App, name, Event, func(r *grist.Reads, e E) error,
+  grist.Refuses(...))` runs on every event of its type a command's
+  decision appends, on the command's reads (which join its condition),
+  its rejection the command's refusal, added to the command's refusals
+  in the catalog (`CatalogBlock.Rules`, `RuleRefuses`, `Catalog.Rules`);
+  rules run in batch order, one event's in registration order, the
+  first refusal winning. `grist.Appends(Event...)` declares what a
+  command appends (required of one appending a ruled event); Verify
+  refuses a rule on an event no block appends. A processor whose Emit a
+  rule refuses fails its trigger, naming the rule. The generator writes
+  `<rule>Refusal(log, e)` and `<rule>Needs(e, refusal)` holes and guards
+  each guarded command's actions (`<command>Ruled`); gristtest's
+  Exercised wants each rule's refusal, `Mutants.App` adds a generated
+  `drop-<rule>` mutant per rule, `DroppedRule` its claim. examples/library's
+  loan limit is a rule; `grist new`'s capacity is one (its hand-written
+  mutant is now `noInvalid`).
 - validate keeps quint's typechecks and its evaluation modules' compiles
   across processes, by content (docs/DESIGN.md §57: quint's version,
   the spec's and its imports' paths and contents, every .qnt beside

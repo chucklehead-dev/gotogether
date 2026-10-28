@@ -2068,6 +2068,67 @@ parent's `Reads` (the same P), its queries join the parent's condition,
 its events the parent's batch. One append, one step (the parent's,
 naming the children).
 
+### 2.4.1 Rules (P1)
+
+A rule is a requirement on every append of an event, whichever command
+makes it ("no deposit until KYC cleared", "at most three loans"): stated
+once, beside the event, instead of in each decision that can append it.
+
+```go
+var ErrLimit = grist.Rejection("limit")
+
+var LoanLimit = grist.NewRule(App, "loan-limit", Borrowed, func(r *grist.Reads, e BookBorrowed) error {
+	if len(Loans.For(r, e.Member)) >= Limit {
+		return ErrLimit
+	}
+	return nil
+}, grist.Refuses(ErrLimit))
+
+var BorrowCmd = grist.NewCommand(App, "borrow", decideBorrow, grist.Appends(Borrowed),
+	grist.Refuses(ErrNotMember, ErrUnavailable), grist.Authorize(grist.Authenticated))
+```
+
+- **When it runs.** After a command's decision returns events, before
+  the append, in the same try: each event of the batch in order, an
+  event's rules in registration order. The first refusal wins and the
+  rules after it do not run. A decision's own refusal comes first (no
+  rule runs on a refused decision).
+- **Its reads are the command's.** It reads through the command's
+  `Reads`, pinned at the same position, and its reads join the read set:
+  a concurrent change to what it read fails the condition, and the
+  command decides again, its rules with it. `Unconditioned` makes them
+  advisory with the decision's.
+- **Its refusal is the command's.** A `grist.Rejection` it returns is
+  the command's refusal: the step's outcome, the key's committed answer.
+  It must be one the rule declares (`Refuses`, required); another, or
+  an error that is no rejection, is the code's error. The catalog adds
+  the rule's refusals to each command it guards (`CatalogBlock.Refuses`,
+  `Rules`, `RuleRefuses`; `Catalog.Rules`), so the bindings have the
+  outcome and `gristtest.Exercised` wants it, with no edit to the
+  command's `Refuses`.
+- **Which commands it guards.** Those declaring its event in
+  `grist.Appends`: a command that appends an event a rule guards without
+  declaring it, or appends a type its `Appends` lacks, is the code's
+  error at that append. `Verify` refuses a rule on an event no block
+  appends (no command's `Appends`, no processor's `Emits` or `Delivers`
+  success): a rule that can never run.
+- **Processors are not guarded yet.** A processor's `Dispatch` runs a
+  command, its rules with it. A processor whose `Emit` (or an effect's
+  `OnSuccess`) a rule refuses fails its trigger (tried, then
+  `grist.failed`), its step's error naming the rule: block-until for
+  processors is later work.
+
+In the model, each rule is two holes in `model/<app>_rules.qnt`:
+`<rule>Refusal(log, e): str` (`""` admits `e`, else the refusal) and
+`<rule>Needs(e, refusal): Set[Read]`. The generator guards each guarded
+command's action with `<command>Ruled` (its decision's outcome, then,
+when ok, the first refusal of `rulesOf` over `<command>Events`), and
+requires the step's read set to cover every rule's needs that ran, as
+it does the decision's. gristtest's `Mutants{App: App}` adds a generated
+mutant per rule, `drop-<rule>` (the app with the rule dropped, no
+overlay), and `DroppedRule(App)` the claim that catches it: some run
+rejects a command it guards.
+
 ### 2.5 Queries
 
 A query is reads and arguments in, a result out; it never appends.
