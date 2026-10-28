@@ -13,9 +13,10 @@ Standing decisions, with the maintainer:
   only OTel and yaml.v3.
 - MIT license.
 
-Order: H1 → H2 → H3 → H4 → H5 → H6 → H7, with GR3's slices 4-6 after H4
-and GR4-GR9 after H5 and H6; G8-G12 and the items left from S, X, Y, T
-and E alongside; R5 when the maintainer says.
+Order: H1 → H3 → H2 with P5 → P1, P3, P4, P7 → H4 → H5 → H6 (with P8)
+→ H7 → P2 → P6, with GR3's slices 4-6 after H4, GR4-GR9 after H5 and
+H6, and P9 after GR4; G8-G12 and the items left from S, X, Y, T and E
+alongside; R5 when the maintainer says.
 
 ## Tenth review: one product (H)
 
@@ -81,6 +82,103 @@ item as recommended:
   imports back (QNT101), which typecheck accepts. grist's model layout
   no longer has such a cycle, so D4 is unblocked (and measured: no gain
   on 0.33, docs/performance.md); the report is the maintainer's.
+
+## Behavioral programming's lessons (P)
+
+Three reviews of pavlov (a behavioral-programming library for Clojure:
+bthreads that request, wait on and block events, composed append-only;
+the same program run by its model checker, with safety bthreads, hot
+states, possibility checks and a navigator over execution branches),
+docs/HISTORY.md. What it does better is one primitive (block), checks we
+lack (possibility, scenarios, liveness as cycles) and exploration (a
+navigator); what it gives up is the independent spec, which every bug
+the newcomer's three tasks found needed, so "the program is the model"
+is not taken. The maintainer's decisions of 2026-10-28, as recommended:
+
+- **P1. Blocking rules in grist (M).** `grist.NewRule(App, name, Event,
+  func(r *grist.Reads, e E) error)`: whenever a decision would append an
+  event of that type, the rule runs in that command's transaction on its
+  Reads, before the append; its reads join the command's condition (a
+  concurrent change conflicts and retries), its rejection is the
+  command's refusal, added to the command's declared refusals in the
+  catalog. Verify refuses a rule on an event no block appends; the
+  generator writes a hole per rule and guards every action appending its
+  event with it; Exercised takes each rule's refusal; the scaffold's
+  mutants drop a rule. A requirement added without editing a command
+  ("no deposit until KYC cleared"). Commands first; a processor whose
+  Emit a rule blocks fails visibly (block-until for processors later).
+- **P2. A state-graph explorer over the Go evaluator (M-L).** A
+  breadth-first graph of a model from Init with qeval's Successors (made
+  to return labelled edges: the action and its picks) and Key, dense ids,
+  a parent tree for shortest counterexamples, bounded by states and
+  depth and saying when it truncated: every invariant in every reachable
+  state, deadlocks, actions never enabled, without a quint process
+  (about 0.2-0.5 ms a transition: 10^5 states in under a minute). A
+  bounded exhaustive alternative to `gotogether simulate`'s sampling;
+  grist's growing log needs the depth bound.
+- **P3. Possibility claims (S).** In the model: a binding's
+  `simulate: possible: [P, ...]` (some trace reaches P; quint's
+  counterexample to `not(P)`, or P2's search), catching a model too
+  strict to reach the scenario a conforming run would prove; the
+  generator emits one per command outcome and processor result. In runs:
+  Takes and Exercised already cover the code's side.
+- **P4. Scenario claims (S).** `qtest.Scenario(qtest.Takes("submit"),
+  qtest.Takes("verify").Outcome("ok"), qtest.Takes("open"))`: a run's
+  steps contain the sequence, others allowed between; `Some`/`All` over
+  runs; a failure names the longest prefix matched and where the run
+  stopped. grist's `gristtest.Scenario` builds one from the catalog's
+  commands with their arguments (and, with P3, the scenario is checked
+  possible in the model). A domain expert's acceptance criteria.
+- **P5. Navigators, with H2 (M).** Over a model (P2's graph: a node a
+  state, its branches the enabled actions with picks, every disabled one
+  with its first false conjunct, H2's evaluation) and over a run (a node
+  a prefix of its choices in Exhaust's schedule syntax; its branches the
+  next choice's named options; a child a replay with that option forced,
+  milliseconds; the steps recorded so far, Sim.Tasks, the model state
+  after them). Two front ends over one Go API:
+  - for agents, `gotogether nav ... -json` (a node, its path, state,
+    branches, disabled actions with their conditions), and failure
+    reports print the nav command of the failing node;
+  - for people, a TUI on Charm's v2 libraries (bubbletea, lipgloss,
+    bubbles): browse branches, fold linear stretches of nominal choices,
+    jump to the failing step, see the state's diff from its parent, save
+    a found branch to the corpus. The Charm dependencies stay out of the
+    core (OTel and yaml.v3 only): the TUI is a module of its own (its own
+    go.mod and api file, published like qweave), its binary invoked by
+    `gotogether nav` when installed.
+- **P6. Liveness as cycles (M, after P2).** In the model: a reachable
+  cycle in which an eventually val is false throughout is "can stay hot
+  forever", reported with its prefix and cycle; weak fairness per action
+  family is required (read-only actions loop everywhere), the subtle
+  part. In runs (cheap, evidence not proof): an unsettled run whose model
+  states repeat with the val false is reported with the cycle's steps
+  (retry storms and livelocks made legible).
+- **P7. grist's obligations generated (S).** Every AtLeastOnce effect,
+  declared call and emitting processor implies an eventual val (each
+  trigger eventually followed by its effect's step or outcome); the
+  generator writes them, judged at a settle as today, the user's own
+  eventual vals beside them.
+- **P8. Skills in pavlov's shape (S, with H6).** Each SKILL.md short (at
+  most about 80 lines) with a "choose your path" list; a results table
+  (one row per verdict and report line, with what to do next);
+  checklists; "run it, do not infer it"; a migration skill for a team
+  arriving with code (bounded contexts, requirements from code, tests,
+  logs and traces with their provenance, then the model, its `possible:`
+  and scenario claims); the workflow skill model-first: scenarios each
+  with a possibility check, then safety, then liveness, then code.
+- **P9. grist apps explored in-process (L, after GR4).** The Go program
+  checked against its rules on every input in small domains, with no
+  quint process: commands' argument domains as Go enumerators, decisions
+  and folds pure (Reads mostly enforces it), effect and call outcomes as
+  the declared options, a canonical encoding of read models' states for
+  keys, a state's restore a truncation of the log, each step judged by
+  qeval on the generated model. Merging states is sound only when every
+  block reads through read models.
+
+Not taken: the program as its own model in place of Quint; one global
+event selector as a runtime; snapshots of closure state (qenv replays
+choices instead); safety as program events; livelock detection by
+hashing Go state; a drawn state-space graph.
 
 ## grist (codename)
 

@@ -1717,6 +1717,32 @@ path. counters, wallet-grist, library and `grist new`'s scaffold moved
 their rules by that one cut. D4, measured with the REPL working: no
 gain on quint 0.33 (docs/performance.md).
 
+### pavlov's lessons (after the tenth review)
+
+Three reviews of pavlov (behavioral programming for Clojure: bthreads
+that request, wait on and block events, composed append-only; the same
+program run by its model checker), their findings ROADMAP's P track:
+- a designer's: the checker is not free (environment bthreads are
+  doubles, safety bthreads and hot bids a spec, `:possible` sets
+  Exercised), but needs no translation or binding, at the price of spec
+  and program sharing one author's understanding; grist's catalog is
+  already additive and its generator plays the program describing
+  itself; what grist lacks is block, so a cross-cutting rule edits every
+  command that can emit its event;
+- a newcomer's: pavlov's path to a checker's finding about an hour in
+  one language, ours about an hour mostly learning Quint and a stronger
+  finding (code against an independent model under faults, where every
+  bug of the three earlier tasks was); its skills short with a choose-
+  your-path list, a results table and checklists; a navigator would have
+  saved most of the time spent on the rejection whose reason no report
+  gave;
+- a Go specialist's: pavlov's state is data (save, restore, exact keys,
+  a breadth-first graph, 5.5-10 µs an edge, hot cycles found by a
+  colouring search); ours is data only at the model level (qeval's
+  Successors and Key), qenv's tasks are goroutines replayed from their
+  choices, and grist's blocks are data-shaped enough to explore
+  in-process; the way to pavlov's checking for free runs through qeval.
+
 ### E: a run gotogether did not drive
 
 From the feedback of an agent using gotogether in another project (an
