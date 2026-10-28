@@ -82,6 +82,13 @@ jobs:
       - name: the race detector on what runs real goroutines
         if: matrix.part == 'race'
         run: go test -race -short -count=1 ./qobs/ ./qtrace/ ./validate/ ./qrun/ ./otelio/ ./convert/ ./binding/ ./itf/ && go test -race -short -count=1 -run 'Native|Synctest|Signal' ./qenv/
+      - name: the race detector on grist's real tier (Main, the platform, calls over HTTP, two pods)
+        if: matrix.part == 'race'
+        # grist on its own go.mod (its pinned core), the pods the test
+        # binary built with -race: a race in a pod ends it with exit 66
+        run: |
+          (cd grist && go test -race -short -count=1 -run '^(TestMain|TestDrainBudget|TestMemoryLimit|TestMetricsLabelEscaping|TestPauseIsProgress|TestCallOverHTTP|TestServeCalls|TestOverHTTPAnswers|TestCallAnswerOfNoRefusal)' .)
+          (cd examples/counters && go test -race -count=1 -run '^TestRealTwoPods$' .)
       - name: test (qenv self-checks)
         if: matrix.part == 'core-variants'
         run: GOTOGETHER_CHECK=1 go test -short -count=1 ./qenv/ ./qload/ ./qtest/ ./qcover/ ./qrun/
