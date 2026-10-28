@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/wovenrt"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qenv/internal/history"
-	"github.com/chucklehead-dev/gotogether/qenv/internal/keyed"
 )
 
 // panicOf runs f and returns what it panicked with, or "".
@@ -121,16 +121,16 @@ func TestStoreStatementsAreSchedulingPoints(t *testing.T) {
 	}
 }
 
-// Woven sync calls are scheduling points too (keyed.go's doc: taking a
+// Woven sync calls are scheduling points too (wovenrt.go's doc: taking a
 // lock is a point Hegel or a seed chooses around): Lock, TryLock, RLock,
 // TryRLock and WaitGroup.Wait each yield even when they need not wait.
 func TestKeyedOpsAreSchedulingPoints(t *testing.T) {
 	ops := map[string]func(ctx context.Context, key any){
-		"Lock":     func(ctx context.Context, k any) { keyed.Lock(ctx, k); keyed.Unlock(ctx, k) },
-		"TryLock":  func(ctx context.Context, k any) { keyed.TryLock(ctx, k) },
-		"RLock":    func(ctx context.Context, k any) { keyed.RLock(ctx, k); keyed.RUnlock(ctx, k) },
-		"TryRLock": func(ctx context.Context, k any) { keyed.TryRLock(ctx, k) },
-		"Wait":     func(ctx context.Context, k any) { keyed.Wait(ctx, k) },
+		"Lock":     func(ctx context.Context, k any) { wovenrt.Lock(ctx, k); wovenrt.Unlock(ctx, k) },
+		"TryLock":  func(ctx context.Context, k any) { wovenrt.TryLock(ctx, k) },
+		"RLock":    func(ctx context.Context, k any) { wovenrt.RLock(ctx, k); wovenrt.RUnlock(ctx, k) },
+		"TryRLock": func(ctx context.Context, k any) { wovenrt.TryRLock(ctx, k) },
+		"Wait":     func(ctx context.Context, k any) { wovenrt.Wait(ctx, k) },
 	}
 	for name, op := range ops {
 		key := new(int)
@@ -151,32 +151,32 @@ func TestKeyedMutex(t *testing.T) {
 	key := new(int)
 	var log []string
 	s.Spawn("a", func(ctx context.Context) {
-		if !keyed.TryLock(ctx, key) {
+		if !wovenrt.TryLock(ctx, key) {
 			t.Error("TryLock of a free mutex failed")
 			return
 		}
 		log = append(log, "a in")
 		qenv.Sleep(ctx, 10*time.Millisecond)
 		log = append(log, "a out")
-		keyed.Unlock(ctx, key)
+		wovenrt.Unlock(ctx, key)
 		qenv.Sleep(ctx, 10*time.Millisecond)
-		keyed.RLock(ctx, key)
+		wovenrt.RLock(ctx, key)
 		qenv.Sleep(ctx, 10*time.Millisecond)
-		keyed.RUnlock(ctx, key)
+		wovenrt.RUnlock(ctx, key)
 	})
 	s.Spawn("b", func(ctx context.Context) {
 		qenv.Sleep(ctx, time.Millisecond)
-		if keyed.TryLock(ctx, key) {
+		if wovenrt.TryLock(ctx, key) {
 			t.Error("TryLock of a held mutex succeeded")
 		}
-		keyed.Lock(ctx, key)
+		wovenrt.Lock(ctx, key)
 		log = append(log, "b in")
-		keyed.Unlock(ctx, key)
+		wovenrt.Unlock(ctx, key)
 		qenv.Sleep(ctx, 15*time.Millisecond) // a holds it shared
-		if keyed.TryLock(ctx, key) {
+		if wovenrt.TryLock(ctx, key) {
 			t.Error("TryLock of a mutex held by a reader succeeded")
 		}
-		if msg := panicOf(func() { keyed.Unlock(ctx, new(int)) }); !strings.Contains(msg, "unlock of unlocked mutex") {
+		if msg := panicOf(func() { wovenrt.Unlock(ctx, new(int)) }); !strings.Contains(msg, "unlock of unlocked mutex") {
 			t.Errorf("Unlock of an unlocked mutex: %q, want a panic", msg)
 		}
 	})
@@ -194,29 +194,29 @@ func TestKeyedRWMutex(t *testing.T) {
 	key := new(int)
 	var log []string
 	s.Spawn("writer", func(ctx context.Context) {
-		keyed.Lock(ctx, key)
+		wovenrt.Lock(ctx, key)
 		log = append(log, "w in")
 		qenv.Sleep(ctx, 10*time.Millisecond)
 		log = append(log, "w out")
-		keyed.Unlock(ctx, key)
+		wovenrt.Unlock(ctx, key)
 	})
 	s.Spawn("reader", func(ctx context.Context) {
 		qenv.Sleep(ctx, time.Millisecond)
-		if keyed.TryRLock(ctx, key) {
+		if wovenrt.TryRLock(ctx, key) {
 			t.Error("TryRLock while a writer holds the lock succeeded")
 		}
-		keyed.RLock(ctx, key)
+		wovenrt.RLock(ctx, key)
 		log = append(log, "r in")
-		keyed.RUnlock(ctx, key)
-		if !keyed.TryRLock(ctx, key) {
+		wovenrt.RUnlock(ctx, key)
+		if !wovenrt.TryRLock(ctx, key) {
 			t.Error("TryRLock of a free lock failed")
 		}
-		if !keyed.TryRLock(ctx, key) {
+		if !wovenrt.TryRLock(ctx, key) {
 			t.Error("a second reader's TryRLock failed")
 		}
-		keyed.RUnlock(ctx, key)
-		keyed.RUnlock(ctx, key)
-		if msg := panicOf(func() { keyed.RUnlock(ctx, key) }); !strings.Contains(msg, "RUnlock of unlocked RWMutex") {
+		wovenrt.RUnlock(ctx, key)
+		wovenrt.RUnlock(ctx, key)
+		if msg := panicOf(func() { wovenrt.RUnlock(ctx, key) }); !strings.Contains(msg, "RUnlock of unlocked RWMutex") {
 			t.Errorf("RUnlock of an unlocked RWMutex: %q, want a panic", msg)
 		}
 	})
@@ -235,15 +235,15 @@ func TestKeyedWaitGroup(t *testing.T) {
 	var waited time.Duration
 	s.Spawn("main", func(ctx context.Context) {
 		start := qenv.Now(ctx)
-		keyed.Add(ctx, key, 2)
-		keyed.Add(ctx, key, -1)
+		wovenrt.Add(ctx, key, 2)
+		wovenrt.Add(ctx, key, -1)
 		qenv.Go(ctx, "done", func(ctx context.Context) {
 			qenv.Sleep(ctx, 10*time.Millisecond)
-			keyed.Add(ctx, key, -1)
+			wovenrt.Add(ctx, key, -1)
 		})
-		keyed.Wait(ctx, key)
+		wovenrt.Wait(ctx, key)
 		waited = qenv.Now(ctx).Sub(start)
-		if msg := panicOf(func() { keyed.Add(ctx, key, -1) }); !strings.Contains(msg, "negative WaitGroup counter") {
+		if msg := panicOf(func() { wovenrt.Add(ctx, key, -1) }); !strings.Contains(msg, "negative WaitGroup counter") {
 			t.Errorf("Done below zero: %q, want a panic", msg)
 		}
 	})
@@ -251,7 +251,7 @@ func TestKeyedWaitGroup(t *testing.T) {
 	if waited != 10*time.Millisecond {
 		t.Errorf("Wait returned after %v, want 10ms (when the counter reached zero)", waited)
 	}
-	if msg := panicOf(func() { keyed.Lock(context.Background(), key) }); !strings.Contains(msg, "Lock outside a simulation task") {
+	if msg := panicOf(func() { wovenrt.Lock(context.Background(), key) }); !strings.Contains(msg, "Lock outside a simulation task") {
 		t.Errorf("Lock outside a task: %q, want a panic", msg)
 	}
 }

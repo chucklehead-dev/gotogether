@@ -58,12 +58,17 @@ item as recommended:
   payd's own Overlay helpers deleted; overlays the taught way to plant a
   mutant by hand (hello's in-code enum and scaffold's retired), qmut the
   generated one.
-- **H5. Hide what no user calls (S-M, breaking for no user code).** The
-  woven call targets (qenv/weave's 15, qcover's, qmut's) in one
-  documented ABI package; grist's generator, CLI plumbing and limit
-  constants under grist/internal or a generator package; storetest's
-  per-check functions unexported (Checks lists them). About 60
-  identifiers out of api/*.txt.
+- **H5. Hide what no user calls (S-M, breaking for no user code).
+  Half done** (DESIGN §60): the woven call targets (qenv/weave's 14,
+  qcover's 2, qmut's 4) are package `woven`, the woven builds' ABI (no
+  promise to users, stable within a version; its state in
+  internal/wovenrt; qenv/weave keeps the aspects and its path), and
+  storetest's twelve per-check functions are unexported (Checks lists
+  them; TwoStores stays): 32 identifiers out of the user-facing sections
+  of api/*.txt, woven's own section recording the ABI. Left, after H4's
+  renames across grist: grist's generator, CLI plumbing and limit
+  constants under grist/internal or a generator package (the rest of the
+  about 60).
 - **H6. The grist path, shorter and at the front (S).** `gristsim.System`
   and `ExploreConfig.ShortSeeds` (the closure and `seeds()` 14 and 12
   examples define); Config.Gen derived from the command types by default;

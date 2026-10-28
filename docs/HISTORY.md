@@ -1668,6 +1668,25 @@ Three reviews, their findings ROADMAP's H track:
   fold silently changed by a new event type, Recorder.Close not closing
   its sink, and grist outside the CLI and the front page.
 
+### H5's first half: the woven ABI
+
+The designer's review counted about 60 exported identifiers no user
+calls. Twenty were what woven code calls: qenv/weave's sync functions
+(the aspects' advice), `qcover.Hit` and `Register` (`qweave -cover`),
+`qmut.Register`, `On`, `Cond` and `Pick` (`qweave -mutate`). They moved
+to package `woven` (DESIGN §60), documented as an ABI, with their state
+in internal/wovenrt (qenv/internal/keyed's hooks, now with `Go`, the
+registries, the run keys qcover and qmut set as functions). The import
+graph is the constraint that shaped it: the core's own mutation testing
+weaves core packages, and a woven package imports `woven`, so `woven`
+imports nothing that could be mutated (qenv included: qenv installs the
+hooks instead), and qweave never mutates woven, wovenrt or what they
+import. No user code changed: tool files still name qenv/weave, whose
+path keeps the aspects; qcover's and qmut's types and readers stayed.
+storetest's twelve per-check functions went unexported in the same
+item (`Checks` and `Run` were how every harness ran them). grist's
+generator, CLI plumbing and limits wait for H4's renames across grist.
+
 ### The acyclic model layout (grist)
 
 quint 0.33's REPL refuses a file that a file it imports imports back

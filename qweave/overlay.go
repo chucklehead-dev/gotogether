@@ -34,7 +34,7 @@ type Config struct {
 	// Cover instruments every block of the main module's packages (test
 	// files aside) for qcover: which code each model step ran. The
 	// toolkit's own packages (its examples aside) are never instrumented:
-	// qcover's Hit would count itself, and qenv's scheduler is not code
+	// woven.Hit would count itself, and qenv's scheduler is not code
 	// under test.
 	Cover bool
 	// CoverPkgs, if set, limits Cover and Mutate to packages with these
@@ -77,10 +77,12 @@ func (c Config) covers(path string, main bool) bool {
 	return false
 }
 
-// selfWoven reports whether a toolkit package is one woven code calls:
-// mutating it would switch its own mutants.
+// selfWoven reports whether a toolkit package is one woven code calls
+// (package woven, the woven builds' ABI, and what it imports): mutating it
+// would switch its own mutants, and import woven from a package woven
+// imports. qmut and qcover read what woven collects.
 func selfWoven(path string) bool {
-	for _, p := range []string{"qmut", "qrun", "qcover", "internal/hooks"} {
+	for _, p := range []string{"woven", "internal/wovenrt", "internal/runkeys", "qrun", "internal/hooks", "qmut", "qcover"} {
 		if path == toolkit+"/"+p || strings.HasPrefix(path, toolkit+"/"+p+"/") {
 			return true
 		}
@@ -90,7 +92,8 @@ func selfWoven(path string) bool {
 
 // runLookup reports whether a file is the code a mutant's switch calls to
 // find its run (qenv's resolver, which qrun asks): mutated, a switch in
-// it would call itself (qmut.On, qrun.Current, the resolver, qmut.On ...).
+// it would call itself (woven.MutantOn, qrun.Current, the resolver,
+// woven.MutantOn ...).
 func runLookup(path, file string) bool {
 	return path == toolkit+"/qenv" && filepath.Base(file) == "goroutine.go"
 }

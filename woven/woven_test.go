@@ -1,4 +1,4 @@
-package weave_test
+package woven_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
-	"github.com/chucklehead-dev/gotogether/qenv/weave"
+	"github.com/chucklehead-dev/gotogether/woven"
 )
 
 // A waiting writer blocks new readers, as with sync.RWMutex: a reader that
@@ -18,21 +18,21 @@ func TestWriterPreference(t *testing.T) {
 	var mu sync.RWMutex
 	var order []string
 	s.Spawn("reader1", func(ctx context.Context) {
-		weave.RLock(&mu)
+		woven.RLock(&mu)
 		qenv.Sleep(ctx, 10*time.Millisecond)
-		weave.RUnlock(&mu)
+		woven.RUnlock(&mu)
 	})
 	s.Spawn("writer", func(ctx context.Context) {
 		qenv.Sleep(ctx, time.Millisecond)
-		weave.RWLock(&mu)
+		woven.RWLock(&mu)
 		order = append(order, "writer")
-		weave.RWUnlock(&mu)
+		woven.RWUnlock(&mu)
 	})
 	s.Spawn("reader2", func(ctx context.Context) {
 		qenv.Sleep(ctx, 2*time.Millisecond)
-		weave.RLock(&mu)
+		woven.RLock(&mu)
 		order = append(order, "reader2")
-		weave.RUnlock(&mu)
+		woven.RUnlock(&mu)
 	})
 	if err := s.Run(time.Second); err != nil {
 		t.Fatal(err)

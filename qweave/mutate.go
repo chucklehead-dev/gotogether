@@ -9,9 +9,6 @@ import (
 	"strings"
 )
 
-// qmutPath is the package woven mutants ask whether they are on.
-const qmutPath = "github.com/chucklehead-dev/gotogether/qmut"
-
 type mutant struct {
 	line int
 	fn   string
@@ -20,13 +17,13 @@ type mutant struct {
 }
 
 // mutate weaves mutant schemata into the file: every mutant behind a
-// switch (qmut.On), so that one build holds them all and a run turns one
+// switch (woven.MutantOn), so that one build holds them all and a run turns one
 // on. The operators: an if's condition negated; a comparison's boundary
 // moved (< and <=, > and >=), for operands without side effects (both
 // forms are evaluated); a call statement dropped.
 func (w *fileWeaver) mutate() {
-	alias := "quintqmut"
-	if name := nameOf(w.imports, qmutPath); name != "" && name != "_" && name != "." {
+	alias := wovenAlias
+	if name := nameOf(w.imports, wovenPath); name != "" && name != "_" && name != "." {
 		alias = name
 	}
 	h := fnv.New32a()
@@ -97,7 +94,7 @@ func (w *fileWeaver) mutate() {
 				}
 				mid := add(n.Pos(), fn, "drop call", n)
 				w.edits = append(w.edits, &edit{start: w.offset(n.Pos()), end: w.offset(n.End()), render: func(inner func(ast.Node) string) (string, error) {
-					return fmt.Sprintf("if !%s.On(%s) { %s }", alias, mid, inner(n)), nil
+					return fmt.Sprintf("if !%s.MutantOn(%s) { %s }", alias, mid, inner(n)), nil
 				}})
 			}
 			return true
@@ -106,8 +103,8 @@ func (w *fileWeaver) mutate() {
 	if len(ms) == 0 {
 		return
 	}
-	if alias == "quintqmut" {
-		w.need[alias] = qmutPath
+	if alias == wovenAlias {
+		w.need[alias] = wovenPath
 	}
 	rel := w.name
 	if w.p.modDir != "" {
@@ -118,7 +115,7 @@ func (w *fileWeaver) mutate() {
 	end := len(w.src)
 	w.edits = append(w.edits, &edit{start: end, end: end, render: func(func(ast.Node) string) (string, error) {
 		var reg strings.Builder
-		fmt.Fprintf(&reg, "\nvar %s = %s.Register([]%s.Mutant{\n", base, alias, alias)
+		fmt.Fprintf(&reg, "\nvar %s = %s.RegisterMutants([]%s.Mutant{\n", base, alias, alias)
 		for _, m := range ms {
 			fmt.Fprintf(&reg, "\t{File: %q, Line: %d, Func: %q, Op: %q, Code: %q},\n", rel, m.line, m.fn, m.op, m.code)
 		}

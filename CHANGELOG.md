@@ -8,6 +8,18 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `woven` (ROADMAP H5, DESIGN §60): the woven builds' ABI, what code
+  woven by qenv/weave's aspects, `qweave -cover` and `qweave -mutate`
+  calls (`MutexLock`, `RLock`, `Add`, `Go`, ...; `Hit`,
+  `RegisterBlocks`; `Cond`, `Pick`, `MutantOn`, `RegisterMutants`). No
+  compatibility promise to users: stable only within one version, for
+  code that version's aspects and qweave wove. Gone from the packages
+  users read, with no caller outside woven code: qenv/weave's fourteen
+  functions (the package keeps the aspects and its path, so tool files
+  do not change), `qcover.Hit` and `qcover.Register`, `qmut.Register`,
+  `qmut.On`, `qmut.Cond` and `qmut.Pick`. qweave imports `woven` as
+  `quintwoven` (was `quintqcover`, `quintqmut`), and never mutates
+  `woven` or what it imports.
 - grist/storetest (ROADMAP H5): the per-check functions
   (`DensePositions`, `ConditionsAgainstBruteForce`, ... `UnknownTenant`)
   are unexported; `Checks()` lists them by name and `Run` runs them all.

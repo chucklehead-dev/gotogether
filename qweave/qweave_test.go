@@ -25,11 +25,11 @@ func TestWeaveSyncFixture(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		`weave.RLock(&s.mu)`,
-		`return func() func()  { __qw_r := &(s.mu); return func()  { weave.RUnlock(&(*__qw_r)) } }()`, // the method value
-		`weave.MutexLock(&(c).Mutex)`, // the promoted call, on the embedded field
-		`go weave.Go(func() {`,
-		`defer weave.Done(wg)`,
+		`woven.RLock(&s.mu)`,
+		`return func() func()  { __qw_r := &(s.mu); return func()  { woven.RUnlock(&(*__qw_r)) } }()`, // the method value
+		`woven.MutexLock(&(c).Mutex)`, // the promoted call, on the embedded field
+		`go woven.Go(func() {`,
+		`defer woven.Done(wg)`,
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("woven guarded.go lacks %s:\n%s", want, src)
@@ -175,7 +175,7 @@ func TestCoverFixtureRuns(t *testing.T) {
 		t.Fatalf("woven %d files, want store.go alone (test files are not instrumented)", len(r.Files))
 	}
 	for _, b := range r.Files {
-		if src := string(b); !strings.Contains(src, "quintqcover.Hit(__qcov_") || !strings.Contains(src, "quintqcover.Register([]quintqcover.Block{") {
+		if src := string(b); !strings.Contains(src, "quintwoven.Hit(__qcov_") || !strings.Contains(src, "quintwoven.RegisterBlocks([]quintwoven.Block{") {
 			t.Errorf("not instrumented:\n%s", src)
 		}
 	}
@@ -208,7 +208,7 @@ func TestMutateFixtureRuns(t *testing.T) {
 	}
 	for _, b := range r.Files {
 		src := string(b)
-		for _, want := range []string{"quintqmut.Cond(", "quintqmut.Pick(", "quintqmut.On(", "quintqmut.Register([]quintqmut.Mutant{"} {
+		for _, want := range []string{"quintwoven.Cond(", "quintwoven.Pick(", "quintwoven.MutantOn(", "quintwoven.RegisterMutants([]quintwoven.Mutant{"} {
 			if !strings.Contains(src, want) {
 				t.Errorf("no %s in:\n%s", want, src)
 			}

@@ -197,6 +197,21 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"qcover.ParseGoCover", "gocover.Parse (package qcover/gocover)"},
 		{"qcover.Compare", "gocover.Compare (package qcover/gocover)"},
 		{"qcover.GoProfile", "gocover.Profile (package qcover/gocover)"},
+		// H5: what woven code calls, in package woven (the woven builds'
+		// ABI, never called by hand), and storetest's checks through Checks
+		{"qcover.Hit(", "nothing: woven code calls woven.Hit"},
+		{"qcover.Register(", "nothing: woven code calls woven.RegisterBlocks"},
+		{"qmut.Register(", "nothing: woven code calls woven.RegisterMutants"},
+		{"qmut.On(", "nothing: woven code calls woven.MutantOn"},
+		{"qmut.Cond(", "nothing: woven code calls woven.Cond"},
+		{"qmut.Pick(", "nothing: woven code calls woven.Pick"},
+		{"weave.MutexLock", "nothing: woven code calls package woven"},
+		{"weave.RWLock", "nothing: woven code calls package woven"},
+		{"weave.GroupGo", "nothing: woven code calls package woven"},
+		{"qenv/internal/keyed", "internal/wovenrt"},
+		{"storetest.DensePositions", "storetest.Checks() (a Check by its Name)"},
+		{"storetest.TenantIsolation", "storetest.Checks() (a Check by its Name)"},
+		{"storetest.ConcurrentAgainstBruteForce", "storetest.Checks() (a Check by its Name)"},
 		// the project's old names, spelled in pieces so a rename script
 		// that rewrites them cannot rewrite these
 		{"quint" + "go", "gotogether"},

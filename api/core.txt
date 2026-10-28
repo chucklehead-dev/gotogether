@@ -413,10 +413,8 @@ type U64 int64
 
 == github.com/chucklehead-dev/gotogether/qcover
 func Blocks() []Block
-func Hit(id int)
 func NewCounts() *Counts
 func ReadSummary(path string) (*Summary, error)
-func Register(bs []Block) int
 func Summarize(runs []*Counts) *Summary
 func WithCounts(ctx context.Context, c *Counts) context.Context
 type Block struct
@@ -921,22 +919,6 @@ type Options struct
     field BadConn bool
     field OnCommit func(ctx context.Context, changes []Change)
 
-== github.com/chucklehead-dev/gotogether/qenv/weave
-func Add(wg *sync.WaitGroup, n int)
-func Done(wg *sync.WaitGroup)
-func Go(fn func()) func()
-func GroupGo(wg *sync.WaitGroup, f func())
-func MutexLock(m *sync.Mutex)
-func MutexTryLock(m *sync.Mutex) bool
-func MutexUnlock(m *sync.Mutex)
-func RLock(m *sync.RWMutex)
-func RUnlock(m *sync.RWMutex)
-func RWLock(m *sync.RWMutex)
-func RWTryLock(m *sync.RWMutex) bool
-func RWUnlock(m *sync.RWMutex)
-func TryRLock(m *sync.RWMutex) bool
-func Wait(wg *sync.WaitGroup)
-
 == github.com/chucklehead-dev/gotogether/qhistory
 const Aborted Outcome = iota (spec 2 of its group)
 const Append OpKind = iota
@@ -1244,11 +1226,7 @@ type Watch struct
     method (*Watch) Stop()
 
 == github.com/chucklehead-dev/gotogether/qmut
-func Cond(id int, c bool) bool
 func Mutants() []Mutant
-func On(id int) bool
-func Pick(id int, orig, mutated bool) bool
-func Register(ms []Mutant) int
 func WithMutant(ctx context.Context, id int) context.Context
 func WithReach(ctx context.Context, r *Reach) context.Context
 type Mutant struct
@@ -2424,4 +2402,41 @@ type Replayed struct
     field Differs string
     field Warnings []string
     field Notes []string
+
+== github.com/chucklehead-dev/gotogether/woven
+func Add(wg *sync.WaitGroup, n int)
+func Cond(id int, c bool) bool
+func Done(wg *sync.WaitGroup)
+func Go(fn func()) func()
+func GroupGo(wg *sync.WaitGroup, f func())
+func Hit(id int)
+func MutantOn(id int) bool
+func MutexLock(m *sync.Mutex)
+func MutexTryLock(m *sync.Mutex) bool
+func MutexUnlock(m *sync.Mutex)
+func Pick(id int, orig, mutated bool) bool
+func RLock(m *sync.RWMutex)
+func RUnlock(m *sync.RWMutex)
+func RWLock(m *sync.RWMutex)
+func RWTryLock(m *sync.RWMutex) bool
+func RWUnlock(m *sync.RWMutex)
+func RegisterBlocks(bs []Block) int
+func RegisterMutants(ms []Mutant) int
+func TryRLock(m *sync.RWMutex) bool
+func Wait(wg *sync.WaitGroup)
+type Block = wovenrt.Block
+    field File string
+    field Line int
+    field Col int
+    field EndLine int
+    field Func string
+    field Stmts int
+    field ID int
+type Mutant = wovenrt.Mutant
+    field ID int
+    field File string
+    field Line int
+    field Func string
+    field Op string
+    field Code string
 

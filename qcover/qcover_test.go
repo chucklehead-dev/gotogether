@@ -9,13 +9,14 @@ import (
 	"github.com/chucklehead-dev/gotogether/qcover"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/woven"
 )
 
 // Two tasks interleave, each running its own blocks between its steps:
 // every step gets its own task's blocks, not whatever ran meanwhile, and
 // runs in parallel keep their counts apart.
 func TestStepsGetTheirTasksBlocks(t *testing.T) {
-	base := qcover.Register([]qcover.Block{
+	base := woven.RegisterBlocks([]woven.Block{
 		{File: "a.go", Line: 1, Func: "a", Stmts: 1},
 		{File: "b.go", Line: 1, Func: "b", Stmts: 1},
 		{File: "c.go", Line: 1, Func: "c", Stmts: 1},
@@ -31,7 +32,7 @@ func TestStepsGetTheirTasksBlocks(t *testing.T) {
 		}{{"a", a}, {"b", b}} {
 			s.Process(w.name, false, func(ctx context.Context) {
 				for range 3 {
-					qcover.Hit(w.block)
+					woven.Hit(w.block)
 					qenv.Sleep(ctx, time.Millisecond) // the other task runs here
 					qobs.Record(ctx, w.name, nil)
 				}

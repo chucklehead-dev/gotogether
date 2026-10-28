@@ -23,7 +23,7 @@ go run -C "$root/qweave" ./cmd/qweave -C "$root" -mutate -coverpkg "github.com/c
 cd "$root/$pkg"
 GOTOGETHER_MUTANT=list "$work/t" -test.run '^$' 2>&1 | grep '^qmut: mutant' > "$work/list" || true
 if [ ! -s "$work/list" ]; then
-  echo "$pkg: no mutants woven: is it a core package qweave may mutate (not qmut, qrun, qcover, internal/hooks)?" >&2
+  echo "$pkg: no mutants woven: is it a core package qweave may mutate (not woven, internal/wovenrt, internal/runkeys, qmut, qrun, qcover, internal/hooks)?" >&2
   exit 1
 fi
 mem=$(( ${MEM_MB:-3072} * 1024 ))

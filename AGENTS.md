@@ -40,6 +40,8 @@ qshrink/      a driver's failing actions shrunk by reruns (ddmin, calibration, S
 qenv/         deterministic simulation: scheduler, virtual time, processes; Store, Queue, Service doubles;
               internal/choice (choosers, byte rule, rates) and internal/profile (virtual-time pprof), qenv's API
 qenv/weave/   Orchestrion aspects: sync locks, wait groups and //qenv:go goroutines simulated inside qenv, real outside
+woven/        the woven builds' ABI: what qenv/weave's aspects, qweave -cover and -mutate make code call (no user calls it);
+              its state in internal/wovenrt (DESIGN §60)
 qenv/fault/   the //quint:fault aspect: fault points (qenv.FaultPoint) with the function's own errors, declared for coverage
 qgosim/       separate module: qenv and whole programs in gosim (on the fork, module github.com/chucklehead-dev/gosim)
 qweave/       separate module: weaves Orchestrion aspects with types into a go -overlay (cmd/qweave); also gosim's

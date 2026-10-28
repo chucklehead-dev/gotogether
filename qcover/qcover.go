@@ -3,8 +3,9 @@
 // (DESIGN.md §17, docs/HISTORY.md, A1).
 //
 // Code is instrumented by qweave (`qweave -cover go test ./...`): each
-// block of the root module's packages calls Hit on entry and the file
-// registers its blocks at init. A run collects into its own Counts, put in
+// block of the root module's packages calls woven.Hit on entry and the
+// file registers its blocks at init (package woven, the woven builds'
+// ABI). A run collects into its own Counts, put in
 // its context (WithCounts; qtest's explorations do whenever blocks are registered),
 // found from a block through the goroutine's run (qrun), so runs in
 // parallel keep their coverage apart. The blocks
@@ -22,6 +23,7 @@ import (
 	"sync"
 
 	"github.com/chucklehead-dev/gotogether/internal/runkeys"
+	"github.com/chucklehead-dev/gotogether/internal/wovenrt"
 	"github.com/chucklehead-dev/gotogether/qrun"
 
 	"github.com/chucklehead-dev/gotogether/qobs"
@@ -41,50 +43,21 @@ type Block struct {
 // Pos is the block's position, file:line.
 func (b Block) Pos() string { return fmt.Sprintf("%s:%d", b.File, b.Line) }
 
-// Process-wide: the blocks woven code registers at init.
-var (
-	regMu  sync.Mutex
-	blocks []Block
-)
-
-// Register adds a file's blocks and returns the ID of the first: woven
-// code numbers its blocks from it. It is called from package variable
-// initialization, before any block runs.
-func Register(bs []Block) int {
-	regMu.Lock()
-	defer regMu.Unlock()
-	base := len(blocks)
-	for i, b := range bs {
-		b.ID = base + i
-		blocks = append(blocks, b)
-	}
-	return base
-}
-
-// Blocks are all registered blocks, by ID.
+// Blocks are all registered blocks, by ID: the blocks of every file
+// qweave -cover wove into the program, which register at init.
 func Blocks() []Block {
-	regMu.Lock()
-	defer regMu.Unlock()
-	return append([]Block(nil), blocks...)
-}
-
-// Hit records that block id ran. Woven code calls it on entry to each
-// block.
-func Hit(id int) {
-	rc, _ := qrun.Current()
-	c, _ := qrun.InContext(rc, countsKey)
-	task, _ := qrun.InContext(rc, runkeys.Task)
-	if c != nil {
-		c.hit(id, task)
+	reg := wovenrt.Blocks()
+	out := make([]Block, len(reg))
+	for i, b := range reg {
+		out[i] = Block(b)
 	}
+	return out
 }
-
-var countsKey = qrun.NewKey[*Counts]("coverage")
 
 // WithCounts makes a run collect into c: its simulation's tasks (whose
 // contexts derive from ctx) and the steps they record.
 func WithCounts(ctx context.Context, c *Counts) context.Context {
-	return qrun.With(ctx, countsKey, c)
+	return qrun.With(ctx, wovenrt.Coverage, c.hit)
 }
 
 // A StepCover is the blocks one step ran.

@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
-	"github.com/chucklehead-dev/gotogether/qenv/weave"
 	"github.com/chucklehead-dev/gotogether/qhegel"
 	"github.com/chucklehead-dev/gotogether/qload"
+	"github.com/chucklehead-dev/gotogether/woven"
 	"hegel.dev/go/hegel"
 )
 
@@ -201,32 +201,32 @@ func TestWovenSyncInSimulation(t *testing.T) {
 			s.Spawn("task", func(ctx context.Context) {
 				for range 3 {
 					if i%2 == 0 {
-						weave.RWLock(&mu)
+						woven.RWLock(&mu)
 						writers++
 						if writers != 1 || readers != 0 {
 							ht.Fatalf("writer with %d writers, %d readers", writers, readers)
 						}
 						qenv.Sleep(ctx, time.Millisecond)
 						writers--
-						weave.RWUnlock(&mu)
+						woven.RWUnlock(&mu)
 					} else {
-						weave.RLock(&mu)
+						woven.RLock(&mu)
 						readers++
 						if writers != 0 {
 							ht.Fatalf("reader with a writer")
 						}
 						qenv.Sleep(ctx, time.Millisecond)
 						readers--
-						weave.RUnlock(&mu)
+						woven.RUnlock(&mu)
 					}
 				}
-				weave.Add(&wg, 1)
-				go weave.Go(func() { defer weave.Done(&wg); done++ })() //qenv:ok what weaving makes of a //qenv:go statement
+				woven.Add(&wg, 1)
+				go woven.Go(func() { defer woven.Done(&wg); done++ })() //qenv:ok what weaving makes of a //qenv:go statement
 			})
 		}
 		s.Spawn("waiter", func(ctx context.Context) {
 			qenv.Sleep(ctx, time.Second)
-			weave.Wait(&wg)
+			woven.Wait(&wg)
 			if done != 4 {
 				ht.Fatalf("Wait returned with %d of 4 done", done)
 			}
@@ -238,11 +238,11 @@ func TestWovenSyncInSimulation(t *testing.T) {
 
 	// outside: the real mutex
 	var mu sync.Mutex
-	weave.MutexLock(&mu)
+	woven.MutexLock(&mu)
 	if mu.TryLock() {
 		t.Fatal("outside a simulation, MutexLock did not take the real mutex")
 	}
-	weave.MutexUnlock(&mu)
+	woven.MutexUnlock(&mu)
 }
 
 func sim(lambda float64) qload.SimConfig {

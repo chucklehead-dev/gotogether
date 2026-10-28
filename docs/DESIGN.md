@@ -1101,19 +1101,21 @@ weaving is the right trade.
 **What is woven.** Orchestrion's method-call join point matches calls of
 `sync.Mutex`, `sync.RWMutex` and `sync.WaitGroup` methods in the root
 module's packages (`package-filter: {root: true}`; never the standard
-library or dependencies). Each call becomes a function in `qenv/weave`.
-That function asks qenv whether the calling goroutine is a simulation task
-(`qenv/internal/keyed.Current`, from the goroutine registry of §12):
+library or dependencies). Each call becomes a function in package `woven`
+(the woven builds' ABI, §60; `qenv/weave` holds the aspects). That
+function asks qenv whether the calling goroutine is a simulation task
+(`internal/wovenrt.Current`, installed by qenv from the goroutine
+registry of §12):
 - inside a task, it operates on a lock or counter kept by the simulation
-  and keyed by the real object's address (`keyed.Lock` and the others).
+  and keyed by the real object's address (`wovenrt.Lock` and the others).
   Taking the lock is a scheduling point, and waiting for it is a simulated
   wait, with `sync`'s semantics (a waiting writer blocks new readers);
 - outside, the real method runs.
 
 **Goroutines.** Orchestrion has no join point for `go` statements. A
 directive does reach the statement's function value, so `//qenv:go`
-before `go func(){…}()` wraps the literal as `weave.Go(func(){…})`.
-`weave.Go` runs in the goroutine executing the go statement, before the
+before `go func(){…}()` wraps the literal as `woven.Go(func(){…})`.
+`woven.Go` runs in the goroutine executing the go statement, before the
 new one starts. That ordering is the trick: in a task it starts a
 simulation task running the function, and returns a no-op for the real
 goroutine. Outside a simulation it returns the function unchanged.
@@ -1857,7 +1859,7 @@ code they ran, step by step, so coverage can be read against the model
   seeds) would mix.
 - Reading them mid-run means parsing an internal file format.
 - qweave already rewrites the code under test, so it inserts the
-  counters itself. `qweave -cover` puts a call of `qcover.Hit(id)` at the
+  counters itself. `qweave -cover` puts a call of `woven.Hit(id)` at the
   start of every straight-line run of statements, splitting after
   compound or branching statements as cmd/cover does, on the line it
   starts so positions do not move. Each file registers its blocks in a
@@ -2171,14 +2173,14 @@ Building one binary per mutant costs a link per mutant, and a simulation's
 explorations are short. `qweave -mutate` instead weaves every mutant of
 the main module (or `-coverpkg`) into one build, each behind a switch
 (mutant schemata):
-- an `if` condition `c` becomes `quintqmut.Cond(id, c)`, negated when on;
+- an `if` condition `c` becomes `quintwoven.Cond(id, c)`, negated when on;
 - a pure comparison (operands without calls) becomes
-  `quintqmut.Pick(id, a < b, a <= b)`: its boundary moved; an `if` whose
+  `quintwoven.Pick(id, a < b, a <= b)`: its boundary moved; an `if` whose
   condition is one gets both, nested;
 - a call statement (not `panic` or `print`) becomes
-  `if !quintqmut.On(id) { call }`: dropped.
+  `if !quintwoven.MutantOn(id) { call }`: dropped.
 
-Each file registers its mutants at init (`qmut.Register`), with the
+Each file registers its mutants at init (`woven.RegisterMutants`, §60), with the
 function, the operator and a one-line snippet. A run turns one on with
 `qmut.WithMutant(ctx, id)`, found through qrun like a recorder, so seeds of
 one mutant, or of different mutants, run in parallel in one process. A
@@ -4312,3 +4314,49 @@ invariant and judges a code that never shows the scenario faithful.
   mutated never to refuse full, `addItem.full` not), gristtest's
   `TestScenario`, library's `TestAtTheLimitPossible` and `TestAtTheLimit`,
   the starter's `TestScenariosPossible` and `TestFull` (TestNewIsGreen).
+
+## 60. One ABI for woven code (H5)
+
+Three weavings rewrite code to call the toolkit: qenv/weave's aspects
+(sync methods and `//qenv:go`), `qweave -cover` (a `Hit` per block, the
+blocks registered at init) and `qweave -mutate` (`Cond`, `Pick`, the
+dropped call's switch, the mutants registered at init). Their targets
+were exported from the packages users read (fourteen functions in
+`qenv/weave`, `qcover.Hit` and `Register`, `qmut.Register`, `On`, `Cond`
+and `Pick`), so a user saw them next to the API meant for them, with
+the same compatibility promise implied.
+
+They are package `woven` now, the only surface public by necessity
+(woven code is the user's package, so it cannot import an internal
+one):
+- **No promise to users.** Its doc says so: nothing in it is called by
+  hand, and any of it may change in any release; it is stable only
+  between code woven by one version's aspects and qweave and that
+  version's core. A user names `qenv/weave` in a tool file (it keeps the
+  aspects, and its path, so no tool file changes) and reads coverage and
+  mutants through `qcover`, `qmut` and qtest, whose types (`Block`,
+  `Mutant`) stay theirs: `woven.Block` and `woven.Mutant` are the
+  registration's own, converted when read.
+- **Its state is internal** (`internal/wovenrt`): the sync hooks qenv
+  installs at init (was `qenv/internal/keyed`, now with `Go`, so `woven`
+  does not import qenv), the registries, and the run keys qcover's
+  `WithCounts` and qmut's `WithMutant` and `WithReach` set, a function
+  each rather than the collector's type, so `wovenrt` imports nothing of
+  the core but qrun and runkeys.
+- **Why so small an import graph.** The core's own mutation testing
+  weaves core packages: a woven package imports `woven`, so any package
+  `woven` imports, directly or not, would import itself once mutated.
+  qweave never mutates `woven`, `internal/wovenrt`, `internal/runkeys`,
+  `qrun`, `internal/hooks` (and still not `qmut` or `qcover`), and a
+  program woven without qenv sees `wovenrt.Current` false, so the real
+  sync methods run.
+- One import alias, `quintwoven`, for coverage and mutants alike (was
+  `quintqcover` and `quintqmut`).
+
+Twenty identifiers left the user-facing packages' sections of
+api/core.txt (qenv/weave's fourteen, qcover's two, qmut's four);
+woven's own section records the ABI (those twenty functions and the two
+registration types), so a change to it still shows in review.
+storetest's twelve per-check functions left api/grist.txt (their names
+stay the Checks' names). grist's generator, CLI plumbing and limit
+constants under grist/internal are H5's other half (ROADMAP).

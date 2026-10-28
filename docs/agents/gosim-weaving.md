@@ -1,9 +1,22 @@
-# gosim, the native runtime and weaving (qgosim, qweave, qenv/weave, qcover, qmut)
+# gosim, the native runtime and weaving (qgosim, qweave, qenv/weave, woven, qcover, qmut)
 
 Gotchas for agents (and humans) before changing qgosim, qweave, qenv/weave, the native runtime, coverage or mutants; AGENTS.md has the general ones.
 
+- Woven code calls package `woven` and nothing else of the toolkit: the
+  sync functions qenv/weave's aspects name (`woven.MutexLock`,
+  `woven.Go`, ...), `-cover`'s `Hit` and `RegisterBlocks`, `-mutate`'s
+  `Cond`, `Pick`, `MutantOn` and `RegisterMutants` (imported as
+  `quintwoven`). It is an ABI (DESIGN §60): no user calls it,
+  and it changes with the aspects and qweave in one commit (an aspect's
+  template, `qweave/cover.go`, `qweave/mutate.go` and their fixture
+  tests). Its state is `internal/wovenrt` (qenv installs the sync hooks;
+  qcover and qmut read the registries and set the run keys). Keep both
+  importing nothing of the core but qrun and runkeys: a core package
+  mutated imports woven, so anything woven imports would import itself.
+  qenv/weave keeps only the aspects and their path (users' tool files
+  name it).
 - `qweave -cover` instruments the main module only, never the toolkit's
-  own packages (examples aside): qcover's `Hit` would count itself. A
+  own packages (examples aside): `woven.Hit` would count itself. A
   block's code is attributed to its task's next step, so a client whose
   step a service records shows as "run by no step": read that list as
   code no step of its own task explains, not as dead code.
@@ -15,9 +28,9 @@ Gotchas for agents (and humans) before changing qgosim, qweave, qenv/weave, the 
   survive by right: read the report, do not assert a score (in an
   example's System.Mutate).
 - The toolkit's own packages are mutated only when `-coverpkg` names
-  them, never qmut, qrun, qcover, internal/hooks or qenv/goroutine.go (the
-  code a mutant's switch calls to find its run: mutated, it called
-  itself). `GOTOGETHER_MUTANT=<id>` turns one mutant on for the whole
+  them, never woven, internal/wovenrt, internal/runkeys, qmut, qrun,
+  qcover, internal/hooks or qenv/goroutine.go (the code a mutant's switch
+  calls to find its run: mutated, it called itself). `GOTOGETHER_MUTANT=<id>` turns one mutant on for the whole
   process (unit tests carry no run), `=list` prints them;
   `ci/mutate-core.sh <pkg> [max]` runs a package's tests once a mutant
   (`JOBS=n` at a time). There the nightly does hold a bar: a core

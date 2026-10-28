@@ -9,8 +9,15 @@ import (
 	"strings"
 )
 
-// qcoverPath is the package woven blocks report to.
-const qcoverPath = "github.com/chucklehead-dev/gotogether/qcover"
+// wovenPath is package woven, the woven builds' ABI: the package woven
+// blocks report to (Hit, RegisterBlocks) and woven mutants ask whether
+// they are on (MutantOn, Cond, Pick). qcover and qmut read what it
+// collects.
+const wovenPath = "github.com/chucklehead-dev/gotogether/woven"
+
+// wovenAlias is the name woven files import package woven by, unless they
+// import it already.
+const wovenAlias = "quintwoven"
 
 // coverBlock is a block found for instrumentation.
 type coverBlock struct {
@@ -20,7 +27,7 @@ type coverBlock struct {
 	fn                 string
 }
 
-// instrument adds block coverage to the file: a call of qcover.Hit at the
+// instrument adds block coverage to the file: a call of woven.Hit at the
 // start of every straight-line run of statements (a new one after each
 // compound or branching statement, as cmd/cover splits them), and the
 // file's blocks registered at package initialization. Insertions stay on
@@ -78,11 +85,11 @@ func (w *fileWeaver) instrument() {
 	if len(bs) == 0 {
 		return
 	}
-	alias := "quintqcover"
-	if name := nameOf(w.imports, qcoverPath); name != "" && name != "_" && name != "." {
+	alias := wovenAlias
+	if name := nameOf(w.imports, wovenPath); name != "" && name != "_" && name != "." {
 		alias = name
 	} else {
-		w.need[alias] = qcoverPath
+		w.need[alias] = wovenPath
 	}
 	h := fnv.New32a()
 	h.Write([]byte(w.name))
@@ -94,7 +101,7 @@ func (w *fileWeaver) instrument() {
 		}
 	}
 	var reg strings.Builder
-	fmt.Fprintf(&reg, "\nvar %s = %s.Register([]%s.Block{\n", base, alias, alias)
+	fmt.Fprintf(&reg, "\nvar %s = %s.RegisterBlocks([]%s.Block{\n", base, alias, alias)
 	for i, b := range bs {
 		text := fmt.Sprintf("%s.Hit(%s+%d); ", alias, base, i)
 		w.edits = append(w.edits, &edit{start: b.at, end: b.at, render: func(func(ast.Node) string) (string, error) { return text, nil }})

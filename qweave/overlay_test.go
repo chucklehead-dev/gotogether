@@ -16,6 +16,8 @@ func TestCoversToolkitPackages(t *testing.T) {
 		{Config{Mutate: true, CoverPkgs: []string{qtrace}}, qtrace, true},
 		{Config{Cover: true, CoverPkgs: []string{qtrace}}, qtrace, false},
 		{Config{Mutate: true, CoverPkgs: []string{toolkit}}, qmut, false},
+		{Config{Mutate: true, CoverPkgs: []string{toolkit}}, toolkit + "/woven", false},
+		{Config{Mutate: true, CoverPkgs: []string{toolkit}}, toolkit + "/internal/wovenrt", false},
 		{Config{Mutate: true, CoverPkgs: []string{toolkit}}, toolkit + "/examples/hello", true},
 	} {
 		if got := c.cfg.covers(c.path, true); got != c.want {

@@ -4,17 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/chucklehead-dev/gotogether/qenv/internal/keyed"
+	"github.com/chucklehead-dev/gotogether/internal/wovenrt"
 )
 
 func init() {
-	keyed.Current, keyed.Lock, keyed.TryLock, keyed.Unlock = current, lockKey, tryLockKey, unlockKey
-	keyed.RLock, keyed.TryRLock, keyed.RUnlock, keyed.Add, keyed.Wait = rLockKey, tryRLockKey, rUnlockKey, addKey, waitKey
+	wovenrt.Current, wovenrt.Lock, wovenrt.TryLock, wovenrt.Unlock = current, lockKey, tryLockKey, unlockKey
+	wovenrt.RLock, wovenrt.TryRLock, wovenrt.RUnlock, wovenrt.Add, wovenrt.Wait = rLockKey, tryRLockKey, rUnlockKey, addKey, waitKey
+	wovenrt.Go = func(ctx context.Context, fn func()) { Go(ctx, "go", func(context.Context) { fn() }) }
 }
 
 // Locks and wait groups keyed by the real object they stand for: what code
-// rewritten at build time (qenv/weave) calls in place of sync.Mutex,
-// sync.RWMutex and sync.WaitGroup methods, so that blocking on them is
+// rewritten at build time (qenv/weave's aspects, through package woven)
+// calls in place of sync.Mutex, sync.RWMutex and sync.WaitGroup methods, so that blocking on them is
 // waiting in the simulation, and taking them is a scheduling point Hegel or
 // a seed chooses around. The real object is only a key; its own state is
 // never touched while its users run in the simulation.
