@@ -48,6 +48,12 @@ qenv/weave/   Orchestrion aspects: sync locks, wait groups and //qenv:go gorouti
 woven/        the woven builds' ABI: what qenv/weave's aspects, qweave -cover and -mutate make code call (no user calls it);
               its state in internal/wovenrt (DESIGN §60)
 qenv/fault/   the //quint:fault aspect: fault points (qenv.FaultPoint) with the function's own errors, declared for coverage
+qenv/qhttp/ qenv/qsql/ qenv/simlog/   doubles in the core: net/http, database/sql over a Store, a partitioned log (Kafka's
+              contract: idempotent producer, group, fencing; the Writer/Reader seams its real tiers implement)
+qenv/simgrpc/ qenv/kubesim/   separate modules (published), doubles with heavy dependencies: any generated gRPC service in qenv
+              (ServiceRegistrar + ClientConnInterface); controller-runtime clients over simulated API servers
+qenv/simlog/kafkalog/ qenv/simlog/kinesislog/   separate modules (published): simlog's seams over franz-go and the AWS SDK
+              (kinesislog/kinesisfake: an in-process Kinesis endpoint)
 qgosim/       separate module: qenv and whole programs in gosim (on the fork, module github.com/chucklehead-dev/gosim)
 qweave/       separate module: weaves Orchestrion aspects with types into a go -overlay (cmd/qweave); also gosim's
 qnav/         separate module (published; Charm's v2 libraries): gotogether-nav, the navigators' TUI; tapes/ (VHS scenarios, goldens)
@@ -73,10 +79,10 @@ examples/glomers      Gossip Glomers on a Maelstrom runtime + simulator (maelstr
                       cmd/* run under real Maelstrom (maelstrom.sh)
 examples/kvstore      app: HTTP KV service with CAS (kvserver, kvload); concurrency, span conversion
 examples/jobqueue     app: at-least-once queue with leases and restarts; design-level verdicts
-examples/grpcledger   separate module: gRPC ledger; simgrpc (any generated gRPC service in qenv: ServiceRegistrar + ClientConnInterface),
+examples/grpcledger   separate module: gRPC ledger simulated through qenv/simgrpc,
                       real tier over bufconn with otelgrpc spans converted to steps (ledger.convert.yaml); cmd/ledger-real
-examples/streams      separate module: outbox publisher + consumers on Kafka (franz-go, kfake), Kinesis (AWS SDK,
-                      kinesisfake) and a simulated log (simlog: partitions, idempotent producer, group, fencing); one binding
+examples/streams      separate module: outbox publisher + consumers on Kafka (kafkalog, kfake), Kinesis (kinesislog,
+                      kinesisfake) and the simulated log (qenv/simlog); one binding
 examples/counters     app: grain's counter example on grist, gristsim; mutants blind (Rejects) and dispatchDirect (Mismatch)
 examples/hello        app: the smallest simulated system (a counter, a lossy network, a retrying client); start here
 examples/wallet       app: transfers on a Store with request-id dedupe, an outbox, a ledger; Exhaust, isolation levels and qhistory,
@@ -87,7 +93,7 @@ examples/raftkv       app: etcd's raft library on qenv (WAL on a Store, election
 examples/lease        app: a lease lock and the store it guards under clock faults (Sim.Clocks); fencing vs clocks, wall vs monotonic
 examples/twophase     app: two-phase commit on qenv against a Choreo model (vendored choreo.qnt); named transitions, connect and Explore
 examples/checkout     app: checkout saga on qenv (isolation levels, outbox, idempotency, crashes); cmd/checkout-sim; under load (load.go)
-examples/fleetrollout separate module: multicluster-runtime controller, simulated (kubesim) and on kwok (kwok-demo.sh;
+examples/fleetrollout separate module: multicluster-runtime controller, simulated (qenv/kubesim) and on kwok (kwok-demo.sh;
                       TRACE= times pods by a SimKube trace through kwok Stages, cmd/kwok-stages)
 examples/crossdb      separate module: Crossplane provider (crossplane-runtime) for a dbaas, simulated and on kind with Crossplane (kind/)
 examples/retrystorm   library: retry policies (backoff, budget); budget checked by a model, policies by qmeta/qload/FindTrigger
@@ -103,8 +109,9 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 
 ## Requirements and commands
 
-- The published modules (the core, qhegel, qweave, qanalysis, qgosim, grist, qnav)
-  have no `replace`: `go install …@version` refuses one, and a
+- The published modules (the core, qhegel, qweave, qanalysis, qgosim, grist, qnav,
+  and the doubles' qenv/simgrpc, qenv/kubesim, qenv/simlog/kafkalog,
+  qenv/simlog/kinesislog) have no `replace`: `go install …@version` refuses one, and a
   dependency's is ignored. They require each other at pushed commits
   (pseudo-versions, until tags). A change to the core that another
   published module needs: push it, then `go get
@@ -112,8 +119,9 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   and push again; until then CI tests the module against the older core.
   Examples are not published and keep `replace => ../..`.
   Tags, when the maintainer says: gosim (its own repository) first, then
-  the core, qweave, qhegel, qanalysis and qgosim, each module's tag
-  prefixed with its directory (`qhegel/v0.1.0`), and each module's
+  the core, qweave, qhegel, qanalysis and qgosim, then the doubles
+  (kafkalog and kinesislog need the core's qenv/simlog), each module's tag
+  prefixed with its directory (`qhegel/v0.1.0`, `qenv/simlog/kafkalog/v0.1.0`), and each module's
   requirements moved from pseudo-versions to the tags.
 - Each published module's exported API is recorded in api/<module>.txt
   (api/core.txt, api/qhegel.txt, ...): every exported function, type,

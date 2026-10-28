@@ -62,7 +62,7 @@ sim.Spawn("sdk", func(ctx context.Context) { /* client.Post(srv.URL()+"/payments
 - Not simulated: TLS (https reaches the same server), HTTP/2, trailers,
   100-continue, Hijack, connection reuse.
 
-## gRPC services: `simgrpc` (examples/grpcledger)
+## gRPC services: `qenv/simgrpc` (a module; examples/grpcledger)
 
 ```go
 srv := simgrpc.NewServer(sim, "ledger", proc)            // a grpc.ServiceRegistrar in the simulation
@@ -92,13 +92,21 @@ client := ledgerpb.NewLedgerClient(srv.Dial())           // a grpc.ClientConnInt
 
 ## Streams: Kafka and Kinesis (examples/streams)
 
-- **Streams (Kafka, Kinesis).** Seams: a `Writer` (Produce with a done
-  callback, Flush) and a `Reader` (Poll, Commit). `examples/streams/simlog`
-  is the simulated log:
-  - named faults `log.produce` (lost, lostAck), `log.commit` (lost,
-    lostAck) and `log.fetch` (rewind);
-  - evictions as `rebalance.<consumer>` nemeses, with fencing;
-  - an idempotent producer client.
+- **Streams (Kafka, Kinesis).** Seams: `qenv/simlog`'s `Writer` (Produce
+  with a done callback, Flush) and `Reader` (Poll, Commit), records with
+  byte values. `qenv/simlog` is the simulated log (`simlog.New`):
+  - named faults `log.<name>.produce` (lost, lostAck), `log.<name>.commit`
+    (lost, lostAck) and `log.<name>.fetch` (rewind);
+  - evictions as `rebalance.<name>.<consumer>` nemeses, with fencing;
+  - an idempotent producer client (`Log.Producer`), group members
+    (`Log.Member`);
+  - a commit reported where it lands (`Log.OnCommit`): record it there;
+  - its contract checked under `GOTOGETHER_CHECK=1`.
+
+  The same seams over real clients are modules: `qenv/simlog/kafkalog`
+  (franz-go) and `qenv/simlog/kinesislog` (the AWS SDK, with an
+  in-process endpoint, `kinesisfake`); each reports a commit to
+  `Reader.OnCommit` when the client is told it landed.
 
   Record `read` at the consumer and let the model learn the log from it:
   the same binding then checks kfake (franz-go's in-process Kafka) and a

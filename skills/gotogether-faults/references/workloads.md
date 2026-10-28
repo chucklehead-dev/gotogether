@@ -1,9 +1,10 @@
 # A production workload against the simulation
 
 Replay a captured cluster's activity while the system under test runs:
-`kubesim.Fleet.Replay(s, trace, speed)` (examples/fleetrollout) applies a
-SimKube trace's Deployment scalings to the simulated members, as another
-writer (`kubesim.AsWriter`), through the same faults. The first replay
+`fleetrollout.Replay(s, fleet, trace, speed)` (examples/fleetrollout)
+applies a SimKube trace's Deployment scalings to the simulated members
+(`qenv/kubesim`), as another writer (`kubesim.AsWriter`), through the
+same faults. The first replay
 usually shows the model has no step for the environment's other writers.
 Add one, deliberately (fleet.qnt `scale`), and explore with the workload
 on.

@@ -34,6 +34,14 @@ AGENTS.md has the general requirements.
   module (`-init` writes a first model/<app>.qnt), or `GRIST_UPDATE=1 go
   test -run TestGenerated`; grist's own golden files:
   `GRIST_UPDATE=1 go test -run TestGenerateGolden .` in grist/.
+- The doubles' modules (qenv/simgrpc, qenv/kubesim, qenv/simlog/kafkalog,
+  qenv/simlog/kinesislog): `cd <dir> && GOWORK=off GOTOGETHER_CHECK=1 go test
+  ./...`, as CI's doubles job runs them (and under `-race`), on their own
+  go.mod and pinned core; no quint needed. qenv/simlog is the core's
+  (`go test ./qenv/simlog/`, `GOTOGETHER_CHECK=1` for its contract check).
+  kafkalog and kinesislog require the core at a commit with qenv/simlog:
+  a change to simlog's seams that they need is pushed first, then `go get`
+  in each.
 - grpcledger and streams (their own modules): `cd examples/<name> && go test ./...`.
   grpcledger's generated protobuf code is checked in; regenerate with buf
   (no protoc: see its README).

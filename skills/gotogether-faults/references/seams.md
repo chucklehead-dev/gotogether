@@ -67,7 +67,8 @@ shrinking removes faults.
   through an interface (`Clusters`). In simulation, give them
   controller-runtime fake clients behind `interceptor.Funcs`; that's the
   seam where generation, conflicts, lag and lost responses happen
-  (examples/fleetrollout `kubesim`).
+  (`qenv/kubesim`, a module: `kubesim.NewCluster`, `Cluster.OnWrite` to
+  record a write where it lands, `kubesim.Fleet`; examples/fleetrollout).
 
 ## 2. Record steps where effects happen
 

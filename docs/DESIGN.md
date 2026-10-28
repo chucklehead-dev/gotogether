@@ -2547,7 +2547,8 @@ qanalysis/actionmap, which has the call graph:
 ## 38. gRPC services, simulated and for real (examples/grpcledger)
 
 A gRPC service is checked the way checkout is, with one new seam:
-`simgrpc` (examples/grpcledger/simgrpc, ~150 lines), which runs any
+`simgrpc` (first examples/grpcledger/simgrpc, ~150 lines; since H7 the
+module qenv/simgrpc), which runs any
 generated service inside qenv.
 - `Server` implements `grpc.ServiceRegistrar`, so the generated
   `RegisterXServer` registers the real handlers. `Conn` implements
@@ -2617,7 +2618,8 @@ what the publisher was told (`publish`). The binding has no templates.
 
 **A simulated partitioned log, not qenv.Queue.** qenv's Queue is
 per-message acknowledgement with redelivery, and has no offsets,
-partitions or groups. simlog (in the example module) is Kafka's contract:
+partitions or groups. simlog (first in the example module; since H7 the core's qenv/simlog,
+its Kafka and Kinesis adapters modules beside it) is Kafka's contract:
 - an idempotent producer client: sequence numbers per partition, the log
   rejecting out-of-order and dropping duplicates, 5 requests in flight;
 - commits with lost requests and acknowledgements;
@@ -2627,7 +2629,8 @@ partitions or groups. simlog (in the example module) is Kafka's contract:
   applying while the new owner re-reads; the serializable projection and
   the version keep it idempotent).
 
-It belongs in core only if a second example needs it. Kinesis's contract
+It belonged in core only if a second user needed it: grist's streams
+(GR5) are that user, so H7 moved it there. Kinesis's contract
 is a subset (no idempotence, no groups), so it could serve that too.
 
 **Findings while building it.**

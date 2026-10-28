@@ -83,6 +83,10 @@ item as recommended:
   GR4. simgrpc (grpcledger), simlog and its Kafka/Kinesis adapters
   (streams) and kubesim (fleetrollout) become published packages or
   small modules, the examples importing them, before GR5-GR7 need them.
+  The second half done (HISTORY: "H7's second half: the doubles
+  published"): `qenv/simlog` in the core, `qenv/simgrpc`,
+  `qenv/kubesim`, `qenv/simlog/kafkalog` and `qenv/simlog/kinesislog`
+  modules.
 - **Upstream:** quint 0.33's REPL refuses a file that a file it imports
   imports back (QNT101), which typecheck accepts. grist's model layout
   no longer has such a cycle, so D4 is unblocked (and measured: no gain

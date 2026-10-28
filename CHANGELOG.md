@@ -1,8 +1,10 @@
 # Changelog
 
 Every published module (the core, qhegel, qweave, qanalysis, qgosim, grist, qnav,
-and the doubles' qenv/simgrpc and qenv/kubesim) is versioned together; the examples are not published. A change to the
-core's exported API updates `api/core.txt` and adds a line here.
+and the doubles' qenv/simgrpc, qenv/kubesim, qenv/simlog/kafkalog and
+qenv/simlog/kinesislog) is versioned together; the examples are not
+published. A change to the core's exported API updates `api/core.txt`
+and adds a line here.
 
 ## Unreleased
 
@@ -19,7 +21,10 @@ The first release. What a user meets, by module:
   simulated API servers for controller-runtime clients, any object's
   generation and status rules, every verb faulted under
   `kube.<cluster>.request`, writes reported where they land,
-  `Cluster.OnWrite`, `NewDeployment`, `Fleet`). grpcledger, streams and
+  `Cluster.OnWrite`, `NewDeployment`, `Fleet`); `qenv/simlog/kafkalog`
+  and `qenv/simlog/kinesislog` (modules: simlog's seams over franz-go and
+  the AWS SDK, `Reader.OnCommit` when a commit is accepted, kinesislog
+  with its in-process endpoint `kinesisfake`). grpcledger, streams and
   fleetrollout import them.
 - Liveness as cycles (ROADMAP P6): `gotogether simulate -graph` judges
   each eventual val over the state graph. A reachable cycle of states

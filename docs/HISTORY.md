@@ -1761,6 +1761,55 @@ what every grist app wrote before its first claim. What changed:
   not). twophase's `MUTANT=earlyCommit` stops on an unsettled run
   (exit 2), as it did before.
 
+### H7's second half: the doubles published
+
+GR5-GR7 will build grist's streams, gRPC and controllers on the doubles
+three examples wrote for themselves; an app outside the repository could
+not import any of them. Each moved in a commit of its own (the file as
+it was, so `git log --follow` reads its history), then became general.
+Placement is by dependency weight: the core takes OTel and yaml.v3 only.
+- **`qenv/simlog`, a package of the core.** It needs nothing but qenv,
+  so it sits beside qhttp and qsql, and gristsim (GR5) can use it
+  without a module. The seams were the pipeline's (`Writer`, `Reader`,
+  `Record` with the pipeline's two ints); they are the log's now, values
+  as bytes (the pipeline encodes `n:value`, as its real tiers did), so
+  the real tiers implement the same interfaces. The commit step it
+  recorded itself is the user's, from `Log.OnCommit` where the commit
+  lands. Its fault kinds carry the log's name (`log.<name>.produce`,
+  `rebalance.<log>.<consumer>`), as the core's doubles' do. It gained a
+  contract check under `Sim.Check`, as the Queue has (offsets dense, each
+  delivery the record that landed there with no hole, an idempotent
+  producer's records each once and in order, commits only from the
+  owner), with tests that each of three broken logs is caught.
+- **`qenv/simgrpc`, a module** (google.golang.org/grpc). Its API was
+  already general; its refused connection became the server process's
+  for a core settle. It had no tests of its own: a hand-written
+  ServiceDesc over a well-known type tests each fault's status code, the
+  virtual timeout, statuses and crashes without generated code.
+- **`qenv/kubesim`, a module** (client-go, controller-runtime). It knew
+  one Deployment (`default/web`), recorded fleetrollout's `patch` and
+  `scale` steps by name and replayed SimKube traces. Now any objects and
+  scheme; the API server's rules for any object with a spec (generation,
+  status kept, an `apierrors` conflict on a stale resourceVersion);
+  every verb a seam; every Deployment rolled out; writes reported where
+  they land (`Cluster.OnWrite`, with `AsWriter`'s writer), from which the
+  example records its steps; `kube.<cluster>.request` as its kind. The
+  replay stays in the example (sktrace is unpublished). For one
+  Deployment the choices are the ones they were: fleetrollout's
+  calibrated seed counts hold.
+- **`qenv/simlog/kafkalog` and `qenv/simlog/kinesislog`, modules**
+  (franz-go; the AWS SDK, with `kinesisfake`). Their commit step became
+  `Reader.OnCommit`; kgo options pass through. They require the core at
+  a commit with qenv/simlog, so they were pushed after it. Their tests
+  write, read, commit and resume on kfake and the fake endpoint; the
+  pipeline's runs on each moved to streams' tier package.
+crossdb keeps its own kube interceptor: its seam translates
+crossplane-runtime's timestamps, and moving it onto kubesim (a
+time-translation option) is GR7's when it needs both. api/<module>.txt
+records each module, CI's doubles job tests each on its own go.mod
+(GOTOGETHER_CHECK and the race detector), simdeps covers them through
+go.work.
+
 ### P8: skills in pavlov's shape
 
 pavlov's newcomer review found its skills short, each with a
