@@ -96,6 +96,7 @@ func (c *Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt Sear
 	}
 	each(all, func(i int) {
 		sc := *c
+		sc.mode.ctx = ctx
 		if searching {
 			o := base
 			if len(runs) > 1 {

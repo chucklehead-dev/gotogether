@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/internal/replay"
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -480,9 +481,11 @@ func quintTest(ctx context.Context, qnt, module, base string, opt Options, tests
 	case <-ctx.Done():
 		return "", fmt.Errorf("quint test: %w", ctx.Err())
 	}
-	cmd := exec.CommandContext(ctx, opt.Quint, args...)
-	cmd.Dir = opt.Dir
+	cmd := quintcmd.Command(ctx, opt.Quint, opt.Dir, args...)
 	out, err := cmd.CombinedOutput()
+	if ctx.Err() != nil { // killed: its output is no verdict
+		return string(out), fmt.Errorf("quint test: %w", ctx.Err())
+	}
 	if err != nil {
 		if _, ok := err.(*exec.ExitError); !ok {
 			return string(out), fmt.Errorf("quint test: %w", err)

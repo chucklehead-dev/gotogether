@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -9,7 +10,6 @@ import (
 	"io"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime/debug"
 	"slices"
@@ -18,6 +18,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/memo"
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -827,7 +828,7 @@ func quintVersion(bin string) string {
 		bin = "quint"
 	}
 	return quintVersions.Once(bin, func() string {
-		out, err := exec.Command(bin, "--version").Output()
+		out, err := quintcmd.Command(context.Background(), bin, "", "--version").Output()
 		if err != nil {
 			return ""
 		}

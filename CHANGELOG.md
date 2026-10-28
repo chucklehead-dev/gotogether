@@ -19,6 +19,11 @@ The first release. What a user meets, by module:
   the docs): LoadModel's error names the rename (`item_`) and the
   binding's mapping, which `scaffold` writes and `lint -binding -src`
   asks for.
+- A cancelled check kills all of quint (eleventh review, H1): every
+  quint invocation runs in a process group of its own, killed whole on
+  cancel, where only node was killed and its Rust evaluator kept running
+  under init. qtest's and connect's checks run under the test's context
+  (`t.Context()`), and a search's quint checks under its Judge's.
 - The examples' doubles published (ROADMAP H7's second half):
   `qenv/simlog`, a package of the core (Kafka's contract on qenv: an
   idempotent `Producer`, group `Member`s with fencing, the seams

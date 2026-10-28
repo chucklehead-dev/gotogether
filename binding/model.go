@@ -1,13 +1,13 @@
 package binding
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/internal/memo"
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/internal/quintnames"
 )
 
@@ -182,8 +183,7 @@ func LoadModel(quint, spec, module string) (*Model, error) {
 	}
 	tmp.Close()
 	defer os.Remove(tmp.Name())
-	cmd := exec.Command(quint, "typecheck", filepath.Base(spec), "--out", tmp.Name())
-	cmd.Dir = filepath.Dir(spec)
+	cmd := quintcmd.Command(context.Background(), quint, filepath.Dir(spec), "typecheck", filepath.Base(spec), "--out", tmp.Name())
 	if out, err := cmd.CombinedOutput(); err != nil {
 		// with --out, quint writes its errors there, not to its output: a
 		// refused model once said only "exit status 1"

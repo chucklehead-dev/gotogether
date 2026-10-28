@@ -1,14 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
@@ -268,8 +269,7 @@ func readWitnesses(out string, preds []*possibleCheck) error {
 }
 
 func runQuint(quint, dir string, argv []string) (string, error) {
-	cmd := exec.Command(quint, argv...)
-	cmd.Dir = dir
+	cmd := quintcmd.Command(context.Background(), quint, dir, argv...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }

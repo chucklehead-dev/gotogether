@@ -1,16 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
@@ -235,8 +236,7 @@ func simulate(args []string) (int, error) {
 				}
 			}
 		}
-		cmd := exec.Command(*quint, argv...)
-		cmd.Dir = dir
+		cmd := quintcmd.Command(context.Background(), *quint, dir, argv...)
 		out, err := cmd.CombinedOutput()
 		violated := strings.Contains(string(out), "[violation]")
 		if hosting != nil && err == nil && !violated {

@@ -1,7 +1,6 @@
 package validate
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -956,7 +955,7 @@ func withProcess(ch *Checker, state string, order []qtrace.Step) string {
 // violation's too), and a conforming one's last state.
 func quintChecker(ch *Checker, tr *qtrace.Trace, a string, invariants bool) func(orders [][]qtrace.Step) ([]int, []string) {
 	return func(orders [][]qtrace.Step) ([]int, []string) {
-		reps, errs := ch.CheckBatch(context.Background(), settledAs(tr, orders), 0)
+		reps, errs := ch.CheckBatch(ch.mode.context(), settledAs(tr, orders), 0)
 		fs, states := make([]int, len(orders)), make([]string, len(orders))
 		for i := range orders {
 			if errs[i] != nil {
@@ -1517,7 +1516,7 @@ func resolution(ch, full *Checker, tr *qtrace.Trace, settles []qtrace.Step, budg
 		searchedAgain.Add(1)
 		disagreed = fmt.Sprintf("; the Go evaluator and quint disagree on actor %s's resolutions: decided by quint (GOTOGETHER_EVAL=quint checks with quint alone)", a)
 	}
-	reps, errs := ch.CheckBatch(context.Background(), settledAs(tr, orders), 0)
+	reps, errs := ch.CheckBatch(ch.mode.context(), settledAs(tr, orders), 0)
 	best, bestAt := 0, -2
 	var firstErr error
 	for i := range orders {

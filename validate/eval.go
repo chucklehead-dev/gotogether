@@ -1,12 +1,12 @@
 package validate
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"hash/maphash"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -16,6 +16,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/internal/memo"
 	"github.com/chucklehead-dev/gotogether/internal/qeval"
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
@@ -153,9 +154,9 @@ func compileEval(c *Checker, make func(path string) (*binding.EvalModule, error)
 	if quint == "" {
 		quint = "quint"
 	}
-	cmd := exec.Command(quint, "compile", "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, qnt)
+	cmd := quintcmd.Command(context.Background(), quint, dir, "compile", "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, qnt)
 	var stderr strings.Builder
-	cmd.Dir, cmd.Stdout, cmd.Stderr = dir, f, &stderr
+	cmd.Stdout, cmd.Stderr = f, &stderr
 	err = cmd.Run()
 	f.Close()
 	if err != nil {

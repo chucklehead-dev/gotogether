@@ -92,7 +92,7 @@ func MutateSteps(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...
 	o := c.Options
 	o.Dir = filepath.Join(c.Dir, "quint")
 	cc, inst, _ := instanceChecker(t, bindingPath, o, c)
-	rep, err := judgeStepMutants(cc, inst, steps, c.searchOptions(), c.stepMutations)
+	rep, err := judgeStepMutants(t.Context(), cc, inst, steps, c.searchOptions(), c.stepMutations)
 	if err != nil {
 		t.Fatalf("gotogether: MutateSteps: %v", err)
 	}
@@ -101,9 +101,9 @@ func MutateSteps(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...
 	return rep
 }
 
-func judgeStepMutants(cc *validate.Checker, inst string, steps []qtrace.Step, opt validate.SearchOptions, mopts []qtrace.MutationOption) (*StepMutationReport, error) {
+func judgeStepMutants(ctx context.Context, cc *validate.Checker, inst string, steps []qtrace.Step, opt validate.SearchOptions, mopts []qtrace.MutationOption) (*StepMutationReport, error) {
 	var cached int
-	sm, err := cc.MutateSteps(context.Background(), steps, opt, cachedCheck(cc, inst, &cached), mopts...)
+	sm, err := cc.MutateSteps(ctx, steps, opt, cachedCheck(cc, inst, &cached), mopts...)
 	if err != nil {
 		return nil, err
 	}

@@ -33,11 +33,12 @@ package qtest
 import (
 	"context"
 	"fmt"
-	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 
 	"github.com/chucklehead-dev/gotogether/qcover"
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -480,7 +481,7 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 	run.Recorded = run.Steps
 	cc := *ch // per run: its own output directory
 	cc.Options.Dir = o.Dir
-	j, err := cc.Judge(context.Background(), run.Steps, c.searchOptions())
+	j, err := cc.Judge(t.Context(), run.Steps, c.searchOptions())
 	if err != nil {
 		t.Fatalf("gotogether: %v", err)
 	}

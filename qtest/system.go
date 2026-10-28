@@ -1,7 +1,6 @@
 package qtest
 
 import (
-	"context"
 	"slices"
 	"testing"
 
@@ -117,7 +116,7 @@ func (s System) FollowTraces(t testing.TB, trace connect.Config, faults FaultMap
 	if trace.Dir == "" {
 		trace.Dir = t.TempDir()
 	}
-	files, _, err := connect.GenerateRun(context.Background(), trace)
+	files, _, err := connect.GenerateRun(t.Context(), trace)
 	if err != nil {
 		t.Fatal(err)
 	}

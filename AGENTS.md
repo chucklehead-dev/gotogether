@@ -179,8 +179,12 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   - a line in README.md if it is a new entry point;
   - an update to the relevant skill in `skills/` if agents should use it.
   `skills/skills_test.go` checks the skills' front matter.
-- quint invocations go through argv (never a shell). Pass absolute spec
-  paths and set `cmd.Dir` to the spec's directory.
+- quint invocations go through argv (never a shell), by
+  `internal/quintcmd.Command` (quint in a process group of its own, the
+  group killed on cancel: exec.CommandContext killed node alone and left
+  its Rust evaluator running). Pass absolute spec paths and the spec's
+  directory as the command's. A test's checks take `t.Context()`, so a
+  failed test's quint processes end with it.
 - Timing-sensitive or slow tests (shrinking against the model) skip under
   `testing.Short()`.
 - A search or a heuristic (Linearize, ResolvePending's placements,

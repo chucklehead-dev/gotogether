@@ -48,6 +48,17 @@ type mode struct {
 	// byCheck: an order the Go evaluator found is left to the check of the
 	// search's Steps to confirm (Judge)
 	byCheck bool
+	// ctx is the Judge's or MutateSteps' context, which a search's quint
+	// checks run under (cancelling it kills them); nil: Background
+	ctx context.Context
+}
+
+// context is the context of c's search's quint checks.
+func (m mode) context() context.Context {
+	if m.ctx == nil {
+		return context.Background()
+	}
+	return m.ctx
 }
 
 // NewChecker loads a binding file, typechecks its model and lints the

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/itf"
 )
 
@@ -188,8 +189,7 @@ func quint(ctx context.Context, c Config, args []string, prefix string) ([]strin
 	if c.Backend != "" {
 		args = append(args, "--backend", c.Backend)
 	}
-	cmd := exec.CommandContext(ctx, c.Quint, args...)
-	cmd.Dir = filepath.Dir(must(filepath.Abs(c.Spec)))
+	cmd := quintcmd.Command(ctx, c.Quint, filepath.Dir(must(filepath.Abs(c.Spec))), args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
@@ -225,7 +225,7 @@ func Run(t testing.TB, c Config, newDriver func() Driver) {
 	if c.Dir == "" {
 		c.Dir = t.TempDir()
 	}
-	files, c, err := GenerateRun(context.Background(), c)
+	files, c, err := GenerateRun(t.Context(), c)
 	if err != nil {
 		t.Fatalf("connect: generating traces: %v", err)
 	}
@@ -241,7 +241,7 @@ func Test(t testing.TB, c Config, test string, newDriver func() Driver) {
 	if c.Dir == "" {
 		c.Dir = t.TempDir()
 	}
-	files, c, err := generateTest(context.Background(), c, test)
+	files, c, err := generateTest(t.Context(), c, test)
 	if err != nil {
 		t.Fatalf("connect: generating traces of %s: %v", test, err)
 	}

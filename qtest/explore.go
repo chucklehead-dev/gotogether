@@ -674,7 +674,7 @@ func judge(t testing.TB, cc *validate.Checker, inst string, opt validate.SearchO
 	for i, r := range runs {
 		steps[i] = r.Steps
 	}
-	js, errs := cc.JudgeBatch(context.Background(), steps, opt, cachedCheck(cc, inst, &cached))
+	js, errs := cc.JudgeBatch(t.Context(), steps, opt, cachedCheck(cc, inst, &cached))
 	for i, r := range runs { // in order: an error names the first run it hit
 		if errs[i] != nil {
 			t.Fatalf("gotogether: %s: %v", name(r), errs[i])
@@ -1611,7 +1611,7 @@ func (x *Exploration) recheck(t testing.TB, r *Run) {
 	}
 	ch := *x.checker
 	ch.Options.Dir = filepath.Join(x.dir, "recheck", strings.NewReplacer(" ", "", "/", "_").Replace(x.nameOf(r)))
-	rep, err := ch.Check(context.Background(), r.Steps)
+	rep, err := ch.Check(t.Context(), r.Steps)
 	if rep != nil {
 		rep.Unsettled = r.Unsettled // judged as the run's report was (adjust)
 	}

@@ -1,14 +1,15 @@
 package validate
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/memo"
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 )
 
 // models caches typechecked models by content: quint, the module, and
@@ -63,8 +64,7 @@ func typecheck(quint, spec, module string) (*binding.Model, error) {
 	}
 	tmp.Close()
 	defer os.Remove(tmp.Name())
-	cmd := exec.Command(quint, "typecheck", filepath.Base(spec), "--out", tmp.Name())
-	cmd.Dir = filepath.Dir(spec)
+	cmd := quintcmd.Command(context.Background(), quint, filepath.Dir(spec), "typecheck", filepath.Base(spec), "--out", tmp.Name())
 	if err := cmd.Run(); err != nil {
 		return binding.LoadModel(quint, spec, module) // its error says what is wrong
 	}
