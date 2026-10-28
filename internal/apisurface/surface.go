@@ -38,7 +38,8 @@ type Module struct {
 }
 
 // Modules are the published modules (AGENTS.md: the core, qhegel, qweave,
-// qanalysis, qgosim, grist, qnav).
+// qanalysis, qgosim, grist, qnav, and the doubles' modules under qenv/).
+// qgosim stays last (its test reads the sim side from it).
 // Read-only.
 var Modules = []Module{
 	{Dir: ".", Path: "github.com/chucklehead-dev/gotogether", File: "api/core.txt"},
@@ -47,6 +48,7 @@ var Modules = []Module{
 	{Dir: "qanalysis", Path: "github.com/chucklehead-dev/gotogether/qanalysis", File: "api/qanalysis.txt"},
 	{Dir: "grist", Path: "github.com/chucklehead-dev/gotogether/grist", File: "api/grist.txt"},
 	{Dir: "qnav", Path: "github.com/chucklehead-dev/gotogether/qnav", File: "api/qnav.txt"},
+	{Dir: "qenv/simgrpc", Path: "github.com/chucklehead-dev/gotogether/qenv/simgrpc", File: "api/simgrpc.txt"},
 	{Dir: "qgosim", Path: "github.com/chucklehead-dev/gotogether/qgosim", File: "api/qgosim.txt", Tags: []string{"sim"}},
 }
 

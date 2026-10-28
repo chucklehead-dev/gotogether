@@ -8,8 +8,9 @@ allowed only when the funds are short.
 
 The same server code (`ledger/`) runs in two tiers.
 
-- **Simulated** (`grpcledger.go`, `simgrpc/`): the generated client and
-  server, unchanged, connected by `simgrpc`. `simgrpc.Server` is a
+- **Simulated** (`grpcledger.go`): the generated client and server,
+  unchanged, connected by `simgrpc` (`qenv/simgrpc`, a published module of
+  its own, which this example was the first user of). `simgrpc.Server` is a
   `grpc.ServiceRegistrar` and `simgrpc.Conn` a `grpc.ClientConnInterface`,
   so `RegisterLedgerServer` and `NewLedgerClient` take them. A call crosses
   a `qenv.Service` and is marshalled with protobuf. Every fault is a qenv

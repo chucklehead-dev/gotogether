@@ -19,16 +19,17 @@ use (
 	./examples/payd
 	./examples/quorumkv
 	./examples/raftkv
-	./examples/wallet
-	./examples/wallet-grist
-	./examples/webjobs
 	./examples/retrystorm
 	./examples/sktrace
 	./examples/streams
 	./examples/twophase
+	./examples/wallet
+	./examples/wallet-grist
+	./examples/webjobs
 	./grist
 	./internal/hegelprops
 	./qanalysis
+	./qenv/simgrpc
 	./qgosim
 	./qhegel
 	./qnav

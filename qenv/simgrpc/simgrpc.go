@@ -21,6 +21,9 @@
 // handler never shares memory with its caller. Outgoing metadata reaches the
 // handler as incoming metadata. What is not simulated: streams (NewStream
 // returns codes.Unimplemented), peers, and the transport's own retries.
+//
+// simgrpc is a module of its own (it needs google.golang.org/grpc, which
+// the core does not): go get github.com/chucklehead-dev/gotogether/qenv/simgrpc.
 package simgrpc
 
 import (
@@ -64,10 +67,12 @@ type call struct {
 }
 
 // NewServer starts a gRPC server in process p of s (nil: a process of its
-// own that never crashes).
+// own that never crashes). Its faults are qenv.Service's of the same name
+// ("rpc.<name>.*") and its own refused connection ("grpc.<name>.conn"),
+// each the server's process's for a core settle (Sim.SettleCore).
 func NewServer(s *qenv.Sim, name string, p *qenv.Process) *Server {
 	srv := &Server{Name: name, sim: s, methods: map[string]method{},
-		conn: qenv.DeclareFaults("grpc."+name+".conn", "unavailable")}
+		conn: qenv.DeclareFaults("grpc."+name+".conn", "unavailable").At(p)}
 	srv.svc = qenv.NewService(s, name, p, srv.handle)
 	return srv
 }

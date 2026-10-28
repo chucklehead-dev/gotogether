@@ -14,8 +14,8 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/examples/grpcledger/ledger"
 	"github.com/chucklehead-dev/gotogether/examples/grpcledger/ledgerpb"
-	"github.com/chucklehead-dev/gotogether/examples/grpcledger/simgrpc"
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv/simgrpc"
 )
 
 // Initial is every account's opening balance (the binding's INITIAL).

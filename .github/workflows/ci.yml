@@ -203,7 +203,7 @@ jobs:
         run: ci/install-quint.sh
       - name: vet and test each published module in the workspace
         run: |
-          for m in qhegel qweave qanalysis qgosim grist qnav; do
+          for m in qhegel qweave qanalysis qgosim grist qnav qenv/simgrpc; do
             echo "::group::$m"
             (cd $m && go vet ./... && go test -short -count=1 -timeout 30m ./...) || exit 1
             echo "::endgroup::"
@@ -234,6 +234,35 @@ jobs:
           go get github.com/chucklehead-dev/gotogether@${{ github.sha }}
           go mod tidy && go build .
           if grep -E 'hegel|purego' go.mod go.sum; then echo "the core pulls in Hegel"; exit 1; fi
+
+  doubles:
+    # the published doubles whose dependencies the core does not take
+    # (gRPC, client-go and controller-runtime, franz-go, the AWS SDK):
+    # each a module of its own, tested on its own go.mod and pinned core,
+    # with the scheduler's and the doubles' self-checks on
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [qenv/simgrpc]
+    name: doubles (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.module }}/go.mod
+          cache-dependency-path: ${{ matrix.module }}/go.sum
+      - name: gofmt, vet
+        run: |
+          test -z "$(gofmt -l . | tee /dev/stderr)"
+          go vet ./...
+      - name: test (GOTOGETHER_CHECK, and under the race detector)
+        run: |
+          GOTOGETHER_CHECK=1 go test -count=1 ./...
+          go test -race -count=1 ./...
 
   edgepublish:
     runs-on: ubuntu-latest

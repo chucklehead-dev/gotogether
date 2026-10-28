@@ -1,0 +1,13 @@
+== github.com/chucklehead-dev/gotogether/qenv/simgrpc
+func NewServer(s *qenv.Sim, name string, p *qenv.Process) *Server
+type Conn struct
+    field Timeout time.Duration
+    method (*Conn) Invoke(ctx context.Context, method string, args, reply any, _ ...grpc.CallOption) error
+    method (*Conn) NewStream(context.Context, *grpc.StreamDesc, string, ...grpc.CallOption) (grpc.ClientStream, error)
+type Server struct
+    field Name string
+    field Interceptor grpc.UnaryServerInterceptor
+    method (*Server) Calls() int
+    method (*Server) Dial() *Conn
+    method (*Server) RegisterService(sd *grpc.ServiceDesc, impl any)
+
