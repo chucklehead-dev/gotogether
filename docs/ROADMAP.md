@@ -335,7 +335,8 @@ Then, in order, each item reviewed before the next:
   criterion (`<app> sizing`). Correctness stays the store's: no
   Kubernetes Lease, ownership fenced in the log. Eleven slices; the
   first two fix today's recorder ids shared by every pod (pid 1) and
-  30 s of drain inside the default 30 s grace. After H7 (slice 4 needs
+  30 s of drain inside the default 30 s grace. Slice 1 done (identity,
+  probes, the drain: docs/grist.md §0.15; HISTORY). After H7 (slice 4 needs
   its upcasting; slice 11 grist slice 3's leases). The maintainer's
   decisions (2026-10-28, §10): no Kubernetes Lease, not even a hint; a
   45 s grace generated; a rewind fails closed until `<app> resume`; no

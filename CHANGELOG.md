@@ -8,6 +8,24 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- grist (GR10 slice 1): a served node records as
+  `<app>/<node>/<incarnation>` (`grist.Identity`, `IdentityFromEnv`,
+  `WithIdentity`), never `<app>-<pid>`, which every container shared
+  (pid 1: two pods' merged files got Reconstruct's duplicate error, no
+  verdict); a served dependency as `<app>/<node>/<incarnation>/<dep>`
+  (was `<app>-<pid>-<dep>`); `-steps DIR` writes a file per start.
+  `serve` drains on a schedule (`grist.Drain`, `WithDrain`,
+  `DrainDelay`): `/readyz` fails at SIGTERM and the server serves on for
+  5 s in a pod before its 10 s shutdown, settle and flush (35 s: give
+  the pod 45 s); `-grace D` budgets the phases into D, the startup line
+  printing each one's share. `-health-addr` (default `:8081` when
+  `KUBERNETES_SERVICE_HOST` is set) serves `/livez` (`LiveBound`; never
+  the store), `/readyz` (never a dependency or processor lag) and
+  `/metrics` (Prometheus text, standard library). `-addr` on loopback in
+  a pod is a usage error naming `-addr :8080`. With `GOMEMLIMIT` unset,
+  serve sets the memory limit to 90% of the cgroup's `memory.max`. A
+  shutdown cut by its bound returns an error saying so.
+
 - Breaking: `qobs.Recorder.Close` returns an error and closes the
   recorder's sink (ROADMAP H3): a standalone program ends with `if err
   := rec.Close(); err != nil { ... }`, where it closed the sink itself

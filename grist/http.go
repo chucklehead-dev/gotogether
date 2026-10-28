@@ -48,6 +48,8 @@ type serveConfig struct {
 	deps        func(context.Context) context.Context
 	served      []servedDep // Main's ServeDependency, in order
 	maxBody     int64
+	identity    *Identity // Main's WithIdentity
+	drain       Drain     // Main's WithDrain
 }
 
 // servedDep is a dependency Main serves on a loopback port (ServeDependency).

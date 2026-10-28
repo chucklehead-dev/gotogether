@@ -4,42 +4,23 @@
 // HTTP API and runs its node on a SQLite file, recording every step for
 // validation with the example's bindings (run-demo.sh's SERVE=1 path).
 //
-// Its mailer writes each welcome to stderr, in process; its bank is the
-// team's own (counters.NewBank), served beside the node behind
-// grist.ServeCalls on a loopback port and called over HTTP
-// (grist.ServeDependency), its payments recorded into the steps file
-// under a recorder of their own (-dependency bank=URL calls another). Its actor comes from the
-// X-Actor header (-actor-header X-Actor): a demo's stand-in for the
-// authentication a real deployment puts in front (grist.Middleware).
+// Its options are counters.Serve's: its mailer writes each welcome to
+// stderr, in process; its bank is the team's own (counters.NewBank),
+// served beside the node behind grist.ServeCalls on a loopback port and
+// called over HTTP (grist.ServeDependency), its payments recorded into
+// the steps file under a recorder of their own (-dependency bank=URL
+// calls another). Its actor comes from the X-Actor header (-actor-header
+// X-Actor): a demo's stand-in for the authentication a real deployment
+// puts in front (grist.Middleware).
 package main
 
 import (
-	"context"
-	"fmt"
-	"os"
-	"sync"
-
 	_ "modernc.org/sqlite" // serve's driver: -db sqlite:PATH
 
 	"github.com/chucklehead-dev/gotogether/examples/counters"
 	"github.com/chucklehead-dev/gotogether/grist"
 )
 
-// stderrMailer sends a mail by writing it to stderr, recording each send
-// with the node's steps (mailerSendServed).
-func stderrMailer() grist.Transport {
-	var mu sync.Mutex
-	return grist.Local(grist.Handlers{counters.Send.Handler(func(ctx context.Context, m counters.Mail) (counters.Mailed, error) {
-		mu.Lock()
-		defer mu.Unlock()
-		_, err := fmt.Fprintf(os.Stderr, "mail %s: created %s\n", grist.CallKey(ctx), m.Name)
-		return counters.Mailed{}, err
-	})})
-}
-
 func main() {
-	mailer := stderrMailer()
-	grist.Main(counters.App, grist.Dependencies(func(ctx context.Context) context.Context {
-		return counters.Mailer.With(ctx, mailer)
-	}), grist.ServeDependency(counters.Bank, counters.NewBank()))
+	grist.Main(counters.App, counters.Serve()...)
 }

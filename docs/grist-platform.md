@@ -1,7 +1,9 @@
 # grist on a platform (GR10): Kubernetes-aware, never Kubernetes-bound
 
-Status: design, 2026-10-28, for docs/ROADMAP.md's GR10. Nothing below
-is built; every proposed API is in ```text blocks, and every name it
+Status: design, 2026-10-28, for docs/ROADMAP.md's GR10; slice 1
+(identity, probes, the drain) built 2026-10-28 (docs/grist.md §0.15
+says what building it changed, and what its acceptance got wrong).
+Nothing else below is built; every proposed API is in ```text blocks, and every name it
 takes from an existing package (`qenv.Stalls`, `qmeta.CalibrateTimeout`,
 `qnemesis.Target`, ...) exists today. Read docs/grist.md (§2.6
 processors, §3.4 leases, §3.5 seams, §3.8 the real tier) and
@@ -790,7 +792,7 @@ names the mutant it must catch (an overlay, `gristtest.Mutants`), with
 the faithful app's claim beside it, and its test fails with the feature
 ablated.
 
-1. **Identity, probes, the drain schedule (core, S-M).** `Identity`,
+1. **Done** (docs/grist.md §0.15). **Identity, probes, the drain schedule (core, S-M).** `Identity`,
    recorder ids `<app>/<node>/<incarnation>`, `/livez` `/readyz`
    `/metrics` on a side port, `Drain` with `-grace`, the loopback
    refusal, `GOMEMLIMIT`, the startup line. **Example: counters**, two

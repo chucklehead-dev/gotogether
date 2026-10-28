@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/grist/store"
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -273,6 +275,28 @@ type node struct {
 	// no processor has work in hand (an at-most-once effect in flight
 	// after its checkpoint included), which a checkpoint alone cannot say
 	pollers, waiting atomic.Int64
+	// effects is how many effects are in flight (Main's /metrics); list
+	// the pollers started, for /livez (under mu: the health server reads
+	// it while the watcher starts tenants)
+	effects atomic.Int64
+	mu      sync.Mutex
+	list    []*poller
+}
+
+// stuck names a poller that has held one batch of triggers for longer
+// than bound at now (Unix nanoseconds), "" when none has: a deadlock or a
+// goroutine stuck in a handler or an effect. A poller waiting on the
+// store, or backing off from its errors, holds none: /livez never
+// depends on the store.
+func (n *node) stuck(now int64, bound time.Duration) string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	for _, pl := range n.list {
+		if since := pl.busy.Load(); since != 0 && time.Duration(now-since) > bound {
+			return fmt.Sprintf("processor %s of tenant %s has handled one batch of triggers for %v (more than %v)", pl.p.name, pl.tenant, time.Duration(now-since).Round(time.Second), bound)
+		}
+	}
+	return ""
 }
 
 // idle reports whether every poller of the node waits with nothing to do.
@@ -296,9 +320,13 @@ func (n *node) start(ctx context.Context, t string) {
 	for _, p := range n.app.processors {
 		p := p
 		n.pollers.Add(1)
+		pl := &poller{app: n.app, s: n.s, p: p, tenant: t, waiting: &n.waiting, effects: &n.effects}
+		n.mu.Lock()
+		n.list = append(n.list, pl)
+		n.mu.Unlock()
 		qenv.Go(ctx, "grist."+p.name+"."+t, func(ctx context.Context) {
 			qenv.Daemon(ctx)
-			(&poller{app: n.app, s: n.s, p: p, tenant: t, waiting: &n.waiting}).run(qobs.Thread(ctx))
+			pl.run(qobs.Thread(ctx))
 		})
 	}
 }
@@ -336,6 +364,10 @@ type poller struct {
 	tenant  string
 	tries   int           // transient errors in a row
 	waiting *atomic.Int64 // the node's count of idle pollers (node.idle)
+	effects *atomic.Int64 // the node's count of effects in flight
+	// busy is when the poller began handling its batch of triggers (Unix
+	// nanoseconds, qenv.Now), 0 when it holds none (node.stuck)
+	busy atomic.Int64
 }
 
 // pause backs off after a transient error.
@@ -373,7 +405,9 @@ func (pl *poller) run(ctx context.Context) {
 		if now, err := pl.s.Checkpoint(ctx, pl.tenant, pl.p.name); err != nil || now != cp {
 			continue
 		}
+		pl.busy.Store(qenv.Now(ctx).UnixNano())
 		pl.handle(ctx, cp, head, evs)
+		pl.busy.Store(0)
 	}
 }
 
@@ -617,7 +651,9 @@ func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res R
 		if sim != nil && proc != nil && sim.FaultOf(kind.Only("crashBefore")) != "" {
 			proc.Crash()
 		}
+		pl.effects.Add(1)
 		err := res.effect(pl.effectContext(ctx, e.Pos, head, key, 0))
+		pl.effects.Add(-1)
 		record(ctx, pl.s, pl.tenant, pl.p.quint+"Effect", nil, "trigger", int64(e.Pos), "key", key, "ok", err == nil,
 			"order.pos", readOrder(head), "order.p."+pl.p.quint, 2*int64(e.Pos))
 		if sim != nil && proc != nil && sim.FaultOf(kind) == "crashAfter" {
@@ -666,7 +702,9 @@ func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Res
 	if sim != nil && proc != nil && sim.FaultOf(kind.Only("crashBefore")) != "" {
 		proc.Crash() // the checkpoint moved, the effect never runs: lost, by right
 	}
+	pl.effects.Add(1)
 	err := res.effect(pl.effectContext(ctx, e.Pos, head, key, 1))
+	pl.effects.Add(-1)
 	record(ctx, pl.s, pl.tenant, pl.p.quint+"Effect", nil, "trigger", int64(e.Pos), "key", key, "ok", err == nil,
 		"order.pos", readOrder(head), "order.p."+pl.p.quint, 2*int64(e.Pos)+1)
 	if sim != nil && proc != nil && sim.FaultOf(kind) == "crashAfter" {

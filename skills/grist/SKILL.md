@@ -331,10 +331,27 @@ for it. No binding is written by hand.
 - **An app's binary**: `func main() { grist.Main(app, opts...) }` with
   the driver imported: `catalog` (the registry as JSON, types as JSON
   Schemas), `verify`, `serve -db sqlite:PATH|postgres:DSN -tenant t1
-  -steps steps.jsonl [-actor-header X-Actor] [-dependency NAME=URL]`;
+  -steps steps.jsonl [-actor-header X-Actor] [-dependency NAME=URL]
+  [-health-addr :8081] [-grace 45s]`;
   `grist.ServeDependency(dep, handlers)` serves a dependency the team owns
   beside the node over HTTP; validate the steps file
-  with the app's binding (`gotogether validate -binding ...`).
+  with the app's binding (`gotogether validate -binding ...`). The node
+  records as `<app>/<node>/<incarnation>` (`grist.Identity`: `GRIST_NODE`,
+  else `POD_NAME`, else the host name, and a fresh nonce per start;
+  `WithIdentity` in tests), so several pods' or starts' files merge (give
+  `-steps` a directory for a file per start); never name a node by its
+  pid (1 in every container: Reconstruct's duplicate error, no verdict).
+  On SIGTERM the drain (`grist.Drain`, `WithDrain`): `/readyz` fails, the
+  server serves on for `Delay` (5 s in a pod), then shutdown, settle and
+  flush, 10 s each: give the pod a 45 s grace, or pass `-grace` to budget
+  the phases into a shorter one (the startup line says what each gets).
+  `-health-addr` (on by default in a pod) serves `/livez` (a poller stuck
+  past `LiveBound`; never the store), `/readyz` (started, not draining;
+  never a dependency or processor lag: point no probe at the database)
+  and `/metrics` (processor lag and oldest trigger, relay backlog,
+  effects and requests in flight). In a pod `-addr` on loopback is
+  refused (give `-addr :8080`); `GOMEMLIMIT` unset is 90% of the
+  cgroup's `memory.max`.
   examples/counters' `cmd/counters` and `SERVE=1 ./run-demo.sh`.
 - **PostgreSQL**: `sqlstore.Postgres` states read committed and sets
   `lock_timeout` and `idle_in_transaction_session_timeout` per

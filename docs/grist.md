@@ -7,7 +7,8 @@ on SQLite: §0.3; its review: §0.4), its HTTP API, `grist/client` and
 `grist.Main` built (§0.5), `AtMostOnce` built (§0.6), their review's
 fixes (§0.7), a newcomer's trial's fixes (§0.8), the generator, `grist
 new` and the test harnesses built (§0.9), GR3's declared calls built
-(§0.12, §0.13, §0.14: on the real tier over HTTP); gristflow is design, as is
+(§0.12, §0.13, §0.14: on the real tier over HTTP), GR10's slice 1
+(identity, probes and the drain: §0.15); gristflow is design, as is
 slice 3. Decisions taken 2026-10-27 (a module
 inside this repository, event sourcing first, Quint and Choreo as the
 specification languages, an API layer and Datastar, the G track goes on
@@ -1580,7 +1581,7 @@ Built, each with a test that fails with it taken out:
 - **`grist.Main`**: `grist.ServeDependency(dep, handlers)` serves a
   dependency behind `ServeCalls` on a loopback port beside the node,
   its records in the `-steps` file under a recorder of their own
-  (`<app>-<pid>-<dep>`), the node calling it with `OverHTTP`; `serve
+  (`<app>-<pid>-<dep>`; since §0.15 `<app>/<node>/<incarnation>/<dep>`), the node calling it with `OverHTTP`; `serve
   -dependency NAME=URL` calls URL instead (`TestMainServesDependency`).
   counters' binary serves its bank so (`SERVE=1 ./run-demo.sh` retires a
   counter).
@@ -1802,6 +1803,91 @@ violation, about 30), `TestRealLostThenKilled` 40 to 23 (the clients'
 validation, `TestRealHTTP`'s claim, dropped), `payTwice` 22 to 18 (one
 retirement), `wrongAmount` 55 to 43 (its real probe in full mode): 173
 to 164. ci/test-times.txt's line is CI's run after the fix: 1038 (run 427), set to 1040.
+
+## 0.15 What building GR10's slice 1 changed (identity, probes, the drain)
+
+docs/grist-platform.md §9's slice 1, the two bugs it found first. Built,
+each with a test that fails with it taken out:
+
+- **The node's identity** (`grist.Identity`, `IdentityFromEnv`,
+  `WithIdentity`; grist/identity.go). The node's recorder was
+  `<app>-<pid>`, and the pid is 1 in every container: two pods' merged
+  step files numbered one recorder twice, Reconstruct's "two different
+  records" and no verdict, and a restarted container collided with its
+  earlier self. It is now `<app>/<node>/<incarnation>`: the node
+  `GRIST_NODE`, else `POD_NAME`, else the host name; the incarnation 12
+  random hex digits per start; the served dependencies'
+  `<app>/<node>/<incarnation>/<dep>`. `-steps DIR` writes
+  `DIR/<app>.<node>.<incarnation>.jsonl`, a file per start. Namespace,
+  host (`NODE_NAME`) and zone (`GRIST_ZONE`) are read and printed, not
+  yet on the recorder (G8's step location is the core change that puts
+  them in reports). `TestMainIdentity` (two starts of one pod merged:
+  no duplicate; without the incarnation, the duplicate error);
+  counters' `TestRealTwoPods`, two processes of the app's binary on one
+  SQLite file, their files and the clients' merged: no duplicate,
+  `Conforms`, `Settles`, the clients linearized; its mutant
+  `pidIdentity` (both pods `counters/1/1`, the pid's identity) gets the
+  duplicate error and a report failing on it alone.
+- **The drain is a schedule** (`grist.Drain`, `WithDrain`, `-grace`;
+  grist/drain.go). At SIGTERM `/readyz` fails at once and the server
+  keeps serving for `Delay` (`DrainDelay`, 5 s, on an orchestrator,
+  `KUBERNETES_SERVICE_HOST` set; none elsewhere), then Shutdown, Settle
+  and Flush, 10 s each as before: 35 s on an orchestrator, more than the
+  default grace of 30 s, so a pod is given 45 s (the maintainer's
+  choice, §10.2 of the platform note; slice 8's manifests write it).
+  `-grace D` budgets the phases into D: the flush keeps its share first
+  (at most half the grace), the rest shared by the delay, the shutdown
+  and the settle in proportion, and each phase ends in time to leave
+  the later ones theirs, its unused time passed on. The startup line
+  says it: `counters: node counters-0, incarnation ...; drain needs a
+  grace of 35s (...); -grace 20s leaves delay 2s, shutdown 4s, settle
+  4s, flush 10s; GOMEMLIMIT ...`. A shutdown cut by its bound returns
+  an error naming it (its clients retry under their keys).
+  `TestMainGraceBudgetsTheDrain`: a client trickling a body across the
+  signal, phases needing 7.5 s, `-grace 2s`: the file at the kill
+  deadline holds the settle and the commits, serve ended; without
+  `-grace` the drain is still in its shutdown at the kill, no settle.
+- **The side port** (`-health-addr`, default `:8081` on an
+  orchestrator, else off; grist/health.go): `/livez` fails only when a
+  poller has held one batch of triggers past `LiveBound` (5 m: a
+  deadlock or a stuck handler; a poller waiting on the store or backing
+  off from its errors holds none, so never the store); `/readyz` is the
+  node started (the store answered: `App.Start` read its tenants) and
+  not draining, never a dependency or processor lag; `/metrics`, in
+  Prometheus' text format with the standard library, has
+  `grist_ready`, `grist_draining`, `grist_api_requests_in_flight`,
+  `grist_effects_in_flight`, `grist_relay_backlog`, per processor and
+  tenant `grist_processor_lag` (head minus checkpoint) and
+  `grist_processor_oldest_trigger_age_seconds`, and `grist_store_up`.
+  qrole's u and v (§3.7 of the platform note) are not yet among them.
+  `TestMainHealth`: an effect hung past a shortened bound fails
+  `/livez`, naming the processor, while `/readyz` stays ok; the gauges;
+  after SIGTERM `/readyz` 503 while a query is still served in the
+  delay.
+- **Loopback in a pod is refused**: `-addr` on loopback (the default
+  `127.0.0.1:8080` included) with `KUBERNETES_SERVICE_HOST` set is a
+  usage error naming `-addr :8080` (`TestMainLoopbackInPod`).
+- **`GOMEMLIMIT`**: unset, serve sets the runtime's limit to 90% of the
+  cgroup's `memory.max` (`debug.SetMemoryLimit`), so the collector works
+  before an OOM kill (no drain at all); `GOMAXPROCS` and `GOGC` are left
+  alone (`TestMemoryLimit`).
+
+What the platform note's acceptance got wrong: "a `-grace 20s` run
+records its settle and flush where today's schedule is killed in the
+flush" cannot be built with the defaults the maintainer chose. A settle
+needs the relay caught up, so the flush after one is nearly instant,
+and the settle comes as soon as the node quiets after the shutdown: the
+unbudgeted drain ends at about the later of delay + shutdown (at most
+15 s) and the node's quiet, so with a 20 s kill it is never killed
+after a settle that a budget could have saved. What a budget saves at
+20 s is the flush when the node never quiets (the unbudgeted settle's
+10 s ending past the kill); the settle is saved only when delay and
+shutdown alone outrun the grace, which the test shows with its phases
+scaled down. Its example line ("-grace 30s leaves the settle 5 s")
+assumed the settle shrinks first; the budget shares the shortfall.
+counters' `cmd/counters` options moved into the package
+(`counters.Serve`), so the mutant's overlay and the pods (the test
+binary as the app's binary, `TestMain`) run what the binary runs.
 
 ## 1. Two things grain gets wrong that grist must make impossible
 

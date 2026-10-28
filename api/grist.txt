@@ -4,7 +4,9 @@ const AtMostOnce Delivery = iota + 1 (spec 1 of its group)
 const CallTimeout = 10 * time.Second
 const CauseHeader = "Grist-Cause"
 const DefaultMaxBody = 1 << 20
+const DrainDelay = 5 * time.Second
 const FlushTimeout = 10 * time.Second
+const LiveBound = 5 * time.Minute
 const MaxIDBytes = 255
 const ReplayedHeader = "Idempotent-Replayed"
 const RetryAfter = 1
@@ -33,6 +35,7 @@ func Emits(types ...EventName) Option
 func Events[E any](r *Reads, t *EventType[E], tags ...TagPair) []E
 func Fail(err error) Result
 func Generate(app *App, dir string) (Generated, error)
+func IdentityFromEnv() Identity
 func Internal() Option
 func Keyed() Option
 func Keys(names ...string) KeyNames
@@ -75,6 +78,8 @@ func TransientTries(n int) Option
 func Unconditioned(reason string) Option
 func Uses(calls ...CallName) Option
 func WithActor(ctx context.Context, actor string) context.Context
+func WithDrain(d Drain) ServeOption
+func WithIdentity(id Identity) ServeOption
 func WithRelay(r *Relay) StartOption
 type App struct
     field Name string
@@ -188,6 +193,13 @@ type Dependency struct
     method (*Dependency) Name() string
     method (*Dependency) String() string
     method (*Dependency) With(ctx context.Context, t Transport) context.Context
+type Drain struct
+    field Delay time.Duration
+    field Shutdown time.Duration
+    field Settle time.Duration
+    field Flush time.Duration
+    field Grace time.Duration
+    method (Drain) Needs() time.Duration
 type EffectOption func(*Result)
 type Envelope struct
     field ID string
@@ -218,6 +230,13 @@ type Hole struct
     field Name string
     field Doc string
     field Stub string
+type Identity struct
+    field Node string
+    field Incarnation string
+    field Namespace string
+    field Host string
+    field Zone string
+    method (Identity) String() string
 type KeyNames []string
 type KeyedReadModel[S any] struct
     embed ReadModel[S]

@@ -13,12 +13,13 @@ import (
 
 // mutants are grain's two bugs, an effect checkpointed first, a payout
 // without its outcome, a retirement by anyone and a payout of the wrong
-// amount, and a payout that calls the bank again after an unknown
-// answer, each a directory of testdata/mutants/
+// amount, a payout that calls the bank again after an unknown answer,
+// and two pods recording as one node (pidIdentity), each a directory of
+// testdata/mutants/
 // whose files replace the app's of the same name (a go build overlay):
 // the app's own files stay as they are, and each mutant is a whole file
 // to diff against them.
-var mutants = []string{"blind", "dispatchDirect", "checkpointFirst", "silentPayout", "anyoneRetires", "wrongAmount", "payTwice"}
+var mutants = []string{"blind", "dispatchDirect", "checkpointFirst", "silentPayout", "anyoneRetires", "wrongAmount", "payTwice", "pidIdentity"}
 
 // fullOnly are the mutants built and run in full mode only: their claim
 // repeats a mechanism a per-push test checks (checkpointFirst: the
@@ -175,6 +176,31 @@ func TestMutant(t *testing.T) {
 		}
 		paidOnce(t, tier, 1)
 		qtest.Validate(t, onReal, tier.Steps()).Expect(t, qtest.Rejects("bankPay"))
+	case "pidIdentity":
+		// GR10 slice 1: two pods recording as one node (as <app>-<pid> named
+		// both, pid 1 in every container) number one recorder twice: the
+		// merged files get Reconstruct's duplicate error, and the report
+		// fails on it alone, no verdict of the model's to read
+		// (TestRealTwoPods is the faithful app's contrast)
+		steps := twoPods(t)
+		d := duplicates(steps)
+		if len(d) == 0 {
+			t.Fatal("two pods as one node: no duplicate error in the merged files")
+		}
+		t.Logf("%d duplicate errors, the first: %s", len(d), d[0])
+		run := qtest.Validate(t, commits, steps)
+		if run.OK() {
+			t.Fatal("two pods as one node conform: the duplicates were not reported")
+		}
+		for _, a := range run.Report.Actors {
+			dup := false
+			for _, is := range a.Issues {
+				dup = dup || is.Severity == "error" && strings.Contains(is.Msg, "two different records")
+			}
+			if !a.OK() && !dup {
+				t.Errorf("actor %s fails without the duplicate error: a verdict where the run has none", a.Actor)
+			}
+		}
 	default:
 		t.Fatalf("unknown mutant %q", mutant)
 	}

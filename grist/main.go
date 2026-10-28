@@ -59,9 +59,12 @@ const mainUsage = `commands:
       -init                            also write the app's first model/<app>_rules.qnt and model/<app>.qnt (Starter) where there are none
   serve -db DB [flags]        serve the App's HTTP API (NewHandler) and run its node (App.Start) on DB
       -db sqlite:PATH | postgres:DSN   the store (grist/sqlstore; the binary imports the driver)
-      -addr HOST:PORT                  where to listen (default 127.0.0.1:8080; :0 picks a port)
+      -addr HOST:PORT                  where to listen (default 127.0.0.1:8080; :0 picks a port; on loopback in a pod, refused)
+      -health-addr HOST:PORT           /livez, /readyz and /metrics on a side port (default :8081 in a pod, else off)
+      -grace DURATION                  the orchestrator's kill deadline after SIGTERM: the drain is budgeted into it
       -tenant NAME                     create the tenant if it does not exist (repeatable)
-      -steps PATH                      record every step to PATH (qobs.FileSink, PerStep), for validation
+      -steps PATH                      record every step to PATH (qobs.FileSink, PerStep), for validation;
+                                       a directory: a file of its own per node and start, <app>.<node>.<incarnation>.jsonl
       -actor-header NAME               take the request's actor from header NAME (behind an authenticating proxy only)
       -poll DURATION                   how often the store reads other processes' appends (default 250ms)
       -dependency NAME=URL             call dependency NAME over HTTP at URL (grist.OverHTTP; repeatable)`
@@ -79,18 +82,27 @@ const mainUsage = `commands:
 //	serve      the HTTP API (NewHandler, opts applied) on grist/sqlstore over -db
 //	           (sqlite:PATH, postgres:DSN), the node (App.Start: relay, pollers,
 //	           the tenant watcher) beside it, every step recorded to -steps
-//	           (qobs.FileSink, PerStep: a new file each time) for validation with
-//	           the app's bindings; until ctx ends, then a graceful shutdown: the
-//	           server drains its requests (ShutdownTimeout) while the node keeps
-//	           running, then, once its processors are idle and its relay caught
-//	           up (SettleTimeout), a settle is recorded (qobs.Settled: the
-//	           bindings' eventual vals are judged on the file), then the node
-//	           stops and the relay records every committed step (Relay.Flush,
-//	           FlushTimeout) before the file closes. A -dependency NAME=URL
-//	           calls the App's dependency NAME at URL (OverHTTP), in place of
-//	           what Dependencies or ServeDependency attach
+//	           (qobs.FileSink, PerStep: a new file each time; in a directory, a
+//	           file per node and start) for validation with the app's bindings,
+//	           under the recorder <app>/<node>/<incarnation> (Identity, from the
+//	           environment or WithIdentity); /livez, /readyz and /metrics on
+//	           -health-addr; until ctx ends, then the drain (Drain, WithDrain):
+//	           /readyz fails and the server keeps serving for its Delay, then
+//	           drains its requests (Shutdown) while the node keeps running,
+//	           then, once its processors are idle and its relay caught up
+//	           (Settle), a settle is recorded (qobs.Settled: the bindings'
+//	           eventual vals are judged on the file), then the node stops and
+//	           the relay records every committed step (Relay.Flush, Flush)
+//	           before the file closes, the phases budgeted into -grace when
+//	           given. A -dependency NAME=URL calls the App's dependency NAME at
+//	           URL (OverHTTP), in place of what Dependencies or ServeDependency
+//	           attach. With GOMEMLIMIT unset, the runtime's memory limit is 90%
+//	           of the cgroup's memory.max
 //
-// serve writes "<app> serving on http://ADDR" to stderr once it listens.
+// serve writes its startup line to stderr ("<app>: node N, incarnation I;
+// drain needs a grace of ...; GOMEMLIMIT ..."), then "<app> health on
+// http://ADDR" when the side port is on, and "<app> serving on
+// http://ADDR" once it listens.
 func MainArgs(ctx context.Context, app *App, args []string, stdout, stderr io.Writer, opts ...ServeOption) error {
 	if len(args) == 0 {
 		return &UsageError{Msg: fmt.Sprintf("usage: %s <command>\n%s", app.Name, mainUsage)}
@@ -241,6 +253,8 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	steps := fs.String("steps", "", "")
 	actorHeader := fs.String("actor-header", "", "")
 	poll := fs.Duration("poll", 0, "")
+	healthAddr := fs.String("health-addr", "", "")
+	grace := fs.Duration("grace", 0, "")
 	var tenants, depURLs names
 	fs.Var(&tenants, "tenant", "")
 	fs.Var(&depURLs, "dependency", "")
@@ -249,6 +263,20 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	}
 	if *dbSpec == "" || fs.NArg() > 0 {
 		return &UsageError{Msg: fmt.Sprintf("%s serve: give -db (and only flags)\n%s", app.Name, mainUsage)}
+	}
+	set := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	orchestrator := onOrchestrator()
+	if orchestrator && loopback(*addr) {
+		// a Service's endpoints are the pod's IP: a server on loopback has
+		// none, and every request to it is refused
+		return &UsageError{Msg: fmt.Sprintf("%s serve: -addr %s listens on loopback, which no Service reaches (KUBERNETES_SERVICE_HOST is set: this is a pod): give -addr :8080", app.Name, *addr)}
+	}
+	if *grace < 0 {
+		return &UsageError{Msg: fmt.Sprintf("%s serve: -grace %v: give the orchestrator's kill deadline (terminationGracePeriodSeconds), as -grace 30s", app.Name, *grace)}
+	}
+	if !set["health-addr"] && orchestrator {
+		*healthAddr = ":8081"
 	}
 	if err := app.Verify(); err != nil {
 		return err
@@ -270,6 +298,39 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 		}
 		overHTTP[d] = OverHTTP(u, nil)
 	}
+	var cfg serveConfig
+	for _, o := range opts {
+		if o.apply != nil {
+			o.apply(&cfg)
+		}
+	}
+	id := IdentityFromEnv()
+	if cfg.identity != nil {
+		id = cfg.identity.resolve(id)
+	}
+	drain := cfg.drain
+	if set["grace"] {
+		drain.Grace = *grace
+	}
+	drain = drain.withDefaults(orchestrator)
+	mem := setMemoryLimit(cgroupMemoryMax)
+	// the startup line: who this node is, what its drain needs of the
+	// orchestrator's grace, and its memory limit
+	fmt.Fprintf(stderr, "%s: %s; %s; %s\n", app.Name, id, drain.line(), mem)
+	var hs *health
+	if *healthAddr != "" {
+		// first, before the store: /livez answers while the store is down,
+		// /readyz says not yet
+		hs = &health{app: app}
+		hln, err := net.Listen("tcp", *healthAddr)
+		if err != nil {
+			return err
+		}
+		hsrv := &http.Server{Handler: hs, ReadHeaderTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second}
+		go hsrv.Serve(hln) //qenv:ok the real tier's health server, outside any simulation
+		defer hsrv.Close() // last: live, and not ready, through the drain
+		fmt.Fprintf(stderr, "%s health on http://%s (/livez, /readyz, /metrics)\n", app.Name, hln.Addr())
+	}
 	db, dialect, err := openDB(*dbSpec)
 	if err != nil {
 		return err
@@ -288,21 +349,22 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 		}
 	}
 	var sink qobs.Sink
-	recorderID := fmt.Sprintf("%s-%d", app.Name, os.Getpid())
+	// <app>/<node>/<incarnation>: never the pid, which is 1 in every
+	// container (two pods' files would number one recorder twice)
+	recorderID := id.recorderID(app.Name)
 	if *steps != "" {
-		fsink, err := qobs.FileSink(*steps, qobs.PerStep)
+		path := *steps
+		if fi, err := os.Stat(path); err == nil && fi.IsDir() {
+			// a directory (a volume the pods share): a file per incarnation
+			path = filepath.Join(path, strings.ReplaceAll(recorderID, "/", ".")+".jsonl")
+		}
+		fsink, err := qobs.FileSink(path, qobs.PerStep)
 		if err != nil {
 			return err
 		}
 		defer fsink.Close() // shared by the recorders below (the node's, each served dependency's): closed once, by its owner
 		sink = fsink
 		ctx = qobs.WithRecorder(ctx, qobs.NewRecorder(sink, qobs.WithID(recorderID)))
-	}
-	var cfg serveConfig
-	for _, o := range opts {
-		if o.apply != nil {
-			o.apply(&cfg)
-		}
 	}
 	// the node outlives the signal: its processors, relay and in-flight
 	// effects keep running while the server drains its requests (whose
@@ -346,6 +408,10 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	if err := app.Start(nodeCtx, st, WithRelay(relay), StartOption{apply: func(c *startConfig) { c.onNode = func(x *node) { n = x } }}); err != nil {
 		return err
 	}
+	if hs != nil {
+		hs.started(st, relay, n) // the store answered (Start read its tenants), the node runs
+		h = hs.count(h)
+	}
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
 		return err
@@ -359,16 +425,32 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 		return err
 	case <-ctx.Done():
 	}
+	// the drain (Drain): not ready at once, serving through the router's
+	// lag, then each phase bounded, within -grace when given
+	sched := newSchedule(drain, time.Now())
+	if hs != nil {
+		hs.draining.Store(true)
+	}
+	if d := time.Until(sched.delay(time.Now())); d > 0 {
+		select {
+		case <-time.After(d): //qenv:ok the real tier's drain, outside any simulation
+		case err := <-done:
+			return err
+		}
+	}
 	// the shutdown's context keeps ctx's recorder (the flush below records
 	// into it) but not its cancellation
-	shut, cancel := context.WithTimeout(context.WithoutCancel(ctx), ShutdownTimeout)
-	err = srv.Shutdown(shut)
+	shut, cancel := context.WithDeadline(context.WithoutCancel(ctx), sched.shutdown(time.Now()))
+	if err = srv.Shutdown(shut); err != nil {
+		err = fmt.Errorf("%s: requests still in flight when the drain's shutdown ended (%w): their clients retry under their keys", app.Name, err)
+	}
 	cancel()
 	// no request is left: once the processors and the relay are done with
 	// what the requests committed, the run has settled, and a settle in
 	// the file is what judges the bindings' eventual vals (qobs.Settled)
-	quiet, cancelQuiet := context.WithTimeout(context.WithoutCancel(ctx), SettleTimeout)
-	if serr := settle(quiet, st, relay, n); serr != nil {
+	until := sched.settle(time.Now())
+	quiet, cancelQuiet := context.WithDeadline(context.WithoutCancel(ctx), until)
+	if serr := settle(quiet, st, relay, n, time.Until(until)); serr != nil {
 		fmt.Fprintf(stderr, "%s: no settle recorded (the steps file's eventual vals get no verdict): %v\n", app.Name, serr)
 	}
 	cancelQuiet()
@@ -377,12 +459,26 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	// relay had not reached would otherwise be recorded only by the next
 	// node's relay, into its own file. Its own time: a shutdown that used
 	// its whole timeout draining slow requests leaves the flush its own
-	flush, cancelFlush := context.WithTimeout(context.WithoutCancel(ctx), FlushTimeout)
+	flush, cancelFlush := context.WithDeadline(context.WithoutCancel(ctx), sched.flush(time.Now()))
 	defer cancelFlush()
 	if ferr := relay.Flush(flush); err == nil {
 		err = ferr
 	}
 	return err
+}
+
+// loopback reports whether addr (HOST:PORT) listens on a loopback
+// address only.
+func loopback(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // serveLoopback serves sd behind ServeCalls on a loopback port, its site's
@@ -391,7 +487,7 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 func serveLoopback(sd servedDep, sink qobs.Sink, recorderID string) (string, func(), error) {
 	h := ServeCalls(sd.d, sd.h)
 	if sink != nil {
-		h = qobshttp.Handler(h, qobs.NewRecorder(sink, qobs.WithID(recorderID+"-"+sd.d.name)))
+		h = qobshttp.Handler(h, qobs.NewRecorder(sink, qobs.WithID(recorderID+"/"+sd.d.name)))
 	}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -415,9 +511,12 @@ func depNames(app *App) []string {
 	return out
 }
 
-// Main's server's bounds: how long a graceful shutdown waits for the
-// requests in flight, then how long for the node to quiet before it
-// records a settle, and then how long the relay's flush may take.
+// Main's drain's default bounds (Drain): how long a graceful shutdown
+// waits for the requests in flight, then how long for the node to quiet
+// before it records a settle, and then how long the relay's flush may
+// take. With DrainDelay on an orchestrator they need 35 s, more than
+// Kubernetes' default grace of 30 s: give the pod 45 s
+// (terminationGracePeriodSeconds), or -grace to budget them into less.
 const (
 	ShutdownTimeout = 10 * time.Second
 	SettleTimeout   = 10 * time.Second
@@ -431,7 +530,7 @@ const (
 // apart. It returns why not if ctx ends first or the relay failed. The
 // settle is the last thing the file holds of the run: the node stops
 // after it, with nothing left to do.
-func settle(ctx context.Context, st Store, relay *Relay, n *node) error {
+func settle(ctx context.Context, st Store, relay *Relay, n *node, bound time.Duration) error {
 	var last map[string]Position
 	for {
 		if err := relay.Err(); err != nil {
@@ -450,7 +549,7 @@ func settle(ctx context.Context, st Store, relay *Relay, n *node) error {
 		last = heads
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("the node did not quiet within %v (a processor still at work, or the relay behind)", SettleTimeout)
+			return fmt.Errorf("the node did not quiet within %v (a processor still at work, or the relay behind)", bound.Round(time.Millisecond))
 		case <-time.After(20 * time.Millisecond): //qenv:ok the real tier's binary, outside any simulation
 		}
 	}

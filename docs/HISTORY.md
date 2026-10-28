@@ -1812,6 +1812,24 @@ reached as subcommands (`gotogether kube`, `<app> kube`, as `gotogether
 nav` execs gotogether-nav), GR7's controller a client of the app's HTTP
 API, a build tag rejected.
 
+### GR10 slice 1: identity, probes and the drain
+
+docs/grist-platform.md §9's slice 1, docs/grist.md §0.15. The node
+records as `<app>/<node>/<incarnation>` (`grist.Identity`: GRIST_NODE,
+POD_NAME or the host name, a nonce per start), so two pods' files, or a
+restarted container's and its predecessor's, merge without
+Reconstruct's duplicate error; counters' `TestRealTwoPods` runs two
+processes of the app's binary on one SQLite file and conforms, its
+mutant `pidIdentity` gets the duplicate error and no verdict. The drain
+is a schedule (`grist.Drain`: a 5 s delay in a pod, then 10 s each for
+shutdown, settle and flush; manifests are to give 45 s), `-grace`
+budgeting it into less (`TestMainGraceBudgetsTheDrain`, scaled down).
+`/livez` `/readyz` `/metrics` on `-health-addr`; loopback refused in a
+pod; `GOMEMLIMIT` from the cgroup. The acceptance's "a `-grace 20s` run
+records its settle where today's schedule is killed in the flush"
+cannot happen with the chosen defaults (§0.15 says why); the test shows
+the budget where delay and shutdown outrun the grace.
+
 ### E: a run gotogether did not drive
 
 From the feedback of an agent using gotogether in another project (an
