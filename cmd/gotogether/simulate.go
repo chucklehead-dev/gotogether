@@ -35,7 +35,11 @@ import (
 // every reachable state within -states and -depth, so "holds" in a
 // complete graph is a proof for the instance and "allows" a shortest
 // counterexample, with deadlocks and the actions never enabled, and no
-// quint process but the cached compile.
+// quint process but the cached compile. Each eventual val is judged as
+// cycles there (live.go, DESIGN §62): a fair cycle of states where it is
+// false, every action weakly fair but simulate.unfair's and
+// simulate.stops', is a lasso that keeps it false forever, failing an
+// eventual val in simulate.holds.
 //
 // The section's possibles (binding.Possible: a predicate, an action, a
 // sequence of steps) are what the model must be able to do: each is
@@ -57,9 +61,11 @@ func simulate(args []string) (int, error) {
 	states := fset.Int("states", 0, "states the Go evaluator's search for the possibles visits at most (default: the binding's simulate.searchStates, else 2000); "+
 		"with -graph, the graph's (default: the binding's simulate.graphStates, else 100000)")
 	graph := fset.Bool("graph", false, "explore the model's state graph with the Go evaluator instead of sampling with quint: every invariant in every reachable state "+
-		"(within -states and -depth), deadlocks, actions never enabled, the shortest counterexamples")
+		"(within -states and -depth), deadlocks, actions never enabled, the shortest counterexamples, and each eventual val as cycles (a fair one keeping it false forever)")
 	depth := fset.Int("depth", 0, "with -graph: the longest path from init explored (default: the binding's simulate.graphDepth, else none)")
 	out := fset.String("out", "", "with -graph: write a Quint module of the binding's instance with a run replaying each counterexample (quint test --match 'gtg_' replays them)")
+	unfair := fset.String("unfair", "", "with -graph: comma-separated actions the liveness search does not oblige (default: the binding's simulate.unfair)")
+	stops := fset.String("stops", "", "with -graph: comma-separated actions the liveness search takes in no cycle (default: the binding's simulate.stops)")
 	quint := fset.String("quint", "quint", "quint binary")
 	fset.Parse(args)
 	if *bpath == "" {
@@ -68,8 +74,8 @@ func simulate(args []string) (int, error) {
 	if *graph && *verify > 0 {
 		return 2, fmt.Errorf("simulate: -graph and -verify are two ways to check every trace: pick one")
 	}
-	if !*graph && (*depth > 0 || *out != "") {
-		return 2, fmt.Errorf("simulate: -depth and -out are -graph's: add -graph")
+	if !*graph && (*depth > 0 || *out != "" || *unfair != "" || *stops != "") {
+		return 2, fmt.Errorf("simulate: -depth, -out, -unfair and -stops are -graph's: add -graph")
 	}
 	b, err := binding.Load(*bpath)
 	if err != nil {
@@ -103,21 +109,24 @@ func simulate(args []string) (int, error) {
 	if *invs != "" {
 		invariants = splitList(*invs)
 	}
-	if len(invariants) == 0 && len(b.Eventually) > 0 && len(sim.Possible) == 0 {
+	if len(invariants) == 0 && len(b.Eventually) > 0 && len(sim.Possible) == 0 && !*graph {
 		// an eventual val holds when a run settles, which a sampled trace of
-		// the model never says: there is nothing to sample
-		fmt.Printf("simulate %s: no invariants, and its eventual vals (%s) are judged after a run settles, not on sampled traces: nothing to simulate\n",
+		// the model never says: there is nothing to sample (-graph judges
+		// it as cycles)
+		fmt.Printf("simulate %s: no invariants, and its eventual vals (%s) are judged after a run settles, not on sampled traces: nothing to simulate (-graph judges them as cycles)\n",
 			*bpath, strings.Join(b.Eventually, ", "))
 		return 0, nil
 	}
-	if len(invariants) == 0 && len(sim.Possible) == 0 {
+	if len(invariants) == 0 && len(sim.Possible) == 0 && !(*graph && len(b.Eventually) > 0) {
 		return 2, fmt.Errorf("simulate: %s names no invariants (or pass -invariants a,b) and no possibles", *bpath)
 	}
 	holds, allows := set(sim.Holds), set(sim.Allows)
-	known := set(b.Invariants)
+	// an eventual val is classified too, for -graph's cycles
+	known := set(append(slices.Clone(b.Invariants), b.Eventually...))
 	for _, n := range append(append([]string(nil), sim.Holds...), sim.Allows...) {
 		if !known[n] {
-			return 2, fmt.Errorf("simulate: %s's simulate section names %s, which is not one of its invariants (%s)", *bpath, n, strings.Join(b.Invariants, ", "))
+			return 2, fmt.Errorf("simulate: %s's simulate section names %s, which is not one of its invariants (%s) nor eventual vals (%s)", *bpath, n,
+				strings.Join(b.Invariants, ", "), strings.Join(b.Eventually, ", "))
 		}
 		if holds[n] && allows[n] {
 			return 2, fmt.Errorf("simulate: %s's simulate section lists %s in both holds and allows", *bpath, n)
@@ -144,7 +153,14 @@ func simulate(args []string) (int, error) {
 		*samples = or(sim.Samples, 1000)
 	}
 	if *graph {
-		return simulateGraph(*bpath, b, checker, possibles, overrides, invariants, *quint, *states, *depth, *out, *steps, *samples, *seed)
+		fair := fairness{}
+		if *unfair != "" {
+			fair.unfair = splitList(*unfair)
+		}
+		if *stops != "" {
+			fair.stops = splitList(*stops)
+		}
+		return simulateGraph(*bpath, b, checker, possibles, overrides, invariants, fair, *quint, *states, *depth, *out, *steps, *samples, *seed)
 	}
 	dir, err := os.MkdirTemp("", "gotogether-simulate-*")
 	if err != nil {

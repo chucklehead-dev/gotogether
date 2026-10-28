@@ -680,7 +680,7 @@ func judge(t testing.TB, cc *validate.Checker, inst string, opt validate.SearchO
 			t.Fatalf("gotogether: %s: %v", name(r), errs[i])
 		}
 		r.Steps, r.Report = js[i].Steps, js[i].Report
-		r.adjust()
+		r.adjust(cc)
 		noteDuplicates(r)
 	}
 	return cached
@@ -1592,7 +1592,7 @@ func (x *Exploration) recheck(t testing.TB, r *Run) {
 	case err != nil:
 	case rep.OK() == r.Report.OK() && reason(rep) == reason(r.Report):
 		r.Report = rep
-		r.adjust()
+		r.adjust(x.checker)
 	default: // a cache key or a backend at fault: say so, keep the verdict the claim was judged by
 		t.Logf("gotogether: %s checked again judges otherwise (%s, not %s): the verdict cache or a backend is wrong; the report below is the one judged", x.nameOf(r), reason(rep), reason(r.Report))
 	}

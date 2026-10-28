@@ -1,0 +1,16 @@
+# hot.qnt's queue (live_test.go, simulate -graph's liveness search).
+# With STORM a retry blocks processing: a fair cycle of retries keeps the
+# queue full, so drained, which the model should drive, fails.
+spec: hot.qnt
+module: hot
+constants:
+  STORM: 'true'
+actions:
+  submit: {}
+  process: {}
+  read: {}
+  retry: {}
+eventually: [drained]
+simulate:
+  holds: [drained]
+  stops: [submit]

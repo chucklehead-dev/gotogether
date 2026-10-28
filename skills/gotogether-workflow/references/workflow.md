@@ -47,6 +47,24 @@ was taken. A truncated graph (`-states`, default 100000; `-depth` or
 log) says so and claims no proof; exit 2 means the evaluator stopped (a
 construct outside its fragment, named): sample without `-graph`.
 
+Liveness under `-graph`: each eventual val is judged as cycles. A
+reachable cycle of states where it is false, fair under weak fairness
+(every action of the step enabled throughout the cycle is taken in it;
+a stutter, a read, counts for nothing), is a lasso: the model can stay
+there forever. Classify the val like an invariant: in `simulate.holds`
+the model must drive it (a lasso fails, printed with its prefix, its
+cycle and a Quint run of one turn); in `allows` it is the code's to
+reach (a model whose actions are observations, a probe's: the lasso is
+reported, not failed). Every action is weakly fair unless named:
+`simulate.unfair` (inputs a client may send forever or never: obliged
+to nothing) and `simulate.stops` (faults, and inputs the driver stops
+before it settles: in no cycle), or `-unfair`, `-stops` on the command
+line. A lasso in a truncated graph is real; "no fair cycle" (`live`) is a
+proof only in a complete graph. A run that did not settle and went
+round a cycle of model states with an eventual val false has the cycle
+on its report (`hot cycle`, evidence, no verdict: a retry storm, a
+livelock).
+
 Model first means scenarios first, each with a possibility check, then
 safety, then liveness, then code. Write each acceptance scenario as a
 `possible` (or, in Go, `qtest.Scenario` checked by `qtest.Possible`):

@@ -229,3 +229,34 @@ func agreeGraph(t *testing.T, path string, states, depth int) int {
 	replayInQuint(t, file)
 	return both
 }
+
+// simulate -graph judges eventual vals as cycles, as the simulate
+// section classifies them (live.go): hot.yaml allows its queue to stay
+// busy forever (exit 0, the lasso on one line); hot_stops proves it
+// drains once submissions stop, the retry loops unfair; hot_storm's
+// retry storm fails drained, which it holds, with the lasso, whose
+// replay quint passes (-out). An eventual-only binding is judged, not
+// skipped as plain simulate skips it.
+func TestSimulateGraphEventually(t *testing.T) {
+	skip.Quint(t)
+	out := filepath.Join(t.TempDir(), "hot.qnt")
+	for _, c := range []struct {
+		args []string
+		code int
+		want string
+	}{
+		{[]string{"-binding", "../../validate/testdata/hot.yaml"}, 0, "  allows  drained: a fair cycle keeps it false forever (the code must leave it): init, submit, then (submit, process, retry, retry) forever"},
+		{[]string{"-binding", "../../validate/testdata/hot_stops.yaml"}, 0, "  live    drained: no fair cycle keeps it false (the whole graph, 6 states); fairness rules out 2 hot cycles (the nearest leaves process enabled throughout, never taken)"},
+		{[]string{"-binding", "../../validate/testdata/hot_storm.yaml", "-out", out}, 1, "    then this cycle, forever, drained false in each of its states (2 steps of a component of 2; taking retry, every weakly fair action enabled throughout it taken: retry):"},
+	} {
+		code, got := capture(t, func() (int, error) { return simulate(append([]string{"-graph"}, c.args...)) })
+		if code != c.code || !strings.Contains(got, c.want) {
+			t.Errorf("%v: exit %d, want %d and %q in\n%s", c.args, code, c.code, c.want, got)
+		}
+	}
+	src, err := os.ReadFile(out)
+	if err != nil || !strings.Contains(string(src), "run gtg_hot_drained = init.then(submit).then(retry).then(retry).expect(") {
+		t.Fatalf("-out: %v\n%s", err, src)
+	}
+	replayInQuint(t, out)
+}

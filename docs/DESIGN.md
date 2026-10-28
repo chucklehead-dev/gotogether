@@ -4514,3 +4514,172 @@ quint process but the cached compile: `gotogether simulate -graph`, and
   explorer reports violated (graph's small, account's underLimit,
   lease's noStaleWrite), and every counterexample it reports replays in
   quint test.
+
+## 62. Liveness as cycles (P6)
+
+An eventual val (a binding's `eventually:`) is judged in runs at a
+settle: the last state of a run whose system went quiet. The model said
+nothing of it on its own: `simulate` samples finite traces, and a
+finite trace never shows "forever". P2's graph does: a reachable cycle
+of states where the val is false is a behaviour that never makes it
+true. `simulate -graph` judges each eventual val so, and a run that did
+not settle has the cycle its model states went round reported with it.
+
+- **The search** (internal/qeval/lasso.go, `Graph.HotComponents`).
+  The graph restricted to the hot states (the val false; expanded, and
+  not the one state the state bound cut while expanding it, whose edges
+  are not all known) and to the edges of families that do not stop,
+  split into strongly connected components (Tarjan's, iterative: a
+  graph's paths are up to 10^5 long). A component is reported if it has
+  two states or more, or is one state where no weakly fair family is
+  enabled (a stutter). The lasso is the shortest path to the
+  component's nearest state (the least id: ids are breadth first) and a
+  cycle through it inside the component.
+- **Fairness: weak, per action, with stuttering.** A family is the
+  branch's action of a label (the step's `any {}` branch: an action
+  name, whatever its arguments; `step` for a transition no action
+  names). Per action rather than per call: a grist model's processor is
+  an action whose trigger argument changes with every event, so a call
+  is never continuously enabled and per-call fairness would oblige
+  nothing; and per call would oblige every client's every input. As in
+  TLA's WF, a step that leaves the state unchanged is no step of its
+  family: an edge back to its own state neither enables nor takes it.
+  That is the subtle part the ROADMAP named: reads (a grist model's
+  queries, quorumkv's read) loop in every state, and counted as steps
+  they would make every state a fair cycle (a reader may read forever)
+  or satisfy a processor's fairness with a no-op. A weakly fair family
+  enabled (by an edge to another state) in every state of a cycle must
+  be taken by one of the cycle's edges. Weak fairness needs no
+  refinement of a component (strong fairness does): a cycle through a
+  subset of its states has every family enabled throughout the
+  component enabled throughout it and takes no more families, so a
+  component that misses a family has no fair cycle in it, and one that
+  misses none has a fair cycle through all of it. A fair component's
+  cycle is built from its nearest state through waypoints, one per
+  family the walk so far leaves enabled throughout and untaken (an edge
+  of it inside the component, or a state of the component where it is
+  not enabled), shortest paths between them; each waypoint settles its
+  family for good, so there are at most as many as families, and the
+  result is checked fair by the same definition.
+- **What is fair by default: every action.** Two opt-outs, per binding
+  or on the command line: `simulate.unfair` (`-unfair`), an action
+  never obliged and allowed to run forever (a client's input, which may
+  come or not), and `simulate.stops` (`-stops`), an action in no cycle
+  (a fault, which a settle turns off; an input the driver stops sending
+  before it settles). The default is the most fairness, so a reported
+  lasso is fair under any weaker assumption: no lasso is a false alarm
+  for want of a declaration. It errs the other way: an input left fair
+  is obliged, and a processor stuck while inputs remain enabled is
+  hidden behind them ("fairness rules out N hot cycles (the nearest
+  leaves X enabled throughout, never taken)" says so, naming X: declare
+  it if it is an input or a fault). The alternatives considered:
+  - no fairness: every hot state stutters forever, every eventual val
+    is hot (TestCheckerGraphEventually's ablation: hot_stops' queue
+    "stays hot" one submit from init);
+  - fairness for the binding's declared processors only (`fair:`): a
+    grist model knows its processors, but the core does not, and a
+    hand-written model would declare everything to get any answer;
+  - the run's assumption, inputs and faults stopping (a settle's): the
+    right one for comparing with runs, but not knowable from a model
+    whose actions do not say which are inputs. `stops:` states it where
+    the binding knows.
+  It comes out right for grist's generated models without a
+  declaration: their state grows (the log, effects, calls and served
+  records are lists that only grow), so their only cycles are stutters,
+  and a hot state is a lasso only where no fair action can change the
+  state, a stuck processor with no input left; P7's obligations
+  (`<processor>EventuallyHandled`, `<call>EventuallyServed`) have their
+  enabling actions (the processor's, the dependency's served record)
+  always enabled until they hold, weakly fair, so no lasso. The
+  generator could emit its commands as `unfair:` (a stuck processor then
+  shows behind them); that is grist's to decide.
+- **Classified as simulate classifies.** An eventual val may be in
+  `simulate.holds` (the model drives it: a lasso fails, exit 1) or
+  `simulate.allows` (the code's to reach: the lasso is reported, the
+  model allows it; a model of observations, quorumkv's probe, always
+  has one). Unclassified, a lasso is reported `hot`, not failed: unlike
+  an invariant's violation, which a sampled trace shows and the model
+  may forbid, a model of recorded observations (most of the
+  repository's run models) cannot drive the vals its runs are judged
+  by, and failing them all would make -graph's verdicts noise.
+- **Truncated graphs.** A lasso found in a truncated graph is a real
+  one (its states and edges are the model's, the cycle's states
+  expanded); "no fair cycle" is `live`, a proof for the instance, only
+  in a complete graph, else `bounded`. A state the evaluator cannot
+  evaluate the val in is in no cycle: a lasso found is real, none found
+  is `unchecked` (exit 2, as for an invariant).
+- **Replay.** The prefix replays as P2's counterexamples do; the cycle
+  is printed with each step's state and the repeated state named, and
+  `-out`'s module has a run of the prefix and one turn of the cycle,
+  ending in `.expect(and { not(val), <the state's variables, as at the
+  cycle's start> })`: quint checks that the cycle is a path of the model
+  that returns to its state with the val false, not that it repeats
+  forever or is fair, which no quint run can (said with the replay).
+- **In runs** (validate/hot.go, `Checker.MarkHot`): a trace that
+  recorded no settle, replayed by the Go evaluator, whose latest
+  entered state (not stuttered in: a run of reads is no cycle) repeats
+  an earlier one with an eventual val false at every state between, is
+  reported on its result (`Result.Hot`, the report's `hot cycle
+  (evidence, no verdict: the run did not settle)` line): the vals, the
+  steps of the cycle, and the run's visits to the state with them false.
+  Evidence only: a run cut short has work pending by right, and one that
+  went on might have left the cycle; no verdict changes. qtest marks a
+  run whose Settle failed (`Run.Unsettled`), on a copy of its report
+  (verdicts are shared by runs of the same steps); `gotogether
+  validate` every trace without a settle. A binding with hidden actions
+  or a resume, and a Linearize search's orders, get none (their states
+  are not one replay's).
+- **Soundness, against brute force and ablated.**
+  `TestHotComponentsAgainstBruteForce`: 3000 random graphs of up to five
+  states, under random fairness, all weakly fair and none: every set of
+  edges between hot states that is strongly connected is the support of
+  a closed walk, fair by the definition above; the states on a fair walk
+  are exactly those of the fair components, each component is a
+  component, its Missed exactly what its walks cannot take, each lasso
+  a closed walk inside it from its nearest state, fair. Ablated, it
+  fails: fairness ignored (an unfair lasso), the SCCs computed over the
+  whole graph and kept only when all hot (cycles missed), a stutter
+  counted as enabling its family (a fair walk missed).
+  `TestHotComponentsFairness` and `TestCheckerGraphEventually` (hot.qnt:
+  a client that submits forever, a worker, a read, a retry; with STORM a
+  retry blocks processing) by hand: all fair, the queue stays busy under
+  submissions; submissions stopping, it drains, the retry loops unfair
+  (process enabled throughout), and the complete graph proves it; the
+  storm a fair cycle of retries (process not enabled throughout it);
+  retries stopping too, a stutter where only they were enabled; a depth
+  bound short of the graph still finds the lasso. `TestSimulateGraphEventually`
+  replays the storm's lasso in quint; `TestMarkHot` and
+  `TestUnsettledRunsHotCycle` the runs' side.
+- **The smoke run** (the repository's 23 bindings with eventual vals,
+  `-states 20000`; grist's two generator fixtures do not typecheck
+  alone): quorumkv's converged is hot, the only lasso under the
+  default: a probe may observe any value forever, a cycle of writes and
+  observations. raftkv's converged is the same model's, hot once its
+  clients' writes, cas and transfers stop (`-stops`), and is bounded
+  under the default only because transfer, enabled throughout, is
+  obliged. Both are the code's to reach, and their bindings now say
+  `simulate.allows: [converged]`. Everything else is bounded (graphs
+  truncated, states that grow): the grist examples (counters' four
+  bindings, library, wallet-grist's two) with no hot cycle at all;
+  payd's three vals, webjobs' two and raftkv cluster's hasLeader with
+  hot cycles that fairness rules out by an action left fair, enabled
+  throughout and untaken (payd's request, an input; webjobs' created;
+  the cluster's isolate, a fault); with the inputs and faults declared
+  stopping, by the next progress action (payd's response, the
+  cluster's campaign), or none at all (webjobs). The testdata bindings
+  are bounded, or live in a complete graph (qtest's journey and probed).
+  No finding was a model's liveness bug, and none asked for a
+  different default. wallet-grist's `ledgerAcksUnposted` mutant is a
+  run-only bug: its runs settle, the ledger having answered posts it
+  never made, and the model cannot stay hot on
+  ledgerPostEventuallyServed, since ledgerPostServed is enabled, weakly
+  fair, for every answered call without a served record until it has
+  one. With every action unfair (the ablation, on a real model) the
+  search reports postEventuallyHandled hot, a stutter one deposit from
+  init.
+  hasLeader shows the cost of fairness per action: `lead` of an old term
+  satisfies lead's fairness, so the model may lead old terms forever
+  (past this bound) with no leader of the newest; fairness per call
+  would rule that out, and oblige every client's every input with it.
+  hasLeader is the code's to reach (raft's election), judged `within`
+  its bound in runs.

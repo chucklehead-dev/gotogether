@@ -331,14 +331,25 @@ func (r *Run) OK() bool { return r.Report != nil && r.Report.OK() }
 
 // adjust fits the run's report to how the run ended, on a copy (verdicts
 // are shared by every run of the same steps, which may have ended
-// otherwise): its Unsettled. Whether eventual properties apply is in the
-// steps (a settle record), so the verdict says it.
-func (r *Run) adjust() {
+// otherwise): its Unsettled, and for a run that did not settle the cycle
+// its model states went round with an eventual val false, if any
+// (validate.Checker.MarkHot, cc's: evidence, no verdict). Whether
+// eventual properties apply is in the steps (a settle record), so the
+// verdict says it.
+func (r *Run) adjust(cc *validate.Checker) {
 	if r.Report == nil || r.adjusted == r.Report {
 		return
 	}
 	rep := *r.Report
 	rep.Unsettled = r.Unsettled
+	if r.Unsettled != "" && cc != nil {
+		rep.Actors = make([]*validate.Result, len(r.Report.Actors))
+		for i, a := range r.Report.Actors {
+			c := *a
+			rep.Actors[i] = &c
+		}
+		cc.MarkHot(&rep, r.Steps)
+	}
 	r.Report = &rep
 	r.adjusted = r.Report
 }

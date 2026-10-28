@@ -112,6 +112,13 @@ type Result struct {
 	// judged; otherwise they are not among Invariants.
 	Settled bool
 
+	// Hot is a trace that recorded no settle going round a cycle of the
+	// model's states with an eventual val false all the while (Checker.
+	// MarkHot: qtest marks a run that did not settle, validate every
+	// unsettled trace): evidence of a retry storm or a livelock, no
+	// verdict, so OK ignores it.
+	Hot *HotCycle
+
 	// Gaps are the holes in the seqs of the recorders of its steps
 	// (qtrace.Trace.Gaps; a search's, of the history it ordered), and
 	// Collected their watermarks (qtrace.Trace.Collected): what Absent's
@@ -838,6 +845,9 @@ func (r *Result) Summary() string {
 		if i.Failure != nil {
 			fmt.Fprintf(&b, "%s", i.Failure.describe("    "))
 		}
+	}
+	if r.Hot != nil {
+		fmt.Fprintf(&b, "  hot cycle (evidence, no verdict: the run did not settle): %s\n", r.Hot)
 	}
 	if len(r.Absent) > 0 {
 		fmt.Fprintf(&b, "  absent:\n")

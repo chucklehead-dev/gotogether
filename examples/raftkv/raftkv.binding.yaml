@@ -21,3 +21,11 @@ actions:
   observe: {}
 
 eventually: [converged]
+
+# The model on its own (gotogether simulate -graph): converged is the
+# code's to reach, as quorumkv's. observe records what the probe saw,
+# any value, so once the clients stop (-stops write,cas,transfer) a fair
+# cycle of observations keeps it false forever, a lasso the model allows
+# (DESIGN §62).
+simulate:
+  allows: [converged]

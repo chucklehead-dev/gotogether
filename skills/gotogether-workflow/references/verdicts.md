@@ -141,7 +141,20 @@ seeds, not by hand.
   evaluator cannot evaluate somewhere `unchecked` (exit 2), a state the
   step cannot leave `deadlock` (exit 1) unless `terminal` holds there
   (`ends`), and states only a stutter leaves `quiet` (never a failure:
-  a model that can always read, a grist model, has no deadlock). A
+  a model that can always read, a grist model, has no deadlock). An
+  eventual val is judged as cycles: `live` (no fair cycle keeps it
+  false: proved in a complete graph, `bounded` in a truncated one),
+  `hot` (a fair cycle keeps it false forever, unclassified: a report),
+  `allows` (the same, the val in `simulate.allows`), `FAIL` (the same,
+  the val in `simulate.holds`: the model should drive it; fix it, or
+  name the actions that stop at a settle, `simulate.stops`, or need not
+  run, `simulate.unfair`). "fairness rules out N hot cycles (the
+  nearest leaves X enabled throughout, never taken)" says which weakly
+  fair action made the difference: if X is an input or a fault, declare
+  it, and look again. A run's `hot cycle (evidence, no verdict ...)` line
+  is a run that did not settle going round a cycle of model states with
+  the val false: read its steps as the storm or livelock that kept it
+  from settling. A
   counterexample's replay marked as drawing among successors may not
   reproduce in quint test; the path printed is the evaluator's;
 - connect: a replay error (`StepError`: `step`, `state`, `check`), no

@@ -2019,6 +2019,49 @@ A model checker's reading of the explorer, its findings by severity:
   `MODEL=early-decision ./run-demo.sh`). crossdb's 128 are the id
   pool's: see its commit.
 
+### P6: liveness as cycles
+
+ROADMAP's P6 as built (DESIGN §62). The decisions it left:
+- **The surface**: a mode of `simulate -graph`, as P2's: each eventual
+  val judged when the binding has one (an eventual-only binding is
+  judged, where plain simulate skips it), classified by
+  `simulate.holds` and `simulate.allows` as invariants are (a lasso
+  fails a val in holds; one in allows, or unclassified, is reported),
+  `-out`'s module with a `gtg_hot_<val>` run of the prefix and one turn
+  of the cycle. Beneath it `GraphResult.Eventually`
+  (`EventualVerdict`, `HotLasso`) and `GraphSearch.Eventually`,
+  `Unfair`, `Stops`; the search itself is qeval's
+  `Graph.HotComponents`.
+- **The family is the action**, whatever its arguments, with TLA's
+  stuttering (a step that changes nothing neither enables nor takes
+  it). Per call was rejected: a grist processor's trigger argument
+  changes with each event, so no call of it is continuously enabled,
+  and every input would be obliged call by call.
+- **Every action weakly fair by default**, `simulate.unfair` and
+  `simulate.stops` (`-unfair`, `-stops`) to opt out: the most fairness,
+  so no lasso is a false alarm for a missing declaration; the report
+  names the action that ruled out each component's cycles, so a fair
+  input or fault hiding one is visible. Grist's generated models need
+  no declaration (their state grows: their only cycles are stutters).
+- **In runs**: `Checker.MarkHot` (qtest on a run whose Settle failed,
+  validate's CLI on every trace without a settle) puts the latest cycle
+  of the replay's states with an eventual val false on the actor's
+  result (`Result.Hot`), evidence beside the verdicts, none changed.
+- **Soundness**: `TestHotComponentsAgainstBruteForce` (every closed
+  walk's support on 3000 random graphs, under random fairness, all
+  fair and none), failing with fairness ignored, the SCCs taken over the
+  whole graph, or a stutter counted as enabling its action;
+  hot.qnt's queue by hand (TestCheckerGraphEventually,
+  TestSimulateGraphEventually, the lasso replayed in quint); the runs'
+  side in TestMarkHot and TestUnsettledRunsHotCycle.
+- **The smoke run** over the 23 bindings with eventual vals: one lasso
+  under the default, quorumkv's converged (a probe may observe any
+  value forever), and raftkv's converged once its clients stop: both
+  bindings now say `allows: [converged]`. No model's liveness bug; the
+  default needed no change. wallet-grist's `ledgerAcksUnposted` is a
+  run-only bug (its runs settle; the model's ledgerPostServed stays
+  enabled, weakly fair, until every answered call has its record).
+
 ### P1: blocking rules (grist)
 
 ROADMAP's P1 as built (docs/grist.md §2.4.1). The decisions it left:

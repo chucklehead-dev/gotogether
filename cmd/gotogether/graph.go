@@ -24,7 +24,7 @@ import (
 // could not finish or an invariant it could not evaluate, with nothing
 // failing: it never says complete then. checker is the binding's, nil
 // to make one; possibles its simulation's, resolved.
-func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, possibles []*possibleCheck, overrides, invariants []string,
+func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, possibles []*possibleCheck, overrides, invariants []string, fair fairness,
 	quint string, states, depth int, out string, steps, samples int, seed string) (int, error) {
 	sim := b.Simulate
 	if sim == nil {
@@ -46,7 +46,7 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 		defer c.Close()
 		checker = c
 	}
-	r, err := checker.Graph(validate.GraphSearch{Constants: overrides, Invariants: invariants, States: states, Depth: depth})
+	r, err := checker.Graph(validate.GraphSearch{Constants: overrides, Invariants: invariants, States: states, Depth: depth, Unfair: fair.unfair, Stops: fair.stops})
 	if err != nil {
 		return 2, fmt.Errorf("simulate -graph: %w", err)
 	}
@@ -155,6 +155,8 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 	if len(cov) > 0 {
 		fmt.Printf("  covered %s\n", strings.Join(cov, ", "))
 	}
+	ec, eu := reportEventually(r, holds, allows)
+	code, unchecked = max(code, ec), unchecked || eu
 	if len(possibles) > 0 {
 		// the evaluator's search first, as deep as the graph; quint samples
 		// what it did not find, as simulate does without -graph (a deep
@@ -216,9 +218,15 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 	return code, nil
 }
 
+// fairness is -unfair's and -stops' actions (nil: the binding's).
+type fairness struct {
+	unfair, stops []string
+}
+
 // replayRuns are the Quint runs of a graph's counterexamples: one per
-// violated invariant (gtg_violates_<name>), and the nearest deadlock's
-// (gtg_deadlock), each a declaration of the simulation module.
+// violated invariant (gtg_violates_<name>), the nearest deadlock's
+// (gtg_deadlock), and each hot eventual val's lasso (gtg_hot_<name>),
+// each a declaration of the simulation module.
 func replayRuns(r *validate.GraphResult) []string {
 	var runs []string
 	for _, v := range r.Invariants {
@@ -228,6 +236,11 @@ func replayRuns(r *validate.GraphResult) []string {
 	}
 	if r.Deadlock != nil {
 		runs = append(runs, "  // the nearest deadlock\n  run gtg_deadlock = "+r.Deadlock.Replay)
+	}
+	for _, v := range r.Eventually {
+		if v.Hot {
+			runs = append(runs, fmt.Sprintf("  // %s kept false forever: the path to a fair cycle and one turn of it (no run checks the forever)\n  run gtg_hot_%s = %s", v.Name, ident(v.Name), v.Lasso.Replay))
+		}
 	}
 	return runs
 }

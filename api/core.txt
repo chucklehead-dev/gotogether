@@ -156,6 +156,8 @@ type Simulation struct
     field Terminal string `yaml:"terminal"`
     field GraphStates int `yaml:"graphStates"`
     field GraphDepth int `yaml:"graphDepth"`
+    field Unfair []string `yaml:"unfair"`
+    field Stops []string `yaml:"stops"`
 type StepPattern struct
     field Action string
     field Params []string
@@ -2084,6 +2086,7 @@ type Checker struct
     method (*Checker) Judge(ctx context.Context, steps []qtrace.Step, opt SearchOptions) (*Judgment, error)
     method (*Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt SearchOptions, check BatchCheck) ([]*Judgment, []error)
     method (*Checker) Key(steps []qtrace.Step) string
+    method (*Checker) MarkHot(rep *Report, steps []qtrace.Step)
     method (*Checker) MutateSteps(ctx context.Context, steps []qtrace.Step, opt SearchOptions, check BatchCheck, mopts ...qtrace.MutationOption) (*StepMutants, error)
     method (*Checker) Nav(start NavStart) (*Navigator, error)
     method (*Checker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]PossibleResult, error)
@@ -2112,6 +2115,19 @@ type Edge struct
     field Action string `json:"action"`
     field Args []NamedValue `json:"args,omitempty"`
     field Picks []NamedValue `json:"picks,omitempty"`
+type EventualVerdict struct
+    field Name string
+    field Hot bool
+    field Lasso *HotLasso
+    field HotStates int
+    field Lassos int
+    field Unfair int
+    field UnfairBy string
+    field Unsupported string
+    field Unchecked int
+    field Error string
+    field Counterexample *Counterexample
+    method (EventualVerdict) Live() bool
 type Explanation struct
     field Action string `json:"action"`
     field Conditions []Condition `json:"conditions,omitempty"`
@@ -2165,6 +2181,9 @@ type GraphResult struct
     field Deadlock *Counterexample
     field Quiescent int
     field Actions []ActionCoverage
+    field Eventually []EventualVerdict
+    field Unfair []string
+    field Stops []string
     field Elapsed time.Duration
     method (*GraphResult) Extent() string
     method (*GraphResult) NeverEnabled() []string
@@ -2174,10 +2193,31 @@ type GraphSearch struct
     field Terminal string
     field States int
     field Depth int
+    field Eventually []string
+    field Unfair []string
+    field Stops []string
 type GraphStep struct
     field Call string
     field Picks []NamedValue
     field State []NamedValue
+type HotCycle struct
+    field Vals []string
+    field From int
+    field To int
+    field Steps []string
+    field Repeats int
+    field State []NamedValue
+    method (*HotCycle) String() string
+type HotLasso struct
+    field Prefix *Counterexample
+    field Cycle []GraphStep
+    field Stutter bool
+    field Repeated []NamedValue
+    field Takes []string
+    field Obliged []string
+    field Component int
+    field Replay string
+    field Sampled []int
 type ITFOptions struct
     embed Options
     field Binding *binding.Binding
@@ -2295,6 +2335,7 @@ type Result struct
     field Pending []qtrace.Step
     field Lost []qtrace.Lost
     field Settled bool
+    field Hot *HotCycle
     field Gaps []qtrace.Gap
     field Collected []qtrace.Watermark
     field Absent []Absence

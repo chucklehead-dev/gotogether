@@ -160,9 +160,14 @@ type Simulation struct {
 	// templates over a run (`{{ set "node" }}`) need a value here.
 	Constants map[string]string `yaml:"constants"`
 	// Holds are the invariants the model guarantees: no trace violates them.
+	// An eventual val here is one the model drives itself: `simulate
+	// -graph` fails on a fair cycle that keeps it false forever (P6).
 	Holds []string `yaml:"holds"`
 	// Allows are the invariants the model allows to fail: some trace must
-	// violate each, or checking the code against it proves nothing.
+	// violate each, or checking the code against it proves nothing. An
+	// eventual val here is the code's to drive: the model may stay with it
+	// false forever (its actions are observations, a probe's), so `simulate
+	// -graph` reports such a cycle without failing.
 	Allows []string `yaml:"allows"`
 	// Possible are what the model must be able to do (Possible): some
 	// trace reaches each. A model too strict to reach a scenario a
@@ -200,6 +205,15 @@ type Simulation struct {
 	// depth bound to explore every state near its start.
 	GraphStates int `yaml:"graphStates"`
 	GraphDepth  int `yaml:"graphDepth"`
+	// Unfair and Stops are the step's actions `simulate -graph`'s liveness
+	// search does not hold to weak fairness (every other action is weakly
+	// fair: one enabled throughout a cycle must be taken in it, a stutter
+	// counting for nothing). An unfair action obliges nothing and may run
+	// forever (a client's input, which may come or not); an action that
+	// stops is never taken in a cycle (a fault, which a settle turns off,
+	// or an input the driver stops sending before it settles).
+	Unfair []string `yaml:"unfair"`
+	Stops  []string `yaml:"stops"`
 }
 
 // Action says how to call one model action from an observed step.

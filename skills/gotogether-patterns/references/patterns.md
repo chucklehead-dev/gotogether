@@ -118,6 +118,20 @@ the collector drained. For the CLI, `gotogether validate
 judgment (a run that never settled, or left a call pending, fails); both
 need such a val, and refuse a binding without one.
 
+**Does the model itself make it true?** `gotogether simulate -graph`
+judges each eventual val as cycles: a fair cycle of states where it is
+false (every action weakly fair, a stutter counting for nothing) means
+the model can stay there forever. A model of the design (a queue and its
+worker) should not, and lists the val in `simulate.holds`; a model of
+observations (quorumkv's probe, which may observe any value) always
+can, and lists it in `simulate.allows`: the val is the code's to reach.
+Fairness is per action: name a client's inputs `simulate.unfair` (it
+may send them forever or never) and the faults and inputs a settle
+stops `simulate.stops` (never in a cycle); a processor left weakly fair
+must run whenever it stays enabled. Weak fairness does not rule out a
+storm in which a retry keeps disabling the progress it waits for (the
+progress is not enabled throughout): that is the cycle to find.
+
 Where nobody records `settle` (real Maelstrom), the property holds
 vacuously. Say so in the README, and rely on the environment's own final
 checks there.

@@ -158,11 +158,14 @@ is not taken. The maintainer's decisions of 2026-10-28, as recommended:
     core (OTel and yaml.v3 only): the TUI is a module of its own (its own
     go.mod and api file, published like qweave), its binary invoked by
     `gotogether nav` when installed.
-- **P6. Liveness as cycles (M, after P2).** In the model: a reachable
+- **P6. Liveness as cycles (M, after P2). Done** (DESIGN §62;
+  HISTORY: "P6: liveness as cycles"; `simulate -graph`'s eventual vals,
+  `validate.Checker.MarkHot`). In the model: a reachable
   cycle in which an eventually val is false throughout is "can stay hot
   forever", reported with its prefix and cycle; weak fairness per action
   family is required (read-only actions loop everywhere), the subtle
-  part. In runs (cheap, evidence not proof): an unsettled run whose model
+  part: every action weakly fair, a stutter no step, `simulate.unfair`
+  and `simulate.stops` opting out. In runs (cheap, evidence not proof): an unsettled run whose model
   states repeat with the val false is reported with the cycle's steps
   (retry storms and livelocks made legible).
 - **P7. grist's obligations generated (S). Done** (docs/grist.md

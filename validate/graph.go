@@ -28,12 +28,17 @@ import (
 // not a deadlock; "": the binding's simulate.terminal), at most States
 // states (default: the binding's simulate.graphStates, else 100000) and
 // paths of at most Depth transitions (default: the binding's
-// simulate.graphDepth, else none).
+// simulate.graphDepth, else none). Eventually are the eventual vals
+// judged as cycles (nil: the binding's), Unfair and Stops the step's
+// actions not weakly fair (nil: the binding's simulate.unfair and
+// simulate.stops; every other action is).
 type GraphSearch struct {
 	Constants     []string
 	Invariants    []string
 	Terminal      string
 	States, Depth int
+	Eventually    []string
+	Unfair, Stops []string
 }
 
 // DefaultGraphStates bounds a graph whose search and binding give no
@@ -73,11 +78,16 @@ type GraphResult struct {
 	// Actions are the step's actions with how often each was taken, in
 	// the order the step names them
 	Actions []ActionCoverage
+	// Eventually are each eventual val's verdict as cycles (P6), in the
+	// order asked; Unfair and Stops the actions the search did not hold to
+	// weak fairness (GraphSearch's)
+	Eventually    []EventualVerdict
+	Unfair, Stops []string
 	// Elapsed is the search's time, the invariants' included (not the
 	// model's compile)
 	Elapsed time.Duration
 
-	// graph is the explored graph, for what builds on it (P6's cycles)
+	// graph is the explored graph, for what builds on it
 	graph *qeval.Graph
 }
 
@@ -196,6 +206,16 @@ func (c *Checker) Graph(cfg GraphSearch) (*GraphResult, error) {
 	terminal := cfg.Terminal
 	if terminal == "" {
 		terminal = sim.Terminal
+	}
+	evs, unfair, stops := cfg.Eventually, cfg.Unfair, cfg.Stops
+	if evs == nil {
+		evs = c.Binding.Eventually
+	}
+	if unfair == nil {
+		unfair = sim.Unfair
+	}
+	if stops == nil {
+		stops = sim.Stops
 	}
 	bound := qeval.Bound{States: cfg.States, Depth: cfg.Depth}
 	if bound.States <= 0 {
@@ -356,6 +376,32 @@ func (c *Checker) Graph(cfg GraphSearch) (*GraphResult, error) {
 			}
 		}
 	}
+	// the eventual vals as cycles, every action weakly fair but those
+	// named: a name the step never calls is an error, as a misspelled
+	// one would leave an action fair
+	r.Unfair, r.Stops = unfair, stops
+	if len(evs) > 0 {
+		for _, x := range []struct {
+			field string
+			list  []string
+		}{{"unfair", unfair}, {"stops", stops}} {
+			for _, a := range x.list {
+				if !slices.ContainsFunc(r.Actions, func(ac ActionCoverage) bool { return ac.Action == a }) && a != "step" {
+					var known []string
+					for _, ac := range r.Actions {
+						known = append(known, ac.Action)
+					}
+					return nil, fmt.Errorf("graph: simulate.%s names %s, which is no action of %s's step (its actions: %s)", x.field, a, c.Binding.Module, strings.Join(known, ", "))
+				}
+				if slices.Contains(unfair, a) && slices.Contains(stops, a) && x.field == "stops" {
+					return nil, fmt.Errorf("graph: simulate lists %s as unfair and as stopping: an action that stops is in no cycle, an unfair one may be; pick one", a)
+				}
+			}
+		}
+		if r.Eventually, err = c.liveness(ce, evs, branch, unfair, stops); err != nil {
+			return nil, err
+		}
+	}
 	r.Elapsed = time.Since(started)
 	return r, nil
 }
@@ -428,18 +474,20 @@ func (w *cexWriter) replayStep(prev qeval.State, t qeval.Transition, k int) (cal
 	return "step", sampled
 }
 
+// named is a state's variables as a report names them.
+func (w *cexWriter) named(s qeval.State) []NamedValue {
+	var out []NamedValue
+	for _, v := range w.e.m.Vars {
+		out = append(out, NamedValue{Name: shortName(v), Value: qeval.String(s[v])})
+	}
+	return out
+}
+
 // path is the counterexample of state id: its path from its start, and
 // the Quint run that replays it, ending in end.
 func (w *cexWriter) path(id int, end string) *Counterexample {
-	named := func(s qeval.State) []NamedValue {
-		var out []NamedValue
-		for _, v := range w.e.m.Vars {
-			out = append(out, NamedValue{Name: shortName(v), Value: qeval.String(s[v])})
-		}
-		return out
-	}
 	start := w.g.Start(id)
-	cx := &Counterexample{Steps: []GraphStep{{Call: "init", State: named(start)}}}
+	cx := &Counterexample{Steps: []GraphStep{{Call: "init", State: w.named(start)}}}
 	run := "init"
 	if w.g.Starts > 1 {
 		// init has several states: the replay starts in this one's values
@@ -450,9 +498,19 @@ func (w *cexWriter) path(id int, end string) *Counterexample {
 		run = "all { " + strings.Join(parts, ", ") + " }"
 		cx.Steps[0].Call = "init (" + stateText(w.e, start) + ")"
 	}
-	prev := start
-	for i, t := range w.g.Path(id) {
-		st := GraphStep{Call: "step", State: named(t.State)}
+	steps, calls, sampled := w.steps(start, w.g.Path(id), 1)
+	cx.Steps = append(cx.Steps, steps...)
+	cx.Sampled = sampled
+	cx.Replay = run + calls + end
+	return cx
+}
+
+// steps are transitions ts taken from state prev as a counterexample's
+// steps, their replay's calls (".then(c)" each) and the steps (numbered
+// from first) whose call quint may draw otherwise (Sampled).
+func (w *cexWriter) steps(prev qeval.State, ts []qeval.Transition, first int) (out []GraphStep, calls string, sampled []int) {
+	for i, t := range ts {
+		st := GraphStep{Call: "step", State: w.named(t.State)}
 		k := branchIndex(w.c.Model, t)
 		if k >= 0 {
 			// the replay applies the action itself where it can: step's
@@ -472,16 +530,15 @@ func (w *cexWriter) path(id int, end string) *Counterexample {
 		}
 		// the call checked by the evaluator: the transition's state among
 		// its successors, and its only one unless quint draws (Sampled)
-		call, sampled := w.replayStep(prev, t, k)
-		if sampled {
-			cx.Sampled = append(cx.Sampled, i+1)
+		call, s := w.replayStep(prev, t, k)
+		if s {
+			sampled = append(sampled, first+i)
 		}
-		cx.Steps = append(cx.Steps, st)
-		run += ".then(" + call + ")"
+		out = append(out, st)
+		calls += ".then(" + call + ")"
 		prev = t.State
 	}
-	cx.Replay = run + end
-	return cx
+	return out, calls, sampled
 }
 
 // callLiteral is an action's call with its arguments as Quint literals,

@@ -8,6 +8,24 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Liveness as cycles (ROADMAP P6): `gotogether simulate -graph` judges
+  each eventual val over the state graph. A reachable cycle of states
+  where it is false, fair under weak fairness per action (a stutter no
+  step), is a lasso that keeps it false forever, printed with its
+  prefix and cycle, and a `gtg_hot_<val>` run in `-out`'s module; it
+  fails a val in `simulate.holds`, and is reported for one in
+  `simulate.allows` or unclassified (both lists now take eventual
+  vals). Every action is weakly fair but those in the binding's new
+  `simulate.unfair` (never obliged) and `simulate.stops` (in no cycle),
+  or `-unfair`, `-stops`. `validate.GraphSearch` gains `Eventually`,
+  `Unfair`, `Stops`; `validate.GraphResult` gains `Eventually`
+  (`validate.EventualVerdict`, `validate.HotLasso`), `Unfair`, `Stops`.
+  In runs, `validate.Checker.MarkHot` puts on a result
+  (`validate.Result.Hot`, a `validate.HotCycle`) the cycle an unsettled
+  trace's model states went round with an eventual val false: qtest
+  marks a run whose Settle failed, `gotogether validate` every trace
+  without a settle; the report's `hot cycle (evidence, no verdict ...)`
+  line, no verdict changed.
 - Skills in pavlov's shape (ROADMAP P8): each SKILL.md at most about 80
   lines, with a "choose your path" list (each reference and when to read
   it), steps, checklists, a results table (each verdict and report line,

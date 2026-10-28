@@ -1,0 +1,16 @@
+# hot.qnt's queue (live_test.go, simulate -graph's liveness search).
+# Submissions stop (as a run's driver stops before it settles): the worker,
+# weakly fair, drains the queue; retry and read loops are unfair.
+spec: hot.qnt
+module: hot
+constants:
+  STORM: 'false'
+actions:
+  submit: {}
+  process: {}
+  read: {}
+  retry: {}
+eventually: [drained]
+simulate:
+  holds: [drained]
+  stops: [submit]

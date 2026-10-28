@@ -1,0 +1,15 @@
+# hot.qnt's queue (live_test.go, simulate -graph's liveness search).
+# Every action weakly fair: a client that submits forever keeps it busy,
+# which the model allows (drained is the code's to reach once inputs stop).
+spec: hot.qnt
+module: hot
+constants:
+  STORM: 'false'
+actions:
+  submit: {}
+  process: {}
+  read: {}
+  retry: {}
+eventually: [drained]
+simulate:
+  allows: [drained]

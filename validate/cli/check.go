@@ -282,6 +282,9 @@ func (chk Check) Judge(ctx context.Context) (*Judged, error) {
 		}
 		j.Judgment = jd
 		rep := jd.Report
+		// a trace that recorded no settle, its states going round a cycle
+		// with an eventual val false: evidence, printed with its result
+		c.MarkHot(rep, jd.Steps)
 		j.OK = rep.OK()
 		actors := rep.Actors
 		// one judgment with qtest.Finishes; only a run that passes is

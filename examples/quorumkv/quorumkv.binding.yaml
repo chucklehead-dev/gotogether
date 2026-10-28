@@ -15,3 +15,11 @@ actions:
   observe: {}
 
 eventually: [converged]
+
+# The model on its own (gotogether simulate -graph): converged is the
+# code's to reach. The model's observe records what a probe saw, any
+# value, so a fair cycle of writes and observations keeps it false
+# forever: the graph's liveness search reports that lasso, which this
+# says the model allows (DESIGN §62).
+simulate:
+  allows: [converged]
