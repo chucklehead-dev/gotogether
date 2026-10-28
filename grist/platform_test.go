@@ -430,3 +430,23 @@ func TestMainLivezPerTrigger(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// /metrics escapes a label value as Prometheus' text format does, and
+// only so: a tenant's name is any UTF-8 without NUL or slash, and Go's
+// quoting (\t, \u200b) is no escape a scraper reads.
+func TestMetricsLabelEscaping(t *testing.T) {
+	a, _ := amoApp(func(ctx context.Context, m grist.Meta) error { return nil })
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	tenant := "a\tb\"c\\d\ne\u200bf"
+	errOut, _, done := serving(t, ctx, a, t.TempDir(), []string{"-addr", "127.0.0.1:0", "-health-addr", "127.0.0.1:0", "-tenant", tenant})
+	_, metrics := get(t, healthURL(t, errOut)+"/metrics")
+	want := `grist_processor_lag{processor="note",tenant="a` + "\t" + `b\"c\\d\ne` + "\u200b" + `f"} 0`
+	if !strings.Contains(metrics, want) {
+		t.Errorf("/metrics has no %q:\n%s", want, metrics)
+	}
+	stop()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}

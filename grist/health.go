@@ -114,7 +114,7 @@ func (h *health) metrics(ctx context.Context, now time.Time) string {
 				if i > 0 {
 					b.WriteByte(',')
 				}
-				fmt.Fprintf(&b, "%s=%s", labels[i], strconv.Quote(labels[i+1]))
+				fmt.Fprintf(&b, "%s=\"%s\"", labels[i], labelEscaper.Replace(labels[i+1]))
 			}
 			b.WriteByte('}')
 		}
@@ -192,6 +192,12 @@ func (h *health) metrics(ctx context.Context, now time.Time) string {
 	value("grist_store_up", bit(up))
 	return b.String()
 }
+
+// labelEscaper escapes a label value as Prometheus' text format does:
+// a backslash, a double quote and a newline, nothing else (a tenant's
+// name is any UTF-8; strconv.Quote's \t or \u200b is no escape there,
+// and a scraper refused the whole page). Read-only.
+var labelEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`)
 
 // setMemoryLimit sets the Go runtime's soft memory limit to 90% of the
 // cgroup's memory.max (read from path) when GOMEMLIMIT is unset, so the
