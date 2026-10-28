@@ -1782,6 +1782,22 @@ ROADMAP's P3 and P4 as built (DESIGN §59). The decisions they left:
   generator's renames, `item_` for a field `item`), so a
   scenario written in Go values matches the binding's arguments
   without the author knowing the renames.
+- **The review** (after landing): best first under a depth bound missed
+  two of vending's three-step sequences within it (a state reached by a
+  longer path first kept its depth: now expanded again when reached
+  shallower); a scenario's outcome the binding passes to no parameter
+  was dropped from the model's search, which then called possible what
+  the outcome forbade (now no search, saying so); a With of a misspelled
+  parameter made None hold for nothing (now failed, named); a `when`
+  naming an action went to quint as a val (now the steps to write), and
+  a mapping's misspelled key was ignored (now refused). quint's share
+  moved into the first invariant's own run (its witnesses and its
+  traces), dropping the per-predicate witness run: library's simulate
+  64 s to 23 s, counters' 33 s to 16 s. Handing ids out in order lost
+  nothing: the step never drew a used id (freshKey disabled it), and a
+  reused key stays a recorded step's outcome, the action's
+  `answered.contains(id)` branch, which quint replays. examples/hello
+  carries a possible and a scenario as the README's first code.
 
 ### P1: blocking rules (grist)
 
