@@ -6,6 +6,7 @@ func LintSources(bs []Bound, anns []Annotation, recs []RecordCall) (errs, warns 
 func Load(path string) (*Binding, error)
 func LoadModel(quint, spec, module string) (*Model, error)
 func ObsComparisons(expect string) []ObsComparison
+func ParseStepPattern(s string) (StepPattern, error)
 func ParseTypecheck(data []byte, module string) (*Model, error)
 func ReadITFMeta(meta map[string]any) (*ITFMeta, bool)
 func RecordsOf(fset *token.FileSet, f *ast.File) []RecordCall
@@ -55,6 +56,7 @@ type Binding struct
     method (*Binding) ObservedITF(t *qtrace.Trace) ([]byte, error)
     method (*Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error)
     method (*Binding) Planner(m *Model, whole *qtrace.Trace) *Planner
+    method (*Binding) PossibleModule(m *Model, qntPath string, preds []string) (*EvalModule, error)
     method (*Binding) Reconstruct(steps []qtrace.Step) ([]*qtrace.Trace, []qtrace.Issue)
     method (*Binding) Skips(s *qtrace.Step) bool
     method (*Binding) SnapshotFirst(tr *qtrace.Trace) bool
@@ -86,6 +88,7 @@ type EvalModule struct
     field Invariants map[string]string
     field Eventually map[string]string
     field Vals map[string]string
+    field Possible map[string]string
 type ITFMeta struct
     field Spec string `json:"spec"`
     field Module string `json:"module"`
@@ -125,6 +128,13 @@ type Plan struct
     method (*Plan) ConstantList() []string
 type Planner struct
     method (*Planner) Plan(t *qtrace.Trace) (*Plan, error)
+type Possible struct
+    field Name string `yaml:"name"`
+    field When string `yaml:"when"`
+    field Steps []string `yaml:"steps"`
+    method (*Possible) UnmarshalYAML(n *yaml.Node) error
+    method (Possible) Resolve(m *Model) (when string, steps []StepPattern, err error)
+    method (Possible) Text() string
 type RecordCall struct
     field Pos string
     field At token.Pos
@@ -136,11 +146,18 @@ type Simulation struct
     field Constants map[string]string `yaml:"constants"`
     field Holds []string `yaml:"holds"`
     field Allows []string `yaml:"allows"`
+    field Possible []Possible `yaml:"possible"`
+    field SearchStates int `yaml:"searchStates"`
     field Steps int `yaml:"steps"`
     field Samples int `yaml:"samples"`
     field Skip string `yaml:"skip"`
     field VerifySteps int `yaml:"verifySteps"`
     field VerifySkip string `yaml:"verifySkip"`
+type StepPattern struct
+    field Action string
+    field Params []string
+    field Values []string
+    field Text string
 type Within struct
     field After string `yaml:"after"`
     field Holds string `yaml:"holds"`
@@ -1577,11 +1594,13 @@ func LinearizeByKey(arg string) Option
 func ManifestEvidence(m *validate.Manifest) *Evidence
 func Mismatch(action string) Expectation
 func MutateSteps(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...Option) *StepMutationReport
+func NamedScenario(name string, steps ...Take) Expectation
 func NoSurvivors(equivalent ...string) MutationClaim
 func None(es ...Expectation) Claim
 func NotVacuous() Claim
 func Optional(t testing.TB, reason string)
 func Pending(action string) Expectation
+func Possible(t testing.TB, binding string, scenarios ...Expectation)
 func Quint(o validate.Options) Option
 func Reaches(kind string) Reach
 func ReadEvidence(path string) (*Evidence, error)
@@ -1593,6 +1612,7 @@ func ResolvePending() Option
 func RowOf(c qenv.Chooser) (qsweep.Row, bool)
 func Runs(runs ...*Run) *Exploration
 func SameFailure(r *Run) Expectation
+func Scenario(steps ...Take) Expectation
 func Settles() Expectation
 func ShrinkActions[A any](t testing.TB, original []A, s ActionShrink[A]) *ShrunkActions[A]
 func ShrunkTo(n int) RunClaim
@@ -1793,6 +1813,7 @@ type Take struct
     method (Take) Name() string
     method (Take) Outcome(o string) Take
     method (Take) String() string
+    method (Take) With(param, value string) Take
 type TakeEach struct
     method (TakeEach) String() string
 type Vacuity struct
@@ -2036,6 +2057,7 @@ type Checker struct
     method (*Checker) Key(steps []qtrace.Step) string
     method (*Checker) MutateSteps(ctx context.Context, steps []qtrace.Step, opt SearchOptions, check BatchCheck, mopts ...qtrace.MutationOption) (*StepMutants, error)
     method (*Checker) Nav(start NavStart) (*Navigator, error)
+    method (*Checker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]PossibleResult, error)
     method (*Checker) WithConstants(constants map[string]string) (*Checker, error)
     method (*Checker) WithInvariants(invariants ...string) (*Checker, error)
 type Condition struct
@@ -2165,6 +2187,19 @@ type Options struct
     field VerdictsOnly bool
     field Eval string
     field NoEnvBackend bool
+type PossibleResult struct
+    field Possible binding.Possible
+    field Found bool
+    field Path []string
+    field Complete bool
+    field Cut string
+    field Nodes int
+    field Depth int
+    method (PossibleResult) Verdict() string
+type PossibleSearch struct
+    field Constants []string
+    field States int
+    field Depth int
 type Report struct
     field Issues []qtrace.Issue
     field Actors []*Result

@@ -75,8 +75,14 @@ func stepsString(o []qtrace.Step) string {
 
 // evaluatorFor is c's binding's evaluator, compiled the first time.
 func evaluatorFor(c *Checker) *evaluator {
+	return evaluatorOf(c, func(path string) (*binding.EvalModule, error) { return c.Binding.EvalModule(c.Model, path) })
+}
+
+// evaluatorOf is the evaluator of the module make writes for a path
+// (binding.EvalModule, or PossibleModule), compiled the first time.
+func evaluatorOf(c *Checker, make func(path string) (*binding.EvalModule, error)) *evaluator {
 	dir := filepath.Join(os.TempDir(), "gotogether-eval")
-	em, err := c.Binding.EvalModule(c.Model, filepath.Join(dir, "x", "eval.qnt"))
+	em, err := make(filepath.Join(dir, "x", "eval.qnt"))
 	if err != nil {
 		return &evaluator{err: err}
 	}
@@ -87,20 +93,19 @@ func evaluatorFor(c *Checker) *evaluator {
 	h := sha256.New()
 	fmt.Fprintf(h, "%s\x00%s\x00%s", c.Options.Quint, em.Text, src)
 	key := hex.EncodeToString(h.Sum(nil))[:16]
-	return evaluators.Once(key, func() *evaluator { return compileEval(c, em, filepath.Join(dir, key)) })
+	return evaluators.Once(key, func() *evaluator { return compileEval(c, make, filepath.Join(dir, key)) })
 }
 
-// compileEval writes em in dir and compiles it with quint: its stdout to a
-// file, since --out writes the modules unflattened, and a pipe loses what
-// quint has not flushed when it exits.
-func compileEval(c *Checker, em *binding.EvalModule, dir string) *evaluator {
-	// the module imports the model relative to where EvalModule was told it
-	// is: write it at the same depth
-	again, err := c.Binding.EvalModule(c.Model, filepath.Join(dir, "eval.qnt"))
+// compileEval writes the module make writes in dir and compiles it with
+// quint: its stdout to a file, since --out writes the modules
+// unflattened, and a pipe loses what quint has not flushed when it exits.
+func compileEval(c *Checker, make func(path string) (*binding.EvalModule, error), dir string) *evaluator {
+	// the module imports the model relative to where it is written: write
+	// it at the same depth
+	em, err := make(filepath.Join(dir, "eval.qnt"))
 	if err != nil {
 		return &evaluator{err: err}
 	}
-	em = again
 	// quint's IR of the module, kept across processes by its content and
 	// the model's (cache.go)
 	key, cached := cacheKey(c.Options.Quint, "compile", c.Binding.SpecPath(), "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, em.Text)

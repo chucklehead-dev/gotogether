@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
@@ -66,11 +67,11 @@ func outcomeOf(c binding.Call) string {
 	return c.Step.Outcome
 }
 
-// takenWith reports whether a run's replay took action with a step of
-// outcome o.
-func takenWith(r *Run, action, o string) bool {
+// takenBy reports whether a run's replay took k: its action, by a step
+// of its outcome, with its arguments.
+func takenBy(r *Run, k Take) bool {
 	for _, c := range takenCalls(r) {
-		if c.Action == action && outcomeOf(c) == o {
+		if k.takes(c) {
 			return true
 		}
 	}
@@ -114,7 +115,11 @@ type Take struct {
 	share   float64
 	outcome string // a step's recorded outcome the action was taken with ("": any)
 	hint    string // how to reach it, said when no run did
+	args    []takeArg
 }
+
+// a parameter's value a Take wants (With)
+type takeArg struct{ param, value string }
 
 // Takes claims that some run took the model action.
 func Takes(action string) Take { return Take{action: action} }
@@ -128,6 +133,42 @@ func (k Take) InAtLeast(share float64) Take { k.share = share; return k }
 // refusal its mutant removes (Takes("borrow").Outcome("limit")), which a
 // borrow that committed does not show.
 func (k Take) Outcome(o string) Take { k.outcome = o; return k }
+
+// With wants the action taken with its parameter param at value, a
+// Quint literal (`"a"`, `2`, `Set(1, 2)`), compared as a value with the
+// argument the binding passed it: Takes("add").With("item", `"a"`).
+// Several With want each.
+func (k Take) With(param, value string) Take {
+	k.args = append(append([]takeArg(nil), k.args...), takeArg{param, value})
+	return k
+}
+
+// takes reports whether call c takes k: its action, its step's outcome
+// if k names one, and each of k's arguments.
+func (k Take) takes(c binding.Call) bool {
+	if c.Action != k.action || k.outcome != "" && outcomeOf(c) != k.outcome {
+		return false
+	}
+	for _, a := range k.args {
+		got, ok := c.Args[a.param]
+		if !ok || !sameLiteral(got, a.value) {
+			return false
+		}
+	}
+	return true
+}
+
+// sameLiteral reports whether two Quint literals are one value (a set's
+// order, spaces aside), or, when one is no literal itf reads, the same
+// text but for spaces.
+func sameLiteral(a, b string) bool {
+	x, errA := itf.ParseQuint(a)
+	y, errB := itf.ParseQuint(b)
+	if errA == nil && errB == nil {
+		return x.Equal(y)
+	}
+	return strings.Join(strings.Fields(a), "") == strings.Join(strings.Fields(b), "")
+}
 
 // Hint is how to reach the action, said when no run did (what the
 // workload must send, a fault to turn on): a claim built for a whole
@@ -145,10 +186,18 @@ func (k Take) Name() string {
 }
 
 func (k Take) what() string {
-	if k.outcome == "" {
-		return k.action
+	w := k.action
+	if len(k.args) > 0 {
+		parts := make([]string, len(k.args))
+		for i, a := range k.args {
+			parts[i] = a.param + " = " + a.value
+		}
+		w += "(" + strings.Join(parts, ", ") + ")"
 	}
-	return k.action + " with outcome " + k.outcome
+	if k.outcome == "" {
+		return w
+	}
+	return w + " with outcome " + k.outcome
 }
 
 func (k Take) String() string {
@@ -174,11 +223,11 @@ func (k Take) count(runs []*Run, m *ModelCoverage) (n, need int) {
 	if k.share > 0 {
 		need = int(k.share*float64(len(runs)) + 0.999999)
 	}
-	if k.outcome == "" {
+	if k.outcome == "" && len(k.args) == 0 {
 		return m.Taken[k.action], need
 	}
 	for _, r := range runs {
-		if takenWith(r, k.action, k.outcome) {
+		if takenBy(r, k) {
 			n++
 		}
 	}

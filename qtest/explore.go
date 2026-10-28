@@ -1219,11 +1219,11 @@ func (x *Exploration) verdict(c Claim, reps []*validate.Report) claimVerdict {
 		}}
 	case bad == 0:
 		return claimVerdict{say: func(testing.TB) string {
-			return fmt.Sprintf("all %d runs conform; want %s%s%s", len(x.Runs), c, x.unfaulted(), x.unscripted())
+			return fmt.Sprintf("all %d runs conform; want %s%s%s%s", len(x.Runs), c, x.unfaulted(), x.unscripted(), x.scenarioMisses(c))
 		}}
 	default:
 		return claimVerdict{say: func(t testing.TB) string {
-			return fmt.Sprintf("%s, none as %s%s; the first:\n%s", x.failingWords(), c, x.atStart(), x.describe(t, x.Failing()[0], true))
+			return fmt.Sprintf("%s, none as %s%s%s; the first:\n%s", x.failingWords(), c, x.atStart(), x.scenarioMisses(c), x.describe(t, x.Failing()[0], true))
 		}}
 	}
 }

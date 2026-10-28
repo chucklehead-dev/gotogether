@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // simulate runs the binding's model on its own: `quint run` of the
@@ -28,6 +29,14 @@ import (
 // says why a model is not verified (one Apalache cannot encode, a
 // nondet over an infinite set or Choreo's recursion, fails with its
 // error without it).
+//
+// The section's possibles (binding.Possible: a predicate, an action, a
+// sequence of steps) are what the model must be able to do: each is
+// searched for by the Go evaluator (validate.Checker.Possible, bounded by
+// -states and the steps), and what it did not find sampled by quint
+// (possible.go). Each is reported reached with its witness, or fails:
+// forbidden, when the evaluator's search saw the whole state graph, else
+// not found in the samples or within the bound.
 func simulate(args []string) (int, error) {
 	fset := commandFlags("simulate")
 	bpath := fset.String("binding", "", "binding file: its spec, module, constants, defs, invariants and simulate section")
@@ -37,6 +46,7 @@ func simulate(args []string) (int, error) {
 	consts := fset.String("const", "", "constants to set, NAME=expr,... (over the binding's and its simulate section's)")
 	invs := fset.String("invariants", "", "comma-separated invariants instead of the binding's (classified as the binding says)")
 	verify := fset.Int("verify", 0, "check each invariant in every trace of up to this many steps with quint verify (Apalache), instead of sampling with quint run")
+	states := fset.Int("states", 0, "states the Go evaluator's search for the possibles visits at most (default: the binding's simulate.searchStates, else 2000)")
 	quint := fset.String("quint", "quint", "quint binary")
 	fset.Parse(args)
 	if *bpath == "" {
@@ -74,15 +84,29 @@ func simulate(args []string) (int, error) {
 	if *invs != "" {
 		invariants = splitList(*invs)
 	}
-	if len(invariants) == 0 && len(b.Eventually) > 0 {
+	if len(invariants) == 0 && len(b.Eventually) > 0 && len(sim.Possible) == 0 {
 		// an eventual val holds when a run settles, which a sampled trace of
 		// the model never says: there is nothing to sample
 		fmt.Printf("simulate %s: no invariants, and its eventual vals (%s) are judged after a run settles, not on sampled traces: nothing to simulate\n",
 			*bpath, strings.Join(b.Eventually, ", "))
 		return 0, nil
 	}
-	if len(invariants) == 0 {
-		return 2, fmt.Errorf("simulate: %s names no invariants (or pass -invariants a,b)", *bpath)
+	if len(invariants) == 0 && len(sim.Possible) == 0 {
+		return 2, fmt.Errorf("simulate: %s names no invariants (or pass -invariants a,b) and no possibles", *bpath)
+	}
+	var possibles []*possibleCheck
+	var checker *validate.Checker
+	if len(sim.Possible) > 0 {
+		// the possibles need the model's actions (a name alone is a step
+		// if it is one) and its evaluator
+		checker, err = validate.NewChecker(*bpath, validate.Options{Quint: *quint})
+		if err != nil {
+			return 2, err
+		}
+		defer checker.Close()
+		if possibles, err = resolvePossibles(checker, sim.Possible); err != nil {
+			return 2, err
+		}
 	}
 	if *steps == 0 {
 		*steps = or(sim.Steps, 30)
@@ -99,6 +123,9 @@ func simulate(args []string) (int, error) {
 	src, err := simulationModule(b, overrides, file)
 	if err != nil {
 		return 2, err
+	}
+	if vals := possibleVals(possibles); vals != "" {
+		src = strings.TrimSuffix(src, "}\n") + vals + "}\n"
 	}
 	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
 		return 2, err
@@ -167,6 +194,32 @@ func simulate(args []string) (int, error) {
 		default: // held: not wrong, only unsaid
 			fmt.Printf("  holds   %s (unclassified: add it to simulate.holds to keep it so)\n", inv)
 		}
+	}
+	if len(possibles) > 0 {
+		// the Go evaluator's search first (milliseconds a state, the
+		// shortest witness with its arguments), quint's sampling for what
+		// it did not find
+		depth := *steps
+		if *verify > 0 {
+			depth = *verify
+		}
+		rs, evalErr := checker.Possible(sim.Possible, validate.PossibleSearch{Constants: overrides, States: or(*states, sim.SearchStates), Depth: depth})
+		var left []*possibleCheck
+		for i, c := range possibles {
+			if evalErr == nil && rs[i].Found {
+				c.quintSkip = "found by the Go evaluator, not sampled"
+				continue
+			}
+			left = append(left, c)
+		}
+		if err := quintPossibles(*quint, dir, file, left, *steps, *samples, *seed, *verify); err != nil {
+			return 2, err
+		}
+		pc, err := reportPossibles(possibles, rs, evalErr, *steps, *samples, *verify)
+		if err != nil {
+			return 2, err
+		}
+		code = max(code, pc)
 	}
 	return code, nil
 }

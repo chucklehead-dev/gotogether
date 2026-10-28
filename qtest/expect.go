@@ -44,6 +44,9 @@ type Expectation struct {
 	// undecided: its value of a run whose conformance has no verdict is
 	// its own (tri), not unknown for that alone
 	undecided bool
+	// scenario, if set, is a Scenario's: a failing claim says per run how
+	// far it followed it, and whether the model can (scenarioMisses)
+	scenario *scenario
 }
 
 // tri is a three-valued verdict of an expectation on a run.

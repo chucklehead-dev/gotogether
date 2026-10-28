@@ -1,0 +1,20 @@
+spec: vending.qnt
+module: vending
+constants:
+  PRICE: '2'
+  STOCK: '2'
+actions:
+  insert: {}
+  buy: { args: { result: '{{.outcome}}' } }
+  refund: {}
+  repair: {}
+invariants: [nonNegative]
+simulate:
+  holds: [nonNegative]
+  steps: 12
+  samples: 300
+  possible:
+    - sold > STOCK
+    - repair
+    - name: three sold of two
+      steps: ['buy(result = "ok")', 'buy(result = "ok")', 'buy(result = "ok")']

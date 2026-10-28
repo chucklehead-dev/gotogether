@@ -111,7 +111,7 @@ Each command's -h says what it is for, with an example. gotogether version print
 usage:
   gotogether scaffold -spec model.qnt -module M [-out m.binding.yaml]
   gotogether scaffold -system -binding b.yaml [-pkg p] [-out system_test.go]
-  gotogether simulate -binding b.yaml [-steps n] [-samples n] [-const N=e] [-seed s] [-verify n]
+  gotogether simulate -binding b.yaml [-steps n] [-samples n] [-states n] [-const N=e] [-seed s] [-verify n]
                    the model alone, with the binding's invariants (-verify: every trace of up to n steps, by Apalache)
   gotogether evidence [-strict] [-expect checks.txt] [DIR|FILE ...]  a suite's explorations (their evidence under GOTOGETHER_EVIDENCE):
                    each test's verdicts, and the model actions and fault kinds no test tried
@@ -247,6 +247,7 @@ func scaffoldTo(w io.Writer, out, spec, module string, system bool, bpath, pkg, 
 	fmt.Fprintf(w, "\nsimulate:        # gotogether simulate: what the model alone does with each invariant\n")
 	fmt.Fprintf(w, "  holds: [%s]   # the model guarantees them (no trace violates them)\n", vals)
 	fmt.Fprintf(w, "  allows: []      # move here those the model lets fail: requirements on the code, which must prevent it\n")
+	fmt.Fprintf(w, "  # possible: []  # what the model must be able to do, each scenario a run should show: a predicate, an action, or {name, steps: [a, b]}\n")
 	return nil
 }
 

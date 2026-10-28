@@ -8,6 +8,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // The simulation module imports the binding's instance, with its
@@ -94,5 +95,63 @@ func TestSimulateOnlyEventualVals(t *testing.T) {
 	code, err := simulate([]string{"-binding", "../../examples/quorumkv/quorumkv.binding.yaml", "-quint", "/nonexistent/quint"})
 	if code != 0 || err != nil {
 		t.Errorf("quorumkv: exit %d, %v; want nothing to simulate", code, err)
+	}
+}
+
+// A binding's possibles: vending's are reached (exit 0); its strict
+// variant's are not (exit 1), the model forbidding each. Each possible
+// quint can check (a predicate, a sequence of names) gets the same
+// answer from quint's sampling and the Go evaluator's search, and a
+// sequence naming arguments is the evaluator's alone.
+func TestSimulatePossible(t *testing.T) {
+	skip.Quint(t)
+	for b, want := range map[string]int{"vending.yaml": 0, "vending_strict.yaml": 1} {
+		path := filepath.Join("../../validate/testdata", b)
+		if code, err := simulate([]string{"-binding", path}); code != want || err != nil {
+			t.Errorf("%s: exit %d, %v; want %d", b, code, err, want)
+		}
+		c, err := validate.NewChecker(path, validate.Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+		cs, err := resolvePossibles(c, c.Binding.Simulate.Possible)
+		if err != nil {
+			t.Fatal(err)
+		}
+		dir := t.TempDir()
+		file := filepath.Join(dir, "simulate.qnt")
+		src, err := simulationModule(c.Binding, nil, file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		src = strings.TrimSuffix(src, "}\n") + possibleVals(cs) + "}\n"
+		if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := quintPossibles("quint", dir, file, cs, 12, 300, "1", 0); err != nil {
+			t.Fatal(err)
+		}
+		rs, err := c.Possible(c.Binding.Simulate.Possible, validate.PossibleSearch{Depth: 12})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, pc := range cs {
+			r := rs[i]
+			switch {
+			case pc.quintSkip != "":
+				if pc.when != "" || len(pc.steps[0].Params) == 0 && len(pc.steps) == 1 {
+					t.Errorf("%s: %s: quint skipped it (%s)", b, pc.p.Text(), pc.quintSkip)
+				}
+			case pc.quintFound != r.Found:
+				t.Errorf("%s: %s: quint found %v, the evaluator %v (%s)", b, pc.p.Text(), pc.quintFound, r.Found, r.Verdict())
+			}
+			if want == 1 && (r.Found || !r.Complete) {
+				t.Errorf("%s: %s: %s, want impossible", b, pc.p.Text(), r.Verdict())
+			}
+			if want == 0 && !r.Found {
+				t.Errorf("%s: %s: %s, want reached", b, pc.p.Text(), r.Verdict())
+			}
+		}
 	}
 }

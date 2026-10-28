@@ -17,7 +17,7 @@ type command struct{ purpose, example string }
 var commands = map[string]command{
 	"scaffold": {"write a binding skeleton for a model (or, with -system, a qtest.System test for a binding): the first step",
 		"gotogether scaffold -spec model/stock.qnt -module stock -out stock.binding.yaml\n  gotogether scaffold -system -binding stock.binding.yaml -out stock_test.go"},
-	"simulate": {"run the model alone with the binding's invariants: which it guarantees (simulate.holds), which it lets fail (simulate.allows)",
+	"simulate": {"run the model alone with the binding's invariants: which it guarantees (simulate.holds), which it lets fail (simulate.allows), and what it must be able to do (simulate.possible)",
 		"gotogether simulate -binding stock.binding.yaml"},
 	"evidence": {"sum up a suite's explorations (written under GOTOGETHER_EVIDENCE): each test's verdicts, and what no test tried",
 		"GOTOGETHER_EVIDENCE=ev go test ./... && gotogether evidence ev"},

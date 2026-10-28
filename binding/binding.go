@@ -164,6 +164,15 @@ type Simulation struct {
 	// Allows are the invariants the model allows to fail: some trace must
 	// violate each, or checking the code against it proves nothing.
 	Allows []string `yaml:"allows"`
+	// Possible are what the model must be able to do (Possible): some
+	// trace reaches each. A model too strict to reach a scenario a
+	// conforming run would show fails `gotogether simulate` here, before
+	// any code is checked against it.
+	Possible []Possible `yaml:"possible"`
+	// SearchStates bounds the Go evaluator's search for the possibles
+	// (default 2000 states; its depth is Steps): a search the bound cut
+	// says "not found within the bound", never "impossible".
+	SearchStates int `yaml:"searchStates"`
 	// Steps and Samples bound the run (default 30 and 1000).
 	Steps   int `yaml:"steps"`
 	Samples int `yaml:"samples"`
