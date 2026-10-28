@@ -3,7 +3,7 @@ module github.com/chucklehead-dev/gotogether/qenv/simgrpc
 go 1.26.1
 
 require (
-	github.com/chucklehead-dev/gotogether v0.0.0-20261028202140-55d25045b669
+	github.com/chucklehead-dev/gotogether v0.0.0-20261028210125-263333b89533
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
 )
