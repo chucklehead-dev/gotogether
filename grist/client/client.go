@@ -26,6 +26,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/grist"
@@ -166,7 +167,16 @@ type body struct {
 type retryable struct {
 	err   error
 	after time.Duration
+	// refused: no server took the request (a router's 502 or 503 with no
+	// grist behind it); a refused connection is the error's own
+	refused bool
 }
+
+// refusedTry reports whether a retried try was refused, no server taking
+// it: a connection refused, or a router's 502 or 503 without grist's
+// answer (an endpoint gone, none ready). A timeout or a reset is not: the
+// request may have been taken.
+func refusedTry(rt *retryable) bool { return rt.refused || errors.Is(rt.err, syscall.ECONNREFUSED) }
 
 func (r *retryable) Error() string { return r.err.Error() }
 func (r *retryable) Unwrap() error { return r.err }
@@ -248,7 +258,8 @@ func (c *Client) refusal(resp *http.Response, b []byte, query bool) error {
 		if query {
 			base = grist.ErrUnavailable
 		}
-		return &retryable{err: fmt.Errorf("%w (%d without grist's answer: %.200s)", base, resp.StatusCode, e.Error), after: retryAfter(resp)}
+		gone := !gristBody && (resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusServiceUnavailable)
+		return &retryable{err: fmt.Errorf("%w (%d without grist's answer: %.200s)", base, resp.StatusCode, e.Error), after: retryAfter(resp), refused: gone}
 	}
 	switch resp.StatusCode {
 	case http.StatusUnprocessableEntity:
@@ -399,7 +410,10 @@ func Params(args json.RawMessage) (url.Values, error) {
 // committed command gets its receipt) after a jittered exponential
 // backoff (RetryDelay doubling to MaxRetryDelay; at least a 503's
 // Retry-After), at most MaxAttempts times and while the Budget holds a
-// retry; a call never answered stays pending. It returns nil, the
+// retry; a call never answered stays pending. Its step counts the tries
+// no server took (a connection refused, a router's 502 or 503 without
+// grist's answer: an endpoint gone, none ready), field refused
+// (gristtest.NoClientErrors). It returns nil, the
 // refusal (a *grist.Rejected, grist.ErrConflict, grist.ErrDenied), a
 // *StatusError, or, for a call never answered, the last try's error
 // (grist.ErrOutcomeUnknown or grist.ErrUnavailable). Arguments that are
@@ -423,6 +437,7 @@ func (c *Client) Do(ctx context.Context, env grist.Envelope, name string, args j
 	budget.deposit()
 	seed := c.calls.Add(1)
 	var last error
+	refused := 0
 	calls.Record(ctx, c.App, env, name, args, func() calls.Answer {
 		for try := 1; try <= attempts; try++ {
 			var res json.RawMessage
@@ -433,7 +448,12 @@ func (c *Client) Do(ctx context.Context, env grist.Envelope, name string, args j
 			}
 			var rt *retryable
 			if !errors.As(last, &rt) {
-				return answer(last, res)
+				a := answer(last, res)
+				a.Refused = refused
+				return a
+			}
+			if refusedTry(rt) {
+				refused++
 			}
 			if try == attempts {
 				break
@@ -444,7 +464,7 @@ func (c *Client) Do(ctx context.Context, env grist.Envelope, name string, args j
 			}
 			qenv.Sleep(ctx, c.backoff(try, seed, rt.after))
 		}
-		return calls.Answer{Pending: true}
+		return calls.Answer{Pending: true, Refused: refused}
 	})
 	return last
 }

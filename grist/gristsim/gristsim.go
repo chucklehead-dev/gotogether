@@ -97,8 +97,9 @@ type Config struct {
 	// App (its relay, pollers and tenant watcher: two pollers of every
 	// processor and tenant then race for each checkpoint, as two
 	// replicas of a real tier do), restarted when it crashes. Only the
-	// first serves the commands and queries (the API); every node's relay
-	// is one Relay, so each step row is recorded once.
+	// first serves the commands and queries (the API), but under a
+	// Cluster, where every node does; every node's relay is one Relay, so
+	// each step row is recorded once.
 	Nodes int
 	// CommitFaults turns on the store's commit faults
 	// (store.<app>.commit: a commit applied whose answer is lost).
@@ -133,6 +134,11 @@ type Config struct {
 	Setup func(s *qenv.Sim, st grist.Store) func(context.Context) context.Context
 	// Horizon bounds the clients' phase in virtual time (default 2m).
 	Horizon time.Duration
+	// Cluster, if set, runs the nodes as an orchestrator does: every node
+	// serves the API behind a lagging router, and is terminated
+	// gracefully, draining as grist.Main does (Cluster); Nodes then
+	// defaults to 3. Not with HTTP yet.
+	Cluster *Cluster
 	// Log, if set, receives the simulation's log (crashes, upgrades:
 	// qenv.Sim.Log), for a failing run's story.
 	Log func(string)
@@ -270,6 +276,8 @@ type response struct {
 	Rejected string
 	Err      string
 	Retry    bool
+	// refused counts the client's tries no server took (a Cluster's)
+	refused int
 }
 
 // CallerHeader is the header the HTTP tier's clients name their caller in
@@ -337,7 +345,9 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 			deps = func(ctx context.Context) context.Context { return d(served(ctx)) }
 		}
 	}
-	var srv *qhttp.Server
+	if cfg.Cluster != nil && cfg.HTTP {
+		return errors.New("gristsim: Config.Cluster with Config.HTTP: a cluster's nodes serve the API as qenv.Services behind its router; the HTTP tier's cluster is not built yet")
+	}
 	var handler http.Handler
 	if cfg.HTTP {
 		h, err := grist.NewHandler(app, st, grist.CallerFromHeader(CallerHeader))
@@ -346,21 +356,15 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 		}
 		handler = h
 	}
-	node := s.Process("node", true, func(ctx context.Context) {
-		if err := app.Start(deps(ctx), st, grist.WithRelay(relay)); err != nil {
-			panic(fmt.Sprintf("gristsim: the node could not start: %v", err))
+	w := &workload{app: app, cfg: cfg, s: s}
+	nodes := map[*qenv.Process]bool{}
+	if cfg.Cluster != nil {
+		w.cluster = startCluster(s, app, st, relay, deps, cfg)
+		for _, p := range w.cluster.nodes {
+			nodes[p] = true
 		}
-		if srv != nil {
-			srv.Handle(ctx, handler) // every incarnation listens again
-		}
-	})
-	nodes := map[*qenv.Process]bool{node: true}
-	for i := 2; i <= cfg.Nodes; i++ {
-		nodes[s.Process(fmt.Sprintf("node%d", i), true, func(ctx context.Context) {
-			if err := app.Start(deps(ctx), st, grist.WithRelay(relay)); err != nil {
-				panic(fmt.Sprintf("gristsim: node %d could not start: %v", i, err))
-			}
-		})] = true
+	} else {
+		w.startNodes(st, relay, deps, nodes, handler)
 	}
 	// a supervisor: a node that crashed itself (an effect's crash point)
 	// restarts as one the nemesis crashed does
@@ -369,23 +373,6 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 			p.Restart()
 		}
 	})
-	w := &workload{app: app, cfg: cfg, s: s}
-	if cfg.HTTP {
-		srv = qhttp.NewServer(s, "api", node)
-		tr := qhttp.NewTransport(srv)
-		tr.Timeout = CallTimeout
-		// a budget every call refills: the workload's calls are judged by a
-		// client-side model, and a call the default budget left pending
-		// after its effect committed is one the model cannot place (each
-		// call is still bounded by MaxAttempts; the budget's own test is
-		// grist's TestClientBackoffAndBudget)
-		w.http = &client.Client{App: app, URL: srv.URL(), HTTP: &http.Client{Transport: tr}, CallerHeader: CallerHeader,
-			MaxAttempts: MaxAttempts, RetryDelay: RetryDelay, Budget: &client.Budget{Ratio: MaxAttempts, Max: MaxAttempts}}
-	} else {
-		w.api = qenv.NewService(s, "api", node, func(ctx context.Context, req request) (response, error) {
-			return serve(deps(ctx), app, st, req), nil
-		})
-	}
 	names := cfg.Send
 	if len(names) == 0 {
 		names = append(app.Commands(), app.Queries()...)
@@ -410,6 +397,9 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 			ctx = qobs.Thread(ctx)
 			qenv.Wait(ctx, func() bool { return done })
 			for op := 1; op <= cfg.Ops; op++ {
+				if w.cluster != nil && op > 1 {
+					qenv.Sleep(ctx, w.cluster.c.Pace) // a cluster's calls span its drains
+				}
 				tenant := cfg.Tenants[s.Choose("gristsim.tenant", len(cfg.Tenants))]
 				name := names[s.Choose("gristsim.op", len(names))]
 				args := w.gen(name)
@@ -449,6 +439,46 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 	return relay.Err()
 }
 
+// startNodes starts cfg.Nodes nodes on st (nodes gets them), the first
+// serving the API: a qenv.Service of requests, or with HTTP handler on a
+// qhttp.Server, which the clients' grist/client calls.
+func (w *workload) startNodes(st grist.Store, relay *grist.Relay, deps func(context.Context) context.Context, nodes map[*qenv.Process]bool, handler http.Handler) {
+	s, app, cfg := w.s, w.app, w.cfg
+	var srv *qhttp.Server
+	node := s.Process("node", true, func(ctx context.Context) {
+		if err := app.Start(deps(ctx), st, grist.WithRelay(relay)); err != nil {
+			panic(fmt.Sprintf("gristsim: the node could not start: %v", err))
+		}
+		if srv != nil {
+			srv.Handle(ctx, handler) // every incarnation listens again
+		}
+	})
+	nodes[node] = true
+	for i := 2; i <= cfg.Nodes; i++ {
+		nodes[s.Process(fmt.Sprintf("node%d", i), true, func(ctx context.Context) {
+			if err := app.Start(deps(ctx), st, grist.WithRelay(relay)); err != nil {
+				panic(fmt.Sprintf("gristsim: node %d could not start: %v", i, err))
+			}
+		})] = true
+	}
+	if cfg.HTTP {
+		srv = qhttp.NewServer(s, "api", node)
+		tr := qhttp.NewTransport(srv)
+		tr.Timeout = CallTimeout
+		// a budget every call refills: the workload's calls are judged by a
+		// client-side model, and a call the default budget left pending
+		// after its effect committed is one the model cannot place (each
+		// call is still bounded by MaxAttempts; the budget's own test is
+		// grist's TestClientBackoffAndBudget)
+		w.http = &client.Client{App: app, URL: srv.URL(), HTTP: &http.Client{Transport: tr}, CallerHeader: CallerHeader,
+			MaxAttempts: MaxAttempts, RetryDelay: RetryDelay, Budget: &client.Budget{Ratio: MaxAttempts, Max: MaxAttempts}}
+		return
+	}
+	w.api = qenv.NewService(s, "api", node, func(ctx context.Context, req request) (response, error) {
+		return serve(deps(ctx), app, st, req), nil
+	})
+}
+
 func isQuery(app *grist.App, name string) bool { return calls.IsQuery(app, name) }
 
 func defaults(cfg Config) Config {
@@ -469,6 +499,9 @@ func defaults(cfg Config) Config {
 	}
 	if cfg.Nodes == 0 {
 		cfg.Nodes = 1
+		if cfg.Cluster != nil {
+			cfg.Nodes = 3
+		}
 	}
 	return cfg
 }
@@ -510,6 +543,8 @@ type workload struct {
 	api *qenv.Service[request, response]
 	// http is the HTTP tier's client (Config.HTTP), api nil
 	http *client.Client
+	// cluster is a Cluster's nodes and router (Config.Cluster), api nil
+	cluster *cluster
 }
 
 // prologue are the Prologue's requests, in order, each call to each of
@@ -635,6 +670,10 @@ func (w *workload) call(ctx context.Context, req request) {
 		w.http.Do(ctx, req.Env, req.Name, req.Args) // it records the call as below, retrying under the same key
 		return
 	}
+	if w.cluster != nil {
+		w.record(ctx, req, func() response { return w.cluster.send(ctx, req) })
+		return
+	}
 	send := func() (response, bool) {
 		for try := 1; try <= MaxAttempts; try++ {
 			resp, err := w.api.Call(ctx, req, CallTimeout)
@@ -700,11 +739,11 @@ func (w *workload) record(ctx context.Context, req request, do func() response) 
 func answerOf(r response) calls.Answer {
 	switch {
 	case r.Err == "unanswered", r.Retry:
-		return calls.Answer{Pending: true}
+		return calls.Answer{Pending: true, Refused: r.refused}
 	case r.Err != "":
-		return calls.Answer{Err: r.Err}
+		return calls.Answer{Err: r.Err, Refused: r.refused}
 	case r.Rejected != "":
-		return calls.Answer{Rejected: r.Rejected}
+		return calls.Answer{Rejected: r.Rejected, Refused: r.refused}
 	}
-	return calls.Answer{Result: r.Result}
+	return calls.Answer{Result: r.Result, Refused: r.refused}
 }

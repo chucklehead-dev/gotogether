@@ -59,6 +59,7 @@ func ServeCalls(d *Dependency, h Handlers) http.Handler
 func ServeDependency(d *Dependency, h Handlers) ServeOption
 func Skip() Result
 func Tag(key string, value any) TagPair
+func Terminating(ctx context.Context) context.Context
 func TransientTries(n int) Option
 func Unconditioned(reason string) Option
 func Uses(calls ...CallName) Option
@@ -308,6 +309,7 @@ type StatusError struct
 == github.com/chucklehead-dev/gotogether/grist/gristsim
 const CallTimeout = 2 * time.Second
 const CallerHeader = "X-Gristsim-Caller"
+const DefaultGrace = 45 * time.Second
 const DependencyTimeout = time.Second
 const MaxAttempts = 50
 const RetryDelay = 100 * time.Millisecond
@@ -319,6 +321,13 @@ type Call struct
     field Tenant string
     field Name string
     field Args any
+type Cluster struct
+    field Grace time.Duration
+    field Drain grist.Drain
+    field EndpointLag time.Duration
+    field Disruptions int
+    field Rolling bool
+    field Pace time.Duration
 type Config struct
     field Isolation qenv.Isolation
     field Tenants []string
@@ -336,15 +345,18 @@ type Config struct
     field Doubles func() Doubles
     field Setup func(s *qenv.Sim, st grist.Store) func(context.Context) context.Context
     field Horizon time.Duration
+    field Cluster *Cluster
     field Log func(string)
 type Doubles map[*grist.Dependency]grist.Handlers
 
 == github.com/chucklehead-dev/gotogether/grist/gristtest
 func Answered(t testing.TB, app *grist.App, traces []*qtrace.Trace)
 func Catalog(app *grist.App) qtest.Catalog
+func ClientErrors() qtest.Expectation
 func DroppedRule(app *grist.App) (rule string, caught qtest.Claim, ok bool)
 func Generated(t testing.TB, app *grist.App)
 func NewTier(t testing.TB, app *grist.App, cfg TierConfig) *Tier
+func NoClientErrors() qtest.Expectation
 func RuleMutants(app *grist.App) []string
 func Scenario(name string, steps ...grist.Invocation) qtest.Expectation
 type Node struct

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
-
+	"github.com/chucklehead-dev/gotogether/grist/internal/drainhook"
 	"github.com/chucklehead-dev/gotogether/grist/store"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
@@ -232,6 +232,9 @@ func (a *App) Start(ctx context.Context, s Store, opts ...StartOption) error {
 	if cfg.onNode != nil {
 		cfg.onNode(n)
 	}
+	if f := drainhook.Of(ctx); f != nil {
+		f(simNode{n}) // gristsim's Cluster: the node's drain
+	}
 	var tenants []string
 	for try := 1; ; try++ {
 		ts, err := s.Tenants(ctx)
@@ -321,6 +324,7 @@ func (n *node) start(ctx context.Context, t string) {
 		n.mu.Unlock()
 		qenv.Go(ctx, "grist."+p.name+"."+t, func(ctx context.Context) {
 			qenv.Daemon(ctx)
+			defer n.pollers.Add(-1) // stopped (its context ended): no work in hand, for idle
 			pl.run(qobs.Thread(ctx))
 		})
 	}

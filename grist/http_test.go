@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -22,6 +25,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qenv/qhttp"
 	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 type Named struct {
@@ -558,6 +562,83 @@ func scripted(t *testing.T, budget *client.Budget, answers ...func(w http.Respon
 		t.Fatal(rerr)
 	}
 	return at, err
+}
+
+// The client counts on its call's step the tries no server took: a
+// router's 502 or bare 503 (no grist behind it), a refused connection;
+// not a 504 (a gateway that timed out may have reached grist) nor grist's
+// own 503, nor the answered try.
+func TestClientCountsRefusedTries(t *testing.T) {
+	refusedOf := func(steps []qtrace.Step) any {
+		for _, st := range steps {
+			if st.Action == "name" && !st.Invocation {
+				return st.Args["refused"]
+			}
+		}
+		return "no step"
+	}
+	sink := &qobs.MemorySink{}
+	ok := status(200, `{"pos":1,"events":[{"tenant":"t1","pos":1}]}`)
+	s := qenv.New(qenv.WithContext(quietChooser(), qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink))))
+	answers := []func(http.ResponseWriter){status(502, "bad gateway"), status(503, "no endpoint"), status(504, "timeout"),
+		status(503, `{"error":"x","retry":"unavailable"}`), ok}
+	var srv *qhttp.Server
+	n := 0
+	node := s.Process("node", true, func(ctx context.Context) {
+		srv.Handle(ctx, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { n++; answers[min(n, len(answers))-1](w) }))
+	})
+	srv = qhttp.NewServer(s, "api", node)
+	tr := qhttp.NewTransport(srv)
+	tr.Timeout = time.Second
+	c := &client.Client{App: apiApp(), URL: srv.URL(), HTTP: &http.Client{Transport: tr}, Budget: &client.Budget{Ratio: 10, Max: 10}}
+	s.Spawn("client", func(ctx context.Context) {
+		qenv.Sleep(ctx, time.Millisecond)
+		if err := c.Do(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Caller: "editor"}, "name", []byte(`{"name":"a"}`)); err != nil {
+			t.Error(err)
+		}
+	})
+	if err := s.Run(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if got := fmt.Sprint(refusedOf(sink.Steps())); got != "2" {
+		t.Errorf("a 502, a bare 503, a 504, grist's 503, then ok: refused %v, want 2", got)
+	}
+	// a refused connection (as net's dialer reports one), then the answer
+	sink = &qobs.MemorySink{}
+	s = qenv.New(qenv.WithContext(quietChooser(), qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink))))
+	defer s.Close()
+	node = s.Process("node", true, func(ctx context.Context) {
+		srv.Handle(ctx, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { ok(w) }))
+	})
+	srv = qhttp.NewServer(s, "api", node)
+	c = &client.Client{App: apiApp(), URL: srv.URL(), HTTP: &http.Client{Transport: &refuseFirst{next: qhttp.NewTransport(srv)}}}
+	s.Spawn("client", func(ctx context.Context) {
+		qenv.Sleep(ctx, time.Millisecond)
+		if err := c.Do(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Caller: "editor"}, "name", []byte(`{"name":"a"}`)); err != nil {
+			t.Error(err)
+		}
+	})
+	if err := s.Run(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprint(refusedOf(sink.Steps())); got != "1" {
+		t.Errorf("a refused connection, then ok: refused %v, want 1", got)
+	}
+}
+
+// refuseFirst refuses its first request's connection, then sends by next.
+type refuseFirst struct {
+	next http.RoundTripper
+	done bool
+}
+
+func (r *refuseFirst) RoundTrip(req *http.Request) (*http.Response, error) {
+	if !r.done {
+		r.done = true
+		return nil, &net.OpError{Op: "dial", Net: "tcp", Err: os.NewSyscallError("connect", syscall.ECONNREFUSED)}
+	}
+	return r.next.RoundTrip(req)
 }
 
 func quietChooser() qenv.Chooser {

@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -236,6 +235,9 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 		}
 		overHTTP[d] = OverHTTP(u, nil)
 	}
+	// the signal's context, for Terminating in the node's and the
+	// requests' contexts, which keep ctx's values but not its cancellation
+	ctx = context.WithValue(ctx, signalKey{}, ctx)
 	var cfg serveConfig
 	for _, o := range opts {
 		if o.apply != nil {
@@ -375,44 +377,39 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	}
 	// the drain (Drain): not ready at once, serving through the router's
 	// lag, then each phase bounded, within -grace when given
-	sched := newSchedule(drain, time.Now())
 	if hs != nil {
 		hs.draining.Store(true)
 	}
-	if d := time.Until(sched.delay(time.Now())); d > 0 {
+	return runDrain(ctx, drain, mainServer{srv: srv, done: done}, st, relay, n, stopNode, true,
+		func(msg string) { fmt.Fprintln(stderr, msg) })
+}
+
+// mainServer is Main's HTTP server as a drain's.
+type mainServer struct {
+	srv  *http.Server
+	done <-chan error // Serve's end
+}
+
+func (m mainServer) keep(ctx context.Context, until time.Time) error {
+	if d := time.Until(until); d > 0 { //qenv:ok the real tier's drain, outside any simulation
 		select {
 		case <-time.After(d): //qenv:ok the real tier's drain, outside any simulation
-		case err := <-done:
+		case err := <-m.done:
 			return err
 		}
 	}
-	// the shutdown's context keeps ctx's recorder (the flush below records
-	// into it) but not its cancellation
-	shut, cancel := context.WithDeadline(context.WithoutCancel(ctx), sched.shutdown(time.Now()))
-	if err = srv.Shutdown(shut); err != nil {
-		err = fmt.Errorf("%s: requests still in flight when the drain's shutdown ended (%w): their clients retry under their keys", app.Name, err)
+	return nil
+}
+
+func (m mainServer) shutdown(ctx context.Context, until time.Time) error {
+	// the shutdown's context keeps ctx's recorder (the flush records into
+	// it) but not its cancellation
+	shut, cancel := phase(ctx, until)
+	defer cancel()
+	if err := m.srv.Shutdown(shut); err != nil {
+		return fmt.Errorf("%w: %w", errShutdownCut, err)
 	}
-	cancel()
-	// no request is left: once the processors and the relay are done with
-	// what the requests committed, the run has settled, and a settle in
-	// the file is what judges the bindings' eventual vals (qobs.Settled)
-	until := sched.settle(time.Now())
-	quiet, cancelQuiet := context.WithDeadline(context.WithoutCancel(ctx), until)
-	if serr := settle(quiet, st, relay, n, time.Until(until)); serr != nil {
-		fmt.Fprintf(stderr, "%s: no settle recorded (the steps file's eventual vals get no verdict): %v\n", app.Name, serr)
-	}
-	cancelQuiet()
-	stopNode()
-	// every committed step into the file before it closes: a row the
-	// relay had not reached would otherwise be recorded only by the next
-	// node's relay, into its own file. Its own time: a shutdown that used
-	// its whole timeout draining slow requests leaves the flush its own
-	flush, cancelFlush := context.WithDeadline(context.WithoutCancel(ctx), sched.flush(time.Now()))
-	defer cancelFlush()
-	if ferr := relay.Flush(flush); err == nil {
-		err = ferr
-	}
-	return err
+	return nil
 }
 
 // loopback reports whether addr (HOST:PORT) listens on a loopback
@@ -470,38 +467,6 @@ const (
 	settleTimeout   = 10 * time.Second
 	flushTimeout    = 10 * time.Second
 )
-
-// settle waits for n to quiet and records a settle into ctx's recorder:
-// every poller waiting with nothing after its checkpoint (an effect in
-// flight is work in hand), the relay caught up (every committed step
-// recorded, Behind 0) and no tenant's head moved across two looks 20 ms
-// apart. It returns why not if ctx ends first or the relay failed. The
-// settle is the last thing the file holds of the run: the node stops
-// after it, with nothing left to do.
-func settle(ctx context.Context, st Store, relay *Relay, n *node, bound time.Duration) error {
-	var last map[string]Position
-	for {
-		if err := relay.Err(); err != nil {
-			return err
-		}
-		heads, err := st.Heads(ctx)
-		quiet := err == nil && n != nil && n.idle() && maps.Equal(heads, last)
-		if quiet {
-			behind, berr := relay.Behind(ctx)
-			quiet = berr == nil && behind == 0
-		}
-		if quiet {
-			qobs.Settled(ctx)
-			return nil
-		}
-		last = heads
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("the node did not quiet within %v (a processor still at work, or the relay behind)", bound.Round(time.Millisecond))
-		case <-time.After(20 * time.Millisecond): //qenv:ok the real tier's binary, outside any simulation
-		}
-	}
-}
 
 // newMainServer is serve's http.Server for h: requests run with ctx's
 // values (its recorder, so a query's step and a refusal's on-return step

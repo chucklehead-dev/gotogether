@@ -96,8 +96,8 @@ func (h *health) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // metrics is grist's gauges in Prometheus' text format: the node's state,
 // the API's requests and the effects in flight, the relay's backlog, and
 // per processor and tenant the lag (the tenant's head minus the
-// processor's checkpoint) and the age of the oldest trigger not yet
-// handled. A store that does not answer leaves its gauges out, and
+// processor's checkpoint while a trigger of its waits, else 0) and the
+// age of the oldest trigger not yet handled. A store that does not answer leaves its gauges out, and
 // grist_store_up 0.
 func (h *health) metrics(ctx context.Context, now time.Time) string {
 	var b strings.Builder
@@ -169,15 +169,20 @@ func (h *health) metrics(ctx context.Context, now time.Time) string {
 				up = false
 				continue
 			}
-			r := row{p: p.name, t: t, lag: int64(head - cp)}
+			// lag only while a trigger waits: a processor's checkpoint stays
+			// at the last trigger it handled, and the head moves on with
+			// every other event, so head minus checkpoint never came back
+			// to 0 for a processor that had caught up
+			r := row{p: p.name, t: t}
 			if len(evs) > 0 {
+				r.lag = int64(head - cp)
 				r.ageS = max(0, float64(now.UnixMilli()-evs[0].Time)/1000)
 			}
 			rows = append(rows, r)
 		}
 	}
 	if len(rows) > 0 {
-		gauge("grist_processor_lag", "Positions between the tenant's head and the processor's checkpoint.")
+		gauge("grist_processor_lag", "Positions between the tenant's head and the processor's checkpoint while a trigger waits (0 for none).")
 		for _, r := range rows {
 			value("grist_processor_lag", r.lag, "processor", r.p, "tenant", r.t)
 		}

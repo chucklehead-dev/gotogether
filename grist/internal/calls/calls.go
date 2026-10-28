@@ -33,7 +33,16 @@ type Answer struct {
 	// Pending: never answered (every try lost, or the outcome unknown at
 	// the last): the call stays pending (qtest.Completes judges it).
 	Pending bool
+	// Refused counts the call's tries that no server took: a connection
+	// refused, a router's endpoint gone or none at all, a server shutting
+	// down; each was retried. The call's step records it as its field
+	// RefusedField when there were any (gristtest.NoClientErrors).
+	Refused int
 }
+
+// RefusedField is a client call's step field counting its refused tries
+// (Answer.Refused), absent when none was: no model parameter takes it.
+const RefusedField = "refused"
 
 // IsQuery reports whether name is one of app's queries.
 func IsQuery(app *grist.App, name string) bool {
@@ -66,21 +75,25 @@ func Record(ctx context.Context, app *grist.App, env grist.Envelope, name string
 	kv = append(kv, "caller", env.Caller) // the call's caller, as the store's step records it
 	call := qobs.Invoke(ctx, q, kv...)
 	a := do()
+	var refused []any
+	if a.Refused > 0 {
+		refused = []any{RefusedField, a.Refused}
+	}
 	switch {
 	case a.Pending:
 	case a.Err != "":
-		call.Done(errors.New(a.Err))
+		call.Done(errors.New(a.Err), refused...)
 	case a.Rejected != "":
-		call.Done(nil, "outcome", a.Rejected)
+		call.Done(nil, append([]any{"outcome", a.Rejected}, refused...)...)
 	case query:
 		obs, err := rec.StepFields(app.ResultType(name), a.Result, "obs.")
 		if err != nil {
-			call.Done(fmt.Errorf("grist: query %s: its result: %w", name, err))
+			call.Done(fmt.Errorf("grist: query %s: its result: %w", name, err), refused...)
 			break
 		}
-		call.Done(nil, obs...)
+		call.Done(nil, append(obs, refused...)...)
 	default:
-		call.Done(nil)
+		call.Done(nil, refused...)
 	}
 	return a
 }
