@@ -533,7 +533,7 @@ for real), and whose site is B's own commit:
   effect key is `<processor>/<tenant>/<trigger>` today (processor.go's
   `key`); slice 5 prefixes the App's name for every call
   (`<app>/<processor>/<tenant>/<trigger>`), so two callers' keys never
-  collide in B's markers, and B's step records `principal` as the
+  collide in B's markers, and B's step records `caller` as the
   service (`service:<app>`), which B's policy admits by name (GR4's
   service identities).
 
@@ -586,7 +586,7 @@ with `//qenv:ok` exemptions as today. Timers are GR8's.
 
 Each is one agent's work, reviewed before the next; each acceptance test
 names the mutant it must catch, built as an overlay
-(`gristtest.Mutants`), with the faithful app's contrast claim beside it.
+(`qtest.Mutants`), with the faithful app's contrast claim beside it.
 
 1. **Calls on the simulated tier** (built, 2026-10-27: docs/grist.md
    §0.12, with what it changed here). `NewDependency`, `NewCall`, `Keyed`,
@@ -666,7 +666,7 @@ names the mutant it must catch, built as an overlay
    the lint, naming the line and the fix (`Meta.Time`); the faithful
    tree is clean, CI runs it.
 5. **Peer calls.** `NewPeer`, `NewPeerCall` over grist/client, the key
-   qualified by the caller's App, `principal` `service:<app>`, B's API
+   qualified by the caller's App, `caller` `service:<app>`, B's API
    server named after B, actors naming the service (question 1),
    `gristtest.Linked`; gristsim running a peer App on its own store,
    node and process (`Config.Peers`: the smallest composition, which

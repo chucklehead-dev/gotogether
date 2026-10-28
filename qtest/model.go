@@ -312,7 +312,7 @@ type TakeEach struct{ takes []Take }
 // and outcome), naming every one that does not, each with its Hint: one
 // claim for a list of what an exploration must have reached, such as
 // every block of an application's catalog by each of its outcomes
-// (gristtest.Exercised), where a list of separate claims stops at the
+// (Catalog.Exercised), where a list of separate claims stops at the
 // first missed. Exercised is the model-wide twin, over every action and
 // fault; this one asks for the takes it is given, so a model's helpers
 // and the outcomes a test does not care for are not wanted.

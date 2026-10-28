@@ -48,7 +48,8 @@ item as recommended:
 - **H3. Recorder.Close closes its sink and returns its error (S,
   breaking).** The newcomer's only compile error; a standalone program's
   recording documented (recorder, sink, close).
-- **H4. One vocabulary (M, breaking, before tags).** grist's actor (the
+- **H4. One vocabulary (M, breaking, before tags). Done** (HISTORY:
+  "H4: one vocabulary"). grist's actor (the
   authenticated principal) becomes the caller (`WithCaller`, `CallerOf`,
   `Callers`, `CallerFromHeader`); `grist.Delivery` renamed
   (`Guarantee`); gristtest's Exercised and Takes become qtest's claims
@@ -350,6 +351,33 @@ Then, in order, each item reviewed before the next:
   app binary links client-go; sizing enters manifests only with
   `-sizing`; the canary an Argo Rollouts Job analysis or HTTPRoute
   weights, no controller of ours.
+- **GR10b. A poller a daemon only while it waits on the store (S,
+  qenv-level).** From P7's review, proposed, not built. A processor's
+  poller calls `qenv.Daemon` once, for its whole life, so a settle
+  treats it as quiet whether it waits for appends or holds a trigger
+  mid-backoff or mid-call: a settle shorter than the work in hand
+  (gristsim's minute against the backoff's 320 ms cap and a call's
+  second; an effect whose tries outlast it) judges the obligations
+  mid-retry and reads a correct app as violating `<p>EventuallyHandled`,
+  and a handler that hangs reads as a violation where it is work never
+  finished. Marking the poller a daemon only while it waits on the store
+  (a daemon mark qenv lets a task take and drop, or a wait that is a
+  daemon's while it lasts) makes the settle wait for work in hand, and a
+  hung handler reads `Unsettled` naming its task, which
+  `qtest.Settles()` judges. Any daemon that holds work between waits
+  needs the same distinction, so the mark is qenv's, not grist's.
+- **GR10c. `Settle` naming down processes (S, qenv-level).** From P7's
+  review, proposed, not built. qenv counts no task of a down process as
+  pending, so a plain `Settle` (not `SettleCore`, which faults outside
+  its core by design) over a simulation that left a node down for good
+  records a settle, and that node's triggers have their obligations
+  judged, violated by right: a down node handles nothing. gristsim's
+  supervisor restarts every node, so no grist run meets it today; a
+  simulation of one's own does, and quorumkv's node down for good under
+  `SettleCore` is the shape. Settle could name the processes down at the
+  settle in its record (`qobs.Settled`) or its result, so a binding's
+  `eventually` vals are judged knowing them, or the settle reported
+  `Unsettled` while a process that has work is down.
 - **Slice 3's rest**: upcasting, snapshots, gristpure, gristhegel,
   leases, screens and Datastar (the read models' cost on long histories
   first: snapshots before a second real app).

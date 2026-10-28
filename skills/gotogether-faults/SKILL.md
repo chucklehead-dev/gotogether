@@ -231,7 +231,7 @@ return s.Settle(60 * time.Second) // faults off, tasks in turn, until quiet; rec
   app.binding.yaml -pkg app -out system_test.go` writes a System test whose Run deploys
   nothing yet, a commented `qobs.Record` per action with the fields the
   binding reads, a conformance test that fails until steps are recorded,
-  and a mutant test to fill in. `examples/hello` is the smallest one
+  and the overlay mutants' harness (`qtest.Mutants`) with a claim to fill in. `examples/hello` is the smallest one
   filled in.
 - **Write a `Run(chooser, Config)`** for the whole deployment, so tests,
   Hegel and a CLI that writes step logs all share it.

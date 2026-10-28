@@ -16,13 +16,14 @@ That ran [examples/hello](examples/hello): a counter behind a simulated
 network that loses and duplicates messages, and a client that retries.
 Each test runs the system many times under different faults (a *seed*
 picks them) and checks every run against a Quint model
-(`model/hello.qnt`). One test plants a bug (a *mutant*: the counter
-forgets to dedupe) and expects the model to reject a step: its output's
-`as expected` blocks are those failures, not the test's.
-[Hegel](https://hegel.dev), a property-based tester, then shrinks that
-failure to the single fault it needs.
+(`model/hello.qnt`). One test plants a bug (a *mutant*: a copy of
+`hello.go` in `testdata/mutants/noDedupe` whose counter forgets to
+dedupe, built in its place with `go test -overlay`) and expects the
+model to reject a step: its output's `as expected` blocks are those
+failures, not the test's. [Hegel](https://hegel.dev), a property-based
+tester, then shrinks that failure to the single fault it needs.
 
-Read `hello.go` and `hello_test.go` (175 lines together), then pick a
+Read `hello.go` and `hello_test.go` (189 lines together), then pick a
 workflow from the table below. Agents start from the `gotogether-start`
 skill (`gotogether skills install`).
 
@@ -35,6 +36,8 @@ skill (`gotogether skills install`).
   5, "obs.balance", 35)`).
 - **Actor**: one sequence of steps checked as one run of the model (a
   process, a node; `qobs.WithActor`). Reports begin `actor <name>:`.
+  Not grist's **caller**, the authenticated principal of a command or
+  query (`grist.WithCaller`, recorded as the step's `caller` field).
 - **Binding**: a YAML file mapping recorded steps to the model's
   actions, constants and invariants (`gotogether scaffold` writes one).
 - **Double**: a simulated dependency (Store, Queue, Service, Disk) that
@@ -48,7 +51,9 @@ skill (`gotogether skills install`).
 - **Claim**: what a test expects of its runs (`Conforms`, `Rejects`,
   `Mismatch`, `Violates`; over runs `Some`, `All`, `None`), given to
   `.Expect(t, claims...)`. Its outcome on a run is a verdict.
-- **Mutant**: a planted bug a test expects the checks to catch.
+- **Mutant**: a planted bug a test expects the checks to catch: by hand,
+  a file of `testdata/mutants/<name>/` built in the package's place
+  (`qtest.Mutants`); generated, by `qweave -mutate` (`System.Mutate`).
 - **Evidence**: what an exploration reached (the model's actions, fault
   kinds and options, code).
 - **Corpus**: saved failing runs, replayed before the seeds.
@@ -334,16 +339,17 @@ Option 0 of every choice is nominal, so shrinking removes faults.
 
 The smallest case is [examples/hello](examples/hello): a counter behind
 a network that loses and duplicates messages, a client that retries, and
-a mutant that forgets to dedupe. The deployment (`Counter.Add` records
+a mutant that forgets to dedupe (`testdata/mutants/noDedupe/hello.go`, the
+file with its bug, planted by hand). The deployment (`Counter.Add` records
 `apply(id)`, or `replay(id)` for a request it has seen; `Send` retries
 until it hears back):
 
 <!-- from examples/hello/hello.go -->
 ```go
-func Run(c qenv.Chooser, m Mutation) error {
+func Run(c qenv.Chooser) error {
 	s := qenv.New(c)
 	defer s.Close()
-	counter := &Counter{Mutation: m, seen: map[int]bool{}}
+	counter := &Counter{seen: map[int]bool{}}
 	svc := qenv.NewService(s, "counter", nil, counter.Add)
 	var err error
 	s.Spawn("client", func(ctx context.Context) {
@@ -363,17 +369,15 @@ func Run(c qenv.Chooser, m Mutation) error {
 
 and its tests: the system bound to the model, an acceptance scenario
 checked possible in the model on its own (before any run) and claimed of
-the runs, explored by seeds, and shrunk by Hegel to the one fault the bug
-needs:
+the runs, explored by seeds, and, in the mutant's binary, shrunk by Hegel
+to the one fault the bug needs. `qtest.Mutants` finds the mutants in
+`testdata/mutants`, builds the tests once per mutant with its overlay,
+and runs `TestMutant` there, `qtest.Mutant()` naming it:
 
 <!-- from examples/hello/hello_test.go -->
 ```go
-func system(m Mutation) qtest.System {
-	s := qtest.System{Binding: "hello.binding.yaml", Run: func(c qenv.Chooser) error { return Run(c, m) }}
-	if m == NoDedupe {
-		s.Mutant = "NoDedupe" // its runs are not the counter's: the suite's evidence leaves them out
-	}
-	return s
+func system() qtest.System {
+	return qtest.System{Binding: "hello.binding.yaml", Run: Run, Mutant: qtest.Mutant()}
 }
 
 // lossy loses or duplicates one message in five.
@@ -389,16 +393,26 @@ func TestRetryPossible(t *testing.T) {
 	qtest.Possible(t, "hello.binding.yaml", retried)
 }
 
-func TestNoDedupeCountsRetries(t *testing.T) {
-	system(NoDedupe).WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).
-		Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()),
-			// it never recognises a retry: no run follows the scenario
-			qtest.None(retried))
+func TestMutant(t *testing.T) {
+	switch qtest.Mutant() {
+	case "":
+		t.Skip("the counter as it is: TestMutants runs this test in each mutant's binary")
+	case "noDedupe":
+		// ...
+		system().WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).
+			Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()),
+				// it never recognises a retry: no run follows the scenario
+				qtest.None(retried))
+		// ...
+		qhegel.Shrink(t, system(), hegel.WithTestCases(50), hegel.WithSeed(1)).
+			Expect(t, qtest.Rejects("apply"), qtest.ShrunkTo(1))
+		// ...
+	}
 }
 
-func TestHegelShrinks(t *testing.T) {
-	qhegel.Shrink(t, system(NoDedupe), hegel.WithTestCases(50), hegel.WithSeed(1)).
-		Expect(t, qtest.Rejects("apply"), qtest.ShrunkTo(1))
+func TestMutants(t *testing.T) {
+	// ...
+	qtest.Mutants{}.Run(t)
 }
 ```
 
@@ -562,7 +576,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `validate` | replay in the Go evaluator (passes) or with `quint test` (failures, and what it cannot judge): `Checker` (`Check`, `CheckBatch`, `MutateSteps`: a log's observation mutants), `Cached`, `ValidateITF`; structured verdicts (`Report.Verdict`); run manifests (`NewManifest`, `ReadManifest`, `Verify`, `Bundle`) |
 | `validate/cli` | the CLI's check of files in Go: `Check` (as `gotogether validate` makes it, and its `Manifest`), `Replay` (a manifest's run judged again: `validate -replay`); its own package, so `validate` brings no OpenTelemetry SDK |
 | `qshrink` | a driver's failing actions shrunk outside a test: `Shrink` (ddmin over reruns, `Calibration`, `SameFailure`, `Resetter`, `ErrDiverged`), what `qtest.ShrinkActions` and `gotogether shrink` run |
-| `qtest` | tests that check against the model: `System` (`Explore`, with `ExploreConfig.Steer` toward rare states, `Exhaust`, `Sweep`, `Fuzz`, `Mutate`, `FollowTraces`: a trace's faults, `FaultScript`, imposed on the whole system), `Validate`, `Record`, `Runs` (runs made one by one, a real deployment's, under claims over runs); claims (`Conforms`, `Rejects`, `Mismatch`, `Violates`, `Settles`, `Completes`, `Finishes` (a finished journey, not a conforming prefix), `Pending`, `AnyOf`; over runs `Some`, `All`, `None`; `Reaches`, `Takes` (`With` an argument), `Exercised`, `NotVacuous`; `Scenario` and `NamedScenario` (Takes in turn, others between: an acceptance criterion, its miss named per run with the longest prefix taken), `Possible` (a scenario checked in the model alone, no run); `Linearize` for histories recorded by clients, `LinearizeByKey` per independent key, `ResolvePending` for calls never completed; `Violates(...).At`; a shrunk run's `ShrunkTo`); observation mutants of a recorded log (`MutateSteps`; claims `Killed`, `Survived` over `StepOp` selectors); a driver's failing actions shrunk (`ShrinkActions`, `ActionShrink`, `Resetter`, `SameFailure`, `ErrDiverged`, `Calibration`; `AtMostActions`); `Evidence`; `RequireQuint` and `Optional` (skips that strict mode fails); options (`Constants`, `Invariants`, `Quint`, `Global`) |
+| `qtest` | tests that check against the model: `System` (`Explore`, with `ExploreConfig.Steer` toward rare states, `Exhaust`, `Sweep`, `Fuzz`, `Mutate`, `FollowTraces`: a trace's faults, `FaultScript`, imposed on the whole system), `Validate`, `Record`, `Runs` (runs made one by one, a real deployment's, under claims over runs); claims (`Conforms`, `Rejects`, `Mismatch`, `Violates`, `Settles`, `Completes`, `Finishes` (a finished journey, not a conforming prefix), `Pending`, `AnyOf`; over runs `Some`, `All`, `None`; `Reaches`, `Takes` (`With` an argument), `Exercised`, `NotVacuous`; `Scenario` and `NamedScenario` (Takes in turn, others between: an acceptance criterion, its miss named per run with the longest prefix taken), `Possible` (a scenario checked in the model alone, no run); `Linearize` for histories recorded by clients, `LinearizeByKey` per independent key, `ResolvePending` for calls never completed; `Violates(...).At`; a shrunk run's `ShrunkTo`); observation mutants of a recorded log (`MutateSteps`; claims `Killed`, `Survived` over `StepOp` selectors); a driver's failing actions shrunk (`ShrinkActions`, `ActionShrink`, `Resetter`, `SameFailure`, `ErrDiverged`, `Calibration`; `AtMostActions`); `Evidence`; `RequireQuint` and `Optional` (skips that strict mode fails); `Mutants` (bugs planted by hand: `testdata/mutants/<name>/` files built in the package's place with `go test -overlay`, each mutant binary's test switching on `Mutant()`) and `Catalog` (a system's blocks by outcome: `Catalog.Exercised`, `Catalog.Take`); options (`Constants`, `Invariants`, `Quint`, `Global`) |
 | `qenv` | deterministic simulation: scheduler, virtual time, crashable processes, choosers (`NewSeeded`, `NewPCT`, `Replay`, `Script`, `Swarm`, `FromBytes`); doubles `Store` (isolation levels; `NewTable[T]`, an app's typed records over a Txn), `Queue`, `Service` (with `Capacity`), `Disk` (fsync, power loss, torn writes, a full disk, a failed fsync, corrupt reads); the network (`Sim.Net`: `Partition`, `Heal`, `PartitionNemesis`); clocks (`Sim.Clocks`: skew, jumps, drift; `Now`, `Mono`, `Since`, `WaitFor`); pauses and gray failures (`Sim.Stalls`); settling (`Sim.Settle`; `Sim.SettleCore`: faults go on outside a core); rolling upgrades (`Sim.Upgrades`, `Process.Upgrade`, `RestartAs`, `Version`); nemesis families (`nemesis.crash`, `.partition`, `.jump`, `.pause`, `.slow`, `.upgrade`); `DeclareFaults`, `FaultPoint`, `CoverageOf`; `NewNative` (the same on goroutines, for gosim); `TimeProfile` |
 | `qenv/weave` | Orchestrion aspects: `sync` and `//qenv:go` goroutines simulated inside qenv, real outside |
 | `woven` | the woven builds' ABI: what code woven by `qenv/weave`'s aspects, `qweave -cover` and `qweave -mutate` calls; never called by hand, stable only within one version |
@@ -595,7 +609,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `grist/storetest` | the store contract suite (`Run`, `Checks`): conditions, reads and concurrent appends against brute force, checkpoints, markers, a waiter woken, copies, the step log, tenant isolation |
 | `grist/gristsim` | `Run`: a grist app in a simulation as a `qtest.System`'s run (a node, a lossy API or its HTTP API on qhttp, clients recorded under `ClientsActor` beside the store's steps, an ordered `Prologue` before them, two settles) |
 | `grist` HTTP API, `grist/client`, `grist.Main` | `NewHandler` (commands under an `Idempotency-Key`, queries as GET, deny by default: `Authorize`, `Internal`), `client.Client` (calls it, recording each call as a client's), `Main` (an app's binary: `catalog`, `verify`, `serve` on sqlstore) |
-| `grist model`, `grist new`, `grist/gristtest` | the generator (`Generate`, `Starter`; an app's binary's `model` command): from the App's catalog (commands' `Refuses`, processors' `Emits` or `Delivers`, `NewSite`'s records) the model's skeleton and both bindings, the app writing only its rules and invariants; `go run github.com/chucklehead-dev/gotogether/grist/cmd/grist new <name>`: an app module green on its first run; `gristtest`: `Generated` (the CI diff), `Mutants` (overlay builds), `NewTier` (the real tier on SQLite over HTTP, both bindings and the answers' cross-check), `Exercised` (the claim that the runs took every block of the catalog, each command by each outcome), `Scenario` (an acceptance scenario in the catalog's values: `Command.With(args)`, `.Refused(err)`); the bindings' generated `possible` entries, each command outcome and processor step reachable by the model on its own; declared calls (`NewDependency`, `NewCall`, `Keyed`, `Uses`, `Call.Do`, `Handlers`: the caller's view and the dependency's application both recorded by grist and modelled by the generator, gristsim serving each dependency as a `qenv.Service` from `Config.Doubles` or its default double, `DefaultHandlers`; on a real tier `OverHTTP` calling it, `ServeCalls` serving a dependency the team owns with its site recorded, `ServeDependency` beside an app's binary, `TierConfig.Serve` in a test); `NewDep` (typed dependencies that are no calls) |
+| `grist model`, `grist new`, `grist/gristtest` | the generator (`Generate`, `Starter`; an app's binary's `model` command): from the App's catalog (commands' `Refuses`, processors' `Emits` or `Delivers`, `NewSite`'s records) the model's skeleton and both bindings, the app writing only its rules and invariants; `go run github.com/chucklehead-dev/gotogether/grist/cmd/grist new <name>`: an app module green on its first run; `gristtest`: `Generated` (the CI diff), `RuleMutants` (a rule's generated mutant, for `qtest.Mutants`), `NewTier` (the real tier on SQLite over HTTP, both bindings and the answers' cross-check), `Catalog` (the App's catalog as a `qtest.Catalog`: its `Exercised` the claim that the runs took every block, each command by each outcome), `Scenario` (an acceptance scenario in the catalog's values: `Command.With(args)`, `.Refused(err)`); the bindings' generated `possible` entries, each command outcome and processor step reachable by the model on its own; declared calls (`NewDependency`, `NewCall`, `Keyed`, `Uses`, `Call.Do`, `Handlers`: the caller's view and the dependency's application both recorded by grist and modelled by the generator, gristsim serving each dependency as a `qenv.Service` from `Config.Doubles` or its default double, `DefaultHandlers`; on a real tier `OverHTTP` calling it, `ServeCalls` serving a dependency the team owns with its site recorded, `ServeDependency` beside an app's binary, `TierConfig.Serve` in a test); `NewDep` (typed dependencies that are no calls) |
 
 ## Example apps
 

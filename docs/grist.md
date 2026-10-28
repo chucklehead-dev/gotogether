@@ -502,16 +502,16 @@ stated where it stands below.
   `MaxBody` 413 (§0.7); an unknown block or tenant 404 (an Internal
   block too, §0.7); the decision's own error 500.
 - **Deny by default, at the adapter** (§4.3): one `grist.Option`,
-  `Authorize(Policy)` (a `func(actor, tenant string) bool`; policies
-  `Authenticated`, `Actors(...)`) or `Internal()`, on commands and
+  `Authorize(Policy)` (a `func(caller, tenant string) bool`; policies
+  `Authenticated`, `Callers(...)`) or `Internal()`, on commands and
   queries; both on one block is a Verify problem. `NewHandler` refuses
   an App with a block that has neither, naming each (the adapter's
   boot): `App.Verify` does not, since gristsim's in-process clients and
   tests call blocks directly. A refused request is 403 (`ErrDenied`).
-  The actor is the request context's (`WithActor`), set by the
+  The caller is the request context's (`WithCaller`), set by the
   application's authentication (`Middleware`) or, behind an
-  authenticating proxy and in tests, `ActorFromHeader` (§0.7: only for
-  a request the middleware left without an actor).
+  authenticating proxy and in tests, `CallerFromHeader` (§0.7: only for
+  a request the middleware left without a caller).
 - **A denial records nothing at the store.** The note had it a refused
   step (`outcome: denied`); but nothing ran, nothing was read and
   nothing committed, and the server records only what its blocks do
@@ -519,7 +519,7 @@ stated where it stands below.
   reused keys on return): the handler records nothing of its own. The
   client records its 403 as its call's outcome, `denied` (§0.7: a
   client-side model's outcome; a refusal that depends on the state, a
-  counter's creator, is the decision's, `Reads.Actor`).
+  counter's creator, is the decision's, `Reads.Caller`).
 - **The client records its side**: `grist/client`'s `Client.Do` records
   each call as gristsim's clients do (`<tenant>/clients`, invoked before
   the first request, done with the answer, a lost answer or a 503 sent
@@ -549,7 +549,7 @@ stated where it stands below.
 - **`grist.Main(app, opts...)`**: `catalog` (the registry as JSON, each
   type a JSON Schema derived by reflection: `grist.Schema`, the
   catalog's `MarshalJSON`), `verify`, and `serve -db sqlite:PATH |
-  postgres:DSN -addr -tenant -steps -actor-header -poll`: the API and the
+  postgres:DSN -addr -tenant -steps -caller-header -poll`: the API and the
   node on sqlstore, every step to a `PerStep` file (a new one each
   start), the application's dependencies attached by `Dependencies`;
   SIGINT or SIGTERM shut it down, the relay flushed into the file first
@@ -633,13 +633,13 @@ A review of the HTTP API, grist/client, gristsim's HTTP tier,
 that fails without the fix (ablated before committing), and stated where
 it stands below (§0.5 and §0.6 point here where it replaces them).
 
-- **The application's authentication wins over `ActorFromHeader`.** The
-  header's actor replaced the context's, so a request a middleware
+- **The application's authentication wins over `CallerFromHeader`.** The
+  header's caller replaced the context's, so a request a middleware
   authenticated as a viewer that named itself an editor in the header
-  was an editor's. The header now names the actor only of a request the
-  context carries none for (`ActorOf` empty): a proxy that
-  authenticates sets it, and a middleware's actor is never overridden
-  (`TestActorHeaderDoesNotOverride`). Refusing both options together was
+  was an editor's. The header now names the caller only of a request the
+  context carries none for (`CallerOf` empty): a proxy that
+  authenticates sets it, and a middleware's caller is never overridden
+  (`TestCallerHeaderDoesNotOverride`). Refusing both options together was
   the alternative; a middleware is also logging and limits, so the
   precedence is stated instead.
 - **Main drains before the node stops.** The node's context was the
@@ -811,19 +811,19 @@ it stands below (§0.5 and §0.6 point here where it replaces them).
   payment made twice inside f, or made while its answer was lost, is
   seen whatever the effect step says (with the answer lost: paid once,
   both vals hold). `Bank.Pay` takes the tenant.
-- **Decisions see the actor, and steps record it.** A decision or query
-  could not tell who asked (`Envelope.Actor` reached the policy only),
+- **Decisions see the caller, and steps record it.** A decision or query
+  could not tell who asked (`Envelope.Caller` reached the policy only),
   and no step recorded it, so no model could judge a rule over the
-  actor. `Reads.Actor()` is the envelope's actor ("" for a processor's
+  caller. `Reads.Caller()` is the envelope's caller ("" for a processor's
   handler), and every command's and query's step records it as
-  **`principal`** (a reserved argument name), the store's side and the
-  client's alike (`TestActorInDecisionsAndSteps`). examples/counters'
+  **`caller`** (a reserved argument name; `principal` until H4), the
+  store's side and the client's alike (`TestCallerInDecisionsAndSteps`). examples/counters'
   `retire-counter` is its creator's only: `counter-created` records its
-  `creator` (`Reads.Actor` at creation), and another actor's retire is
+  `creator` (`Reads.Caller` at creation), and another caller's retire is
   refused `not-creator`, a decision's refusal (422, committed as the
-  key's answer and recorded at the store; a `Policy` sees the actor and
+  key's answer and recorded at the store; a `Policy` sees the caller and
   the tenant, not the counter). The model's `retireCounter(counter, id,
-  principal, ...)` requires `createdBy(log, counter, principal)` for ok
+  caller, ...)` requires `createdBy(log, counter, caller)` for ok
   and its negation for `not-creator`; `TestRetireByCreatorOnly`: two
   clients creating and retiring conform, and some retire is refused so;
   without the check (the `anyoneRetires` mutant, full mode) 6 of 6 runs
@@ -905,7 +905,7 @@ with a test that fails without it:
   catalog lacked each command's refusals and each processor's result:
   `grist.Refuses(rejections...)` on a command (a decision returning an
   undeclared rejection is its error, not remembered), `grist.Emits(types...)`
-  or `grist.Delivers(d, success...)` on a processor (a result that
+  or `grist.Delivers(g, success...)` on a processor (g a `grist.Guarantee`; a result that
   contradicts it fails the trigger: tried, then `grist.failed`; Skip and
   Fail allowed under any, though a Delivers processor's have no step in
   its generated model: §0.10). A declaration the code could contradict
@@ -917,7 +917,7 @@ with a test that fails without it:
   holds three modules: `<app>Events` (an `Event` constructor per type,
   accessors, reads, each read model's selection of the log and the reads
   a read of it records, a record type per block's arguments with
-  `principal`, per query's result, per site's record), `<app>Gen` (the
+  `caller`, per query's result, per site's record), `<app>Gen` (the
   store's side: every variable, an action per command with its reused
   key, conflict, ok and declared refusals over `freshKey`, `covers` and
   `conditionHolds`, per query, per processor by its declared shape over
@@ -987,9 +987,11 @@ with a test that fails without it:
   checked-in skeleton, grist.qnt and bindings are the catalog's, every
   hole defined, both modules importing the events and rules;
   `GRIST_UPDATE=1` writes them);
-  `Mutants{Names, FullOnly}.Run(t)` and `Mutant()` (each mutant's binary
-  built with a go `-overlay` of `testdata/mutants/<m>/*.go`, told its
-  name by `GRIST_MUTANT`: no marker file); `NewTier(t, App, TierConfig)`
+  the overlay mutants, moved to the core in H4 (`qtest.Mutants{FullOnly,
+  Generated}.Run(t)` and `qtest.Mutant()`: each mutant a directory of
+  `testdata/mutants`, found there, its binary built with a go `-overlay`
+  of its `*.go`, told its name by `GOTOGETHER_MUTANT`: no marker file;
+  `gristtest.RuleMutants(App)` the generated ones); `NewTier(t, App, TierConfig)`
   (the real tier: SQLite, real HTTP, nodes started and killed, lost
   answers, `Settle` waiting for every processor of the catalog and the
   relay, `Check` validating both bindings and `Answered`, the
@@ -1060,8 +1062,8 @@ without it:
 - **Onboarding**: `<app> model` with no `model/<app>.qnt` listed every
   hole as undefined; it now says the file is missing and that `model
   -init` writes one, and names the files it writes
-  (`TestMainModel`, the model command's first test). `gristtest.Overlay`
-  is unexported: it is `Mutants`' mechanics.
+  (`TestMainModel`, the model command's first test). The overlay is
+  `qtest.Mutants.Overlay` (H4: the core's harness).
 - **The library trial** (examples/library, TRIAL.md), from `grist new`
   and the docs alone: a query result's `[]string` field was dropped by
   the generator without a word (`MemberLoansResult = { unit: bool }`),
@@ -1118,7 +1120,8 @@ out:
 
 - **A run that reached none of the app's blocks fails.** library's first
   `TestFaithful` never committed a borrow and passed every claim.
-  `gristtest.Exercised(App, except...)` claims every block of the
+  `gristtest.Catalog(App).Exercised(except...)` (H4: qtest's
+  `Catalog.Exercised`, the catalog built from the App's) claims every block of the
   catalog taken in some run: each command by `ok` and by each declared
   refusal, each query, a processor's handling (Emits) or its effect and
   checkpoint (Delivers; an at-most-once outcome when it declares a
@@ -1127,7 +1130,7 @@ out:
   A conflict, a reused key and a skip are not wanted (faults and
   workloads decide them). It is qtest's `TakesEach` of the catalog's
   `Takes` (core: `Take.Outcome`, `Take.Hint`, `TakesEach`), so its
-  verdict is any Takes' (`TestExercised`, qtest's
+  verdict is any Takes' (`TestCatalogExercised`, qtest's
   `TestTakesOutcomeAndEach`). **Not applied by default**: gristsim's
   `Run` is a `qtest.System`'s run, which knows no claims, and a default
   in qtest would fail every contrast and mutant test, whose workloads
@@ -1151,7 +1154,7 @@ out:
 - **An ordered workload**: `gristsim.Config.Prologue []gristsim.Call`,
   calls made in order, each answered (or pending after MaxAttempts),
   before any client sends its first. They go to each tenant or the one
-  named, recorded as clients' calls (actor `prologue`) through the same
+  named, recorded as clients' calls (caller `prologue`) through the same
   faults (`TestPrologue`, which fails with the clients not waiting).
   library's faithful, greedy and lending shapes open with it, where they
   weighted `Send`.
@@ -1248,7 +1251,7 @@ with it taken out:
   `callKeyStable` and `keyCalled`, checked in grist/model's tests. The
   binding names both actions with no template but the outcome as
   `result` (and a reserved name's), and the calls' outcomes.
-  `gristtest.Exercised` takes each call, answered ok and applied.
+  `gristtest.Catalog(App).Exercised()` takes each call, answered ok and applied.
 - **counters' bank** is a declared call (`Bank`, `Pay`: `Keyed`,
   refusing `declined`), its double a handler attached per run in its
   tests (deduplicating by key, `Replayed`); deps.go's `Bank` interface, `BankDep`,
@@ -2128,7 +2131,7 @@ recorded as the step's outcome, a 422 with its name at the API. Any
 other error is a fault of the code (a 500), recorded with its text.
 
 **Idempotency.** Every command carries an envelope (`grist.Envelope`:
-command id, tenant, actor, time), the id chosen by the caller (the API
+command id, tenant, caller, time), the id chosen by the caller (the API
 requires it as `Idempotency-Key`). **A key's first answer is final**
 (§0.2): every committed outcome writes a marker keyed by the command
 id, holding the hash of the command (its name, version and canonical
@@ -2210,7 +2213,7 @@ var BorrowCmd = grist.NewCommand(App, "borrow", decideBorrow, grist.Appends(Borr
   an error that is no rejection, is the code's error. The catalog adds
   the rule's refusals to each command it guards (`CatalogBlock.Refuses`,
   `Rules`, `RuleRefuses`; `Catalog.Rules`), so the bindings have the
-  outcome and `gristtest.Exercised` wants it, with no edit to the
+  outcome and the catalog's `Exercised` wants it, with no edit to the
   command's `Refuses`.
 - **Which commands it guards.** Those declaring its event in
   `grist.Appends`: a command that appends an event a rule guards without
@@ -2760,9 +2763,11 @@ application's failure is its own or its model's, not the framework's.
 What the catalog declares a block will do eventually is an eventual val
 the generator writes into module `<app>Gen` (`model/<app>_steps.qnt`),
 named from the processor or call, and the store's default binding judges
-at a settle beside the app's own eventual vals (so does a variant that
-judges every invariant of the default binding; one that judges only its
-own vals does not):
+at a settle beside the app's own eventual vals. So does a variant that
+judges every invariant of the default binding, a call's obligation only
+where the variant also judges a val reading the call's served records
+(`<call>Records`, a site claim, directly or through the model's defs);
+one that judges only its own vals does not:
 
 | block | obligation | meaning, after a settle |
 | --- | --- | --- |
@@ -2821,12 +2826,19 @@ poller is a daemon whether it waits for appends or holds a trigger, so
 a settle does not wait for work in hand: its duration must cover it
 (gristsim's minute, against the backoff's 320 ms cap and
 `DependencyTimeout`'s second; an effect whose tries outlast it would be
-judged mid-retry). A variant that judges every invariant of the default
-binding judges the call obligations too, a `real` one included
-(docs/grist-instrumentation.md §5, decision 4): a `Keyed` dependency
-recording no site there (a third party's, behind `OverHTTP`) violates
-its `<call>EventuallyServed` on that tier, and no mark yet leaves an
-obligation out of a variant.
+judged mid-retry; ROADMAP's GR10b would mark a poller a daemon only
+while it waits on the store). A node left down for good outside
+`SettleCore`'s core has its triggers judged by a plain `Settle`, which
+names no down process (ROADMAP's GR10c). A variant judges a call's
+obligation only where one of its own vals reads the call's served
+records (H4, `TestCallObligationsFollowSiteClaims`): a `real` variant
+holds only what the real tier can judge (docs/grist-instrumentation.md
+§5, decision 4), and a `Keyed` dependency recording no site there (a
+third party's, behind `OverHTTP`) would violate its
+`<call>EventuallyServed` in every run. counters' `real` keeps
+`bankPayEventuallyServed` (it judges `everyPaymentAnswerServed`, the
+bank's records: the bank runs behind `ServeCalls`); a variant judging no
+site claim of a call has none of its obligation.
 
 ### 3.4 Leases, in plain Quint (slice 3)
 
@@ -2979,8 +2991,8 @@ verify` in CI with the analyzers' output.
 ### 4.3 Authorization, denied by default
 
 Every command and query is denied at every adapter unless it declares
-`grist.Authorize(p)`, a predicate over the envelope's actor and the
-tenant (`grist.Policy`; `grist.Authenticated`, `grist.Actors(...)`);
+`grist.Authorize(p)`, a predicate over the envelope's caller and the
+tenant (`grist.Policy`; `grist.Authenticated`, `grist.Callers(...)`);
 `grist.Internal()` marks one no adapter serves (only processors
 dispatch it); the adapter's boot (`NewHandler`) refuses an App with a
 block that has neither (§0.5: `App.Verify` does not, for in-process
@@ -3005,8 +3017,8 @@ refuses (`ErrBadArgs`) or a key it refuses, 413 for a body past
 carries `Idempotent-Replayed: true` (§0.7). `GET /t/{tenant}/queries/{name}?field=value` returns `{"result",
 "pos"}`, the position read through; `GET /catalog`, behind
 `grist.DevEndpoints`, the registry. Authentication is the application's
-middleware (`grist.WithActor`; `grist.Middleware`, or
-`grist.ActorFromHeader` behind a proxy). A plain `http.Handler`, so
+middleware (`grist.WithCaller`; `grist.Middleware`, or
+`grist.CallerFromHeader` behind a proxy). A plain `http.Handler`, so
 `qhttp.NewServer` serves it in a simulation (`gristsim.Config.HTTP`).
 `grist/client` calls it and records each call as a client's.
 

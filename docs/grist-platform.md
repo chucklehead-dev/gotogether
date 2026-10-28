@@ -52,7 +52,7 @@ gristsim, gristtest) at 0da5013.
 | decisions' inputs | an `Envelope` (`ID`, `Tenant`, `Actor`) and `Reads`; no clock, no config (GR3 §1) | a ConfigMap read by one pod and not yet by another | none today, by construction: keep it so (§3.6) |
 | resources | nothing: `GOMEMLIMIT` unset; `GOMAXPROCS` is container-aware since Go 1.25 (the cgroup's CPU limit, rounded up, updated as it changes; grist needs Go 1.26.1) | memory limits (OOMKill: SIGKILL, no grace); CPU limits (CFS throttling: stalls of up to the 100 ms period) | read models fold from the log on every read (grist §2.2, slice 1), so memory and CPU per query grow with the log: a limit sized in week one OOMs in week four |
 | metrics | none in grist; qrole exists (gauges u, v), unused by grist | HPA, KEDA, alerts | processor lag, relay backlog, oldest pending effect are not exposed |
-| inbound HTTP | every command requires `Idempotency-Key` (400 without, http.go); 503 + `Retry-After` for an unknown outcome; `WriteTimeout` 2 m | Gateway/HTTPRoute and mesh timeouts and retries | a retried command is safe; the timeout chain is not ordered (a gateway timing out at 15 s turns a slow commit into a 504 and a retry); `-actor-header` trusts a header the Gateway forwards unless a filter strips it |
+| inbound HTTP | every command requires `Idempotency-Key` (400 without, http.go); 503 + `Retry-After` for an unknown outcome; `WriteTimeout` 2 m | Gateway/HTTPRoute and mesh timeouts and retries | a retried command is safe; the timeout chain is not ordered (a gateway timing out at 15 s turns a slow commit into a 504 and a retry); `-caller-header` trusts a header the Gateway forwards unless a filter strips it |
 | outbound calls | `OverHTTP` (`CallTimeout` 10 s), declared calls (GR3) | DNS, endpoint lag, NetworkPolicy, conntrack-pinned connections | already modelled: a reset is an unknown outcome, never a refusal |
 | store | sqlstore on PostgreSQL or SQLite, `-poll` 250 ms | managed PostgreSQL failover (async replication loses a committed tail), CSI snapshot restore (the log rewinds), `max_connections` against replicas × pool; SQLite on a PVC (RWO with a surge deadlocks a rollout, RWX corrupts) | none of these is a fault grist or qenv can make |
 | steps | `-steps FILE` (`qobs.PerStep`), on the container's filesystem | lost with the pod (emptyDir) or interleaved (a shared PV) | commit steps survive in the store's step log (grist §2.10), but only a relay records them, and no command exports them |
@@ -366,7 +366,7 @@ outer timeout shorter than the server's handling turns a commit into a
   route family (`/t/*/commands/*`, `/t/*/queries/*`), timeouts from
   sizing, retries only where sizing says the product of layers recovers
   (commands are safe to retry, not free to), a `RequestHeaderModifier`
-  removing the actor header from client requests when `-actor-header`
+  removing the caller header from client requests when `-caller-header`
   is used (the authenticating proxy sets it after).
 - The lint checks the chain: client per-attempt timeout > Gateway
   request timeout > grist's request deadline > the longest declared
@@ -523,7 +523,7 @@ with kubeconform in grist/kube's tests.
 `gotogether kube lint` (the same rules, against a live cluster's
 objects) check hand-written or edited manifests, each finding naming the field and the fix:
 loopback `-addr`; a liveness probe reaching the store; a grace below the
-drain; `-actor-header` not stripped at the Gateway; retries on routes
+drain; `-caller-header` not stripped at the Gateway; retries on routes
 whose product of layers sizing rejects; the timeout chain out of order;
 a PDB that blocks drains; a CPU limit; no `GOMEMLIMIT`; secrets in env
 or args; `subPath` secret mounts; replicas without spread; SQLite in a
@@ -802,7 +802,7 @@ gateway:
 ## 9. Slices
 
 Each is one agent's work, reviewed before the next; each acceptance
-names the mutant it must catch (an overlay, `gristtest.Mutants`), with
+names the mutant it must catch (an overlay, `qtest.Mutants`), with
 the faithful app's claim beside it, and its test fails with the feature
 ablated.
 

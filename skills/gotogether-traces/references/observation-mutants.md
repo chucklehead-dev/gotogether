@@ -108,7 +108,7 @@ keep the full run out of `-short`.
 
 | mutants | change | answer | use when |
 |---|---|---|---|
-| code (`Mutation` options, `System.Mutate` with `qweave -mutate`) | the program | does a run of the buggy code fail? | the code is yours to plant bugs in |
+| code (overlays planted by hand, `qtest.Mutants`; `System.Mutate` with `qweave -mutate`) | the program | does a run of the buggy code fail? | the code is yours to plant bugs in |
 | overlays (`go test -overlay`) | files of a package left as it is | the same, without editing the code | code you must not edit (payd, webjobs) |
 | observation (`MutateSteps`, `validate -mutate-steps`) | the recorded log | does the check read what was recorded? | after a binding is written; for a recorder another team or tool writes; to find fields no check reads |
 

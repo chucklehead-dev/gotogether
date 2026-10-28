@@ -55,13 +55,15 @@ that replaces gotogether with a checkout, `go mod tidy` after the
 2. Read it, in this order: `model/hello.qnt` (what may happen),
    `hello.binding.yaml` (recorded steps to the model's actions),
    `hello.go` (the system, written against qenv's seams), `hello_test.go`
-   (the system explored by seeds, a mutant caught, Hegel shrinking it).
+   (the system explored by seeds, a mutant planted as an overlay in
+   `testdata/mutants` caught, Hegel shrinking it).
 3. For your component, write the model first and simulate its
    invariants (`gotogether simulate -binding`, `quint run --invariant`
    before a binding exists): gotogether-model.
 4. Scaffold a binding and a System test, then record each model step
    where it takes effect, until the faithful system conforms.
-5. Add a mutant and state how it is caught (`Rejects`, `Mismatch`,
+5. Plant a mutant (a copy of a file in `testdata/mutants/<name>/`, its bug
+   in it: `qtest.Mutants`) and state how it is caught (`Rejects`, `Mismatch`,
    `Violates`). A check no mutant can fail proves nothing.
 6. Let Hegel shrink the mutant's failure (`qhegel.Shrink`), and carry the
    model to the real environment (`gotogether validate`).
@@ -109,12 +111,8 @@ Its shape is every simulated test's:
 
 <!-- from examples/hello/hello_test.go -->
 ```go
-func system(m Mutation) qtest.System {
-	s := qtest.System{Binding: "hello.binding.yaml", Run: func(c qenv.Chooser) error { return Run(c, m) }}
-	if m == NoDedupe {
-		s.Mutant = "NoDedupe" // its runs are not the counter's: the suite's evidence leaves them out
-	}
-	return s
+func system() qtest.System {
+	return qtest.System{Binding: "hello.binding.yaml", Run: Run, Mutant: qtest.Mutant()}
 }
 
 // lossy loses or duplicates one message in five.
@@ -122,7 +120,7 @@ var lossy = qenv.Rates{Default: 0.2}
 
 func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
-	system(Faithful).WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms(),
+	system().WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms(),
 		// ...
 		qtest.Reaches("rpc.counter.request").Faulted().InAtLeast(0.3),
 		// ...
@@ -131,20 +129,25 @@ func TestFaithfulConforms(t *testing.T) {
 		qtest.Some(retried))
 }
 
-func TestNoDedupeCountsRetries(t *testing.T) {
-	qtest.RequireQuint(t)
-	system(NoDedupe).WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).
-		Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()),
-			// ...
-			qtest.None(retried))
+func TestMutant(t *testing.T) {
+	switch qtest.Mutant() {
 	// ...
+	case "noDedupe":
+		// ...
+		system().WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).
+			Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()),
+				// ...
+				qtest.None(retried))
+		// ...
+		qhegel.Shrink(t, system(), hegel.WithTestCases(50), hegel.WithSeed(1)).
+			Expect(t, qtest.Rejects("apply"), qtest.ShrunkTo(1))
+		// ...
+	}
 }
 
-func TestHegelShrinks(t *testing.T) {
+func TestMutants(t *testing.T) {
 	// ...
-	qhegel.Shrink(t, system(NoDedupe), hegel.WithTestCases(50), hegel.WithSeed(1)).
-		Expect(t, qtest.Rejects("apply"), qtest.ShrunkTo(1))
-	// ...
+	qtest.Mutants{}.Run(t)
 }
 ```
 

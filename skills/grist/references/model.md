@@ -39,7 +39,7 @@ error, with the move: module `<app>Rules` as it is to
   `counterCreatedByName(v)`); per read model its selection of the log
   (`totalsEvents(log, counter)`) and the reads a read of it records
   (`totalsReads(counter)`); a record type per command's and query's
-  arguments with `principal` (`CreateCounterArgs`), per query's result,
+  arguments with `caller` (`CreateCounterArgs`), per query's result,
   per site's record, per declared call its request, response and step
   record (`BankPayRequest`, `BankPayResponse`, `BankPayRecord`: processor,
   trigger, key, request, result, response).
@@ -83,7 +83,7 @@ as an Emits processor's Fail is).
 
 ## The holes (module `<app>Rules`, `model/<app>_rules.qnt`)
 
-Per command `c` (its arguments a record: `c.counter`, `c.principal`):
+Per command `c` (its arguments a record: `c.counter`, `c.caller`):
 
 - `<c>Outcome(log, c): str`: the rule, `"ok"` or a declared refusal,
   decided on the log at the commit (for a conditioned command, equal to
@@ -217,10 +217,10 @@ identifier, an integer tag (a tag is text the model cannot write from
 an int: make it a string), and a pointer argument (recorded only when
 set). In your own defs, avoid Quint's built-ins as parameter names
 (`item`, `set`, `range`, `exists`...); `quint typecheck` names the one it
-refuses. grist's own step fields (`id`, `principal`, `readPos`, `reads`,
+refuses. grist's own step fields (`id`, `caller`, `readPos`, `reads`,
 `result`, `trigger`, `key`, `ok`) are refused by `App.Verify`.
 
-## Delivery, and what a mismatch shows
+## Guarantees, and what a mismatch shows
 
 At least once, the checkpoint commits what the run reached (the success
 after an ok effect step, `grist.failed` after the tries); at most once,
@@ -232,7 +232,7 @@ states it with test-only eventual vals over the site's records
 `atMostOnceOutcomesLogged`), checked with two pollers
 (`gristsim.Config.Nodes: 2`). The checked-in model is generated from the
 faithful app's declarations, and judges every mutant's runs: a mutant
-that changes a delivery (and its declaration with it, which the runtime
+that changes a guarantee (and its declaration with it, which the runtime
 enforces) is rejected at its first trigger (`Rejects(<processor>)`:
 counters' `checkpointFirst`), before what it would cause.
 

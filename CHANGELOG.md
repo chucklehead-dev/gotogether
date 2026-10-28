@@ -42,6 +42,53 @@ The first release. What a user meets, by module:
   `Catalog.Take(name)`: the twins of the model-wide `Exercised` and
   `Takes`, which grist's `gristtest.Exercised` and `gristtest.Takes`
   were (`gristtest.Catalog(App)` builds one).
+- Breaking, grist (ROADMAP H4): the authenticated principal of a command
+  or query is its **caller**, not its actor: "actor" already means a
+  recorder's sequence of steps in the core (qobs.WithActor, a report's
+  `actor <name>:`, a binding's `actors:`), and grist used it for both,
+  so a grist report's "actor t1/clients" and a Policy's actor were two
+  things under one word. `grist.WithActor`, `ActorOf`, `Actors`,
+  `ActorFromHeader` are `WithCaller`, `CallerOf`, `Callers`,
+  `CallerFromHeader`; `Envelope.Actor` is `Envelope.Caller`,
+  `Reads.Actor()` `Reads.Caller()`, a `Policy` a `func(caller, tenant
+  string) bool`; `client.Client.ActorHeader` and `gristsim.ActorHeader`
+  are `CallerHeader` (`X-Gristsim-Caller`); serve's `-actor-header` is
+  `-caller-header`; `ErrDenied` says "does not admit the caller". The
+  step field grist records it as is `caller` (was `principal`), so the
+  generated models' argument records and the bindings' query answers
+  say `caller`: regenerate (`<app> model`) and rename `c.principal` in
+  the rules. The recorder's actor stays (`gristsim.ClientsActor`, a
+  site's or a commit's `actor` the tenant).
+- Breaking, grist (H4): `grist.Delivery` is `grist.Guarantee` (an
+  effect's declared guarantee, `AtLeastOnce` or `AtMostOnce`), and
+  `CatalogProcessor.Delivery` is `Guarantee` (JSON `guarantee`).
+- Breaking, grist (H4): `gristtest.Exercised(app, except...)` and
+  `gristtest.Takes(app)` are `gristtest.Catalog(app)`, a
+  `qtest.Catalog`, with `.Exercised(except...)` and `.Take(name)`;
+  `gristtest.Mutants`, `Mutant()` and `MutantEnv` (`GRIST_MUTANT`) are
+  the core's `qtest.Mutants`, `qtest.Mutant()` and `GOTOGETHER_MUTANT`,
+  its mutants found from `testdata/mutants` (no `Names`), a rule's
+  generated mutants `qtest.Mutants{Generated:
+  gristtest.RuleMutants(App)}` (was `Mutants.App`).
+- grist model (H4, P7's review): a variant judges a `Keyed` call's
+  `<call>EventuallyServed` only where one of its own vals reads the
+  call's served records (`<call>Records`, a site claim, directly or
+  through the model's or rules' defs): a `real` variant holds only what
+  the real tier can judge, and a third party's dependency, recording no
+  site there, would have violated the obligation in every run. The
+  default binding and the processors' obligations are unchanged; the
+  shop golden's `audit` variant loses `warehouseHoldEventuallyServed`,
+  counters' `real` keeps `bankPayEventuallyServed`.
+- Breaking, `gotogether scaffold -system` (H4): the scaffolded test has no
+  `Mutation` enum: `system()` takes `Mutant: qtest.Mutant()`, and its
+  mutant test is `TestMutant` (a case per mutant) run by `TestMutants`
+  (`qtest.Mutants{}.Run(t)`, skipped until a mutant is planted in
+  `testdata/mutants`; was `TestMutantIsCaught`). examples/hello's
+  `Mutation` enum is gone too: its `NoDedupe` is
+  `testdata/mutants/noDedupe/hello.go`, `Run(c)` takes the chooser
+  alone, `MUTANT=noDedupe ./run-demo.sh` builds the simulator with the
+  overlay. examples/webjobs' and payd's own `Overlay` helpers are
+  deleted, their harnesses `qtest.Mutants{Package: ...}`.
 - grist (GR10 slice 1): a served node records as
   `<app>/<node>/<incarnation>` (`grist.Identity`, `NewIdentity`, which
   mints a fresh incarnation on every call, `WithIdentity`; Namespace,

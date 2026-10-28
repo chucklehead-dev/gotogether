@@ -4259,7 +4259,7 @@ invariant and judges a code that never shows the scenario faithful.
   because it is cheap (milliseconds a state, its witness the shortest
   and with arguments); quint confirming what it found would double
   simulate's time for what TestAgreesWithQuint already holds it to.
-- **The grist generator writes one per Take** (gristtest.Takes): each
+- **The grist generator writes one per Take** (gristtest.Takes, gristtest.Catalog since H4): each
   command by each outcome (ok, each refusal, its rules' too) as the
   predicate that the model's step can answer so next (an identity left,
   some arguments of the step's draws with that outcome: a refusal leaves

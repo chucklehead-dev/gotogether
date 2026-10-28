@@ -1,6 +1,6 @@
 ---
 name: grist
-description: Build an event-sourced Go application on grist (gotogether's framework, slice 1 and slice 2's SQL store and HTTP API) so it is checked against a Quint model without annotations - events, plain and keyed read models, commands conditioned on their pinned reads (Unconditioned only on purpose), idempotency by command id (a key's first answer final, refusals included), queries, processors (Emit, Skip, Effect at least or at most once), options, deny-by-default authorization (Authorize, Internal), the HTTP API (NewHandler, Idempotency-Key, status codes) and its recording client (grist/client), grist.Main for an app's binary, the store contract (grist/store) with memstore, simstore and sqlstore (PostgreSQL, SQLite, qsql), commits recorded from the step log (grist.Relay), gristsim.Run as a qtest.System on simstore, the SQL tier or the HTTP tier, a real-tier run over HTTP on SQLite judged by the same binding, the model's skeleton and both bindings generated from the App's catalog (grist model: the app writes only its rules and invariants), grist new for a new app, and grist/gristtest's harnesses (Generated, Exercised, Mutants, Tier). Use when starting, writing or changing a grist application, its model or binding, when a gristsim exploration fails, or when a store must keep grist's contract (grist/storetest).
+description: Build an event-sourced Go application on grist (gotogether's framework, slice 1 and slice 2's SQL store and HTTP API) so it is checked against a Quint model without annotations - events, plain and keyed read models, commands conditioned on their pinned reads (Unconditioned only on purpose), idempotency by command id (a key's first answer final, refusals included), queries, processors (Emit, Skip, Effect at least or at most once), options, deny-by-default authorization (Authorize, Internal), the HTTP API (NewHandler, Idempotency-Key, status codes) and its recording client (grist/client), grist.Main for an app's binary, the store contract (grist/store) with memstore, simstore and sqlstore (PostgreSQL, SQLite, qsql), commits recorded from the step log (grist.Relay), gristsim.Run as a qtest.System on simstore, the SQL tier or the HTTP tier, a real-tier run over HTTP on SQLite judged by the same binding, the model's skeleton and both bindings generated from the App's catalog (grist model: the app writes only its rules and invariants), grist new for a new app, and grist/gristtest's harnesses (Generated, Catalog for qtest's catalog claims, RuleMutants for qtest.Mutants, Tier). Use when starting, writing or changing a grist application, its model or binding, when a gristsim exploration fails, or when a store must keep grist's contract (grist/storetest).
 ---
 
 # grist: an application checked by its model
@@ -40,17 +40,18 @@ for it. No binding is written by hand.
    [`references/entities.md`](references/entities.md) when a command
    touches more than one). Reads: `X.Get(r)`, `X.For(r, key)`, `r.Exists(Event,
    grist.Tag(k, v))`, `grist.Events(r, Event, tags...)` (typed),
-   `r.Select(grist.Selector{...})` (raw), and `r.Actor()` (the
-   envelope's actor, recorded in every command's and query's step as
-   `principal`: a rule over who asks, such as only a counter's creator
-   retiring it, is the decision's `Rejection` and the model's, by
-   `principal`; a `Policy` sees only the actor and the tenant). A read of a type the App does
+   `r.Select(grist.Selector{...})` (raw), and `r.Caller()` (the
+   envelope's caller, the authenticated principal, recorded in every
+   command's and query's step as `caller`: a rule over who asks, such as
+   only a counter's creator retiring it, is the decision's `Rejection`
+   and the model's, by `caller`; a `Policy` sees only the caller and the
+   tenant). A read of a type the App does
    not register, or of a tag key the type has none of, is the decision's
    error, never an empty answer. Options (one `grist.Option` type):
    `Unconditioned(reason)`, `ConditionTries(n)`, `TransientTries(n)` on
    commands (and queries), `EffectTries(n)`, `BatchSize(n)` on
    processors, and on every command and query `Authorize(policy)`
-   (`grist.Authenticated`, `grist.Actors(...)`, or a `func(actor, tenant
+   (`grist.Authenticated`, `grist.Callers(...)`, or a `func(caller, tenant
    string) bool`) or `Internal()`: blocks are denied by default, and the
    HTTP adapter refuses an App with a block that has neither. `App.Verify()` names every problem and its fix;
    `App.Catalog()` is the registry as data.
@@ -190,7 +191,9 @@ for it. No binding is written by hand.
    network's faults, `rpc.api.response` among them, under the same
    kinds).
    **Claim the runs reached the app**: a faithful test adds
-   `gristtest.Exercised(App, except...)`, every block of the catalog
+   `gristtest.Catalog(App).Exercised(except...)` (qtest's
+   `Catalog.Exercised` over the App's catalog; `Catalog.Take(name)` one
+   block, `.InAtLeast(share)` in a share of the runs), every block of the catalog
    taken in some run (each command by `ok` and each declared refusal,
    its rules' included, every query, a processor's handling, effect and checkpoint, every
    site's record), naming each missed with how to reach it; except
@@ -211,11 +214,11 @@ for it. No binding is written by hand.
    blocks) apart from grist's helpers (`appends`, `readsThrough`).
 5. **Prove each check can fail** with a mutant per claim (files in
    `testdata/mutants/<name>/` replacing the app's of the same names, run
-   by `gristtest.Mutants{Names: ..., FullOnly: ...}.Run(t)` from a
-   `TestMutants`, each binary's `TestMutant` switching on
-   `gristtest.Mutant()`, as examples/counters' `blind` and
+   found and run by the core's `qtest.Mutants{FullOnly: ...}.Run(t)` from
+   a `TestMutants`, each binary's `TestMutant` switching on
+   `qtest.Mutant()`, as examples/counters' `blind` and
    `dispatchDirect`; a mutant carries the declarations its code needs;
-   `Mutants{..., App: App}` adds a generated `drop-<rule>` per rule, the
+   `qtest.Mutants{Generated: gristtest.RuleMutants(App)}` adds a generated `drop-<rule>` per rule, the
    app with the rule dropped, which `TestMutant` handles before its
    switch: `if _, caught, ok := gristtest.DroppedRule(App); ok {
    system(...).Explore(...).Expect(t, caught); return }`, at a workload
@@ -331,9 +334,9 @@ for it. No binding is written by hand.
   field missing or null, a NUL byte, an integer past int64; every field
   is required but a pointer's), 403 (`denied`), 404 (an Internal block
   too), 413 (past `grist.MaxBody`), 500; a replay of a key's answer
-  carries `Idempotent-Replayed: true`. The actor is
-  `grist.WithActor`'s, set by `grist.Middleware` (the app's
-  authentication, which wins) or `grist.ActorFromHeader` (tests, behind
+  carries `Idempotent-Replayed: true`. The caller is
+  `grist.WithCaller`'s, set by `grist.Middleware` (the app's
+  authentication, which wins) or `grist.CallerFromHeader` (tests, behind
   a proxy: only for a request no middleware authenticated);
   `grist.Dependencies` attaches the app's doubles. `grist/client`'s
   `Client.Do` calls it and records the call as a client's (retrying
@@ -347,7 +350,7 @@ for it. No binding is written by hand.
 - **An app's binary**: `func main() { grist.Main(app, opts...) }` with
   the driver imported: `catalog` (the registry as JSON, types as JSON
   Schemas), `verify`, `serve -db sqlite:PATH|postgres:DSN -tenant t1
-  -steps steps.jsonl [-actor-header X-Actor] [-dependency NAME=URL]
+  -steps steps.jsonl [-caller-header X-Caller] [-dependency NAME=URL]
   [-health-addr :8081] [-grace 45s]`;
   `grist.ServeDependency(dep, handlers)` serves a dependency the team owns
   beside the node over HTTP; validate the steps file

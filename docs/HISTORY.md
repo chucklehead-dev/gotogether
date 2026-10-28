@@ -2022,6 +2022,76 @@ out of the binding every run conforms. Pre-existing, not P7's: a
 trigger fails), so the at-least-once obligation's `grist.failed` is
 only an effect's that failed every try.
 
+### H4: one vocabulary
+
+ROADMAP's H4 as built, with two leftovers of P7's review. The decisions
+it left:
+- **Caller, not actor**: "actor" is the core's, a recorder's sequence of
+  steps (qobs.WithActor, `actor <name>:` in a report, a binding's
+  `actors:`), and grist meant both by it: a commit's actor the tenant, a
+  client's `<tenant>/clients`, and a Policy's authenticated principal.
+  Only the principal is renamed (`WithCaller`, `CallerOf`, `Callers`,
+  `CallerFromHeader`, `Envelope.Caller`, `Reads.Caller`,
+  `CallerHeader`, `-caller-header`); `gristsim.ClientsActor` and every
+  `actor` a site or commit records stay. The step field it is recorded
+  as went with it (`principal` to `caller`), so the vocabulary is one
+  from the API to the model's argument records: the cost is every app's
+  rules that read `c.principal` (counters' two), and a regeneration.
+- **`Guarantee`** for `grist.Delivery`; the option stays `Delivers`
+  (what a processor does), its argument the guarantee.
+- **The catalog's claims are qtest's, the catalog grist's.** grist
+  imports no qtest (a production binary would link the validator), so
+  `gristtest.Catalog(App)` builds a `qtest.Catalog` (a name and a Take
+  per block and outcome, each with its hint), and the claims are its
+  methods: `Exercised(except...)` and `Take(name)`. Not a second
+  `qtest.Exercised(catalog, ...)`: the model-wide Exercised's exceptions
+  name actions, fault kinds and nemeses, the catalog's blocks by
+  outcome, and one function taking both would read the one as the
+  other. Any system can list its own Catalog. `gristtest.Scenario`
+  stays, built from `grist.Invocation` values, the catalog's typed
+  arguments.
+- **The overlay harness in the core**, `qtest.Mutants`: its mutants the
+  directories of `testdata/mutants` (a new directory is a new mutant,
+  and a `TestMutant` whose `default` fails says what catches it);
+  `Package` for a harness package replacing another's files (payd's
+  and webjobs'), `Overlay(t, name)` for `go build` of a mutant program
+  (webjobs' server under -short), `Generated` for mutants a binary makes
+  of itself (grist's dropped rules: `gristtest.RuleMutants`, whose init
+  reads `qtest.Mutant()`), `Show` for the output lines a harness wants
+  logged. `GOTOGETHER_MUTANT` is qmut's variable already (a number, or
+  `list`): `Mutant()` reports neither, and a directory named so is
+  refused, so one variable names a mutant of either kind.
+- **Overlays the taught way.** examples/hello's `Mutation` enum is a
+  file now (`testdata/mutants/noDedupe/hello.go`): its NoDedupe tests,
+  the exhaustive search of one fault and Hegel's shrink moved into
+  `TestMutant`'s case, the faithful Hegel run left as
+  `TestHegelFindsNothing`, and `qweave -mutate` weaves 10 mutants of it
+  where the compound condition made 8. `gotogether scaffold -system`
+  writes `TestMutant` and `TestMutants` instead of an enum (skipped
+  until a mutant is planted, failed under GOTOGETHER_STRICT=1); `grist
+  new`'s starter had overlays already and uses the core's harness. The
+  other examples' enums stay (checkout's, wallet's configurations are
+  their own API); the skills teach overlays first, qmut as the
+  generated way.
+- **A call's obligation where the variant judges its records** (P7's
+  review, decision 4 of docs/grist-instrumentation.md §5): a variant
+  that judges every default invariant gets the processors' obligations,
+  and a Keyed call's `<call>EventuallyServed` only where one of its own
+  vals reads `<call>Records`, directly or through a def of the model or
+  the rules (comments left out). A third party's dependency on a real
+  tier records no site, and the obligation would have failed every run
+  there. counters' `real` judges the bank's records and keeps its
+  obligation; the shop golden's `audit` judges the warehouse's picks,
+  not its holds, and lost `warehouseHoldEventuallyServed`.
+  `TestCallObligationsFollowSiteClaims` fails without the filter, and
+  with the defs' closure taken out.
+- **Left, as ROADMAP items** (GR10b, GR10c): a poller a daemon only
+  while it waits on the store, so a settle waits for work in hand and a
+  hung handler reads `Unsettled`; and `Settle` naming the processes down
+  at the settle, so a node left down for good does not have its triggers
+  judged as a live one's. Both are qenv's: Settle's other users
+  (quorumkv's node down for good) would meet them too.
+
 ### E: a run gotogether did not drive
 
 From the feedback of an agent using gotogether in another project (an

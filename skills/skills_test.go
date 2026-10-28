@@ -212,6 +212,29 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"storetest.DensePositions", "storetest.Checks() (a Check by its Name)"},
 		{"storetest.TenantIsolation", "storetest.Checks() (a Check by its Name)"},
 		{"storetest.ConcurrentAgainstBruteForce", "storetest.Checks() (a Check by its Name)"},
+		// H4: one vocabulary (grist's actor is the caller: "actor" is a
+		// recorder's; the overlay harness and the catalog's claims in the
+		// core)
+		{"grist.WithActor", "grist.WithCaller"},
+		{"ActorOf", "grist.CallerOf"},
+		{"grist.Actors(", "grist.Callers("},
+		{"ActorFromHeader", "grist.CallerFromHeader"},
+		{"-actor-header", "-caller-header"},
+		{"ActorHeader", "CallerHeader (client.Client's, gristsim's)"},
+		{"Reads.Actor", "Reads.Caller"},
+		{"Envelope.Actor", "Envelope.Caller"},
+		{"grist.Delivery", "grist.Guarantee"},
+		{"gristtest.Exercised", "gristtest.Catalog(App).Exercised(except...) (qtest.Catalog)"},
+		{"gristtest.Takes", "gristtest.Catalog(App).Takes, Catalog.Take(name)"},
+		{"gristtest.Mutants", "qtest.Mutants (Generated: gristtest.RuleMutants(App))"},
+		{"gristtest.Mutant()", "qtest.Mutant()"},
+		{"gristtest.MutantEnv", "qtest.MutantEnv"},
+		{"GRIST_MUTANT", "GOTOGETHER_MUTANT (qtest.MutantEnv)"},
+		{"gristtest.Overlay", "qtest.Mutants.Overlay"},
+		{"Overlay(t, m, t.TempDir())", "qtest.Mutants{Package: ...}.Overlay(t, name) (webjobs' and payd's helpers are gone)"},
+		{"system(NoDedupe)", "testdata/mutants/noDedupe, TestMutant switching on qtest.Mutant() (hello's Mutation enum is gone)"},
+		{"hello.Mutation", "testdata/mutants/noDedupe (qtest.Mutants)"},
+		{"TestMutantIsCaught", "TestMutant and TestMutants (gotogether scaffold -system: qtest.Mutants)"},
 		// the project's old names, spelled in pieces so a rename script
 		// that rewrites them cannot rewrite these
 		{"quint" + "go", "gotogether"},
