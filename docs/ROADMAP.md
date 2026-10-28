@@ -121,9 +121,21 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   a run belong to it (as `hooks.FaultNames` does for kinds), or
   `CoverageOf` takes them from the runs it is given; then a CI job with
   `-shuffle=on -count=2` over the core's fast packages.
-- **I11. Differential fuzzing of qeval against quint (M).**
-  Hegel-generated expressions and actions over the builtin table,
-  judged by both, nightly: the next I2 found before a user does.
+- **I11. Differential fuzzing of qeval against quint (M). Done**
+  (54326d3, a7d9075, 4f3be99; DESIGN §56, HISTORY "I11"): generated expressions
+  and actions over the evaluator's builtins (math/rand, not Hegel: the
+  core does not import it), judged by the evaluator and both of quint's
+  backends, shrunk; two batches per push, 80 a night. It found a let
+  evaluated eagerly, exists/forall stopping at the evaluator's own first
+  witness, and setToMap keeping one of a key's two values by the
+  evaluator's order, all fixed. Left: actions of more than one variable
+  and of a model's own step (TestAgreesWithQuint covers the repository's
+  models), and quint's Rust backend writing integers past 2^53 into ITF as
+  bignumber.js objects, which the toolkit's ITF reader takes for records
+  (the harness reads them back; validate's and connect's readers need the
+  variable's type to do the same, or quint a fix).
+  What it was: Hegel-generated expressions and actions over the builtin
+  table, judged by both, nightly: the next I2 found before a user does.
 
 ### Adoption: stability
 

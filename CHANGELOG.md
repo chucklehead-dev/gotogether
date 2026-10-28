@@ -10,6 +10,15 @@ and adds a line here.
 
 The first release. What a user meets, by module:
 
+- The Go evaluator matches quint where a differential test against
+  both backends found it did not (ROADMAP I11): a `val` inside an
+  expression is evaluated where its name is read (`{ val n = 1 / 0; 0 }`
+  is 0, as in quint, not a division by zero), and `exists`/`forall` judge
+  every element, refusing (quint judges) when one fails where another
+  decides (TypeScript fails, Rust stops at its own first witness);
+  `setToMap` of two pairs of one key is refused (which value quint keeps
+  is its set order's; the evaluator kept the greatest pair's).
+
 - Store incidents (GR10 slice 3, ROADMAP I25): `qenv.Store.Failovers`
   (`store.<name>.failover`: a commit's primary dies, the commit applied
   and answered `ErrUnknownOutcome`, every open transaction reset, writes
@@ -35,6 +44,7 @@ The first release. What a user meets, by module:
   Action (`.github/actions/gotogether`), a pinned image
   (`ci/image/Dockerfile`, built by CI, published nowhere) and a CI
   tiering guide (docs/ci.md).
+
 - qsql joins by a key (ROADMAP I23): `SELECT t.c, u.d FROM t JOIN u ON
   u.k = t.c ... WHERE t.... ORDER BY t.... LIMIT n` looks u's rows up by
   its whole primary key, an inner join, every column qualified. grist's

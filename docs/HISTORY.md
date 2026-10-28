@@ -2930,6 +2930,81 @@ verdicts quint does not give. Each reproduction is a regression test now
   same classifier) has no real-time edges and only committed
   transactions, so nothing there changes.
 
+### I11: the evaluator against quint on generated expressions
+
+ROADMAP's I11, from the formal-methods review's idea 3: the evaluator
+decides passing runs (DESIGN §56), and what checked it (TestAgreesWithQuint,
+the nightly's shadow, a sampled 1 in 50 passes) saw only what the
+repository's models use. internal/qeval's differential test now
+generates what they do not, and has quint's two backends judge it.
+
+The decisions:
+- **Hand-rolled on math/rand, not Hegel.** The core does not import
+  Hegel, and internal/hegelprops would have to reach qeval's unexported
+  evaluation for actions. A seed makes one batch, the same everywhere;
+  a disagreement names it (`GOTOGETHER_QEVAL_FUZZ_SEED=n`).
+- **Batches through `quint test`, not the REPL or `quint run`.** One
+  module of a val (or an action), a variable of its type and a run
+  assigning it per entry: each run's ITF is quint's value, each failing
+  run its own error, so one entry's division by zero leaves the other
+  199 judged. Three processes a batch: a compile (the evaluator's IR) and
+  a test per backend.
+- **Actions judged two ways.** quint samples one successor; the
+  evaluator's set must hold it, and must equal the action read as an
+  expression (a choice's flattened map, a guard's `if`, `any`'s union),
+  which quint judges as any other entry: a successor the evaluator
+  misses is found though quint never reports the set.
+- **Actions from a state too**: half the actions start where their
+  run's first step puts them (`(v' = s).then(a)`) and read v; their
+  successors' expression reads s in its place.
+- **Shrunk by batches of reductions**: every one-step-smaller tree in
+  one module, the smallest that still differs the same way kept, until
+  none does.
+- **Full mode only**: a batch of 200 costs about 70 CPU s, most of it
+  quint's typechecker (three typechecks of the generated expressions) and
+  the Rust backend's runs. Two batches of 100 per push, 80 of 200 a night
+  (`qeval-differential`, about 25 minutes on four cores).
+
+What it found, at its first runs:
+- **A let evaluated eagerly** (fixed). `{ val n = 1 / 0; 0 }` is 0 on
+  both backends: quint evaluates a let where its name is read. The
+  evaluator bound it at once and threw a division by zero, a map's
+  missing key, a list's empty head. A let's failure is now thrown where
+  its name is read (`bindLet`).
+- **exists and forall stopped at the evaluator's first witness**
+  (fixed). TypeScript evaluates every element (`Set(5, 9, 33).forall(x
+  => if (x == 33) 1 / 0 > 0 else false)` is a division by zero), Rust
+  stops at a witness in its own order (false); the evaluator gave false,
+  a pass where TypeScript fails. Every element is now evaluated; a
+  failure is the model's runtime error when no element decides (both
+  backends fail), and Unsupported when one does.
+- **setToMap kept the evaluator's choice of a key's two values**
+  (fixed). `Set(("k", ["a", "a", ""]), ("k", ["ab", "a",
+  "ab"])).setToMap()` is Map("k" -> ["a", "a", ""]) on Rust, and the
+  evaluator kept the greatest pair's: a value quint contradicts, found
+  by an action's successors (a choice over a constant set mapped to a
+  setToMap) once the generator's actions started from states too. A
+  key's second pair is now Unsupported.
+- **quint's Rust backend writes integers past 2^53 into ITF as
+  bignumber.js objects** (`{"s": 1, "e": 18, "c": [46116,
+  86018427387904]}` for 2^62), in `quint run` and `quint test` alike;
+  TypeScript writes `#bigint`. The harness reads them back (a record of
+  the generator's has no fields e and s). The toolkit's own ITF reader
+  does not (ROADMAP I11's note): a state with such an integer from a
+  Rust trace reads as a record.
+- **Tests that fail without it**: each fix undone fails
+  TestDifferentialFindings (and both backends' judgement of its case);
+  an evaluator whose `%` is Euclidean fails the push tier's second batch,
+  shrunk from a 300-character `any {}` to `v8' = (1 % (-2))` (the
+  evaluator -1, quint 1).
+- **Harness lessons**: the Rust backend refuses a whole module with a
+  literal past 64 bits (every run, QNT600), so the generator writes
+  none; a pipe loses what node has not written when it exits (the
+  TypeScript report stopped after 23 failures), so compile and test
+  write to files; `quint compile` prints nothing for a parse error,
+  typecheck does; a let's body starting with `(` applies the value
+  before it (`val n = r.c` then `(x)` is `r.c(x)`): lets end in `;`.
+
 ### I23: sqlstore reads in one query
 
 ROADMAP's I23, from the Go specialist's finding (review 11): a read

@@ -196,9 +196,9 @@ jobs:
           export GOTOGETHER_SEED_OFFSET=$(( $(date -u +%s) / 86400 * 1000 ))
           echo "batches $((GOTOGETHER_SEED_OFFSET + 1))..$((GOTOGETHER_SEED_OFFSET + GOTOGETHER_QEVAL_FUZZ))"
           mkdir -p "$GOTOGETHER_KEEP"
-          go test -count=1 -timeout 110m -run '^TestDifferential' -v ./internal/qeval | tee "$RUNNER_TEMP/differential.log" | grep -E '^(---|ok|FAIL)|batches:|disagree' || true
-          grep -q '^ok' "$RUNNER_TEMP/differential.log"
-      - name: keep the batches (each one's module, quint's IR and both backends' reports)
+          set -o pipefail
+          go test -count=1 -timeout 110m -run '^TestDifferential' -v ./internal/qeval | tee "$GOTOGETHER_KEEP/differential.log"
+      - name: keep the batches (each one's module, quint's IR and both backends' reports) and the log
         if: failure()
         uses: actions/upload-artifact@v4
         with:

@@ -135,13 +135,15 @@ func envNum(t *testing.T, name string, def int) int {
 }
 
 // A gentry is an expression of type t, or an action assigning a value of
-// t (succ: the index of the entry holding its successors as an
-// expression).
+// t to v (succ: the index of the entry holding its successors as an
+// expression), from no state or from v = from, its run's first step.
 type gentry struct {
 	t    *gtyp
 	expr *gnode
 	act  *gnode
 	succ int
+	v    string
+	from *gnode
 }
 
 func (e gentry) root() *gnode {
@@ -166,9 +168,14 @@ func generate(seed uint64, n int) []gentry {
 	for len(out) < n {
 		t := g.randType(2)
 		if g.chance(0.25) {
-			a := g.action(fmt.Sprintf("v%d", len(out)), t, 1+g.r.IntN(3), nil)
-			out = append(out, gentry{t: t, act: a, succ: len(out) + 1})
-			out = append(out, gentry{t: setOfT(t), expr: successors(a, t)})
+			v := fmt.Sprintf("v%d", len(out))
+			var from *gnode
+			var env []gbind
+			if g.chance(0.5) { // from a state: the action reads v
+				from, env = g.literal(t, 2), []gbind{{v, t}}
+			}
+			a := g.action(v, t, 1+g.r.IntN(3), env)
+			out = append(out, actionPair(len(out), t, a, v, from)...)
 			continue
 		}
 		out = append(out, gentry{t: t, expr: g.expr(t, 1+g.r.IntN(4), nil)})
@@ -176,21 +183,35 @@ func generate(seed uint64, n int) []gentry {
 	return out
 }
 
-// renumber is e as entry i of a batch: an action assigns v<i>, its
-// successors' entry next.
-func (e gentry) renumber(i int) gentry {
-	if e.act == nil {
-		return e
-	}
-	c := e
-	c.act = e.act.clone()
-	descend(c.act, nil, func(n *gnode, _ []string) {
-		if n.op == "assign" {
-			n.lit = fmt.Sprintf("v%d", i)
+// actionPair is action a, assigning v, as entry i of a batch (its
+// variable v<i>), and its successors as an expression, entry i+1: from a
+// state, v read as its value there.
+func actionPair(i int, t *gtyp, a *gnode, v string, from *gnode) []gentry {
+	nv := fmt.Sprintf("v%d", i)
+	a = a.clone()
+	descend(a, nil, func(n *gnode, _ []string) {
+		if (n.op == "assign" || n.op == "name") && n.lit == v {
+			n.lit = nv
 		}
 	})
-	c.succ = i + 1
-	return c
+	succ := successors(a, t)
+	if from != nil {
+		succ = subst(succ, nv, from)
+	}
+	return []gentry{{t: t, act: a, succ: i + 1, v: nv, from: from}, {t: setOfT(t), expr: succ}}
+}
+
+// subst is n with each read of name replaced by val.
+func subst(n *gnode, name string, val *gnode) *gnode {
+	if n.op == "name" && n.lit == name {
+		return val.clone()
+	}
+	c := *n
+	c.kids = make([]*gnode, len(n.kids))
+	for i, k := range n.kids {
+		c.kids[i] = subst(k, name, val)
+	}
+	return &c
 }
 
 // ---- outcomes -----------------------------------------------------------
@@ -234,7 +255,16 @@ func evaluate(m *Model, e gentry, i int) (o goutcome) {
 		v, err := m.Eval(nil, State{}, name)
 		return fromErr(o, v, err)
 	}
-	vals, err := assigned(m, name, fmt.Sprintf("v%d", i))
+	v, st := fmt.Sprintf("v%d", i), State{}
+	if e.from != nil {
+		x, err := m.Eval(nil, State{}, fmt.Sprintf("s%d", i))
+		if err != nil {
+			o.refused = "harness: the start state: " + err.Error()
+			return o
+		}
+		st[v] = x
+	}
+	vals, err := assigned(m, name, v, st)
 	if err != nil {
 		return fromErr(o, nil, err)
 	}
@@ -242,7 +272,7 @@ func evaluate(m *Model, e gentry, i int) (o goutcome) {
 	if o.vals == nil {
 		o.vals = []Value{}
 	}
-	if _, err := assigned(m.AsReplayed(), name, fmt.Sprintf("v%d", i)); err != nil {
+	if _, err := assigned(m.AsReplayed(), name, v, st); err != nil {
 		var u *Unsupported
 		if errors.As(err, &u) && u.Choice != "" {
 			o.partial = true
@@ -267,14 +297,14 @@ func fromErr(o goutcome, v Value, err error) goutcome {
 	return o
 }
 
-// assigned is the values action name may assign v from no state, sorted.
-func assigned(m *Model, name, v string) (vals []Value, err error) {
+// assigned is the values action name may assign v from state st, sorted.
+func assigned(m *Model, name, v string, st State) (vals []Value, err error) {
 	defer recoverInto(&err)
 	d, ok := m.Decl(name)
 	if !ok {
 		return nil, fmt.Errorf("no %s", name)
 	}
-	ev := m.evaluation(nil, State{})
+	ev := m.evaluation(nil, st)
 	body, en, err := ev.bindArgs(d, nil, nil, name)
 	if err != nil {
 		return nil, err
@@ -324,6 +354,9 @@ func (b *gbatch) module() string {
 		b.lines[i] = line
 		put(fmt.Sprintf("  var v%d: %s", i, e.typeText()))
 		if e.act != nil {
+			if e.from != nil {
+				put(fmt.Sprintf("  val s%d = %s", i, e.from))
+			}
 			put(fmt.Sprintf("  action e%d = %s", i, e.act))
 		} else {
 			put(fmt.Sprintf("  val e%d = %s", i, e.expr))
@@ -334,9 +367,12 @@ func (b *gbatch) module() string {
 			continue
 		}
 		b.runs[i] = line
-		if e.act != nil {
+		switch {
+		case e.act != nil && e.from != nil:
+			put(fmt.Sprintf("  run t%d = (v%d' = s%d).then(e%d)", i, i, i, i))
+		case e.act != nil:
 			put(fmt.Sprintf("  run t%d = e%d", i, i))
-		} else {
+		default:
 			put(fmt.Sprintf("  run t%d = v%d' = e%d", i, i, i))
 		}
 	}
@@ -779,8 +815,7 @@ func shrink(ctx context.Context, t *testing.T, e gentry, d disagreement) (gentry
 		for _, c := range cands {
 			if e.act != nil {
 				at = append(at, len(entries))
-				entries = append(entries, gentry{t: e.t, act: c, succ: len(entries) + 1}.renumber(len(entries)))
-				entries = append(entries, gentry{t: setOfT(e.t), expr: successors(c, e.t)})
+				entries = append(entries, actionPair(len(entries), e.t, c, e.v, e.from)...)
 			} else {
 				at = append(at, len(entries))
 				entries = append(entries, gentry{t: e.t, expr: c})
