@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -59,7 +60,6 @@ func TestOnCallViolationReport(t *testing.T) {
 		"observed: refund(amount=500, id=ch_1)\n",
 		"the step changed, in the model's state:\n",
 		`charges["ch_1"].refunded: 700 -> 1200`,
-		"model state after the step: 1 variable (-v prints it)",
 	} {
 		if !strings.Contains(sum, want) {
 			t.Errorf("the report lacks %q:\n%s", want, sum)
@@ -70,8 +70,18 @@ func TestOnCallViolationReport(t *testing.T) {
 			t.Errorf("the report names %q, which is -v's:\n%s", not, sum)
 		}
 	}
+	// the TypeScript backend writes no ITF for a failing test: no state
+	// to print, and the diff is the evaluator's alone
+	ts := os.Getenv("QUINT_BACKEND") == "typescript"
+	if !ts && !strings.Contains(sum, "model state after the step: 1 variable (-v prints it)") {
+		t.Errorf("the report lacks the state's count:\n%s", sum)
+	}
 	v := rep.VerboseSummary()
-	for _, want := range []string{"step 4 of the replay, seq 4 of recorder payments-1", "charges = Map("} {
+	wantV := []string{"step 4 of the replay, seq 4 of recorder payments-1"}
+	if !ts {
+		wantV = append(wantV, "charges = Map(")
+	}
+	for _, want := range wantV {
 		if !strings.Contains(v, want) {
 			t.Errorf("the verbose report lacks %q:\n%s", want, v)
 		}
@@ -85,7 +95,7 @@ func TestOnCallViolationReport(t *testing.T) {
 	if f.Check != "refundsWithinCapture" || f.Verdict != "fail" || f.Record == nil || f.Record.ID != "day.jsonl:5" || f.Record.Step != 4 || f.Record.Seq != 4 ||
 		f.Record.Time != "2026-10-02T09:00:03Z" || f.Record.Process != "payments-1" || len(f.Changes) != 1 ||
 		f.Changes[0] != (Change{Path: `charges["ch_1"].refunded`, Kind: "changed", Before: "700", After: "1200"}) ||
-		f.Brief != `refund(amount=500, id=ch_1): charges["ch_1"].refunded: 700 -> 1200` || !strings.Contains(f.State["charges"], `refunded: 1200`) {
+		f.Brief != `refund(amount=500, id=ch_1): charges["ch_1"].refunded: 700 -> 1200` || !ts && !strings.Contains(f.State["charges"], `refunded: 1200`) {
 		t.Errorf("the failure as data: %s", d.JSON())
 	}
 }

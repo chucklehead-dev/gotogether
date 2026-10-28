@@ -43,7 +43,8 @@ model (default)
     why: the model's apply(id = 1) is disabled:
       in apply: not(applied.contains(id)) is false
         where applied = Set(1), id = 1
-      enabled instead: replay(id = 1), apply(id = 2), apply(id = 3)
+      enabled instead (the model's moves from this state, not records): replay(id = 1),
+        apply(id = 2), apply(id = 3)
 
 tasks
   client: waiting until 100ms

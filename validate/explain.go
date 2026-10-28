@@ -192,7 +192,7 @@ func (c *Checker) explainResult(p *binding.Plan, res *Result, o Options) {
 		}
 	}
 	for _, f := range res.failures() {
-		if f.Kind != "state" && f.Kind != "invariant" || f.Index < 0 || f.Index >= len(p.Calls) || !f.StateAfter {
+		if f.Kind != "state" && f.Kind != "invariant" || f.Index < 0 || f.Index >= len(p.Calls) {
 			continue
 		}
 		if e := get(); e.err == nil {
