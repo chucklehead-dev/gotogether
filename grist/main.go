@@ -29,9 +29,14 @@ import (
 // grist.Main(app, opts...) }, the binary importing its database's driver
 // (modernc.org/sqlite, github.com/jackc/pgx/v5/stdlib: grist imports
 // none). It runs MainArgs on the process's arguments, stopping on SIGINT
-// or SIGTERM, and exits 2 on a usage error, 1 on any other.
+// or SIGTERM, and exits 2 on a usage error, 1 on any other. A second
+// signal, in the drain, ends the process at once (the signals' default).
 func Main(app *App, opts ...ServeOption) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	// the first signal starts the drain; the next is the signals' own
+	// again: an operator's second Ctrl-C ends a 35 s drain, where it was
+	// swallowed (relayed to a context already cancelled)
+	context.AfterFunc(ctx, stop)
 	err := MainArgs(ctx, app, os.Args[1:], os.Stdout, os.Stderr, opts...)
 	stop()
 	var usage *UsageError

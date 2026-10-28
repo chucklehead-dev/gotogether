@@ -8,11 +8,13 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -448,5 +450,53 @@ func TestMetricsLabelEscaping(t *testing.T) {
 	stop()
 	if err := <-done; err != nil {
 		t.Fatal(err)
+	}
+}
+
+// mainChild is the environment variable that makes the test binary run
+// grist.Main on the arguments after "--" (TestMainSecondSignal).
+const mainChild = "GRIST_TEST_MAIN"
+
+// A second signal in the drain ends the process at once: an operator's
+// second Ctrl-C (or a supervisor's second SIGTERM) is not swallowed by a
+// drain with a minute to go.
+func TestMainSecondSignal(t *testing.T) {
+	if os.Getenv(mainChild) != "" {
+		for i, a := range os.Args {
+			if a == "--" {
+				os.Args = append([]string{"procs"}, os.Args[i+1:]...)
+			}
+		}
+		a, _ := amoApp(func(ctx context.Context, m grist.Meta) error { return nil })
+		grist.Main(a, grist.WithDrain(grist.Drain{Delay: time.Minute}))
+		os.Exit(0)
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=^TestMainSecondSignal$", "--", "serve", "-db", "sqlite:"+filepath.Join(t.TempDir(), "app.db"), "-addr", "127.0.0.1:0")
+	cmd.Env = append(os.Environ(), mainChild+"=1", "KUBERNETES_SERVICE_HOST=")
+	var errOut syncBuffer
+	cmd.Stderr = &errOut
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer cmd.Process.Kill()
+	exited := make(chan error, 1)
+	go func() { exited <- cmd.Wait() }()
+	for deadline := time.Now().Add(30 * time.Second); !strings.Contains(errOut.String(), "serving on "); time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the child did not serve: %s", errOut.String())
+		}
+	}
+	cmd.Process.Signal(syscall.SIGTERM)
+	time.Sleep(300 * time.Millisecond) // in the drain's minute of delay
+	select {
+	case err := <-exited:
+		t.Fatalf("the child ended at the first signal (%v), not in its drain: %s", err, errOut.String())
+	default:
+	}
+	cmd.Process.Signal(os.Interrupt)
+	select {
+	case <-exited:
+	case <-time.After(20 * time.Second):
+		t.Fatalf("a second signal in the drain did not end the process: %s", errOut.String())
 	}
 }
