@@ -200,7 +200,7 @@ func TestMainHealth(t *testing.T) {
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
 	errOut, url, done := serving(t, ctx, a, t.TempDir(), []string{"-addr", "127.0.0.1:0", "-health-addr", "127.0.0.1:0"},
-		grist.WithDrain(grist.Drain{Delay: 400 * time.Millisecond}))
+		grist.WithDrain(grist.Drain{Delay: 2 * time.Second})) // the probes and the query below fit in it on a slow runner
 	hu := healthURL(t, errOut)
 	for _, p := range []string{"/livez", "/readyz"} {
 		if code, body := get(t, hu+p); code != 200 {
