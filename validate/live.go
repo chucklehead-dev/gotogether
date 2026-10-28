@@ -48,7 +48,9 @@ type EventualVerdict struct {
 }
 
 // Live says no fair cycle keeps the val false, and every state evaluated
-// it: proved for the instance when the graph is complete.
+// it: when the graph is complete, proved for the instance that the val
+// is true infinitely often in every behaviour weakly fair to each action
+// (not that it is true once, nor under fairness per call or strong).
 func (v EventualVerdict) Live() bool {
 	return !v.Hot && v.Error == "" && v.Unsupported == ""
 }

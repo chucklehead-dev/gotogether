@@ -2759,6 +2759,14 @@ verdicts quint does not give. Each reproduction is a regression test now
   restored, rr's run fails on its first sampled state
   (`TestSimulateGraphCheckedByQuint`, by a tampered graph). Truncated
   graphs claim no proof and are not checked.
+- **O2, liveness's wording.** DESIGN §62 said a hot cycle is "a
+  behaviour that never makes it true" and that no lasso is a false
+  alarm for want of a declaration. What is checked is □◇P (P at
+  quiescence), under weak fairness per action: a lasso's prefix may pass
+  through states where the val holds, and per-call or strong fairness
+  oblige more, so a lasso may be no behaviour of a system that has them
+  and `live` holds only for a system at least that fair. §62, the
+  `cycles` line of the report, the doc comments and the skills say so.
 - **F2, a choice inside a bound action** (high). An action that chooses
   (`any { x' = 1, ..., x' = 4 }`, a die's nondet) whose expect reads the
   result: quint's replay draws the choice, and three validations of one

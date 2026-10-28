@@ -4609,8 +4609,13 @@ An eventual val (a binding's `eventually:`) is judged in runs at a
 settle: the last state of a run whose system went quiet. The model said
 nothing of it on its own: `simulate` samples finite traces, and a
 finite trace never shows "forever". P2's graph does: a reachable cycle
-of states where the val is false is a behaviour that never makes it
-true. `simulate -graph` judges each eventual val so, and a run that did
+of states where the val is false, fair under the assumption below, is a
+behaviour that from some point on never makes it true. What is checked
+is that the val is true infinitely often (□◇P; for a run that settles,
+P at quiescence), not that it is true once (◇P): a lasso's prefix may
+pass through states where the val holds (review 11, O2). That is the
+right semantics for a settle, and the report says it so.
+`simulate -graph` judges each eventual val so, and a run that did
 not settle has the cycle its model states went round reported with it.
 
 - **The search** (internal/qeval/lasso.go, `Graph.HotComponents`).
@@ -4658,9 +4663,15 @@ not settle has the cycle its model states went round reported with it.
   never obliged and allowed to run forever (a client's input, which may
   come or not), and `simulate.stops` (`-stops`), an action in no cycle
   (a fault, which a settle turns off; an input the driver stops sending
-  before it settles). The default is the most fairness, so a reported
-  lasso is fair under any weaker assumption: no lasso is a false alarm
-  for want of a declaration. It errs the other way: an input left fair
+  before it settles). The default is the most fairness of its kind
+  (weak, per action), so a reported lasso is fair under any weaker
+  assumption of that kind: no lasso is a false alarm for want of an
+  `unfair` or `stops` declaration. It is not the most fairness there is:
+  per-call weak fairness and strong fairness oblige more, and a lasso is
+  a false alarm for a system whose real fairness is of those (the
+  hasLeader lasso that per-call fairness rules out, below); `live` is so
+  only for a system at least this fair (review 11, O2). It errs the
+  other way too: an input left fair
   is obliged, and a processor stuck while inputs remain enabled is
   hidden behind them ("fairness rules out N hot cycles and M hot states
   stuttering (the nearest
@@ -4707,7 +4718,8 @@ not settle has the cycle its model states went round reported with it.
   by, and failing them all would make -graph's verdicts noise.
 - **Truncated graphs.** A lasso found in a truncated graph is a real
   one (its states and edges are the model's, the cycle's states
-  expanded); "no fair cycle" is `live`, a proof for the instance, only
+  expanded); "no fair cycle" is `live`, a proof for the instance under
+  per-action weak fairness, only
   in a complete graph, else `bounded`. A state the evaluator cannot
   evaluate the val in is in no cycle: a lasso found is real, none found
   is `unchecked` (exit 2, as for an invariant).

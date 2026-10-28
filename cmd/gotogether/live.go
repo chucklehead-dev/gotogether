@@ -12,7 +12,9 @@ import (
 // classifies it: in holds, a fair cycle keeping it false fails; in
 // allows, one is what the model allows (the code's to leave); else it is
 // reported, not failed. A val no fair cycle keeps false is live: proved
-// for the instance in a complete graph, bounded in a truncated one.
+// for the instance, under per-action weak fairness, in a complete graph
+// (true infinitely often in every fair behaviour), bounded in a
+// truncated one.
 // It returns the exit code its verdicts make (1 for a failure) and
 // whether one was unchecked (the evaluator refused it somewhere, and no
 // cycle was found).
@@ -31,7 +33,12 @@ func reportEventually(r *validate.GraphResult, holds, allows map[string]bool) (c
 	if len(but) > 0 {
 		fairness += " but " + strings.Join(but, "; ") + " (simulate.unfair, simulate.stops)"
 	}
-	fmt.Printf("  cycles  %s judged as cycles of states where each is false, %s; a stutter is no step\n", plural(len(r.Eventually), "eventual val"), fairness)
+	// what is checked, said as it is (review 11, O2): true infinitely
+	// often (at quiescence, for a run that settles), not true once, and
+	// under per-action weak fairness, not the most fairness there is
+	fmt.Printf("  cycles  %s judged as true infinitely often (at quiescence, for a run that settles): a fair cycle of states where one is false refutes it; "+
+		"%s, fairness weak and per action (per-call or strong fairness would rule out more cycles, so a lasso may be no behaviour of a system that has them, "+
+		"and live is so only for a system at least this fair); a stutter is no step\n", plural(len(r.Eventually), "eventual val"), fairness)
 	for _, v := range r.Eventually {
 		ev := v.Name
 		if v.Error != "" {

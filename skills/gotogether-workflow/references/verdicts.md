@@ -143,8 +143,10 @@ seeds, not by hand.
   step cannot leave `deadlock` (exit 1) unless `terminal` holds there
   (`ends`), and states only a stutter leaves `quiet` (never a failure:
   a model that can always read, a grist model, has no deadlock). An
-  eventual val is judged as cycles: `live` (no fair cycle keeps it
-  false: proved in a complete graph, `bounded` in a truncated one),
+  eventual val is judged as cycles, as true infinitely often (at
+  quiescence, for a run that settles) under weak fairness per action:
+  `live` (no fair cycle keeps it false: proved in a complete graph for
+  a system at least that fair, `bounded` in a truncated one),
   `hot` (a fair cycle keeps it false forever, unclassified: a report),
   `allows` (the same, the val in `simulate.allows`), `FAIL` (the same,
   the val in `simulate.holds`: the model should drive it; fix it, or

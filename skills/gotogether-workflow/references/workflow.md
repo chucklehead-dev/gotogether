@@ -49,7 +49,9 @@ was taken. A truncated graph (`-states`, default 100000; `-depth` or
 log) says so and claims no proof; exit 2 means the evaluator stopped (a
 construct outside its fragment, named): sample without `-graph`.
 
-Liveness under `-graph`: each eventual val is judged as cycles. A
+Liveness under `-graph`: each eventual val is judged as cycles, as true
+infinitely often (at quiescence, for a run that settles), not true once,
+under weak fairness per action (not per call, not strong). A
 reachable cycle of states where it is false, fair under weak fairness
 (every action of the step enabled throughout the cycle is taken in it;
 a stutter, a read, counts for nothing), is a lasso: the model can stay

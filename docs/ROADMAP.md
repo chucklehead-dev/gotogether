@@ -98,7 +98,7 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   production case (NTP skew well over 1 ms). Example: kvstore on two
   hosts 5 ms apart, a false "not linearizable" before, the assumption
   named after.
-- **I8. Liveness says what it checks (S). In progress.** DESIGN §62 and
+- **I8. Liveness says what it checks (S). Done.** DESIGN §62 and
   the reports: the check is □◇P (P at quiescence), not ◇P, since a
   lasso's prefix may pass through states where the val holds; "no lasso
   is a false alarm for want of a declaration" holds only under
