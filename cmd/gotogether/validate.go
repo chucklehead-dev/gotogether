@@ -239,6 +239,7 @@ func (v *validateRun) report(j *cli.Judged, jerr error) (code int, _ error) {
 			}
 		}
 		fmt.Fprint(v.out, rep.Summary())
+		v.navLines(rep)
 		if v.verbose {
 			for _, a := range rep.Actors {
 				fmt.Fprintln(v.out, a.Output)
@@ -343,3 +344,24 @@ func (r *repeated) String() string { return strings.Join(*r, " ") }
 
 // Set adds a value.
 func (r *repeated) Set(v string) error { *r = append(*r, v); return nil }
+
+// navLines print, for each actor whose step the model rejected or
+// mismatched, the nav command that opens the model in the state before
+// that step (a step log's run, as recorded: one input, no search).
+func (v *validateRun) navLines(rep *validate.Report) {
+	if v.binding == "" || len(v.files) != 1 || v.search.Linearize || v.search.ResolvePending || v.conv != "" {
+		return
+	}
+	for _, a := range rep.Actors {
+		f := a.Failure
+		if f == nil || a.Conforms != validate.Fail || f.Index < 0 || f.Kind != "disabled" && f.Kind != "state" {
+			continue
+		}
+		actor := ""
+		if a.Actor != "" {
+			actor = fmt.Sprintf(" -actor '%s'", a.Actor)
+		}
+		fmt.Fprintf(v.out, "navigate: gotogether nav -binding %s -run %s%s -at %d   (the model before step %d: its branches, and why the step is not one)\n",
+			v.binding, v.files[0], actor, f.Index, f.Index+1)
+	}
+}

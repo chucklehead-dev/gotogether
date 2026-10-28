@@ -776,6 +776,7 @@ type Sim struct
     field Clocks Clocks
     field Stalls Stalls
     field Hang time.Duration
+    method (*Sim) ChoiceOptions(kind string) []string
     method (*Sim) Choose(kind string, n int) int
     method (*Sim) Close()
     method (*Sim) Context() context.Context
@@ -1994,6 +1995,7 @@ func IsManifest(path string) bool
 func NewChecker(bindingPath string, opt Options) (*Checker, error)
 func NewManifest(r RunRecord) (*Manifest, error)
 func ReadManifest(path string) (*Manifest, error)
+func SplitPath(s string) []string
 func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error)
 type Absence struct
     field Actor string
@@ -2004,6 +2006,10 @@ type Absence struct
     field Due time.Time
     field Why string
     method (Absence) String() string
+type ActorState struct
+    field Actor string `json:"actor"`
+    field State []NamedValue `json:"state,omitempty"`
+    field Error string `json:"error,omitempty"`
 type ActorVerdict struct
     field Actor string `json:"actor"`
     field Verdict Verdict `json:"verdict"`
@@ -2029,18 +2035,28 @@ type Checker struct
     method (*Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt SearchOptions, check BatchCheck) ([]*Judgment, []error)
     method (*Checker) Key(steps []qtrace.Step) string
     method (*Checker) MutateSteps(ctx context.Context, steps []qtrace.Step, opt SearchOptions, check BatchCheck, mopts ...qtrace.MutationOption) (*StepMutants, error)
+    method (*Checker) Nav(start NavStart) (*Navigator, error)
     method (*Checker) WithConstants(constants map[string]string) (*Checker, error)
     method (*Checker) WithInvariants(invariants ...string) (*Checker, error)
 type Condition struct
     field In string `json:"in"`
     field Expr string `json:"expr"`
     field Values []NamedValue `json:"values,omitempty"`
+type Disabled struct
+    field Action string `json:"action"`
+    field Why *Explanation `json:"why,omitempty"`
 type Driver struct
     field Name string `json:"name"`
     field Version string `json:"version,omitempty"`
     field Seed string `json:"seed,omitempty"`
     field Origin string `json:"origin,omitempty"`
     field Args []string `json:"args,omitempty"`
+type Edge struct
+    field Take string `json:"take"`
+    field Label string `json:"label"`
+    field Action string `json:"action"`
+    field Args []NamedValue `json:"args,omitempty"`
+    field Picks []NamedValue `json:"picks,omitempty"`
 type Explanation struct
     field Action string `json:"action"`
     field Conditions []Condition `json:"conditions,omitempty"`
@@ -2123,6 +2139,22 @@ type Manifest struct
 type NamedValue struct
     field Name string `json:"name"`
     field Value string `json:"value"`
+type NavStart struct
+    field Steps []qtrace.Step
+    field Actor string
+    field At int
+type Navigator struct
+    method (*Navigator) Node(path ...string) (*Node, error)
+type Node struct
+    field ID string `json:"id"`
+    field Start string `json:"start"`
+    field Path []string `json:"path"`
+    field State []NamedValue `json:"state"`
+    field Changed []string `json:"changed,omitempty"`
+    field Invariants []NamedValue `json:"invariants,omitempty"`
+    field Branches []Edge `json:"branches"`
+    field Disabled []Disabled `json:"disabled,omitempty"`
+    method (*Node) String() string
 type Options struct
     field Quint string
     field Backend string
@@ -2166,6 +2198,10 @@ type Result struct
     method (*Result) PendingCause(p qtrace.Step) Cause
     method (*Result) Reason() string
     method (*Result) Summary() string
+type RunBranch struct
+    field Option int `json:"option"`
+    field Name string `json:"name,omitempty"`
+    field Child string `json:"child"`
 type RunCheck struct
     field Linearize bool `json:"linearize,omitempty"`
     field Key string `json:"linearizeKey,omitempty"`
@@ -2178,6 +2214,11 @@ type RunCheck struct
     field Format string `json:"format,omitempty"`
     field NoVars bool `json:"noVars,omitempty"`
     method (RunCheck) SearchOptions() SearchOptions
+type RunChoice struct
+    field Kind string `json:"kind"`
+    field N int `json:"n"`
+    field Options []string `json:"options,omitempty"`
+    field Taken int `json:"taken"`
 type RunInput struct
     field Path string
     field Format string
@@ -2192,6 +2233,20 @@ type RunModel struct
     field Convert *File `json:"convert,omitempty"`
     field Constants map[string]string `json:"constants,omitempty"`
     field Invariants []string `json:"invariants"`
+type RunNode struct
+    field Run string `json:"run"`
+    field ID string `json:"id"`
+    field Schedule string `json:"schedule"`
+    field At int `json:"at"`
+    field Choice *RunChoice `json:"choice,omitempty"`
+    field Branches []RunBranch `json:"branches"`
+    field Steps []string `json:"steps"`
+    field Tasks []string `json:"tasks,omitempty"`
+    field Elapsed string `json:"elapsed,omitempty"`
+    field Model []ActorState `json:"model,omitempty"`
+    field Verdict string `json:"verdict"`
+    field Saved string `json:"saved,omitempty"`
+    field Notes []string `json:"notes,omitempty"`
 type RunRecord struct
     field Options Options
     field Binding *binding.Binding

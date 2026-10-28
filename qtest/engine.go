@@ -82,6 +82,11 @@ func (e *engine) run(sources ...source) {
 	t, x := e.t, e.x
 	t.Helper()
 	defer hooks.Strict()() // a step with nowhere to go fails the exploration, rather than vanish from its run
+	if x.navigating() {    // GOTOGETHER_NAV: the run alone's node, not an exploration
+		x.navigated = true
+		e.navigate(sources)
+		return
+	}
 	mark, _ := hooks.Escaped(0)
 	var plans []planned
 	stopped := false

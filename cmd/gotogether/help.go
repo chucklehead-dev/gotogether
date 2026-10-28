@@ -29,6 +29,8 @@ var commands = map[string]command{
 		"gotogether validate -binding stock.binding.yaml runs/*.jsonl"},
 	"shrink": {"shrink a failing sequence of an external driver's actions to a 1-minimal one that fails the same way, rerunning the driver per candidate and judging its steps",
 		"gotogether shrink -binding webjobs.binding.yaml -actions journey.json -out shrunk -- ./play -actions {actions} -steps {steps}"},
+	"nav": {"navigate a model's states (its branches, and its disabled actions with why) or an exploration's run by its choices, one node at a time (-json for agents)",
+		"gotogether nav -binding stock.binding.yaml -follow 'reserve(\"a\", 1)'\n  gotogether nav -run 'TestShop#2:seed=17' -at fail -json"},
 	"itf":     {"turn recorded steps into a model-level ITF trace per actor", "gotogether itf -binding stock.binding.yaml -out itf/ runs/*.jsonl"},
 	"convert": {"turn an app's OTLP/JSON spans into a step log with rules", "gotogether convert -rules spans.convert.yaml -out steps.jsonl spans.json"},
 	"cover": {"compare a real environment's code coverage with a simulation's: what ran only for real, only simulated",
@@ -85,7 +87,7 @@ func isZeroValue(f *flag.Flag) bool {
 
 // commandNames are main's commands, for the unknown command's
 // did-you-mean.
-var commandNames = []string{"scaffold", "simulate", "evidence", "lint", "steps", "validate", "shrink", "itf", "convert", "cover", "skills", "help", "version"}
+var commandNames = []string{"scaffold", "simulate", "evidence", "lint", "steps", "validate", "shrink", "nav", "itf", "convert", "cover", "skills", "help", "version"}
 
 // unknownCommand says that name is no command, with the nearest one if
 // it is a likely misspelling, and where the list is: the whole usage

@@ -1,0 +1,355 @@
+[
+  {
+    "id": "",
+    "start": "init",
+    "path": null,
+    "state": [
+      {
+        "name": "admitted",
+        "value": "Set()"
+      }
+    ],
+    "invariants": [
+      {
+        "name": "underLimit",
+        "value": "true"
+      }
+    ],
+    "branches": [
+      {
+        "take": "admit(\"a\")",
+        "label": "admit(client = \"a\")",
+        "action": "admit",
+        "args": [
+          {
+            "name": "client",
+            "value": "\"a\""
+          }
+        ],
+        "picks": [
+          {
+            "name": "c",
+            "value": "\"a\""
+          }
+        ]
+      },
+      {
+        "take": "admit(\"b\")",
+        "label": "admit(client = \"b\")",
+        "action": "admit",
+        "args": [
+          {
+            "name": "client",
+            "value": "\"b\""
+          }
+        ],
+        "picks": [
+          {
+            "name": "c",
+            "value": "\"b\""
+          }
+        ]
+      },
+      {
+        "take": "admit(\"c\")",
+        "label": "admit(client = \"c\")",
+        "action": "admit",
+        "args": [
+          {
+            "name": "client",
+            "value": "\"c\""
+          }
+        ],
+        "picks": [
+          {
+            "name": "c",
+            "value": "\"c\""
+          }
+        ]
+      }
+    ],
+    "disabled": [
+      {
+        "action": "release",
+        "why": {
+          "action": "release",
+          "conditions": [
+            {
+              "in": "release (c = \"a\", the one closest to enabled of the 3 values of CLIENTS, each disabling it)",
+              "expr": "admitted.contains(client)",
+              "values": [
+                {
+                  "name": "admitted",
+                  "value": "Set()"
+                },
+                {
+                  "name": "client",
+                  "value": "\"a\""
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "admit(\"a\"),admit(\"b\")",
+    "start": "init",
+    "path": [
+      "admit(\"a\")",
+      "admit(\"b\")"
+    ],
+    "state": [
+      {
+        "name": "admitted",
+        "value": "Set(\"a\", \"b\")"
+      }
+    ],
+    "changed": [
+      "admitted"
+    ],
+    "invariants": [
+      {
+        "name": "underLimit",
+        "value": "true"
+      }
+    ],
+    "branches": [
+      {
+        "take": "release(\"a\")",
+        "label": "release(client = \"a\")",
+        "action": "release",
+        "args": [
+          {
+            "name": "client",
+            "value": "\"a\""
+          }
+        ],
+        "picks": [
+          {
+            "name": "c",
+            "value": "\"a\""
+          }
+        ]
+      },
+      {
+        "take": "release(\"b\")",
+        "label": "release(client = \"b\")",
+        "action": "release",
+        "args": [
+          {
+            "name": "client",
+            "value": "\"b\""
+          }
+        ],
+        "picks": [
+          {
+            "name": "c",
+            "value": "\"b\""
+          }
+        ]
+      }
+    ],
+    "disabled": [
+      {
+        "action": "admit",
+        "why": {
+          "action": "admit",
+          "conditions": [
+            {
+              "in": "admit (c = \"c\", the one closest to enabled of the 3 values of CLIENTS, each disabling it)",
+              "expr": "admitted.size() < LIMIT",
+              "values": [
+                {
+                  "name": "admitted.size()",
+                  "value": "2"
+                },
+                {
+                  "name": "admitted",
+                  "value": "Set(\"a\", \"b\")"
+                },
+                {
+                  "name": "LIMIT",
+                  "value": "2"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "admit(\"a\"),release(\"a\")",
+    "start": "init",
+    "path": [
+      "admit(\"a\")",
+      "release(\"a\")"
+    ],
+    "state": [
+      {
+        "name": "admitted",
+        "value": "Set()"
+      }
+    ],
+    "changed": [
+      "admitted"
+    ],
+    "invariants": [
+      {
+        "name": "underLimit",
+        "value": "true"
+      }
+    ],
+    "branches": [
+      {
+        "take": "admit(\"a\")",
+        "label": "admit(client = \"a\")",
+        "action": "admit",
+        "args": [
+          {
+            "name": "client",
+            "value": "\"a\""
+          }
+        ],
+        "picks": [
+          {
+            "name": "c",
+            "value": "\"a\""
+          }
+        ]
+      },
+      {
+        "take": "admit(\"b\")",
+        "label": "admit(client = \"b\")",
+        "action": "admit",
+        "args": [
+          {
+            "name": "client",
+            "value": "\"b\""
+          }
+        ],
+        "picks": [
+          {
+            "name": "c",
+            "value": "\"b\""
+          }
+        ]
+      },
+      {
+        "take": "admit(\"c\")",
+        "label": "admit(client = \"c\")",
+        "action": "admit",
+        "args": [
+          {
+            "name": "client",
+            "value": "\"c\""
+          }
+        ],
+        "picks": [
+          {
+            "name": "c",
+            "value": "\"c\""
+          }
+        ]
+      }
+    ],
+    "disabled": [
+      {
+        "action": "release",
+        "why": {
+          "action": "release",
+          "conditions": [
+            {
+              "in": "release (c = \"a\", the one closest to enabled of the 3 values of CLIENTS, each disabling it)",
+              "expr": "admitted.contains(client)",
+              "values": [
+                {
+                  "name": "admitted",
+                  "value": "Set()"
+                },
+                {
+                  "name": "client",
+                  "value": "\"a\""
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "",
+    "start": "actor limiter's state after 1 of its 3 calls",
+    "path": [
+      "admit(\"a\")"
+    ],
+    "state": [
+      {
+        "name": "admitted",
+        "value": "Set(\"a\")"
+      }
+    ],
+    "invariants": [
+      {
+        "name": "underLimit",
+        "value": "true"
+      }
+    ],
+    "branches": [
+      {
+        "take": "release(\"a\")",
+        "label": "release(client = \"a\")",
+        "action": "release",
+        "args": [
+          {
+            "name": "client",
+            "value": "\"a\""
+          }
+        ],
+        "picks": [
+          {
+            "name": "c",
+            "value": "\"a\""
+          }
+        ]
+      },
+      {
+        "take": "admit(\"b\")",
+        "label": "admit(client = \"b\")",
+        "action": "admit",
+        "args": [
+          {
+            "name": "client",
+            "value": "\"b\""
+          }
+        ],
+        "picks": [
+          {
+            "name": "c",
+            "value": "\"b\""
+          }
+        ]
+      },
+      {
+        "take": "admit(\"c\")",
+        "label": "admit(client = \"c\")",
+        "action": "admit",
+        "args": [
+          {
+            "name": "client",
+            "value": "\"c\""
+          }
+        ],
+        "picks": [
+          {
+            "name": "c",
+            "value": "\"c\""
+          }
+        ]
+      }
+    ]
+  }
+]

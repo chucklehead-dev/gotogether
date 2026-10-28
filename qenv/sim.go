@@ -94,7 +94,10 @@ type Sim struct {
 	forgotten bool              // closed: ended tasks are no longer kept, under owners' lock
 	now       time.Time
 	start     time.Time
-	tasks     []*task   // every task, in creation order (task id-1)
+	tasks     []*task // every task, in creation order (task id-1)
+	// options names the options of the choice being made, while the
+	// scheduler or a nemesis makes it (ChoiceOptions)
+	options   func() []string
 	checking  []*task   // the tasks selfCheck looks at: every task but those it saw ended and unqueued (Check)
 	runq      fenwick   // the queued runnable tasks, by id: k-th in O(log n)
 	pred      []*task   // tasks waiting on a predicate (evaluated every step)
@@ -235,7 +238,32 @@ func New(c Chooser) *Sim {
 	}
 	own(s.creator, s, nil)
 	live.Add(1)
+	if o, ok := choice.As[simObserver](c); ok {
+		o.ObserveSim(s)
+	}
 	return s
+}
+
+// A simObserver is a chooser that reads the simulation it chooses for
+// while it chooses (ChoiceOptions, Tasks): qtest's run navigator. New
+// hands it the simulation made from it.
+type simObserver interface{ ObserveSim(*Sim) }
+
+// ChoiceOptions names the options of the choice s is making, for a
+// chooser to read from its Choose (one New handed the simulation): a
+// scheduling choice's runnable tasks, option i the i-th; a nemesis
+// family's, "none" then the nemeses enabled; a declared fault kind's,
+// "nominal" then its options. nil for another choice, or outside one.
+func (s *Sim) ChoiceOptions(kind string) []string {
+	if s.options != nil {
+		return s.options()
+	}
+	if IsFault(kind) {
+		if o := choice.Options(kind); o != nil {
+			return append([]string{"nominal"}, o...)
+		}
+	}
+	return nil
 }
 
 // Choose makes a choice of the environment. While the simulation settles,
@@ -1074,7 +1102,16 @@ func (s *Sim) Run(d time.Duration) error {
 			}
 			eachLog(s.c, func(r *ChoiceLog) { r.Took("sched.task", n, k) }) // the choice it stands for: replays without it
 		} else {
+			s.options = func() []string {
+				ids := s.runnableIDs(n, cands)
+				out := make([]string, len(ids))
+				for i, id := range ids {
+					out[i] = s.tasks[id-1].name
+				}
+				return out
+			}
 			k = s.Choose("sched.task", n)
+			s.options = nil
 		}
 		t := s.pick(k, cands)
 		s.ran = t.id
@@ -1453,7 +1490,9 @@ func (s *Sim) maybeNemesis() {
 		if by == nil && s.core != nil {
 			k = s.draw(kind, len(ns)+1) // a core settle: the nemeses left are outside the core
 		} else if by == nil {
+			s.options = func() []string { return append([]string{"none"}, names...) }
 			k = s.Choose(kind, len(ns)+1)
+			s.options = nil
 		} else if i := slices.Index(ns, picked); i >= 0 {
 			k = i + 1
 		}

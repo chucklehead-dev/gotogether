@@ -59,6 +59,7 @@ type Exploration struct {
 	vacuity   *vacuityResult    // computed once (Vacuous)
 	given     bool              // its runs were made one by one and gathered (Runs): no seeds, no choices
 	mixed     bool              // given runs checked against different instances
+	navigated bool              // GOTOGETHER_NAV navigated its run instead: no claims to judge
 }
 
 // faultCoverage is the runs' fault coverage (qenv.CoverageOf): for each fault
@@ -416,6 +417,9 @@ func (p *RunPanic) Error() string { return fmt.Sprintf("panic: %v", p.Value) }
 func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Chooser) error) *Run {
 	mem := &qobs.MemorySink{}
 	rec := &qenv.ChoiceLog{C: ch}
+	if nc, ok := qenv.As[*navChooser](ch); ok { // a run navigator's node: what it shows of the run at its choice
+		nc.steps = mem.Steps
+	}
 	var sink qobs.Sink = mem
 	ctx := context.Background()
 	var code *qcover.Counts
@@ -488,6 +492,9 @@ func (x *Exploration) keep(r *Run, save bool) string {
 	}
 	if x.test != "" && x.alone == nil {
 		fmt.Fprintf(&b, "  reproduce: %s\n", x.reproduce(r))
+		if !x.fuzz {
+			fmt.Fprintf(&b, "  navigate:  %s\n", x.navCommand(r))
+		}
 	}
 	return b.String()
 }
@@ -935,6 +942,10 @@ func anySettled(runs []*Run) bool {
 // runs never faulted.
 func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 	t.Helper()
+	if x.navigated {
+		t.Logf("gotogether: %s navigated (GOTOGETHER_NAV): its claims are not judged", x.ref())
+		return
+	}
 	switch {
 	case x.given && len(x.Runs) == 0:
 		t.Fatalf("gotogether: qtest.Runs() with no runs: a claim over none holds or fails for nothing; give it the runs Validate or Record made")

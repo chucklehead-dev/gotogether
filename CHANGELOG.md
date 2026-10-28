@@ -21,6 +21,20 @@ The first release. What a user meets, by module:
   error. `qnemesis.NewRecorder` returns the recorder alone (closing it
   closes the nemesis's log). qobshttp's package example is a standalone
   program's recording: recorder, sink, handler, shutdown, close.
+- A rejected step's report says why (ROADMAP H2, DESIGN §58): the Go
+  evaluator's first false condition of the rejected action, as Quint
+  text with its free names' values, a grist app's reading of it, and the
+  actions enabled instead (`validate.Failure.Why`, an `Explanation`;
+  never a verdict: quint's is). The info naming the actors a binding
+  leaves out is in a report's Issues and no longer in its Summary; the
+  Linearize hint is given only to an actor whose own steps are a
+  client's history.
+- Navigators (ROADMAP P5, DESIGN §58): `validate.Checker.Nav` (a
+  model's states: `Navigator.Node`, `Node`, `Edge`, `Disabled`,
+  `NavStart`, `SplitPath`), the run navigator in test binaries
+  (`GOTOGETHER_NAV`, `validate.RunNode`), `gotogether nav` (`-json`), a
+  failing run's `navigate:` line and validate's; `qenv.Sim.ChoiceOptions`
+  names a choice's options.
 - validate keeps quint's typechecks and its evaluation modules' compiles
   across processes, by content (docs/DESIGN.md §57: quint's version,
   the spec's and its imports' paths and contents, every .qnt beside

@@ -77,6 +77,8 @@ func main() {
 		code, err = evidence(os.Args[2:])
 	case "shrink":
 		code, err = shrinkTo(os.Stdout, os.Args[2:])
+	case "nav":
+		code, err = nav(os.Stdout, os.Args[2:])
 	case "help", "-h", "-help", "--help":
 		help()
 	case "version":
@@ -128,6 +130,10 @@ usage:
   gotogether shrink   -binding b.yaml -actions journey.json [-out DIR] [-reset PROG] [-diverged-exit n] [-baseline n] [-reruns n]
                    [-budget n] [-time d] -- DRIVER ARGS... ({actions}, {steps})
                    shrink an external driver's failing actions, rerunning it per candidate: the shrunk actions, shrink.json, a manifest
+  gotogether nav      -binding b.yaml [-run steps.jsonl [-at k] [-actor a]] [-follow path] [-take t] [-json]
+                   a model's states, one node at a time: its branches (the step's transitions), its disabled actions with why
+  gotogether nav      -run 'TestX#2:seed=17' [-pkg DIR] [-at fail|start|<schedule>@<k>] [-follow 1,0] [-take o] [-save] [-json]
+                   an exploration's run by its choices: the next choice's options, the steps so far, the tasks, the model's state
   gotogether itf      -binding b.yaml -out DIR FILE...      recorded steps -> model-level ITF per actor
   gotogether cover    -covdir D1,D2 [-sim EVIDENCE]       a real environment's coverage (binaries built with -cover),
                    against a simulation's (an exploration's evidence, or qcover.Summary JSON): what ran only for real, only simulated
