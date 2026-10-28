@@ -410,7 +410,7 @@ func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder),
 	// goroutines it starts (servers, clusters), which no run can follow.
 	// Without it, their steps would be lost: the run is strict, and they
 	// fail the test.
-	end := qrun.Start(qobs.WithRecorder(context.Background(), rec))
+	end := qrun.Start(qobs.WithRecorder(context.Background(), rec)) //quintctx:ok the run's context: a step recorded after the test is reported late, not cancelled
 	restore := func() {}
 	if c.Global {
 		if restore, err = qobs.InstallGlobal(rec); err != nil {

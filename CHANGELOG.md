@@ -24,6 +24,12 @@ The first release. What a user meets, by module:
   cancel, where only node was killed and its Rust evaluator kept running
   under init. qtest's and connect's checks run under the test's context
   (`t.Context()`), and a search's quint checks under its Judge's.
+- qanalysis: `quintctx` (api/qanalysis.txt), a fourth analyzer:
+  `context.Background()` or `TODO()` in a function that has a
+  `context.Context` parameter or a test's `t`, with the fix that passes
+  it (`t.Context()`). quintsim's findings carry fixes where a context is
+  in scope: `go f()` to `qenv.Go(ctx, "f", ...)`, `time.Now()` and
+  `time.Sleep(d)` to qenv's (eleventh review, tooling).
 - A fault site declared inside a run is that run's (eleventh review,
   M1): `qenv.DeclareFaultSite` from a simulation's task or its creator,
   or a qtest scenario, no longer adds a point to every later test's

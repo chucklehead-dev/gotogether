@@ -1,0 +1,41 @@
+package ctxapp
+
+import (
+	"context"
+	"testing"
+)
+
+func use(context.Context) {}
+
+func handler(ctx context.Context) {
+	use(context.Background()) // want `context.Background\(\) in a function that has ctx: pass ctx`
+	use(context.TODO())       // want `context.TODO\(\) in a function that has ctx`
+	go func() {
+		use(context.Background()) // a closure may outlive ctx by design
+	}()
+	use(context.Background()) //quintctx:ok detached on purpose
+}
+
+func check(t *testing.T) {
+	use(context.Background())                       // want `context.Background\(\) in a function that has t.Context\(\): pass t.Context\(\)`
+	t.Cleanup(func() { use(context.Background()) }) // t.Context() has ended by then
+}
+
+func both(t testing.TB, ctx context.Context) {
+	use(context.Background()) // want `pass ctx`
+}
+
+func defaulted(ctx context.Context) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	use(ctx)
+}
+
+func none(_ context.Context) {
+	use(context.Background())
+}
+
+func main() {
+	use(context.Background())
+}

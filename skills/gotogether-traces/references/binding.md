@@ -55,8 +55,12 @@ model (a misspelled action gets a did-you-mean).
 In the editor and in CI, the same checks run as analyzers (qanalysis):
 - `quintvet ./...` (built from `qanalysis/cmd/quintvet`, or
   `go vet -vettool=$(which quintvet)`) runs the simulation, weaving and
-  annotation checks; `-quintaction.binding app.binding.yaml` adds the
-  binding's. In golangci-lint, enable the `gotogether` module plugin.
+  annotation checks, and quintctx (a `context.Background()` where the
+  function has a ctx or a test's t); `-quintaction.binding
+  app.binding.yaml` adds the binding's. quintsim's and quintctx's
+  findings carry fixes (`go f()` to `qenv.Go`, `time.Now` to
+  `qenv.Now`): `quintvet -fix ./...` applies them. In golangci-lint,
+  enable the `gotogether` module plugin.
 - An annotation's expressions run on return: use parameters, the
   receiver and named results. quintaction names a local it sees.
 - `actionmap -coverage summary.json ./...` (the summary of a woven

@@ -1,6 +1,7 @@
 == github.com/chucklehead-dev/gotogether/qanalysis
 var Action = &analysis.Analyzer{Name: "quintaction", URL: "https://github.com/chucklehead-dev/gotogether/tree/main/qanalysis", …}
 var All = []*analysis.Analyzer{…}
+var Ctx = &analysis.Analyzer{Name: "quintctx", URL: "https://github.com/chucklehead-dev/gotogether/tree/main/qanalysis", …}
 var Sim = &analysis.Analyzer{Name: "quintsim", URL: "https://github.com/chucklehead-dev/gotogether/tree/main/qanalysis", …}
 var Weave = &analysis.Analyzer{Name: "quintweave", URL: "https://github.com/chucklehead-dev/gotogether/tree/main/qanalysis", …}
 

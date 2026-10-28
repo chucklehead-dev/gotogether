@@ -15,7 +15,7 @@
 //	      gotogether:
 //	        type: module
 //	        settings:
-//	          analyzers: [quintsim, quintaction]   # default: all three
+//	          analyzers: [quintsim, quintaction]   # default: all four
 //	          binding: app.binding.yaml            # quintaction's -binding
 package golangci
 
@@ -68,7 +68,7 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	for _, name := range p.s.Analyzers {
 		i := slices.IndexFunc(qanalysis.All, func(a *analysis.Analyzer) bool { return a.Name == name })
 		if i < 0 {
-			return nil, fmt.Errorf("gotogether: no analyzer %q (have quintsim, quintweave, quintaction)", name)
+			return nil, fmt.Errorf("gotogether: no analyzer %q (have quintsim, quintweave, quintaction, quintctx)", name)
 		}
 		out = append(out, qanalysis.All[i])
 	}

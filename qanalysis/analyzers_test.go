@@ -42,3 +42,17 @@ func TestActionWithBinding(t *testing.T) {
 	defer qanalysis.Action.Flags.Set("binding", "")
 	analysistest.Run(t, analysistest.TestData(), qanalysis.Action, "bindingapp")
 }
+
+// quintsim's findings carry their fix where a context is in scope: a
+// `go` statement without arguments started with qenv.Go, time.Now and
+// time.Sleep as qenv's.
+func TestSimFixes(t *testing.T) {
+	analysistest.RunWithSuggestedFixes(t, analysistest.TestData(), qanalysis.Sim, "simfix")
+}
+
+// context.Background() and TODO() in a function with a context of its
+// own (a ctx parameter, a test's t), and the fix that passes it; not in
+// a closure, which may outlive it.
+func TestCtx(t *testing.T) {
+	analysistest.RunWithSuggestedFixes(t, analysistest.TestData(), qanalysis.Ctx, "ctxapp")
+}

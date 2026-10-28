@@ -1,6 +1,7 @@
 // Package qanalysis has gotogether's checks as go/analysis passes:
 // what escapes a qenv simulation (Sim), what qenv/weave cannot rewrite
-// (Weave), and //quint:action annotations against their binding (Action).
+// (Weave), //quint:action annotations against their binding (Action),
+// and fresh contexts where the function has one of its own (Ctx).
 // They run in a multichecker (cmd/quintvet, also usable as `go vet
 // -vettool`) and in golangci-lint as a module plugin (package golangci).
 //
@@ -30,7 +31,7 @@ import (
 )
 
 // All are the analyzers, for a multichecker.
-var All = []*analysis.Analyzer{Sim, Weave, Action}
+var All = []*analysis.Analyzer{Sim, Weave, Action, Ctx}
 
 // Sim reports code in files that import qenv that escapes the simulation:
 // go statements, the wall clock, steps recorded with a background context
@@ -39,14 +40,19 @@ var All = []*analysis.Analyzer{Sim, Weave, Action}
 // function by what its name denotes, so it finds what the CLI's syntactic
 // check cannot: a function value or call through a dot import, and no
 // false finding for a local variable that shadows an import's name.
+// Where a context is in scope it suggests the fix (simFixes): a `go`
+// statement started with qenv.Go, time.Now and time.Sleep as qenv's.
 var Sim = &analysis.Analyzer{
 	Name: "quintsim",
 	Doc:  "report code that escapes a qenv simulation (go statements, the wall clock, steps recorded with context.Background)",
 	URL:  "https://github.com/chucklehead-dev/gotogether/tree/main/qanalysis",
 	Run: func(pass *analysis.Pass) (any, error) {
-		return nil, report(pass, func(fset *token.FileSet, f *ast.File) []qlint.Finding {
-			return qlint.SimFileTyped(fset, f, pass.TypesInfo)
-		}, true)
+		for _, f := range pass.Files {
+			for _, x := range qlint.SimFileTyped(pass.Fset, f, pass.TypesInfo) {
+				pass.Report(analysis.Diagnostic{Pos: x.At, Message: x.What + ": " + x.Fix, SuggestedFixes: simFixes(pass, f, x.At)})
+			}
+		}
+		return nil, nil
 	},
 }
 

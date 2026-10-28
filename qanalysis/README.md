@@ -6,8 +6,9 @@ yaml.v3 and Hegel.
 
 | Analyzer | Reports | Same as |
 |---|---|---|
-| `quintsim` | in files importing qenv: `go` statements, the wall clock and math/rand's functions, called or as values (`now := time.Now`; by type: dot imports too), steps recorded with `context.Background()` | `gotogether lint -sim` |
+| `quintsim` | in files importing qenv: `go` statements, the wall clock and math/rand's functions, called or as values (`now := time.Now`; by type: dot imports too), steps recorded with `context.Background()`; with a context in scope, fixes: `go f()` to `qenv.Go`, `time.Now()`/`time.Sleep` to qenv's | `gotogether lint -sim` |
 | `quintweave` | unmarked `go` statements, sync method values, embedded sync types (for packages woven by qenv/weave) | `gotogether lint -weave` |
+| `quintctx` | `context.Background()` or `TODO()` in a function with a `context.Context` parameter or a test's `t` (fix: pass it, or `t.Context()`); not in closures, not a nil parameter's default; `//quintctx:ok` exempts a line | |
 | `quintaction` | `//quint:action` without `action:`; expressions using locals (only parameters, the receiver and named results are in scope on return); with `-binding`: actions not in the model, fields the binding uses but the annotation does not record | `gotogether lint -binding -src` |
 
 The first two wrap package `qlint`, so the CLI and the analyzers find the
@@ -15,7 +16,7 @@ same things.
 
 ```sh
 go install github.com/chucklehead-dev/gotogether/qanalysis/cmd/quintvet@latest
-quintvet ./...                                           # all three
+quintvet ./...                                           # all four
 quintvet -quintweave=false -quintaction.binding app.binding.yaml ./...
 go vet -vettool=$(which quintvet) -quintweave=false ./... # per package, with go vet
 ```
