@@ -3,7 +3,8 @@
 # checked against model/library.qnt through the generated bindings.
 # MUTATION=<name> builds the app with that mutant's overlay
 # (testdata/mutants/) and shows what catches it: no-copy-check,
-# stale-limit, no-dedupe, wrong-receipt.
+# stale-limit, no-dedupe, wrong-receipt; drop-loan-limit is the
+# generated mutant that drops the loan-limit rule.
 set -euo pipefail
 cd "$(dirname "$0")"
 case "${MUTATION:-}" in
@@ -12,6 +13,7 @@ case "${MUTATION:-}" in
   stale-limit) run='TestMutants$/^staleLimit$' ;;
   no-dedupe) run='TestMutants$/^noDedupe$' ;;
   wrong-receipt) run='TestMutants$/^wrongReceipt$' ;;
+  drop-loan-limit) run='TestMutants$/^drop-loan-limit$' ;;
   *) echo "unknown MUTATION=$MUTATION" >&2; exit 2 ;;
 esac
 go run ./cmd/library model -check

@@ -30,7 +30,6 @@ var (
 	ErrAlreadyMember = grist.Rejection("already-member")
 	ErrInvalid       = grist.Rejection("invalid")
 	ErrNotMember     = grist.Rejection("not-member")
-	ErrLimit         = grist.Rejection("limit")
 	ErrUnavailable   = grist.Rejection("unavailable")
 	ErrNotHeld       = grist.Rejection("not-held")
 )
@@ -53,17 +52,14 @@ func decideAddBook(r *grist.Reads, c AddBook) ([]grist.Event, error) {
 	return []grist.Event{Added.Of(BookAdded{Book: c.Book, Copies: c.Copies})}, nil
 }
 
-// decideBorrow refuses a stranger, a member at the limit and a book with no
-// copy free, in that order. Each check reads what it depends on (the
-// member's join, the member's loans, the book's shelf), so the append commits
-// only if none of them changed since: two borrows of a book's last copy, or
-// of a member's third loan, commit once.
+// decideBorrow refuses a stranger and a book with no copy free, in that
+// order. Each check reads what it depends on (the member's join, the
+// book's shelf), so the append commits only if neither changed since: two
+// borrows of a book's last copy commit once. The loan limit is a rule on
+// every borrow (LoanLimit, rules.go), checked after the decision.
 func decideBorrow(r *grist.Reads, c Borrow) ([]grist.Event, error) {
 	if !r.Exists(Joined, grist.Tag("member", c.Member)) {
 		return nil, ErrNotMember
-	}
-	if len(Loans.For(r, c.Member)) >= Limit {
-		return nil, ErrLimit
 	}
 	if Books.For(r, c.Book).Free() <= 0 {
 		return nil, ErrUnavailable
@@ -86,9 +82,9 @@ func decideReturn(r *grist.Reads, c ReturnBook) ([]grist.Event, error) {
 var (
 	JoinCmd = grist.NewCommand(App, "join", decideJoin, grist.Refuses(ErrAlreadyMember), grist.Authorize(grist.Authenticated))
 	AddCmd  = grist.NewCommand(App, "add-book", decideAddBook, grist.Refuses(ErrInvalid), grist.Authorize(grist.Authenticated))
-	// the mutant staleLimit: the borrow's reads advisory, so the limit is
-	// checked against loans that may be stale by its append
-	BorrowCmd = grist.NewCommand(App, "borrow", decideBorrow, grist.Refuses(ErrNotMember, ErrLimit, ErrUnavailable), grist.Authorize(grist.Authenticated),
+	// the mutant staleLimit: the borrow's reads advisory, its rule's too, so
+	// the limit is checked against loans that may be stale by its append
+	BorrowCmd = grist.NewCommand(App, "borrow", decideBorrow, grist.Appends(Borrowed), grist.Refuses(ErrNotMember, ErrUnavailable), grist.Authorize(grist.Authenticated),
 		grist.Unconditioned("loans are checked at the desk"))
 	ReturnCmd = grist.NewCommand(App, "return-book", decideReturn, grist.Refuses(ErrNotHeld), grist.Authorize(grist.Authenticated))
 )

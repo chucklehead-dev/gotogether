@@ -74,10 +74,13 @@ var contended = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 5, Com
 // replayed by the mailer), and the runs took every block of the catalog by
 // each of its outcomes but the limit refusal, which three borrows of one
 // member in fifteen random operations seldom reach (TestGreedy claims it).
+// Eight seeds under -short: the loan limit's move into a rule (one more
+// read per borrow) moved every run's choices, and the first four seeds no
+// longer lost a mailer's answer.
 func TestFaithful(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
-	system(commits, contended).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 4)}).
+	system(commits, contended).Explore(t, qtest.ExploreConfig{Seeds: seeds(20, 8)}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.library.commit").Faulted(),
 			qtest.Reaches("rpc.mailer.response").Faulted(), qtest.Takes("mailerSend").Outcome("unknown"), qtest.Takes("mailerSendReplayed"),
 			gristtest.Exercised(App, "borrow.limit"))
@@ -114,7 +117,7 @@ func TestScarce(t *testing.T) {
 // greedy is one member borrowing from three books of three copies each
 // (joined and catalogued by a prologue), at ReadCommitted, no faults:
 // three clients race for the member's last loans, nine borrows for three.
-// The staleLimit mutant's shape. (With the join and the additions among
+// The staleLimit and drop-loan-limit mutants' shape. (With the join and the additions among
 // the random sends, no run of the first version reached the limit at all:
 // Takes(...).Outcome("limit") said so.)
 var greedy = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 3, Isolation: qenv.ReadCommitted,
@@ -125,8 +128,9 @@ var greedy = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 3, Isolat
 		"borrow": func(p func(int) int) any { return Borrow{Member: "a", Book: of(p, "x", "y", "z")} },
 	}}
 
-// TestGreedy: the faithful app at the mutant's shape holds the limit, and
-// some borrow is refused at it.
+// TestGreedy: the faithful app at the mutants' shape (staleLimit,
+// drop-loan-limit) holds the limit, and some borrow is refused at it by
+// the loan-limit rule.
 func TestGreedy(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)

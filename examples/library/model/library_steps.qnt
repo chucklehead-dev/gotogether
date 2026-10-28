@@ -99,6 +99,32 @@ module libraryGen {
     mailerSendRecords' = mailerSendRecords,
   }
 
+  // The rules (grist.NewRule), run on the events an ok decision appends, on
+  // its reads, before the append: their verdicts so far (the first refusal,
+  // "" for none, and the reads of every rule that ran), and a guarded
+  // command's (its decision's outcome, then its rules')
+  type RuleVerdict = { refusal: str, needs: Set[Read] }
+  type CommandVerdict = { decided: str, outcome: str, needs: Set[Read] }
+  pure val noRule: RuleVerdict = { refusal: "", needs: Set() }
+
+  // rule loan-limit on book-borrowed, after acc: no verdict once one refused
+  pure def loanLimitRuled(log: List[Event], e: Event, acc: RuleVerdict): RuleVerdict =
+    val refusal = if (acc.refusal != "" or e.typ != "book-borrowed") "" else loanLimitRefusal(log, e)
+    if (acc.refusal != "" or e.typ != "book-borrowed") acc
+    else { refusal: refusal, needs: acc.needs.union(loanLimitNeeds(e, refusal)) }
+
+  // the rules on b's events, in batch order, an event's in registration
+  // order: the first refusal wins
+  pure def rulesOf(log: List[Event], b: List[Event]): RuleVerdict =
+    b.foldl(noRule, (acc, e) => loanLimitRuled(log, e, acc))
+
+  // borrow's outcome: its decision's (borrowOutcome), then, when ok, the
+  // first refusal of its rules (loan-limit) on what it appends (borrowEvents)
+  pure def borrowRuled(log: List[Event], c: BorrowArgs): CommandVerdict =
+    val decided = borrowOutcome(log, c)
+    val ruled = rulesOf(log, if (decided == "ok") borrowEvents(log, c) else [])
+    { decided: decided, outcome: if (ruled.refusal != "") ruled.refusal else decided, needs: ruled.needs }
+
   // add-book: conditioned on its reads; refusals invalid. Every committed
   // outcome needs its id fresh and its read set covering what its rule needs;
   // ok and a refusal need the rule's outcome and the condition to have held,
@@ -120,22 +146,26 @@ module libraryGen {
     }
   }
 
-  // borrow: conditioned on its reads; refusals not-member, limit,
-  // unavailable. Every committed outcome needs its id fresh and its read set
-  // covering what its rule needs; ok and a refusal need the rule's outcome
+  // borrow: conditioned on its reads; refusals not-member, unavailable,
+  // limit. Its outcome is its decision's, then, when that is ok, the first
+  // refusal of the rules guarding it (loan-limit, borrowRuled); every
+  // committed outcome needs its id fresh and its read set covering what its
+  // decision and every rule that ran need; ok and a refusal need that outcome
   // and the condition to have held, a conflict needs it not to. A reused key
   // commits nothing.
   action borrow(member: str, book: str, id: str, principal: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
     val args_: BorrowArgs = { member: member, book: book, principal: principal }
     val reads_ = readsOf(reads)
+    val verdict_ = borrowRuled(log, args_)
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
     else all {
       freshKey(answered, id),
-      borrowNeeds(args_, result).forall(n => covers(reads_, n)),
+      borrowNeeds(args_, if (result != "conflict" and verdict_.decided == "ok") "ok" else result).forall(n => covers(reads_, n)),
       if (result == "conflict") all { not(conditionHolds(log, readPos, reads_)), refuses(readPos, id) }
       else all {
         conditionHolds(log, readPos, reads_),
-        result == borrowOutcome(log, args_),
+        result == verdict_.outcome,
+        verdict_.needs.forall(n => covers(reads_, n)),
         if (result == "ok") appends(caused(borrowEvents(log, args_), ("command", id)), id)
         else refuses(readPos, id),
       },
@@ -336,8 +366,9 @@ module libraryGen {
         nondet id = IDS.oneOf()
         {
           val args_: BorrowArgs = { member: member, book: book, principal: principal }
-          val result_ = borrowOutcome(log, args_)
-          borrow(member, book, id, principal, log.length(), triplesOf(borrowNeeds(args_, result_)), result_)
+          val verdict_ = borrowRuled(log, args_)
+          val result_ = verdict_.outcome
+          borrow(member, book, id, principal, log.length(), triplesOf(borrowNeeds(args_, if (verdict_.decided == "ok") "ok" else result_).union(verdict_.needs)), result_)
         }
       },
       {
@@ -435,6 +466,32 @@ module libraryCallsGen {
   // nothing and answers nothing: its key stays unanswered
   action denied: bool = all { log' = log, answered' = answered }
 
+  // The rules (grist.NewRule), run on the events an ok decision appends, on
+  // its reads, before the append: their verdicts so far (the first refusal,
+  // "" for none, and the reads of every rule that ran), and a guarded
+  // command's (its decision's outcome, then its rules')
+  type RuleVerdict = { refusal: str, needs: Set[Read] }
+  type CommandVerdict = { decided: str, outcome: str, needs: Set[Read] }
+  pure val noRule: RuleVerdict = { refusal: "", needs: Set() }
+
+  // rule loan-limit on book-borrowed, after acc: no verdict once one refused
+  pure def loanLimitRuled(log: List[Event], e: Event, acc: RuleVerdict): RuleVerdict =
+    val refusal = if (acc.refusal != "" or e.typ != "book-borrowed") "" else loanLimitRefusal(log, e)
+    if (acc.refusal != "" or e.typ != "book-borrowed") acc
+    else { refusal: refusal, needs: acc.needs.union(loanLimitNeeds(e, refusal)) }
+
+  // the rules on b's events, in batch order, an event's in registration
+  // order: the first refusal wins
+  pure def rulesOf(log: List[Event], b: List[Event]): RuleVerdict =
+    b.foldl(noRule, (acc, e) => loanLimitRuled(log, e, acc))
+
+  // borrow's outcome: its decision's (borrowOutcome), then, when ok, the
+  // first refusal of its rules (loan-limit) on what it appends (borrowEvents)
+  pure def borrowRuled(log: List[Event], c: BorrowArgs): CommandVerdict =
+    val decided = borrowOutcome(log, c)
+    val ruled = rulesOf(log, if (decided == "ok") borrowEvents(log, c) else [])
+    { decided: decided, outcome: if (ruled.refusal != "") ruled.refusal else decided, needs: ruled.needs }
+
   action addBook(book: str, copies: int, id: str, principal: str, result: str): bool = {
     val args_: AddBookArgs = { book: book, copies: copies, principal: principal }
     if (result == "denied") denied
@@ -450,7 +507,7 @@ module libraryCallsGen {
     if (result == "denied") denied
     else if (result == "conflict") answers([], id)
     else all {
-      result == borrowOutcome(log, args_),
+      result == borrowRuled(log, args_).outcome,
       answers(if (result == "ok") caused(borrowEvents(log, args_), ("command", id)) else [], id),
     }
   }
@@ -492,7 +549,7 @@ module libraryCallsGen {
         nondet book = STRS.oneOf()
         nondet principal = STRS.oneOf()
         nondet id = IDS.oneOf()
-        borrow(member, book, id, principal, borrowOutcome(log, { member: member, book: book, principal: principal }))
+        borrow(member, book, id, principal, borrowRuled(log, { member: member, book: book, principal: principal }).outcome)
       },
       {
         nondet member = STRS.oneOf()

@@ -43,18 +43,22 @@ module libraryRules {
   pure def addBookEvents(log: List[Event], c: AddBookArgs): List[Event] = [bookAdded(c.book, c.copies)]
   pure def addBookNeeds(c: AddBookArgs, result: str): Set[Read] = Set()
 
-  // borrow: a stranger refused on the member's join, a member at the limit
-  // on their loans too, a book with no copy free on its shelf too
+  // borrow: a stranger refused on the member's join, a book with no copy
+  // free on its shelf too (the loan limit is the rule below's)
   pure def borrowOutcome(log: List[Event], c: BorrowArgs): str =
     if (not(isMember(log, c.member))) "not-member"
-    else if (loanCount(log, c.member) >= LIMIT) "limit"
     else if (copies(log, c.book) - onLoan(log, c.book) <= 0) "unavailable"
     else "ok"
   pure def borrowEvents(log: List[Event], c: BorrowArgs): List[Event] = [bookBorrowed(c.member, c.book)]
   pure def borrowNeeds(c: BorrowArgs, result: str): Set[Read] =
     if (result == "not-member") Set(memberJoinedByMember(c.member))
-    else if (result == "limit") Set(memberJoinedByMember(c.member)).union(loansReads(c.member))
-    else Set(memberJoinedByMember(c.member)).union(loansReads(c.member)).union(booksReads(c.book))
+    else Set(memberJoinedByMember(c.member)).union(booksReads(c.book))
+
+  // loan-limit, the rule on every borrow: a member at the limit refused,
+  // on their loans
+  pure def loanLimitRefusal(log: List[Event], e: Event): str =
+    if (loanCount(log, bookBorrowedMember(e)) >= LIMIT) "limit" else ""
+  pure def loanLimitNeeds(e: Event, refusal: str): Set[Read] = loansReads(bookBorrowedMember(e))
 
   // return-book: refused unless the member holds a copy, on their loans
   pure def returnBookOutcome(log: List[Event], c: ReturnBookArgs): str =

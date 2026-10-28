@@ -3,8 +3,9 @@
 A lending library on grist, scaffolded by `grist new library` and grown
 one block at a time: members `join` (refused `already-member`), books are
 catalogued with a number of copies (`add-book`, refused `invalid`), a
-member `borrow`s a copy (refused `not-member`, `limit` at three loans,
-`unavailable` with no copy free) and returns one they hold (`return-book`,
+member `borrow`s a copy (refused `not-member`, `unavailable` with no
+copy free, and `limit` at three loans by the `loan-limit` rule, which
+guards every append of a borrow) and returns one they hold (`return-book`,
 refused `not-held`); `member-loans` shows a member's loans; the `receipts`
 processor mails each borrow's receipt at least once through the mailer, a
 declared dependency (`Mailer`, its `Keyed` call `Send`): grist records the
@@ -19,13 +20,13 @@ of building it as a newcomer to grist.
 
 | file | what it is |
 |---|---|
-| [app.go](app.go), [commands.go](commands.go), [queries.go](queries.go), [processors.go](processors.go), [mailer.go](mailer.go) | the events, the read models (`books` keyed by book, `loans` keyed by member), the commands, the query, the processor, the mailer's declaration (no double: gristsim serves its default) |
-| [model/library_rules.qnt](model/library_rules.qnt) | written by hand: the rules the skeleton calls (the receipt a borrow asks the mailer for, `receiptsMailerSend`) |
+| [app.go](app.go), [commands.go](commands.go), [rules.go](rules.go), [queries.go](queries.go), [processors.go](processors.go), [mailer.go](mailer.go) | the events, the read models (`books` keyed by book, `loans` keyed by member), the commands, the rule (`loan-limit`, on `book-borrowed`: `grist.NewRule`), the query, the processor, the mailer's declaration (no double: gristsim serves its default) |
+| [model/library_rules.qnt](model/library_rules.qnt) | written by hand: the rules the skeleton calls (the loan limit's verdict and reads, `loanLimitRefusal` and `loanLimitNeeds`, which guard the generated `borrow`; the receipt a borrow asks the mailer for, `receiptsMailerSend`) |
 | [model/library.qnt](model/library.qnt) | written by hand: the invariants (copies on loan within the book's copies, at most three loans, at every step; every borrow receipted, after a settle). That every receipt is for a borrow that happened is the generated `mailerSendServed`'s own guard, not an invariant |
 | [doubles_test.go](doubles_test.go) | the runs' doubles: none (the `noDedupe` mutant replaces it) |
 | [model/library_gen.qnt](model/library_gen.qnt), [model/library_steps.qnt](model/library_steps.qnt), `*.binding.yaml`, [model/grist.qnt](model/grist.qnt) | generated: `go run ./cmd/library model` (never edit them; `TestGenerated` fails when they are stale) |
 | [cmd/library](cmd/library/main.go) | the binary (`grist.Main`): `model`, `catalog`, `verify`, `serve -db sqlite:PATH` |
-| [testdata/mutants](testdata/mutants) | `noCopyCheck`, `staleLimit`, `noDedupe`, `wrongReceipt` |
+| [testdata/mutants](testdata/mutants) | `noCopyCheck`, `staleLimit`, `noDedupe`, `wrongReceipt`; `drop-loan-limit` is generated (`gristtest.Mutants{App: App}`: the app with its rule dropped) |
 
 ## Which check catches which mutant
 
@@ -35,8 +36,9 @@ of building it as a newcomer to grist.
 | `TestFaithfulAtClients` | the same runs at the clients, linearized | nothing: `Conforms` |
 | `TestScarce` | members borrowing one book added a copy at a time, no faults | nothing: `None(Rejects("borrow"))` (`noCopyCheck`'s contrast), a borrow refused `unavailable` (`Takes("borrow").Outcome("unavailable")`) |
 | `TestMutant` (`noCopyCheck`) | the same | `Some(Rejects("borrow"))`: a borrow with no copy free commits where the model's rule says `unavailable` (and its read set misses the shelf) |
-| `TestGreedy` | one member and three books opened by a prologue, three clients borrowing at ReadCommitted, no faults | nothing: `None(Rejects("borrow"))` (`staleLimit`'s contrast), a borrow refused at the `limit` |
-| `TestMutant` (`staleLimit`) | the same, the borrow `Unconditioned` | `Some(Rejects("borrow"))`: a fourth loan commits on a stale read of the member's loans, where the model's rule says `limit` |
+| `TestGreedy` | one member and three books opened by a prologue, three clients borrowing at ReadCommitted, no faults | nothing: `None(Rejects("borrow"))` (`staleLimit`'s and `drop-loan-limit`'s contrast), a borrow refused at the `limit` by the rule |
+| `TestMutant` (`staleLimit`) | the same, the borrow `Unconditioned` | `Some(Rejects("borrow"))`: a fourth loan commits on a stale read of the member's loans (the rule's reads advisory with the borrow's), where the model's rule says `limit` |
+| `TestMutant` (`drop-loan-limit`, generated) | the same, the `loan-limit` rule dropped | `gristtest.DroppedRule`'s claim, `Some(Rejects("borrow"))`: a fourth loan commits where the generated guard (`loanLimitRefusal`) says `limit` |
 | `TestReceiptOnce` | a scripted crash just after a receipt's mail, before its checkpoint | nothing: `Conforms` (the mail sent again, the mailer replaying its first answer), `All(Settles)`, the crash reached |
 | `TestMutant` (`noDedupe`) | the same, a mailer double sending every try | `All(Rejects("mailerSendServed"))`: a second served record of one key, which the generated `mailerSendAdmits` refuses (`Send` is `Keyed`; no rule written by hand) |
 | `TestMutant` (`wrongReceipt`) | borrows, no faults | `All(Rejects("mailerSendServed"))`: a receipt naming no borrow (member and book swapped), refused where the mailer sends it (its request not `receiptsMailerSend`'s for its trigger), the first record of it |
