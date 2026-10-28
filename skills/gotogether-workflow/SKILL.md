@@ -167,6 +167,18 @@ the failing step.
 | tool error (exit 2) | the binding or the model doesn't fit the steps (a missing field, a type error in a template) | the message names the step, the template and the signature |
 | conforms, but the environment's checker fails | the model assumes more of the environment than it gives | the recording misses steps that matter |
 
+A failing run's report ends with `reproduce:` (the run alone) and
+`navigate:` (`gotogether nav -run 'TestX#2:seed=17' -at fail`, in the
+test's package): the run's choices as a tree, opened at the last choice
+before the failing step. A node (`<schedule>@<k>`, Exhaust's schedule
+syntax) shows the steps recorded so far, the simulation's tasks, each
+actor's model state, the next choice's named options (a fault kind's
+declared options, the runnable tasks, the nemeses) and the verdict of the
+run each option makes (`-take 0`: nominal after it). Take branches with
+`-follow 1,0` or `-take o`; `-save` keeps a branch that fails as a
+corpus entry. `-json` for agents: one object per call. A rejected step's
+`why:` (gotogether-traces §4) names the condition the model found false.
+
 Every verdict, its expectation and its claims over many runs are in
 [`references/verdicts.md`](references/verdicts.md).
 

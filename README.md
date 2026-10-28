@@ -288,6 +288,9 @@ gotogether validate -binding bank.binding.yaml -complete-through '*=2026-10-26T1
 gotogether validate -binding bank.binding.yaml -manifest run.json -run-info driver.json steps.jsonl  # a portable failure (gotogether.run/2)
 gotogether validate -replay run.json                                                 # judged again: its hashed inputs unchanged, the same verdict (validate/cli.Replay in Go)
 gotogether shrink -binding bank.binding.yaml -actions journey.json -- ./driver -play {actions} -steps {steps}  # a driver's failing actions, shrunk by rerunning it
+gotogether nav -binding bank.binding.yaml -follow 'deposit("carol", 2)' -json          # the model, a state at a time: branches, disabled actions with why
+gotogether nav -binding bank.binding.yaml -run steps.jsonl -at 3                         # the model before a recorded run's step 4 (validate's navigate: line)
+gotogether nav -run 'TestShop#2:seed=17' -at fail -json                                  # an exploration's run by its choices (a failing report's navigate: line)
 # a manifest records the driver's args, absolute paths and the failing step's ref verbatim: sanitize a log before sharing it (steps -pseudonymize)
 ```
 

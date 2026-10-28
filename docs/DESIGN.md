@@ -3997,3 +3997,115 @@ keeps quint's output for both under the user's cache directory
   process, and an import's change, a sibling's, another quint version
   and `GOTOGETHER_CACHE=off` each start one (TestCacheAcrossProcesses);
   no key without every import (TestCacheNeedsEveryImport).
+
+## 58. Why a step was rejected, and the navigators (H2, P5)
+
+The newcomer's largest time sink (the tenth review) was a rejection
+whose report gave the step and the state before it, not which of the
+action's conditions was false: a grist mutant's create committed blind
+(`conditionHolds` false), an app's decision with an empty read set
+(`covers` false), a limiter's `admitted.size() < LIMIT` with 2 < 2. And
+pavlov's navigator showed what an interactive walk of a model's states
+and of a run's choices gives an agent and a person alike.
+
+- **The explanation is quint's report's, never a verdict.** A check
+  whose actor quint rejected (a conformance failure of kind "disabled"
+  at a call) asks the Go evaluator, when the binding has an evaluation
+  module (§45) and GOTOGETHER_EVAL is not quint: it replays the plan's
+  calls before the rejected one (the state compared with quint's, as
+  quint reported it), then `qeval.Model.Explain`s the call
+  (`Failure.Why`, explain.go). A search's candidates (a checker with a
+  history, VerdictsOnly) ask nothing. The evaluator disagreeing (it
+  takes the step, reaches another state, rejects an earlier call) is
+  said ("not explained: ..."), beside quint's report as before.
+- **Explain** descends the action conjunct by conjunct: `all {}` and
+  `and` to the first false one, the actions and definitions it applies
+  (their arguments bound), lets, `ite` (the branch taken, named in the
+  context), `forall` (its first witness), `implies` (the consequent); a
+  choice whose every value disables it, by the value closest to enabled
+  (the most conjuncts holding before the false one: the limiter's third
+  client, not the first's "already admitted"); an `any {}` none of whose
+  branches is enabled, each branch's. Each level is a condition: where
+  it is, its text, the values of its free names and of its operands that
+  are applications (`admitted.size() = 2`), a value shown once.
+- **Source text from the IR, not positions.** quint's JSON IR has ids
+  but no positions, and `quint parse --source-map` numbers the parsed
+  files' nodes, not the flattened module `quint compile` writes (an
+  instance's import copies the model's definitions under new ids). So
+  qeval prints Quint from the IR (print.go): builtins as methods,
+  operators infix, the compiler's parameter renamings (`p_<id>`) and the
+  evaluation module's `__gtg_` names undone. It is the expression, in
+  the printer's layout, which a reader finds in the file by its text.
+- **What the model could do instead**: the transitions of its step in
+  that state, each named by the first action it applies below step (a
+  helper's, part of its caller), an action enabled many ways once with
+  how many (`createCounter (32 ways, e.g. ...)`), six shown.
+- **Labelled transitions.** `qeval.Model.Transitions` is Successors
+  with what led to each successor (the actions applied, the choices
+  made), one per label and state; a successor's labels cost nothing when
+  unlabelled (searches and runs). P2 reuses them. TestAgreesWithQuint
+  holds them to quint's traces (the same states as Successors, the state
+  quint took reached by a transition applying the action its trace says).
+- **grist's vocabulary.** grist's generated step actions reject through
+  grist.qnt's few definitions, read by their frames (name, parameters,
+  arguments): `covers(reads, need)` false is a decision that read
+  nothing of need's events, the read models whose `<rm>Reads` cover them
+  named; `conditionHolds` false names the event appended after the read
+  position that matches a read (a concurrent append); `freshKey` a
+  command id answered again; `<call>Admits` with its record's key a
+  Keyed dependency applying a key twice. A hint beside the conditions.
+- **Info lines that do not apply.** The actors a binding's actors:
+  patterns leave out are in Report.Issues (the data) and not in its
+  Summary: every two-sided run (a grist store and its clients) had one on
+  each report. The Linearize hint is an actor's whose own steps carry
+  invocation times without a domain clock (order.*): a store's commits
+  and a processor's calls are placed where they took effect, and another
+  actor's client history made every grist store-side failure suggest it.
+
+The navigators share the explanation and the transitions.
+
+- **A model's** (`Checker.Nav`, validate/nav.go): a node is a state and
+  its path from the start (init, or the state after an actor's first k
+  calls of a recorded run, the evaluator's replay; a call the model
+  rejects before k is the error, explained); its branches the step's
+  transitions (`take`, the call with its arguments as literals, which
+  `-follow` takes, `#n` after it when transitions share it), its
+  disabled actions the step's own actions (BranchActions) no branch
+  takes, each with Explain restricted to its branch; its invariants'
+  values; the variables its last transition changed. Checked against
+  brute force (TestNavBranchesAgainstBruteForce: every action with every
+  argument of its domain enabled exactly when a branch takes it) and its
+  JSON by a golden.
+- **A run's** (qtest/nav.go): a node is a prefix of an exploration's
+  run's choices in Exhaust's schedule syntax, `<schedule>@<k>`, the
+  choices before k as the schedule says, nominal otherwise; its branches
+  the next choice's options, named by the simulation (`Sim.ChoiceOptions`:
+  a fault kind's declared options, the runnable tasks of a scheduling
+  choice in option order, the nemeses enabled, read by a chooser qenv.New
+  hands the simulation); a child the replay with that option forced and
+  nominal after, shown at the next choice: the steps recorded so far,
+  Sim.Tasks, each actor's model state after them (the model navigator's
+  start), and the verdict of the whole run it makes. It is stateless, as
+  Exhaust: each node a replay from the start, so a system must be
+  deterministic, and a node of the base run's own choices says where its
+  replay diverged from them (entropy, which a schedule does not replay,
+  is said too). It runs in the test binary: GOTOGETHER_RUN names the run,
+  GOTOGETHER_NAV the node (start, fail: the last choice before the
+  failing step was recorded, @k, an id), and the exploration navigates
+  instead of exploring; its claims are not judged. `-save` writes the
+  node's run to the exploration's corpus.
+- **Front ends.** `gotogether nav` (-json for agents: one object a
+  call), a failing run's `navigate:` line and validate's (the model
+  before the rejected or mismatched step). The TUI (P5's people's front
+  end, Charm's libraries) is a module of its own, kept out of the core:
+  it reads the same types (validate.Node, validate.RunNode) and drives the
+  same commands.
+- **Tests that fail without it**: the limiter's rejection names
+  `admitted.size() < LIMIT` with its values, by Check and CheckBatch
+  (TestRejectionNamesTheConjunct), none under GOTOGETHER_EVAL=quint; the
+  golden shop's empty read set reads as grist's (TestRejectionReadsAsGrist);
+  counters' blind mutant's rejection names conditionHolds and a concurrent
+  append (its TestMutant); the info lines (TestLinearizeHintOnlyWhereItApplies,
+  TestActorsLeftOutNotInSummary); the navigators (TestNavBranchesAgainstBruteForce,
+  TestNavNodeJSON, TestNavRun: a node by its id and by following equal,
+  fail's node, its nominal child passing; TestNavFromValidate).

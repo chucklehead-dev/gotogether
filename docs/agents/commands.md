@@ -73,6 +73,11 @@ AGENTS.md has the general requirements.
   qhegel. `GOTOGETHER_RUN='TestX#2:seed=n'` (or `:schedule=...`,
   `:corpus=<file>`, `:choices=<file>` for a steered run) runs one run of one exploration alone, the test's
   explorations numbered in order; each failing run's report prints it.
+  With it, `GOTOGETHER_NAV` (start, fail, `@k`, `<schedule>@k`) navigates
+  that run instead (DESIGN §58): `GOTOGETHER_NAV_FOLLOW` options taken
+  from the node, the node's JSON to `GOTOGETHER_NAV_OUT`,
+  `GOTOGETHER_NAV_SAVE=1` its run to the corpus; `gotogether nav -run`
+  sets them.
   `GOTOGETHER_EVIDENCE=dir` writes each exploration's evidence
   (`gotogether.evidence/2`, with its role: faithful, mutant, replay) as
   dir/<package>/<test>/x<N>.json (the package as its directory in its

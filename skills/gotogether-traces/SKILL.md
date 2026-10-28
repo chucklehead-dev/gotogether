@@ -234,6 +234,26 @@ Production logs are selected and sanitized before they are checked
 | `issue: error overlap` | an incarnation acted after its successor started | a split brain (fence the old incarnation), or wrong process ids or skewed clocks (order with a domain clock) |
 | `issue: error cycle` | contradictory order keys | instrumentation order keys are wrong |
 
+A rejected step's report says why (`why:`, by the Go evaluator, beside
+quint's verdict): the rejected action's first false condition as Quint
+text, with its free names' values (`in admit: admitted.size() < LIMIT is
+false / where admitted.size() = 2, LIMIT = 2`), descended through the
+actions and definitions it calls; a grist app's in its terms too
+(`grist: the decision read nothing of ... read it through the read model
+...`); and what the model could have done instead (`enabled instead:`).
+Read the false condition first: it names the field the code got wrong or
+the binding mapped wrong. `why: not explained: ...` says why there is
+none (a model outside the evaluator's fragment): quint's report is the
+verdict either way. The `navigate:` line opens the model in the state
+before the step (`gotogether nav`, below).
+
+To explore the model from a state (init, or a recorded run's step k):
+`gotogether nav -binding b.yaml [-run steps.jsonl -at k] [-follow
+'admit("a"),release("a")'] -json` prints one node: its state, its
+branches (the step's transitions, each with its action, arguments and
+picks, `take` naming it for `-follow`), and the step's actions no branch
+takes, each with why. Run it, do not infer what the model allows.
+
 The generated module (`module:` in a failing report) is a plain Quint file:
 `quint test` it, edit it, or keep it as a regression test. A passing run
 the Go evaluator decided has no module (its report says "judged by the Go

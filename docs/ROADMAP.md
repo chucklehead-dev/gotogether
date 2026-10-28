@@ -39,7 +39,7 @@ item as recommended:
   compiles across processes (D3: overlay mutants' test binaries, the
   CLI, CI's binding and qeval packages; one binding entry point added).
   docs/performance.md.
-- **H2. Why a step was rejected (M).** A rejection names the conjunct
+- **H2. Why a step was rejected (M). Done** (DESIGN §58). A rejection names the conjunct
   that is false, with its values (a grist read set: "does not cover
   removeItemNeeds(...): stockReads(b)"); the newcomer's largest time
   sink in two of three tasks. Info lines that do not apply to the
@@ -130,7 +130,9 @@ is not taken. The maintainer's decisions of 2026-10-28, as recommended:
   stopped. grist's `gristtest.Scenario` builds one from the catalog's
   commands with their arguments (and, with P3, the scenario is checked
   possible in the model). A domain expert's acceptance criteria.
-- **P5. Navigators, with H2 (M).** Over a model (P2's graph: a node a
+- **P5. Navigators, with H2 (M). The core done** (DESIGN §58: the Go
+  API, the run navigator in test binaries, `gotogether nav -json`, the
+  failing reports' `navigate:` lines); the TUI module is left. Over a model (P2's graph: a node a
   state, its branches the enabled actions with picks, every disabled one
   with its first false conjunct, H2's evaluation) and over a run (a node
   a prefix of its choices in Exhaust's schedule syntax; its branches the
