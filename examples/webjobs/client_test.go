@@ -54,7 +54,7 @@ func played(t *testing.T, s journey.Server, seed int64) *qtest.Run {
 // TestMutants drives each mutant's server the same way, so a regression
 // of webjobs/ fails per push.
 func TestClient(t *testing.T) {
-	if mutant != "" {
+	if qtest.Mutant() != "" {
 		t.Skip("webjobs as it is; a mutant's client run is TestMutant's")
 	}
 	t.Parallel()
@@ -77,7 +77,7 @@ func clientJourneys() int {
 // by the client against a fresh server: a finished run, as Bombadil's
 // was. The bridge a Bombadil failure is shrunk through. Full mode.
 func TestRecordedActions(t *testing.T) {
-	if mutant != "" {
+	if qtest.Mutant() != "" {
 		t.Skip("webjobs as it is")
 	}
 	if testing.Short() {

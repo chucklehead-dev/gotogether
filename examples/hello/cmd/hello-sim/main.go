@@ -1,8 +1,9 @@
 // Command hello-sim runs the counter and its client in simulated
 // environments, one per seed, and writes each run's model steps to
-// <out>/seed<N>.jsonl for `gotogether validate`.
+// <out>/seed<N>.jsonl for `gotogether validate`. A mutant's is built
+// with its overlay (run-demo.sh's MUTANT=noDedupe).
 //
-//	hello-sim -seeds 20 -mutation no-dedupe -out /tmp/runs
+//	hello-sim -seeds 20 -out /tmp/runs
 package main
 
 import (
@@ -19,14 +20,9 @@ import (
 
 func main() {
 	seeds := flag.Int("seeds", 20, "runs, with seeds 1..N")
-	mut := flag.String("mutation", "", "no-dedupe")
 	rate := flag.Float64("fault-rate", 0.2, "probability of each message fault")
 	out := flag.String("out", "runs", "directory for the step logs")
 	flag.Parse()
-	m, ok := map[string]hello.Mutation{"": hello.Faithful, "no-dedupe": hello.NoDedupe}[*mut]
-	if !ok {
-		fail(fmt.Errorf("unknown mutation %q (want no-dedupe)", *mut))
-	}
 	if err := os.MkdirAll(*out, 0o755); err != nil {
 		fail(err)
 	}
@@ -38,7 +34,7 @@ func main() {
 		c := qenv.NewSeeded(uint64(seed))
 		c.Rates = qenv.Rates{Default: *rate}
 		rec := qobs.NewRecorder(sink, qobs.WithActor(fmt.Sprintf("seed%d", seed)))
-		if err := hello.Run(qenv.WithContext(c, qobs.WithRecorder(context.Background(), rec)), m); err != nil {
+		if err := hello.Run(qenv.WithContext(c, qobs.WithRecorder(context.Background(), rec))); err != nil {
 			fail(err)
 		}
 		if err := rec.Close(); err != nil { // closes the step log

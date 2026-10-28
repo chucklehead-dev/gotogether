@@ -1,0 +1,75 @@
+// The noDedupe mutant of hello.go: the file as it is but for Add, which
+// counts every request it receives, a retry or a duplicate again (a go
+// build overlay: TestMutants builds the package with it in hello.go's
+// place).
+
+// Package hello is the smallest simulated system checked against a model:
+// a counter service reached over a network that loses requests and
+// responses and delivers some requests twice, and a client that retries
+// until it hears back. The service dedupes by request id, so every request
+// counts once (model/hello.qnt). Its mutant, testdata/mutants/noDedupe,
+// counts a retried or duplicated request again.
+package hello
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
+)
+
+// Requests is how many requests the client sends (ids 1..Requests, the
+// model's REQUESTS).
+const Requests = 3
+
+// Counter counts requests.
+type Counter struct {
+	seen  map[int]bool
+	count int
+}
+
+// Add handles request id: counted the first time, acknowledged again
+// after. Each is the model step of that name, with the count it leaves.
+func (c *Counter) Add(ctx context.Context, id int) (int, error) {
+	// the mutant: no dedupe, a retried or duplicated request counted again
+	c.seen[id] = true
+	c.count++
+	qobs.Record(ctx, "apply", nil, "id", id, "obs.count", c.count)
+	return c.count, nil
+}
+
+// Send calls the service until it answers, waiting timeout for each
+// attempt: a lost request or response looks the same to the client, so it
+// retries both, and the service sees the request again.
+func Send(ctx context.Context, svc *qenv.Service[int, int], id int, timeout time.Duration) error {
+	for attempt := 0; attempt < 10; attempt++ {
+		_, err := svc.Call(ctx, id, timeout)
+		if !errors.Is(err, qenv.ErrTimeout) {
+			return err
+		}
+	}
+	return errors.New("hello: no answer after 10 attempts")
+}
+
+// Run deploys the counter and one client on c and runs them until quiet.
+func Run(c qenv.Chooser) error {
+	s := qenv.New(c)
+	defer s.Close()
+	counter := &Counter{seen: map[int]bool{}}
+	svc := qenv.NewService(s, "counter", nil, counter.Add)
+	var err error
+	s.Spawn("client", func(ctx context.Context) {
+		for id := 1; id <= Requests && err == nil; id++ {
+			err = Send(ctx, svc, id, 100*time.Millisecond)
+		}
+		if err == nil {
+			qobs.Record(ctx, "done", nil) // every request answered
+		}
+	})
+	if rerr := s.Run(time.Minute); rerr != nil {
+		return rerr
+	}
+	return err
+}

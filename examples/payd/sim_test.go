@@ -8,13 +8,9 @@ import (
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
-// mutant is the mutant this test binary was built with: set by the file a
-// mutant's overlay adds (TestMutants), "" for payd as it is.
-var mutant string
-
 // system is payd under cfg as one System.
 func system(cfg Config, opts ...qtest.Option) qtest.System {
-	return qtest.System{Binding: "payd.binding.yaml", Rates: faulty, Opts: opts, Mutant: mutant,
+	return qtest.System{Binding: "payd.binding.yaml", Rates: faulty, Opts: opts, Mutant: qtest.Mutant(),
 		Run: func(c qenv.Chooser) error { return Run(c, cfg) }}
 }
 
@@ -87,6 +83,7 @@ func TestChargeEdited(t *testing.T) {
 // Under -short each mutant states its cheapest claim (the others run in
 // the full tests and nightly).
 func TestMutant(t *testing.T) {
+	mutant := qtest.Mutant()
 	if mutant == "" {
 		t.Skip("payd as it is: TestMutants runs this test built with each mutant's overlay")
 	}

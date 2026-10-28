@@ -9,14 +9,12 @@ import (
 	"hegel.dev/go/hegel"
 )
 
-// system is the counter and its client, with mutation m, as one System:
-// explored by seeds here, and by Hegel, sweeps or the fuzzer the same way.
-func system(m Mutation) qtest.System {
-	s := qtest.System{Binding: "hello.binding.yaml", Run: func(c qenv.Chooser) error { return Run(c, m) }}
-	if m == NoDedupe {
-		s.Mutant = "NoDedupe" // its runs are not the counter's: the suite's evidence leaves them out
-	}
-	return s
+// system is the counter and its client as one System: explored by seeds
+// here, and by Hegel, sweeps or the fuzzer the same way. In a mutant's
+// binary it names the mutant: its runs are not the counter's, and the
+// suite's evidence leaves them out.
+func system() qtest.System {
+	return qtest.System{Binding: "hello.binding.yaml", Run: Run, Mutant: qtest.Mutant()}
 }
 
 // lossy loses or duplicates one message in five.
@@ -39,7 +37,7 @@ func TestRetryPossible(t *testing.T) {
 // counts once.
 func TestFaithfulConforms(t *testing.T) {
 	qtest.RequireQuint(t)
-	system(Faithful).WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms(),
+	system().WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms(),
 		// and the faults happened: a pass with no duplicates says nothing of
 		// dedupe. Measured, 56% of runs fault a request (2000 seeds); the bar
 		// is well under it, so a window of fresh seeds (a nightly run) does
@@ -52,41 +50,67 @@ func TestFaithfulConforms(t *testing.T) {
 		qtest.Some(retried))
 }
 
-// Without dedupe a retried request is counted again: the model has no
-// apply of a request already applied, so some run's apply is rejected.
-// With no faults there is no retry, and the bug is invisible.
-func TestNoDedupeCountsRetries(t *testing.T) {
-	qtest.RequireQuint(t)
-	system(NoDedupe).WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).
-		Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()),
-			// it never recognises a retry: no run follows the scenario
-			qtest.None(retried))
-	system(NoDedupe).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 5}).Expect(t, qtest.Conforms())
-}
-
 // Every run within two delays and two faults, not a sample: the faithful
 // counter conforms in all 2508 (quint checks 49: the rest repeat their
-// steps), late requests among them, and NoDedupe's bug needs one fault,
-// which the search of every single fault finds.
+// steps), late requests among them.
 func TestExhaustive(t *testing.T) {
 	qtest.RequireQuint(t)
-	system(Faithful).Exhaust(t, qtest.Bound{Delays: 2, Faults: 2, MaxRuns: 5000}).Expect(t, qtest.Conforms())
-	system(NoDedupe).Exhaust(t, qtest.Bound{Faults: 1}).Expect(t, qtest.Rejects("apply"))
+	system().Exhaust(t, qtest.Bound{Delays: 2, Faults: 2, MaxRuns: 5000}).Expect(t, qtest.Conforms())
 }
 
-// Hegel makes every choice of the same System and shrinks NoDedupe's
-// failure to the one fault it needs (a duplicated request, or a lost
-// response and its retry); in the faithful counter it finds nothing. It
-// draws at the default rates. Hegel's shrinking alone stopped at two
-// faults for 3 seeds of 10 (a lost response and a dropped request, where
-// the response is enough); Shrink's own pass then removes each fault the
-// failure does not need, and every seed tried ends at one.
-func TestHegelShrinks(t *testing.T) {
+// Hegel makes every choice of the same System; in the faithful counter,
+// at lossy's rates too, it finds nothing (noDedupe's shrink is
+// TestMutant's).
+func TestHegelFindsNothing(t *testing.T) {
 	qtest.RequireQuint(t)
 	if testing.Short() {
 		t.Skip("shrinks against the model")
 	}
-	qhegel.Shrink(t, system(NoDedupe), hegel.WithTestCases(50), hegel.WithSeed(1)).
-		Expect(t, qtest.Rejects("apply"), qtest.ShrunkTo(1))
-	qhegel.Shrink(t, system(Faithful).WithRates(lossy), hegel.WithTestCases(20)).Expect(t, qtest.Conforms()) // nothing to find, at lossy's rates too
+	qhegel.Shrink(t, system().WithRates(lossy), hegel.WithTestCases(20)).Expect(t, qtest.Conforms())
+}
+
+// TestMutant states what catches the mutant this binary was built with
+// (testdata/mutants/<name>: files replacing the package's of the same
+// name, the way to plant a bug by hand); TestMutants builds and runs it
+// once per mutant.
+func TestMutant(t *testing.T) {
+	switch qtest.Mutant() {
+	case "":
+		t.Skip("the counter as it is: TestMutants runs this test in each mutant's binary")
+	case "noDedupe":
+		// Without dedupe a retried request is counted again: the model has
+		// no apply of a request already applied, so some run's apply is
+		// rejected. With no faults there is no retry, and the bug is
+		// invisible.
+		qtest.RequireQuint(t)
+		system().WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).
+			Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()),
+				// it never recognises a retry: no run follows the scenario
+				qtest.None(retried))
+		system().WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 5}).Expect(t, qtest.Conforms())
+		// the bug needs one fault, which the search of every single fault
+		// finds
+		system().Exhaust(t, qtest.Bound{Faults: 1}).Expect(t, qtest.Rejects("apply"))
+		if testing.Short() {
+			return
+		}
+		// Hegel makes every choice and shrinks the failure to the one fault
+		// it needs (a duplicated request, or a lost response and its
+		// retry). It draws at the default rates. Hegel's shrinking alone
+		// stopped at two faults for 3 seeds of 10 (a lost response and a
+		// dropped request, where the response is enough); Shrink's own pass
+		// then removes each fault the failure does not need, and every seed
+		// tried ends at one.
+		qhegel.Shrink(t, system(), hegel.WithTestCases(50), hegel.WithSeed(1)).
+			Expect(t, qtest.Rejects("apply"), qtest.ShrunkTo(1))
+	default:
+		t.Fatalf("mutant %s: say what catches it", qtest.Mutant())
+	}
+}
+
+// Each mutant of testdata/mutants, built with its overlay, is caught as
+// TestMutant says.
+func TestMutants(t *testing.T) {
+	t.Parallel() // each mutant's binary is a process of its own
+	qtest.Mutants{}.Run(t)
 }

@@ -247,7 +247,7 @@ func replays(t *testing.T, dir string) {
 // the page), its manifest replayed; then Bombadil reproduces it
 // (--reproduce) against a new server, which is checked again.
 func TestLive(t *testing.T) {
-	if mutant != "" {
+	if qtest.Mutant() != "" {
 		t.Skip("webjobs as it is; a mutant's live run is TestMutant's")
 	}
 	qtest.RequireQuint(t)

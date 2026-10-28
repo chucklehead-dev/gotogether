@@ -142,12 +142,14 @@ both removed, `TestFaithful` (read committed, serializable),
 ## How the mutants run
 
 A mutant is a directory of `testdata/mutants/` whose files replace
-payd's files of the same names. `TestMutants` writes a go build overlay
-for each mutant: the mutant's files, plus a test file that sets
-`mutant`. It then runs `go test -overlay <it> -run '^TestMutant$'` with
-its own `-short` and `-timeout`, and without `GOTOGETHER_SEEDS` (a
-mutant's claims have their stated miss chance at their own seeds).
-`TestMutant` states the mutant's claims with `Expect`. payd's sources
+payd's files of the same names. `TestMutants` is the core's harness,
+`qtest.Mutants{Package: "payd"}.Run(t)`: it finds the mutants there,
+writes a go build overlay for each, and runs `go test -overlay <it> -run
+'^TestMutant$'` with `GOTOGETHER_MUTANT` naming the mutant, its own
+`-short` and `-timeout`, and without `GOTOGETHER_SEEDS` (a mutant's
+claims have their stated miss chance at their own seeds). `TestMutant`
+switches on `qtest.Mutant()` and states the mutant's claims with
+`Expect`. payd's sources
 are never touched, and each mutant is a whole file to diff against
 payd's.
 

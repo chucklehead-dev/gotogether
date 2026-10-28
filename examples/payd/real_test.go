@@ -32,7 +32,7 @@ func realRun(t *testing.T, keys, senders int) (*qtest.Run, *RealResult) {
 // answer its charge, the balances what the charges took.
 func TestReal(t *testing.T) {
 	qtest.RequireQuint(t)
-	if mutant != "" {
+	if qtest.Mutant() != "" {
 		t.Skip("payd as it is; a mutant's real run is in TestMutant")
 	}
 	keys := 30

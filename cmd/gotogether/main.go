@@ -785,7 +785,7 @@ func relativeTo(out, path string) string {
 // systemTest is a qtest.System test for the binding: a Run that deploys
 // nothing yet, one commented qobs.Record per bound or modelled action with
 // the fields the binding reads, a conformance test that fails until steps
-// are recorded, and a mutant claim to fill in.
+// are recorded, and the overlay mutants' harness with a claim to fill in.
 func systemTest(pkg, bpath string, b *binding.Binding, m *binding.Model) string {
 	var rec strings.Builder
 	for _, a := range m.ActionNames() {
@@ -848,20 +848,12 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
-// Mutation is a bug the application can be built with, to show that the
-// checks catch it: Faithful is none.
-type Mutation int
-
-const (
-	Faithful Mutation = iota
-	Mutant            // name it for the bug it injects
-)
-
-// system deploys the application, with mutation m, in a simulation made
-// from c. Every workflow runs it: Explore (seeds), qhegel.Shrink (Hegel),
-// Sweep, Fuzz, Mutate.
-func system(m Mutation) qtest.System {
-	s := qtest.System{Binding: %[2]q, Run: func(c qenv.Chooser) error {
+// system deploys the application in a simulation made from c. Every
+// workflow runs it: Explore (seeds), qhegel.Shrink (Hegel), Sweep, Fuzz,
+// Mutate. In a mutant's binary (TestMutants) it names the mutant: its
+// runs are not the application's, and a suite's evidence leaves them out.
+func system() qtest.System {
+	return qtest.System{Binding: %[2]q, Mutant: qtest.Mutant(), Run: func(c qenv.Chooser) error {
 		s := qenv.New(c)
 		defer s.Close()
 		// Deploy the application here: its services (qenv.NewService),
@@ -872,10 +864,6 @@ func system(m Mutation) qtest.System {
 		s.Spawn("client", func(ctx context.Context) {
 %[3]s		})
 %[6]s	}}
-	if m != Faithful {
-		s.Mutant = "Mutant" // its runs are not the application's: a suite's evidence leaves them out
-	}
-	return s
 }
 
 // The faithful application conforms through every seed's faults, and the
@@ -884,16 +872,29 @@ func system(m Mutation) qtest.System {
 func TestConforms(t *testing.T) {
 	qtest.RequireQuint(t)
 	// until Run records steps, the exploration fails saying so
-	system(Faithful).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, %[5]s)
+	system().Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, %[5]s)
 }
 
-// A mutant must be caught, and how: say which check fails (Rejects,
-// Mismatch, Violates; over runs Some, All, None). A check no mutant can
-// fail proves nothing.
-func TestMutantIsCaught(t *testing.T) {
-	qtest.RequireQuint(t)
-	qtest.Optional(t, "scaffold: inject a bug as Mutant, state how it shows, and remove this line")
-	system(Mutant).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, %[4]s)
+// TestMutant states what catches the mutant this binary was built with,
+// and how: say which check fails (Rejects, Mismatch, Violates; over runs
+// Some, All, None). A check no mutant can fail proves nothing.
+func TestMutant(t *testing.T) {
+	switch qtest.Mutant() {
+	case "":
+		t.Skip("the application as it is: TestMutants runs this test in each mutant's binary")
+	default: // a case per mutant, named as its directory
+		qtest.RequireQuint(t)
+		system().Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, %[4]s)
+	}
+}
+
+// A mutant is a directory of testdata/mutants whose files replace the
+// package's of the same names: a copy of a file, the bug planted in it
+// by hand. TestMutants finds each, builds the tests with its overlay and
+// runs TestMutant there (qtest.Mutant() naming it).
+func TestMutants(t *testing.T) {
+	qtest.Optional(t, "scaffold: plant a bug as testdata/mutants/<name>/<file>.go (a copy of a file of the package, the bug in it), state how it shows in TestMutant, and remove this line")
+	qtest.Mutants{}.Run(t)
 }
 `, pkg, bpath, rec.String(), claim, faithful, end)
 }

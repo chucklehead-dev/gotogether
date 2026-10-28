@@ -1,24 +1,16 @@
 package harness
 
 import (
-	"encoding/json"
-	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
-// mutant is the mutant this test binary was built with: set by the file a
-// mutant's overlay adds (TestMutants), "" for webjobs as it is.
-var mutant string
-
 // mutants are the planted bugs, each a directory of testdata/mutants/
-// whose files replace webjobs' of the same name (a go build overlay), and
-// the invariant that catches each.
+// whose files replace webjobs' of the same name (a go build overlay,
+// found there by qtest.Mutants), and the invariant that catches each.
 var mutants = map[string]string{
 	// the page is told ready once the report is written, 250ms before
 	// the server commits it
@@ -46,39 +38,9 @@ var mutants = map[string]string{
 // tiers.
 var pageless = map[string]bool{"rerunFinished": true}
 
-// Overlay writes the go build overlay for mutant m into dir and returns
-// its path: the mutant's files in place of webjobs', and a test file
-// that names the mutant to this package's tests.
-func Overlay(t testing.TB, m, dir string) string {
-	t.Helper()
-	here, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	replace := map[string]string{}
-	files, err := filepath.Glob(filepath.Join(here, "testdata", "mutants", m, "*.go"))
-	if err != nil || len(files) == 0 {
-		t.Fatalf("mutant %s has no files in testdata/mutants/%s", m, m)
-	}
-	for _, f := range files {
-		target := filepath.Join(here, "webjobs", filepath.Base(f))
-		if _, err := os.Stat(target); err != nil {
-			t.Fatalf("testdata/mutants/%s/%s replaces no file of webjobs: %v", m, filepath.Base(f), err)
-		}
-		replace[target] = f
-	}
-	marker := filepath.Join(dir, "mutant_test.go")
-	if err := os.WriteFile(marker, []byte("package harness\n\nfunc init() { mutant = \""+m+"\" }\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	replace[filepath.Join(here, "zz_mutant_test.go")] = marker
-	b, _ := json.Marshal(map[string]any{"Replace": replace})
-	path := filepath.Join(dir, "overlay.json")
-	if err := os.WriteFile(path, b, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	return path
-}
+// planted are webjobs' mutants: testdata/mutants/<name>/ files replacing
+// the webjobs package's of the same name.
+var planted = qtest.Mutants{Package: "webjobs", Show: []string{"violates", "journey:"}}
 
 // Each mutant, built with its overlay, is caught as its claim says.
 // Under -short the overlay builds cmd/webjobs, which the client drives
@@ -86,38 +48,30 @@ func Overlay(t testing.TB, m, dir string) string {
 // a live Bombadil run of the mutant's server.
 func TestMutants(t *testing.T) {
 	t.Parallel() // each mutant's binary is a process of its own
-	if mutant != "" {
+	if !testing.Short() {
+		// the test binary of each runs TestMutant: a live Bombadil run
+		planted.Run(t)
+		return
+	}
+	if qtest.Mutant() != "" {
 		t.Skip("already a mutant's binary")
 	}
-	for m := range mutants {
+	for _, m := range planted.Names(t) {
 		t.Run(m, func(t *testing.T) {
 			t.Parallel()
-			overlay := Overlay(t, m, t.TempDir())
-			if testing.Short() {
-				// the mutant's server as a program, driven by the client
-				// from here: one small build per mutant, every check in
-				// this process (its recorded run is TestRecordedMutants')
-				qtest.RequireQuint(t)
-				bin := filepath.Join(t.TempDir(), "webjobs")
-				if out, err := exec.Command("go", "build", "-overlay", overlay, "-o", bin, "./cmd/webjobs").CombinedOutput(); err != nil {
-					t.Fatalf("mutant %s: go build: %v\n%s", m, err, out)
-				}
-				clientRunOf(t, bin, 1).Expect(t, qtest.Violates(mutants[m]))
-				return
+			inv, ok := mutants[m]
+			if !ok {
+				t.Fatalf("mutant %s: no claim in mutants (the invariant that catches it)", m)
 			}
-			args := []string{"test", "-count=1", "-overlay", overlay, "-run", "^TestMutant$", "-v"}
-			if d, ok := t.Deadline(); ok {
-				args = append(args, "-timeout", time.Until(d).Round(time.Second).String())
+			// the mutant's server as a program, driven by the client from
+			// here: one small build per mutant, every check in this process
+			// (its recorded run is TestRecordedMutants')
+			qtest.RequireQuint(t)
+			bin := filepath.Join(t.TempDir(), "webjobs")
+			if out, err := exec.Command("go", "build", "-overlay", planted.Overlay(t, m), "-o", bin, "./cmd/webjobs").CombinedOutput(); err != nil {
+				t.Fatalf("mutant %s: go build: %v\n%s", m, err, out)
 			}
-			out, err := exec.Command("go", append(args, ".")...).CombinedOutput()
-			if err != nil {
-				t.Fatalf("mutant %s: %v\n%s", m, err, out)
-			}
-			for _, l := range strings.Split(string(out), "\n") {
-				if l = strings.TrimSpace(l); strings.HasPrefix(l, "---") || strings.Contains(l, "violates") || strings.Contains(l, "journey:") {
-					t.Log(l)
-				}
-			}
+			clientRunOf(t, bin, 1).Expect(t, qtest.Violates(inv))
 		})
 	}
 }
@@ -127,6 +81,7 @@ func TestMutants(t *testing.T) {
 // mutant's server and by its recorded Bombadil run (under -short), or by
 // a live run (Bombadil exploring the mutant's server for 45s).
 func TestMutant(t *testing.T) {
+	mutant := qtest.Mutant()
 	if mutant == "" {
 		t.Skip("webjobs as it is: TestMutants runs this test built with each mutant's overlay")
 	}

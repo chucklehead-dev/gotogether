@@ -108,7 +108,7 @@ func probe(t *testing.T, srv, trace []string) *qtest.Run {
 }
 
 func TestProbes(t *testing.T) {
-	if mutant != "" {
+	if qtest.Mutant() != "" {
 		t.Skip("webjobs as it is")
 	}
 	t.Parallel()

@@ -28,7 +28,7 @@ import (
 // the same log. Full mode; node and Playwright (NODE_PATH, or npm root
 // -g) are optional, a failure under GOTOGETHER_STRICT.
 func TestPlaywright(t *testing.T) {
-	if mutant != "" {
+	if qtest.Mutant() != "" {
 		t.Skip("webjobs as it is")
 	}
 	if testing.Short() {

@@ -50,7 +50,7 @@ func rerunOf(t *testing.T, bin string) func(ctx context.Context, actions []journ
 // rerun's failure). Full mode: each candidate is a rerun and a check.
 func TestShrink(t *testing.T) {
 	t.Parallel()
-	if mutant != "" {
+	if qtest.Mutant() != "" {
 		t.Skip("already a mutant's binary")
 	}
 	qtest.RequireQuint(t)
@@ -61,7 +61,7 @@ func TestShrink(t *testing.T) {
 			}
 			t.Parallel()
 			bin := filepath.Join(t.TempDir(), "webjobs")
-			if out, err := exec.Command("go", "build", "-overlay", Overlay(t, m, t.TempDir()), "-o", bin, "./cmd/webjobs").CombinedOutput(); err != nil {
+			if out, err := exec.Command("go", "build", "-overlay", planted.Overlay(t, m), "-o", bin, "./cmd/webjobs").CombinedOutput(); err != nil {
 				t.Fatalf("mutant %s: go build: %v\n%s", m, err, out)
 			}
 			c := client()
@@ -101,7 +101,7 @@ func faithful(t *testing.T, actions []journey.Action) {
 // Full mode.
 func TestShrinkRecorded(t *testing.T) {
 	t.Parallel()
-	if mutant != "" {
+	if qtest.Mutant() != "" {
 		t.Skip("already a mutant's binary")
 	}
 	if testing.Short() {
@@ -121,7 +121,7 @@ func TestShrinkRecorded(t *testing.T) {
 				t.Fatal(err)
 			}
 			bin := filepath.Join(t.TempDir(), "webjobs")
-			if out, err := exec.Command("go", "build", "-overlay", Overlay(t, m, t.TempDir()), "-o", bin, "./cmd/webjobs").CombinedOutput(); err != nil {
+			if out, err := exec.Command("go", "build", "-overlay", planted.Overlay(t, m), "-o", bin, "./cmd/webjobs").CombinedOutput(); err != nil {
 				t.Fatalf("mutant %s: go build: %v\n%s", m, err, out)
 			}
 			s := qtest.ShrinkActions(t, original, qtest.ActionShrink[journey.Action]{Binding: "webjobs.binding.yaml", Rerun: rerunOf(t, bin)})

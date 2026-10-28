@@ -338,9 +338,11 @@ it with `npm i -g @antithesishq/bombadil@0.7.9`; Bombadil finds Chrome as
 `BOMBADIL_ARGS="--chrome-grant-permissions local-network-access"`.
 
 The mutants are overlays, as in [examples/payd](../payd): a directory of
-`testdata/mutants/` whose files replace webjobs' of the same name, built
-with `go test -overlay` by `TestMutants`, which runs `TestMutant` in
-each binary. Under `-short` that runs the mutant's server with the Go
+`testdata/mutants/` whose files replace webjobs' of the same name, found
+there by the core's harness (`qtest.Mutants{Package: "webjobs"}`) and
+built with `go test -overlay` by `TestMutants`, which runs `TestMutant`
+in each binary (`qtest.Mutant()` naming it); a mutant program's build
+takes the same overlay (`Mutants.Overlay`). Under `-short` that runs the mutant's server with the Go
 client and judges the mutant's recorded run; out of it, a live run of
 the mutant's server.
 

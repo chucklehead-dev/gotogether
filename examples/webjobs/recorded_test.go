@@ -18,7 +18,7 @@ import (
 // within holds, every click was answered on the page), and the CLI's
 // manifest of it replays.
 func TestRecorded(t *testing.T) {
-	if mutant != "" {
+	if qtest.Mutant() != "" {
 		t.Skip("webjobs as it is; a mutant's recorded run is TestMutant's")
 	}
 	t.Parallel()
@@ -60,7 +60,7 @@ func edited(t *testing.T, edit func(n int, line string) *string) string {
 // journey cut at its first click, the requests it sent left unanswered
 // in the log, does not finish, whatever the server did.
 func TestClickWithNoOutcome(t *testing.T) {
-	if mutant != "" {
+	if qtest.Mutant() != "" {
 		t.Skip("webjobs as it is")
 	}
 	if testing.Short() {
@@ -105,7 +105,7 @@ func TestClickWithNoOutcome(t *testing.T) {
 // is a lost tail: the steps before it are judged, and the run has no
 // verdict for its finish, since the lost line may hold an answer.
 func TestTornTrace(t *testing.T) {
-	if mutant != "" {
+	if qtest.Mutant() != "" {
 		t.Skip("webjobs as it is")
 	}
 	if testing.Short() {
@@ -170,7 +170,7 @@ func rerecorded(t *testing.T, steps []qtrace.Step) []qtrace.Step {
 // faithful journey's page acts after the server's settle (which then
 // settles nothing: no finish).
 func TestTimesKept(t *testing.T) {
-	if mutant != "" {
+	if qtest.Mutant() != "" {
 		t.Skip("webjobs as it is")
 	}
 	t.Parallel()
@@ -202,7 +202,7 @@ func TestTimesKept(t *testing.T) {
 // its invariant: a recorded trace needs no overlay, so these run here,
 // side by side. Full mode only.
 func TestRecordedMutants(t *testing.T) {
-	if mutant != "" {
+	if qtest.Mutant() != "" {
 		t.Skip("webjobs as it is")
 	}
 	if testing.Short() {
@@ -234,7 +234,7 @@ func TestRecordedMutants(t *testing.T) {
 // reads a submit's or a cancel's time. Full mode only: each mutant is a
 // check of the whole journey (about 3 s each).
 func TestObservationMutants(t *testing.T) {
-	if mutant != "" {
+	if qtest.Mutant() != "" {
 		t.Skip("webjobs as it is")
 	}
 	if testing.Short() {
