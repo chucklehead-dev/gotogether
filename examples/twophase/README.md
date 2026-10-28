@@ -75,4 +75,9 @@ resends its decision until each participant answers.
 `./run-demo.sh` explores the model's graph, then simulates 30 seeds and
 validates their step logs with `gotogether validate`; `MUTANT=earlyCommit
 | impatient | volatileDecision` injects a bug into the code,
-`MODEL=early-decision` into the model.
+`MODEL=early-decision` into the model. Under `earlyCommit` most runs never
+settle: the coordinator resends its commit forever to a participant
+that voted to abort (and refuses it), which is the bug's consequence,
+not the harness's. twophase-sim says which seeds did not settle and
+writes their logs without a settle record, so validation rejects each
+at its `decideCommit` (the demo exits 1 with the report).
