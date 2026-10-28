@@ -246,11 +246,25 @@ On CI, run 442 (both, 54f0867) against run 431: counters 438 → 280 CPU
 s, lease 72 → 30, bank 37 → 23, twophase 61 → 47, validate 706 → 603
 and qtest 295 → 181 (internal/qeval, unchanged, 180 → 221: a slower
 runner); the core part's wall time 13.6 → 7.4 minutes (run 434's), the
-examples part's 8.3 → 7.0. webjobs rose, 135-155 → 179, not yet
-explained: its overlay mutants' processes each load an evaluator (the
-compile cached across them, the first one's paid on a fresh runner),
-and its suite is mostly overlay builds. ci/test-times.txt follows run
-442.
+examples part's 8.3 → 7.0. ci/test-times.txt follows run 442.
+
+**webjobs did not get slower.** Measured here with CI's flags (GOWORK=off,
+GOTOGETHER_STRICT=1, -short, its -skip, under internal/cputime, a fresh
+HOME and cache): before H1 (7e83d66) 133.4 CPU s, at 769cd5e 134.4, with
+26 quint processes in both (23 `quint test`, one typecheck, one compile,
+all in the parent test binary: under -short the overlay mutants are
+client runs checked in it); with a cold Go build cache 136.1 and 136.8.
+H1 spares it nothing by design: its binding has `within` obligations,
+which are judged on quint's states, so the evaluator decides none of its
+runs (validate's runEvaluator; under GOTOGETHER_EVAL=shadow it agrees on
+all 15 of its checks, 7 passes among them). Run 442's 179 was a slow
+runner: the same code measured 132 in run 443 and 106 in run 444, and
+that run's counters (280, against 209 and 169) and checkout (90, against
+69 and 48) were as high. Its share of the examples' CPU doubled only
+because H1 made the others cheaper. Letting the evaluator decide a run
+with `within` obligations, by judging them on its own states, would
+save it most of its 125 quint CPU s: a change to what decides a pass,
+the maintainer's.
 
 ### D4. A quint session for many replays
 
