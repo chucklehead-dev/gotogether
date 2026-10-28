@@ -1893,6 +1893,19 @@ counters' `cmd/counters` options moved into the package
 (`counters.Serve`), so the mutant's overlay and the pods (the test
 binary as the app's binary, `TestMain`) run what the binary runs.
 
+Its review's fixes, each with a test that fails without it: `/livez`'s
+bound is per trigger and a store backoff restarts it (above); a second
+SIGINT or SIGTERM in the drain ends the process, where
+`signal.NotifyContext` swallowed it until the drain's end
+(`TestMainSecondSignal`); `/metrics` escapes label values as the text
+format does (a backslash, a double quote, a newline), not with Go's
+quoting (`TestMetricsLabelEscaping`: a tenant with a tab); `qenv.Signal`'s
+`Notify` raced with itself outside a simulation (sqlstore's commits,
+found by `-race` on `TestMainGraceBudgetsTheDrain`;
+`TestSignalNotifyFromRealGoroutines`). And `/readyz` is ok only once
+the API listens (a window of microseconds, no test). The platform
+note's three errors are corrected there (§3.2, §3.3, §9's slice 1).
+
 ## 1. Two things grain gets wrong that grist must make impossible
 
 Both were read in grain's code (research notes, 2026-10-27); slice 1

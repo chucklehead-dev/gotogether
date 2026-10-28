@@ -19,12 +19,13 @@ The first release. What a user meets, by module:
   5 s in a pod before its 10 s shutdown, settle and flush (35 s: give
   the pod 45 s); `-grace D` budgets the phases into D, the startup line
   printing each one's share. `-health-addr` (default `:8081` when
-  `KUBERNETES_SERVICE_HOST` is set) serves `/livez` (`LiveBound`; never
-  the store), `/readyz` (never a dependency or processor lag) and
+  `KUBERNETES_SERVICE_HOST` is set) serves `/livez` (`LiveBound`, per
+  trigger; never the store), `/readyz` (never a dependency or processor lag) and
   `/metrics` (Prometheus text, standard library). `-addr` on loopback in
   a pod is a usage error naming `-addr :8080`. With `GOMEMLIMIT` unset,
   serve sets the memory limit to 90% of the cgroup's `memory.max`. A
-  shutdown cut by its bound returns an error saying so.
+  shutdown cut by its bound returns an error saying so. A second
+  SIGINT or SIGTERM in the drain ends the process at once.
 
 - Breaking: `qobs.Recorder.Close` returns an error and closes the
   recorder's sink (ROADMAP H3): a standalone program ends with `if err

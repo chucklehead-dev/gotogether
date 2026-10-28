@@ -166,30 +166,35 @@ type Identity struct {
 	Namespace   string // POD_NAMESPACE
 	Host        string // NODE_NAME (the Kubernetes node: a failure domain)
 	Zone        string // GRIST_ZONE (the downward API cannot read a node's labels; the manifest passes it, or "")
-	Config      string // a hash of the operational options and files in effect (§3.6)
+	Config      string // a hash of the operational options and files in effect (§3.6; not in slice 1)
 }
 func IdentityFromEnv() Identity
 func WithIdentity(id Identity) ServeOption // tests and other orchestrators
 ```
 
-The node's recorder id becomes `<app>/<node>/<incarnation>` (the
-`-steps` file name defaults to it), the served dependencies'
-`<app>/<node>/<incarnation>/<dep>`; relayed steps keep `RecorderID`
-(store and tenant: the same row is the same record wherever relayed).
-The other fields go on the recorder's metadata, not on steps: G8's "a
-step's location separate from its incarnation" is the core change that
-puts them in reports (qnemesis's loss records then name pods). The
-generated manifest sets the variables from the downward API
-(`fieldRef: metadata.name`, `spec.nodeName`).
+The node's recorder id becomes `<app>/<node>/<incarnation>` (`-steps
+DIR` writes `DIR/<app>.<node>.<incarnation>.jsonl`; a file path is used
+as given), the served dependencies' `<app>/<node>/<incarnation>/<dep>`;
+relayed steps keep `RecorderID` (store and tenant: the same row is the
+same record wherever relayed). The other fields belong on the
+recorder's metadata, not on steps, but a recorder has no metadata until
+G8's "a step's location separate from its incarnation", the core change
+that puts them in reports (qnemesis's loss records then name pods):
+slice 1 reads them and prints them on the startup line only, and
+`Config` waits for §3.6's options. The generated manifest (slice 8) sets
+the variables from the downward API (`fieldRef: metadata.name`,
+`spec.nodeName`).
 
 ### 3.3 Lifecycle: probes and the drain schedule
 
 `Main` serves, on a side port (`-health-addr`, default `:8081` when an
 orchestrator is detected, else off):
 
-- `/livez`: the node's loop is ticking (every poller woke within a
-  bound: a deadlock or a stuck goroutine). **Never the store**: a
-  database blip must not restart every pod.
+- `/livez`: the node's loop is ticking (no poller has worked on one
+  trigger past `LiveBound`, 5 m, its clock restarted at each trigger and
+  after each backoff from a store error: a deadlock or a stuck
+  goroutine). **Never the store**: a database blip must not restart
+  every pod.
 - `/readyz`: the store answered once since start, the node started, not
   draining. **Never a dependency, never processor lag**: lag caused by a
   slow bank would take every pod out of the Service and turn a slow
@@ -216,7 +221,7 @@ type Drain struct {
 	Shutdown time.Duration // the server drains its requests (ShutdownTimeout, 10 s)
 	Settle   time.Duration // the node quiets, a settle recorded (SettleTimeout, 10 s)
 	Flush    time.Duration // the relay records every committed step (FlushTimeout, 10 s)
-	Grace    time.Duration // -grace: the orchestrator's kill deadline; the phases shrink to fit, flush first served
+	Grace    time.Duration // -grace: the orchestrator's kill deadline; the phases shrink to fit, the flush's share first
 }
 func WithDrain(d Drain) ServeOption
 ```
@@ -226,10 +231,16 @@ On SIGTERM: `/readyz` fails at once; the server keeps serving for
 since Kubernetes 1.30, does the same outside the binary, and the
 generated manifest uses one or the other, not both); then Shutdown,
 Settle, Flush as today. Given `-grace`, `Main` budgets the phases from
-the deadline backwards (the flush keeps its share: a settle skipped is
-an unjudged eventual val, a flush cut is unrecorded commits) and prints
-at start what it needs (`shop: drain needs a grace of 35 s; -grace 30s
-leaves the settle 5 s`). `-addr` on loopback with `KUBERNETES_SERVICE_HOST`
+the deadline backwards: the flush keeps its share first (at most half
+the grace: a flush cut is unrecorded commits), the delay, the shutdown
+and the settle share the rest in proportion (a settle skipped is an
+unjudged eventual val, a request cut a client's retry), and a phase
+that ends early passes its time on. It prints at start what the drain
+needs and what each phase gets: `shop: node shop-0, incarnation
+3f9a0c1e7b42; drain needs a grace of 35s (delay 5s, shutdown 10s,
+settle 10s, flush 10s); -grace 30s leaves delay 4s, shutdown 8s, settle
+8s, flush 10s; GOMEMLIMIT ...` (the shortfall shared, not taken from
+the settle alone). `-addr` on loopback with `KUBERNETES_SERVICE_HOST`
 set fails, naming `-addr :8080`.
 
 ### 3.4 Store incidents
@@ -799,7 +810,16 @@ ablated.
    real nodes as two processes (`TestRealTwoPods`), merged.
    **Acceptance**: the mutant `pidIdentity` (both `counters-1`) gets
    Reconstruct's duplicate error, no verdict; the faithful run conforms;
-   a `-grace 20s` run records its settle and flush (phases shrunk).
+   a budgeted run records its settle and flush where the unbudgeted one
+   is still draining at the kill. As built (docs/grist.md §0.15) that
+   needs the phases scaled down (delay 0.5 s, shutdown 3 s, settle 2 s,
+   flush 2 s, `-grace 2s`, a request trickling across the signal): with
+   the defaults a `-grace 20s` run is never killed after a settle a
+   budget could save (a settle needs the relay caught up, so the flush
+   after it is nearly instant), only before one when delay and shutdown
+   alone outrun the grace. The recorder's metadata (namespace, host,
+   zone) waits for G8 and the generated 45 s grace for slice 8: slice 1
+   prints the fields and the grace the drain needs on the startup line.
 2. **Graceful termination and the router in qenv and gristsim (core,
    M).** `nemesis.terminate.<proc>`, `qenv.Terminating`, the router
    double (`route.<name>`, `route.<name>.lag`), `gristsim.Cluster`'s
@@ -908,7 +928,9 @@ The maintainer took the recommendation on five and reshaped the sixth
    the fence in the log (§3.5). The Go specialist's elector over a
    minimal client is kept only as the recorded alternative.
 2. **The drain:** 10 s phases kept, a 5 s wait for endpoints added, a
-   45 s grace generated; `-grace` budgets anything shorter (§3.3).
+   45 s grace generated (by slice 8's manifests; until then the startup
+   line says the 35 s the defaults need); `-grace` budgets anything
+   shorter (§3.3).
 3. **A rewind:** fail closed for effects (`ErrRewound`); the operator
    runs `<app> resume`; never an automatic resume, since an at-most-once
    effect would run again (§3.4).
