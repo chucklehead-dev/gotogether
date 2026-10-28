@@ -435,7 +435,9 @@ working there:
   process-wide state (Setenv, a global recorder, the process-wide log):
   keep `t.Parallel()` out of those.
   `gotogether lint -sim .` (in CI) flags `go` statements, wall-clock
-  calls, math/rand's and crypto/rand's package functions and selects of
+  calls, math/rand's and crypto/rand's package functions (called, or
+  taken as values: `now := time.Now`; quintvet's quintsim sees them
+  through the types, dot imports and shadowing included) and selects of
   two or more cases in files that import qenv, tests included; `//qenv:ok` exempts a
   line (give the reason after it). The core's own simulated code (qenv, its
   internals, qload, qrole, qobs, qrun, qcover, qmut) is held to it too
