@@ -15,7 +15,7 @@ import (
 // the node's steps (mailerSendServed); its bank is the team's own
 // (NewBank), served beside the node behind grist.ServeCalls on a
 // loopback port and called over HTTP (grist.ServeDependency). The node's
-// identity is the environment's (grist.IdentityFromEnv): its pod's name
+// identity is the environment's (grist.NewIdentity): its pod's name
 // and a fresh incarnation per start.
 func Serve() []grist.ServeOption {
 	mailer := stderrMailer()

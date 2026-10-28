@@ -309,7 +309,7 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 			o.apply(&cfg)
 		}
 	}
-	id := IdentityFromEnv()
+	id := NewIdentity()
 	if cfg.identity != nil {
 		id = cfg.identity.resolve(id)
 	}

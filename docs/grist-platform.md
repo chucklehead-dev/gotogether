@@ -168,7 +168,7 @@ type Identity struct {
 	Zone        string // GRIST_ZONE (the downward API cannot read a node's labels; the manifest passes it, or "")
 	Config      string // a hash of the operational options and files in effect (§3.6; not in slice 1)
 }
-func IdentityFromEnv() Identity
+func NewIdentity() Identity // mints: a fresh Incarnation on every call, the rest from the environment
 func WithIdentity(id Identity) ServeOption // tests and other orchestrators
 ```
 

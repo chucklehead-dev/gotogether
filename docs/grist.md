@@ -1809,7 +1809,8 @@ to 164. ci/test-times.txt's line is CI's run after the fix: 1038 (run 427), set 
 docs/grist-platform.md §9's slice 1, the two bugs it found first. Built,
 each with a test that fails with it taken out:
 
-- **The node's identity** (`grist.Identity`, `IdentityFromEnv`,
+- **The node's identity** (`grist.Identity`, `NewIdentity`, named
+  `IdentityFromEnv` until the review: it mints an incarnation per call,
   `WithIdentity`; grist/identity.go). The node's recorder was
   `<app>-<pid>`, and the pid is 1 in every container: two pods' merged
   step files numbered one recorder twice, Reconstruct's "two different

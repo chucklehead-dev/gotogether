@@ -266,7 +266,7 @@ func TestDrainBudget(t *testing.T) {
 	if b, _ := grist.DrainShares(grist.Drain{Grace: 45 * time.Second}, true); b.Shutdown != grist.ShutdownTimeout || b.Delay != grist.DrainDelay {
 		t.Errorf("shares of 45 s: %+v, want the defaults", b)
 	}
-	if b, _ := grist.DrainShares(grist.Drain{}, false); b.Delay != 0 || b.Needs() != 30*time.Second {
+	if b, _ := grist.DrainShares(grist.Drain{}, false); b.Delay != 0 || b.Delay+b.Shutdown+b.Settle+b.Flush != 30*time.Second {
 		t.Errorf("off an orchestrator: %+v, want no delay", b)
 	}
 	if b, _ := grist.DrainShares(grist.Drain{Delay: -1}, true); b.Delay != 0 {

@@ -9,13 +9,14 @@ core's exported API updates `api/core.txt` and adds a line here.
 The first release. What a user meets, by module:
 
 - grist (GR10 slice 1): a served node records as
-  `<app>/<node>/<incarnation>` (`grist.Identity`, `IdentityFromEnv`,
-  `WithIdentity`), never `<app>-<pid>`, which every container shared
+  `<app>/<node>/<incarnation>` (`grist.Identity`, `NewIdentity`, which
+  mints a fresh incarnation on every call, `WithIdentity`; Namespace,
+  Host and Zone only printed until G8), never `<app>-<pid>`, which every container shared
   (pid 1: two pods' merged files got Reconstruct's duplicate error, no
   verdict); a served dependency as `<app>/<node>/<incarnation>/<dep>`
   (was `<app>-<pid>-<dep>`); `-steps DIR` writes a file per start.
   `serve` drains on a schedule (`grist.Drain`, `WithDrain`,
-  `DrainDelay`): `/readyz` fails at SIGTERM and the server serves on for
+  `DrainDelay`; `Drain.Needs` is unexported, its sum on the startup line): `/readyz` fails at SIGTERM and the server serves on for
   5 s in a pod before its 10 s shutdown, settle and flush (35 s: give
   the pod 45 s); `-grace D` budgets the phases into D, the startup line
   printing each one's share. `-health-addr` (default `:8081` when

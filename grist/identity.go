@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// An Identity is where a node runs, read once at start (IdentityFromEnv)
+// An Identity is where a node runs, made once per start (NewIdentity)
 // and named in its recorder's id: <app>/<node>/<incarnation>. Every field
 // is optional. A process id names no node: it is 1 in every container,
 // so two pods, or a restarted container and its earlier self, recorded
@@ -21,20 +21,27 @@ type Identity struct {
 	// its pod name, and its steps must not be numbered as its earlier
 	// self's.
 	Incarnation string
-	// Namespace is POD_NAMESPACE.
+	// Namespace is POD_NAMESPACE. Like Host and Zone, it is only printed
+	// (Main's startup line) until G8 puts a recorder's location in
+	// reports (docs/grist-platform.md §3.2): no step or recorder id
+	// carries it.
 	Namespace string
 	// Host is NODE_NAME (the Kubernetes node, spec.nodeName: a failure
-	// domain).
+	// domain). Only printed until G8, as Namespace is.
 	Host string
 	// Zone is GRIST_ZONE (the downward API cannot read a node's labels: a
-	// manifest passes it, or it is "").
+	// manifest passes it, or it is ""). Only printed until G8, as
+	// Namespace is.
 	Zone string
 }
 
-// IdentityFromEnv is the process's Identity: its node from GRIST_NODE,
-// POD_NAME or the host name ("node" when none is known), a fresh
-// Incarnation, and the other fields from their variables.
-func IdentityFromEnv() Identity {
+// NewIdentity mints the Identity of a start of this process: a fresh
+// random Incarnation on every call (two calls are two incarnations of
+// one node), its node from GRIST_NODE, POD_NAME or the host name ("node"
+// when none is known), and the other fields from their variables. Main
+// calls it once per start; a program recording steps of one start calls
+// it once and keeps the value.
+func NewIdentity() Identity {
 	id := Identity{Node: firstEnv("GRIST_NODE", "POD_NAME"), Namespace: os.Getenv("POD_NAMESPACE"),
 		Host: os.Getenv("NODE_NAME"), Zone: os.Getenv("GRIST_ZONE"), Incarnation: newIncarnation()}
 	if id.Node == "" {
@@ -48,7 +55,7 @@ func IdentityFromEnv() Identity {
 
 // WithIdentity makes id Main's node identity in place of the
 // environment's (tests, and orchestrators other than Kubernetes); its
-// empty fields are IdentityFromEnv's.
+// empty fields are NewIdentity's.
 func WithIdentity(id Identity) ServeOption {
 	return ServeOption{apply: func(c *serveConfig) { c.identity = &id }}
 }

@@ -69,14 +69,14 @@ func (d Drain) withDefaults(orchestrator bool) Drain {
 		Settle: def(d.Settle, SettleTimeout), Flush: def(d.Flush, FlushTimeout), Grace: max(d.Grace, 0)}
 }
 
-// Needs is the grace the phases need: their sum.
-func (d Drain) Needs() time.Duration { return d.Delay + d.Shutdown + d.Settle + d.Flush }
+// needs is the grace the phases need: their sum.
+func (d Drain) needs() time.Duration { return d.Delay + d.Shutdown + d.Settle + d.Flush }
 
 // budget is d's phases' shares of its Grace: d itself when they fit (or
 // no grace is given), else the flush's first (at most half the grace)
 // and the rest in proportion, each rounded down to the millisecond.
 func (d Drain) budget() Drain {
-	if d.Grace <= 0 || d.Needs() <= d.Grace {
+	if d.Grace <= 0 || d.needs() <= d.Grace {
 		return d
 	}
 	b := Drain{Grace: d.Grace}
@@ -96,7 +96,7 @@ func (d Drain) budget() Drain {
 // line is Main's startup line's account of d (defaults applied): what it
 // needs, and what -grace leaves each phase.
 func (d Drain) line() string {
-	s := fmt.Sprintf("drain needs a grace of %v (delay %v, shutdown %v, settle %v, flush %v)", d.Needs(), d.Delay, d.Shutdown, d.Settle, d.Flush)
+	s := fmt.Sprintf("drain needs a grace of %v (delay %v, shutdown %v, settle %v, flush %v)", d.needs(), d.Delay, d.Shutdown, d.Settle, d.Flush)
 	switch b := d.budget(); {
 	case d.Grace <= 0:
 		s += "; -grace budgets it into a shorter one"

@@ -35,7 +35,6 @@ func Emits(types ...EventName) Option
 func Events[E any](r *Reads, t *EventType[E], tags ...TagPair) []E
 func Fail(err error) Result
 func Generate(app *App, dir string) (Generated, error)
-func IdentityFromEnv() Identity
 func Internal() Option
 func Keyed() Option
 func Keys(names ...string) KeyNames
@@ -51,6 +50,7 @@ func NewDep[T any](name string, fallback T) *Dep[T]
 func NewDependency(app *App, name string) *Dependency
 func NewEvent[E any](app *App, name string) *EventType[E]
 func NewHandler(app *App, s Store, opts ...ServeOption) (http.Handler, error)
+func NewIdentity() Identity
 func NewKeyedReadModel[S any](app *App, name string, version int, keys KeyNames, init func() S, handlers ...Handler[S]) *KeyedReadModel[S]
 func NewProcessor[E any](app *App, name string, on *EventType[E], h func(ctx context.Context, r *Reads, e E, m Meta) Result, opts ...Option) *Processor
 func NewQuery[Q, R any](app *App, name string, f func(r *Reads, q Q) (R, error), opts ...Option) *QueryBlock[Q, R]
@@ -200,7 +200,6 @@ type Drain struct
     field Settle time.Duration
     field Flush time.Duration
     field Grace time.Duration
-    method (Drain) Needs() time.Duration
 type EffectOption func(*Result)
 type Envelope struct
     field ID string
