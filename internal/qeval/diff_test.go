@@ -130,8 +130,10 @@ func agree(t *testing.T, b *binding.Binding, refused bool) bool {
 	if len(traces) == 0 {
 		t.Skip("quint run wrote no trace")
 	}
+	// by the model's types where quint's Rust backend's integers need them
+	reader := &binding.TraceReader{Spec: mod, Module: "diff"}
 	for _, tp := range traces {
-		tr, err := itf.ReadFile(tp)
+		tr, err := reader.Read(tp)
 		if err != nil {
 			t.Fatal(err)
 		}
