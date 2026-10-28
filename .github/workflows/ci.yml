@@ -258,6 +258,45 @@ jobs:
           go mod tidy && go build .
           if grep -E 'hegel|purego' go.mod go.sum; then echo "the core pulls in Hegel"; exit 1; fi
 
+  consumer:
+    # a user's module built from outside the repository (ci/consumer, an
+    # order-sync service on simgrpc, simlog and kafkalog, explored with
+    # qtest.System and qhegel): no replace, no workspace, the published
+    # modules at this commit, so nothing builds only because the checkout
+    # is beside it (ROADMAP I14). First with the core at the newest of the
+    # modules' pins, what go get of them gives a user; then with the core
+    # at this commit too
+    runs-on: ubuntu-latest
+    env:
+      GOPROXY: direct
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install quint
+        run: ci/install-quint.sh
+      - name: the consumer on the published modules at this commit, the core at their pins
+        run: |
+          cp -r ci/consumer "$RUNNER_TEMP/consumer"
+          cd "$RUNNER_TEMP/consumer"
+          m=github.com/chucklehead-dev/gotogether
+          go get $m/qenv/simgrpc@${{ github.sha }} $m/qenv/simlog/kafkalog@${{ github.sha }} $m/qhegel@${{ github.sha }}
+          go mod tidy
+          if grep -n '^replace' go.mod; then echo "the consumer must build without replace"; exit 1; fi
+          go list -m all | grep "^$m"
+          go vet ./... && go test -count=1 ./...
+      - name: the consumer with the core at this commit too
+        working-directory: ${{ runner.temp }}/consumer
+        run: |
+          go get github.com/chucklehead-dev/gotogether@${{ github.sha }}
+          go mod tidy
+          go list -m all | grep '^github.com/chucklehead-dev/gotogether'
+          go vet ./... && go test -count=1 ./...
+
   doubles:
     # the published doubles whose dependencies the core does not take
     # (gRPC, client-go and controller-runtime, franz-go, the AWS SDK):

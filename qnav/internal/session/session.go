@@ -138,6 +138,12 @@ func Start(pkg, ref string) (*Session, error) {
 		s.Close()
 		return nil, fmt.Errorf("the session of %s: its first line names no session: %s", ref, r.Error)
 	}
+	// the binary is built against the module's core, this navigator
+	// against its own: a protocol it does not speak is refused with the fix
+	if err := validate.CheckNavProtocol(r.Session.Protocol); err != nil {
+		s.Close()
+		return nil, fmt.Errorf("the session of %s: %w", ref, err)
+	}
 	s.Info = *r.Session
 	return s, nil
 }

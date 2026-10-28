@@ -113,10 +113,15 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   and the doubles' qenv/simgrpc, qenv/kubesim, qenv/simlog/kafkalog,
   qenv/simlog/kinesislog) have no `replace`: `go install …@version` refuses one, and a
   dependency's is ignored. They require each other at pushed commits
-  (pseudo-versions, until tags). A change to the core that another
-  published module needs: push it, then `go get
-  github.com/chucklehead-dev/gotogether@<commit>` in that module (GOWORK=off)
-  and push again; until then CI tests the module against the older core.
+  (pseudo-versions, until tags), all at one commit: `TestCorePinsAgree`
+  (internal/ciconfig) fails while their pins differ. A change to the
+  core that another published module needs: push it, then
+  `ci/bump-core.sh <commit>` (every published module, GOWORK=off go get
+  and tidy) and push again; until then CI tests each module against the
+  older core. CI's consumer job builds ci/consumer from outside the
+  repository, as a user would. Formats are versioned by one table
+  (internal/formats, DESIGN §63): a breaking change to a format bumps
+  its major there; the woven ABI's is `woven.ABI1`'s name.
   Examples are not published and keep `replace => ../..`.
   Tags, when the maintainer says: gosim (its own repository) first, then
   the core, qweave, qhegel, qanalysis and qgosim, then the doubles

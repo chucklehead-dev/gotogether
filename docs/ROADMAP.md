@@ -140,7 +140,14 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   limiter per machine (a token directory with flock) instead of
   `quintSlots` per test binary.
 - **I13. Formats and ABIs versioned (S each, policy: For the
-  maintainer).** The step log, the longest-lived artifact, has no
+  maintainer). Done** on the recommended policy (DESIGN §63, HISTORY
+  "I13 and I14"): one table, internal/formats; `gotogether.steps/1` as a
+  format record (an unversioned log is steps/1), `format:` in bindings
+  and rule files, `gotogether.corpus/1`, the nav protocol in
+  `RunSession`/`RunNode`, `woven.ABI1` checked by qweave, and `gotogether
+  doctor`'s version report (the rest of doctor stays I21's). Left for the
+  maintainer: confirm the policy, above all that derived files
+  (manifests, evidence) read their current major only. What it was: The step log, the longest-lived artifact, has no
   version (every other format does: `gotogether.run/2`,
   `gotogether.evidence/2`, `gotogether.requests/1`); bindings have no
   `format:` key, so a newer binding fails an older CLI with "unknown
@@ -152,7 +159,11 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   woven code referencing `woven.ABI1` (skew fails to compile, by name)
   with qweave checking the resolved core, a `version` in the nav
   handshake.
-- **I14. One core version, built from outside (S).** Seven core
+- **I14. One core version, built from outside (S). Done** but
+  gorelease/apidiff, which wait for tags: `ci/bump-core.sh`,
+  `TestCorePinsAgree` (no module may lag), and CI's `consumer` job
+  building ci/consumer (simgrpc, simlog, kafkalog, qhegel, qtest.System)
+  with no replace and no workspace. What it was: Seven core
   pseudo-versions across the published modules (qgosim's five days and
   three breaking tracks old); `go get` resolves their maximum, which no
   CI job builds, and every example builds through `replace`.

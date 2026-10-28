@@ -2618,6 +2618,54 @@ the upcaster fingerprint (I1), the lock's gap for a rolling update
 | `qobs.Sometimes`, `qtest.NoHotCycle`, typed fault names | code-side possibilities; livelocks as claims; misspellings at compile time | S each |
 | A runtime module at v1 | production importers stable before the analysis side | M (the maintainer's) |
 
+### I13 and I14: formats versioned, one core version
+
+The eleventh review's I13 and I14 (DESIGN §63), on the policy the I
+track's "For the maintainer" recommends, kept in one table
+(internal/formats) so the maintainer's decision is a field per format:
+- **Formats named.** The step log's first line is a format record
+  (`{"quint.format":"gotogether.steps/1"}`), written by JSONLSink with
+  the first step (one write per step, as qenv.Disk's schedules had it)
+  and by WriteJSONL; OTel steps carry it on their span. A log without
+  one is steps/1: everything written before had no name, and a major 0
+  would invent an earlier format. Bindings and rule files take an
+  optional `format:`, read before the strict decode so a later major is
+  refused with the upgrade rather than its keys "unknown". The corpus
+  entry, named `gotogether.run/1` like the manifest's run/2, is
+  `gotogether.corpus/1`, the old name read as it (raftkv's entries).
+  The nav protocol is named in a session's first line and a node
+  (`validate.NavProtocol`); both navigators check it. qdriver's
+  requests/1, the manifest, the evidence and BytesVersion (now
+  `gotogether.choices/1`'s major) go through the same table, so there is
+  one scheme, not two. Derived files (manifest, evidence) and the byte
+  rule still read their current major only, each refusal saying how to
+  write it anew; data nobody can write again is read from major 1 for
+  good.
+- **The woven ABI.** `woven.ABI1`, referenced by every file qweave
+  -cover or -mutate writes (`var _ = quintwoven.ABI1`), and qweave
+  refuses a module whose core lacks it, naming the core and the fix
+  (testdata/oldabi, a fake core of ABI0). `qweave -version` prints it.
+- **One core version.** `ci/bump-core.sh` moves every published module
+  (qhegel, qweave, qanalysis, qgosim, grist, qnav and the four doubles)
+  to one commit; `TestCorePinsAgree` fails while the pins differ (seven
+  commits before) and checks the script's list against every go.mod
+  without a replace. No module may lag: a user gets the newest core of
+  the pins anyway. CI's `consumer` job builds ci/consumer (an order-sync
+  service on simgrpc, simlog, kafkalog and qhegel, explored with
+  `qtest.System`) outside the repository with no replace and no
+  workspace, at the satellites' commit with the core at their pins, then
+  with the core at the commit.
+- **`gotogether doctor`**, I21's version-reporting core: the CLI and its
+  ABI, the module's core and published modules, qweave, gotogether-nav
+  and named binaries' cores, quint, the evaluator its version expects,
+  Node, the formats read, the variables in effect; each skew with its
+  fix, `-strict` exiting 1.
+
+Ablated: a step log, binding, rule file, corpus entry or nav session of
+a later major is read (or "unknown field") without the table; the ABI
+check off, qweave weaves against ABI0 silently; the pin check finds
+eight commits on the tree before the bump.
+
 ### P7: grist's obligations generated
 
 ROADMAP's P7 as built (docs/grist.md §3.3.1). The decisions it left:

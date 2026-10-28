@@ -1,0 +1,10 @@
+# How the service's steps become calls of model/ordersync.qnt's actions:
+# both take the step's id, the default.
+spec: model/ordersync.qnt
+module: ordersync
+constants:
+  ORDERS: '1.to(3)'
+actions:
+  place: {}
+  sync: {}
+invariants: [syncedPlaced]
