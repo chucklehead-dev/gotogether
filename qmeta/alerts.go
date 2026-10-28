@@ -265,12 +265,13 @@ func (r *Region) Rules(cfg RuleConfig, healthy string) string {
 	q := fmt.Sprintf("%s{name=%q}", cfg.Queue, cfg.Server)
 	o := fmt.Sprintf("%s{service=%q}", cfg.Orbit, cfg.Service)
 	var terms []string
+	g := r.Chain.unit // the bands are in the chain's units, the gauges in requests
 	for _, b := range r.Bands(cfg.Step) {
-		cond := fmt.Sprintf("%s >= %d", q, b.ULo)
+		cond := fmt.Sprintf("%s >= %d", q, b.ULo*g)
 		if b.UHi <= r.Chain.N {
-			cond += fmt.Sprintf(" and %s < %d", q, b.UHi)
+			cond += fmt.Sprintf(" and %s < %d", q, b.UHi*g)
 		}
-		terms = append(terms, fmt.Sprintf("(%s and on() %s >= %d)", cond, o, b.VMin))
+		terms = append(terms, fmt.Sprintf("(%s and on() %s >= %d)", cond, o, b.VMin*g))
 	}
 	expr := "vector(0) > 1" // no state is in the region: never fires
 	if len(terms) > 0 {
@@ -285,14 +286,23 @@ func (r *Region) Rules(cfg RuleConfig, healthy string) string {
 	fmt.Fprintf(&b, "        annotations:\n")
 	fmt.Fprintf(&b, "          summary: %q\n", fmt.Sprintf("%s is in a state it is unlikely to leave by itself within %s", cfg.Server, seconds(r.Bound)))
 	fmt.Fprintf(&b, "          derivation: %q\n", fmt.Sprintf("qmeta chain: lambda=%.3g/s mu=%.3g/s workers=%d timeout=%.3gs retries=%d backoff=%.3gs budget=%.3g; region: states with less than even odds of %s within %s",
-		p.Lambda, p.Mu, max(p.Workers, 1), p.Timeout, p.Retries, p.Backoff, p.RetryBudget, healthy, seconds(r.Bound)))
+		p.Lambda, p.Mu, max(p.Workers, 1), p.Timeout, p.Retries, p.Backoff, p.RetryBudget, healthy, seconds(r.Bound))+unitNote(g))
 	if r.Healthy != nil {
-		fmt.Fprintf(&b, "          healthy: %q\n", r.Healthy.PromQL(cfg))
+		fmt.Fprintf(&b, "          healthy: %q\n", Healthy{MaxU: r.Healthy.MaxU * g}.PromQL(cfg))
 	}
 	if cfg.Headroom != "" {
 		fmt.Fprintf(&b, "          headroom: %q\n", cfg.Headroom)
 	}
 	return b.String()
+}
+
+// unitNote says, in a rule's derivation, that the chain counted requests
+// in units (Params.Unit): its rates and healthy set are per unit.
+func unitNote(g int) string {
+	if g <= 1 {
+		return ""
+	}
+	return fmt.Sprintf(" (the chain in units of %d requests: its rates and healthy set per unit, the thresholds above in requests)", g)
 }
 
 func seconds(s float64) string {

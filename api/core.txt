@@ -1014,6 +1014,7 @@ const Window = 100 * time.Second
 func Assess(x Experiment, goodput string, tr Trigger, within time.Duration, seed uint64) Recovery
 func Constant(v float64) Shape
 func Count(sys Target, tr Trigger, n int) int
+func Layered(inner int, outer Retrier) Retrier
 func Mostly(sys Target, tr Trigger, n int) (bool, Recovery)
 func NewClient(s *qenv.Sim, rnd *rand.Rand, m *Metrics, sv *Server, cfg ClientConfig) *Client
 func NewServer(s *qenv.Sim, rnd *rand.Rand, m *Metrics, cfg ServerConfig) *Server
@@ -1148,18 +1149,26 @@ type TriggerSpace struct
 == github.com/chucklehead-dev/gotogether/qmeta
 func Calibrate(p Params, data []Trajectory) (Params, float64)
 func CalibrateTimeout(p Params, data []Trajectory) (Params, float64)
+func LimitFor(p Params, factor, duration float64, healthy func(State) bool, within, prob, hi float64) float64
 func Measure(samples []time.Duration) Service
 func New(p Params) *Chain
+func RecoveryAfter(p Params, b Burst, healthy func(State) bool, within float64) float64
+func Size(p Params, b Burst, healthy func(State) bool, within, prob float64, most int) Sized
+func TimeoutFor(p Params, data []Trajectory, s Service, b Burst, healthy func(State) bool, within, prob float64) Timeout
 func Trajectories(obs []Observation, times []float64, bucket int) []Trajectory
 type Band struct
     field ULo int
     field UHi int
     field VMin int
+type Burst struct
+    field Rate float64
+    field Duration float64
 type Chain struct
     field P Params
     field N int
     field V int
     method (*Chain) Clamp(s State) State
+    method (*Chain) Distribution(pi []float64, t float64) []float64
     method (*Chain) Field(stepU, stepV int) []Drift
     method (*Chain) HealthyRegion(h Healthy, bound float64) *Region
     method (*Chain) HittingTimes(target func(State) bool) []float64
@@ -1196,6 +1205,7 @@ type Params struct
     field Backoff float64
     field RetryBudget float64
     field RetryRate float64
+    field Unit int
     method (Params) Warning() string
 type Region struct
     field Chain *Chain
@@ -1224,6 +1234,10 @@ type Service struct
     method (Service) Draw(rnd *rand.Rand) time.Duration
     method (Service) Exponential() bool
     method (Service) Mu() float64
+    method (Service) Quantile(q float64) time.Duration
+type Sized struct
+    field Workers int
+    field Recovery map[int]float64
 type State struct
     field U int
     field V int
@@ -1231,6 +1245,13 @@ type State struct
 type State2 struct
     field U float64
     field V float64
+type Timeout struct
+    field Value float64
+    field Floor float64
+    field Drain float64
+    field Scale float64
+    field Recovery map[float64]float64
+    field Why string
 type Trajectory struct
     field From State
     field Times []float64

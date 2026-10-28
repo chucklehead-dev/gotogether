@@ -22,10 +22,13 @@ func (c *Chain) Loss(data []Trajectory) float64 {
 		if _, ok := all[key]; !ok {
 			all[key] = c.MeanAll(tr.Times)
 		}
-		i0 := c.Index(c.Clamp(tr.From))
+		// data are in requests, the chain's states in units (Params.Unit)
+		g := float64(c.unit)
+		i0 := c.Index(c.Clamp(State{tr.From.U / c.unit, tr.From.V / c.unit}))
 		exp := make([]State2, len(tr.Times))
 		for i := range exp {
-			exp[i] = all[key][i][i0]
+			e := all[key][i][i0]
+			exp[i] = State2{e.U * g, e.V * g}
 		}
 		for i := range exp {
 			du, dv := exp[i].U-tr.Mean[i].U, exp[i].V-tr.Mean[i].V

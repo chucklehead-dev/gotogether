@@ -44,12 +44,27 @@ type Params struct {
 	Backoff     float64
 	RetryBudget float64
 	RetryRate   float64
+
+	// Unit, if above 1, is how many requests the chain counts as one: its
+	// states (u, v) are in units, and New divides Lambda, the capacity
+	// (Workers × Mu), RetryRate, Queue and Orbit by it, ceil(Workers/Unit)
+	// workers sharing the capacity. A chain's states grow with μ ×
+	// Workers × Timeout (the queue a timeout lets through), too many to
+	// solve for a service of milliseconds behind a timeout of seconds; in
+	// units the chain keeps the drift (the fluid dynamics: where the
+	// tipping point is) and loses noise, so its escapes are less likely in
+	// both directions. Rank settings with it, and confirm in a simulation,
+	// which counts every request. A healthy set is in units too; a
+	// Burst's rate and Trajectories are in requests.
+	Unit int
 }
 
 // Chain is the CTMC of a single server with timeouts and retries.
 type Chain struct {
+	// P is the parameters in the chain's units (Params.Unit): Unit 1.
 	P     Params
-	N, V  int // u in [0, N], v in [0, V]
+	N, V  int // u in [0, N], v in [0, V], in units
+	unit  int // requests per unit (Params.Unit), at least 1
 	alpha float64
 	fail  []float64 // fail[u]: probability a request arriving at u times out
 }
@@ -65,7 +80,9 @@ func New(p Params) *Chain {
 	if p.Orbit == 0 {
 		p.Orbit = 2 * p.Queue
 	}
-	c := &Chain{P: p, N: p.Queue, V: p.Orbit, alpha: float64(p.Retries) / float64(p.Retries+1)}
+	unit := max(p.Unit, 1)
+	p = p.inUnits()
+	c := &Chain{P: p, N: p.Queue, V: p.Orbit, unit: unit, alpha: float64(p.Retries) / float64(p.Retries+1)}
 	c.fail = make([]float64, c.N+1)
 	for u := 0; u <= c.N; u++ {
 		c.fail[u] = failProb(u, p.Workers, p.Mu, p.Timeout)
@@ -389,11 +406,34 @@ func (c *Chain) backward(times []float64, g []float64, absorb []bool) [][]float6
 // P = I + Q/L. A from outside the chain's bounds is clamped to them: an
 // observed system can exceed a bound the chain only approximates.
 func (c *Chain) Mean(from State, times []float64) []State2 {
-	from = c.Clamp(from)
+	pi := make([]float64, c.States())
+	pi[c.Index(c.Clamp(from))] = 1
+	acc := c.forward(pi, times)
+	out := make([]State2, len(times))
+	for ti := range times {
+		for u := 0; u <= c.N; u++ {
+			for v := 0; v <= c.V; v++ {
+				p := acc[ti][c.Index(State{u, v})]
+				out[ti].U += p * float64(u)
+				out[ti].V += p * float64(v)
+			}
+		}
+	}
+	return out
+}
+
+// Distribution is the probability of every state (by Index) t seconds
+// after the distribution pi (a vector over the chain's states: one 1 at a
+// state's Index for a start in it), by uniformization.
+func (c *Chain) Distribution(pi []float64, t float64) []float64 {
+	return c.forward(pi, []float64{t})[0]
+}
+
+// forward is the distribution at each of times from pi.
+func (c *Chain) forward(pi []float64, times []float64) [][]float64 {
 	n := c.States()
 	L, edges, stay := c.uniformized()
-	pi := make([]float64, n)
-	pi[c.Index(from)] = 1
+	pi = append([]float64(nil), pi...)
 	next := make([]float64, n)
 	acc := make([][]float64, len(times))
 	for i := range acc {
@@ -429,17 +469,7 @@ func (c *Chain) Mean(from State, times []float64) []State2 {
 		}
 		pi, next = next, pi
 	}
-	out := make([]State2, len(times))
-	for ti := range times {
-		for u := 0; u <= c.N; u++ {
-			for v := 0; v <= c.V; v++ {
-				p := acc[ti][c.Index(State{u, v})]
-				out[ti].U += p * float64(u)
-				out[ti].V += p * float64(v)
-			}
-		}
-	}
-	return out
+	return acc
 }
 
 // State2 is an expected (u, v).

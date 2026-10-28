@@ -33,6 +33,6 @@ internal/qeval 360 # 340 and 358 CPU s on CI (runs 447 and 460), 520 in run 459 
 internal/simdeps 20 # 14.3 CPU s on CI (run 348), under 4 here with a warm build cache
 qenv/internal/profile 15 # 10.9 CPU s on CI (run 348)
 qload 13 # 8-12 CPU s
-qmeta 15
+qmeta 22 # 13.5 s wall -short here: GR10 slice 6's brute-force tests of Size, LimitFor and TimeoutFor add about 5 CPU s to TestRegionAndRules' 5
 qtest 290 # 181 CPU s on CI (run 442, internal/qeval 221 in it: about 250 on run 434's slower runner; passes decided by the Go evaluator, 8178000); 295 and 514 in runs 431 and 434
 validate 960 # 603 CPU s on CI (run 442, internal/qeval 221 in it: about 840 on run 434's slower runner; passes decided by the Go evaluator, 8178000); 706 and 1218 in runs 431 and 434; here 718 (557 quint processes) against 940 (730) before

@@ -26,6 +26,19 @@ The first release. What a user meets, by module:
   marks a run whose Settle failed, `gotogether validate` every trace
   without a settle; the report's `hot cycle (evidence, no verdict ...)`
   line, no verdict changed.
+- Sizing from the chain (GR10 slice 6, core part): `qmeta.RecoveryAfter`
+  (the probability of being healthy within a bound after a `Burst`, from
+  the distribution the burst ends in), `qmeta.Size` (the fewest workers
+  that recover from a burst), `qmeta.LimitFor` (the highest arrival rate
+  a hop whose workers no replica count changes recovers at: a rate
+  limit), `qmeta.TimeoutFor` (a per-attempt timeout: the latency floor,
+  Erlang C at the load, the drain bound for regular service, then the
+  shortest rung that recovers, calibrated with λ held), `Params.Unit`
+  (the chain counts requests in units, so a millisecond service behind a
+  timeout of seconds is solvable), `Chain.Distribution`,
+  `Service.Quantile`, and `qload.Layered` (a proxy's tries inside a
+  client's attempts: attempts multiply, the client's budget sees only its
+  own). Rules of a chain in units alert in requests.
 - Skills in pavlov's shape (ROADMAP P8): each SKILL.md at most about 80
   lines, with a "choose your path" list (each reference and when to read
   it), steps, checklists, a results table (each verdict and report line,

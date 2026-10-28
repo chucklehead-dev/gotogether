@@ -3,6 +3,7 @@ package qmeta
 import (
 	"math"
 	"math/rand/v2"
+	"slices"
 	"time"
 )
 
@@ -67,4 +68,19 @@ func (s Service) Draw(rnd *rand.Rand) time.Duration {
 		return s.Mean
 	}
 	return s.Samples[rnd.IntN(len(s.Samples))]
+}
+
+// Quantile is the q-quantile (0.999: the 99.9th percentile) of the
+// samples, the mean's exponential quantile without samples.
+func (s Service) Quantile(q float64) time.Duration {
+	if len(s.Samples) == 0 {
+		if s.Mean <= 0 || q >= 1 {
+			return s.Mean
+		}
+		return time.Duration(-math.Log(1-q) * float64(s.Mean))
+	}
+	sorted := slices.Clone(s.Samples)
+	slices.Sort(sorted)
+	i := min(len(sorted)-1, max(0, int(math.Ceil(q*float64(len(sorted))))-1))
+	return sorted[i]
 }
