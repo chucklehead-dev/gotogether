@@ -238,7 +238,8 @@ func bare(kind, where string) {
 // covers reports whether a kind prefix covers kind: itself, or a kind
 // below it ("rpc" covers "rpc.x", not "rpcx").
 func covers(prefix, kind string) bool {
-	return kind == prefix || strings.HasPrefix(kind, prefix+".")
+	rest, ok := strings.CutPrefix(kind, prefix)
+	return ok && (rest == "" || rest[0] == '.') // (prefix+"." built a string at every fault choice)
 }
 
 // DefaultRates inject a fault at one fault choice in twenty, except a
