@@ -14,9 +14,527 @@ Standing decisions, with the maintainer:
 - MIT license.
 
 Order: H1 → H3 → H2 with P5 → P1, P3, P4, P7 → H4 → H5 → H6 (with P8)
-→ H7 → GR10 → P2 → P6, with GR3's slices 4-6 after H4, GR4-GR9 after
-H5 and H6, and P9 after GR4; G8-G12 and the items left from S, X, Y, T and E
-alongside; R5 when the maintainer says.
+→ H7 → GR10 → P2 → P6 (all done but H7's next item and GR10's
+slices), then the eleventh review's I track: I1-I11 first (most in
+progress), I12-I18 before R5, I22 (H7's next) and GR10 slices 3-4
+before GR4, I23-I25 before a second real grist app, I26-I36 alongside,
+I37-I41 after I13, and I42-I51 each decided before it starts. GR3's
+slices 4-6 after H4, GR4-GR9 after H5, H6 and I22, P9 after GR4; G8-G12
+and the items left from S, X, Y, T and E alongside; R5 when the
+maintainer says (the I track's "For the maintainer").
+
+## Eleventh review: integrity before tags (I)
+
+Five reviews at 65e5d23, after H, P and GR10 slices 1, 2 and 6 (an
+architect's, a usability designer's with two newcomers' first hours, a
+formal-methods expert's with adversarial models, an adopter's for a
+platform team, a Go specialist's with benchmarks and the race detector;
+docs/HISTORY.md, "Eleventh review"). Duplicates are merged and conflicts
+decided there. Order: silent wrong answers, then what blocks adoption
+(stability, scale, on-call reports, packaging), then grist's gaps,
+usability, performance, and the bold ideas last; each item reviewed
+before the next. Sizes as in S (S under a week, M two to four, L more).
+**In progress** means an agent is on it now: do not start it again.
+Commit 3b20911 cites the architect's draft numbers: its I1 is I1 here,
+its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
+
+### Silent wrong answers
+
+- **I1. A fixed upcaster refolds (S). In progress** (3b20911 landed
+  the fingerprint and the mutant `upcasterFixKeepsSnapshots`). A read
+  model's fingerprint held no upcaster, so snapshots folded through a
+  buggy upcaster stayed in use after its fix, and `CheckSnapshots` (a
+  fresh store) could not see it. Left: library's upcaster-fix example
+  (a `buggyUpcaster` mutant, snapshots taken under it, then the fix:
+  the regression as an example); the runtime audit is I24's.
+- **I2. Sound set folds in the Go evaluator (S). In progress.**
+  qeval accepted a set `fold` that gave the same result sorted and
+  reversed, which does not make it order-independent: a round-robin
+  shard assignment over `Set(1, 33, 2)` made `simulate -graph` "prove"
+  an invariant quint refutes, and a run quint rejects passed "judged by
+  the Go evaluator". The review's preference: every permutation up to
+  about 6 elements, a whitelist of commutative shapes (sums, unions,
+  max/min, puts to distinct keys) above it, `Unsupported` otherwise;
+  not quint's own set order, which no quint version promises. Example:
+  `examples/shards`, a rebalance protocol over a set fold, `-graph` and
+  quint agreeing in its README.
+- **I3. `-graph` cross-checked against quint (S). In progress.** A
+  graph's "holds" rested on the evaluator alone. Every `-graph` run also
+  samples quint (`simulate.samples`) and requires each state quint
+  visits to be a node of a complete graph: a missing one is an evaluator
+  bug and an error. It would have caught I2 in milliseconds.
+- **I4. An internal choice the expect observes (S, then M). In
+  progress.** A bound action that chooses inside (`nondet`, `any {}`)
+  whose result the binding's expect reads is sampled by quint's replay:
+  the same input gave Mismatch at different steps on three reruns, and
+  `lint -binding` said "fits". First a lint and a report line ("bind it
+  as a parameter"); then replays with the evaluator's witness pinned,
+  as `-graph`'s replays write literal calls, so quint confirms a path
+  instead of sampling one (the M half stays here if the agent's fix is
+  the lint alone).
+- **I5. ResolvePending keeps the invariants if a placement can (S). In
+  progress.** It judged invariants on the first placement that conforms,
+  so `Violates` held for a run that a later placement keeps (and the
+  verdict differed with `Linearize()`). A second search, as
+  `orderIssue` has; Violates only when no conforming placement keeps
+  them, naming the one that does otherwise.
+- **I6. qhistory ignores an Unknown transaction's completion (S). In
+  progress.** A timed-out transaction may commit later; its `Completed`
+  made a real-time edge and a `G-single-realtime` that did not happen.
+  Elle treats `:info` as infinity. Session order and lost writes are
+  I45's.
+- **I7. Real time across recorders named in the verdict (S). In
+  progress.** Two recorders with neither `Call` nor order keys are
+  ordered by wall time within `RealTimeSlack` (1 ms), and a
+  `NotLinearizable` proof is then true only under that clock
+  assumption, which quint's re-check cannot touch. The verdict names
+  the cross-recorder edges it used ("assumes clocks of a and b within
+  1 ms"). A declared skew per pair stays G8's, with the adopter's
+  production case (NTP skew well over 1 ms). Example: kvstore on two
+  hosts 5 ms apart, a false "not linearizable" before, the assumption
+  named after.
+- **I8. Liveness says what it checks (S). In progress.** DESIGN §62 and
+  the reports: the check is □◇P (P at quiescence), not ◇P, since a
+  lasso's prefix may pass through states where the val holds; "no lasso
+  is a false alarm for want of a declaration" holds only under
+  per-action weak fairness (per-call or strong fairness oblige more, so
+  `live` can be wrong for a system with weaker fairness); "a proof for
+  the instance" says "under per-action weak fairness".
+- **I9. Verdicts that state their bounds (S).** `All(...)` over zero
+  runs holds vacuously: fail it. Exhaust's "complete" printed with its
+  bound ("complete within 2 delays, 1 fault"). PCT's guarantee stated
+  as conditional on `Steps` at least the run's length and `n` counting
+  every task ever created. The evaluator's sampled share of passes in
+  the exploration's summary, raised for plans that touch operators new
+  since the last shadow-clean nightly or any `fold`. A one-line
+  confidence for sampling ("a bug reached by 1 trace in K is missed with
+  probability (1-1/K)^N"), the nightly's per-claim confidence (Left from
+  Y) with it.
+- **I10. Coverage scoped to its runs (S).** `Coverage.Unreached` reads
+  the process-wide registry of declared sites, so in a user's suite it
+  reports sites another test declared; qenv's `TestFaultPoints` fails 4
+  of 5 times under `-count=5` and under `-shuffle`. Declarations made in
+  a run belong to it (as `hooks.FaultNames` does for kinds), or
+  `CoverageOf` takes them from the runs it is given; then a CI job with
+  `-shuffle=on -count=2` over the core's fast packages.
+- **I11. Differential fuzzing of qeval against quint (M).**
+  Hegel-generated expressions and actions over the builtin table,
+  judged by both, nightly: the next I2 found before a user does.
+
+### Adoption: stability
+
+- **I12. quint's processes die with their check (S, then M).**
+  `exec.CommandContext` kills node, not the Rust evaluator it spawns:
+  a cancelled check leaves a CPU-bound `quint_evaluator` with ppid 1
+  that ignores SIGTERM, inflating neighbours' CPU budgets and outliving
+  an interrupted `go test`. One `quintCmd(ctx, dir, args...)` helper for
+  every call site (process group, `Cancel` killing it, `WaitDelay`,
+  argv, `cmd.Dir`, the backend, the slot), `t.Context()` through qtest's
+  and validate's checks in place of `context.Background()`, and a Linux
+  test that a cancelled check leaves no evaluator. Then (M) one slot
+  limiter per machine (a token directory with flock) instead of
+  `quintSlots` per test binary.
+- **I13. Formats and ABIs versioned (S each, policy: For the
+  maintainer).** The step log, the longest-lived artifact, has no
+  version (every other format does: `gotogether.run/2`,
+  `gotogether.evidence/2`, `gotogether.requests/1`); bindings have no
+  `format:` key, so a newer binding fails an older CLI with "unknown
+  field"; the woven ABI is called by code a qweave binary generates
+  against whatever `woven` the user's module resolves; the
+  run-navigation protocol between a test binary and `gotogether-nav`
+  has no version. `gotogether.steps/1` (a header record; readers refuse
+  a newer major with the fix), an optional `format: gotogether.binding/1`,
+  woven code referencing `woven.ABI1` (skew fails to compile, by name)
+  with qweave checking the resolved core, a `version` in the nav
+  handshake.
+- **I14. One core version, built from outside (S).** Seven core
+  pseudo-versions across the published modules (qgosim's five days and
+  three breaking tracks old); `go get` resolves their maximum, which no
+  CI job builds, and every example builds through `replace`.
+  `ci/bump-core.sh` moves every published module to one core commit; a
+  CI job builds and tests them at the maximum of their pins; gorelease
+  or apidiff per module once tags exist. Example: an outside-in consumer
+  module (no replace, no workspace): an order-sync service publishing
+  through kafkalog and served by simgrpc, explored with `qtest.System`,
+  the first user of GR5-GR7's doubles.
+- **I15. The suite's own guards (S).** The race job widened to qtest
+  (whose explorations run seeds in parallel), qhistory, qsweep,
+  qnemesis, qload, qshrink and internal/qeval (all pass today, about 4
+  CPU minutes); qhegel's capture of Hegel's output by assigning
+  `os.Stdout` (a data race with any parallel print) replaced by fd-level
+  capture, and an `io.Writer` option asked of hegel-go; a pinned
+  staticcheck job; grist in ci/test-times.txt with a -short tier per
+  push and the full run nightly (grist 332 s, gristsim 283 s wall under
+  -short; counters 253-440 CPU s on the same code); a `GOTOOLCHAIN=go1.25`
+  build of the core (the floor: For the maintainer).
+- **I16. Explicit quantifiers, one place for claims (S, breaking,
+  before tags).** A bare expectation means `All` for `Conforms`,
+  `Settles`, `Completes`, `Satisfies` and `NoClientErrors`, and `Some`
+  for `Rejects`, `Mismatch`, `Violates`, `Scenario` (Left from Y's
+  arity). Decided: a quantifier required except on the claims whose
+  names say "every run" (`Conforms`, `Settles`, `Completes`,
+  `Finishes`), with a panic naming `Some(...)` or `All(...)`, and every
+  failure printing its quantifier. `Mutate(t, cfg).Expect(t,
+  PerMutant(claims...), NoSurvivors(...))` as Explore's; gristtest's
+  `ClientErrors` folded into the negation.
+- **I17. Model claims through one Expect (M, breaking for
+  `qtest.Possible`).** Three engines answer "can the model ...?" with
+  two semantics: the CLI's `simulate` falls back to quint sampling,
+  `qtest.Possible` fails "not searched" where the CLI would sample, and
+  a test of `-graph`'s verdicts walks `GraphResult` by hand (twophase's
+  and crossdb's tests: the walk AGENTS forbids for runs). One library
+  engine, `validate.Simulate` (Left from Y), the CLI calling it;
+  `qtest.Model(t, binding).Expect(t, qtest.Proves("consistency"),
+  qtest.Refutes("x"), qtest.Possible(scenario), qtest.Live("val"),
+  qtest.NoDeadlocks())`; one `search: {states, depth}` bound in the
+  binding for `searchStates`, `graphStates` and `graphDepth`. Example:
+  `simulate -graph` in hello as the step before any code ("the model
+  proved for COUNT=3"), with a model mutant whose invariant fails with
+  the shortest counterexample replayed by quint; a bounded `graphDepth`
+  run in counters.
+- **I18. validate split (M, breaking, before tags).** validate is 86
+  exported identifiers and 10.7k lines: runs, model checking, the model
+  navigator, the run navigator's wire protocol (qnav imports validate
+  for it), manifests, step mutants, all to freeze as one v1 surface.
+  Model analysis to a package of its own (`validate/model`), the
+  navigation protocol to `validate/navproto` with I13's version, qnav
+  on it; validate keeps runs. With it: `qtrace.Step`'s record fields
+  (invocation, settle, loss, watermark) said to be Reconstruct's, zero
+  in a Trace's steps, or a `Record` type of their own; DESIGN's rule
+  for a new knob ("a struct for a run's knobs, an Option for a
+  test's").
+
+### Adoption: scale and on-call
+
+- **I19. Validation at production volume (M-L).** A synthetic payments
+  log took 1.5 s at 90 steps, 5.3 s at 300, 54 s at 900 (all in the Go
+  evaluator, compile cached) and over 10 minutes at 9000: about n², and
+  a payments service writes millions of steps a day. Reconstruct
+  presized first (20-30% less time, 27-33% fewer bytes: two lines);
+  then the quadratic profiled and fixed; continue after the first
+  failure (every later invariant is "not checked" today, hiding the
+  blast radius); a serial log partitioned by entity, declared in the
+  binding and checked against the model's declaration; budget tests at
+  10⁴ and 10⁵ steps in ci/test-times.txt. Example: a million-step
+  synthetic day of payments judged in windows or partitions within a
+  stated budget.
+- **I20. On-call reports (S-M).** The report serves a model's author,
+  not on-call at 3 a.m.: three indices for one record ("step 16",
+  "seq 7", ":19"); no wall time, pod, trace or request id on the failing
+  line; "enabled instead" lists the instance's synthetic arguments as if
+  they were records; state dumps cut mid-value; no machine-readable
+  verdict. `validate -json`, JUnit and a GitHub step summary; one record
+  index with wall time, process and pod, tenant, command and trace ids;
+  the "enabled instead" examples labelled as the model's, or behind
+  `-v`; a state diff in place of the dump; a verdict-to-runbook table in
+  verdicts.md. Example: an incident walkthrough from alert to fix with
+  `-json`, `nav` and `validate -replay`, doubling as the runbook.
+
+### Adoption: packaging
+
+- **I21. Packaging (S, then M).** A GitHub Action (`setup-gotogether`:
+  quint and its evaluator pinned and cached, `validate` and `evidence
+  -strict` steps with annotations) and a container image with quint
+  pinned, so no repository copies `install-quint.sh`; `gotogether
+  doctor` (the core's, qweave's, qnav's, qhegel's and quint's versions,
+  I13's ABI and protocol skews, the D3 cache, bindings' formats,
+  `GOTOGETHER_*` in effect, each skew with its fix); a CI tiering guide
+  (per PR: recorded tests' conformance and -short explorations under a
+  CPU budget; nightly: seeds, Hegel, mutants) as a reusable workflow.
+  Then (M) a compiled-model artifact (`gotogether compile` writes the
+  evaluator's IR), so a validate-only pipeline (a canary, a CronJob, an
+  incident laptop) needs no Node or quint for passing runs. Example: a
+  CI-budget reference repository, ten small model-checked services under
+  5 CPU minutes per PR each.
+
+### grist's gaps
+
+- **I22. Versions that roll (M, with GR10 slice 4, before GR4). In
+  progress** for the lock's gap (3b20911: a field added to a version is
+  taken as that version, as grist-platform §3.9 calls it safe). The rest
+  is H7's **Next** (`grist.WritesVersion` with a downcaster,
+  `gristtest.Upgrade`, counters v2 with the `eagerV2` mutant), not
+  repeated here.
+- **I23. sqlstore reads in one query (S-M, before grist's tag).**
+  `sqlstore.Read` fetches positions from `grist_index`, then one
+  `SELECT` per event: 31-37 µs an event on SQLite (5,000 events 155
+  ms), a round trip each on PostgreSQL (a 5,000-event rebuild 1.5-5 s).
+  One `grist_index JOIN grist_events` query is 6.2 µs an event; a Read
+  benchmark in storetest on SQLite and PostgreSQL in CI.
+- **I24. grist's reads at scale (M).** A read with snapshots on costs
+  about twice `SnapshotEvery` events (dc959e8 kept short logs as they
+  were), with no in-process memo though folds are pure; a failed
+  `PutSnapshot` is ignored (a read-only role folds from 0 forever,
+  silently); `/metrics` says nothing of folds or snapshots; retired
+  fingerprints' snapshots are never pruned. A memo keyed by (tenant,
+  read model, fingerprint, key); `grist_fold_events` and
+  `grist_snapshot_{hits,misses,put_failures}`; pruning after a put,
+  deferred while two fingerprints are live in a rollout; I1's runtime
+  audit (a sampled key refolded from 0 against its snapshot, a metric);
+  `grist.Snapshots(every)` an App option in place of the context
+  setting, gristsim's field mapped to it. Example: counters at 10⁵
+  events, snapshots on and off, the fold cost printed.
+- **I25. grist's operations basics (M; GR10 slice 3 moved up).** The
+  DSN from a file or the environment (a flag shows in `ps` and the pod
+  spec; slice 5's first part); structured lifecycle logs (the drain
+  logs nothing); request rate, latency and errors by outcome, Go
+  runtime metrics and build info; a schema-version table and
+  migrations (today `CREATE TABLE IF NOT EXISTS` at boot); retention for
+  `grist_steps` and `grist_markers`; `steps -export` (from slice 9) and
+  an admin command for `grist.failed` dead letters. GR10 slice 3
+  (failover and restore: `ErrRewound`, `<app> resume`) is built next to
+  slice 4, before anyone runs grist on managed PostgreSQL. Example: a
+  store failover in wallet-grist where `ErrRewound` meets an at-most-once
+  effect.
+- **I26. The generator warns on what an app forgot (S-M).** A newcomer
+  added `ItemRemoved` and no read model's fold of it, in Go and Quint
+  alike: generation, Verify and every test passed, and removals never
+  lowered stock (the tenth review's newcomer met its twin). `<app>
+  model` warns "item-removed is appended by remove-item and folded by no
+  read model; tagged item like stock's events: should stock fold it?",
+  and likewise rules with no refusal mutant, commands no scenario
+  takes, a stale grist.lock: in the generator's warnings, where the
+  loop already looks.
+- **I27. grist's user guide (M). In progress** for H7's docs (dc959e8
+  landed docs/grist.md §2.1-§2.2 as built and the grist skill's
+  versions reference). The README links docs/grist.md, a design note
+  that opens with slices and a codename; the generated app's README is
+  the best user doc there is. grist/README.md (the module's page on
+  pkg.go.dev) as the guide: an app's tour, what one writes and what is
+  generated, the loop, versioning (upcasting, snapshots, grist.lock),
+  costs, what is not built; grist.md's sections marked *built* or
+  *designed*; backticked `pkg.Ident` in docs/*.md checked against
+  api/*.txt (how `UpcastFrom` got through), "designed, not built"
+  behind an explicit marker. Example: the tutorial "Changing an event"
+  on library (a struct changed, `grist model` refusing, the upcaster,
+  the kept v1 log replayed, `snapshotPastItsPosition` caught).
+
+### Usability: the first hour
+
+- **I28. The quickstart shows a catch (S).** README promises hello's
+  `as expected` blocks and a shrink line; `go test -v` prints neither,
+  so a newcomer never sees what a catch looks like. A passing
+  expected-failure claim logs its first counterexample in three lines
+  (the step, why, the faults Hegel shrank it to); the README quotes the
+  real lines; hello's stale numbers fixed (2508 for 4430, 80 lines for
+  73).
+- **I29. First runs fast and visible (S).** `grist new` says to run
+  `go test ./...`: 343 s, silent (the README says `-short`, 73 s). It
+  prints `go test -short -v ./...` with its time, and "downloading the
+  toolkit (first run: about 2 minutes)"; long explorations print a
+  progress line on stderr every 10 s when not `-v`; fault-rate claims
+  under -short that three seeds cannot fail by chance (S10's stated
+  power: a `Reaches` with 3 seeds failed after an unrelated change).
+- **I30. Reserved names caught by the toolkit (S).** `item` is a quint
+  built-in (QNT101 on a REST developer's first model) and AGENTS.md's
+  list omits it. The list generated from quint 0.33's built-ins, not by
+  hand; `scaffold` and `lint -binding` checking step fields against it
+  and suggesting `item_`, as grist's generator does.
+- **I31. Reports in the user's words (S-M).** Decided against hiding the
+  evaluator's share (I9 wants it): written for a user ("30 runs, all
+  conform (quint confirmed 2)"), the breakdown behind
+  `GOTOGETHER_VERBOSE`; grist's skeleton helpers out of "never taken";
+  "rejected at the first addItem" for a rejection with no step taken;
+  one file:line per mutant summary (not `mutants.go:207:`); a passing
+  `qtest.Record` logs its summary; "the run" for a single actor;
+  "steps" not "calls". A zero-step run whose client was refused (qhttp
+  knows: nothing listening yet) says so, is not "a reconstruction
+  issue" nor "a deadlock", and `nav -at fail` on it names the last
+  client error. Failure copies under `$TMPDIR/gotogether/`, removed as
+  said (173 were left in /tmp).
+- **I32. help, nav and the CLI's errors (S).** One line per command in
+  `gotogether help` (what it answers, one example), flags under `-h`,
+  `-graph` on simulate's line; `validate` with no arguments says what it
+  needs; nav's `-follow` error shows `#1` and the take form ("bare
+  numbers are a run's options"); a disabled action's "closest value" not
+  drawn from another action's nondet; run-nav titles in words ("after 4
+  choices: client ran 4 times") before the schedule id; "in the then
+  branch of if (...)" in `why:`.
+- **I33. Scaffold for an HTTP service (M).** `scaffold -system -http`:
+  the server's process before the client's, a retrying client, qhttp
+  wired; `Exercised()` in a test of its own, its failure suggesting the
+  exact `qtest.Exercised("rpc.stock.delay.late") // why: ...` line;
+  `possible:` with the call form (`'reserve(result = "refused")'`). A
+  REST developer's 10 minutes of wiring to one.
+- **I34. The structure written down (S-M).** docs/ARCHITECTURE.md (about
+  300 lines, current state only: the module graph and its dependency
+  rule, the five types everything flows through, the judging path, the
+  model-analysis path, the grist pipeline, where each gotcha lives),
+  DESIGN citing it; AGENTS.md's layout with qnemesis and internal/qeval;
+  the README's 24 examples as tracks (Learn: hello, bank, checkout;
+  grist: counters, library, wallet-grist, migrate-payments; Your stack),
+  six rows on the front page and examples/README.md the rest; run-demo.sh
+  for bank, fleetrollout, glomers and sktrace (AGENTS' rule); G11's
+  rest.
+- **I35. Examples and tutorials for the newest features (M).** Each a
+  page of the Learn track, its commands run by CI:
+  - P2, "From sampling to proof" on hello and twophase (I17's), with
+    `-depth` on quorumkv to show the bound;
+  - P6: examples/requeue landed (f21ca9f); a run-side counterpart waits
+    for `NoHotCycle` (I51), a strong-fairness one for I43;
+  - scenarios as acceptance criteria: wallet-grist's three, each
+    `qtest.Possible` in the model and `Some(...)` of runs, with a
+    too-strict model mutant;
+  - GR10, "Your grist app on a cluster" (counters' rolling restart, a
+    30 s drain in a 30 s grace shown failing), then kind;
+  - a front page for migrate-payments with each stage's time, linked
+    from the quickstart as "I have code and no model"; wallet to
+    wallet-grist as the migration skill's second walk-through.
+- **I36. Analyzers that fix (S-M).** SuggestedFixes in quintsim (`go
+  f()` to `qenv.Go`, `time.Now()` to `qenv.Now(ctx)`, `time.Sleep` to
+  `qenv.Sleep`); a quintctx analyzer (`context.Background()` in a
+  function with a ctx, or a test's check without `t.Context()`); gopls
+  use documented (the golangci plugin, or quintvet in a pre-commit
+  hook); JSON Schemas for binding and convert YAML.
+
+### Performance
+
+- **I37. Recording a step (S, after I13).** 10-18 µs and about 40
+  allocs a step (slog's JSON is 0.5-1 µs), no faster in parallel:
+  `MarshalLine` builds a `map[string]any` and lets encoding/json sort
+  it. An append-based encoder in the fixed key order, a golden test
+  against `json.Marshal(Attributes())` (the format pinned after I13
+  versions it): an estimated 8-10x. Example: an HTTP server recording
+  through qobshttp with a Tee of a buffered and an OTel sink, benchmarked
+  at `-cpu 1,4,8` before and after.
+- **I38. Reconstruct by index (S-M).** After I19's presizing:
+  `[]int` indices or `[]*Step` in place of 336-byte values copied
+  through five slices (100k steps take 0.9 GB): 4-5x less allocation.
+- **I39. qeval's quick wins (S).** The bank explore is 270 KB and 3,000
+  allocs a state: a struct seen-key in place of `k + "#" + p`, sized
+  event slices, binary state keys, int literals parsed at Load, an
+  integer kind switch, `SetGCPercent(400)` during a search (32% alone),
+  an Explore benchmark: an estimated 2-3x for the graph, liveness and
+  `Reach`.
+- **I40. The scheduler's small costs (S).** `Rates.Of` memoized per kind
+  in `Seeded` (a fault choice 280 ns against a schedule choice's 17);
+  no options closure per step; the goroutine lookup (2.7 µs under load,
+  the docs say 1) behind sharded maps and the context first.
+- **I41. Benchmarks in the nightly (M).** 13 benchmarks in the
+  repository, none for qeval, Reconstruct, Record, judging, grist's
+  stores, Linearize or the CTMC, where I23 and I37-I39 hid. A nightly
+  `-bench . -count=6` compared with benchstat, failing past a threshold.
+  Example: examples/perf, one system's virtual-time and CPU profiles
+  side by side with the costs a user should expect (a step about 1 µs,
+  a Store transaction about 10, a Service call about 16).
+
+### Bold ideas (each its own decision before it starts)
+
+- **I42. A model diff and refinement (M each).** Two models, or a model
+  and its mutant, compared on the projection a binding observes ("v2
+  admits these traces v1 forbade"): migrations and model changes in a
+  PR reviewed like code, "never loosen a check" made mechanical; then
+  refinement mappings over the graph (every mechanism edge a spec edge
+  or a stutter), with twophase's Choreo model refining an atomic-commit
+  spec and a mutant breaking it at a named edge.
+- **I43. Graphs further (M each).** Symmetry reduction
+  (`simulate.symmetric: [PROCS]`), fairness on demand (per-call weak,
+  strong for named actions: `simulate.fair`; example: a lock service
+  live only under strong fairness of `acquire`), inductive invariants
+  through Apalache behind `simulate -prove`, proof certificates (the
+  complete graph's states and edges, re-checkable offline).
+- **I44. Exhaust with sleep sets, then DPOR (M, then L).** Footprints
+  from the doubles' seams (Store keys, queue names). Example: raftkv's
+  depth-2 election bug found by Exhaust at Delays=2 within MaxRuns, and
+  by PCT at its predicted rate.
+- **I45. Elle's rest (S-M each).** Session-order edges, an rw-register
+  workload, a committed append no later read shows (a lost write).
+  Example: SQLite against a hand-built "SI over read committed" shim
+  with a seeded lost update, and a timeout-heavy run for I6.
+- **I46. Production capture (M each, after I19).** A trace-capture SDK
+  from payd's and streams' shapes (net/http middleware, gRPC
+  interceptors, a `database/sql` commit feed, a Kafka consumer hook); an
+  OTel Collector processor keeping step-bearing spans whatever the
+  sampling, writing step logs per recorder and the watermark (with G8);
+  continuous conformance (hourly windows,
+  `gotogether_conformance{verdict,action}`); a canary gate for any
+  service (an Argo Rollouts AnalysisTemplate, a Flagger webhook),
+  generalising GR10 slice 10.
+- **I47. A shared report (M).** A manifest bundle rendered as one HTML
+  page (the history, the failing step, the states before and after,
+  nav's branches), shareable in an incident channel; then `nav -serve`.
+- **I48. Controllers' entry (M).** kubesim as "envtest with faults": a
+  drop-in client and cluster for controller-runtime tests, contract
+  faults first, the model optional. Example: an open-source controller's
+  issue reproduced in kubesim by a seed, then on kind.
+- **I49. No blank page (M-L).** `gotogether init` (HTTP handler,
+  library, simulated service or grist), a model skeleton from a Go type
+  (`scaffold -from-go`), a model proposed from recorded REST runs, and
+  `gotogether tour` through hello.
+- **I50. Quint text off the hot path (L each).** grist's models built as
+  qeval's IR from the catalog, the user's rules compiled alone (a cold
+  verdict's 7-40 s typecheck gone); qeval compiled to closures with
+  slot-resolved environments (5-10x on top of I39); a WASM playground
+  on the Go evaluator.
+- **I51. Small, each S.** `qtest.NoHotCycle()` over unsettled runs;
+  generated constants for a package's fault names; `gristtest.StoredLogs`
+  (every kept production log through today's upcasters, folds and
+  model); `qobs.Sometimes(name)`, the code's twin of `possible:`; a
+  library of ghost-variable modules; the model's facts (holds, terminal,
+  fairness, possibles) beside the spec rather than in each binding.
+
+### For the maintainer
+
+Decisions only the maintainer takes, each with the recommendation:
+
+- **Tags and v0.1 (R5).** Recommended: v0.1.0 of every published
+  module once I1-I10, I12-I14 and I16-I18 are in (the wrong answers,
+  the processes, the formats, one core version, the breaking API moves),
+  in R5's order (gosim, the core, qweave, qhegel, qanalysis, qgosim,
+  then grist, qnav and the doubles), each `<dir>/v0.1.0`; v0.x for long
+  enough that GR4-GR7 settle.
+- **Format and ABI policy.** Recommended: every wire format named
+  `gotogether.<thing>/<major>`; a reader refuses a newer major with the
+  fix and reads every older major it ever read (the step log is
+  production data: forever); a breaking change bumps the major, an
+  added optional field does not. The step log's attributes keep the
+  `quint.` namespace (they describe model steps; renaming breaks every
+  log written). The woven ABI's version in a constant's name
+  (`woven.ABI1`), bumped on any change, qweave refusing a mismatch. A
+  deprecation window of one minor release for exported API after v0.1,
+  in a CHANGELOG by module.
+- **The "grist" rename.** Where it comes from: docs/grist.md §10.5
+  (6fdafe2, 2026-10-27), a default "the maintainer may override":
+  "'grist' is a codename ... it also names gristlabs' spreadsheet
+  (grist-core); renamed before the module's first tag", echoed by this
+  section's heading "grist (codename)" and grist.md's first lines. No
+  candidate name and no plan exist anywhere in the repository; the
+  adopter's review read the default as a decision. Recommended: decide
+  before grist's first tag. Keep "grist" (the import path is under
+  gotogether, grist-core is a spreadsheet in TypeScript and Python, and
+  a rename touches every app's imports, the `grist:"tag"` struct tag,
+  grist.lock, `GRIST_UPDATE`, `grist new`, the skill and the docs),
+  dropping "codename"; if it is renamed, in one commit now, before an
+  adopter. A trademark check is the maintainer's.
+- **Stability labels.** Recommended: a label in each package's doc
+  comment, listed in the README. Stable at v0.1: qobs, qobshttp,
+  qtrace's Step and Trace, qrun, qrole, woven, the step log and the
+  binding YAML. Experimental: qnemesis, qhistory, qsweep, qmeta,
+  qdriver, qmut, qshrink, grist's platform parts (gristload, Cluster),
+  the navigation protocol until I18.
+- **One core module or a runtime module.** qobs, qrole, qrun and woven
+  are imported by production binaries, qnemesis or qmeta will break
+  more. Recommended: one module at v0.x now (costs nothing); carve a
+  runtime module (qobs, qobshttp, qrole, qrun, woven, `qtrace.Step`)
+  only after GR4-GR7, when the shared internals' home (`internal/hooks`,
+  `internal/wovenrt`) is clear.
+- **The Go floor.** The core's `go 1.26.1` was hegel-go's, which the
+  core no longer imports; organisations pinning N-1 cannot adopt.
+  Recommended: `go 1.25` for the core (and grist if it builds) after I15's
+  `GOTOOLCHAIN=go1.25` build passes; qhegel stays at 1.26.1.
+- **Bare expectations' quantifier (I16).** Breaking for every example's
+  bare claims. Recommended as I16 says, before tags.
+- **GR10's slice order.** Recommended: slice 3 (failover and restore)
+  beside slice 4, before GR4 (I25): a managed PostgreSQL failover that
+  loses an asynchronously replicated tail goes unseen today, which a
+  payments adopter calls disqualifying.
+- **Governance.** 780 commits in nine days, by agents, one maintainer:
+  an adopter's bus factor. Recommended: a CHANGELOG by module, a short
+  CONTRIBUTING (how changes are reviewed, what "breaking" means before
+  and after v0.1), and the weekly breaking renames ending at R5.
+- **Upstream.** hegel-go: an `io.Writer` option for its output (I15).
+  quint: the evaluator not killed with node (I12 works around it; worth
+  a report), and the REPL's import cycle (H's Upstream).
 
 ## Tenth review: one product (H)
 
@@ -90,7 +608,7 @@ item as recommended:
   against a fold from the start (docs/grist.md §2.1, §2.2); a fixed
   upcaster refolds (its probe in the fingerprint); a field added to a
   version is taken as that version. **Next, with GR10 slice 4 and before
-  GR4: versions that roll.** A new version's writers write it at once,
+  GR4: versions that roll** (the eleventh review's I22). A new version's writers write it at once,
   and the older nodes refuse it (`NewerVersionError`): `grist.WritesVersion`
   (writing an older version, through a downcaster, until every node reads
   the new one), `gristtest.Upgrade`, counters v2 with the `eagerV2`
@@ -176,8 +694,9 @@ is not taken. The maintainer's decisions of 2026-10-28, as recommended:
     go.mod and api file, published like qweave), its binary invoked by
     `gotogether nav` when installed.
 - **P6. Liveness as cycles (M, after P2). Done** (DESIGN §62;
-  HISTORY: "P6: liveness as cycles"; `simulate -graph`'s eventual vals,
-  `validate.Checker.MarkHot`). In the model: a reachable
+  HISTORY: "P6: liveness as cycles" and "P6's review"; `simulate
+  -graph`'s eventual vals, `validate.Checker.MarkHot`; the example,
+  examples/requeue, f21ca9f; the wording of what it checks is I8's). In the model: a reachable
   cycle in which an eventually val is false throughout is "can stay hot
   forever", reported with its prefix and cycle; weak fairness per action
   family is required (read-only actions loop everywhere), the subtle
@@ -368,7 +887,9 @@ Then, in order, each item reviewed before the next:
   the app's steps: `qmeta.Size`, `LimitFor`, `TimeoutFor`,
   `qload.Layered`, grist/gristload's report, `<app> sizing` a binary of
   its own: grist §0.17). After H7 (slice 4 needs
-  its upcasting; slice 11 grist slice 3's leases). The maintainer's
+  its upcasting; slice 11 grist slice 3's leases). The eleventh review
+  recommends slice 3 (failover and restore) next, beside slice 4 (I25;
+  the maintainer's). The maintainer's
   decisions (2026-10-28, §10): no Kubernetes Lease, not even a hint; a
   45 s grace generated; a rewind fails closed until `<app> resume`; no
   app binary links client-go; sizing enters manifests only with
@@ -464,7 +985,10 @@ item reviewed before the next. Sizes as in S.
   incarnation (Left from E); a declared clock skew per pair of
   recorders in place of the fixed 1 ms; a collector-side watermark (an
   OTel processor emitting `quint.complete_through_unix_nano` after a
-  flush).
+  flush). The eleventh review: the verdict names the 1 ms assumption
+  first (I7, in progress); an adopter's production hosts differ by more
+  under NTP, so the declared skew is what a production check needs; the
+  collector processor is I46's.
 - **G9. qsql for a real service's queries (M).** Inequalities, ORDER BY
   a non-key column with LIMIT, SKIP LOCKED, RETURNING, COUNT, a
   transaction's own isolation; each checked against SQLite
@@ -488,10 +1012,13 @@ item reviewed before the next. Sizes as in S.
   on install; `skills install -update`; a test that installs into a
   temporary directory and resolves every link; gotogether-faults split
   (about 4k words); AGENTS.md's layout and README's example rows
-  complete (payd, webjobs, qnemesis, sktrace) and shorter.
+  complete (payd, webjobs, qnemesis, sktrace) and shorter (with I34,
+  which adds internal/qeval and the examples' tracks).
 - **G12. The cost of a -short verdict (S-M).** validate 1370 CPU s and
   qtest 440, mostly quint: conformance under -short on internal/qeval,
   quint confirming failures and a sample of passes, all of it nightly.
+  H1 did most of it (the Go evaluator decides passing runs); grist's
+  -short tier and time budget are I15's.
 
 ## Left from X
 
@@ -525,6 +1052,9 @@ it; simulate's and evidence's logic as library calls
 disks, clocks and partitions; bare expectations' arity (`Conforms` every
 run, the rest some) and contradictory pairs; "run 3" not "schedule 3";
 `Reaches` by prefix as Rates are.
+
+Taken into the I track: `validate.Simulate` (I17), bare expectations'
+arity (I16), the nightly's confidence per claim (I9).
 
 ## Eighth review: whole product (S)
 
