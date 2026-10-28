@@ -269,6 +269,10 @@ type Rules struct
     field Ref string `yaml:"ref"`
     field Rules []Rule `yaml:"rules"`
     method (*Rules) Steps(tds []otelio.TracesData) ([]qtrace.Step, error)
+    method (*Rules) Unmatched(tds []otelio.TracesData) ([]Unmatched, error)
+type Unmatched struct
+    field Name string
+    field Count int
 
 == github.com/chucklehead-dev/gotogether/input
 const ITF Format = "itf"

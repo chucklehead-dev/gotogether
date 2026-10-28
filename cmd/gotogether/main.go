@@ -596,7 +596,28 @@ func convertFile(path string, rules *convert.Rules) ([]qtrace.Step, bool, error)
 	if err != nil {
 		return nil, false, fmt.Errorf("%s: %w", path, err)
 	}
+	un, err := rules.Unmatched(tds)
+	if err != nil {
+		return nil, false, fmt.Errorf("%s: %w", path, err)
+	}
+	if msg := unmatchedSpans(path, un); msg != "" {
+		fmt.Fprintln(os.Stderr, msg)
+	}
 	return steps, true, nil
+}
+
+// unmatchedSpans says which spans of a file no rule matched ("" if every
+// one did): operations the model does not name, or outside its context.
+func unmatchedSpans(path string, un []convert.Unmatched) string {
+	if len(un) == 0 {
+		return ""
+	}
+	var names []string
+	for _, u := range un {
+		names = append(names, fmt.Sprintf("%q (%d)", u.Name, u.Count))
+	}
+	return fmt.Sprintf("convert: %s: spans that no rule matches: %s. Each is an operation the model does not name "+
+		"(a rule mapping it to an action) or one outside the model's context (a rule with drop: true says so)", path, strings.Join(names, ", "))
 }
 
 func runConvert(args []string) error {

@@ -57,6 +57,12 @@ The first release. What a user meets, by module:
   `Service.Quantile`, and `qload.Layered` (a proxy's tries inside a
   client's attempts: attempts multiply, the client's budget sees only its
   own). Rules of a chain in units alert in requests.
+- Spans no convert rule matches are named: `convert.Rules.Unmatched`
+  (`convert.Unmatched`: a span name and its count; a `drop: true` rule
+  is a match), and `gotogether convert`, and `validate`, `steps` and
+  `itf` with `-convert`, print them per file: operations the model does
+  not name, or outside its context. examples/migrate-payments, the
+  gotogether-migration skill's walk-through, shows a draft rule file's.
 - Skills in pavlov's shape (ROADMAP P8): each SKILL.md at most about 80
   lines, with a "choose your path" list (each reference and when to read
   it), steps, checklists, a results table (each verdict and report line,

@@ -169,3 +169,44 @@ rules:
 		t.Fatalf("a span's own ref: %+v", steps)
 	}
 }
+
+// Unmatched lists the spans no rule matches by name, as Steps matches
+// them: a dropped span is matched, an event rule matches a span only
+// through an event of its name, and a where filter that fails leaves the
+// span unmatched.
+func TestUnmatched(t *testing.T) {
+	r, err := Parse([]byte(rules + `
+  - span: "Bank/Close"
+    where: { bank.kind: savings }
+    action: close
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sr := tracetest.NewSpanRecorder()
+	tr := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(sr)).Tracer("app")
+	ctx := context.Background()
+	for _, name := range []string{"Bank/Deposit", "Bank/HealthCheck", "Other", "Other", "Bank/Audit"} {
+		_, s := tr.Start(ctx, name)
+		s.End()
+	}
+	_, s := tr.Start(ctx, "Bank/Audit")
+	s.AddEvent("audited")
+	s.End()
+	_, s = tr.Start(ctx, "Bank/Close")
+	s.SetAttributes(attribute.String("bank.kind", "checking"))
+	s.End()
+	got, err := r.Unmatched([]otelio.TracesData{otelio.SpansToTracesData(sr.Ended())})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Unmatched{{"Bank/Audit", 1}, {"Bank/Close", 1}, {"Other", 2}}
+	if len(got) != len(want) {
+		t.Fatalf("Unmatched = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("Unmatched = %v, want %v", got, want)
+		}
+	}
+}

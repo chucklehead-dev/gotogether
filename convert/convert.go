@@ -39,8 +39,10 @@ package convert
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"os"
 	"path"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -312,6 +314,79 @@ func (rs *Rules) Steps(tds []otelio.TracesData) ([]qtrace.Step, error) {
 		out[i] = p.s
 	}
 	return out, nil
+}
+
+// Unmatched is a span name no rule matched, and how many spans of it:
+// an operation the model does not name, or one outside its context (a
+// `drop: true` rule says so, and is a match).
+type Unmatched struct {
+	Name  string
+	Count int
+}
+
+// Unmatched lists, by name, the spans of tds that no rule matches (as
+// Steps matches them: a rule's span glob, its where filters and, with
+// `event:`, an event of that name), which Steps ignores. A span carrying
+// quint.step events is recorded natively and never listed. Each is an
+// operation to map with a rule, or to drop as outside the model's context.
+func (rs *Rules) Unmatched(tds []otelio.TracesData) ([]Unmatched, error) {
+	counts := map[string]int{}
+	for _, td := range tds {
+		for _, rsp := range td.ResourceSpans {
+			res := otelio.Attrs(rsp.Resource.Attributes)
+			for _, ss := range rsp.ScopeSpans {
+				for i := range ss.Spans {
+					sp := &ss.Spans[i]
+					if slices.ContainsFunc(sp.Events, func(e otelio.Event) bool { return e.Name == qtrace.EventName }) {
+						continue
+					}
+					ok, err := rs.matchesAny(sp, res)
+					if err != nil {
+						return nil, err
+					}
+					if !ok {
+						counts[sp.Name]++
+					}
+				}
+			}
+		}
+	}
+	var out []Unmatched
+	for _, n := range slices.Sorted(maps.Keys(counts)) {
+		out = append(out, Unmatched{n, counts[n]})
+	}
+	return out, nil
+}
+
+// matchesAny reports whether some rule matches the span (or, for an
+// event rule, one of its events).
+func (rs *Rules) matchesAny(sp *otelio.Span, res map[string]any) (bool, error) {
+	spanAttrs := otelio.Attrs(sp.Attributes)
+	for ri := range rs.Rules {
+		ru := &rs.Rules[ri]
+		if ok, _ := path.Match(ru.Span, sp.Name); !ok {
+			continue
+		}
+		evs := []map[string]any{{}}
+		if ru.Event != "" {
+			evs = nil
+			for _, ev := range sp.Events {
+				if ev.Name == ru.Event {
+					evs = append(evs, otelio.Attrs(ev.Attributes))
+				}
+			}
+		}
+		for _, e := range evs {
+			ok, err := ru.matches(&ctx{res: res, span: spanAttrs, event: e, sp: sp})
+			if err != nil {
+				return false, fmt.Errorf("rule %s: %w", ru.Span, err)
+			}
+			if ok {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func (rs *Rules) step(ru *Rule, c *ctx, t time.Time) (qtrace.Step, string, error) {
