@@ -176,7 +176,7 @@ func TestFaults(t *testing.T) {
 // the connection's Timeout, not after a wall-clock deadline.
 func TestTimeoutIsVirtual(t *testing.T) {
 	var took time.Duration
-	start := time.Now()
+	start := time.Now() //qenv:ok the test measures the real time the virtual timeout takes
 	run(t, script{"rpc.counter.response": 1}, &counter{}, func(ctx context.Context, conn *simgrpc.Conn) {
 		conn.Timeout = 5 * time.Second
 		t0 := qenv.Now(ctx)
@@ -186,7 +186,7 @@ func TestTimeoutIsVirtual(t *testing.T) {
 	if took < 5*time.Second || took > 6*time.Second {
 		t.Errorf("the lost response failed after %v of virtual time, want the 5s timeout", took)
 	}
-	if real := time.Since(start); real > 5*time.Second {
+	if real := time.Since(start); real > 5*time.Second { //qenv:ok the real time, against the virtual
 		t.Errorf("the run took %v of real time", real)
 	}
 }
