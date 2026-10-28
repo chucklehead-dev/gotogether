@@ -73,7 +73,7 @@ type Config struct {
 	// its first: the state the workload's random operations need (a member
 	// joined, a book catalogued), which random sends of a command that
 	// needs earlier ones mostly refuse. Its calls are recorded as every
-	// client's are (actor "prologue", ids <tenant>-prologue-<k>) and go
+	// client's are (caller "prologue", ids <tenant>-prologue-<k>) and go
 	// through the same faults; the clients wait for it.
 	Prologue []Call
 	// SQL runs the app on grist/sqlstore over qsql (qsql.Open on the run's
@@ -90,7 +90,7 @@ type Config struct {
 	// network's faults are qhttp's (rpc.api.request, rpc.api.delay,
 	// rpc.api.response, the node's crashes). Every command and query the
 	// clients send must declare Authorize (grist denies by default); a
-	// client is its Envelope's actor (ActorHeader).
+	// client is its Envelope's caller (CallerHeader).
 	HTTP bool
 	// Nodes is how many node processes run the App on the one store
 	// (default 1): node, node2, ...; each a crashable process starting the
@@ -272,9 +272,9 @@ type response struct {
 	Retry    bool
 }
 
-// ActorHeader is the header the HTTP tier's clients name their actor in
-// (grist.ActorFromHeader).
-const ActorHeader = "X-Gristsim-Actor"
+// CallerHeader is the header the HTTP tier's clients name their caller in
+// (grist.CallerFromHeader).
+const CallerHeader = "X-Gristsim-Caller"
 
 // Timeouts: a client waits CallTimeout for an answer, then retries the
 // same request (same id) after RetryDelay.
@@ -340,7 +340,7 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 	var srv *qhttp.Server
 	var handler http.Handler
 	if cfg.HTTP {
-		h, err := grist.NewHandler(app, st, grist.ActorFromHeader(ActorHeader))
+		h, err := grist.NewHandler(app, st, grist.CallerFromHeader(CallerHeader))
 		if err != nil {
 			return fmt.Errorf("gristsim: Config.HTTP: %w", err)
 		}
@@ -379,7 +379,7 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 		// after its effect committed is one the model cannot place (each
 		// call is still bounded by MaxAttempts; the budget's own test is
 		// grist's TestClientBackoffAndBudget)
-		w.http = &client.Client{App: app, URL: srv.URL(), HTTP: &http.Client{Transport: tr}, ActorHeader: ActorHeader,
+		w.http = &client.Client{App: app, URL: srv.URL(), HTTP: &http.Client{Transport: tr}, CallerHeader: CallerHeader,
 			MaxAttempts: MaxAttempts, RetryDelay: RetryDelay, Budget: &client.Budget{Ratio: MaxAttempts, Max: MaxAttempts}}
 	} else {
 		w.api = qenv.NewService(s, "api", node, func(ctx context.Context, req request) (response, error) {
@@ -414,7 +414,7 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 				name := names[s.Choose("gristsim.op", len(names))]
 				args := w.gen(name)
 				w.call(ctx, request{Query: isQuery(app, name), Name: name,
-					Env: grist.Envelope{ID: fmt.Sprintf("%s-c%d-%d", tenant, i, op), Tenant: tenant, Actor: fmt.Sprintf("client%d", i)}, Args: args})
+					Env: grist.Envelope{ID: fmt.Sprintf("%s-c%d-%d", tenant, i, op), Tenant: tenant, Caller: fmt.Sprintf("client%d", i)}, Args: args})
 			}
 		})
 	}
@@ -432,7 +432,7 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 		for _, t := range cfg.Tenants {
 			for _, q := range app.Queries() {
 				for k, args := range w.all(app.ArgsType(q)) {
-					req := request{Query: true, Name: q, Env: grist.Envelope{ID: fmt.Sprintf("%s-probe-%s-%d", t, q, k), Tenant: t, Actor: "probe"}, Args: args}
+					req := request{Query: true, Name: q, Env: grist.Envelope{ID: fmt.Sprintf("%s-probe-%s-%d", t, q, k), Tenant: t, Caller: "probe"}, Args: args}
 					w.record(ctx, req, func() response { return serve(deps(ctx), app, st, req) })
 				}
 			}
@@ -549,7 +549,7 @@ func (w *workload) prologue() ([]request, error) {
 				args = b
 			}
 			out = append(out, request{Query: isQuery(w.app, c.Name), Name: c.Name, Args: args,
-				Env: grist.Envelope{ID: fmt.Sprintf("%s-prologue-%d", t, k+1), Tenant: t, Actor: "prologue"}})
+				Env: grist.Envelope{ID: fmt.Sprintf("%s-prologue-%d", t, k+1), Tenant: t, Caller: "prologue"}})
 		}
 	}
 	return out, nil

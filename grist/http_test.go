@@ -48,7 +48,7 @@ func apiApp(opts ...grist.Option) *grist.App {
 			return nil, taken
 		}
 		return []grist.Event{named.Of(Named(c))}, nil
-	}, append([]grist.Option{grist.Authorize(grist.Actors("editor"))}, opts...)...)
+	}, append([]grist.Option{grist.Authorize(grist.Callers("editor"))}, opts...)...)
 	grist.NewCommand(a, "secret", func(r *grist.Reads, c Name) ([]grist.Event, error) { return nil, nil }, grist.Internal())
 	grist.NewQuery(a, "names", func(r *grist.Reads, q Name) (Many, error) {
 		return Many{N: len(r.Select(grist.Selector{Types: []string{"named"}, Tags: []grist.TagPair{grist.Tag("name", q.Name)}}))}, nil
@@ -56,10 +56,10 @@ func apiApp(opts ...grist.Option) *grist.App {
 	return a
 }
 
-// serve serves a on s over httptest, the actor taken from X-Actor.
+// serve serves a on s over httptest, the caller taken from X-Caller.
 func serve(t *testing.T, a *grist.App, s grist.Store) *httptest.Server {
 	t.Helper()
-	h, err := grist.NewHandler(a, s, grist.ActorFromHeader("X-Actor"), grist.DevEndpoints())
+	h, err := grist.NewHandler(a, s, grist.CallerFromHeader("X-Caller"), grist.DevEndpoints())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,11 +69,11 @@ func serve(t *testing.T, a *grist.App, s grist.Store) *httptest.Server {
 }
 
 // do sends a request and returns its code, body and Retry-After.
-func do(t *testing.T, method, url, actor, key, body string) (int, map[string]any, string) {
+func do(t *testing.T, method, url, caller, key, body string) (int, map[string]any, string) {
 	t.Helper()
 	req, _ := http.NewRequest(method, url, strings.NewReader(body))
-	if actor != "" {
-		req.Header.Set("X-Actor", actor)
+	if caller != "" {
+		req.Header.Set("X-Caller", caller)
 	}
 	if key != "" {
 		req.Header.Set("Idempotency-Key", key)
@@ -95,7 +95,7 @@ func do(t *testing.T, method, url, actor, key, body string) (int, map[string]any
 // retry of its key, nothing appended twice), a rejection's name (422),
 // a reused key (422, the key's own answer standing), no key or
 // arguments that do not decode (400), an unknown block or tenant (404),
-// a denial (403: an actor the policy refuses, an internal block); a
+// a denial (403: a caller the policy refuses, an internal block); a
 // query's result and position (200).
 func TestAPICodes(t *testing.T) {
 	st := newStoreNamed(t, "names")
@@ -109,9 +109,9 @@ func TestAPICodes(t *testing.T) {
 		t.Errorf("a retry of k1: %d %v, want the first answer (200 at 1)", code, again)
 	}
 	cases := []struct {
-		method, url, actor, key, body string
-		code                          int
-		rejected                      string
+		method, url, caller, key, body string
+		code                           int
+		rejected                       string
 	}{
 		{"POST", cmd, "editor", "k2", `{"name":"a"}`, 422, "taken"},
 		{"POST", cmd, "editor", "k1", `{"name":"b"}`, 422, "idempotency-key-reused"},
@@ -128,9 +128,9 @@ func TestAPICodes(t *testing.T) {
 		{"GET", cmd, "editor", "k9", "", 405, ""},
 	}
 	for _, c := range cases {
-		code, body, _ := doAny(t, c.method, c.url, c.actor, c.key, c.body)
+		code, body, _ := doAny(t, c.method, c.url, c.caller, c.key, c.body)
 		if code != c.code || c.rejected != "" && body["rejected"] != c.rejected {
-			t.Errorf("%s %s (actor %q, key %q, %s): %d %v, want %d %s", c.method, c.url, c.actor, c.key, c.body, code, body, c.code, c.rejected)
+			t.Errorf("%s %s (caller %q, key %q, %s): %d %v, want %d %s", c.method, c.url, c.caller, c.key, c.body, code, body, c.code, c.rejected)
 		}
 	}
 	code, body, _ = do(t, "GET", srv.URL+"/t/t1/queries/names?name=a", "viewer", "", "")
@@ -147,11 +147,11 @@ func TestAPICodes(t *testing.T) {
 }
 
 // doAny is do for a body that may not be JSON (net/http's own 405).
-func doAny(t *testing.T, method, url, actor, key, body string) (int, map[string]any, string) {
+func doAny(t *testing.T, method, url, caller, key, body string) (int, map[string]any, string) {
 	t.Helper()
 	req, _ := http.NewRequest(method, url, strings.NewReader(body))
-	if actor != "" {
-		req.Header.Set("X-Actor", actor)
+	if caller != "" {
+		req.Header.Set("X-Caller", caller)
 	}
 	if key != "" {
 		req.Header.Set("Idempotency-Key", key)
@@ -266,7 +266,7 @@ func TestClientRetriesOverQHTTP(t *testing.T) {
 		})
 	})
 	node := s.Process("node", true, func(ctx context.Context) {
-		h, err := grist.NewHandler(a, st, grist.ActorFromHeader("X-Actor"), count)
+		h, err := grist.NewHandler(a, st, grist.CallerFromHeader("X-Caller"), count)
 		if err != nil {
 			panic(err)
 		}
@@ -278,13 +278,13 @@ func TestClientRetriesOverQHTTP(t *testing.T) {
 	srv = qhttp.NewServer(s, "api", node)
 	tr := qhttp.NewTransport(srv)
 	tr.Timeout = time.Second
-	c := &client.Client{App: a, URL: srv.URL(), HTTP: &http.Client{Transport: tr}, ActorHeader: "X-Actor"}
+	c := &client.Client{App: a, URL: srv.URL(), HTTP: &http.Client{Transport: tr}, CallerHeader: "X-Caller"}
 	var first, second, denied error
 	s.Spawn("client", func(ctx context.Context) {
 		ctx = qobs.Thread(ctx)
-		first = c.Do(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Actor: "editor"}, "name", []byte(`{"name":"a"}`))
-		second = c.Do(ctx, grist.Envelope{ID: "k2", Tenant: "t1", Actor: "editor"}, "name", []byte(`{"name":"a"}`))
-		denied = c.Do(ctx, grist.Envelope{ID: "k3", Tenant: "t1", Actor: "viewer"}, "name", []byte(`{"name":"b"}`))
+		first = c.Do(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Caller: "editor"}, "name", []byte(`{"name":"a"}`))
+		second = c.Do(ctx, grist.Envelope{ID: "k2", Tenant: "t1", Caller: "editor"}, "name", []byte(`{"name":"a"}`))
+		denied = c.Do(ctx, grist.Envelope{ID: "k3", Tenant: "t1", Caller: "viewer"}, "name", []byte(`{"name":"b"}`))
 	})
 	if err := s.Run(time.Minute); err != nil {
 		t.Fatal(err)
@@ -325,7 +325,7 @@ func TestClientRetriesOverQHTTP(t *testing.T) {
 // an internal block answered 403.
 func TestAPIRefusesBadArgs(t *testing.T) {
 	st := newStoreNamed(t, "names")
-	h, err := grist.NewHandler(apiApp(), st, grist.ActorFromHeader("X-Actor"), grist.MaxBody(64))
+	h, err := grist.NewHandler(apiApp(), st, grist.CallerFromHeader("X-Caller"), grist.MaxBody(64))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -361,7 +361,7 @@ func TestAPIRefusesBadArgs(t *testing.T) {
 	}
 	// the same refusals in process: App.Execute's JSON and a typed Execute
 	a := apiApp()
-	env := grist.Envelope{ID: "k8", Tenant: "t1", Actor: "editor"}
+	env := grist.Envelope{ID: "k8", Tenant: "t1", Caller: "editor"}
 	for _, body := range []string{`{"name":"a\u0000"}`, "{\"name\":\"\xff\"}", `null`, `{}`} {
 		if _, err := a.Execute(context.Background(), st, env, "name", []byte(body)); !errors.Is(err, grist.ErrBadArgs) {
 			t.Errorf("App.Execute of %q: %v, want ErrBadArgs", body, err)
@@ -375,7 +375,7 @@ func TestAPIReplayedHeader(t *testing.T) {
 	srv := serve(t, apiApp(), newStoreNamed(t, "names"))
 	send := func(key, body string) (int, string) {
 		req, _ := http.NewRequest("POST", srv.URL+"/t/t1/commands/name", strings.NewReader(body))
-		req.Header.Set("X-Actor", "editor")
+		req.Header.Set("X-Caller", "editor")
 		req.Header.Set("Idempotency-Key", key)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -397,20 +397,20 @@ func TestAPIReplayedHeader(t *testing.T) {
 	}
 }
 
-// The application's authentication wins over ActorFromHeader: a request
+// The application's authentication wins over CallerFromHeader: a request
 // a middleware authenticated as a viewer that names itself an editor in
 // the header is a viewer's (403), where the header once overrode it
-// (200). A request no middleware authenticated takes the header's actor.
-func TestActorHeaderDoesNotOverride(t *testing.T) {
+// (200). A request no middleware authenticated takes the header's caller.
+func TestCallerHeaderDoesNotOverride(t *testing.T) {
 	auth := grist.Middleware(func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Header.Get("Authorization") == "Bearer viewer-token" {
-				r = r.WithContext(grist.WithActor(r.Context(), "viewer"))
+				r = r.WithContext(grist.WithCaller(r.Context(), "viewer"))
 			}
 			h.ServeHTTP(w, r)
 		})
 	})
-	h, err := grist.NewHandler(apiApp(), newStoreNamed(t, "names"), auth, grist.ActorFromHeader("X-Actor"))
+	h, err := grist.NewHandler(apiApp(), newStoreNamed(t, "names"), auth, grist.CallerFromHeader("X-Caller"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -421,7 +421,7 @@ func TestActorHeaderDoesNotOverride(t *testing.T) {
 		code  int
 	}{{"viewer-token", 403}, {"", 200}} {
 		req, _ := http.NewRequest("POST", srv.URL+"/t/t1/commands/name", strings.NewReader(`{"name":"`+c.token+`"}`))
-		req.Header.Set("X-Actor", "editor")
+		req.Header.Set("X-Caller", "editor")
 		req.Header.Set("Idempotency-Key", "k-"+c.token)
 		if c.token != "" {
 			req.Header.Set("Authorization", "Bearer "+c.token)
@@ -432,7 +432,7 @@ func TestActorHeaderDoesNotOverride(t *testing.T) {
 		}
 		resp.Body.Close()
 		if resp.StatusCode != c.code {
-			t.Errorf("authenticated as %q, X-Actor editor: %d, want %d", c.token, resp.StatusCode, c.code)
+			t.Errorf("authenticated as %q, X-Caller editor: %d, want %d", c.token, resp.StatusCode, c.code)
 		}
 	}
 }
@@ -499,7 +499,7 @@ func TestStepFieldsExact(t *testing.T) {
 	st.CreateTenant(context.Background(), "t1")
 	sink := &qobs.MemorySink{}
 	ctx := qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink))
-	env := grist.Envelope{Tenant: "t1", Actor: "x"}
+	env := grist.Envelope{Tenant: "t1", Caller: "x"}
 	for _, n := range []int64{1<<53 + 1, math.MaxInt64, math.MinInt64} {
 		if _, _, err := a.Query(ctx, st, env, "echo", []byte(fmt.Sprintf(`{"n":%d,"u":1}`, n))); err != nil {
 			t.Fatal(err)
@@ -552,7 +552,7 @@ func scripted(t *testing.T, budget *client.Budget, answers ...func(w http.Respon
 	var err error
 	s.Spawn("client", func(ctx context.Context) {
 		qenv.Sleep(ctx, time.Millisecond) // the server listening
-		err = c.Do(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Actor: "editor"}, "name", []byte(`{"name":"a"}`))
+		err = c.Do(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Caller: "editor"}, "name", []byte(`{"name":"a"}`))
 	})
 	if rerr := s.Run(10 * time.Minute); rerr != nil {
 		t.Fatal(rerr)

@@ -32,14 +32,14 @@ type Reads struct {
 	pinned bool
 	sels   []Selector
 	id     string // the command id, for ID
-	actor  string // the envelope's actor, for Actor
+	caller string // the envelope's caller, for Caller
 	// err is the first store error (transient: the try is retried); bad
 	// the first misuse (the code's fault)
 	err, bad error
 }
 
 func newReads(ctx context.Context, app *App, s Store, env Envelope) *Reads {
-	return &Reads{ctx: ctx, app: app, store: s, tenant: env.Tenant, id: env.ID, actor: env.Actor}
+	return &Reads{ctx: ctx, app: app, store: s, tenant: env.Tenant, id: env.ID, caller: env.Caller}
 }
 
 // readsAt is a Reads pinned at p.
@@ -50,14 +50,14 @@ func readsAt(ctx context.Context, app *App, s Store, tenant string, p Position, 
 // Tenant is the tenant the decision is about.
 func (r *Reads) Tenant() string { return r.tenant }
 
-// Actor is the actor the command or query runs for (its Envelope's: at
-// the API, the request's authenticated actor), "" for a processor's
+// Caller is the caller the command or query runs for (its Envelope's: at
+// the API, the request's authenticated caller), "" for a processor's
 // handler (no one's) and an unauthenticated call. A decision may refuse
 // by it (only a counter's creator retires it: a Rejection, committed and
 // recorded as the key's answer, unlike a policy's 403). Every command's
-// and query's step records it as "principal", so the model judges such
-// a rule; the decision is a function of its reads, arguments and actor.
-func (r *Reads) Actor() string { return r.actor }
+// and query's step records it as "caller", so the model judges such
+// a rule; the decision is a function of its reads, arguments and caller.
+func (r *Reads) Caller() string { return r.caller }
 
 // Position is the position the reads are pinned at, pinning it (at the
 // head) if nothing was read yet.

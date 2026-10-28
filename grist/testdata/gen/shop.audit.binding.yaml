@@ -26,10 +26,10 @@ actions:
     args: { item_: '{{.args.item}}', result: '{{.outcome}}' }
     expect: 'log.length() == {{.obs.head}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   count:
-    expect: 'countAnswer(log, { principal: {{.principal}} }) == {{.obs.result}}'
+    expect: 'countAnswer(log, { caller: {{.caller}} }) == {{.obs.result}}'
   showItem:
     args: { item_: '{{.args.item}}' }
-    expect: 'showItemAnswer(log, { item: {{.item}}, principal: {{.principal}} }) == { qty: {{.obs.qty}}, shipped: {{.obs.shipped}} }'
+    expect: 'showItemAnswer(log, { item: {{.item}}, caller: {{.caller}} }) == { qty: {{.obs.qty}}, shipped: {{.obs.shipped}} }'
   ship:
     expect: 'log.length() == {{.obs.head}} and checkpoints.get("ship") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   notifyEffect: {}
@@ -55,7 +55,7 @@ actions:
     args: { item_: '{{.args.item}}', result: '{{.outcome}}' }
 
 invariants: [stockBounded, picksAdded]
-eventually: [shipEventuallyHandled, notifyEventuallyHandled, chargeEventuallyHandled, warehouseHoldEventuallyServed]
+eventually: [shipEventuallyHandled, notifyEventuallyHandled, chargeEventuallyHandled]
 
 # The model on its own (gotogether simulate)
 simulate:

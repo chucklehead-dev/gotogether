@@ -86,7 +86,7 @@ func TestMainServe(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		done <- grist.MainArgs(ctx, apiApp(), []string{"serve", "-db", "sqlite:" + filepath.Join(dir, "names.db"), "-addr", "127.0.0.1:0",
-			"-tenant", "t1", "-steps", steps, "-actor-header", "X-Actor", "-poll", "10ms"}, &errOut, &errOut)
+			"-tenant", "t1", "-steps", steps, "-caller-header", "X-Caller", "-poll", "10ms"}, &errOut, &errOut)
 	}()
 	var url string
 	for deadline := time.Now().Add(10 * time.Second); url == ""; {
@@ -98,12 +98,12 @@ func TestMainServe(t *testing.T) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	c := &client.Client{App: apiApp(), URL: url, ActorHeader: "X-Actor"}
-	rc, err := c.Command(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Actor: "editor"}, "name", []byte(`{"name":"a"}`))
+	c := &client.Client{App: apiApp(), URL: url, CallerHeader: "X-Caller"}
+	rc, err := c.Command(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Caller: "editor"}, "name", []byte(`{"name":"a"}`))
 	if err != nil || rc.Pos != 1 {
 		t.Fatalf("a command over the served API: %v %v", rc, err)
 	}
-	if _, err := c.Command(ctx, grist.Envelope{ID: "k2", Tenant: "t1", Actor: "editor"}, "name", []byte(`{"name":"a"}`)); !errors.Is(err, grist.Rejection("taken")) {
+	if _, err := c.Command(ctx, grist.Envelope{ID: "k2", Tenant: "t1", Caller: "editor"}, "name", []byte(`{"name":"a"}`)); !errors.Is(err, grist.Rejection("taken")) {
 		t.Errorf("a taken name: %v", err)
 	}
 	cancel()
@@ -140,7 +140,7 @@ func startServe(t *testing.T, ctx context.Context, a *grist.App, dir string, ext
 	done := make(chan error, 1)
 	go func() {
 		done <- grist.MainArgs(ctx, a, append([]string{"serve", "-db", "sqlite:" + filepath.Join(dir, "app.db"), "-addr", "127.0.0.1:0",
-			"-tenant", "t1", "-steps", steps, "-actor-header", "X-Actor", "-poll", "10ms"}, extra...), &errOut, &errOut, opts...)
+			"-tenant", "t1", "-steps", steps, "-caller-header", "X-Caller", "-poll", "10ms"}, extra...), &errOut, &errOut, opts...)
 	}()
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(5 * time.Millisecond) {
 		if time.Now().After(deadline) {
@@ -178,15 +178,15 @@ func TestMainShutdownDrains(t *testing.T) {
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
 	url, steps, done := startServe(t, ctx, a, t.TempDir(), nil)
-	c := &client.Client{App: a, URL: url, ActorHeader: "X-Actor"}
-	if _, err := c.Command(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Actor: "x"}, "add", []byte(`{"by":1}`)); err != nil {
+	c := &client.Client{App: a, URL: url, CallerHeader: "X-Caller"}
+	if _, err := c.Command(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Caller: "x"}, "add", []byte(`{"by":1}`)); err != nil {
 		t.Fatal(err)
 	}
 	<-started
 	// a client trickling its body: in flight when the signal comes
 	pr, pw := io.Pipe()
 	req, _ := http.NewRequest("POST", url+"/t/t1/commands/add", pr)
-	req.Header.Set("X-Actor", "x")
+	req.Header.Set("X-Caller", "x")
 	req.Header.Set("Idempotency-Key", "k2")
 	answered := make(chan int, 1)
 	go func() {
@@ -249,8 +249,8 @@ func TestMainServeSettles(t *testing.T) {
 	ctx, stop := context.WithCancel(context.Background())
 	defer stop()
 	url, steps, done := startServe(t, ctx, a, t.TempDir(), nil)
-	c := &client.Client{App: a, URL: url, ActorHeader: "X-Actor"}
-	if _, err := c.Command(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Actor: "x"}, "add", []byte(`{"by":1}`)); err != nil {
+	c := &client.Client{App: a, URL: url, CallerHeader: "X-Caller"}
+	if _, err := c.Command(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Caller: "x"}, "add", []byte(`{"by":1}`)); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(50 * time.Millisecond) // the effect under way
@@ -312,8 +312,8 @@ func TestMainServesDependency(t *testing.T) {
 		ctx, stop := context.WithCancel(context.Background())
 		defer stop()
 		url, steps, done := startServe(t, ctx, a, t.TempDir(), extra, grist.ServeDependency(bank, bankHandlers(pay)))
-		c := &client.Client{App: a, URL: url, ActorHeader: "X-Actor"}
-		if _, err := c.Command(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Actor: "x"}, "add", []byte(`{"n":5}`)); err != nil {
+		c := &client.Client{App: a, URL: url, CallerHeader: "X-Caller"}
+		if _, err := c.Command(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Caller: "x"}, "add", []byte(`{"n":5}`)); err != nil {
 			t.Fatal(err)
 		}
 		stop() // serve settles first: the payout's effect runs to its end

@@ -245,18 +245,18 @@ type CatalogProcessor struct {
 	EffectTries int    `json:"effectTries"`
 	// Shape is its declared result: "emits" (Emits), "effect" (Delivers),
 	// or "" when it declares none. Emits are an Emits' event types;
-	// Delivery and Success an effect's delivery and success event type
+	// Guarantee and Success an effect's guarantee and success event type
 	// ("" for none).
-	Shape    string   `json:"shape,omitempty"`
-	Emits    []string `json:"emits,omitempty"`
-	Delivery Delivery `json:"delivery,omitempty"`
-	Success  string   `json:"success,omitempty"`
+	Shape     string    `json:"shape,omitempty"`
+	Emits     []string  `json:"emits,omitempty"`
+	Guarantee Guarantee `json:"guarantee,omitempty"`
+	Success   string    `json:"success,omitempty"`
 	// Uses are the calls its effect makes (Uses), by Quint name.
 	Uses []string `json:"uses,omitempty"`
 }
 
-// MarshalText writes the delivery by name.
-func (d Delivery) MarshalText() ([]byte, error) { return []byte(d.String()), nil }
+// MarshalText writes the guarantee by name.
+func (d Guarantee) MarshalText() ([]byte, error) { return []byte(d.String()), nil }
 
 // Catalog is the App's registry.
 func (a *App) Catalog() Catalog {
@@ -310,7 +310,7 @@ func (a *App) Catalog() Catalog {
 				cp.Emits = append(cp.Emits, e.Name())
 			}
 		case effectResult:
-			cp.Shape, cp.Delivery = "effect", sh.delivery
+			cp.Shape, cp.Guarantee = "effect", sh.guarantee
 			if sh.success != nil {
 				cp.Success = sh.success.Name()
 			}

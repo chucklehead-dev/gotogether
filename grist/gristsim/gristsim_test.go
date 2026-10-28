@@ -171,11 +171,11 @@ func TestPrologue(t *testing.T) {
 			switch {
 			case s.Invocation && strings.Contains(id, "-prologue-") && s.Action == "note":
 				order = append(order, id+":"+fmtAny(s.Args["topic"]))
-			case s.Args["principal"] == "prologue" || strings.Contains(id, "-prologue-"):
-			case s.Invocation && firstClient < 0 && !strings.HasPrefix(fmtAny(s.Args["principal"]), "probe"):
+			case s.Args["caller"] == "prologue" || strings.Contains(id, "-prologue-"):
+			case s.Invocation && firstClient < 0 && !strings.HasPrefix(fmtAny(s.Args["caller"]), "probe"):
 				firstClient = i
 			}
-			if s.Args["principal"] == "prologue" && !s.Invocation {
+			if s.Args["caller"] == "prologue" && !s.Invocation {
 				lastPrologue = i
 			}
 		}

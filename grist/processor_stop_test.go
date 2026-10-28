@@ -48,7 +48,7 @@ func TestPollerStopsWithItsNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	body, _ := json.Marshal(addAmounts{A: 5})
-	if _, err := a.Execute(ctx, st, grist.Envelope{ID: "c1", Tenant: "t1", Actor: "u"}, "add", body); err != nil {
+	if _, err := a.Execute(ctx, st, grist.Envelope{ID: "c1", Tenant: "t1", Caller: "u"}, "add", body); err != nil {
 		t.Fatal(err)
 	}
 	for deadline := time.Now().Add(10 * time.Second); st.appends.Load() == 0; {

@@ -39,13 +39,14 @@ func lending() *grist.App {
 	return a
 }
 
-// Exercised wants every block of the catalog taken, a command by each of
+// The catalog's Exercised wants every block taken, a command by each of
 // its outcomes, and names each one missed with how to reach it; its
 // exceptions are the names it lists, and one it does not list panics.
-func TestExercised(t *testing.T) {
+func TestCatalogExercised(t *testing.T) {
 	a := lending()
+	cat := gristtest.Catalog(a)
 	var names []string
-	for _, k := range gristtest.Takes(a) {
+	for _, k := range cat.Takes {
 		names = append(names, k.Name())
 	}
 	if got, want := strings.Join(names, " "), "note.ok note.dup count mailEffect mail postSend.ok postSendServed sent"; got != want {
@@ -58,15 +59,15 @@ func TestExercised(t *testing.T) {
 		return qtest.Runs(&qtest.Run{Report: &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass,
 			Calls: []binding.Call{{Action: "init"}, call("note", "ok"), call("count", "ok"), call("mailEffect", "ok"), call("mail", "ok"), call("postSend", "ok")}}}}})
 	}
-	msgs := run(t, func(tb testing.TB) { runs().Expect(tb, gristtest.Exercised(a)) })
+	msgs := run(t, func(tb testing.TB) { runs().Expect(tb, cat.Exercised()) })
 	if len(msgs) != 1 || !strings.Contains(msgs[0], "3 of 8 not taken") || !strings.Contains(msgs[0], "no note was refused dup") ||
 		!strings.Contains(msgs[0], "the sent site recorded nothing") || !strings.Contains(msgs[0], "post applied no send") {
 		t.Errorf("a run without the refusal, the site's record and the call's application: %q, want each named with its fix", msgs)
 	}
-	if msgs := run(t, func(tb testing.TB) { runs().Expect(tb, gristtest.Exercised(a, "note.dup", "sent", "postSendServed")) }); len(msgs) > 0 {
+	if msgs := run(t, func(tb testing.TB) { runs().Expect(tb, cat.Exercised("note.dup", "sent", "postSendServed")) }); len(msgs) > 0 {
 		t.Errorf("all three excepted: %q", msgs)
 	}
-	if msgs := run(t, func(tb testing.TB) { runs().Expect(tb, gristtest.Exercised(a, "note", "sent", "postSendServed")) }); len(msgs) > 0 {
+	if msgs := run(t, func(tb testing.TB) { runs().Expect(tb, cat.Exercised("note", "sent", "postSendServed")) }); len(msgs) > 0 {
 		t.Errorf("the command excepted whole: %q", msgs)
 	}
 	defer func() {
@@ -74,5 +75,5 @@ func TestExercised(t *testing.T) {
 			t.Errorf("a misspelled exception: panic %q", msg)
 		}
 	}()
-	gristtest.Exercised(a, "notes")
+	cat.Exercised("notes")
 }

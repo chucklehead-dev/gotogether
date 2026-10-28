@@ -1,6 +1,6 @@
 == github.com/chucklehead-dev/gotogether/grist
-const AtLeastOnce Delivery = iota + 1
-const AtMostOnce Delivery = iota + 1 (spec 1 of its group)
+const AtLeastOnce Guarantee = iota + 1
+const AtMostOnce Guarantee = iota + 1 (spec 1 of its group)
 const CallTimeout = 10 * time.Second
 const CauseHeader = "Grist-Cause"
 const DefaultMaxBody = 1 << 20
@@ -12,21 +12,21 @@ const ReplayedHeader = "Idempotent-Replayed"
 const RetryAfter = 1
 const SettleTimeout = 10 * time.Second
 const ShutdownTimeout = 10 * time.Second
-func ActorFromHeader(name string) ServeOption
-func ActorOf(ctx context.Context) string
-func Actors(names ...string) Policy
 func Appends(types ...EventName) Option
-func Authenticated(actor, tenant string) bool
+func Authenticated(caller, tenant string) bool
 func Authorize(p Policy) Option
 func BatchSize(n int) Option
 func CallKey(ctx context.Context) string
+func CallerFromHeader(name string) ServeOption
+func CallerOf(ctx context.Context) string
+func Callers(names ...string) Policy
 func CheckTenant(t string) error
 func ConditionTries(n int) Option
 func DefaultHandlers(d *Dependency) Handlers
-func Delivers(d Delivery, success ...EventName) Option
+func Delivers(g Guarantee, success ...EventName) Option
 func Dependencies(f func(context.Context) context.Context) ServeOption
 func DevEndpoints() ServeOption
-func Effect(f func(ctx context.Context) error, d Delivery, opts ...EffectOption) Result
+func Effect(f func(ctx context.Context) error, g Guarantee, opts ...EffectOption) Result
 func EffectFaults(processor string) qenv.FaultKind
 func EffectKey(ctx context.Context) string
 func EffectTries(n int) Option
@@ -77,7 +77,7 @@ func Tag(key string, value any) TagPair
 func TransientTries(n int) Option
 func Unconditioned(reason string) Option
 func Uses(calls ...CallName) Option
-func WithActor(ctx context.Context, actor string) context.Context
+func WithCaller(ctx context.Context, caller string) context.Context
 func WithDrain(d Drain) ServeOption
 func WithIdentity(id Identity) ServeOption
 func WithRelay(r *Relay) StartOption
@@ -158,7 +158,7 @@ type CatalogProcessor struct
     field EffectTries int `json:"effectTries"`
     field Shape string `json:"shape,omitempty"`
     field Emits []string `json:"emits,omitempty"`
-    field Delivery Delivery `json:"delivery,omitempty"`
+    field Guarantee Guarantee `json:"guarantee,omitempty"`
     field Success string `json:"success,omitempty"`
     field Uses []string `json:"uses,omitempty"`
 type CatalogReadModel struct
@@ -181,9 +181,6 @@ type Command[C any] struct
     method (*Command[C]) Execute(ctx context.Context, s Store, env Envelope, args C) (Receipt, error)
     method (*Command[C]) Name() string
     method (*Command[C]) With(args C) Invocation
-type Delivery int
-    method (Delivery) MarshalText() ([]byte, error)
-    method (Delivery) String() string
 type Dep[T any] struct
     method (*Dep[T]) Attached(ctx context.Context) bool
     method (*Dep[T]) Name() string
@@ -204,7 +201,7 @@ type EffectOption func(*Result)
 type Envelope struct
     field ID string
     field Tenant string
-    field Actor string
+    field Caller string
 type Event = store.Event
 type EventName interface
     Name() string
@@ -223,6 +220,9 @@ type Generated struct
     field Missing []string
     method (Generated) Diff(dir string) []string
     method (Generated) Write(dir string) error
+type Guarantee int
+    method (Guarantee) MarshalText() ([]byte, error)
+    method (Guarantee) String() string
 type Handler[S any] struct
 type Handlers []CallHandler
     method (Handlers) Serves(d *Dependency) error
@@ -251,7 +251,7 @@ type KeyedReadModel[S any] struct
     method (*KeyedReadModel[S]) For(r *Reads, values ...string) S
 type Meta = store.Meta
 type Option struct
-type Policy func(actor, tenant string) bool
+type Policy func(caller, tenant string) bool
 type Position = store.Position
 type Processor struct
     method (*Processor) Name() string
@@ -263,7 +263,7 @@ type ReadModel[S any] struct
     method (*ReadModel[S]) Get(r *Reads) S
     method (*ReadModel[S]) Name() string
 type Reads struct
-    method (*Reads) Actor() string
+    method (*Reads) Caller() string
     method (*Reads) Exists(t EventName, tags ...TagPair) bool
     method (*Reads) ID(n int) string
     method (*Reads) Position() Position
@@ -301,7 +301,7 @@ type UsageError struct
     method (*UsageError) Error() string
 var ErrBadArgs = errors.New("grist: arguments refused")
 var ErrConflict = errors.New("grist: conflict: the decision's reads changed on every try; retry later under a new id")
-var ErrDenied = errors.New("grist: denied: the block's policy (Authorize) does not admit the actor")
+var ErrDenied = errors.New("grist: denied: the block's policy (Authorize) does not admit the caller")
 var ErrKeyReused = Rejection("idempotency-key-reused")
 var ErrOutcomeUnknown = errors.New("grist: the command's outcome is unknown (an append may have committed): retry it with the same id")
 var ErrUnavailable = errors.New("grist: the store kept failing before anything committed: retry later")
@@ -320,7 +320,7 @@ type Client struct
     field App *grist.App
     field URL string
     field HTTP *http.Client
-    field ActorHeader string
+    field CallerHeader string
     field MaxAttempts int
     field RetryDelay time.Duration
     field MaxRetryDelay time.Duration
@@ -334,8 +334,8 @@ type StatusError struct
     method (*StatusError) Error() string
 
 == github.com/chucklehead-dev/gotogether/grist/gristsim
-const ActorHeader = "X-Gristsim-Actor"
 const CallTimeout = 2 * time.Second
+const CallerHeader = "X-Gristsim-Caller"
 const DependencyTimeout = time.Second
 const MaxAttempts = 50
 const RetryDelay = 100 * time.Millisecond
@@ -368,22 +368,13 @@ type Config struct
 type Doubles map[*grist.Dependency]grist.Handlers
 
 == github.com/chucklehead-dev/gotogether/grist/gristtest
-const MutantEnv = "GRIST_MUTANT"
 func Answered(t testing.TB, app *grist.App, traces []*qtrace.Trace)
+func Catalog(app *grist.App) qtest.Catalog
 func DroppedRule(app *grist.App) (rule string, caught qtest.Claim, ok bool)
-func Exercised(app *grist.App, except ...string) qtest.Claim
 func Generated(t testing.TB, app *grist.App)
-func Mutant() string
 func NewTier(t testing.TB, app *grist.App, cfg TierConfig) *Tier
+func RuleMutants(app *grist.App) []string
 func Scenario(name string, steps ...grist.Invocation) qtest.Expectation
-func Takes(app *grist.App) []qtest.Take
-type Mutants struct
-    field Names []string
-    field FullOnly []string
-    field Dir string
-    field Test string
-    field App *grist.App
-    method (Mutants) Run(t *testing.T)
 type Node struct
     field Relay *grist.Relay
     method (*Node) Kill()

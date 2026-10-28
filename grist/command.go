@@ -19,11 +19,11 @@ import (
 
 // An Envelope is what every command and query carries besides its
 // arguments: the command id (the idempotency key, chosen by the caller),
-// the tenant and the actor.
+// the tenant and the caller.
 type Envelope struct {
 	ID     string
 	Tenant string
-	Actor  string
+	Caller string
 }
 
 // Rejected is a named, expected refusal: a decision's result, recorded
@@ -100,7 +100,7 @@ type Command[C any] struct {
 
 // reservedArgs are step fields grist records with every command: a
 // command's argument may not take their names. Read-only.
-var reservedArgs = map[string]bool{"id": true, "principal": true, "readPos": true, "reads": true, "result": true, "trigger": true, "key": true, "ok": true}
+var reservedArgs = map[string]bool{"id": true, "caller": true, "readPos": true, "reads": true, "result": true, "trigger": true, "key": true, "ok": true}
 
 // NewCommand registers a command: its decision is conditioned on its
 // read set unless Unconditioned. Its options are Unconditioned,
@@ -204,7 +204,7 @@ func (c *Command[C]) execute(ctx context.Context, s Store, env Envelope, args C)
 	hash := c.hash(body)
 	o := c.info.opts
 	fields := func(r *Reads) []any {
-		return append(append([]any{}, argKV...), "id", env.ID, "principal", env.Actor, "readPos", int64(r.pos), "reads", triples(r.sels))
+		return append(append([]any{}, argKV...), "id", env.ID, "caller", env.Caller, "readPos", int64(r.pos), "reads", triples(r.sels))
 	}
 	// onReturn records a step that commits nothing (a reused key, the
 	// code's error): it reads through r's position and appends nothing

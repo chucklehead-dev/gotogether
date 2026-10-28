@@ -41,7 +41,7 @@ var errDeclined = grist.Rejection("declined")
 // callsApp is the calls' app, its processor of delivery d, its effect
 // paying through pay unless declare is false (then the processor does not
 // declare it: Uses left out).
-func callsApp(d grist.Delivery, declare bool) (*grist.App, *grist.Dependency, *grist.Call[payReq, payResp]) {
+func callsApp(d grist.Guarantee, declare bool) (*grist.App, *grist.Dependency, *grist.Call[payReq, payResp]) {
 	a := grist.New("calls")
 	amounts := grist.NewEvent[amount](a, "amount")
 	bank := grist.NewDependency(a, "bank")
@@ -119,7 +119,7 @@ func runCalls(t *testing.T, a *grist.App, bank *grist.Dependency, h grist.Handle
 	s.Spawn("client", func(ctx context.Context) {
 		for i, c := range adds {
 			body, _ := json.Marshal(c)
-			if _, err := a.Execute(ctx, st, grist.Envelope{ID: fmt.Sprintf("c%d", i), Tenant: "t1", Actor: "u"}, "add", body); err != nil {
+			if _, err := a.Execute(ctx, st, grist.Envelope{ID: fmt.Sprintf("c%d", i), Tenant: "t1", Caller: "u"}, "add", body); err != nil {
 				t.Error(err)
 			}
 		}

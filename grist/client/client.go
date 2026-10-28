@@ -120,11 +120,11 @@ type Client struct {
 	// HTTP sends the requests (nil: http.DefaultClient). In a simulation,
 	// one whose Transport is a qhttp.Transport, its Timeout the call's.
 	HTTP *http.Client
-	// ActorHeader, if set, carries each call's Envelope.Actor (for a
-	// server with grist.ActorFromHeader: tests and demos, or behind a
+	// CallerHeader, if set, carries each call's Envelope.Caller (for a
+	// server with grist.CallerFromHeader: tests and demos, or behind a
 	// proxy that authenticates). Otherwise authenticate in HTTP's
 	// Transport.
-	ActorHeader string
+	CallerHeader string
 	// MaxAttempts bounds Do's requests for one call; RetryDelay and
 	// MaxRetryDelay are its backoff's first wait and cap (0: the
 	// defaults).
@@ -219,8 +219,8 @@ func (c *Client) budget() *Budget {
 
 // send sends one request and reads its answer.
 func (c *Client) send(ctx context.Context, env grist.Envelope, req *http.Request) (*http.Response, []byte, error) {
-	if c.ActorHeader != "" && env.Actor != "" {
-		req.Header.Set(c.ActorHeader, env.Actor)
+	if c.CallerHeader != "" && env.Caller != "" {
+		req.Header.Set(c.CallerHeader, env.Caller)
 	}
 	resp, err := c.http().Do(req)
 	if err != nil {

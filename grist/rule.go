@@ -118,7 +118,7 @@ func (a *App) applyRules(r *Reads, events []Event) (*ruleRefusal, error) {
 	for _, e := range events {
 		for _, ri := range a.rulesOn(e.Type) {
 			if ruledrop.Dropped == ri.name {
-				continue // a generated mutant's binary (gristtest.Mutants): the rule dropped
+				continue // a generated mutant's binary (gristtest.RuleMutants): the rule dropped
 			}
 			err := ri.check(r, e)
 			if r.err != nil {

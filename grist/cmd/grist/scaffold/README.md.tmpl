@@ -16,13 +16,13 @@ and both bindings are generated from the App's catalog.
 | [model/{{.Name}}.qnt](model/{{.Name}}.qnt) | written by hand: the invariants, each marked for its binding (`// grist: invariant`); the modules the bindings name |
 | [model/{{.Name}}_gen.qnt](model/{{.Name}}_gen.qnt) (the events), [model/{{.Name}}_steps.qnt](model/{{.Name}}_steps.qnt) (the actions), `*.binding.yaml`, [model/grist.qnt](model/grist.qnt) | generated: `go run ./cmd/{{.Name}} model` (never edit them; `TestGenerated` fails when they are stale) |
 | [cmd/{{.Name}}](cmd/{{.Name}}/main.go) | the binary (`grist.Main`): `model`, `catalog`, `verify`, `serve -db sqlite:PATH` |
-| [testdata/mutants](testdata/mutants) | `noInvalid`: the quantity check left out; `drop-capacity` is generated (`gristtest.Mutants{App: App}`: the app with its rule dropped) |
+| [testdata/mutants](testdata/mutants) | `noInvalid`: the quantity check left out; `drop-capacity` is generated (`gristtest.RuleMutants(App)`: the app with its rule dropped); `qtest.Mutants` finds and runs them all |
 
 ## Which check catches which mutant
 
 | test | configuration | catches |
 |---|---|---|
-| `TestFaithful` | one tenant, three clients, commit faults, node crashes, a lossy API and warehouse | nothing: `Conforms`, `All(Settles)`, commit faults reached, every block of the catalog taken (`gristtest.Exercised`) |
+| `TestFaithful` | one tenant, three clients, commit faults, node crashes, a lossy API and warehouse | nothing: `Conforms`, `All(Settles)`, commit faults reached, every block of the catalog taken (`gristtest.Catalog(App).Exercised()`) |
 | `TestFaithfulAtClients` | the same runs at the clients, linearized | nothing: `Conforms` |
 | `TestMutant` (`noInvalid`) | `TestFaithful`'s workload, no faults | `Some(Rejects("addItem"))`: an addition of none or fewer commits where the model refuses it (`TestFaithful` is the contrast) |
 | `TestScenariosPossible` | the model on its own (`qtest.Possible`) | a model too strict for the `fill up` scenario (an item filled, an addition past its capacity refused `full`) to happen |

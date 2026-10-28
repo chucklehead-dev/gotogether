@@ -16,40 +16,40 @@ import (
 )
 
 // ErrDenied is a command or query an adapter refused to serve: its
-// policy (Authorize) does not admit the request's actor in its tenant
+// policy (Authorize) does not admit the request's caller in its tenant
 // (an Internal block is not served at all: the API answers 404, as for
 // an unknown one). Nothing ran, so nothing is recorded at the store; a
 // client that records its calls records the refusal ("denied").
-var ErrDenied = errors.New("grist: denied: the block's policy (Authorize) does not admit the actor")
+var ErrDenied = errors.New("grist: denied: the block's policy (Authorize) does not admit the caller")
 
-type actorKey struct{}
+type callerKey struct{}
 
-// WithActor is ctx carrying the request's authenticated actor: what the
+// WithCaller is ctx carrying the request's authenticated caller: what the
 // application's authentication (a middleware in front of NewHandler's
 // handler, Middleware) sets, and what a block's Policy and the command's
-// Envelope.Actor get.
-func WithActor(ctx context.Context, actor string) context.Context {
-	return context.WithValue(ctx, actorKey{}, actor)
+// Envelope.Caller get.
+func WithCaller(ctx context.Context, caller string) context.Context {
+	return context.WithValue(ctx, callerKey{}, caller)
 }
 
-// ActorOf is ctx's actor (WithActor), "" if none: an unauthenticated
+// CallerOf is ctx's caller (WithCaller), "" if none: an unauthenticated
 // request, which Authenticated refuses.
-func ActorOf(ctx context.Context) string { a, _ := ctx.Value(actorKey{}).(string); return a }
+func CallerOf(ctx context.Context) string { a, _ := ctx.Value(callerKey{}).(string); return a }
 
 // A ServeOption configures NewHandler and Main (Middleware,
-// ActorFromHeader, DevEndpoints, Dependencies, MaxBody). The zero
+// CallerFromHeader, DevEndpoints, Dependencies, MaxBody). The zero
 // ServeOption changes nothing.
 type ServeOption struct{ apply func(*serveConfig) }
 
 type serveConfig struct {
-	middleware  []func(http.Handler) http.Handler
-	actorHeader string
-	catalog     bool
-	deps        func(context.Context) context.Context
-	served      []servedDep // Main's ServeDependency, in order
-	maxBody     int64
-	identity    *Identity // Main's WithIdentity
-	drain       Drain     // Main's WithDrain
+	middleware   []func(http.Handler) http.Handler
+	callerHeader string
+	catalog      bool
+	deps         func(context.Context) context.Context
+	served       []servedDep // Main's ServeDependency, in order
+	maxBody      int64
+	identity     *Identity // Main's WithIdentity
+	drain        Drain     // Main's WithDrain
 }
 
 // servedDep is a dependency Main serves on a loopback port (ServeDependency).
@@ -84,22 +84,22 @@ func ServeDependency(d *Dependency, h Handlers) ServeOption {
 }
 
 // Middleware wraps the handler in m: the application's authentication
-// (which calls WithActor on the request's context), logging, limits.
+// (which calls WithCaller on the request's context), logging, limits.
 // Several wrap in order, the first given outermost.
 func Middleware(m func(http.Handler) http.Handler) ServeOption {
 	return ServeOption{apply: func(c *serveConfig) { c.middleware = append(c.middleware, m) }}
 }
 
-// ActorFromHeader takes the request's actor from header name, as set by
+// CallerFromHeader takes the request's caller from header name, as set by
 // an authenticating proxy in front of the server (or a test's client:
-// client.Client's ActorHeader), for a request the application's
-// authentication left without one: an actor the request's context
-// already carries (WithActor, set by a Middleware) wins, and the header
-// is then ignored, so a client cannot name itself another actor than the
+// client.Client's CallerHeader), for a request the application's
+// authentication left without one: a caller the request's context
+// already carries (WithCaller, set by a Middleware) wins, and the header
+// is then ignored, so a client cannot name itself another caller than the
 // one its credentials gave it. Never expose such a server directly: a
-// request no middleware authenticates could name any actor.
-func ActorFromHeader(name string) ServeOption {
-	return ServeOption{apply: func(c *serveConfig) { c.actorHeader = name }}
+// request no middleware authenticates could name any caller.
+func CallerFromHeader(name string) ServeOption {
+	return ServeOption{apply: func(c *serveConfig) { c.callerHeader = name }}
 }
 
 // DevEndpoints serves GET /catalog: the App's registry as JSON
@@ -143,7 +143,7 @@ const (
 // long, text no store holds), or with arguments it refuses (ErrBadArgs:
 // not UTF-8, a field the type lacks, a required one missing or null,
 // text with a NUL byte, an integer past int64); 413 for a body past
-// MaxBody; 403 when the policy refuses the actor; 404 for an unknown
+// MaxBody; 403 when the policy refuses the caller; 404 for an unknown
 // block, an Internal one (as unknown: an internal block's name is not
 // told) or an unknown tenant; 500 for the decision's own error. A query
 // answers 200 with {"result", "pos"} (the position it read through),
@@ -151,9 +151,9 @@ const (
 //
 // Every block is denied by default: NewHandler refuses an App with a
 // command or query that declares neither Authorize nor Internal, and
-// answers 403 to an actor its policy refuses. The actor is the request
-// context's (WithActor: the application's middleware, or
-// ActorFromHeader). The handler records nothing itself: a command's
+// answers 403 to a caller its policy refuses. The caller is the request
+// context's (WithCaller: the application's middleware, or
+// CallerFromHeader). The handler records nothing itself: a command's
 // steps are its commit's (relayed from the store's step log) or its
 // refusal's, a query's its own, as on every adapter; a client records
 // its side (grist/client).
@@ -180,7 +180,7 @@ func NewHandler(app *App, s Store, opts ...ServeOption) (http.Handler, error) {
 	}
 	if len(open) > 0 {
 		return nil, fmt.Errorf("grist: %s cannot be served: %v declare neither Authorize nor Internal, and every block is denied by default: "+
-			"give each grist.Authorize(policy) (grist.Authenticated, grist.Actors(...)) or grist.Internal()", app.Name, open)
+			"give each grist.Authorize(policy) (grist.Authenticated, grist.Callers(...)) or grist.Internal()", app.Name, open)
 	}
 	api := &api{app: app, s: s, maxBody: cfg.maxBody}
 	if api.maxBody <= 0 {
@@ -199,14 +199,14 @@ func NewHandler(app *App, s Store, opts ...ServeOption) (http.Handler, error) {
 		inner := h
 		h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { inner.ServeHTTP(w, r.WithContext(deps(r.Context()))) })
 	}
-	if name := cfg.actorHeader; name != "" {
+	if name := cfg.callerHeader; name != "" {
 		inner := h
 		h = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// the application's authentication (a Middleware, outside
 			// this) wins: the header names only an unauthenticated
-			// request's actor
-			if a := r.Header.Get(name); a != "" && ActorOf(r.Context()) == "" {
-				r = r.WithContext(WithActor(r.Context(), a))
+			// request's caller
+			if a := r.Header.Get(name); a != "" && CallerOf(r.Context()) == "" {
+				r = r.WithContext(WithCaller(r.Context(), a))
 			}
 			inner.ServeHTTP(w, r)
 		})
@@ -262,10 +262,10 @@ func fail(w http.ResponseWriter, code int, format string, args ...any) {
 	writeJSON(w, code, apiError{Error: fmt.Sprintf(format, args...)})
 }
 
-// allowed reports whether o's block is served to the request's actor in
+// allowed reports whether o's block is served to the request's caller in
 // tenant, answering 403 if not.
 func allowed(w http.ResponseWriter, r *http.Request, o options, tenant string) bool {
-	if o.authorize == nil || !o.authorize(ActorOf(r.Context()), tenant) {
+	if o.authorize == nil || !o.authorize(CallerOf(r.Context()), tenant) {
 		writeJSON(w, http.StatusForbidden, apiError{Error: ErrDenied.Error(), Rejected: "denied"})
 		return false
 	}
@@ -346,7 +346,7 @@ func (a *api) command(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "grist: command %s: the body: %v", name, err)
 		return
 	}
-	rc, replayed, err := c.run(r.Context(), a.s, Envelope{ID: key, Tenant: tenant, Actor: ActorOf(r.Context())}, body)
+	rc, replayed, err := c.run(r.Context(), a.s, Envelope{ID: key, Tenant: tenant, Caller: CallerOf(r.Context())}, body)
 	if replayed {
 		w.Header().Set(ReplayedHeader, "true")
 	}
@@ -380,7 +380,7 @@ func (a *api) query(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "grist: query %s: %v", name, err)
 		return
 	}
-	res, pos, err := a.app.Query(r.Context(), a.s, Envelope{Tenant: tenant, Actor: ActorOf(r.Context())}, name, args)
+	res, pos, err := a.app.Query(r.Context(), a.s, Envelope{Tenant: tenant, Caller: CallerOf(r.Context())}, name, args)
 	if err != nil {
 		answer(w, err)
 		return

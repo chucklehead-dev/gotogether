@@ -107,8 +107,10 @@ func modelFile(app string) string { return "model/" + app + ".qnt" }
 //     handled; <call>EventuallyServed: every answered call of a Keyed
 //     dependency served), which the store's default binding judges at a
 //     settle beside the app's own, as does a variant that judges every
-//     invariant of the default binding (an app defining one of those
-//     names itself is an error naming it);
+//     invariant of the default binding, a call's only where the variant
+//     also judges a val reading the call's served records (a site claim:
+//     a real tier's third party records none); an app defining one of
+//     those names itself is an error naming it;
 //   - module <app>CallsGen, the clients' side: no positions, no
 //     processors, a key's first answer final, denied answering nothing;
 //   - the bindings: every parameter the step's field, the outcome as
@@ -146,6 +148,10 @@ func Generate(app *App, dir string) (Generated, error) {
 		return Generated{}, err
 	}
 	g.defined = definedIn(rules, g.aq+"Rules")
+	g.bodies = bodiesIn(own, g.aq)
+	for n, b := range bodiesIn(rules, g.aq+"Rules") {
+		g.bodies[n] = b
+	}
 	events, steps := g.eventsFile(), g.stepsFile()
 	if len(g.clashes) > 0 {
 		return Generated{}, fmt.Errorf("grist model: %s:\n  %s", app.Name, strings.Join(g.clashes, "\n  "))
@@ -399,6 +405,9 @@ type gen struct {
 	// defined are the defs of the application's rules (module <app>Rules):
 	// a call's Admits is generated only where they do not define it
 	defined map[string]bool
+	// bodies are the definitions of the application's model (module <app>)
+	// and rules, by name: which state each reads (readsRecords)
+	bodies map[string]string
 }
 
 // a field is one scalar field of a struct, as a step records it.
@@ -539,7 +548,7 @@ var quintTaken = func() map[string]bool {
 		to always eventually next then expect reps fail assert orKeep mustChange enabled weakFair strongFair leadsTo
 		range igt ilt igte ilte iadd isub iuminus imul idiv imod ipow actionAll actionAny field fieldNames item
 		assign of eq neq ite cross difference matchVariant variant
-		log checkpoints appended effects answered init step args_ result_ reads_ rec_ id principal readPos reads
+		log checkpoints appended effects answered init step args_ result_ reads_ rec_ id caller readPos reads
 		result`) {
 		m[n] = true
 	}
@@ -888,10 +897,10 @@ func (g *gen) eventsModule(b *strings.Builder) {
 			fmt.Fprintf(b, "  pure def %s(%s): Set[Read] = Set(%s)\n", g.claim(rq+"Reads", "read model "+rm.Name), strings.Join(ps, ", "), strings.Join(reads, ", "))
 		}
 	}
-	b.WriteString("\n  // each command's and query's arguments, with the actor that sent it (principal)\n")
+	b.WriteString("\n  // each command's and query's arguments, with the caller that sent it\n")
 	for _, c := range append(append([]CatalogBlock(nil), g.c.Commands...), g.c.Queries...) {
 		fs, _ := scalarFields(c.Args)
-		fmt.Fprintf(b, "  type %s = %s\n", g.claim(upper(c.Quint)+"Args", c.Name), recordType(fs, "principal: str"))
+		fmt.Fprintf(b, "  type %s = %s\n", g.claim(upper(c.Quint)+"Args", c.Name), recordType(fs, "caller: str"))
 	}
 	for _, q := range g.c.Queries {
 		if q.Result.Kind() == reflect.Struct {
@@ -1018,8 +1027,8 @@ func (g *gen) command(b *strings.Builder, c CatalogBlock) {
 		doc += " and the condition to have held, a conflict needs it not to"
 	}
 	b.WriteString("\n" + comment("  ", doc+". A reused key commits nothing."))
-	fmt.Fprintf(b, "  action %s(%s): bool = {\n", c.Quint, params(fs, "id: str", "principal: str", "readPos: int", "reads: Set[(str, str, str)]", "result: str"))
-	fmt.Fprintf(b, "    val args_: %s = %s\n    val reads_ = readsOf(reads)\n", args, recordValue(fs, "principal: principal"))
+	fmt.Fprintf(b, "  action %s(%s): bool = {\n", c.Quint, params(fs, "id: str", "caller: str", "readPos: int", "reads: Set[(str, str, str)]", "result: str"))
+	fmt.Fprintf(b, "    val args_: %s = %s\n    val reads_ = readsOf(reads)\n", args, recordValue(fs, "caller: caller"))
 	if ruled {
 		fmt.Fprintf(b, "    val verdict_ = %sRuled(log, args_)\n", c.Quint)
 	}
@@ -1066,7 +1075,7 @@ func (g *gen) processor(b *strings.Builder, p CatalogProcessor) {
 		fmt.Fprintf(b, "\n  // %s (Emits): on each %s, %sEmits of the log through the trigger,\n  // with its checkpoint (whatever came after the trigger)\n", p.Name, p.On, p.Quint)
 		fmt.Fprintf(b, "  action %s(trigger: int): bool = all {\n    trigger > 0,\n    trigger == %s,\n    processes(caused(%sEmits(log.slice(0, trigger), trigger), %s), %q, trigger),\n  }\n",
 			p.Quint, next, p.Quint, cause, p.Name)
-	case p.Delivery == AtLeastOnce:
+	case p.Guarantee == AtLeastOnce:
 		fmt.Fprintf(b, "\n  // %s's effect, at least once: any number of tries for its next trigger\n  // before its checkpoint, every one under the trigger's key\n", p.Name)
 		fmt.Fprintf(b, "  action %sEffect(trigger: int, key: str, ok: bool): bool = all {\n    trigger > 0,\n    trigger == %s,\n    %s,\n    effectStep(%q, trigger, key, ok),\n  }\n", p.Quint, next, effects, p.Name)
 		fmt.Fprintf(b, "\n  // %s's checkpoint, only after effect steps: its success after an ok one,\n  // grist.failed after %d failed ones, whichever the run committed (ok: its\n  // record of which)\n", p.Name, p.EffectTries)
@@ -1229,7 +1238,7 @@ func recordFrom(c CatalogBlock, fs []field) string {
 	for i, f := range fs {
 		parts = append(parts, orig[i].json+": "+f.param)
 	}
-	return "{ " + strings.Join(append(parts, "principal: principal"), ", ") + " }"
+	return "{ " + strings.Join(append(parts, "caller: caller"), ", ") + " }"
 }
 
 func (g *gen) storeStep(b *strings.Builder) {
@@ -1239,13 +1248,13 @@ func (g *gen) storeStep(b *strings.Builder) {
 		fs, _ := scalarFields(c.Args)
 		d := newDraws()
 		ps := d.add(fs)
-		d.pick("principal", "STRS")
+		d.pick("caller", "STRS")
 		d.pick("id", "nextID(answered)")
 		reads := fmt.Sprintf("triplesOf(%sNeeds(args_, result_))", c.Quint)
 		if len(c.Rules) > 0 {
 			reads = fmt.Sprintf("triplesOf(%sNeeds(args_, if (verdict_.decided == \"ok\") \"ok\" else result_).union(verdict_.needs))", c.Quint)
 		}
-		calls = append(calls, d.branch(commandCall(c, ps, "id", "principal", "log.length()", reads, "result_")))
+		calls = append(calls, d.branch(commandCall(c, ps, "id", "caller", "log.length()", reads, "result_")))
 	}
 	for _, q := range g.c.Queries {
 		fs, _ := scalarFields(q.Args)
@@ -1258,7 +1267,7 @@ func (g *gen) storeStep(b *strings.Builder) {
 		switch {
 		case p.Shape == "emits":
 			calls = append(calls, fmt.Sprintf("%s(%s)", p.Quint, next))
-		case p.Delivery == AtLeastOnce:
+		case p.Guarantee == AtLeastOnce:
 			calls = append(calls, fmt.Sprintf("%sSkip(%s)", p.Quint, next))
 			d.pick("key_", "KEYS")
 			d.pick("ok_", "Bool")
@@ -1302,13 +1311,13 @@ func (g *gen) callsModule(b *strings.Builder) {
 	b.WriteString("  var log: List[Event]\n  var answered: Set[str]\n\n  action init = all { log' = [], answered' = Set() }\n\n")
 	b.WriteString("  pure val IDS = " + idList + "\n  // the next identity a command answers (none once all are): the first\n  // unanswered, so that the model on its own never draws a used one (a\n  // command that would be disabled) nor two that differ only by name\n  pure def nextID(answered: Set[str]): Set[str] =\n    IDS.foldl(Set(), (s, i) => if (s == Set() and not(answered.contains(i))) Set(i) else s)\n\n")
 	b.WriteString("  action answers(b: List[Event], id: str): bool = all {\n    freshKey(answered, id),\n    log' = log.concat(b),\n    answered' = answered.union(Set(id)),\n  }\n\n")
-	b.WriteString("  // a call the API refused (403: the block's policy refused the actor) ran\n  // nothing and answers nothing: its key stays unanswered\n")
+	b.WriteString("  // a call the API refused (403: the block's policy refused the caller) ran\n  // nothing and answers nothing: its key stays unanswered\n")
 	b.WriteString("  action denied: bool = all { log' = log, answered' = answered }\n")
 	g.rulesDefs(b)
 	for _, c := range g.c.Commands {
 		fs, _ := scalarFields(c.Args)
-		fmt.Fprintf(b, "\n  action %s(%s): bool = {\n", c.Quint, params(fs, "id: str", "principal: str", "result: str"))
-		fmt.Fprintf(b, "    val args_: %sArgs = %s\n    if (result == \"denied\") denied\n", upper(c.Quint), recordValue(fs, "principal: principal"))
+		fmt.Fprintf(b, "\n  action %s(%s): bool = {\n", c.Quint, params(fs, "id: str", "caller: str", "result: str"))
+		fmt.Fprintf(b, "    val args_: %sArgs = %s\n    if (result == \"denied\") denied\n", upper(c.Quint), recordValue(fs, "caller: caller"))
 		if c.Unconditioned == "" {
 			b.WriteString("    else if (result == \"conflict\") answers([], id)\n")
 		}
@@ -1328,13 +1337,13 @@ func (g *gen) callsModule(b *strings.Builder) {
 		fs, _ := scalarFields(c.Args)
 		d := newDraws()
 		ps := d.add(fs)
-		d.pick("principal", "STRS")
+		d.pick("caller", "STRS")
 		d.pick("id", "nextID(answered)")
 		outcome := fmt.Sprintf("%sOutcome(log, %s)", c.Quint, recordFrom(c, ps))
 		if len(c.Rules) > 0 {
 			outcome = fmt.Sprintf("%sRuled(log, %s).outcome", c.Quint, recordFrom(c, ps))
 		}
-		calls = append(calls, d.branch(fmt.Sprintf("%s(%s)", c.Quint, paramNames(ps, "id", "principal", outcome))))
+		calls = append(calls, d.branch(fmt.Sprintf("%s(%s)", c.Quint, paramNames(ps, "id", "caller", outcome))))
 	}
 	for _, q := range g.c.Queries {
 		fs, _ := scalarFields(q.Args)
@@ -1463,7 +1472,7 @@ func (g *gen) binding(name string, m marks) []byte {
 		for _, f := range fs {
 			parts = append(parts, f.json+": "+tmplField(f.json))
 		}
-		parts = append(parts, "principal: {{.principal}}")
+		parts = append(parts, "caller: {{.caller}}")
 		answer := "{{.obs.result}}"
 		if q.Result.Kind() == reflect.Struct {
 			rs, _ := scalarFields(q.Result)
@@ -1484,7 +1493,7 @@ func (g *gen) binding(name string, m marks) []byte {
 			switch {
 			case p.Shape == "emits":
 				entry(p.Quint, "", cp)
-			case p.Delivery == AtLeastOnce:
+			case p.Guarantee == AtLeastOnce:
 				entry(p.Quint+"Effect", "", "")
 				entry(p.Quint, "", cp)
 				entry(p.Quint+"Outcome", "", "")
@@ -1505,8 +1514,9 @@ func (g *gen) binding(name string, m marks) []byte {
 	inv, ev, viol := m.of(name)
 	if !calls && observe {
 		// the obligations the catalog implies, beside the app's own: judged
-		// where the default binding's invariants are
-		ev = append(append([]string(nil), ev...), g.obligationNames()...)
+		// where the default binding's invariants are, a call's only where
+		// the binding judges the call's served records
+		ev = append(append([]string(nil), ev...), g.obligationNamesFor(name, append(append(append([]string(nil), inv...), ev...), viol...))...)
 	}
 	fmt.Fprintf(&b, "\ninvariants: [%s]\n", strings.Join(append(append([]string(nil), inv...), viol...), ", "))
 	if len(ev) > 0 {
@@ -1535,7 +1545,7 @@ func (g *gen) binding(name string, m marks) []byte {
 }
 
 // possibles are a binding's possible entries (binding.Possible), as
-// gristtest.Takes names what runs must take: each command's outcomes (ok,
+// gristtest.Catalog names what runs must take: each command's outcomes (ok,
 // each refusal), as the state from which the model's step can answer so
 // (a fresh id, and some arguments of the step's domains whose outcome it
 // is: a refusal leaves no trace in the state), and each query; with the
@@ -1559,7 +1569,7 @@ func (g *gen) possibles(calls bool) []string {
 			out = append(out, fmt.Sprintf("    - %s\n", p.Quint))
 		case p.Shape == "effect":
 			out = append(out, fmt.Sprintf("    - %sEffect\n    - %s\n", p.Quint, p.Quint))
-			if p.Delivery == AtMostOnce && p.Success != "" {
+			if p.Guarantee == AtMostOnce && p.Success != "" {
 				out = append(out, fmt.Sprintf("    - %sOutcome\n", p.Quint))
 			}
 		}
@@ -1582,7 +1592,7 @@ func commandCan(c CatalogBlock, o string) string {
 	fs, _ := scalarFields(c.Args)
 	d := newDraws()
 	ps := d.add(fs)
-	d.pick("principal", "STRS")
+	d.pick("caller", "STRS")
 	outcome := fmt.Sprintf("%sOutcome(log, %s)", c.Quint, recordFrom(c, ps))
 	if len(c.Rules) > 0 {
 		outcome = fmt.Sprintf("%sRuled(log, %s).outcome", c.Quint, recordFrom(c, ps))
@@ -1636,6 +1646,7 @@ var (
 	moduleLine = regexp.MustCompile(`^\s*module\s+([A-Za-z_][A-Za-z0-9_]*)`)
 	defLine    = regexp.MustCompile(`^\s*(?:pure\s+)?(?:def|val)\s+([A-Za-z_][A-Za-z0-9_]*)`)
 	bindingRe  = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+	identRe    = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]*`)
 )
 
 // parseMarks reads the marks of the application's model: a `// grist:
@@ -1700,6 +1711,56 @@ func parseMarks(src []byte, aq string) (marks, error) {
 }
 
 // definedIn are the defs and vals of module in src.
+// bodiesIn are the definitions (val and def) of module in src, by name:
+// each one's lines up to the next definition, mark or module, comments
+// left out.
+func bodiesIn(src []byte, module string) map[string]string {
+	out := map[string]string{}
+	in, name := false, ""
+	for _, line := range strings.Split(string(src), "\n") {
+		if mm := moduleLine.FindStringSubmatch(line); mm != nil {
+			in, name = mm[1] == module, ""
+			continue
+		}
+		if !in {
+			continue
+		}
+		if i := strings.Index(line, "//"); i >= 0 {
+			if markLine.MatchString(line) {
+				name = ""
+			}
+			line = line[:i]
+		}
+		if dm := defLine.FindStringSubmatch(line); dm != nil {
+			name = dm[1]
+		}
+		if name != "" {
+			out[name] += line + "\n"
+		}
+	}
+	return out
+}
+
+// readsRecords reports whether any of vals reads state, directly or
+// through the definitions of the application's model and rules it uses.
+func (g *gen) readsRecords(vals []string, state string) bool {
+	seen := map[string]bool{}
+	var reads func(n string) bool
+	reads = func(n string) bool {
+		if seen[n] {
+			return false
+		}
+		seen[n] = true
+		for _, id := range identRe.FindAllString(g.bodies[n], -1) {
+			if id == state || id != n && g.bodies[id] != "" && reads(id) {
+				return true
+			}
+		}
+		return false
+	}
+	return slices.ContainsFunc(vals, reads)
+}
+
 func definedIn(src []byte, module string) map[string]bool {
 	out := map[string]bool{}
 	in := false

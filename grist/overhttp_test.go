@@ -49,7 +49,7 @@ func TestCallOverHTTP(t *testing.T) {
 	}
 	for i, n := range []int{5, 13, 7} {
 		body, _ := json.Marshal(addAmounts{A: n})
-		if _, err := a.Execute(ctx, st, grist.Envelope{ID: fmt.Sprint("c", i), Tenant: "t1", Actor: "u"}, "add", body); err != nil {
+		if _, err := a.Execute(ctx, st, grist.Envelope{ID: fmt.Sprint("c", i), Tenant: "t1", Caller: "u"}, "add", body); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -339,7 +339,7 @@ func TestCallAnswerOfNoRefusal(t *testing.T) {
 			}
 			for i, n := range []int{5, 6} {
 				body, _ := json.Marshal(addAmounts{A: n})
-				if _, err := a.Execute(ctx, st, grist.Envelope{ID: fmt.Sprint("c", i), Tenant: "t1", Actor: "u"}, "add", body); err != nil {
+				if _, err := a.Execute(ctx, st, grist.Envelope{ID: fmt.Sprint("c", i), Tenant: "t1", Caller: "u"}, "add", body); err != nil {
 					t.Fatal(err)
 				}
 			}

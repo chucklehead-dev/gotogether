@@ -38,8 +38,8 @@ func guarded() *grist.App {
 	return a
 }
 
-// Exercised wants each refusal a command's rules add, its hint naming
-// the rule; Mutants makes a generated mutant of each rule guarding a
+// The catalog's Exercised wants each refusal a command's rules add, its
+// hint naming the rule; RuleMutants makes a generated mutant of each rule guarding a
 // command, none of one that guards none.
 func TestRules(t *testing.T) {
 	a := guarded()
@@ -47,12 +47,12 @@ func TestRules(t *testing.T) {
 		t.Fatal(err)
 	}
 	var names []string
-	for _, k := range gristtest.Takes(a) {
+	for _, k := range gristtest.Catalog(a).Takes {
 		names = append(names, k.Name())
 	}
 	runs := qtest.Runs(&qtest.Run{Report: &validate.Report{Actors: []*validate.Result{{Conforms: validate.Pass,
 		Calls: []binding.Call{{Action: "init"}, {Action: "hold", Step: &qtrace.Step{Action: "hold", Outcome: "ok"}}}}}}})
-	if msgs := run(t, func(tb testing.TB) { runs.Expect(tb, gristtest.Exercised(a, "release")) }); len(msgs) != 1 || !strings.Contains(msgs[0], "no hold was refused full by its rules (two-holds)") {
+	if msgs := run(t, func(tb testing.TB) { runs.Expect(tb, gristtest.Catalog(a).Exercised("release")) }); len(msgs) != 1 || !strings.Contains(msgs[0], "no hold was refused full by its rules (two-holds)") {
 		t.Errorf("a run without the rule's refusal: %q, want it named with the rule", msgs)
 	}
 	if got := strings.Join(names, " "); !strings.HasPrefix(got, "hold.ok hold.full ") {

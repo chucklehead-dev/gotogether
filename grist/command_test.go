@@ -429,40 +429,40 @@ func TestQuintName(t *testing.T) {
 	}
 }
 
-// A decision and a query see the actor (Reads.Actor: the envelope's),
-// and every step records it as "principal", a commit's, a refusal's and
+// A decision and a query see the caller (Reads.Caller: the envelope's),
+// and every step records it as "caller", a commit's, a refusal's and
 // a query's alike, so a model can judge a rule over who asks: here only
 // alice names. Before, neither the decision nor the steps had it.
-func TestActorInDecisionsAndSteps(t *testing.T) {
+func TestCallerInDecisionsAndSteps(t *testing.T) {
 	a := grist.New("names")
 	named := grist.NewEvent[Named](a, "named")
 	notAlice := grist.Rejection("not-alice")
 	cmd := grist.NewCommand(a, "name", func(r *grist.Reads, c Name) ([]grist.Event, error) {
-		if r.Actor() != "alice" {
+		if r.Caller() != "alice" {
 			return nil, notAlice
 		}
 		return []grist.Event{named.Of(Named(c))}, nil
 	})
-	grist.NewQuery(a, "who", func(r *grist.Reads, q struct{}) (Name, error) { return Name{Name: r.Actor()}, nil })
+	grist.NewQuery(a, "who", func(r *grist.Reads, q struct{}) (Name, error) { return Name{Name: r.Caller()}, nil })
 	s := memstore.New("names")
 	s.CreateTenant(context.Background(), "t1")
 	ctx, steps := recorded(t, s)
-	if _, err := cmd.Execute(ctx, s, grist.Envelope{ID: "k1", Tenant: "t1", Actor: "bob"}, Name{Name: "a"}); !errors.Is(err, notAlice) {
+	if _, err := cmd.Execute(ctx, s, grist.Envelope{ID: "k1", Tenant: "t1", Caller: "bob"}, Name{Name: "a"}); !errors.Is(err, notAlice) {
 		t.Errorf("bob: %v, want not-alice", err)
 	}
-	if _, err := cmd.Execute(ctx, s, grist.Envelope{ID: "k2", Tenant: "t1", Actor: "alice"}, Name{Name: "a"}); err != nil {
+	if _, err := cmd.Execute(ctx, s, grist.Envelope{ID: "k2", Tenant: "t1", Caller: "alice"}, Name{Name: "a"}); err != nil {
 		t.Errorf("alice: %v", err)
 	}
-	res, _, err := a.Query(ctx, s, grist.Envelope{Tenant: "t1", Actor: "carol"}, "who", []byte(`{}`))
+	res, _, err := a.Query(ctx, s, grist.Envelope{Tenant: "t1", Caller: "carol"}, "who", []byte(`{}`))
 	if err != nil || string(res) != `{"name":"carol"}` {
 		t.Errorf("the query saw %s, %v: want carol", res, err)
 	}
 	got := map[string]any{}
 	for _, st := range steps() {
 		key := st.Action + ":" + fmt.Sprint(st.Args["id"])
-		got[key] = st.Args["principal"]
+		got[key] = st.Args["caller"]
 	}
 	if got["name:k1"] != "bob" || got["name:k2"] != "alice" || got["who:<nil>"] != "carol" {
-		t.Errorf("principals by step %v: want bob's refusal, alice's commit, carol's query", got)
+		t.Errorf("callers by step %v: want bob's refusal, alice's commit, carol's query", got)
 	}
 }

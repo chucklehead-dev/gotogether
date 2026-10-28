@@ -32,7 +32,7 @@ func serving(t *testing.T, ctx context.Context, a *grist.App, dir string, args [
 	done := make(chan error, 1)
 	go func() {
 		done <- grist.MainArgs(ctx, a, append([]string{"serve", "-db", "sqlite:" + filepath.Join(dir, "app.db"), "-tenant", "t1",
-			"-actor-header", "X-Actor", "-poll", "10ms"}, args...), &errOut, &errOut, opts...)
+			"-caller-header", "X-Caller", "-poll", "10ms"}, args...), &errOut, &errOut, opts...)
 	}()
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(5 * time.Millisecond) {
 		if time.Now().After(deadline) {
@@ -117,12 +117,12 @@ func TestMainIdentity(t *testing.T) {
 		if !strings.Contains(errOut.String(), "node names-0, incarnation ") {
 			t.Errorf("start %d's startup line: %s", i, errOut.String())
 		}
-		c := &client.Client{App: apiApp(), URL: url, ActorHeader: "X-Actor"}
-		if _, err := c.Command(ctx, grist.Envelope{ID: "k" + name, Tenant: "t1", Actor: "editor"}, "name", []byte(`{"name":"`+name+`"}`)); err != nil {
+		c := &client.Client{App: apiApp(), URL: url, CallerHeader: "X-Caller"}
+		if _, err := c.Command(ctx, grist.Envelope{ID: "k" + name, Tenant: "t1", Caller: "editor"}, "name", []byte(`{"name":"`+name+`"}`)); err != nil {
 			t.Fatal(err)
 		}
 		// a refusal: a step of the node's own recorder (the commit's is the relay's)
-		if _, err := c.Command(ctx, grist.Envelope{ID: "r" + name, Tenant: "t1", Actor: "editor"}, "name", []byte(`{"name":"`+name+`"}`)); !errors.Is(err, grist.Rejection("taken")) {
+		if _, err := c.Command(ctx, grist.Envelope{ID: "r" + name, Tenant: "t1", Caller: "editor"}, "name", []byte(`{"name":"`+name+`"}`)); !errors.Is(err, grist.Rejection("taken")) {
 			t.Fatalf("a taken name: %v", err)
 		}
 		stop()
@@ -236,8 +236,8 @@ func TestMainHealth(t *testing.T) {
 			t.Errorf("%s at start: %d %s", p, code, body)
 		}
 	}
-	c := &client.Client{App: a, URL: url, ActorHeader: "X-Actor"}
-	if _, err := c.Command(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Actor: "x"}, "add", []byte(`{"by":1}`)); err != nil {
+	c := &client.Client{App: a, URL: url, CallerHeader: "X-Caller"}
+	if _, err := c.Command(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Caller: "x"}, "add", []byte(`{"by":1}`)); err != nil {
 		t.Fatal(err)
 	}
 	<-hang
@@ -272,7 +272,7 @@ func TestMainHealth(t *testing.T) {
 	if code, _ := get(t, hu+"/livez"); code != 200 {
 		t.Errorf("/livez through the drain: %d, want ok", code)
 	}
-	if got, _, err := c.Query(context.Background(), grist.Envelope{Tenant: "t1", Actor: "x"}, "count", []byte(`{"name":""}`)); err != nil || !strings.Contains(string(got), `1`) {
+	if got, _, err := c.Query(context.Background(), grist.Envelope{Tenant: "t1", Caller: "x"}, "count", []byte(`{"name":""}`)); err != nil || !strings.Contains(string(got), `1`) {
 		t.Errorf("a query in the drain's delay: %s %v, want it served (the router still sends requests)", got, err)
 	}
 	if err := <-done; err != nil {
@@ -320,14 +320,14 @@ func killedAt(t *testing.T, grace time.Duration, args []string) ([]qtrace.Step, 
 	// the phases scaled down: delay and shutdown alone need more than the grace
 	_, url, done := serving(t, ctx, a, dir, append([]string{"-addr", "127.0.0.1:0", "-steps", steps}, args...),
 		grist.WithDrain(grist.Drain{Delay: 500 * time.Millisecond, Shutdown: 3 * time.Second, Settle: 2 * time.Second, Flush: 2 * time.Second}))
-	c := &client.Client{App: a, URL: url, ActorHeader: "X-Actor"}
-	if _, err := c.Command(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Actor: "x"}, "add", []byte(`{"by":1}`)); err != nil {
+	c := &client.Client{App: a, URL: url, CallerHeader: "X-Caller"}
+	if _, err := c.Command(ctx, grist.Envelope{ID: "k1", Tenant: "t1", Caller: "x"}, "add", []byte(`{"by":1}`)); err != nil {
 		t.Fatal(err)
 	}
 	pr, pw := io.Pipe()
 	defer pw.Close()
 	req, _ := http.NewRequest("POST", url+"/t/t1/commands/add", pr)
-	req.Header.Set("X-Actor", "x")
+	req.Header.Set("X-Caller", "x")
 	req.Header.Set("Idempotency-Key", "k2")
 	go func() {
 		if resp, err := http.DefaultClient.Do(req); err == nil {
@@ -438,9 +438,9 @@ func TestMainLivezPerTrigger(t *testing.T) {
 	defer stop()
 	errOut, url, done2 := serving(t, ctx, a, t.TempDir(), []string{"-addr", "127.0.0.1:0", "-health-addr", "127.0.0.1:0"})
 	hu := healthURL(t, errOut)
-	c := &client.Client{App: a, URL: url, ActorHeader: "X-Actor"}
+	c := &client.Client{App: a, URL: url, CallerHeader: "X-Caller"}
 	for i := 1; i <= 5; i++ {
-		if _, err := c.Command(ctx, grist.Envelope{ID: fmt.Sprint("k", i), Tenant: "t1", Actor: "x"}, "add", []byte(`{"by":1}`)); err != nil {
+		if _, err := c.Command(ctx, grist.Envelope{ID: fmt.Sprint("k", i), Tenant: "t1", Caller: "x"}, "add", []byte(`{"by":1}`)); err != nil {
 			t.Fatal(err)
 		}
 		if i == 1 {

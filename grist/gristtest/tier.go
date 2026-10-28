@@ -77,7 +77,7 @@ type TierConfig struct {
 
 // A Tier is an application's real tier in a test: the app on a SQLite
 // file (grist/sqlstore) served over real HTTP (grist.NewHandler behind an
-// httptest server, the actor from a header), its nodes (App.Start: the
+// httptest server, the caller from a header), its nodes (App.Start: the
 // relay, the pollers, the tenant watcher; goroutines, each recording to
 // the tier's PerStep step file), clients calling the API (grist/client:
 // each call recorded where its client sees it). Settle waits for every
@@ -90,8 +90,8 @@ type Tier struct {
 	t   testing.TB
 	app *grist.App
 	cfg TierConfig
-	// Store is the tier's store; Client calls its API (its actor is an
-	// Envelope's Actor, sent in the X-Actor header).
+	// Store is the tier's store; Client calls its API (its caller is an
+	// Envelope's Caller, sent in the X-Caller header).
 	Store  grist.Store
 	Client *client.Client
 	sql    *sqlstore.Store
@@ -127,8 +127,8 @@ type depServer struct {
 	}
 }
 
-// The header the tier's clients name their actor in.
-const actorHeader = "X-Actor"
+// The header the tier's clients name their caller in.
+const callerHeader = "X-Caller"
 
 // NewTier makes app's real tier in a temporary directory, its tenants
 // created, no node started (Start).
@@ -187,7 +187,7 @@ func NewTier(t testing.TB, app *grist.App, cfg TierConfig) *Tier {
 	r.clients = qobs.WithRecorder(r.deps(ctx), qobs.NewRecorder(r.sink, qobs.WithID("clients")))
 	srv := httptest.NewServer(http.HandlerFunc(r.serve))
 	t.Cleanup(srv.Close)
-	r.Client = &client.Client{App: app, URL: srv.URL, ActorHeader: actorHeader, RetryDelay: 10 * time.Millisecond}
+	r.Client = &client.Client{App: app, URL: srv.URL, CallerHeader: callerHeader, RetryDelay: 10 * time.Millisecond}
 	t.Cleanup(func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
@@ -315,7 +315,7 @@ func (r *Tier) Start(id string) *Node {
 	if err := r.app.Start(ctx, st, grist.WithRelay(relay)); err != nil {
 		r.t.Fatal(err)
 	}
-	api, err := grist.NewHandler(r.app, st, grist.ActorFromHeader(actorHeader), grist.Middleware(func(h http.Handler) http.Handler {
+	api, err := grist.NewHandler(r.app, st, grist.CallerFromHeader(callerHeader), grist.Middleware(func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			h.ServeHTTP(w, req.WithContext(qobs.WithRecorder(req.Context(), rec)))
 		})

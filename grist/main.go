@@ -71,7 +71,7 @@ const mainUsage = `commands:
       -steps PATH                      record every step to PATH (qobs.FileSink, PerStep), for validation;
                                        a directory: a file of its own per node and start, <app>.<node>.<incarnation>.jsonl
                                        (in a pod give a directory: a restart truncates a file, losing the earlier start's steps)
-      -actor-header NAME               take the request's actor from header NAME (behind an authenticating proxy only)
+      -caller-header NAME              take the request's caller from header NAME (behind an authenticating proxy only)
       -poll DURATION                   how often the store reads other processes' appends (default 250ms)
       -dependency NAME=URL             call dependency NAME over HTTP at URL (grist.OverHTTP; repeatable)`
 
@@ -257,7 +257,7 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	dbSpec := fs.String("db", "", "")
 	addr := fs.String("addr", "127.0.0.1:8080", "")
 	steps := fs.String("steps", "", "")
-	actorHeader := fs.String("actor-header", "", "")
+	callerHeader := fs.String("caller-header", "", "")
 	poll := fs.Duration("poll", 0, "")
 	healthAddr := fs.String("health-addr", "", "")
 	grace := fs.Duration("grace", 0, "")
@@ -403,8 +403,8 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	for d, t := range overHTTP {
 		nodeCtx = d.With(nodeCtx, t)
 	}
-	if *actorHeader != "" {
-		opts = append(opts, ActorFromHeader(*actorHeader))
+	if *callerHeader != "" {
+		opts = append(opts, CallerFromHeader(*callerHeader))
 	}
 	h, err := NewHandler(app, st, opts...)
 	if err != nil {

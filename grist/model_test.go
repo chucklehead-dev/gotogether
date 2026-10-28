@@ -175,6 +175,52 @@ func TestGenerateGolden(t *testing.T) {
 	quint(t, filepath.Join(tmp, "model"), "run", "--main=shopCalls", "--max-samples=100", "--max-steps=15", "--seed=3", "--invariant=stockBounded", "shop.qnt")
 }
 
+// A variant judging every invariant of the default binding judges the
+// processors' obligations, and a call's only where one of its own vals
+// reads the call's served records (a site claim, here through a def): a
+// real tier's variant whose dependency is a third party's, recording no
+// site, would otherwise have every run violate the call's obligation.
+func TestCallObligationsFollowSiteClaims(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "model"), 0o755)
+	rules, err := os.ReadFile(filepath.Join("testdata", "gen", "model", "shop_rules.qnt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(dir, "model", "shop_rules.qnt"), rules, 0o644)
+	own := `module shop {
+  import grist.* from "./grist"
+  import shopEvents.* from "./shop_gen"
+  import shopRules.* from "./shop_rules"
+  import shopGen.* from "./shop_steps"
+  export shopGen.*
+
+  // grist: invariant default real sim
+  val stockBounded = STRS.forall(i => stock(log, i) <= 3)
+
+  // the holds the warehouse served (warehouseHoldRecords): a site claim
+  def served(key: str): bool = warehouseHoldRecords.indices().exists(j => warehouseHoldRecords[j].key == key)
+
+  // grist: eventually sim
+  val everyHoldAnswerServed = warehouseHoldCalls.indices().forall(i => served(warehouseHoldCalls[i].key))
+}
+`
+	os.WriteFile(filepath.Join(dir, "model", "shop.qnt"), []byte(own), 0o644)
+	g, err := grist.Generate(shopApp(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for b, want := range map[string]string{
+		"shop.binding.yaml":      "eventually: [shipEventuallyHandled, notifyEventuallyHandled, chargeEventuallyHandled, warehouseHoldEventuallyServed]",
+		"shop.sim.binding.yaml":  "eventually: [everyHoldAnswerServed, shipEventuallyHandled, notifyEventuallyHandled, chargeEventuallyHandled, warehouseHoldEventuallyServed]",
+		"shop.real.binding.yaml": "eventually: [shipEventuallyHandled, notifyEventuallyHandled, chargeEventuallyHandled]\n",
+	} {
+		if !strings.Contains(string(g.Files[b]), want) {
+			t.Errorf("%s: want %q in it:\n%s", b, want, g.Files[b])
+		}
+	}
+}
+
 // A Starter model fills every hole with a stub that typechecks: an app's
 // first `model -init` is a model quint takes, and Generate reports no
 // hole missing from it; a hole taken out of it is reported by name.

@@ -1,7 +1,6 @@
 package gristtest_test
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -91,33 +90,6 @@ func TestGeneratedWitness(t *testing.T) {
 	os.WriteFile(filepath.Join("model", "notes_rules.qnt"), []byte(strings.Replace(string(b), "pure def noteNeeds", "pure def noteNeedz", 1)), 0o644)
 	if msgs := run(t, func(tb testing.TB) { gristtest.Generated(tb, a) }); len(msgs) != 1 || !strings.Contains(msgs[0], "lacks noteNeeds") {
 		t.Errorf("a missing hole: %v, want one failure naming it", msgs)
-	}
-}
-
-// Overlay maps each of a mutant's files onto the package's file of its
-// name, and refuses a mutant file that replaces none.
-func TestOverlay(t *testing.T) {
-	dir := t.TempDir()
-	t.Chdir(dir)
-	os.WriteFile("app.go", []byte("package app\n"), 0o644)
-	os.MkdirAll(filepath.Join("testdata", "mutants", "m"), 0o755)
-	os.WriteFile(filepath.Join("testdata", "mutants", "m", "app.go"), []byte("package app // mutant\n"), 0o644)
-	path := gristtest.Overlay(t, filepath.Join("testdata", "mutants"), "m")
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var o struct{ Replace map[string]string }
-	if err := json.Unmarshal(b, &o); err != nil {
-		t.Fatal(err)
-	}
-	here, _ := os.Getwd()
-	if len(o.Replace) != 1 || o.Replace[filepath.Join(here, "app.go")] != filepath.Join(here, "testdata", "mutants", "m", "app.go") {
-		t.Errorf("overlay %v", o.Replace)
-	}
-	os.WriteFile(filepath.Join("testdata", "mutants", "m", "other.go"), []byte("package app\n"), 0o644)
-	if msgs := run(t, func(tb testing.TB) { gristtest.Overlay(tb, filepath.Join("testdata", "mutants"), "m") }); len(msgs) != 1 || !strings.Contains(msgs[0], "replaces no file") {
-		t.Errorf("a mutant file replacing none: %v", msgs)
 	}
 }
 

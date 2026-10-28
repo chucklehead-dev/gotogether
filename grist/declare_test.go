@@ -37,7 +37,7 @@ func TestRefusesDeclared(t *testing.T) {
 	}
 	s := newStore(t)
 	ctx, steps := recorded(t, s)
-	env := func(id string) grist.Envelope { return grist.Envelope{ID: id, Tenant: "t1", Actor: "a"} }
+	env := func(id string) grist.Envelope { return grist.Envelope{ID: id, Tenant: "t1", Caller: "a"} }
 	if _, err := cmd.Execute(ctx, s, env("c1"), Create{Counter: "a", Name: "x"}); err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func TestShapeDeclared(t *testing.T) {
 		t.Errorf("Verify: %v, want both problems", err)
 	}
 	cat := a.Catalog().Processors
-	if cat[1].Shape != "effect" || cat[1].Delivery != grist.AtLeastOnce || cat[1].Success != "noted" {
+	if cat[1].Shape != "effect" || cat[1].Guarantee != grist.AtLeastOnce || cat[1].Success != "noted" {
 		t.Errorf("the catalog's processor %+v: want its declared effect", cat[1])
 	}
 }
@@ -233,7 +233,7 @@ func TestUndeclaredRefusalNamesRefuses(t *testing.T) {
 	}, grist.Authorize(grist.Authenticated))
 	s := newStore(t)
 	ctx, steps := recorded(t, s)
-	if _, err := cmd.Execute(ctx, s, grist.Envelope{ID: "c1", Tenant: "t1", Actor: "a"}, Create{Counter: "a", Name: "full"}); !errors.Is(err, full) {
+	if _, err := cmd.Execute(ctx, s, grist.Envelope{ID: "c1", Tenant: "t1", Caller: "a"}, Create{Counter: "a", Name: "full"}); !errors.Is(err, full) {
 		t.Fatalf("the refusal: %v, want it refused", err)
 	}
 	var refused *qtrace.Step
@@ -259,7 +259,7 @@ func TestUndeclaredRefusalNamesRefuses(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := &binding.Model{Actions: map[string][]binding.Param{"createCounter": {{Name: "counter", Type: "str"}, {Name: "name", Type: "str"},
-		{Name: "id", Type: "str"}, {Name: "principal", Type: "str"}, {Name: "readPos", Type: "int"}, {Name: "reads", Type: "Set[(str, str, str)]"}, {Name: "result", Type: "str"}}}}
+		{Name: "id", Type: "str"}, {Name: "caller", Type: "str"}, {Name: "readPos", Type: "int"}, {Name: "reads", Type: "Set[(str, str, str)]"}, {Name: "result", Type: "str"}}}}
 	_, err = b.Plan(m, &qtrace.Trace{Actor: "t1", Steps: []qtrace.Step{*refused}})
 	if err == nil || !strings.Contains(err.Error(), `outcome "full" has no mapping`) || !strings.Contains(err.Error(), "grist.Refuses(...) on its NewCommand") {
 		t.Errorf("the binding's error: %v, want no mapping, naming grist.Refuses", err)

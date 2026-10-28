@@ -93,7 +93,7 @@ func (b *QueryBlock[Q, R]) Run(ctx context.Context, s Store, env Envelope, q Q) 
 			err = r.bad
 		}
 		r.Position()
-		kv := append(append([]any{}, argKV...), "principal", env.Actor, "readPos", int64(r.pos), "order.pos", readOrder(r.pos))
+		kv := append(append([]any{}, argKV...), "caller", env.Caller, "readPos", int64(r.pos), "order.pos", readOrder(r.pos))
 		var obs []any
 		if err == nil {
 			body, _ := json.Marshal(res)

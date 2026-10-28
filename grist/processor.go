@@ -14,14 +14,15 @@ import (
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
-// A Delivery is an effect's declared guarantee.
-type Delivery int
+// A Guarantee is an effect's declared delivery guarantee: at least or
+// at most once.
+type Guarantee int
 
 const (
 	// AtLeastOnce runs the effect, then commits the checkpoint (and the
 	// outcome event): a crash between them runs it again, under the same
 	// EffectKey. An error is tried EffectTries times.
-	AtLeastOnce Delivery = iota + 1
+	AtLeastOnce Guarantee = iota + 1
 	// AtMostOnce commits the checkpoint first, then runs the effect once,
 	// then commits its outcome event (idempotent, under a marker of the
 	// effect key): OnSuccess's after a success, grist.failed after an
@@ -34,15 +35,15 @@ const (
 	AtMostOnce
 )
 
-// String is the delivery's name (AtLeastOnce, AtMostOnce).
-func (d Delivery) String() string {
+// String is the guarantee's name (AtLeastOnce, AtMostOnce).
+func (d Guarantee) String() string {
 	switch d {
 	case AtLeastOnce:
 		return "AtLeastOnce"
 	case AtMostOnce:
 		return "AtMostOnce"
 	}
-	return fmt.Sprintf("Delivery(%d)", int(d))
+	return fmt.Sprintf("Guarantee(%d)", int(d))
 }
 
 // notApplied is an effect's error that says it did not happen.
@@ -80,7 +81,7 @@ type Result struct {
 	kind      resultKind
 	events    []Event
 	effect    func(ctx context.Context) error
-	delivery  Delivery
+	guarantee Guarantee
 	onSuccess *Event
 	err       error
 	// blocked says err is a rule's refusal of the result's appends
@@ -108,15 +109,15 @@ type EffectOption func(*Result)
 // OnSuccess appends e with the checkpoint once the effect succeeded.
 func OnSuccess(e Event) EffectOption { return func(r *Result) { r.onSuccess = &e } }
 
-// Effect runs f outside the log, with the delivery guarantee d
+// Effect runs f outside the log, with the guarantee g
 // (AtLeastOnce or AtMostOnce; any other is the handler's error). f's ctx
 // carries the EffectKey. At least once, an error is retried (EffectTries
 // tries, with backoff), then checkpointed with a grist.failed event; at
 // most once, f runs once after the checkpoint, and its outcome (the
 // success event, or grist.failed) is appended after it, if no crash came
 // between.
-func Effect(f func(ctx context.Context) error, d Delivery, opts ...EffectOption) Result {
-	r := Result{kind: effectResult, effect: f, delivery: d}
+func Effect(f func(ctx context.Context) error, g Guarantee, opts ...EffectOption) Result {
+	r := Result{kind: effectResult, effect: f, guarantee: g}
 	for _, o := range opts {
 		o(&r)
 	}
@@ -124,7 +125,7 @@ func Effect(f func(ctx context.Context) error, d Delivery, opts ...EffectOption)
 }
 
 // check is the handler's error in r, if r is no result grist can carry
-// out: the zero Result, an Effect without a function or of a delivery
+// out: the zero Result, an Effect without a function or of a guarantee
 // grist does not have.
 func (r Result) check(processor string) error {
 	switch {
@@ -132,8 +133,8 @@ func (r Result) check(processor string) error {
 		return fmt.Errorf("grist: processor %s returned the zero Result: return Emit, Skip, Effect or Fail", processor)
 	case r.kind == effectResult && r.effect == nil:
 		return fmt.Errorf("grist: processor %s returned an Effect without a function", processor)
-	case r.kind == effectResult && r.delivery != AtLeastOnce && r.delivery != AtMostOnce:
-		return fmt.Errorf("grist: processor %s returned an Effect of delivery %d: give AtLeastOnce or AtMostOnce", processor, r.delivery)
+	case r.kind == effectResult && r.guarantee != AtLeastOnce && r.guarantee != AtMostOnce:
+		return fmt.Errorf("grist: processor %s returned an Effect of guarantee %d: give AtLeastOnce or AtMostOnce", processor, r.guarantee)
 	}
 	return nil
 }
@@ -653,7 +654,7 @@ func (pl *poller) step(trigger Position, events []Event, slot int64, skip bool, 
 // read at head), then commits the checkpoint with its outcome event; it
 // returns the head after, false if the checkpoint did not commit.
 func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res Result) (Position, bool) {
-	if res.delivery == AtMostOnce {
+	if res.guarantee == AtMostOnce {
 		return pl.atMostOnce(ctx, cp, e, res)
 	}
 	key := pl.key(e.Pos)

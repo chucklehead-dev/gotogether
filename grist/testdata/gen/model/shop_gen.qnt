@@ -42,11 +42,11 @@ module shopEvents {
   pure def itemsEvents(log: List[Event]): List[Event] = log.select(e => Set("item-added").contains(e.typ))
   pure val itemsReads: Set[Read] = Set({ typ: "item-added", tags: Set() })
 
-  // each command's and query's arguments, with the actor that sent it (principal)
-  type AddItemArgs = { item: str, qty: int, of: str, principal: str }
-  type NoteItemArgs = { item: str, principal: str }
-  type CountArgs = { principal: str }
-  type ShowItemArgs = { item: str, principal: str }
+  // each command's and query's arguments, with the caller that sent it
+  type AddItemArgs = { item: str, qty: int, of: str, caller: str }
+  type NoteItemArgs = { item: str, caller: str }
+  type CountArgs = { caller: str }
+  type ShowItemArgs = { item: str, caller: str }
   type ShowItemResult = { qty: int, shipped: bool }
   // site warehouse-picks: a record of the effect, made where it takes place
   type WarehousePicksRecord = { key: str, item: str, qty: int }

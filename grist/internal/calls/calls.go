@@ -61,7 +61,7 @@ func Record(ctx context.Context, app *grist.App, env grist.Envelope, name string
 	if !query {
 		kv = append(kv, "id", env.ID)
 	}
-	kv = append(kv, "principal", env.Actor) // the call's actor, as the store's step records it
+	kv = append(kv, "caller", env.Caller) // the call's caller, as the store's step records it
 	call := qobs.Invoke(ctx, q, kv...)
 	a := do()
 	switch {

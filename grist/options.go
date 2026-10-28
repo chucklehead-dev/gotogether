@@ -32,7 +32,7 @@ type options struct {
 	internal  bool
 	// refuses are a command's declared rejections (Refuses), nil when it
 	// declares none; shape is a processor's declared result (Emits,
-	// Delivers): its delivery, the event types it emits, its success
+	// Delivers): its guarantee, the event types it emits, its success
 	// event's type
 	refuses []string
 	shape   shape
@@ -48,10 +48,10 @@ type options struct {
 
 // shape is a processor's declared result: 0 when it declares none.
 type shape struct {
-	kind     resultKind // emitResult or effectResult
-	delivery Delivery
-	emits    []EventName
-	success  EventName // nil: no OnSuccess
+	kind      resultKind // emitResult or effectResult
+	guarantee Guarantee
+	emits     []EventName
+	success   EventName // nil: no OnSuccess
 }
 
 // The defaults of the tries and the batch size.
@@ -127,26 +127,26 @@ func kindsOf(option string) []string {
 }
 
 // A Policy is who an adapter (the HTTP API, NewHandler) serves a command
-// or query to: a predicate over the request's actor (WithActor, set by
+// or query to: a predicate over the request's caller (WithCaller, set by
 // the application's authentication) and its tenant. It runs in the
 // adapter, never in a decision: a processor's dispatch is subject to no
 // user's policy.
-type Policy func(actor, tenant string) bool
+type Policy func(caller, tenant string) bool
 
-// Authenticated is the policy of any authenticated actor: one whose
-// request carries an actor (WithActor), whatever the tenant.
-func Authenticated(actor, tenant string) bool { return actor != "" }
+// Authenticated is the policy of any authenticated caller: one whose
+// request carries a caller (WithCaller), whatever the tenant.
+func Authenticated(caller, tenant string) bool { return caller != "" }
 
-// Actors is the policy of the named actors only, in every tenant.
-func Actors(names ...string) Policy {
+// Callers is the policy of the named callers only, in every tenant.
+func Callers(names ...string) Policy {
 	set := map[string]bool{}
 	for _, n := range names {
 		set[n] = true
 	}
-	return func(actor, tenant string) bool { return actor != "" && set[actor] }
+	return func(caller, tenant string) bool { return caller != "" && set[caller] }
 }
 
-// Authorize serves a command or query to the actors p admits, at every
+// Authorize serves a command or query to the callers p admits, at every
 // adapter. Every command and query is denied by default: an adapter
 // refuses to serve an App with a block that has neither Authorize nor
 // Internal (NewHandler's error), and answers a request p refuses with
@@ -154,7 +154,7 @@ func Actors(names ...string) Policy {
 func Authorize(p Policy) Option {
 	return Option{name: "Authorize", kinds: kindsOf("Authorize"), apply: func(o *options) string {
 		if p == nil {
-			return "a nil Policy: give one (Authenticated, Actors, or a func(actor, tenant string) bool)"
+			return "a nil Policy: give one (Authenticated, Callers, or a func(caller, tenant string) bool)"
 		}
 		o.authorize = p
 		return ""
@@ -282,10 +282,10 @@ func Emits(types ...EventName) Option {
 }
 
 // Delivers declares a processor whose handler returns an Effect of
-// delivery d, with OnSuccess of an event of type success (at most one;
+// guarantee g, with OnSuccess of an event of type success (at most one;
 // none: no success event). The model generator writes its effect,
 // checkpoint and outcome actions from it (grist.qnt's at-least-once or
-// at-most-once defs). A handler that returns another delivery, no
+// at-most-once defs). A handler that returns another guarantee, no
 // success event where one is declared or another's, or an Emit, fails
 // its trigger (Fail), naming the fix: the guarantee the model judges is
 // the declared one. A Skip or a handler's Fail is allowed too: its
@@ -295,16 +295,16 @@ func Emits(types ...EventName) Option {
 // says the handler skips the trigger (docs/grist.md §0.11); a Fail, whose
 // grist.failed the skip's empty batch does not match, is a mismatch, as
 // an Emits processor's is.
-func Delivers(d Delivery, success ...EventName) Option {
+func Delivers(g Guarantee, success ...EventName) Option {
 	return Option{name: "Delivers", kinds: kindsOf("Delivers"), apply: func(o *options) string {
-		if d != AtLeastOnce && d != AtMostOnce {
-			return fmt.Sprintf("delivery %d: give AtLeastOnce or AtMostOnce", d)
+		if g != AtLeastOnce && g != AtMostOnce {
+			return fmt.Sprintf("guarantee %d: give AtLeastOnce or AtMostOnce", g)
 		}
 		if len(success) > 1 {
 			return "more than one success event: an effect's OnSuccess appends one"
 		}
 		o.declared++
-		o.shape = shape{kind: effectResult, delivery: d}
+		o.shape = shape{kind: effectResult, guarantee: g}
 		if len(success) == 1 {
 			if success[0] == nil {
 				return "a nil success event type: give a registered event type, or none"
@@ -333,8 +333,8 @@ func (s shape) conforms(processor string, res Result) error {
 		}
 	case res.kind != effectResult:
 		return fmt.Errorf("grist: processor %s returned Emit, but it declares Delivers: return an Effect, or declare Emits", processor)
-	case res.delivery != s.delivery:
-		return fmt.Errorf("grist: processor %s returned an Effect %s, but it declares Delivers(%s): make them agree", processor, res.delivery, s.delivery)
+	case res.guarantee != s.guarantee:
+		return fmt.Errorf("grist: processor %s returned an Effect %s, but it declares Delivers(%s): make them agree", processor, res.guarantee, s.guarantee)
 	case s.success == nil && res.onSuccess != nil:
 		return fmt.Errorf("grist: processor %s's Effect has OnSuccess(%s), which its Delivers does not declare: add it", processor, res.onSuccess.Type)
 	case s.success != nil && (res.onSuccess == nil || res.onSuccess.Type != s.success.Name()):

@@ -171,7 +171,7 @@ func (g *gen) callActions(b *strings.Builder) {
 				fmt.Sprintf("rec_.request == %s(log.slice(0, trigger), trigger)", c.ruleName(p)),
 				fmt.Sprintf("not(%sSkips(log.slice(0, trigger), trigger))", p.Quint),
 			}
-			if p.Delivery == AtLeastOnce {
+			if p.Guarantee == AtLeastOnce {
 				cond = append(cond, fmt.Sprintf("trigger == nextOf(log, checkpoints.get(%q), %q)", p.Name, p.On))
 			} else {
 				cond = append(cond, fmt.Sprintf("checkpoints.get(%q) >= trigger", p.Name), fmt.Sprintf("triesOf(effects, %q, trigger) == 0", p.Name), fmt.Sprintf("not(keyCalled(%s(%sCalls), key))", keys, c.Quint))
@@ -192,7 +192,7 @@ func (g *gen) callActions(b *strings.Builder) {
 		}
 		atMostOnce := ""
 		for _, p := range c.users {
-			if p.Delivery == AtMostOnce {
+			if p.Guarantee == AtMostOnce {
 				atMostOnce = ", at most once with no earlier call of the key"
 			}
 		}
