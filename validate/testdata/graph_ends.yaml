@@ -1,0 +1,15 @@
+# graph.yaml with its deadlock declared the model's end (simulate.terminal).
+spec: graph.qnt
+module: graph
+actions:
+  inc: {}
+  bump: {}
+  reset: {}
+  never: {}
+invariants: [small, positive]
+simulate:
+  holds: [positive]
+  allows: [small]
+  steps: 10
+  samples: 200
+  terminal: x == 3 and y == 2

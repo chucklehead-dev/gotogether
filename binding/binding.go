@@ -187,6 +187,17 @@ type Simulation struct {
 	// cannot encode, or one too slow at any useful depth. Its sampling
 	// stands.
 	VerifySkip string `yaml:"verifySkip"`
+	// Terminal is a Quint predicate over the state saying where the model
+	// means to stop: `gotogether simulate -graph` reports a state the step
+	// cannot leave as a deadlock unless it holds there (a protocol that
+	// has finished, a log at its bound).
+	Terminal string `yaml:"terminal"`
+	// GraphStates and GraphDepth bound `gotogether simulate -graph`'s
+	// state graph for this model (default 100000 states, no depth bound):
+	// a model whose state grows without end (grist's log) needs the
+	// depth bound to explore every state near its start.
+	GraphStates int `yaml:"graphStates"`
+	GraphDepth  int `yaml:"graphDepth"`
 }
 
 // Action says how to call one model action from an observed step.

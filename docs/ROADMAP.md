@@ -115,7 +115,9 @@ is not taken. The maintainer's decisions of 2026-10-28, as recommended:
   mutants drop a rule. A requirement added without editing a command
   ("no deposit until KYC cleared"). Commands first; a processor whose
   Emit a rule blocks fails visibly (block-until for processors later).
-- **P2. A state-graph explorer over the Go evaluator (M-L).** A
+- **P2. A state-graph explorer over the Go evaluator (M-L). Done**
+  (DESIGN §61; HISTORY: "P2: the state-graph explorer"; `gotogether
+  simulate -graph`, `validate.Checker.Graph`). A
   breadth-first graph of a model from Init with qeval's Successors (made
   to return labelled edges: the action and its picks) and Key, dense ids,
   a parent tree for shortest counterexamples, bounded by states and

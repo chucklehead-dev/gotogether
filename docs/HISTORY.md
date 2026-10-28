@@ -1818,6 +1818,44 @@ ROADMAP's P3 and P4 as built (DESIGN §59). The decisions they left:
   `answered.contains(id)` branch, which quint replays. examples/hello
   carries a possible and a scenario as the README's first code.
 
+### P2: the state-graph explorer
+
+ROADMAP's P2 as built (DESIGN §61). The decisions it left:
+- **The surface**: a mode of simulate (`-graph`, with `-states`,
+  `-depth`, `-out`), not a command of its own: it answers simulate's
+  question (does the model guarantee what `holds` says, allow what
+  `allows` says, reach what `possible` says) over every reachable state
+  instead of samples, as `-verify` does through Apalache. Beneath it
+  `validate.Checker.Graph(GraphSearch)`; no qtest claim (a model-only
+  check needs no run; `qtest.Possible` remains the model-first claim).
+- **One core for Reach and Explore** (qeval's graph.go), Reach's
+  sequence goals its best-first ordering: no second search.
+  `Transitions` already returned labelled edges; the graph interns
+  them, the branch's action and its own choices kept, the step's unused
+  choices dropped.
+- **Deadlocks fail**, unless `simulate.terminal` holds there (a new
+  binding field, with `graphStates` and `graphDepth`); actions never
+  enabled are reported, not failed.
+- **Possibles under -graph** go to the evaluator at the graph's bounds,
+  then to quint for what it did not find: the first version left them
+  to the evaluator alone, and the grist examples' deep possibles
+  (counters' payoutOutcome, library's borrow.limit) failed where plain
+  simulate's sampling reaches them.
+- **The default bound** stays the ROADMAP's 10^5 states: under a minute
+  for most models, minutes where a step's choice product is large
+  (bank, broadcast, kvstore), each of which a binding can bound.
+- **The smoke run** over the repository's 64 bindings with invariants
+  (`simulate -graph -states 20000`): 58 explored (six skip or have only
+  eventual vals), 11 complete (hello, uniqueids, twophase, crossdb;
+  vending and its strict variant, limiter, graph and graph_ends; qtest's
+  journal and letters), the rest cut by
+  the state bound; none stopped by the evaluator. Times in DESIGN §61
+  (0.2 s to 188 s). Failures: the two examples' deadlocks (twophase's
+  decided protocol, crossdb's spent ids), each a `terminal:` or more ids
+  in its example; the grist examples' deep possibles before quint
+  sampled them; and testdata fixtures whose invariants are unclassified
+  on purpose (their violations are what their tests are about).
+
 ### P1: blocking rules (grist)
 
 ROADMAP's P1 as built (docs/grist.md §2.4.1). The decisions it left:

@@ -64,23 +64,8 @@ func (r PossibleResult) Verdict() string {
 // a constant computed from a run's steps with no value given, a possible
 // that names no action or parameter of the model.
 func (c *Checker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]PossibleResult, error) {
-	b := *c.Binding
-	b.Constants = maps.Clone(c.Binding.Constants)
-	if b.Constants == nil {
-		b.Constants = map[string]string{}
-	}
-	if b.Simulate != nil {
-		for k, v := range b.Simulate.Constants {
-			b.Constants[k] = v
-		}
-	}
-	for _, o := range cfg.Constants {
-		if k, v, ok := strings.Cut(o, "="); ok {
-			b.Constants[strings.TrimSpace(k)] = strings.TrimSpace(v)
-		}
-	}
-	cc := *c
-	cc.Binding = &b
+	cc := c.simulationInstance(cfg.Constants)
+	b := cc.Binding
 	type goal struct {
 		when  string
 		steps []binding.StepPattern
@@ -97,7 +82,7 @@ func (c *Checker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]Possibl
 			preds = append(preds, when)
 		}
 	}
-	e := evaluatorOf(&cc, func(path string) (*binding.EvalModule, error) { return b.PossibleModule(c.Model, path, preds) })
+	e := evaluatorOf(cc, func(path string) (*binding.EvalModule, error) { return b.PossibleModule(c.Model, path, preds) })
 	if e.err != nil {
 		return nil, fmt.Errorf("possible: the Go evaluator has no evaluation module for %s: %w", b.SpecPath(), e.err)
 	}

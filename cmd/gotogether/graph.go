@@ -1,0 +1,279 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/validate"
+)
+
+// simulateGraph is `simulate -graph`: the binding's instance explored by
+// the Go evaluator (validate.Checker.Graph), each invariant judged as
+// the simulate section classifies it over every state the graph holds,
+// then its deadlocks, the actions it never took, and the possibles
+// (searched by the evaluator as deep as the graph, what it did not find
+// sampled by quint as without -graph: the only quint process but the
+// cached compile). A violation prints its shortest
+// counterexample and the Quint run that replays it (all of them in -out's
+// module). Exit 1 for a verdict that fails, 2 for a graph the evaluator
+// could not finish or an invariant it could not evaluate, with nothing
+// failing: it never says complete then. checker is the binding's, nil
+// to make one; possibles its simulation's, resolved.
+func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, possibles []*possibleCheck, overrides, invariants []string,
+	quint string, states, depth int, out string, steps, samples int, seed string) (int, error) {
+	sim := b.Simulate
+	if sim == nil {
+		sim = &binding.Simulation{}
+	}
+	if checker == nil {
+		c, err := validate.NewChecker(bpath, validate.Options{Quint: quint})
+		if err != nil {
+			return 2, err
+		}
+		defer c.Close()
+		checker = c
+	}
+	r, err := checker.Graph(validate.GraphSearch{Constants: overrides, Invariants: invariants, States: states, Depth: depth})
+	if err != nil {
+		return 2, fmt.Errorf("simulate -graph: %w", err)
+	}
+	bounds := fmt.Sprintf("at most %d states", r.Bound.States)
+	if r.Bound.Depth > 0 {
+		bounds += fmt.Sprintf(", depth %d", r.Bound.Depth)
+	}
+	fmt.Printf("simulate %s: %s(%s), its state graph by the Go evaluator (%s)\n", bpath, b.Module, strings.Join(constantList(b, overrides), ", "), bounds)
+	fmt.Printf("  graph   %s, %.1fs\n", r.Extent(), r.Elapsed.Seconds())
+	where := "no reachable state"
+	if !r.Complete {
+		where = fmt.Sprintf("none of the %d states explored", r.States)
+	}
+	raise := "raise -states or -depth (simulate.graphStates, simulate.graphDepth)"
+	if r.Cut == "unsupported" || r.Cut == "error" {
+		raise = "simulate without -graph samples the model with quint"
+	}
+	holds, allows := set(sim.Holds), set(sim.Allows)
+	code, unchecked := 0, false
+	for _, v := range r.Invariants {
+		inv := v.Name
+		switch {
+		case v.Unsupported != "":
+			unchecked = true
+			fmt.Printf("  unchecked %s: the Go evaluator cannot evaluate it (%s); simulate without -graph samples it with quint\n", inv, v.Unsupported)
+			continue
+		case v.Error != "":
+			code = 1
+			fmt.Printf("  FAIL    %s: evaluating it fails in a reachable state (%s): the model's own error, fix the model. The path:\n%s", inv, v.Error, cexText(v.Counterexample))
+			continue
+		}
+		switch {
+		case holds[inv] && v.Held() && r.Complete:
+			fmt.Printf("  holds   %s: no reachable state violates it (the whole graph, %d states%s)\n", inv, r.States, depthNote(r))
+		case holds[inv] && v.Held():
+			fmt.Printf("  holds   %s: %s violates it (the graph is truncated: %s for a proof)\n", inv, where, raise)
+		case allows[inv] && v.Violated:
+			fmt.Printf("  allows  %s: a state %d steps from init violates it (the code must not): %s\n", inv, len(v.Counterexample.Steps)-1, callsOf(v.Counterexample))
+		case holds[inv]:
+			code = 1
+			fmt.Printf("  FAIL    %s: the model should guarantee it, and a reachable state violates it: fix the model if it must hold, "+
+				"or move it to simulate.allows if it is a requirement on the code. The shortest counterexample:\n%s", inv, cexText(v.Counterexample))
+		case allows[inv] && r.Complete:
+			code = 1
+			fmt.Printf("  FAIL    %s: the model should allow its violation, and no reachable state violates it: checking the code against it proves nothing. "+
+				"Move it to simulate.holds (the graph proves it for this instance), or loosen the model\n", inv)
+		case allows[inv]:
+			code = 1
+			fmt.Printf("  FAIL    %s: the model should allow its violation, and %s violates it: checking the code against it proves nothing. "+
+				"%s, or move it to simulate.holds\n", inv, where, capitalize(raise))
+		case v.Violated:
+			code = 1
+			fmt.Printf("  FAIL    %s: not classified; the model allows its violation: add it to simulate.allows if the code must prevent it, else fix the model. "+
+				"The shortest counterexample:\n%s", inv, cexText(v.Counterexample))
+		case r.Complete:
+			fmt.Printf("  holds   %s: no reachable state violates it (unclassified: add it to simulate.holds to keep it so)\n", inv)
+		default:
+			fmt.Printf("  holds   %s: %s violates it (unclassified, the graph truncated)\n", inv, where)
+		}
+	}
+	switch {
+	case r.Deadlocks > 0:
+		code = 1
+		fmt.Printf("  FAIL    deadlock: %s the step cannot leave%s. If the model means to stop there, say where with simulate.terminal "+
+			"(a predicate over the state); else find the guard that disables every action (gotogether nav -binding %s). The nearest:\n%s",
+			plural(r.Deadlocks, "reachable state"), terminalNote(r), bpath, cexText(r.Deadlock))
+	case r.Terminals > 0:
+		fmt.Printf("  ends    %s the step cannot leave, each terminal (simulate.terminal)\n", plural(r.Terminals, "reachable state"))
+	}
+	if never := r.NeverEnabled(); len(never) > 0 {
+		if r.Complete {
+			fmt.Printf("  never   %s: no reachable state enables it (dead in this instance: a guard too strict, or constants too small to reach it)\n", strings.Join(never, ", "))
+		} else {
+			fmt.Printf("  never   %s: no state explored enables it (within the bound)\n", strings.Join(never, ", "))
+		}
+	}
+	var cov []string
+	for _, a := range r.Actions {
+		if a.Transitions > 0 {
+			cov = append(cov, fmt.Sprintf("%s %d in %d states", a.Action, a.Transitions, a.States))
+		}
+	}
+	if len(cov) > 0 {
+		fmt.Printf("  covered %s\n", strings.Join(cov, ", "))
+	}
+	if len(possibles) > 0 {
+		// the evaluator's search first, as deep as the graph; quint samples
+		// what it did not find, as simulate does without -graph (a deep
+		// scenario the graph's breadth cannot reach)
+		depthP := r.Bound.Depth
+		if depthP == 0 {
+			depthP = 1 << 30 // none: the state bound bounds it
+		}
+		rs, evalErr := checker.Possible(sim.Possible, validate.PossibleSearch{Constants: overrides, States: r.Bound.States, Depth: depthP})
+		var left []*possibleCheck
+		for i, c := range possibles {
+			if evalErr == nil && rs[i].Found {
+				c.quintSkip = "found by the Go evaluator, not sampled"
+				continue
+			}
+			left = append(left, c)
+		}
+		if len(left) > 0 {
+			dir, err := os.MkdirTemp("", "gotogether-simulate-*")
+			if err != nil {
+				return 2, err
+			}
+			defer os.RemoveAll(dir)
+			file := filepath.Join(dir, "simulate.qnt")
+			src, err := simulationModule(b, overrides, file)
+			if err != nil {
+				return 2, err
+			}
+			src = strings.TrimSuffix(src, "}\n") + possibleVals(possibles) + "}\n"
+			if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+				return 2, err
+			}
+			if err := quintPossibles(quint, dir, file, left, steps, samples, seed, 0, nil); err != nil {
+				return 2, err
+			}
+		}
+		pc, err := reportPossibles(bpath, possibles, rs, evalErr, steps, samples, 0)
+		if err != nil {
+			return 2, err
+		}
+		code = max(code, pc)
+	}
+	if runs := replayRuns(r); out != "" && len(runs) > 0 {
+		if err := writeReplays(b, overrides, out, runs); err != nil {
+			return 2, err
+		}
+		fmt.Printf("  wrote   %s: quint test --main simulate --match 'gtg_' %s replays each counterexample\n", out, filepath.Base(out))
+	}
+	if code == 0 && (unchecked || r.Cut == "unsupported" || r.Cut == "error") {
+		if r.Cut == "unsupported" || r.Cut == "error" {
+			fmt.Printf("  stopped %s\n", r.Stopped)
+		}
+		return 2, nil
+	}
+	return code, nil
+}
+
+// replayRuns are the Quint runs of a graph's counterexamples: one per
+// violated invariant (gtg_violates_<name>), and the nearest deadlock's
+// (gtg_deadlock), each a declaration of the simulation module.
+func replayRuns(r *validate.GraphResult) []string {
+	var runs []string
+	for _, v := range r.Invariants {
+		if v.Violated {
+			runs = append(runs, fmt.Sprintf("  // %s violated\n  run gtg_violates_%s = %s", v.Name, ident(v.Name), v.Counterexample.Replay))
+		}
+	}
+	if r.Deadlock != nil {
+		runs = append(runs, "  // the nearest deadlock\n  run gtg_deadlock = "+r.Deadlock.Replay)
+	}
+	return runs
+}
+
+// writeReplays writes the simulation module of b's instance to path,
+// with runs.
+func writeReplays(b *binding.Binding, overrides []string, path string, runs []string) error {
+	src, err := simulationModule(b, overrides, path)
+	if err != nil {
+		return err
+	}
+	src = strings.TrimSuffix(src, "}\n") + strings.Join(runs, "\n") + "\n}\n"
+	return os.WriteFile(path, []byte(src), 0o644)
+}
+
+// cexText is a counterexample as a report prints it: each step's call,
+// the choices it made itself and the state after it, then its replay.
+func cexText(cx *validate.Counterexample) string {
+	if cx == nil {
+		return ""
+	}
+	var b strings.Builder
+	for i, st := range cx.Steps {
+		fmt.Fprintf(&b, "    %d. %s", i, st.Call)
+		if len(st.Picks) > 0 {
+			var ps []string
+			for _, p := range st.Picks {
+				ps = append(ps, p.Name+" = "+p.Value)
+			}
+			fmt.Fprintf(&b, " choosing %s", strings.Join(ps, ", "))
+		}
+		var vs []string
+		for _, v := range st.State {
+			vs = append(vs, v.Name+" = "+v.Value)
+		}
+		fmt.Fprintf(&b, "\n         %s\n", strings.Join(vs, ", "))
+	}
+	fmt.Fprintf(&b, "    replay: run r = %s\n", cx.Replay)
+	if len(cx.Sampled) > 0 {
+		fmt.Fprintf(&b, "    (steps %v choose within their action: quint's replay draws those choices itself)\n", cx.Sampled)
+	}
+	return b.String()
+}
+
+// callsOf is a counterexample's steps as one line.
+func callsOf(cx *validate.Counterexample) string {
+	var cs []string
+	for _, st := range cx.Steps {
+		cs = append(cs, st.Call)
+	}
+	return strings.Join(cs, ", ")
+}
+
+func depthNote(r *validate.GraphResult) string {
+	if r.Bound.Depth > 0 {
+		return fmt.Sprintf(" within depth %d", r.Bound.Depth)
+	}
+	return ""
+}
+
+func terminalNote(r *validate.GraphResult) string {
+	if r.Terminals > 0 {
+		return fmt.Sprintf(" where simulate.terminal does not hold (%d more where it does)", r.Terminals)
+	}
+	return ""
+}
+
+// ident is an invariant's text as a Quint identifier's tail.
+func ident(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r == '_' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
+}
+
+func capitalize(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}

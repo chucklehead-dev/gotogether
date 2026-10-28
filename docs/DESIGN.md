@@ -4360,3 +4360,102 @@ registration types), so a change to it still shows in review.
 storetest's twelve per-check functions left api/grist.txt (their names
 stay the Checks' names). grist's generator, CLI plumbing and limit
 constants under grist/internal are H5's other half (ROADMAP).
+
+## 61. The state-graph explorer (P2)
+
+`gotogether simulate` sampled: a thousand traces of thirty steps, so
+"holds" meant "no sample violated it". The Go evaluator (§45, §56)
+computes a state's transitions in microseconds, so a binding's model
+small enough is checked in every reachable state instead, with no
+quint process but the cached compile: `gotogether simulate -graph`, and
+`validate.Checker.Graph` beneath it.
+
+- **One search core** (internal/qeval/graph.go). P3's Reach and the
+  explorer are one search: nodes by Key (and a sequence goal's progress),
+  dense ids in the order found, a parent tree, a frontier ordered by
+  progress, depth and id (so breadth first without a sequence), bounds
+  on states and depth, and which bound cut it. Hooks make the
+  difference: Reach's meet its goals and stop; `Model.Explore`'s keep
+  every expanded state's out-edges, so the graph is there for what
+  builds on it (P6's cycles), not re-derived. Init's every successor is
+  a start (a nondeterministic init has several).
+- **Edges as labels.** An edge is a label id and the state it reaches;
+  labels are interned. Validate's label is the step's branch: the
+  action applied with its arguments and the choices it made itself. The
+  step's own choices used by no branch are dropped (bank's step picks a
+  transfer's accounts for a deposit too: about 130 labelled transitions a
+  state, 37 edges), merging edges that differ only in them.
+- **Shortest counterexamples.** Ids are in breadth-first order, so the
+  first id where an invariant is false is a nearest violating state and
+  its path up the parent tree a shortest trace. Every state found is
+  checked, those at the depth bound (not expanded) included.
+- **Complete or not.** Complete means no bound cut the search and the
+  evaluator refused nothing: every state reachable (within the depth
+  bound, if set) was checked, and "holds" is a proof for the instance.
+  A state at the depth bound cuts it even if it has no successor
+  (unknown, since it is not expanded). The default bound is 100000
+  states (`-states`, `simulate.graphStates`) and no depth bound
+  (`-depth`, `simulate.graphDepth`): grist's log grows without end, so
+  its graphs are always cut, and the depth bound makes the cut "every
+  state within D steps" rather than a breadth-first prefix.
+- **Unsupported is never complete.** A construct outside the evaluator's
+  fragment met during the search (an integer past 64 bits, an order-
+  dependent fold, a set past 65,536) stops it: the graph found so far
+  stays (its paths are real traces, a violation in it is real), cut
+  "unsupported", `Stopped` naming the construct; an invariant the
+  evaluator cannot evaluate is "unchecked". Either exits 2 when nothing
+  failed, and the report says to sample without -graph.
+- **Classified as simulate classifies.** `holds` in a complete graph is
+  proved; in a truncated one, "none of the N states explored violates
+  it"; violated, it fails with the shortest counterexample. `allows`
+  passes with the shortest violating path, and fails when the complete
+  graph has none (checking the code against it proves nothing).
+- **Deadlocks** are expanded states with no edge. quint run says
+  nothing of them (a sample just ends); TLC fails on one by default, and
+  so does -graph, unless `simulate.terminal` (a Quint predicate) holds
+  there: a model's intended end. The smoke run found two in the
+  examples, both complete graphs: twophase (99 states, 9 deadlocks:
+  every participant decided, the protocol's end, unsaid) and crossdb
+  (10377 states, 128: a resource stuck deleting once the model's three
+  database ids are spent, the finite pool's end).
+- **Actions never enabled, and coverage**: each of the step's actions
+  with the edges taking it and the states it is enabled in. One never
+  taken in a complete graph is dead in the instance (vending's repair,
+  by design); in a truncated one, only not reached. Reported, not
+  failed: an instance's constants may rule one out on purpose.
+- **Replay in quint.** Each counterexample is a Quint run over the
+  simulation module (`-out f.qnt`, then `quint test --main simulate
+  --match gtg_ f.qnt`): init (or, where init has several states, the
+  start's values assigned), each step its branch's call with literal
+  arguments, then `.expect(not(inv))` or, for a deadlock,
+  `.then(step.fail())`. It replays exactly where no step chooses inside
+  its action; where one does (`Counterexample.Sampled`), quint draws
+  those choices itself. The run calls the action, not step: the
+  evaluator found the transition through step, so a guard step adds
+  around a branch is not re-checked by the replay.
+- **Possibles under -graph**: the evaluator's search at the graph's
+  bounds, then quint's sampling for what it did not find, as without
+  -graph (a grist app's deep scenarios, which a 20000-state breadth-
+  first prefix four or five steps deep never reaches).
+- **Cost.** A state's expansion is its step's whole choice product.
+  The smoke run (every binding of the repository with invariants, 20000
+  states each, one core): 0.1-0.7 ms a state for most (checkout 6.2 s,
+  counters 7.6, crossdb's whole graph 6.7, edgepublish 6.3, grpcledger
+  12.8, jobqueue 2.9, lease 2.3, library 12.6, raftkv 4.6, streams
+  14.3: 10^5 states in 10-65 s), 1.2-9 ms where the product is large
+  (wallet-grist 26 s, account's amounts 29, webjobs 56, broadcast 71,
+  bank's 135 picks 90, payd 93, kvstore's `0.to(revision)` 188). No
+  model met a construct the evaluator refuses.
+- **Tests that fail without it**: `TestExploreAgainstBruteForce` (every
+  path of graph.qnt and vending to each depth bound from every initial
+  state: the same states at their least depths, each path a trace of
+  that length, an expanded state's edges exactly its transitions, the
+  deadlocks, complete exactly when no state lies at the bound, a state
+  bound's prefix; a deepest-first frontier, or edges to seen states
+  dropped, fails it), `TestExploreGraph`, `TestExploreUnsupported`,
+  `TestCheckerGraph` and `TestCheckerGraphUnsupported`,
+  `TestSimulateGraph`, and `TestGraphAgreesWithQuint`: on eight small
+  models, each invariant quint's sampling violates within the steps the
+  explorer reports violated (graph's small, account's underLimit,
+  lease's noStaleWrite), and every counterexample it reports replays in
+  quint test.

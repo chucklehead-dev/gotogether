@@ -64,6 +64,11 @@ skill (`gotogether skills install`).
 gotogether is the Go counterpart of
 [quint-connect](https://github.com/quint-co/quint-connect) (model-based
 testing, where Quint traces drive the implementation). It adds:
+- **the model checked on its own** (`gotogether simulate`): its
+  invariants sampled by quint or, with `-graph`, checked in every
+  reachable state by a Go evaluator (the shortest counterexample, as a
+  Quint run; deadlocks; actions never enabled), and what it must be able
+  to do (`possible`);
 - **property-based and state-machine testing with
   [Hegel](https://github.com/hegeldev/hegel-go)**, judged and shrunk by
   the model;
@@ -598,7 +603,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `qdriver` | an external driver's request log (protocol `gotogether.requests/1`, JSONL a driver writes itself): `Read`, `ReadFile`, `New`, `Log.Steps` (each request an invocation record, completed only by its own response; steps a driver saw; its times, refs and correlation ids), `Log.Warnings`, `Log.Write`, `Sniff`; Playwright's adapter is [adapters/playwright](adapters/playwright) |
 | `qdriver/bombadil` | Bombadil's `trace.jsonl` with a page that logs its requests, as a request log (`Log`, `LogFile`; its steps for `qtest.Validate`): `Options` (the spec's extract, its custom actions in `Clicks`, the log's `Fields`, the display as `Show` steps), `States` (experimental) for a mapping of your own |
 | `skills` | the agent skills below, embedded, and their install |
-| `cmd/gotogether` | the CLI: `scaffold`, `lint`, `simulate` (the model alone: which invariants it guarantees, which the code must, and what it must be able to do, its `possible` list, each reached with a witness or failing as too strict; `-verify N`, Apalache to depth N), `steps`, `validate`, `itf`, `convert`, `cover`, `evidence` (a suite's explorations, and what no faithful one tried; `-strict` for CI), `skills` |
+| `cmd/gotogether` | the CLI: `scaffold`, `lint`, `simulate` (the model alone: which invariants it guarantees, which the code must, and what it must be able to do, its `possible` list, each reached with a witness or failing as too strict; `-verify N`, Apalache to depth N; `-graph`, every reachable state by the Go evaluator, with the shortest counterexamples, deadlocks and the actions never enabled), `steps`, `validate`, `itf`, `convert`, `cover`, `evidence` (a suite's explorations, and what no faithful one tried; `-strict` for CI), `skills` |
 | `qweave` (module) | weaves Orchestrion aspects into a `go -overlay`: `qweave go test ./...`, `-cover`, `-mutate` |
 | `qnav` (module) | `gotogether-nav`, the navigators' TUI (Charm's v2 libraries): a model's states or a run's choices, enter to take a branch, back, fold, the failing step, save; its VHS tapes are its docs' GIFs ([qnav](qnav)) |
 | `qanalysis` (module) | analyzers `quintsim`, `quintweave`, `quintaction` (`cmd/quintvet`, a golangci plugin); `cmd/actionmap` |

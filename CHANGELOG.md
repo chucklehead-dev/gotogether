@@ -28,6 +28,16 @@ The first release. What a user meets, by module:
   cancelled in flight has an unknown outcome.
 - `qtest.Satisfies(desc, f)`: an expectation judged by a function of the
   report, for a framework's own claims (gristtest.NoClientErrors).
+- `gotogether simulate -graph` and `validate.Checker.Graph` (ROADMAP
+  P2, DESIGN §61): a binding's model explored breadth first by the Go
+  evaluator, every invariant in every reachable state, with
+  `GraphSearch`, `GraphResult` (`Extent`, `NeverEnabled`),
+  `GraphBound`, `InvariantVerdict` (`Held`), `Counterexample` (its
+  steps and the Quint run replaying it), `GraphStep`, `ActionCoverage`
+  and `DefaultGraphStates`; `binding.Simulation.Terminal`,
+  `GraphStates` and `GraphDepth` (`simulate.terminal`, `graphStates`,
+  `graphDepth`). New flags `-graph`, `-depth`, `-out`; `-states` bounds
+  the graph under `-graph`.
 - `woven` (ROADMAP H5, DESIGN §60): the woven builds' ABI, what code
   woven by qenv/weave's aspects, `qweave -cover` and `qweave -mutate`
   calls (`MutexLock`, `RLock`, `Add`, `Go`, ...; `Hit`,

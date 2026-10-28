@@ -35,6 +35,19 @@ simulate:
 A model with no `step` (replay only) says `skip: <why>`. The command
 exits 1 on a misclassified invariant, naming it and the fix.
 
+`-graph` checks the same classification over every reachable state
+instead of samples (the Go evaluator, breadth first, no quint process):
+in a complete graph `holds` is proved for the instance and `allows`
+gets the shortest counterexample, with a Quint run that replays it
+(`-out cex.qnt`, then `quint test --main simulate --match gtg_
+cex.qnt`). It also fails on a deadlock (a reachable state the step
+cannot leave: declare a model's intended end with `simulate.terminal:
+<predicate>`) and lists the actions never enabled and how often each
+was taken. A truncated graph (`-states`, default 100000; `-depth` or
+`simulate.graphDepth` for a model whose state grows, like a grist
+log) says so and claims no proof; exit 2 means the evaluator stopped (a
+construct outside its fragment, named): sample without `-graph`.
+
 Model first means scenarios first, each with a possibility check, then
 safety, then liveness, then code. Write each acceptance scenario as a
 `possible` (or, in Go, `qtest.Scenario` checked by `qtest.Possible`):
@@ -224,8 +237,10 @@ deliberately and say why in the commit and the README.
 ## CI layout
 
 - `gotogether simulate -binding` for every binding: the models on their
-  own, before any code runs. Nightly, `-verify N` makes it a bounded
-  proof (quint verify, Apalache) where the model is small enough.
+  own, before any code runs. `-graph` makes it exhaustive where the
+  state graph is small (seconds for 10^4 states); nightly, `-verify N`
+  makes it a bounded proof (quint verify, Apalache) where the model is
+  small enough.
 - `go test -short ./...`: scripted scenarios, mutants, `Batched` Hegel
   runs (about a minute).
 - `go test ./...`: adds the `FindViolation` shrinking tests.

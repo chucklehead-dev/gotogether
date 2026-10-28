@@ -153,6 +153,9 @@ type Simulation struct
     field Skip string `yaml:"skip"`
     field VerifySteps int `yaml:"verifySteps"`
     field VerifySkip string `yaml:"verifySkip"`
+    field Terminal string `yaml:"terminal"`
+    field GraphStates int `yaml:"graphStates"`
+    field GraphDepth int `yaml:"graphDepth"`
 type StepPattern struct
     field Action string
     field Params []string
@@ -2011,6 +2014,7 @@ var Renamed = map[string]string{"quint-start": "gotogether-start", "quint-model-
 var Targets = map[string]string{…}
 
 == github.com/chucklehead-dev/gotogether/validate
+const DefaultGraphStates = 100000
 const DefaultHiddenDepth = 4
 const DefaultLinearizeBudget = qtrace.DefaultLinearizeBudget
 const DefaultResolveBudget = 200
@@ -2045,6 +2049,10 @@ type Absence struct
     field Due time.Time
     field Why string
     method (Absence) String() string
+type ActionCoverage struct
+    field Action string
+    field Transitions int
+    field States int
 type ActorState struct
     field Actor string `json:"actor"`
     field State []NamedValue `json:"state,omitempty"`
@@ -2070,6 +2078,7 @@ type Checker struct
     method (*Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, error)
     method (*Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProcess int) (reports []*Report, errs []error)
     method (*Checker) Close() error
+    method (*Checker) Graph(cfg GraphSearch) (*GraphResult, error)
     method (*Checker) Judge(ctx context.Context, steps []qtrace.Step, opt SearchOptions) (*Judgment, error)
     method (*Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt SearchOptions, check BatchCheck) ([]*Judgment, []error)
     method (*Checker) Key(steps []qtrace.Step) string
@@ -2082,6 +2091,10 @@ type Condition struct
     field In string `json:"in"`
     field Expr string `json:"expr"`
     field Values []NamedValue `json:"values,omitempty"`
+type Counterexample struct
+    field Steps []GraphStep
+    field Replay string
+    field Sampled []int
 type Disabled struct
     field Action string `json:"action"`
     field Why *Explanation `json:"why,omitempty"`
@@ -2132,6 +2145,36 @@ type Finish struct
     field Reason string
     field Actor string
     field Why string
+type GraphBound struct
+    field States int
+    field Depth int
+type GraphResult struct
+    field States int
+    field Starts int
+    field Transitions int
+    field Depth int
+    field Complete bool
+    field Cut string
+    field Stopped string
+    field Bound GraphBound
+    field Invariants []InvariantVerdict
+    field Deadlocks int
+    field Terminals int
+    field Deadlock *Counterexample
+    field Actions []ActionCoverage
+    field Elapsed time.Duration
+    method (*GraphResult) Extent() string
+    method (*GraphResult) NeverEnabled() []string
+type GraphSearch struct
+    field Constants []string
+    field Invariants []string
+    field Terminal string
+    field States int
+    field Depth int
+type GraphStep struct
+    field Call string
+    field Picks []NamedValue
+    field State []NamedValue
 type ITFOptions struct
     embed Options
     field Binding *binding.Binding
@@ -2152,6 +2195,14 @@ type InvariantResult struct
     field Failure *Failure
     field Eventually bool
     field Within bool
+type InvariantVerdict struct
+    field Name string
+    field Violated bool
+    field Counterexample *Counterexample
+    field Error string
+    field Unsupported string
+    field Checked int
+    method (InvariantVerdict) Held() bool
 type Judgment struct
     field Report *Report
     field Steps []qtrace.Step

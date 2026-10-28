@@ -30,6 +30,13 @@ import (
 // nondet over an infinite set or Choreo's recursion, fails with its
 // error without it).
 //
+// With -graph, the Go evaluator explores the model's state graph from
+// init instead (graph.go, validate.Checker.Graph): every invariant in
+// every reachable state within -states and -depth, so "holds" in a
+// complete graph is a proof for the instance and "allows" a shortest
+// counterexample, with deadlocks and the actions never enabled, and no
+// quint process but the cached compile.
+//
 // The section's possibles (binding.Possible: a predicate, an action, a
 // sequence of steps) are what the model must be able to do: each is
 // searched for by the Go evaluator (validate.Checker.Possible, bounded by
@@ -47,11 +54,22 @@ func simulate(args []string) (int, error) {
 	consts := fset.String("const", "", "constants to set, NAME=expr,... (over the binding's and its simulate section's)")
 	invs := fset.String("invariants", "", "comma-separated invariants instead of the binding's (classified as the binding says)")
 	verify := fset.Int("verify", 0, "check each invariant in every trace of up to this many steps with quint verify (Apalache), instead of sampling with quint run")
-	states := fset.Int("states", 0, "states the Go evaluator's search for the possibles visits at most (default: the binding's simulate.searchStates, else 2000)")
+	states := fset.Int("states", 0, "states the Go evaluator's search for the possibles visits at most (default: the binding's simulate.searchStates, else 2000); "+
+		"with -graph, the graph's (default: the binding's simulate.graphStates, else 100000)")
+	graph := fset.Bool("graph", false, "explore the model's state graph with the Go evaluator instead of sampling with quint: every invariant in every reachable state "+
+		"(within -states and -depth), deadlocks, actions never enabled, the shortest counterexamples")
+	depth := fset.Int("depth", 0, "with -graph: the longest path from init explored (default: the binding's simulate.graphDepth, else none)")
+	out := fset.String("out", "", "with -graph: write a Quint module of the binding's instance with a run replaying each counterexample (quint test --match 'gtg_' replays them)")
 	quint := fset.String("quint", "quint", "quint binary")
 	fset.Parse(args)
 	if *bpath == "" {
 		return 2, fmt.Errorf("simulate needs -binding b.yaml")
+	}
+	if *graph && *verify > 0 {
+		return 2, fmt.Errorf("simulate: -graph and -verify are two ways to check every trace: pick one")
+	}
+	if !*graph && (*depth > 0 || *out != "") {
+		return 2, fmt.Errorf("simulate: -depth and -out are -graph's: add -graph")
 	}
 	b, err := binding.Load(*bpath)
 	if err != nil {
@@ -95,6 +113,16 @@ func simulate(args []string) (int, error) {
 	if len(invariants) == 0 && len(sim.Possible) == 0 {
 		return 2, fmt.Errorf("simulate: %s names no invariants (or pass -invariants a,b) and no possibles", *bpath)
 	}
+	holds, allows := set(sim.Holds), set(sim.Allows)
+	known := set(b.Invariants)
+	for _, n := range append(append([]string(nil), sim.Holds...), sim.Allows...) {
+		if !known[n] {
+			return 2, fmt.Errorf("simulate: %s's simulate section names %s, which is not one of its invariants (%s)", *bpath, n, strings.Join(b.Invariants, ", "))
+		}
+		if holds[n] && allows[n] {
+			return 2, fmt.Errorf("simulate: %s's simulate section lists %s in both holds and allows", *bpath, n)
+		}
+	}
 	var possibles []*possibleCheck
 	var checker *validate.Checker
 	if len(sim.Possible) > 0 {
@@ -114,6 +142,9 @@ func simulate(args []string) (int, error) {
 	}
 	if *samples == 0 {
 		*samples = or(sim.Samples, 1000)
+	}
+	if *graph {
+		return simulateGraph(*bpath, b, checker, possibles, overrides, invariants, *quint, *states, *depth, *out, *steps, *samples, *seed)
 	}
 	dir, err := os.MkdirTemp("", "gotogether-simulate-*")
 	if err != nil {
@@ -135,16 +166,6 @@ func simulate(args []string) (int, error) {
 		fmt.Printf("simulate %s: %s(%s), every trace of up to %d steps (quint verify%s)\n", *bpath, b.Module, strings.Join(constantList(b, overrides), ", "), *verify, capped)
 	} else {
 		fmt.Printf("simulate %s: %s(%s), %d traces of %d steps, seed %s\n", *bpath, b.Module, strings.Join(constantList(b, overrides), ", "), *samples, *steps, *seed)
-	}
-	holds, allows := set(sim.Holds), set(sim.Allows)
-	known := set(b.Invariants)
-	for _, n := range append(append([]string(nil), sim.Holds...), sim.Allows...) {
-		if !known[n] {
-			return 2, fmt.Errorf("simulate: %s's simulate section names %s, which is not one of its invariants (%s)", *bpath, n, strings.Join(b.Invariants, ", "))
-		}
-		if holds[n] && allows[n] {
-			return 2, fmt.Errorf("simulate: %s's simulate section lists %s in both holds and allows", *bpath, n)
-		}
 	}
 	// the Go evaluator's search for the possibles first (milliseconds a
 	// state, the shortest witness with its arguments); quint samples what

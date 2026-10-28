@@ -1,0 +1,16 @@
+# The state-graph explorer's model (simulate -graph, Checker.Graph): two
+# initial states, a deadlock at x = 3, y = 2 (where small fails), an
+# action never enabled. graph_ends.yaml says the deadlock is its end.
+spec: graph.qnt
+module: graph
+actions:
+  inc: {}
+  bump: {}
+  reset: {}
+  never: {}
+invariants: [small, positive]
+simulate:
+  holds: [positive]
+  allows: [small]
+  steps: 10
+  samples: 200
