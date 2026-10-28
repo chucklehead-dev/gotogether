@@ -355,7 +355,9 @@ for it. No binding is written by hand.
   records as `<app>/<node>/<incarnation>` (`grist.Identity`: `GRIST_NODE`,
   else `POD_NAME`, else the host name, and a fresh nonce per start;
   `WithIdentity` in tests), so several pods' or starts' files merge (give
-  `-steps` a directory for a file per start); never name a node by its
+  `-steps` a directory for a file per start; in a pod always a directory:
+  a restart truncates a `-steps FILE`, losing the earlier start's steps,
+  and serve warns); never name a node by its
   pid (1 in every container: Reconstruct's duplicate error, no verdict).
   On SIGTERM the drain (`grist.Drain`, `WithDrain`): `/readyz` fails, the
   server serves on for `Delay` (5 s in a pod), then shutdown, settle and

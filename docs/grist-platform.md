@@ -174,7 +174,10 @@ func WithIdentity(id Identity) ServeOption // tests and other orchestrators
 
 The node's recorder id becomes `<app>/<node>/<incarnation>` (`-steps
 DIR` writes `DIR/<app>.<node>.<incarnation>.jsonl`; a file path is used
-as given), the served dependencies' `<app>/<node>/<incarnation>/<dep>`;
+as given, which a pod should not do: a restarted container opens the
+file afresh, and the earlier start's steps are lost, so a pod gives
+`-steps DIR`, and serve warns in a pod, `KUBERNETES_SERVICE_HOST` set,
+when `-steps` names a file), the served dependencies' `<app>/<node>/<incarnation>/<dep>`;
 relayed steps keep `RecorderID` (store and tenant: the same row is the
 same record wherever relayed). The other fields belong on the
 recorder's metadata, not on steps, but a recorder has no metadata until

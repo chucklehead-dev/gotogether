@@ -1819,7 +1819,9 @@ each with a test that fails with it taken out:
   `GRIST_NODE`, else `POD_NAME`, else the host name; the incarnation 12
   random hex digits per start; the served dependencies'
   `<app>/<node>/<incarnation>/<dep>`. `-steps DIR` writes
-  `DIR/<app>.<node>.<incarnation>.jsonl`, a file per start. Namespace,
+  `DIR/<app>.<node>.<incarnation>.jsonl`, a file per start, which a pod
+  must give: a restart truncates a `-steps FILE`, losing the earlier
+  start's steps (serve warns in a pod: `TestMainStepsFileInPod`). Namespace,
   host (`NODE_NAME`) and zone (`GRIST_ZONE`) are read and printed, not
   yet on the recorder (G8's step location is the core change that puts
   them in reports). `TestMainIdentity` (two starts of one pod merged:

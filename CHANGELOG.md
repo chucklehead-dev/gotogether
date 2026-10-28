@@ -14,7 +14,9 @@ The first release. What a user meets, by module:
   Host and Zone only printed until G8), never `<app>-<pid>`, which every container shared
   (pid 1: two pods' merged files got Reconstruct's duplicate error, no
   verdict); a served dependency as `<app>/<node>/<incarnation>/<dep>`
-  (was `<app>-<pid>-<dep>`); `-steps DIR` writes a file per start.
+  (was `<app>-<pid>-<dep>`); `-steps DIR` writes a file per start, as a pod should: a restart
+  truncates a `-steps FILE`, losing the earlier start's steps (serve warns
+  in a pod when `-steps` names a file).
   `serve` drains on a schedule (`grist.Drain`, `WithDrain`,
   `DrainDelay`; `Drain.Needs` is unexported, its sum on the startup line): `/readyz` fails at SIGTERM and the server serves on for
   5 s in a pod before its 10 s shutdown, settle and flush (35 s: give

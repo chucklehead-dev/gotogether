@@ -160,6 +160,35 @@ func TestMainIdentity(t *testing.T) {
 	}
 }
 
+// In a pod (KUBERNETES_SERVICE_HOST set) -steps naming a file warns
+// that a restart truncates it, naming -steps DIR; a directory, or a file
+// outside a pod, does not warn.
+func TestMainStepsFileInPod(t *testing.T) {
+	for _, c := range []struct {
+		pod, dir, warn bool
+	}{{true, false, true}, {true, true, false}, {false, false, false}} {
+		host := ""
+		if c.pod {
+			host = "10.0.0.1"
+		}
+		t.Setenv("KUBERNETES_SERVICE_HOST", host)
+		dir := t.TempDir()
+		steps := filepath.Join(dir, "steps.jsonl")
+		if c.dir {
+			steps = t.TempDir()
+		}
+		ctx, stop := context.WithCancel(context.Background())
+		errOut, _, done := serving(t, ctx, apiApp(), dir, []string{"-addr", ":0", "-health-addr", "", "-steps", steps}, grist.WithDrain(grist.Drain{Delay: -1}))
+		stop()
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(errOut.String(), "a restart of this container truncates it, losing the earlier start's steps; in a pod give -steps a directory"); got != c.warn {
+			t.Errorf("pod %v, a directory %v: warned %v, want %v:\n%s", c.pod, c.dir, got, c.warn, errOut.String())
+		}
+	}
+}
+
 // In a pod (KUBERNETES_SERVICE_HOST set) a server on loopback has no
 // endpoints: serve refuses it, naming -addr :8080, the default address
 // included; outside one it serves there.
