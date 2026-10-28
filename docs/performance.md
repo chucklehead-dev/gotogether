@@ -87,6 +87,11 @@ TypeScript backend, as before).
 | examples/lease | 188 → 72 | 49 → 19 |
 | examples/bank | 91 → 37 | 30 → 19 |
 
+The examples part measured the same in run 434 (counters 426). The core
+part's runners differ: run 434 measured validate 1218 and qtest 514, but
+internal/qeval, unchanged, 307 against 180 in run 431 and 227 in 427.
+Against it, validate fell 29% and qtest 20%, as here.
+
 Risk: none to determinism (no simulation changes) or verdicts. Not an
 API change. `ci/test-times.txt` was lowered to about 15% above run 431's
 lines (2d79047), so the budget guards the gain.
@@ -98,8 +103,9 @@ the qenv self-checks (2.9) and the TypeScript backend (5.6) in turn: 30
 minutes on every push's critical path. Run 431 with the variants split
 off: core 8.0, core-variants 12.9, examples 13.0 (their demos 4.3 of
 it). The race detector and the demos are now parts of their own too:
-the longest part should be about 9 minutes (examples' tests 7.2, core's
-7.3), from 23 to 31 before. Cost: three more runner set-ups a push.
+run 434's parts took core 13.6 minutes (a slow runner: see item 2),
+examples 8.3, core-variants 5.0, race 4.4, demos 3.9, tools 5.6; the
+push's wall time is the core part's, from 23 to 31 minutes before. Cost: three more runner set-ups a push.
 
 ### 4. Quint-bound tests in parallel, a typecheck per spec (b7606ee)
 
