@@ -87,7 +87,7 @@ func TestMutant(t *testing.T) {
 	}
 	inv, ok := mutants[mutant]
 	if !ok {
-		t.Fatalf("unknown mutant %q", mutant)
+		t.Fatalf("mutant %s: no claim in mutants (the invariant that catches it)", mutant)
 	}
 	qtest.RequireQuint(t)
 	if pageless[mutant] {

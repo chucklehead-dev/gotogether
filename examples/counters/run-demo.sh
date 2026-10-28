@@ -24,12 +24,12 @@ if [ -n "${SERVE:-}" ]; then
   port=${PORT:-18080}
   go build -o "$dir/counters" ./cmd/counters
   "$dir/counters" serve -db "sqlite:$dir/counters.db" -addr "127.0.0.1:$port" -tenant t1 \
-    -steps "$dir/steps.jsonl" -caller-header X-Actor -poll 50ms &
+    -steps "$dir/steps.jsonl" -caller-header X-Caller -poll 50ms &
   pid=$!
   api="http://127.0.0.1:$port/t/t1"
-  for _ in $(seq 100); do curl -fs "$api/queries/show-counter?counter=a" -H 'X-Actor: demo' >/dev/null && break; sleep 0.1; done
+  for _ in $(seq 100); do curl -fs "$api/queries/show-counter?counter=a" -H 'X-Caller: demo' >/dev/null && break; sleep 0.1; done
   post() { # post COMMAND KEY BODY: the status and the answer
-    curl -s -w ' %{http_code}\n' -X POST "$api/commands/$1" -H 'X-Actor: demo' -H "Idempotency-Key: $2" -d "$3"; }
+    curl -s -w ' %{http_code}\n' -X POST "$api/commands/$1" -H 'X-Caller: demo' -H "Idempotency-Key: $2" -d "$3"; }
   echo "== create a under the name x (k1), then k1 again: the same receipt"
   post create-counter k1 '{"counter":"a","name":"x"}'
   post create-counter k1 '{"counter":"a","name":"x"}'
@@ -38,10 +38,10 @@ if [ -n "${SERVE:-}" ]; then
   post create-counter k1 '{"counter":"b","name":"y"}'
   echo "== increment a by 2 (k3), then show it"
   post increment-counter k3 '{"counter":"a","by":2}'
-  curl -s -w ' %{http_code}\n' "$api/queries/show-counter?counter=a" -H 'X-Actor: demo'
+  curl -s -w ' %{http_code}\n' "$api/queries/show-counter?counter=a" -H 'X-Caller: demo'
   echo "== retire a (k5): the payout pays it through the bank, over HTTP on its loopback port"
   post retire-counter k5 '{"counter":"a"}'
-  echo "== without an actor: 403"
+  echo "== without a caller: 403"
   curl -s -w ' %{http_code}\n' -X POST "$api/commands/increment-counter" -H 'Idempotency-Key: k4' -d '{"counter":"a","by":1}'
   kill -INT "$pid"; wait "$pid" || true; pid=
   echo "== the steps the server recorded, validated with counters.binding.yaml"

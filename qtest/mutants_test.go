@@ -40,22 +40,23 @@ func TestMutantsNamesAndOverlay(t *testing.T) {
 	dir := t.TempDir()
 	writeFiles(t, dir, map[string]string{
 		"pkg/a.go":                     "package pkg\n",
-		"testdata/mutants/b/a.go":      "package pkg\n",
-		"testdata/mutants/a/a.go":      "package pkg\n",
+		"testdata/mutants/b/a.go":      "package pkg\n\nconst b = 1\n",
+		"testdata/mutants/a/a.go":      "package pkg\n\nconst a = 1\n",
+		"testdata/mutants/same/a.go":   "package pkg // a copy\n",
 		"testdata/mutants/stray/z.go":  "package pkg\n",
 		"testdata/mutants/notes.txt":   "not a mutant",
 		"testdata/mutants/empty/x.txt": "",
 	})
 	t.Chdir(dir)
 	m := Mutants{Package: "pkg", Generated: []string{"drop-x"}}
-	if got := m.Names(t); !slices.Equal(got, []string{"a", "b", "empty", "stray", "drop-x"}) {
+	if got := m.Names(t); !slices.Equal(got, []string{"a", "b", "empty", "same", "stray", "drop-x"}) {
 		t.Errorf("Names = %v", got)
 	}
 	b, err := os.ReadFile(m.Overlay(t, "a"))
 	if err != nil || !strings.Contains(string(b), filepath.Join(dir, "pkg", "a.go")) || !strings.Contains(string(b), filepath.Join(dir, "testdata", "mutants", "a", "a.go")) {
 		t.Errorf("overlay %s (%v)", b, err)
 	}
-	for name, want := range map[string]string{"stray": "replaces no file of the package", "empty": "has no files"} {
+	for name, want := range map[string]string{"stray": "replaces no file of the package", "empty": "has no files", "same": "mutant same changes nothing"} {
 		f := &failTB{TB: t}
 		done := make(chan struct{})
 		go func() { //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
@@ -71,7 +72,10 @@ func TestMutantsNamesAndOverlay(t *testing.T) {
 		m    Mutants
 		want string
 	}{
-		{Mutants{Dir: "none"}, "no mutants"},
+		{Mutants{Dir: "none"}, "Mutants.Dir none"},
+		{Mutants{Dir: "none", Generated: []string{"drop-x"}}, "Mutants.Dir none"},
+		{Mutants{Package: "pkg"}, ""}, // the default Dir, which exists: no failure
+		{Mutants{Generated: []string{"drop x"}}, "a name of letters, digits"},
 		{Mutants{Generated: []string{"a"}}, "both generated and a directory"},
 		{Mutants{Generated: []string{"7"}}, "qmut reads as its own"},
 		{Mutants{FullOnly: []string{"c"}}, "FullOnly names c"},
@@ -83,7 +87,7 @@ func TestMutantsNamesAndOverlay(t *testing.T) {
 			c.m.Names(f)
 		}()
 		<-done
-		if len(f.errs) != 1 || !strings.Contains(f.errs[0], c.want) {
+		if c.want == "" && len(f.errs) != 0 || c.want != "" && (len(f.errs) != 1 || !strings.Contains(f.errs[0], c.want)) {
 			t.Errorf("%+v: %q, want %q", c.m, f.errs, c.want)
 		}
 	}
@@ -125,4 +129,44 @@ func TestMutant(t *testing.T) {
 	t.Setenv(MutantEnv, "")
 	t.Setenv("GOWORK", "off")
 	Mutants{}.Run(t)
+}
+
+// A harness package's mutants of another package (Package) replace that
+// package's files, and the mutant's binary is told the package
+// (GOTOGETHER_MUTANT_PACKAGE), which its navigate line passes to the
+// navigator.
+func TestMutantsRunPackage(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("no go command")
+	}
+	dir := t.TempDir()
+	test := `package harness
+
+import (
+	"os"
+	"testing"
+
+	"m/lib"
+)
+
+func TestMutant(t *testing.T) {
+	m := os.Getenv("GOTOGETHER_MUTANT")
+	if m == "" {
+		t.Skip()
+	}
+	if lib.Planted != m || os.Getenv("GOTOGETHER_MUTANT_PACKAGE") != "lib" {
+		t.Fatalf("mutant %s, planted %q, package %q", m, lib.Planted, os.Getenv("GOTOGETHER_MUTANT_PACKAGE"))
+	}
+}
+`
+	writeFiles(t, dir, map[string]string{
+		"go.mod":                      "module m\n\ngo 1.21\n",
+		"lib/lib.go":                  "package lib\n\nconst Planted = \"\"\n",
+		"harness_test.go":             test,
+		"testdata/mutants/one/lib.go": "package lib\n\nconst Planted = \"one\"\n",
+	})
+	t.Chdir(dir)
+	t.Setenv(MutantEnv, "")
+	t.Setenv("GOWORK", "off")
+	Mutants{Package: "lib"}.Run(t)
 }

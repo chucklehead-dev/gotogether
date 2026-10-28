@@ -17,7 +17,7 @@ import (
 // The events.
 type (
 	// CounterCreated: a counter, under a name no other counter has, by
-	// its creator (the actor that created it: the one who may retire it).
+	// its creator (the caller that created it: the one who may retire it).
 	CounterCreated struct {
 		Counter string `json:"counter" grist:"tag"`
 		Name    string `json:"name" grist:"tag"`

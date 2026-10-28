@@ -189,7 +189,7 @@ func TestMutant(t *testing.T) {
 		t.Logf("%d duplicate errors, the first: %s", len(d), d[0])
 		qtest.Validate(t, commits, steps).Expect(t, qtest.HasIssue("duplicate"))
 	default:
-		t.Fatalf("unknown mutant %q", mutant)
+		t.Fatalf("mutant %s: say what catches it (a case of TestMutant)", mutant)
 	}
 }
 

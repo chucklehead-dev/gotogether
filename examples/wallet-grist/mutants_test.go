@@ -90,7 +90,7 @@ func TestMutant(t *testing.T) {
 		system(commits, depositsAndReads).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 4)}).
 			Expect(t, qtest.Some(qtest.Mismatch("read")))
 	default:
-		t.Fatalf("unknown mutant %q", mutant)
+		t.Fatalf("mutant %s: say what catches it (a case of TestMutant)", mutant)
 	}
 }
 

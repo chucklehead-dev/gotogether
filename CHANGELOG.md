@@ -50,6 +50,19 @@ The first release. What a user meets, by module:
   and qnav's `gotogether-nav -run` build the test binary with the
   mutant's overlay (`internal/overlay`). qnav's hello tape navigates
   `TestMutant#1:seed=1` of hello's noDedupe so.
+- H4's review: an overlay mutant whose files are the package's but for
+  comments and layout fails as "changes nothing" (directives such as
+  `//go:embed` and `//quint:action` count as changes), a `Mutants.Dir`
+  that does not exist fails even beside `Generated`, and a mutant's name
+  is letters, digits, `_`, `-` and `.`. A harness package's mutants
+  (`Mutants.Package`: payd's, webjobs') navigate: their navigate line
+  sets `GOTOGETHER_MUTANT_PACKAGE`, whose files the navigators overlay
+  (they overlaid the harness's own, and failed). A run's reproduce line
+  in a mutant built by hand says it needs the overlay, and `gotogether
+  nav -run` of a mutant's run without `GOTOGETHER_MUTANT` names the
+  package's mutants. `Catalog.Exercised` panics when nothing is left to
+  want (every Take excepted, or none), which no runs could fail, and
+  `Catalog.Take` on a name two Takes share.
 - Breaking, grist (ROADMAP H4): the authenticated principal of a command
   or query is its **caller**, not its actor: "actor" already means a
   recorder's sequence of steps in the core (qobs.WithActor, a report's

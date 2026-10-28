@@ -210,6 +210,21 @@ func TestMutantRunReproduced(t *testing.T) {
 	if got := x.navCommand(r); !strings.HasPrefix(got, "GOTOGETHER_MUTANT=noDedupe gotogether nav -run 'TestMutant#1:seed=3' -at fail") {
 		t.Errorf("navigate line %q", got)
 	}
+	// a harness's mutant of another package (Mutants.Package): the
+	// navigator overlays that package's files
+	t.Setenv("GOTOGETHER_MUTANT_PACKAGE", "payd")
+	if got := x.navCommand(r); !strings.HasPrefix(got, "GOTOGETHER_MUTANT=noDedupe GOTOGETHER_MUTANT_PACKAGE=payd gotogether nav -run") {
+		t.Errorf("navigate line of a Package harness's mutant %q", got)
+	}
+	t.Setenv("GOTOGETHER_MUTANT_PACKAGE", "")
+	// built by hand, a mutant with an overlay: a plain go test would build
+	// the faithful program, which the line says
+	dir := t.TempDir()
+	writeFiles(t, dir, map[string]string{"testdata/mutants/noDedupe/a.go": "package a\n"})
+	t.Chdir(dir)
+	if got := x.reproduce(r); !strings.HasSuffix(got, "go test -run '^TestMutant$' (built with the mutant's overlay, as its harness, qtest.Mutants, builds it: go test -overlay)") {
+		t.Errorf("reproduce line by hand of an overlay's mutant %q", got)
+	}
 	t.Setenv(MutantEnv, "")
 	if got := x.navCommand(r); !strings.HasPrefix(got, "gotogether nav -run") {
 		t.Errorf("navigate line of the system as it is %q", got)

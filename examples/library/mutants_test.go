@@ -57,7 +57,7 @@ func TestMutant(t *testing.T) {
 		system(commits, lending).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(3, 1)}).
 			Expect(t, qtest.All(qtest.Rejects("mailerSendServed")))
 	default:
-		t.Fatalf("unknown mutant %q", mutant)
+		t.Fatalf("mutant %s: say what catches it (a case of TestMutant)", mutant)
 	}
 }
 

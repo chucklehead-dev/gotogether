@@ -200,13 +200,29 @@ func navRun(ref, pkg, at, follow string, save, fold bool) (*validate.RunNode, er
 	runErr := cmd.Run()
 	b, err := os.ReadFile(outFile)
 	if err != nil {
-		return nil, fmt.Errorf("nav -run %s: the test wrote no node (go test -run '%s' in %s: %v)\n%s", ref, pattern, pkg, runErr, buf.String())
+		hint := ""
+		if overlay.Mutant() == "" {
+			// a mutant's run in the system as it is: its TestMutant skips
+			if ms, _ := filepath.Glob(filepath.Join(pkg, filepath.FromSlash(overlay.Dir), "*")); len(ms) > 0 {
+				hint = fmt.Sprintf("; a mutant's run navigates in its mutant, %s=<name> as the run's navigate line sets it (this package's: %s)", overlay.Env, strings.Join(names(ms), ", "))
+			}
+		}
+		return nil, fmt.Errorf("nav -run %s: the test wrote no node (go test -run '%s' in %s: %v%s)\n%s", ref, pattern, pkg, runErr, hint, buf.String())
 	}
 	var n validate.RunNode
 	if err := json.Unmarshal(b, &n); err != nil {
 		return nil, fmt.Errorf("nav -run %s: %w", ref, err)
 	}
 	return &n, nil
+}
+
+// names are paths' base names.
+func names(paths []string) []string {
+	out := make([]string, len(paths))
+	for i, p := range paths {
+		out[i] = filepath.Base(p)
+	}
+	return out
 }
 
 // runNodeText is a run node as a person reads it.

@@ -235,6 +235,8 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 		{"system(NoDedupe)", "testdata/mutants/noDedupe, TestMutant switching on qtest.Mutant() (hello's Mutation enum is gone)"},
 		{"hello.Mutation", "testdata/mutants/noDedupe (qtest.Mutants)"},
 		{"TestMutantIsCaught", "TestMutant and TestMutants (gotogether scaffold -system: qtest.Mutants)"},
+		{".principal", ".caller (the step field a command records its caller as)"},
+		{"X-Actor", "X-Caller (the header a demo names its caller in, -caller-header)"},
 		// the project's old names, spelled in pieces so a rename script
 		// that rewrites them cannot rewrite these
 		{"quint" + "go", "gotogether"},
@@ -272,7 +274,7 @@ func TestSkillsAvoidDeprecated(t *testing.T) {
 	// in the names of their time
 	docs, _ := filepath.Glob("../examples/*/README.md")
 	agents, _ := filepath.Glob("../docs/agents/*.md") // AGENTS.md's pages by area
-	docs = append(append(docs, agents...), "../README.md", "../AGENTS.md", "../qgosim/README.md", "../docs/instrumentation.md")
+	docs = append(append(docs, agents...), "../README.md", "../AGENTS.md", "../qgosim/README.md", "../qnav/README.md", "../qweave/README.md", "../qanalysis/README.md", "../docs/instrumentation.md")
 	for _, p := range docs {
 		b, err := os.ReadFile(p)
 		if err != nil {

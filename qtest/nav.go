@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/internal/overlay"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -509,6 +510,9 @@ func (x *Exploration) navCommand(r *Run) string {
 	env := ""
 	if m := Mutant(); m != "" { // the navigator builds the mutant's binary with its overlay
 		env = MutantEnv + "=" + m + " "
+		if p := os.Getenv(overlay.PackageEnv); p != "" { // of a harness's other package
+			env += overlay.PackageEnv + "=" + p + " "
+		}
 	}
 	return fmt.Sprintf("%sgotogether nav -run '%s:%s' -at fail (in the test's package directory; -json for agents)", env, x.ref(), r.ID())
 }

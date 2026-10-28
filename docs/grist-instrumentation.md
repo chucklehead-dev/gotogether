@@ -36,7 +36,7 @@ library) at commit 27c7ce9.
 | what an effect calls (a bank, a mailer, a ledger) | **only if the app wrote a `NewSite` and called `Site.Record` in its double**; never the request as the caller sent it | **only if the app wrapped its double in a `qenv.Service`** | the app |
 | outbound HTTP or gRPC from an effect | no | no, unless the app routes it through a double it wrote | nobody |
 | another database written by an effect | no | no (qsql only if the app opens it) | nobody |
-| time | `Meta.Time` is the append's `qenv.Now` (virtual in a simulation); decisions see no clock (`Envelope` has `ID`, `Tenant`, `Actor` only, command.go, though grist §2.4 still says "time") | grist's own waits use `qenv.Sleep`; an effect's `time.Now` or `time.Sleep` is real | grist; the effect's code is unchecked |
+| time | `Meta.Time` is the append's `qenv.Now` (virtual in a simulation); decisions see no clock (`Envelope` has `ID`, `Tenant`, `Caller` only, command.go, though grist §2.4 still says "time") | grist's own waits use `qenv.Sleep`; an effect's `time.Now` or `time.Sleep` is real | grist; the effect's code is unchecked |
 | randomness | `r.ID(n)` is a UUIDv5 of the command id (reads.go) | deterministic | grist; an effect's `math/rand` is unchecked |
 | goroutines | grist's tasks are `qenv.Go` (processor.go) | yes | grist; an effect's `go` is unchecked |
 | brokers, watches, gRPC servers | none exist (GR5-GR7) | - | - |

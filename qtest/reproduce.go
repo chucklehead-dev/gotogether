@@ -254,16 +254,21 @@ func (x *Exploration) reproduce(r *Run) string {
 		env = "GOTOGETHER_ALL_FAULTS=1 "
 	}
 	pattern := "^" + strings.ReplaceAll(x.test, "/", "$/^") + "$"
+	hint := ""
 	if m := Mutant(); m != "" {
 		if harness := os.Getenv(overlay.TestEnv); harness != "" {
 			// a mutant's binary: its harness rebuilds it with its overlay,
 			// GOTOGETHER_RUN passed on
 			pattern = harness
 		} else {
-			env += MutantEnv + "=" + m + " " // built by hand: with its overlay
+			env += MutantEnv + "=" + m + " " // built by hand
+			if st, err := os.Stat(filepath.Join(filepath.FromSlash(overlay.Dir), m)); err == nil && st.IsDir() {
+				// a plain go test would build the faithful program
+				hint = " (built with the mutant's overlay, as its harness, qtest.Mutants, builds it: go test -overlay)"
+			}
 		}
 	}
-	return fmt.Sprintf("%sGOTOGETHER_RUN='%s:%s' go test -run '%s'", env, x.ref(), r.ID(), pattern)
+	return fmt.Sprintf("%sGOTOGETHER_RUN='%s:%s' go test -run '%s'%s", env, x.ref(), r.ID(), pattern, hint)
 }
 
 // universal reports whether c holds of every run, so a run alone can be

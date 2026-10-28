@@ -49,7 +49,7 @@ gristsim, gristtest) at 0da5013.
 | replicas | `gristsim.Config.Nodes` and two real nodes are safe: every node polls every processor of every tenant, the checkpoint CAS picks one commit (`TestPayoutTwoNodes`) | N replicas | at-least-once effects run on several nodes (harmless only for `Keyed` calls); condition retries grow with N; every node's relay records the whole step log from its first row at every start (the durable relay cursor is grist §8's left item) |
 | leadership | none needed; grist §3.4 designs leases **in the tenant's log**, fenced in the commit (slice 3, not built) | client-go's leader election is not a fence: a paused leader acts after its Lease expired | the tempting wrong tool is one import away |
 | config, secrets | flags: `-db postgres:DSN` (in the pod spec, in `ps`); `OverHTTP`'s `http.Client` built once | Secrets and ConfigMaps as files, swapped atomically (`..data`), 30-90 s apart per pod; cert-manager rotating certificates | credentials in args; an open `*sql.DB` keeps old credentials; certificates cached until restart |
-| decisions' inputs | an `Envelope` (`ID`, `Tenant`, `Actor`) and `Reads`; no clock, no config (GR3 §1) | a ConfigMap read by one pod and not yet by another | none today, by construction: keep it so (§3.6) |
+| decisions' inputs | an `Envelope` (`ID`, `Tenant`, `Caller`) and `Reads`; no clock, no config (GR3 §1) | a ConfigMap read by one pod and not yet by another | none today, by construction: keep it so (§3.6) |
 | resources | nothing: `GOMEMLIMIT` unset; `GOMAXPROCS` is container-aware since Go 1.25 (the cgroup's CPU limit, rounded up, updated as it changes; grist needs Go 1.26.1) | memory limits (OOMKill: SIGKILL, no grace); CPU limits (CFS throttling: stalls of up to the 100 ms period) | read models fold from the log on every read (grist §2.2, slice 1), so memory and CPU per query grow with the log: a limit sized in week one OOMs in week four |
 | metrics | none in grist; qrole exists (gauges u, v), unused by grist | HPA, KEDA, alerts | processor lag, relay backlog, oldest pending effect are not exposed |
 | inbound HTTP | every command requires `Idempotency-Key` (400 without, http.go); 503 + `Retry-After` for an unknown outcome; `WriteTimeout` 2 m | Gateway/HTTPRoute and mesh timeouts and retries | a retried command is safe; the timeout chain is not ordered (a gateway timing out at 15 s turns a slow commit into a 504 and a retry); `-caller-header` trusts a header the Gateway forwards unless a filter strips it |
@@ -882,7 +882,7 @@ ablated.
    (`TestNewIsGreen` extended). **Example: `grist new`'s scaffold**.
    **Acceptance**: each of a table of manifest mutants (one per lint
    rule: a liveness probe on the store, a grace below the drain, the
-   actor header forwarded, ...) is reported naming its field and fix;
+   caller header forwarded, ...) is reported naming its field and fix;
    the generated manifests are clean and valid; `go list -deps` of the
    scaffold's binary has no k8s.io package (a test).
 9. **gotogether-kube and the kind tier (M-L).** The module and its

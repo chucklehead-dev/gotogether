@@ -9,8 +9,8 @@
 // served beside the node behind grist.ServeCalls on a loopback port and
 // called over HTTP (grist.ServeDependency), its payments recorded into
 // the steps file under a recorder of their own (-dependency bank=URL
-// calls another). Its actor comes from the X-Actor header (-caller-header
-// X-Actor): a demo's stand-in for the authentication a real deployment
+// calls another). Its caller comes from the X-Caller header (-caller-header
+// X-Caller): a demo's stand-in for the authentication a real deployment
 // puts in front (grist.Middleware).
 package main
 

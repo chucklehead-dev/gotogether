@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -69,6 +70,10 @@ type Mutants struct {
 	Show []string
 }
 
+// mutantName is what a mutant's name may hold: its navigate line sets it
+// unquoted, and go test -run matches it as a subtest's name. Read-only.
+var mutantName = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+
 func (m Mutants) dir() string {
 	if m.Dir == "" {
 		return filepath.FromSlash(overlay.Dir)
@@ -84,13 +89,15 @@ func (m Mutants) test() string {
 }
 
 // Names are the mutants, sorted: Dir's directories, then Generated. A
-// name qmut would read as its own (a number, list) or a generated
-// mutant's that is also a directory fails t, as does no mutant at all.
+// Dir given that does not exist, a name qmut would read as its own (a
+// number, list), one a shell or go test -run would not keep as it is (a
+// name is letters, digits, '_', '-' and '.'), a generated mutant's that
+// is also a directory, or no mutant at all fails t.
 func (m Mutants) Names(t testing.TB) []string {
 	t.Helper()
 	entries, err := os.ReadDir(m.dir())
-	if err != nil && !os.IsNotExist(err) {
-		t.Fatal(err)
+	if err != nil && (m.Dir != "" || !os.IsNotExist(err)) {
+		t.Fatalf("Mutants.Dir %s: %v (the directory of the mutants, relative to the test's package; leave it empty for %s)", m.Dir, err, overlay.Dir)
 	}
 	var out []string
 	for _, e := range entries {
@@ -108,6 +115,9 @@ func (m Mutants) Names(t testing.TB) []string {
 	for _, n := range out {
 		if _, err := strconv.Atoi(n); err == nil || n == "list" {
 			t.Fatalf("mutant %s: a name qmut reads as its own (%s=<id>, list): rename it", n, MutantEnv)
+		}
+		if !mutantName.MatchString(n) {
+			t.Fatalf("mutant %q: a name of letters, digits, '_', '-' and '.' only, as its reproduce and navigate lines and go test -run keep it: rename it", n)
 		}
 	}
 	for _, f := range m.FullOnly {
@@ -146,7 +156,8 @@ func (m Mutants) Overlay(t testing.TB, name string) string {
 // skips. A failing run's reproduce line in a mutant's binary runs this
 // test's subtest of the mutant, GOTOGETHER_RUN passed on to it, and its
 // navigate line names the mutant (GOTOGETHER_MUTANT=<name> gotogether
-// nav ...), which the navigator builds with its overlay.
+// nav ..., with GOTOGETHER_MUTANT_PACKAGE=<Package> when it is not
+// "."), which the navigator builds with its overlay.
 func (m Mutants) Run(t *testing.T) {
 	t.Helper()
 	if Mutant() != "" {
@@ -174,12 +185,16 @@ func (m Mutants) Run(t *testing.T) {
 			// a mutant's claims have their stated miss chance at their own
 			// seeds: a nightly's GOTOGETHER_SEEDS would only make it slow
 			for _, e := range os.Environ() {
-				if !strings.HasPrefix(e, "GOTOGETHER_SEEDS=") && !strings.HasPrefix(e, MutantEnv+"=") && !strings.HasPrefix(e, overlay.TestEnv+"=") {
+				if !slices.ContainsFunc([]string{"GOTOGETHER_SEEDS=", MutantEnv + "=", overlay.TestEnv + "=", overlay.PackageEnv + "="}, func(p string) bool { return strings.HasPrefix(e, p) }) {
 					cmd.Env = append(cmd.Env, e)
 				}
 			}
-			// a failing run's reproduce line reruns it from here
+			// a failing run's reproduce line reruns it from here, and its
+			// navigate line overlays the package the mutant's files replace
 			cmd.Env = append(cmd.Env, MutantEnv+"="+name, overlay.TestEnv+"=^"+strings.ReplaceAll(t.Name(), "/", "$/^")+"$")
+			if m.Package != "" && filepath.Clean(m.Package) != "." {
+				cmd.Env = append(cmd.Env, overlay.PackageEnv+"="+filepath.ToSlash(filepath.Clean(m.Package)))
+			}
 			out, err := cmd.CombinedOutput()
 			if err != nil {
 				t.Fatalf("mutant %s: %v\n%s", name, err, out)

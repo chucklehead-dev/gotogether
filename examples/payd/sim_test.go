@@ -156,6 +156,6 @@ func TestMutant(t *testing.T) {
 		system(Config{Workload: One}).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 1}).
 			Expect(t, qtest.All(qtest.Violates("responseMatchesCharge")))
 	default:
-		t.Fatalf("unknown mutant %q", mutant)
+		t.Fatalf("mutant %s: say what catches it (a case of TestMutant)", mutant)
 	}
 }

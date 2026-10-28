@@ -27,7 +27,9 @@ type Catalog struct {
 // exercised none of a system's own blocks passes every other claim:
 // this one fails it. except names what the test does not expect, each as
 // Take.Name names it ("borrow.limit"), or an action for all of its
-// outcomes ("borrow"); a name that is none of them panics, naming them.
+// outcomes ("borrow"); a name that is none of them panics, naming them,
+// as does an exception of every Take (or a catalog of none), which no
+// runs could fail.
 // It is the catalog's twin of the model-wide Exercised, which wants
 // every action and fault option of the model: this one wants the
 // catalog's blocks by outcome, and none of a model's helpers.
@@ -50,20 +52,39 @@ func (c Catalog) Exercised(except ...string) TakeEach {
 			want = append(want, k)
 		}
 	}
+	if len(want) == 0 {
+		// it would hold of any runs, none at all included
+		panic(fmt.Sprintf("qtest: Catalog(%s).Exercised(%s): no Take left to want (the catalog's: %s): except fewer, or list the system's blocks in Takes", c.Name, strings.Join(except, ", "), strings.Join(c.names(), ", ")))
+	}
 	return TakesEach(want...)
 }
 
 // Take is the catalog's Take of name, as Take.Name names it
 // ("borrow.limit"), with its Hint: for a test that wants one block in a
 // share of the runs (Take.InAtLeast), or with arguments (Take.With). A
-// name the catalog lacks panics, naming its Takes.
+// name the catalog lacks, or has more than one Take of, panics, naming
+// its Takes.
 func (c Catalog) Take(name string) Take {
-	var names []string
+	var found []Take
 	for _, k := range c.Takes {
 		if k.Name() == name {
-			return k
+			found = append(found, k)
 		}
-		names = append(names, k.Name())
 	}
-	panic(fmt.Sprintf("qtest: Catalog(%s).Take(%q): no such block (its takes: %s)", c.Name, name, strings.Join(names, ", ")))
+	switch len(found) {
+	case 0:
+		panic(fmt.Sprintf("qtest: Catalog(%s).Take(%q): no such block (its takes: %s)", c.Name, name, strings.Join(c.names(), ", ")))
+	case 1:
+		return found[0]
+	}
+	panic(fmt.Sprintf("qtest: Catalog(%s).Take(%q): %d Takes of that name (Take.With's arguments are not in it): build the one you want with qtest.Takes", c.Name, name, len(found)))
+}
+
+// names are its Takes' names, in order.
+func (c Catalog) names() []string {
+	out := make([]string, len(c.Takes))
+	for i, k := range c.Takes {
+		out[i] = k.Name()
+	}
+	return out
 }

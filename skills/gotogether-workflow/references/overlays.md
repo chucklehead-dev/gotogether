@@ -37,6 +37,14 @@ func TestMutants(t *testing.T) { qtest.Mutants{}.Run(t) }
   naming it (`qtest.Mutant()`), `-short` and `-timeout` passed through
   and `GOTOGETHER_SEEDS` left out (a mutant's claim needs its stated miss
   chance, not a nightly's 500 seeds), and fails with the binary's output.
+  A mutant is an error, never a pass, when its directory is empty or has
+  no `.go` file, a file replaces none of the package's, or its files are
+  the package's but for comments and layout ("changes nothing": its
+  claims would be judged on the faithful program). A `Dir` that does not
+  exist fails too. Names are letters, digits, `_`, `-` and `.` (its
+  lines set it unquoted), and never a number or `list`, which qmut reads
+  from the same variable: one variable, `GOTOGETHER_MUTANT`, names a
+  mutant of either kind.
 - `System.Mutant: qtest.Mutant()` keeps a mutant's runs out of the
   suite's evidence. A faithful test that must not run in a mutant's
   binary skips when `qtest.Mutant() != ""`.
@@ -50,9 +58,12 @@ func TestMutants(t *testing.T) { qtest.Mutants{}.Run(t) }
 - A failing run in a mutant's binary is reproduced through its harness
   (its reproduce line runs `TestMutants`' subtest of the mutant, which
   rebuilds it and passes `GOTOGETHER_RUN` on) and navigated in the
-  mutant: its navigate line sets `GOTOGETHER_MUTANT=<name>`, and
+  mutant: its navigate line sets `GOTOGETHER_MUTANT=<name>` (and
+  `GOTOGETHER_MUTANT_PACKAGE=<Package>` for a harness package's), and
   `gotogether nav` and `gotogether-nav` build the test binary with the
   mutant's overlay.
+- Mutants are built with the plain go command: a package whose tests
+  need weaving (`qweave go test`) cannot use them yet.
 - Each mutant costs a link (about a second, cached after). Its binary is
   the service's own: nothing of the toolkit is woven in.
 
