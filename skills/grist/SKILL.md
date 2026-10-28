@@ -56,7 +56,9 @@ the walk-through: read its README's table first.
 |---|---|---|
 | `<app> model: ... does not define X, which the skeleton calls` | a new block's hole | paste the stub, then write the rule |
 | `<app> model: warning: XEvents folds T now` | a fold's inputs changed | handle T in every fold over XEvents |
-| `generated files differ from what the ... catalog generates` | a block changed without regenerating | `go run ./cmd/<app> model`, commit |
+| `generated files differ from what the ... catalog generates` (`grist.lock is stale: ...`) | a block changed without regenerating | `go run ./cmd/<app> model`, commit (the lock too) |
+| `<app> model: warning: event X is appended by ... and read by nothing` | no fold, processor or model reads it | fold it (Go and the rules' fold), unless a record no decision reads |
+| `warning: rule R has a generated mutant ... no test runs`; `command C ... taken by no acceptance scenario` | the tests forgot it | `RuleMutants` and `DroppedRule`; a `gristtest.Scenario` invoking C |
 | `reject <command>` (`Rejects`) | a commit the model forbids | the decision's rule, its condition, a read not covered (`covers`), a key answered twice |
 | `show a mismatch after <block>` | head, batch or causes differ | a raw append, or a fold disagreeing with its def |
 | `grist.ErrOutcomeUnknown` | an append's outcome is unknown | retry with the same id |

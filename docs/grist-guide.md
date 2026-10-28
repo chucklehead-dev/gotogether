@@ -1121,6 +1121,11 @@ verdict ("NO VERDICT: checks the actors */clients").
 | `inventory model: model/inventory_rules.qnt does not define X, which the skeleton calls` | a new block's hole | paste the stub into `model/<app>_rules.qnt`, then write the rule |
 | `XEvents folds T now, which it did not when ... was generated` | a fold's inputs changed | handle T in every fold over XEvents (a foldl's else skips it silently) |
 | `generated files differ from what the inventory App's catalog generates` | a block changed without regenerating | `go run ./cmd/<app> model`, commit |
+| `... (grist.lock is stale: read model R's fingerprint changed ...; X version 2 is new)` | the lock, the record of what has been stored, is not the catalog's | `go run ./cmd/<app> model`, commit grist.lock with the change |
+| `warning: event item-removed is appended by command remove-item and read by nothing ... (stock folds events tagged item too: should it fold this one?)` | no read model folds it, no processor handles it, the model reads it nowhere: its events change no decision | fold it (`grist.On(Removed, ...)` in that read model, and in its fold in `model/<app>_rules.qnt`), unless it is a record no decision reads |
+| `event X is appended by no block ... and read by nothing ...: it can never be written or matter` (an error) | dead: every command declares `Appends` and none names it | declare the block that appends it, or remove it |
+| `warning: rule R has a generated mutant ... that no test runs` | nothing shows a run reaching the rule's refusal | `qtest.Mutants{Generated: gristtest.RuleMutants(App)}` and a `gristtest.DroppedRule(App)` case in TestMutant (§6) |
+| `warning: command C (Var) is taken by no acceptance scenario` | the tests write scenarios, none invokes C | a `gristtest.Scenario` with `Var.With(...)`, claimed `qtest.Possible` and run |
 | `event X version N changed shape since grist.lock was written (fields [...], then [...])` | a stored version's struct changed | keep the old struct as `XVN`, add version N+1 with an upcaster (§7.2); if never deployed, delete its lock entry |
 | `the upcaster from version N ignores F` | an old field reaches no later version | copy it, or `.Drops("F")` on purpose |
 | `... an upcaster keeps every tag (key and value), and a tag that must change is a new event type` | the upcast changed a tag | keep it; a new tag is a new event type |

@@ -2487,6 +2487,41 @@ claim such as `Some(Not(NoClientErrors()))` is not shown in the test's
 summary line; hello's mutant report says "schedule 3" where its nav
 command says `schedule=1:2`; the quint cache had grown to 3.2 GB here; `serve -steps DIR/` fails ("is a directory") when DIR does not exist, where it could make it.
 
+### I26: the generator warns on what an app forgot
+
+ROADMAP I26 (the eleventh review's designer: a newcomer added an event
+no read model folded, in Go and Quint alike, and every check passed).
+`<app> model` and `gristtest.Generated` (grist/internal/gen's
+`forgotten`) now say, each with the fix:
+- **An event nothing reads**: appended by a block (or by none that
+  declares it) and folded by no read model, handled by no processor,
+  delivered by none (grist's model reads a delivered outcome), and read
+  nowhere in the app's model files (its type's name, an accessor, a
+  read: the constructor alone builds one). The warning names who
+  appends it and the read models folding events of its tags ("stock
+  folds events tagged item too: should it fold this one?"). A record no
+  decision reads is no mistake, so it stays a warning; an event no block
+  can append either (the app has commands, all declaring `Appends`, none
+  naming it) is dead, and the generator's error.
+- **Rules whose generated mutants no test runs**: the package's tests
+  call neither `gristtest.RuleMutants` nor `DroppedRule`.
+- **Commands no acceptance scenario takes**, in an app whose tests
+  write `gristtest.Scenario`s: no `<command var>.With(...)` among their
+  steps. library's `return-book` was one; it gained the scenario "a
+  member returns a book" (`TestAReturnPossible`).
+- **A stale grist.lock**: `Generated.Lock` says what changed (a version
+  new or grown, a read model new or refolded), in the model command's
+  `-check` error and Generated's diff; a missing lock says to commit it.
+
+`gristtest.Generated` logs the warnings on every run (it showed them
+only beside a diff). The tests' wiring is found by a text search of the
+package's Go files, so each warning names what it looked for. counters
+and wallet-grist warn of nothing: their outcome events are delivered or
+read by their invariants. `TestGenerateWarnsOfAnUnreadEvent`,
+`TestGenerateRefusesADeadEvent`, `TestGenerateWarnsOfUnrunRuleMutants`,
+`TestGenerateWarnsOfCommandsNoScenarioTakes` and
+`TestGenerateNamesAStaleLock` fail with the checks ablated.
+
 ### I24: grist's reads at scale
 
 ROADMAP I24 (the eleventh review's architect). A read with snapshots on

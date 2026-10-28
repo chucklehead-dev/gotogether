@@ -74,7 +74,11 @@ func Command(app App, args []string, stdout io.Writer, usage func(msg string) er
 	}
 	if *check {
 		if d := g.Diff(*dir); len(d) > 0 {
-			return fmt.Errorf("%s model: %s differ from what the catalog generates: regenerate with `%s model` and commit them", c.Name, strings.Join(d, ", "), c.Name)
+			lock := ""
+			if slices.Contains(d, LockFile) && len(g.Lock) > 0 {
+				lock = fmt.Sprintf("; %s is stale: %s", LockFile, strings.Join(g.Lock, "; "))
+			}
+			return fmt.Errorf("%s model: %s differ from what the catalog generates%s: regenerate with `%s model` and commit them", c.Name, strings.Join(d, ", "), lock, c.Name)
 		}
 	} else if err := g.Write(*dir); err != nil {
 		return err

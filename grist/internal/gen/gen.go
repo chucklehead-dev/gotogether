@@ -101,8 +101,15 @@ type Generated struct {
 	// the same version (its snapshots refolded), an event no longer
 	// registered.
 	// The app's folds and rules still typecheck, so nothing else would
-	// say so: a fold's else branch skips a new type silently.
+	// say so: a fold's else branch skips a new type silently. And what
+	// the app forgot (forgotten): an event nothing reads, rules whose
+	// generated mutants no test runs, commands no acceptance scenario
+	// takes; each names its fix.
 	Warnings []string
+	// Lock says how grist.lock as the catalog makes it differs from the
+	// one under dir (none: "there is no grist.lock"), nil when they agree:
+	// what a stale lock's diff (Diff, gristtest.Generated, -check) means.
+	Lock []string
 }
 
 // A Hole is one definition the generated skeleton leaves to the
@@ -249,6 +256,14 @@ func Generate(app App, dir string) (Generated, error) {
 	}
 	out.Files[LockFile] = lock
 	out.Warnings = append(out.Warnings, warnings...)
+	if !bytes.Equal(prevLock, lock) {
+		out.Lock = lockChanges(prevLock, lock)
+	}
+	ws, errs := forgotten(c, dir, own, rules)
+	if len(errs) > 0 {
+		return Generated{}, fmt.Errorf("grist model: %s:\n  %s", c.Name, strings.Join(errs, "\n  "))
+	}
+	out.Warnings = append(out.Warnings, ws...)
 	if cycle, err := importCycle(dir, out.Files); err != nil {
 		return Generated{}, err
 	} else if cycle != nil {

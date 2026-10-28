@@ -149,6 +149,20 @@ func TestAtTheLimitPossible(t *testing.T) {
 	qtest.Model(t, commits).Expect(t, qtest.Possible(atTheLimit))
 }
 
+// aReturn is a loan and its return as an acceptance scenario (the
+// generator warned that no scenario took return-book): a member returns
+// the copy it borrowed, then is refused a second return of it.
+var aReturn = gristtest.Scenario("a member returns a book",
+	JoinCmd.With(Join{Member: "a"}), AddCmd.With(AddBook{Book: "a", Copies: 1}),
+	BorrowCmd.With(Borrow{Member: "a", Book: "a"}), ReturnCmd.With(ReturnBook{Member: "a", Book: "a"}),
+	ReturnCmd.With(ReturnBook{Member: "a", Book: "a"}).Refused(ErrNotHeld))
+
+// TestAReturnPossible: the model on its own can follow it.
+func TestAReturnPossible(t *testing.T) {
+	t.Parallel()
+	qtest.Model(t, commits).Expect(t, qtest.Possible(aReturn))
+}
+
 // limit is the scenario as a workload: its first six calls a prologue,
 // then one client asking for the fourth loan.
 var limit = gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 1, Send: []string{"borrow"},

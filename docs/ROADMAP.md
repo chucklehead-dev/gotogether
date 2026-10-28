@@ -376,15 +376,19 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   slice 4, before anyone runs grist on managed PostgreSQL. Example: a
   store failover in wallet-grist where `ErrRewound` meets an at-most-once
   effect.
-- **I26. The generator warns on what an app forgot (S-M).** A newcomer
-  added `ItemRemoved` and no read model's fold of it, in Go and Quint
-  alike: generation, Verify and every test passed, and removals never
-  lowered stock (the tenth review's newcomer met its twin). `<app>
-  model` warns "item-removed is appended by remove-item and folded by no
-  read model; tagged item like stock's events: should stock fold it?",
-  and likewise rules with no refusal mutant, commands no scenario
-  takes, a stale grist.lock: in the generator's warnings, where the
-  loop already looks.
+- **I26. The generator warns on what an app forgot (S-M). Done**
+  (HISTORY: "I26: the generator warns on what an app forgot";
+  docs/grist-guide.md §10). `<app> model` and `gristtest.Generated` warn,
+  each with its fix, of an event a block appends that nothing reads
+  ("item-removed is appended by command remove-item and read by nothing
+  ... (stock folds events tagged item too: should it fold this one?)"),
+  rules whose generated mutants no test runs, commands no acceptance
+  scenario takes, and name a stale grist.lock's changes; an event nothing
+  can append or read is an error. The designer's `grist doctor`
+  checklist is these warnings, where the loop already looks. Left: the
+  tests' wiring is found by a text search of the package's files (a
+  command registered otherwise, or a scenario built in a helper, is not
+  seen).
 - **I27. grist's user guide (M). Done** (HISTORY: "I27 and I34: the
   structure written down"; dc959e8 had landed grist.md §2.1-§2.2 as
   built and the grist skill's versions reference). docs/grist-guide.md

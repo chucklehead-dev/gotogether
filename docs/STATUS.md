@@ -165,13 +165,12 @@ four, L more; agent-days in practice).
 | # | Item | Size | Why here |
 |---|---|---|---|
 | 1 | I18's rest: `qtrace.Step`'s record fields (Reconstruct's, zero in a Trace's steps, or a `Record` type), DESIGN's knob rule, the model navigator out of validate | S-M, breaking | before tags: the record fields are the step's v1 shape |
-| 2 | I26, the generator warns on what an app forgot | S-M | a newcomer's silent bug; cheap |
-| 3 | GR3 slices 4-6 (lints for an app's own code; peer calls; spans of declared calls; [grist-instrumentation.md](grist-instrumentation.md) §4) | M each | unblocked (after H4); 5 is GR4's groundwork |
-| 4 | GR4, several services simulated together | L | after H5, H6, I22 (all done) |
-| 5 | GR5 streams, GR6 gRPC, GR7 controllers | M, M, L | on the published doubles (H7) |
-| 6 | GR8 sagas and timers, GR9 checkout as grist services | M, L | GR9 proves GR4 and GR8 compose |
-| 7 | P9, grist apps explored in-process | L | after GR4 |
-| 8 | I42-I51, the bold ideas: model diff and refinement (M each), graphs further (M each), sleep sets then DPOR (M, L), Elle's rest (S-M each), production capture (M each), a shared report (M), kubesim as envtest (M), no blank page (M-L; `init -kind http` is its first part), Quint off the hot path (L each), small ones (S each: `qtest.NoHotCycle`, typed fault names, `gristtest.StoredLogs`, `qobs.Sometimes`, ghost modules, the model's facts beside the spec) | as listed | each decided by the maintainer before it starts |
+| 2 | GR3 slices 4-6 (lints for an app's own code; peer calls; spans of declared calls; [grist-instrumentation.md](grist-instrumentation.md) §4) | M each | unblocked (after H4); 5 is GR4's groundwork |
+| 3 | GR4, several services simulated together | L | after H5, H6, I22 (all done) |
+| 4 | GR5 streams, GR6 gRPC, GR7 controllers | M, M, L | on the published doubles (H7) |
+| 5 | GR8 sagas and timers, GR9 checkout as grist services | M, L | GR9 proves GR4 and GR8 compose |
+| 6 | P9, grist apps explored in-process | L | after GR4 |
+| 7 | I42-I51, the bold ideas: model diff and refinement (M each), graphs further (M each), sleep sets then DPOR (M, L), Elle's rest (S-M each), production capture (M each), a shared report (M), kubesim as envtest (M), no blank page (M-L; `init -kind http` is its first part), Quint off the hot path (L each), small ones (S each: `qtest.NoHotCycle`, typed fault names, `gristtest.StoredLogs`, `qobs.Sometimes`, ghost modules, the model's facts beside the spec) | as listed | each decided by the maintainer before it starts |
 
 Also proposed, not built: GR10b (a poller a daemon only while it waits)
 and GR10c (`Settle` naming down processes), both S and qenv-level.
@@ -317,5 +316,5 @@ findings and the synthesis; ROADMAP's I track is the eleventh's (at
 - *Architect*: `SnapshotEvery` the one grist setting in a context (I24: done, App options);
   record kinds as flags on `qtrace.Step` (I18); a runtime module (the
   maintainer's).
-- *Designer*: a `grist doctor` checklist (folded into I26); nav in the
+- *Designer*: a `grist doctor` checklist (I26: done, the generator's warnings); nav in the
   browser (I47).

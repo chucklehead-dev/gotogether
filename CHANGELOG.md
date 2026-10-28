@@ -324,6 +324,16 @@ The first release. What a user meets, by module:
   `Relay.RenderAs`, `gristtest.Upgrade`, `ReadersFirst` and
   `WritersFirst`. The runtime snapshot audit (now `grist.AuditSnapshots`,
   below).
+- grist's generator warns on what an app forgot (ROADMAP I26): `<app>
+  model` and `gristtest.Generated` (which now logs the warnings on every
+  run) name an event a block appends that nothing reads (no read model
+  folds it, no processor handles or delivers it, the model reads it
+  nowhere), with the read models folding events of its tags; rules
+  whose generated mutants no test runs; commands no acceptance scenario
+  takes, in an app that writes scenarios; and a stale grist.lock with
+  what changed in it (`-check`, Generated's diff). An event nothing can
+  append or read (every command declares `Appends`, none names it) is
+  the generator's error.
 - grist's reads at scale (ROADMAP I24, breaking): the read settings are
   the App's options, `grist.New(name, opts ...AppOption)` with
   `grist.Snapshots(every)`, `grist.AuditSnapshots(oneIn)` and

@@ -7,8 +7,10 @@
 package gristtest
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -31,9 +33,14 @@ import (
 // block added, renamed or redeclared without regenerating fails here, in
 // CI, rather than as a binding that silently judges an older catalog.
 // GRIST_UPDATE=1 writes the files instead (the app's `model` command
-// does the same). Either way it names the app's rules' inputs that
-// changed (Generated's Warnings: a read model folding a new event type,
-// an event whose fields changed), which no typecheck catches.
+// does the same). A stale grist.lock is named with what changed in it.
+// Either way it logs the generator's warnings, which no typecheck
+// catches: the app's rules' inputs that changed (a read model folding a
+// new event type, an event whose fields changed), and what the app
+// forgot (an event no read model folds, no processor handles and the
+// model reads nowhere; rules whose generated mutants no test runs;
+// commands no acceptance scenario takes), each with its fix. An event
+// nothing can append or read fails (the generator's error).
 func Generated(t testing.TB, app *grist.App) {
 	t.Helper()
 	g, err := gen.Generate(app, ".")
@@ -52,8 +59,17 @@ func Generated(t testing.TB, app *grist.App) {
 			t.Logf("regenerated %s's model; check its rules:%s", app.Name, warnings)
 		}
 	} else if d := g.Diff("."); len(d) > 0 {
-		t.Fatalf("generated files differ from what the %s App's catalog generates (the generator): %s; regenerate them with the app's binary's model command (grist.Main: go run ./cmd/<app> model) or GRIST_UPDATE=1 go test -run '^%s$', and commit them%s",
-			app.Name, strings.Join(d, ", "), t.Name(), warnings)
+		lock := ""
+		if slices.Contains(d, gen.LockFile) && len(g.Lock) > 0 {
+			lock = fmt.Sprintf(" (%s is stale: %s)", gen.LockFile, strings.Join(g.Lock, "; "))
+		}
+		t.Fatalf("generated files differ from what the %s App's catalog generates (the generator): %s%s; regenerate them with the app's binary's model command (grist.Main: go run ./cmd/<app> model) or GRIST_UPDATE=1 go test -run '^%s$', and commit them%s",
+			app.Name, strings.Join(d, ", "), lock, t.Name(), warnings)
+	} else if warnings != "" {
+		// what the app forgot (an event nothing reads, rules whose mutants
+		// no test runs, commands no scenario takes): said on every run,
+		// failing none (a record no decision reads is no mistake)
+		t.Logf("%s's model is generated; the generator warns:%s", app.Name, warnings)
 	}
 	if len(g.Missing) > 0 {
 		var stubs []string
