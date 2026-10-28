@@ -103,6 +103,23 @@ func TestSatisfies(t *testing.T) {
 	if w := few.explain(runs[1]); w != " (3 issues)" {
 		t.Errorf("explanation %q, want its error's", w)
 	}
+	// a report it cannot judge: no claim holds by it, None and its
+	// negation's Some alike
+	judged := Satisfies("issues judged", func(r *validate.Report) error {
+		if r.Issues == nil {
+			return fmt.Errorf("%w: no issues recorded", NoVerdict)
+		}
+		return nil
+	})
+	none := []*validate.Report{{}, {}}
+	for _, c := range []Claim{judged, Some(judged), All(judged), None(judged)} {
+		if c.judge(none).ok {
+			t.Errorf("%v held of runs it cannot judge", c)
+		}
+	}
+	if !All(judged).judge(runs).ok {
+		t.Error("All of it failed on runs it judges")
+	}
 }
 
 // A Reach is judged over the runs' choices: how many runs reached (or

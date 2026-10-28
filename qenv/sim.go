@@ -816,7 +816,7 @@ type Process struct {
 	// whether its next crash is its own exit
 	term        *termination
 	terminating bool
-	termCancels []context.CancelFunc
+	termCancels []termCancel
 	exiting     bool
 }
 

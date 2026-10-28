@@ -3,6 +3,7 @@ package qenv_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -306,5 +307,131 @@ func TestRouterPick(t *testing.T) {
 	}
 	if picked["a"] == 0 || picked["b"] == 0 {
 		t.Errorf("picks %v: want both backends chosen", picked)
+	}
+}
+
+// A process down counts against a Budget as one terminating does: with
+// a budget of one and a crashed process that nothing restarts (an
+// unhealthy pod, which a PodDisruptionBudget counts), no other process
+// of the group is terminated, however often the scheduler would; once
+// it is back, one is.
+func TestTerminationsBudgetCountsDown(t *testing.T) {
+	c := qenv.NewSeeded(1)
+	c.Rates = qenv.NoFaults.Set("nemesis.terminate", 1)
+	s := qenv.New(c)
+	s.Check = true
+	defer s.Close()
+	up := 0
+	a := s.Process("a", false, drainer(time.Second, &up))
+	b := s.Process("b", false, drainer(time.Second, &up))
+	var during, after int // b's incarnation while a is down, and at the end
+	s.Spawn("operator", func(ctx context.Context) {
+		a.Crash() // stays down: a is not crashable, nothing restarts it
+		s.Terminations(qenv.Termination{Budget: 1}, a, b)
+		for i := 0; i < 50; i++ {
+			qenv.Sleep(ctx, 100*time.Millisecond)
+		}
+		during = b.Incarnation
+		a.Restart()
+		qenv.Sleep(ctx, 10*time.Second)
+		after = b.Incarnation + a.Incarnation
+	})
+	if err := s.Run(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if during != 1 {
+		t.Errorf("b at incarnation %d while a was down: a budget of one let a second process go", during)
+	}
+	if after <= 3 {
+		t.Errorf("incarnations a+b %d once a was back: want a termination then", after)
+	}
+}
+
+// Terminating's contexts that ended before the signal are dropped, so a
+// task asking for one per request keeps no more than are live.
+func TestTerminatingDropsEnded(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	defer s.Close()
+	var p *qenv.Process
+	p = s.Process("p", false, func(ctx context.Context) {
+		for i := 0; i < 100; i++ {
+			c, cancel := context.WithCancel(ctx)
+			_ = qenv.Terminating(c)
+			cancel()
+		}
+		keep := qenv.Terminating(ctx)
+		if n := qenv.TermContexts(p); n > 2 {
+			t.Errorf("%d contexts kept after 100 requests ended, want at most 2", n)
+		}
+		p.Terminate()
+		if keep.Err() == nil {
+			t.Error("a live context was not cancelled at the signal")
+		}
+	})
+	if err := s.Run(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// lagAt is a chooser making route.<name>.lag's choices whose ordinal
+// (from 1) is in stale its stale option, every other choice nominal.
+type lagAt struct {
+	kind  string
+	stale map[int]bool
+	n     int
+}
+
+func (c *lagAt) Choose(kind string, n int) int {
+	if kind != "fault."+c.kind {
+		return 0
+	}
+	c.n++
+	if c.stale[c.n] {
+		return 1
+	}
+	return 0
+}
+
+// A router's changes reach its view in the order they happened, every
+// backend's in one sequence: a rolling restart that terminates b once a
+// is back never empties the view, though a's return reaches it late and
+// b's removal is on time. A lag per change, each backend's apart, let b's
+// removal overtake a's return and emptied the view for the lag.
+func TestRouterKeepsOrderAcrossBackends(t *testing.T) {
+	// the lag's choices: a's removal (1, nominal), a's return (2, stale),
+	// b's removal (3, nominal)
+	s := qenv.New(&lagAt{kind: "route.api.lag", stale: map[int]bool{2: true}})
+	s.Check = true
+	defer s.Close()
+	up := 0
+	a := s.Process("a", false, drainer(time.Second, &up))
+	b := s.Process("b", false, drainer(10*time.Second, &up))
+	s.Terminations(qenv.Termination{}, a, b)
+	r := qenv.NewRouter(s, "api", 3*time.Second, a, b)
+	var views []string
+	s.Spawn("rollout", func(ctx context.Context) {
+		a.Terminate()
+		qenv.Wait(ctx, func() bool { return a.Incarnation == 2 && !a.Down() })
+		b.Terminate()
+		for i := 0; i < 20; i++ {
+			var names []string
+			for _, e := range r.View() {
+				names = append(names, e.String())
+			}
+			views = append(views, fmt.Sprintf("%v %s", s.Elapsed(), strings.Join(names, " ")))
+			qenv.Sleep(ctx, 250*time.Millisecond)
+		}
+	})
+	if err := s.Run(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range views {
+		if strings.HasSuffix(v, " ") {
+			t.Errorf("the view emptied at %s: %q", strings.TrimSpace(v), views)
+			break
+		}
+	}
+	if want := "4s a#2"; !slices.Contains(views, want) {
+		t.Errorf("views %q: want %q once a's return and b's removal reached it, in order", views, want)
 	}
 }

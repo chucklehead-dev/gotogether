@@ -32,9 +32,20 @@ var ErrNoEndpoint = errors.New("qenv: the router has no ready endpoint in its vi
 // terminating (Process.Terminate); its view follows each change of a
 // backend's readiness, at once (nominal), or Lag later under the fault
 // "route.<name>.lag", option "stale": a terminating backend still
-// chosen, a restarted one not yet. Each backend's changes reach the view
-// in order (a later one never before an earlier one). With Lag zero the
-// view is never stale, and the fault kind is not declared.
+// chosen, a restarted one not yet. Changes reach the view in the order
+// they happened, every backend's in one sequence (a later one, of any
+// backend, never before an earlier one): the view is the backends'
+// readiness as of some moment that only moves forward, as an endpoint
+// pipeline's is (the EndpointSlice controller and kube-proxy both act on
+// the latest state, never on one change ahead of another). So a rollout
+// that terminates the next backend once the previous one is ready never
+// empties the view, however late it is; a lag that let one change
+// overtake another emptied it, a fault no load balancer has. With Lag
+// zero the view is never stale, and the fault kind is not declared.
+//
+// One view for every client: a single load balancer. Clients with views
+// of their own (a client-side balancer each, kube-proxy on each node)
+// are a router each.
 type Router struct {
 	Name     string
 	sim      *Sim
@@ -42,9 +53,9 @@ type Router struct {
 	lagKind  FaultKind
 	backends []*Process
 	slot     map[*Process]int
-	view     []routeEntry // per backend, in its order: the endpoint the view has
-	want     []routeEntry // per backend: what its readiness says
-	queue    [][]routeUpdate
+	view     []routeEntry  // per backend, in its order: the endpoint the view has
+	want     []routeEntry  // per backend: what its readiness says
+	queue    []routeUpdate // the changes on their way, in the order they happened
 }
 
 // routeEntry is a backend's endpoint in a view, or none.
@@ -53,11 +64,12 @@ type routeEntry struct {
 	present bool
 }
 
-// routeUpdate is a change of a backend's endpoint that reaches the view at
-// at.
+// routeUpdate is a change of backend slot's endpoint that reaches the
+// view at at, or after the changes before it if later.
 type routeUpdate struct {
-	at time.Time
-	e  routeEntry
+	at   time.Time
+	slot int
+	e    routeEntry
 }
 
 // NewRouter registers a router named name in front of backends, its view
@@ -77,7 +89,6 @@ func NewRouter(s *Sim, name string, lag time.Duration, backends ...*Process) *Ro
 		e := readiness(p)
 		r.view, r.want = append(r.view, e), append(r.want, e)
 	}
-	r.queue = make([][]routeUpdate, len(backends))
 	s.onChange(r.changed)
 	return r
 }
@@ -108,22 +119,20 @@ func (r *Router) changed(p *Process) {
 	if r.lag > 0 && s.FaultOf(r.lagKind) == "stale" {
 		at = at.Add(r.lag)
 	}
-	r.queue[i] = append(r.queue[i], routeUpdate{at: at, e: e}) // applied in order: never before an earlier change
+	r.queue = append(r.queue, routeUpdate{at: at, slot: i, e: e}) // applied in order: never before an earlier change
 	r.apply()
 }
 
-// apply moves into the view every change whose time has come, each
-// backend's in order: one waits for the changes before it.
+// apply moves into the view every change whose time has come, in the
+// order they happened: one waits for every change before it.
 func (r *Router) apply() {
 	now := r.sim.Now()
-	for i, q := range r.queue {
-		k := 0
-		for k < len(q) && !q[k].at.After(now) {
-			r.view[i] = q[k].e
-			k++
-		}
-		r.queue[i] = q[k:]
+	k := 0
+	for k < len(r.queue) && !r.queue[k].at.After(now) {
+		r.view[r.queue[k].slot] = r.queue[k].e
+		k++
 	}
+	r.queue = r.queue[k:]
 }
 
 // View is the router's view now: the endpoints a request may go to, in

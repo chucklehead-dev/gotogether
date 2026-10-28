@@ -22,8 +22,11 @@ type Termination struct {
 	Short time.Duration
 	// Budget, if set, enables a process's terminate nemesis only while
 	// fewer than Budget of the processes registered with it are
-	// terminating: a PodDisruptionBudget's maxUnavailable. Crashes are
-	// involuntary and not budgeted, as a PDB does not cover them.
+	// unavailable (terminating, or down: exited and not yet replaced, or
+	// crashed): a PodDisruptionBudget's maxUnavailable. Crashes are
+	// involuntary and not budgeted, as a PDB does not prevent them, but a
+	// process they keep down counts against the budget, as an unhealthy
+	// pod does against a PDB's disruptionsAllowed.
 	Budget int
 }
 
@@ -67,14 +70,17 @@ func (s *Sim) Terminations(t Termination, procs ...*Process) {
 	}
 }
 
-// allows reports whether the budget allows one more termination.
+// allows reports whether the budget allows one more termination: fewer
+// than Budget of the group unavailable, a process down counting as one
+// terminating does (between its exit and its replacement's start, or
+// after a crash nothing restarted, it serves nothing either).
 func (tm *termination) allows() bool {
 	if tm.t.Budget <= 0 {
 		return true
 	}
 	n := 0
 	for _, q := range tm.group {
-		if q.terminating && !q.down {
+		if q.terminating || q.down {
 			n++
 		}
 	}
@@ -95,8 +101,8 @@ func (p *Process) Terminate() {
 	}
 	s := p.sim
 	p.terminating = true
-	for _, cancel := range p.termCancels {
-		cancel()
+	for _, tc := range p.termCancels {
+		tc.cancel()
 	}
 	p.termCancels = nil
 	grace := DefaultGrace
@@ -160,8 +166,23 @@ func Terminating(ctx context.Context) context.Context {
 		cancel()
 		return c
 	}
-	p.termCancels = append(p.termCancels, cancel)
+	// those already ended (a request's context, its handler done) go: a
+	// task asking for one per request would otherwise grow the list, and
+	// keep every context it ever made, for its incarnation's life
+	live := p.termCancels[:0]
+	for _, tc := range p.termCancels {
+		if tc.ctx.Err() == nil {
+			live = append(live, tc)
+		}
+	}
+	p.termCancels = append(live, termCancel{c, cancel})
 	return c
+}
+
+// termCancel is a context Terminating gave, and its cancel.
+type termCancel struct {
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // onChange registers a hook run after a process's life changes: it was

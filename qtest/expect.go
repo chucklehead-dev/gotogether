@@ -1,6 +1,7 @@
 package qtest
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"os/exec"
@@ -435,11 +436,23 @@ func HasIssue(kind string) Expectation {
 // Satisfies: f finds nothing wrong with the run's report (nil), where f
 // judges what no other expectation names: a framework's claim over its
 // steps (grist's gristtest.NoClientErrors over its clients' calls). Its
-// error says why a run misses it, and a failure prints it. As a claim
-// alone it is about every run, as Conforms is; Some, All and None
+// error says why a run misses it, and a failure prints it; an error
+// wrapping NoVerdict says the report cannot judge it (what it judges was
+// not recorded, or not by this binding), and no claim holds by such a
+// run: None(e) would otherwise hold of reports that judge nothing. As a
+// claim alone it is about every run, as Conforms is; Some, All and None
 // quantify it as any other.
 func Satisfies(desc string, f func(r *validate.Report) error) Expectation {
-	return Expectation{desc: desc, check: func(r *validate.Report) bool { return f(r) == nil }, every: true,
+	value := func(r *validate.Report) tri {
+		switch err := f(r); {
+		case err == nil:
+			return yes
+		case errors.Is(err, NoVerdict):
+			return unknown
+		}
+		return no
+	}
+	return Expectation{desc: desc, check: func(r *validate.Report) bool { return f(r) == nil }, every: true, tri: value,
 		why: func(r *validate.Report) string {
 			if err := f(r); err != nil {
 				return err.Error()
@@ -447,6 +460,11 @@ func Satisfies(desc string, f func(r *validate.Report) error) Expectation {
 			return ""
 		}}
 }
+
+// NoVerdict is what a Satisfies function's error wraps when the report
+// cannot judge its expectation (fmt.Errorf("%w: ...", NoVerdict)): the
+// run is unjudged for it, not missing it.
+var NoVerdict = errors.New("no verdict")
 
 // AnyOf: the report meets at least one of es.
 func AnyOf(es ...Expectation) Expectation {

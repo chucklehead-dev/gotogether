@@ -69,8 +69,19 @@ The first release. What a user meets, by module:
   when its context is cancelled (context.Canceled, not a deadline),
   returning the context's error, as a real client does: a call
   cancelled in flight has an unknown outcome.
+  A call's context cancelled by a task now consumes fewer choices than
+  before (nothing sent, or no wait to its timeout): a corpus entry or
+  choice log recorded from such a run diverges, and `qenv.Replay` says
+  where. A `Budget` counts a group's down processes with its terminating
+  ones (between an exit and its replacement, after a crash nothing
+  restarted), as a PDB counts unhealthy pods. A router's view takes its
+  backends' changes in the order they happened, every backend's in one
+  sequence (a lagged change holds back the later ones of every
+  backend), so a rollout that waits for readiness never empties it.
 - `qtest.Satisfies(desc, f)`: an expectation judged by a function of the
-  report, for a framework's own claims (gristtest.NoClientErrors).
+  report, for a framework's own claims (gristtest.NoClientErrors); an
+  error wrapping `qtest.NoVerdict` leaves the run unjudged for it, so
+  that no claim, `None` included, holds of reports it cannot judge.
 - `gotogether simulate -graph` and `validate.Checker.Graph` (ROADMAP
   P2, DESIGN §61): a binding's model explored breadth first by the Go
   evaluator, every invariant in every reachable state, with

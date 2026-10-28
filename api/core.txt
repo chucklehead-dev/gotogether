@@ -1844,6 +1844,7 @@ type Vacuity struct
     field Runs int `json:"runs"`
     method (Vacuity) String() string
 var ErrDiverged = qshrink.ErrDiverged
+var NoVerdict = errors.New("no verdict")
 
 == github.com/chucklehead-dev/gotogether/qtrace
 const AllRecorders = "*"

@@ -55,7 +55,14 @@ type Capacity struct {
 // cancelled (context.Canceled: a node stopping its work, Terminating's
 // context at a termination) stops waiting, as a real client does: Call
 // returns the context's error, the request maybe processed (an unknown
-// outcome); one cancelled before the call sends nothing.
+// outcome); one cancelled before the call sends nothing. A context's
+// deadline does not end a call: it is a wall-clock instant, which a
+// simulation's virtual time does not follow, so honouring it would make
+// a run depend on how fast the test process ran. Call's timeout is the
+// call's deadline in virtual time (qhttp's Transport turns a request
+// context's deadline into it). The cancellation must come from the run
+// (a task's call, a termination): one from a goroutine outside it lands
+// at no step the chooser made, and the run no longer replays.
 type Service[Req, Resp any] struct {
 	Name    string
 	Proc    *Process
