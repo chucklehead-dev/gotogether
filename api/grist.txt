@@ -503,7 +503,6 @@ type Doubles map[*grist.Dependency]grist.Handlers
 func Answered(t testing.TB, app *grist.App, traces []*qtrace.Trace)
 func Capture(st grist.Store) *Capturing
 func Catalog(app *grist.App) qtest.Catalog
-func ClientErrors() qtest.Expectation
 func DroppedRule(app *grist.App) (rule string, caught qtest.Claim, ok bool)
 func Generated(t testing.TB, app *grist.App)
 func NewTier(t testing.TB, app *grist.App, cfg TierConfig) *Tier
@@ -516,7 +515,6 @@ func Snapshots(t testing.TB, app *grist.App, st grist.Store)
 func Upcasts(t testing.TB, app *grist.App)
 func Upgrade(t testing.TB, binding string, from, app *grist.App, cfg gristsim.Config) qtest.System
 func WriteLog(l Log, path string) error
-func WritersFirst() qtest.Expectation
 type Capturing struct
     embed grist.Store
     method (*Capturing) Append(ctx context.Context, t string, b store.Batch) (store.Position, error)

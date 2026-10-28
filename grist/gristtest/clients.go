@@ -1,7 +1,6 @@
 package gristtest
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -25,33 +24,15 @@ import (
 // judged with the clients' binding (System.WithBinding): a report with
 // no client actor has no verdict for it (qtest.NoVerdict), so no claim
 // holds by such runs, None(NoClientErrors()) included, and the failure
-// names the fix. As a claim alone it is about every run.
+// names the fix. Over runs it takes its quantifier: All(NoClientErrors())
+// of a faithful system, and of a mutant whose clients retry some run's
+// negation, qtest.Some(qtest.Not(NoClientErrors())).
 func NoClientErrors() qtest.Expectation {
 	return qtest.Satisfies("no client call refused, erring or left unanswered", func(r *validate.Report) error {
 		if err := judgesClients(r); err != nil {
 			return err
 		}
 		return clientError(r)
-	})
-}
-
-// ClientErrors: some client call was refused a try, answered an error or
-// left unanswered (NoClientErrors' negation): what a mutant that makes
-// its clients retry shows in some run, Some(ClientErrors()). A report
-// with no client actor has no verdict for it either. Not qtest's
-// negation of any expectation: there is none, as most expectations' have
-// no one meaning (Conforms' is a rejection, a mismatch or an invariant
-// violated, each named), where this one's is the claim a mutant's test
-// states.
-func ClientErrors() qtest.Expectation {
-	return qtest.Satisfies("some client call refused, erring or left unanswered", func(r *validate.Report) error {
-		if err := judgesClients(r); err != nil {
-			return err
-		}
-		if clientError(r) == nil {
-			return errors.New("every client call was answered at its first try that a server took")
-		}
-		return nil
 	})
 }
 
@@ -122,29 +103,16 @@ func count(s qtrace.Step, field string) int {
 // answers, and counted on its step (the field olderRefused). The fix is
 // the newer release writing the older version until the rollout ends
 // (grist.WritesVersion). Judged by the clients' binding, as
-// NoClientErrors is: a report with no client actor has no verdict.
+// NoClientErrors is: a report with no client actor has no verdict. Over
+// runs All(ReadersFirst()); a release that writes a new version at once
+// shows its negation in some run of its rolling update,
+// qtest.Some(qtest.Not(ReadersFirst())).
 func ReadersFirst() qtest.Expectation {
 	return qtest.Satisfies("no client call refused by an older release's node for an event it cannot read", func(r *validate.Report) error {
 		if err := judgesClients(r); err != nil {
 			return err
 		}
 		return olderRefusal(r)
-	})
-}
-
-// WritersFirst: some client call had a try refused by a node of the older
-// release for an event it cannot read (ReadersFirst's negation): what a
-// release that writes a new version at once shows in some run of its
-// rolling update, Some(WritersFirst()).
-func WritersFirst() qtest.Expectation {
-	return qtest.Satisfies("some client call refused by an older release's node for an event it cannot read", func(r *validate.Report) error {
-		if err := judgesClients(r); err != nil {
-			return err
-		}
-		if olderRefusal(r) == nil {
-			return errors.New("no older release's node met an event it cannot read")
-		}
-		return nil
 	})
 }
 

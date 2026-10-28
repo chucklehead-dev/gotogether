@@ -205,7 +205,7 @@ func TestMutant(t *testing.T) {
 		// none. With the router's lag off nothing needs the delay: every
 		// run is free of refusals, the mutant's too
 		system(calls, rolling, qtest.Linearize()).WithRates(lagging).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 4}).
-			Expect(t, qtest.Conforms(), qtest.Some(gristtest.ClientErrors()))
+			Expect(t, qtest.Conforms(), qtest.Some(qtest.Not(gristtest.NoClientErrors())))
 		system(calls, rolling, qtest.Linearize()).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 4}).
 			Expect(t, qtest.Conforms(), qtest.All(gristtest.NoClientErrors()))
 		// the same on the real tier, three pods of the binary behind a
@@ -219,16 +219,16 @@ func TestMutant(t *testing.T) {
 		}
 		steps, _ := rollingRestart(t, 3)
 		t.Logf("nine drains without the delay: %d calls refused a try", refusedCalls(steps))
-		qtest.Validate(t, calls, steps, qtest.Linearize()).Expect(t, qtest.Conforms(), gristtest.ClientErrors())
+		qtest.Validate(t, calls, steps, qtest.Linearize()).Expect(t, qtest.Conforms(), qtest.Not(gristtest.NoClientErrors()))
 	case "eagerV2":
 		// counter-created's version 2 written at once, a release early: in
 		// the rolling update from release 1 a node of release 1 meets a
 		// version 2 event (a retirement's creator check, a show's names, a
 		// welcome's trigger) and refuses the call, which a node of release
-		// 2 then answers: WritersFirst in some run, where the faithful
+		// 2 then answers: ReadersFirst's negation in some run, where the faithful
 		// app's are none (TestRollingUpdate)
 		upgrade(t, calls, qtest.Linearize()).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 4}).
-			Expect(t, qtest.Conforms(), qtest.Some(gristtest.WritersFirst()))
+			Expect(t, qtest.Conforms(), qtest.Some(qtest.Not(gristtest.ReadersFirst())))
 	default:
 		t.Fatalf("mutant %s: say what catches it (a case of TestMutant)", mutant)
 	}

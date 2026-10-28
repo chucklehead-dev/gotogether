@@ -82,7 +82,7 @@ func TestFull(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	system(commits, fill).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}).
-		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("addItem")), fillUp)
+		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("addItem")), qtest.Some(fillUp))
 }
 
 // TestGenerated: the model's skeleton and the bindings are what the

@@ -13,14 +13,14 @@ import (
 // others between them. It is a qtest.NamedScenario of the catalog's
 // actions (each step a qtest.Takes with its outcome and its arguments as
 // the model's parameters take them), so it is claimed like any
-// expectation (alone or under Some, All, None) and checked possible in
+// expectation (under Some, All or None) and checked possible in
 // the model on its own with qtest.Possible:
 //
 //	fill := gristtest.Scenario("fill an item",
 //		Add.With(AddItem{Item: "a", Qty: 3}),
 //		Add.With(AddItem{Item: "a", Qty: 3}).Refused(ErrFull))
 //	qtest.Possible(t, "app.binding.yaml", fill) // the model can
-//	system(commits, cfg).Explore(t, qtest.ExploreConfig{}).Expect(t, fill) // and a run does
+//	system(commits, cfg).Explore(t, qtest.ExploreConfig{}).Expect(t, qtest.Some(fill)) // and a run does
 //
 // A run that misses it is reported with how far it got, where it
 // stopped, and whether the model on its own can follow it.

@@ -13,8 +13,8 @@ import (
 // NoClientErrors holds of a run whose clients' calls were each answered
 // at their first try a server took, and misses one with a call refused
 // a try (the step's refused field, an int in process or an int64 read
-// back), erring or left pending; ClientErrors is its negation. A report
-// with no client actor holds neither: it has no verdict for them
+// back), erring or left pending; qtest.Not(NoClientErrors()) its negation. A
+// report with no client actor holds neither: it has no verdict for them
 // (qtest.NoVerdict, whose claims qtest's TestSatisfies checks).
 func TestNoClientErrors(t *testing.T) {
 	call := func(args map[string]any, err string) binding.Call {
@@ -39,8 +39,8 @@ func TestNoClientErrors(t *testing.T) {
 		if got := gristtest.NoClientErrors().Holds(run); got != c.no {
 			t.Errorf("%s: NoClientErrors %v, want %v", name, got, c.no)
 		}
-		if got := gristtest.ClientErrors().Holds(run); got != c.errors {
-			t.Errorf("%s: ClientErrors %v, want %v", name, got, c.errors)
+		if got := qtest.Not(gristtest.NoClientErrors()).Holds(run); got != c.errors {
+			t.Errorf("%s: Not(NoClientErrors) %v, want %v", name, got, c.errors)
 		}
 	}
 }
