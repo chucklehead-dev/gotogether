@@ -78,6 +78,16 @@ AGENTS.md has the general requirements.
   `GOTOGETHER_EVAL=shadow`). `GOTOGETHER_SHADOW_LOG=file`
   appends a line per run so judged (`agree`, `DISAGREE`) or refused by
   the evaluator (`refused`, with why).
+  The evaluator's differential test (internal/qeval's
+  TestDifferentialAgainstQuint, full mode, needs quint; ROADMAP I11):
+  `GOTOGETHER_QEVAL_FUZZ=n` batches (2 unset; the nightly's 80, at seeds
+  after `GOTOGETHER_SEED_OFFSET`) of `GOTOGETHER_QEVAL_FUZZ_SIZE`
+  generated expressions and actions (100; the nightly's 200), each batch one module that
+  the evaluator and `quint test` on both backends judge;
+  `GOTOGETHER_QEVAL_FUZZ_SEED=n` runs batch n alone (a disagreement names
+  it), `GOTOGETHER_QEVAL_FUZZ_SHRINK=0` reports it unshrunk, and
+  `GOTOGETHER_KEEP=/dir` keeps each batch's module, IR and the backends'
+  reports.
   validate keeps quint's typechecks and the evaluation modules' compiles
   across processes, by content (quint's version, the spec's and its
   imports' paths and contents, every .qnt beside them, the arguments),

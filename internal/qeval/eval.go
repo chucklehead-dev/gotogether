@@ -55,18 +55,23 @@ type env struct {
 	name  string
 	val   Value
 	outer *env
+	// err is a let's failure, thrown where its name is read (bindLet)
+	err error
 }
 
 func (e *env) lookup(name string) (Value, bool) {
 	for ; e != nil; e = e.outer {
 		if e.name == name {
+			if e.err != nil {
+				throw(e.err)
+			}
 			return e.val, true
 		}
 	}
 	return nil, false
 }
 
-func (e *env) bind(name string, v Value) *env { return &env{name, v, e} }
+func (e *env) bind(name string, v Value) *env { return &env{name: name, val: v, outer: e} }
 
 // An evaluation: the model, its constants, the state it reads (nil for
 // init), and the values of its vals, cached per state.
@@ -518,12 +523,36 @@ func (ev *evaluation) varName(e *Expr) string {
 	return ""
 }
 
-// bindLet binds a let's definition: a value now, or an operator.
+// bindLet binds a let's definition: a value now, or an operator. A
+// value whose evaluation fails is the failure where the name is read,
+// not here: quint evaluates a let only when its name is read (`val n =
+// 1 / 0; 0` is 0 in both backends), and the evaluator, binding eagerly,
+// threw a division by zero quint never makes (found by the differential
+// test, differential_test.go).
 func (ev *evaluation) bindLet(d *Decl, en *env) *env {
 	if d.Expr.Kind == "lambda" {
 		return en.bind(d.Name, &Lambda{params: paramNames(d.Expr), body: d.Expr.Expr, env: en}) // it closes over the lets and parameters around it (quint has no recursion)
 	}
-	return en.bind(d.Name, ev.eval(d.Expr, en))
+	v, err := ev.evalOrErr(d.Expr, en)
+	if err != nil {
+		return &env{name: d.Name, outer: en, err: err}
+	}
+	return en.bind(d.Name, v)
+}
+
+// evalOrErr is e's value, or what its evaluation threw (the model's
+// runtime error, a refusal).
+func (ev *evaluation) evalOrErr(e *Expr, en *env) (v Value, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			t, ok := r.(thrown)
+			if !ok {
+				panic(r)
+			}
+			v, err = nil, t.err
+		}
+	}()
+	return ev.eval(e, en), nil
 }
 
 func paramNames(l *Expr) []string {

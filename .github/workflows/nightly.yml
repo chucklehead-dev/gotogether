@@ -165,6 +165,46 @@ jobs:
           name: fuzz-corpus-${{ strategy.job-index }}
           path: ${{ matrix.dir }}/testdata/fuzz
 
+  qeval-differential:
+    # the Go evaluator against quint's two backends on generated
+    # expressions and actions (internal/qeval's TestDifferentialAgainstQuint,
+    # ROADMAP I11): each batch a module of 200 well-typed random vals and
+    # actions over the builtins the evaluator supports, judged by the
+    # evaluator and by `quint test` on rust and typescript. A difference
+    # where the evaluator answered is a bug, shrunk and named by its batch
+    # (GOTOGETHER_QEVAL_FUZZ_SEED=n reruns it). The push tier runs batches 1
+    # and 2 of 100 entries; this one 80 of 200 (16000 entries) at seeds
+    # offset by date, about 70 CPU s a batch.
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install quint
+        run: ci/install-quint.sh
+      - name: generated expressions, judged by the evaluator and both backends
+        env:
+          GOTOGETHER_QEVAL_FUZZ: "80"
+          GOTOGETHER_QEVAL_FUZZ_SIZE: "200"
+          GOTOGETHER_KEEP: ${{ runner.temp }}/qeval
+        run: |
+          export GOTOGETHER_SEED_OFFSET=$(( $(date -u +%s) / 86400 * 1000 ))
+          echo "batches $((GOTOGETHER_SEED_OFFSET + 1))..$((GOTOGETHER_SEED_OFFSET + GOTOGETHER_QEVAL_FUZZ))"
+          mkdir -p "$GOTOGETHER_KEEP"
+          go test -count=1 -timeout 110m -run '^TestDifferential' -v ./internal/qeval | tee "$RUNNER_TEMP/differential.log" | grep -E '^(---|ok|FAIL)|batches:|disagree' || true
+          grep -q '^ok' "$RUNNER_TEMP/differential.log"
+      - name: keep the batches (each one's module, quint's IR and both backends' reports)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qeval-differential
+          path: ${{ runner.temp }}/qeval
+
   # Every model on its own, every trace of up to 8 steps (quint verify,
   # Apalache): a bounded proof of what the binding says each invariant
   # holds, a counterexample for what it allows. A binding's
