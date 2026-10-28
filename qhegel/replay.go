@@ -25,13 +25,10 @@ func Traces(t testing.TB, c connect.Config) []*itf.Trace {
 	if err != nil {
 		t.Fatalf("qhegel: generating traces: %v", err)
 	}
-	var out []*itf.Trace
-	for _, f := range files {
-		tr, err := itf.ReadFile(f)
-		if err != nil {
-			t.Fatalf("qhegel: %v", err)
-		}
-		out = append(out, tr)
+	// by the model's types where quint's Rust backend's integers need them
+	out, err := connect.ReadTraces(rc, files)
+	if err != nil {
+		t.Fatalf("qhegel: %v", err)
 	}
 	t.Logf("qhegel: %d model traces from %s (seed %s)", len(out), c.Spec, rc.Seed)
 	traceCache.Store(key, out)
