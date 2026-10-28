@@ -176,8 +176,12 @@ actor's model state, the next choice's named options (a fault kind's
 declared options, the runnable tasks, the nemeses) and the verdict of the
 run each option makes (`-take 0`: nominal after it). Take branches with
 `-follow 1,0` or `-take o`; `-save` keeps a branch that fails as a
-corpus entry. `-json` for agents: one object per call. A rejected step's
-`why:` (gotogether-traces §4) names the condition the model found false.
+corpus entry. `-json` for agents: one object per call; `-fold` passes a
+linear stretch of choices that are no decision. People use the
+interactive navigator (`gotogether-nav`, the qnav module, which
+`gotogether nav` opens on a terminal); agents use `-json`. A rejected
+step's `why:` (gotogether-traces §4) names the condition the model found
+false.
 
 Every verdict, its expectation and its claims over many runs are in
 [`references/verdicts.md`](references/verdicts.md).

@@ -253,6 +253,8 @@ To explore the model from a state (init, or a recorded run's step k):
 branches (the step's transitions, each with its action, arguments and
 picks, `take` naming it for `-follow`), and the step's actions no branch
 takes, each with why. Run it, do not infer what the model allows.
+People use the same navigator interactively (`gotogether-nav`, the qnav
+module, which `gotogether nav` opens on a terminal); agents use `-json`.
 
 The generated module (`module:` in a failing report) is a plain Quint file:
 `quint test` it, edit it, or keep it as a regression test. A passing run

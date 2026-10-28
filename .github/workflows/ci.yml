@@ -192,7 +192,7 @@ jobs:
         run: ci/install-quint.sh
       - name: vet and test each published module in the workspace
         run: |
-          for m in qhegel qweave qanalysis qgosim grist; do
+          for m in qhegel qweave qanalysis qgosim grist qnav; do
             echo "::group::$m"
             (cd $m && go vet ./... && go test -short -count=1 -timeout 30m ./...) || exit 1
             echo "::endgroup::"
@@ -212,7 +212,7 @@ jobs:
           go-version: 1.26.1
       - name: go install the commands at this commit
         run: |
-          for c in cmd/gotogether qweave/cmd/qweave qanalysis/cmd/quintvet; do
+          for c in cmd/gotogether qweave/cmd/qweave qanalysis/cmd/quintvet qnav/cmd/gotogether-nav; do
             go install github.com/chucklehead-dev/gotogether/$c@${{ github.sha }}
           done
       - name: a program that only records steps depends on no Hegel
@@ -272,6 +272,63 @@ jobs:
         run: go vet ./...
       - name: test (aspects woven, the woven fixture run in qenv)
         run: go test -count=1 ./...
+
+  qnav:
+    # the interactive navigator, a module of its own (Charm's libraries):
+    # its screens driven by key messages, hello's run through a session of
+    # its test binary
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: qnav
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: qnav/go.mod
+          cache-dependency-path: qnav/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install quint
+        run: ../ci/install-quint.sh
+      - name: vet
+        run: go vet ./...
+      - name: test
+        run: go test -count=1 ./internal/... ./cmd/...
+
+  qnav-tapes:
+    # the navigator's VHS tapes in a real terminal (vhs drives ttyd in a
+    # headless browser, ffmpeg encodes): their text against the goldens,
+    # and the rendered GIFs and screenshots as an artifact
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: qnav
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: qnav/go.mod
+          cache-dependency-path: qnav/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install quint
+        run: ../ci/install-quint.sh
+      - name: Install vhs, ttyd and ffmpeg
+        run: |
+          sudo apt-get update && sudo apt-get install -y ttyd ffmpeg
+          go install github.com/charmbracelet/vhs@v0.12.1
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: "the tapes: their screens against the goldens"
+        run: go test -count=1 -run TestTapes -v ./tapes/
+      - name: render the tapes
+        run: tapes/render.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gotogether-nav-media
+          path: qnav/tapes/media
 
   gosim:
     runs-on: ubuntu-latest

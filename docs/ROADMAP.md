@@ -131,9 +131,10 @@ is not taken. The maintainer's decisions of 2026-10-28, as recommended:
   stopped. grist's `gristtest.Scenario` builds one from the catalog's
   commands with their arguments (and, with P3, the scenario is checked
   possible in the model). A domain expert's acceptance criteria.
-- **P5. Navigators, with H2 (M). The core done** (DESIGN §58: the Go
-  API, the run navigator in test binaries, `gotogether nav -json`, the
-  failing reports' `navigate:` lines); the TUI module is left. Over a model (P2's graph: a node a
+- **P5. Navigators, with H2 (M). Done** (DESIGN §58: the Go API, the
+  run navigator in test binaries and its sessions, folding, `gotogether
+  nav -json`, the failing reports' `navigate:` lines, and the TUI, the
+  qnav module's `gotogether-nav` with its VHS tapes). Over a model (P2's graph: a node a
   state, its branches the enabled actions with picks, every disabled one
   with its first false conjunct, H2's evaluation) and over a run (a node
   a prefix of its choices in Exhaust's schedule syntax; its branches the

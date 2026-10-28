@@ -116,6 +116,7 @@ go get github.com/chucklehead-dev/gotogether/qhegel@latest               # Hegel
 npm install -g @informalsystems/quint                                  # quint ≥ 0.32 on PATH
 go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest   # the CLI: scaffold, lint, validate, skills (gotogether help; each command's -h)
 go install github.com/chucklehead-dev/gotogether/qweave/cmd/qweave@latest # weaving: //quint:action, coverage, mutants
+go install github.com/chucklehead-dev/gotogether/qnav/cmd/gotogether-nav@latest # the interactive navigator (gotogether nav opens it on a terminal)
 ```
 
 In a module of your own (the examples' `replace` lines are for working
@@ -291,8 +292,15 @@ gotogether shrink -binding bank.binding.yaml -actions journey.json -- ./driver -
 gotogether nav -binding bank.binding.yaml -follow 'deposit("carol", 2)' -json          # the model, a state at a time: branches, disabled actions with why
 gotogether nav -binding bank.binding.yaml -run steps.jsonl -at 3                         # the model before a recorded run's step 4 (validate's navigate: line)
 gotogether nav -run 'TestShop#2:seed=17' -at fail -json                                  # an exploration's run by its choices (a failing report's navigate: line)
+gotogether nav -run 'TestShop#2:seed=17' -at fail                                        # the same in gotogether-nav, the interactive navigator (qnav), on a terminal
 # a manifest records the driver's args, absolute paths and the failing step's ref verbatim: sanitize a log before sharing it (steps -pseudonymize)
 ```
+
+On a terminal, `gotogether nav` opens the interactive navigator
+([qnav](qnav)): here a failing run, at the choice before its failing
+step, then the run's option, whose step the model rejects, with why.
+
+![gotogether-nav on hello's failing run](qnav/tapes/media/hello.gif)
 
 ```
 actor default: 10 steps
@@ -563,6 +571,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `skills` | the agent skills below, embedded, and their install |
 | `cmd/gotogether` | the CLI: `scaffold`, `lint`, `simulate` (the model alone: which invariants it guarantees, which the code must; `-verify N`, Apalache to depth N), `steps`, `validate`, `itf`, `convert`, `cover`, `evidence` (a suite's explorations, and what no faithful one tried; `-strict` for CI), `skills` |
 | `qweave` (module) | weaves Orchestrion aspects into a `go -overlay`: `qweave go test ./...`, `-cover`, `-mutate` |
+| `qnav` (module) | `gotogether-nav`, the navigators' TUI (Charm's v2 libraries): a model's states or a run's choices, enter to take a branch, back, fold, the failing step, save; its VHS tapes are its docs' GIFs ([qnav](qnav)) |
 | `qanalysis` (module) | analyzers `quintsim`, `quintweave`, `quintaction` (`cmd/quintvet`, a golangci plugin); `cmd/actionmap` |
 | `qgosim` (module) | qenv and whole programs in gosim (the fork, `github.com/chucklehead-dev/gosim`) |
 | `grist` (module) | an event-sourced framework checked by its model ([docs/grist.md](docs/grist.md), slice 1): `New`, `NewEvent`, `NewReadModel`, `NewKeyedReadModel`, `NewCommand` (conditioned on its `Reads`, checked against the App; `Unconditioned`; idempotent by `Envelope.ID`, a key's first answer final), `NewQuery`, `NewProcessor` (`Emit`, `Skip`, `Effect` with `AtLeastOnce` or `AtMostOnce`, `EffectKey`), `Events`, options (`ConditionTries`, `TransientTries`, `EffectTries`, `BatchSize`), `Catalog`; every step recorded by the framework, each commit's from the store's step log (`Relay`, `WithRelay`) |

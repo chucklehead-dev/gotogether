@@ -31,5 +31,6 @@ use (
 	./qanalysis
 	./qgosim
 	./qhegel
+	./qnav
 	./qweave
 )

@@ -1,0 +1,131 @@
+gotogether-nav  TestNoDedupeCountsRetries#1:seed=1  node 0:1,1:1,2:2,4:1@5
+path: fail
+verdict rejects apply  (the run this node makes, nominal after it; after 5 choices, at 0s)
+
+next choice: sched.task (3 options)
+  0 counter.main  → 0:1,1:1,2:2,4:1@6
+  1 counter.handle  → 0:1,1:1,2:2,4:1,5:1@6
+› 2 counter.handle  → 0:1,1:1,2:2,4:1,5:2@6  ◂ the run took
+
+steps so far (1)
+  apply(id=1)
+
+model (default)
+  applied = Set(1)
+  count = 1
+
+tasks
+  client: waiting until 100ms
+  counter.handle: runnable
+  counter.handle: runnable
+  counter.main: runnable
+
+enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
+
+========
+
+gotogether-nav  TestNoDedupeCountsRetries#1:seed=1  node 0:1,1:1,2:2,4:1,5:2@6
+path: fail › 2 counter.handle
+verdict rejects apply  (the run this node makes, nominal after it; after 6 choices, at 0s)
+
+next choice: sched.task (3 options)
+  0 counter.main  → 0:1,1:1,2:2,4:1,5:2@7
+  1 counter.handle  → 0:1,1:1,2:2,4:1,5:2,6:1@7
+› 2 counter.handle  → 0:1,1:1,2:2,4:1,5:2,6:2@7  ◂ the run took
+
+steps so far (2)
+  apply(id=1)
+  apply(id=1)
+
+model (default)
+  the model rejects a step so far:
+  call 2 (apply(1))
+    why: the model's apply(id = 1) is disabled:
+      in apply: not(applied.contains(id)) is false
+        where applied = Set(1), id = 1
+      enabled instead: replay(id = 1), apply(id = 2), apply(id = 3)
+
+tasks
+  client: waiting until 100ms
+  counter.handle: runnable
+  counter.handle: runnable
+  counter.main: runnable
+
+enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
+
+========
+
+gotogether-nav  TestNoDedupeCountsRetries#1:seed=1  node 0:1,1:1,2:2,4:1@5
+path: fail
+verdict rejects apply  (the run this node makes, nominal after it; after 5 choices, at 0s)
+
+next choice: sched.task (3 options)
+  0 counter.main  → 0:1,1:1,2:2,4:1@6
+  1 counter.handle  → 0:1,1:1,2:2,4:1,5:1@6
+› 2 counter.handle  → 0:1,1:1,2:2,4:1,5:2@6  ◂ the run took
+
+steps so far (1)
+  apply(id=1)
+
+model (default)
+  applied = Set(1)
+  count = 1
+
+tasks
+  client: waiting until 100ms
+  counter.handle: runnable
+  counter.handle: runnable
+  counter.main: runnable
+
+enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
+
+========
+
+gotogether-nav  TestNoDedupeCountsRetries#1:seed=1  node 0:1,1:1,2:2,4:1,5:1@6
+path: fail › 1 counter.handle
+verdict rejects apply  (the run this node makes, nominal after it; after 6 choices, at 0s)
+
+next choice: fault.rpc.counter.response (2 options)
+› 0 nominal  → 0:1,1:1,2:2,4:1,5:1@7
+  1 lost  → 0:1,1:1,2:2,4:1,5:1,6:1@7
+
+steps so far (1)
+  apply(id=1)
+
+model (default)  (* changed since the last node)
+  applied = Set(1)
+  count = 1
+
+tasks
+  client: waiting until 100ms
+  counter.handle: runnable
+  counter.handle: runnable
+  counter.main: runnable
+
+enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
+
+========
+
+gotogether-nav  TestNoDedupeCountsRetries#1:seed=1  node 0:1,1:1,2:2,4:1,5:1@6
+path: fail › 1 counter.handle
+verdict rejects apply  (the run this node makes, nominal after it; after 6 choices, at 0s)
+
+next choice: fault.rpc.counter.response (2 options)
+› 0 nominal  → 0:1,1:1,2:2,4:1,5:1@7
+  1 lost  → 0:1,1:1,2:2,4:1,5:1,6:1@7
+
+steps so far (1)
+  apply(id=1)
+
+model (default)  (* changed since the last node)
+  applied = Set(1)
+  count = 1
+
+tasks
+  client: waiting until 100ms
+  counter.handle: runnable
+  counter.handle: runnable
+  counter.main: runnable
+
+not saved: the exploration has no corpus (ExploreConfig.Corpus)
+enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit

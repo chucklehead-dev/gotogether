@@ -1,0 +1,82 @@
+gotogether-nav  model limiter  (from init)
+path: init
+
+branches (3)
+› admit("a")
+  admit("b")
+  admit("c")
+
+state  (* changed by the last move)
+  admitted = Set()
+
+invariants
+  underLimit = true
+
+disabled
+  release
+    why: the model's release is disabled:
+      in release (c = "a", the one closest to enabled of the 3 values of CLIENTS, each
+        disabling it): admitted.contains(client) is false
+        where admitted = Set(), client = "a"
+
+enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
+
+========
+
+gotogether-nav  model limiter  (from init)
+path: init › admit("a")
+
+branches (3)
+› release("a")
+  admit("b")
+  admit("c")
+
+state  (* changed by the last move)
+* admitted = Set("a")
+
+invariants
+  underLimit = true
+
+enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
+
+========
+
+gotogether-nav  model limiter  (from init)
+path: init › admit("a") › admit("b")
+
+branches (2)
+› release("a")
+  release("b")
+
+state  (* changed by the last move)
+* admitted = Set("a", "b")
+
+invariants
+  underLimit = true
+
+disabled
+  admit
+    why: the model's admit is disabled:
+      in admit (c = "c", the one closest to enabled of the 3 values of CLIENTS, each
+        disabling it): admitted.size() < LIMIT is false
+        where admitted.size() = 2, admitted = Set("a", "b"), LIMIT = 2
+
+enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
+
+========
+
+gotogether-nav  model limiter  (from init)
+path: init › admit("a")
+
+branches (3)
+  release("a")
+› admit("b")
+  admit("c")
+
+state  (* changed by the last move)
+* admitted = Set("a")
+
+invariants
+  underLimit = true
+
+enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit

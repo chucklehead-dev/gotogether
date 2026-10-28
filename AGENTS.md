@@ -43,6 +43,7 @@ qenv/weave/   Orchestrion aspects: sync locks, wait groups and //qenv:go gorouti
 qenv/fault/   the //quint:fault aspect: fault points (qenv.FaultPoint) with the function's own errors, declared for coverage
 qgosim/       separate module: qenv and whole programs in gosim (on the fork, module github.com/chucklehead-dev/gosim)
 qweave/       separate module: weaves Orchestrion aspects with types into a go -overlay (cmd/qweave); also gosim's
+qnav/         separate module (published; Charm's v2 libraries): gotogether-nav, the navigators' TUI; tapes/ (VHS scenarios, goldens)
 qload/ qmeta/ load simulation (open/closed-loop clients, servers, triggers, the recovery property); CTMC, alert rules (qmeta imports nothing of the module)
 qcover/ qrun/ code coverage by model step (woven by qweave -cover); a run's state found from its context or goroutine
 qlint/        simulation and weaving lints (gotogether lint -sim, -weave); per file for qanalysis
@@ -95,7 +96,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 
 ## Requirements and commands
 
-- The published modules (the core, qhegel, qweave, qanalysis, qgosim, grist)
+- The published modules (the core, qhegel, qweave, qanalysis, qgosim, grist, qnav)
   have no `replace`: `go install …@version` refuses one, and a
   dependency's is ignored. They require each other at pushed commits
   (pseudo-versions, until tags). A change to the core that another

@@ -1,6 +1,6 @@
 # Changelog
 
-Every published module (the core, qhegel, qweave, qanalysis, qgosim, grist) is
+Every published module (the core, qhegel, qweave, qanalysis, qgosim, grist, qnav) is
 versioned together; the examples are not published. A change to the
 core's exported API updates `api/core.txt` and adds a line here.
 
@@ -59,6 +59,13 @@ The first release. What a user meets, by module:
   `drop-<rule>` mutant per rule, `DroppedRule` its claim. examples/library's
   loan limit is a rule; `grist new`'s capacity is one (its hand-written
   mutant is now `noInvalid`).
+- qnav (new module): `gotogether-nav`, the navigators' interactive front
+  end on Charm's v2 libraries (bubbletea v2.1.0, lipgloss v2.0.6, bubbles
+  v2.2.1): a model's states or a run's choices, branches taken with
+  enter, back, fold, the failing step, save, a filter; a run through a
+  session of its test binary. `gotogether nav` opens it on a terminal
+  when it is installed (`-text` prints the node). Its VHS tapes
+  (qnav/tapes) render the docs' GIFs and are checked as text.
 - validate keeps quint's typechecks and its evaluation modules' compiles
   across processes, by content (docs/DESIGN.md §57: quint's version,
   the spec's and its imports' paths and contents, every .qnt beside

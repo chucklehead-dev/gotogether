@@ -4122,6 +4122,30 @@ The navigators share the explanation and the transitions.
   where every later choice is nominal. One replay either way: the
   chooser moves its snapshot's choice past each folded one. Both say how
   many they folded.
+- **The TUI** (qnav, a module of its own: Charm's v2 libraries, bubbletea
+  v2.1.0, lipgloss v2.0.6, bubbles v2.2.1, stay out of the core). Its
+  state (the nodes visited, a cursor each, the filter, the scroll)
+  changes in Update alone and View renders it, so its tests drive
+  Update with key messages and compare screens with goldens, no
+  terminal (charmbracelet's teatest has no released v2). A model's node
+  is fetched from the in-process Navigator; a run's from a session of
+  its test binary (`go test -c`, then `GOTOGETHER_NAV=serve`, the
+  responses on their own descriptor where the platform has one, so the
+  system's prints stay out of them), in a command, so the screen says
+  it is working. The branches stay in view (windowed around the cursor)
+  above the node's detail, which scrolls; a changed variable is marked
+  `*` (a model's Node.Changed; a run's actors' states against the node
+  before it), the base run's option `◂`, so that NO_COLOR loses nothing;
+  colors are the terminal's sixteen, which its theme shades for light or
+  dark. Back is the visited stack (a node is a replay or a path: nothing
+  to undo), `g` a run's `fail` or a recorded run's state before the call
+  the model rejects, with why (a run the model rejects opens there).
+  `gotogether nav` without `-json` execs it on a terminal when it is on
+  PATH. Its VHS tapes (qnav/tapes: the limiter, hello's failing run,
+  counters' blind mutant read as grist's, folding) are the README's GIFs
+  and, as text (their navigator screens, each once, the frames of a node
+  being fetched left out), checked against goldens when vhs, ttyd and
+  ffmpeg are installed (a CI job of their own).
 - **Tests that fail without it**: the limiter's rejection names
   `admitted.size() < LIMIT` with its values, by Check and CheckBatch
   (TestRejectionNamesTheConjunct), none under GOTOGETHER_EVAL=quint; the
@@ -4133,4 +4157,7 @@ The navigators share the explanation and the transitions.
   fail's node, its nominal child passing; TestNavFromValidate); folding
   (TestNavFold, TestNavFoldFlag) and sessions (TestNavServe: a node by
   its id and by following equal, a fold to the base run's next decision
-  and, off its path, to the end; TestNavServeNondeterministic).
+  and, off its path, to the end; TestNavServeNondeterministic); the TUI
+  (qnav's TestLimiter, TestFold, TestRunDiff, TestHelloRun,
+  TestGristRejection: without folding, the change marks or back, they
+  fail).

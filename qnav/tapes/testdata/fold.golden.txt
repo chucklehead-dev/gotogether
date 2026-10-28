@@ -1,0 +1,66 @@
+gotogether-nav  model ticks  (from init)
+path: init
+
+branches (1)
+› tick
+
+state  (* changed by the last move)
+  c = 0
+
+disabled
+  fire
+    why: the model's fire is disabled:
+      in fire: c >= 5 is false
+        where c = 0
+
+enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
+
+========
+
+gotogether-nav  model ticks  (from init)
+path: init › fold
+folded 5 transitions of single branches
+
+branches (2)
+› tick
+  fire
+
+state  (* changed by the last move)
+* c = 5
+
+enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
+
+========
+
+gotogether-nav  model ticks  (from init)
+path: init › fold
+folded 5 transitions of single branches
+
+branches (2)
+› tick
+  fire
+
+state  (* changed by the last move)
+* c = 5
+
+nothing to fold: this node has several branches, or none
+enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
+
+========
+
+gotogether-nav  model ticks  (from init)
+path: init
+
+branches (1)
+› tick
+
+state  (* changed by the last move)
+  c = 0
+
+disabled
+  fire
+    why: the model's fire is disabled:
+      in fire: c >= 5 is false
+        where c = 0
+
+enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
