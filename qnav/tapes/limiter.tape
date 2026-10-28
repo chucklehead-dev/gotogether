@@ -12,8 +12,11 @@ Set Theme "Catppuccin Mocha"
 Set TypingSpeed 35ms
 Set Framerate 12
 
+# the terminal's size pinned in rows and columns: the browser's font
+# metrics (its fonts, its version) decide how many rows a height in
+# pixels holds, and a screen that fills them differed between machines
 Hide
-Type "cd ../../validate/testdata && clear" Enter
+Type "stty rows 32 cols 105 && cd ../../validate/testdata && clear" Enter
 Show
 
 Type "gotogether-nav -binding limiter.yaml" Sleep 400ms Enter

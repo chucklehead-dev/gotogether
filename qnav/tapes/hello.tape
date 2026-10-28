@@ -14,8 +14,11 @@ Set TypingSpeed 35ms
 Set Framerate 12
 Env GOTOGETHER_CORPUS "/tmp/gotogether-nav-tape-corpus"
 
+# the terminal's size pinned in rows and columns: the browser's font
+# metrics (its fonts, its version) decide how many rows a height in
+# pixels holds, and a screen that fills them differed between machines
 Hide
-Type "cd ../../examples/hello && rm -rf /tmp/gotogether-nav-tape-corpus && clear" Enter
+Type "stty rows 38 cols 105 && cd ../../examples/hello && rm -rf /tmp/gotogether-nav-tape-corpus && clear" Enter
 Show
 
 Type "gotogether-nav -run 'TestNoDedupeCountsRetries#1:seed=1' -at fail" Sleep 400ms Enter
