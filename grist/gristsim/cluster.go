@@ -50,9 +50,11 @@ type Cluster struct {
 	// budgeted.
 	Disruptions int
 	// Rolling restarts every node in turn while the clients call (a
-	// rollout's restart: each node terminated once the previous one is
-	// back and in the router's view), from a point gristsim.rollout chooses (a quarter of Pace
-	// apart, over the clients' phase).
+	// StatefulSet's rolling update: each node terminated once the previous
+	// one is back, ready, whether or not the router's view has it yet: no
+	// rollout waits for the endpoints, and the view, which takes changes in
+	// order, never empties for it), from a point gristsim.rollout chooses
+	// (a quarter of Pace apart, over the clients' phase).
 	Rolling bool
 	// Pace is how long each client waits between its operations (default
 	// 1 s), so a run's calls span its drains.
@@ -141,12 +143,6 @@ func startCluster(s *qenv.Sim, app *grist.App, st grist.Store, relay *grist.Rela
 				inc := p.Incarnation
 				p.Terminate()
 				qenv.Wait(ctx, func() bool { return p.Incarnation > inc && !p.Down() })
-				// and routed to again before the next goes (a Deployment's
-				// minReadySeconds): with two nodes, the next one's removal
-				// before this one's addition reached the view left it empty
-				for !cl.routed(p) {
-					qenv.Sleep(ctx, RetryDelay)
-				}
 			}
 		})
 	}
@@ -166,16 +162,6 @@ func (cl *cluster) apiOf(e qenv.Endpoint) *apiState {
 		cl.state[e] = as
 	}
 	return as
-}
-
-// routed reports whether the router's view has p's current incarnation.
-func (cl *cluster) routed(p *qenv.Process) bool {
-	for _, e := range cl.router.View() {
-		if e.Process == p && e.Incarnation == p.Incarnation {
-			return true
-		}
-	}
-	return false
 }
 
 // allUp reports whether every node is up and none terminating.

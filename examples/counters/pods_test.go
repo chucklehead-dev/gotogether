@@ -40,8 +40,9 @@ func TestMain(m *testing.M) {
 type pod struct {
 	cmd    *exec.Cmd
 	url    string
-	health string     // its side port's URL, with -health-addr
-	out    chan error // the process's end
+	health string        // its side port's URL, with -health-addr
+	out    chan error    // the process's end
+	exited chan struct{} // closed once it ended
 }
 
 // startPod starts the pod named name (POD_NAME, as the downward API
@@ -60,7 +61,7 @@ func startPod(t *testing.T, name, db, steps string, extra ...string) *pod {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	p := &pod{cmd: cmd, out: make(chan error, 1)}
+	p := &pod{cmd: cmd, out: make(chan error, 1), exited: make(chan struct{})}
 	urls := make(chan string, 1)
 	health := make(chan string, 1)
 	go func() {
@@ -76,6 +77,7 @@ func startPod(t *testing.T, name, db, steps string, extra ...string) *pod {
 		}
 		io.Copy(io.Discard, stderr)
 		p.out <- cmd.Wait()
+		close(p.exited)
 	}()
 	select {
 	case p.url = <-urls:
@@ -89,11 +91,22 @@ func startPod(t *testing.T, name, db, steps string, extra ...string) *pod {
 		cmd.Process.Kill()
 		t.Fatalf("pod %s did not serve within 30 s", name)
 	}
-	t.Cleanup(func() { cmd.Process.Kill() })
+	// killed and waited for, whatever ended the test: a pod left running
+	// would hold its ports and write into the directory TempDir removes
+	t.Cleanup(func() {
+		cmd.Process.Kill()
+		select {
+		case <-p.exited:
+		case <-time.After(10 * time.Second):
+			t.Errorf("pod %s still running 10 s after its kill", name)
+		}
+	})
 	return p
 }
 
-// stop sends the pod SIGTERM and waits for its drain to end.
+// stop sends the pod SIGTERM and waits for its drain to end, killing it
+// at the grace. It fails t with Errorf, never Fatal: pods are stopped
+// from goroutines of their own too, where FailNow must not be called.
 func (p *pod) stop(t *testing.T) {
 	t.Helper()
 	p.cmd.Process.Signal(syscall.SIGTERM)
@@ -104,7 +117,8 @@ func (p *pod) stop(t *testing.T) {
 		}
 	case <-time.After(45 * time.Second): // the grace the generated manifests give
 		p.cmd.Process.Kill()
-		t.Fatal("a pod's drain outlived its grace")
+		<-p.exited
+		t.Error("a pod's drain outlived its grace")
 	}
 }
 

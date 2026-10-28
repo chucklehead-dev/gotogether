@@ -193,8 +193,8 @@ func TestMutant(t *testing.T) {
 		// Main once cancelled it): a payout whose bank call is in flight at
 		// a node's signal is cancelled, its outcome unknown though the bank
 		// was asked, in some run of the rolling restart, where the faithful
-		// app's are none (TestRollingRestart): 12 of 40 runs (10 seeds miss
-		// with chance 3%)
+		// app's are none (TestRollingRestart): 6 of 20 runs, 2 of -short's
+		// 10 (10 seeds at that rate miss with chance 4%)
 		system(terminating, rolling).WithRates(lagging).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 10}).
 			Expect(t, qtest.Some(qtest.Violates("noPayoutUnknown")))
 	case "noDrainDelay":

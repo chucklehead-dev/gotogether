@@ -13,8 +13,9 @@ import (
 // NoClientErrors holds of a run whose clients' calls were each answered
 // at their first try a server took, and misses one with a call refused
 // a try (the step's refused field, an int in process or an int64 read
-// back), erring or left pending, or with no client actor at all;
-// ClientErrors is its negation, but for that last.
+// back), erring or left pending; ClientErrors is its negation. A report
+// with no client actor holds neither: it has no verdict for them
+// (qtest.NoVerdict, whose claims qtest's TestSatisfies checks).
 func TestNoClientErrors(t *testing.T) {
 	call := func(args map[string]any, err string) binding.Call {
 		return binding.Call{Action: "createCounter", Step: &qtrace.Step{Action: "createCounter", Args: args, Error: err}}

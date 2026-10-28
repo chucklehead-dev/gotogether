@@ -57,8 +57,9 @@ func slowBank() gristsim.Doubles {
 // PodDisruptionBudget of one). The bank is slow (slowBank), so payouts
 // are in flight at the signals. Two nodes, not three: a signal lands on
 // the node running a payout one time in two (with three, one in three,
-// and the stopNodeAtSignal mutant's runs show an unknown payout 5 times
-// in 40, where with two they do 12 in 40).
+// and the stopNodeAtSignal mutant's runs showed an unknown payout 5
+// times in 40, where with two they did 12 in 40; 8 in 30 since the
+// rollout stopped waiting for the router).
 var rolling = gristsim.Config{Tenants: []string{"t1"}, Nodes: 2, Clients: 2, Ops: 14, Alphabet: []string{"a", "b"}, Doubles: slowBank,
 	Send:    []string{"create-counter", "increment-counter", "retire-counter", "retire-counter", "show-counter"},
 	Cluster: &gristsim.Cluster{Rolling: true, EndpointLag: 3 * time.Second, Disruptions: 1, Drain: Drain}}

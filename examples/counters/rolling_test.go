@@ -209,7 +209,7 @@ func rollingRestart(t *testing.T, rounds int) (steps []qtrace.Step, settledAfter
 	if err != nil {
 		t.Fatal(err)
 	}
-	clients := qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink, qobs.WithID("clients")))
+	clients, cancelClients := context.WithCancel(qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink, qobs.WithID("clients"))))
 	var stop atomic.Bool
 	var wg sync.WaitGroup
 	for c := 1; c <= 3; c++ {
@@ -232,7 +232,7 @@ func rollingRestart(t *testing.T, rounds int) (steps []qtrace.Step, settledAfter
 				default:
 					name, args = "show-counter", fmt.Sprintf(`{"counter":%q}`, counter)
 				}
-				if err := cl.Do(ctx, env, name, []byte(args)); err != nil {
+				if err := cl.Do(ctx, env, name, []byte(args)); err != nil && ctx.Err() == nil {
 					var rej *grist.Rejected
 					if !errors.As(err, &rej) && !errors.Is(err, grist.ErrConflict) {
 						t.Errorf("%s %s: %v", name, env.ID, err)
@@ -242,6 +242,11 @@ func rollingRestart(t *testing.T, rounds int) (steps []qtrace.Step, settledAfter
 			}
 		})
 	}
+	// the clients stopped before the router and the pods, whatever ends
+	// the test (a Fatal below): one calling on would fail t after it
+	// ended, which panics the test binary; cancelled, so that one in its
+	// retries (up to 100, 5 s apart) ends at once
+	defer func() { stop.Store(true); cancelClients(); wg.Wait() }()
 	type drained struct {
 		file  string
 		lagAt []time.Time // when its /metrics showed every lag at 0

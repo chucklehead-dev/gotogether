@@ -4768,7 +4768,8 @@ with it taken out:
   and `Process.Exit`s, or is killed at its grace, and either way is
   restarted (a StatefulSet's pod back under its name). Option `short` of
   `terminate.<proc>.grace` is a reduced grace; `Budget` is a
-  PodDisruptionBudget, counting the group's terminating processes.
+  PodDisruptionBudget, counting the group's unavailable processes
+  (terminating, or down).
   `TestTerminateDrainsOrKills`, `TestTerminateShortGrace`,
   `TestTerminationsBudget` (two terminating at once in some run without
   the budget, never with it).
@@ -4778,8 +4779,13 @@ with it taken out:
   schedule choice `route.<name>`, `ErrNoEndpoint` on an empty view. Each
   change of a backend's readiness (terminating, down, restarted) reaches
   the view at once or, under `route.<name>.lag`'s option `stale`, `lag`
-  later, each backend's in order: a terminating backend still chosen, a
-  restarted one not yet (`TestRouterLag`). An endpoint that is `Gone`
+  later, in the order the changes happened, every backend's in one
+  sequence (the view is the readiness of some moment past, as an
+  endpoint pipeline's is): a terminating backend still chosen, a
+  restarted one not yet (`TestRouterLag`), and never one backend's
+  change ahead of another's (`TestRouterKeepsOrderAcrossBackends`; a
+  lag per change, each backend's apart, was the first version, and its
+  view emptied in a rollout no real one empties). An endpoint that is `Gone`
   refuses the request sent to it.
 - **`Service.Call` stops at a cancelled context** (context.Canceled, not
   a deadline, which passes in wall time), returning the context's error,
@@ -4814,9 +4820,12 @@ with it taken out:
   (an error says so). `TestClusterRollingRestart` (refusals without the
   delay, none with it, none without the lag), `TestClusterDisruptions`.
 - **`gristtest.NoClientErrors()`** and its negation `ClientErrors()`,
-  over the clients' binding (a report with no client actor misses
-  either, naming the fix), built on the core's new `qtest.Satisfies`: no
-  client call refused a try, answered an error, or left pending.
+  over the clients' binding (a report with no client actor has no
+  verdict for either, `qtest.NoVerdict`, so no claim holds by it and
+  the failure names the fix: it first missed both, and
+  `None(NoClientErrors())` held of a binding that judged no client),
+  built on the core's new `qtest.Satisfies`: no client call refused a
+  try, answered an error, or left pending.
 - **counters**: `Drain` (5 s of serving, everywhere) and `NodeContext`
   in serve.go, used by the binary and the simulations; the test-only
   `noPayoutUnknown` (`counters.terminating.binding.yaml`); the mutants
@@ -4825,7 +4834,7 @@ with it taken out:
   rolled under load, the router stale at half its changes, a slow bank;
   `Conforms`, `All(Settles)`, at the clients `All(Completes)` and
   `NoClientErrors`, `None(Violates("noPayoutUnknown"))`; the mutants
-  `Some(Violates("noPayoutUnknown"))` (12 of 40 runs) and
+  `Some(Violates("noPayoutUnknown"))` (6 of 20 runs) and
   `Some(ClientErrors())`, and with the lag off `NoClientErrors` holds of
   the mutant too. `TestRealRollingRestart` (full mode, about 35 s): three
   pods of the binary on one SQLite file, `-steps DIR` and
@@ -4859,6 +4868,11 @@ What the platform note's acceptance got wrong:
   the router's lag costs is the tries, so `NoClientErrors` is defined
   over them (the step's `refused` count), and the mutant's claim is
   `Some(ClientErrors())`, qtest having no negation of an expectation.
+  The review kept it so: a general `qtest.Not` has no one meaning for
+  most expectations (`Not(Conforms())` is a rejection, a mismatch or a
+  violation, each named already), and `Some(ClientErrors())` reads as
+  the claim it is. The name `NoClientErrors` stays too: a refused try is
+  an error the client saw and hid by retrying, and the doc says so.
 - "a router without lag (ablation) makes the endpoint-lag test pass the
   mutant": only once a try sent before the shutdown is served. As first
   built a simulated server refused what reached it after its close, and
@@ -4875,13 +4889,21 @@ What the platform note's acceptance got wrong:
   `Rolling` and `Pace`. A simulated node is never killed at its grace:
   its drain is budgeted into it and each phase ends in time; the kill is
   qenv's, tested there. Option `short` is qenv's, not the Cluster's.
-  "Down by them" in the budget is moot: a terminated process restarts at
-  once.
+  "Down by them" in the budget is not moot: between a drained process's
+  exit and its replacement's start, and while a crash nothing restarted
+  keeps one down, it is unavailable, and the budget counts it, as a PDB
+  counts an unhealthy pod (`TestTerminationsBudgetCountsDown`; the first
+  version counted only those terminating and up).
 - A rolling restart that terminates the next node as soon as the last
-  is back up (as a Deployment does without `minReadySeconds`) empties a
-  two-node router's view when the next one's removal reaches it before
-  the last one's addition: 3 runs in 10 refused 26 tries of a call, the
-  app blameless. `Rolling` waits for the restarted node in the view.
+  is back up emptied a two-node router's view when the next one's
+  removal reached it before the last one's addition: 3 runs in 10
+  refused 26 tries of a call, the app blameless. `Rolling` first waited
+  for the restarted node in the view, which no rollout does
+  (`minReadySeconds` counts from the pod's readiness, not from its
+  endpoints'). The review found the cause in the router: its lag let one
+  backend's change overtake another's, which a load balancer acting on
+  the latest state cannot. The view now takes changes in order, and
+  `Rolling` waits only for the node to be back, as a StatefulSet does.
 
 ## Why AGENTS.md's gotchas say what they say
 

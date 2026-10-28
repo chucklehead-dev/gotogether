@@ -23,8 +23,9 @@ import (
 // longer than the router's lag, a disruption budget). A refusal the
 // model explains is no error (Conforms judges those). The run must be
 // judged with the clients' binding (System.WithBinding): a report with
-// no client actor misses it, naming the fix. As a claim alone it is about
-// every run.
+// no client actor has no verdict for it (qtest.NoVerdict), so no claim
+// holds by such runs, None(NoClientErrors()) included, and the failure
+// names the fix. As a claim alone it is about every run.
 func NoClientErrors() qtest.Expectation {
 	return qtest.Satisfies("no client call refused, erring or left unanswered", func(r *validate.Report) error {
 		if err := judgesClients(r); err != nil {
@@ -37,7 +38,11 @@ func NoClientErrors() qtest.Expectation {
 // ClientErrors: some client call was refused a try, answered an error or
 // left unanswered (NoClientErrors' negation): what a mutant that makes
 // its clients retry shows in some run, Some(ClientErrors()). A report
-// with no client actor misses it too, naming the fix.
+// with no client actor has no verdict for it either. Not qtest's
+// negation of any expectation: there is none, as most expectations' have
+// no one meaning (Conforms' is a rejection, a mismatch or an invariant
+// violated, each named), where this one's is the claim a mutant's test
+// states.
 func ClientErrors() qtest.Expectation {
 	return qtest.Satisfies("some client call refused, erring or left unanswered", func(r *validate.Report) error {
 		if err := judgesClients(r); err != nil {
@@ -57,7 +62,7 @@ func judgesClients(r *validate.Report) error {
 			return nil
 		}
 	}
-	return errors.New("the report judges no client's calls (actor <tenant>/clients): judge the run with the clients' binding (System.WithBinding)")
+	return fmt.Errorf("%w: the report judges no client's calls (actor <tenant>/clients): judge the run with the clients' binding (System.WithBinding)", qtest.NoVerdict)
 }
 
 // clientError is r's first client call refused a try, erring or left
