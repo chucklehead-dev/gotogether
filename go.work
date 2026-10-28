@@ -16,6 +16,7 @@ use (
 	./examples/kvstore
 	./examples/lease
 	./examples/library
+	./examples/migrate-payments
 	./examples/payd
 	./examples/quorumkv
 	./examples/raftkv

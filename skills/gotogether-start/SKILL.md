@@ -10,7 +10,7 @@ description: Start here for checking Go code against a Quint model with gotogeth
 | Question | Skill |
 |---|---|
 | A new component: what order, which tests, CI? | gotogether-workflow (model first) |
-| A team arrives with existing code and no model | gotogether-migration |
+| A team arrives with existing code and no model | gotogether-migration (walked through in examples/migrate-payments) |
 | Writing the model; what it should allow | gotogether-model, gotogether-patterns |
 | Does my code do what the model's traces do? | gotogether-mbt |
 | Does the code accept inputs the model forbids? | gotogether-hegel |

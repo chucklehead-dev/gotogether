@@ -1,0 +1,24 @@
+# The stage-3 draft's rule file: the spans the draft model names. Run on
+# the staging spans, convert names those no rule matches (GET
+# /charges/{id}, notify merchant): lookup was then modelled, and the
+# notifications dropped as outside the context (payments.convert.yaml).
+actor: =payments
+recorder: =payments-staging
+thread: =payments
+rules:
+  - span: POST /charges
+    action: authorize
+    outcome: attr:payments.result
+    args: { id: attr:payments.charge_id, key: attr:payments.idempotency_key, amount: attr:payments.amount|int }
+  - span: POST /charges/{id}/capture
+    action: capture
+    outcome: attr:payments.result
+    args: { id: attr:payments.charge_id, amount: attr:payments.amount|int }
+  - span: POST /charges/{id}/refund
+    action: refund
+    outcome: attr:payments.result
+    args: { id: attr:payments.charge_id, amount: attr:payments.amount|int }
+  - span: POST /charges/{id}/void
+    action: void
+    outcome: attr:payments.result
+    args: { id: attr:payments.charge_id }

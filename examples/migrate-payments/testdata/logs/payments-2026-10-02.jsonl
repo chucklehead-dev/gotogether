@@ -1,0 +1,15 @@
+{"time":"2026-10-02T09:00:01.000Z","level":"INFO","msg":"charge.authorize","audit_seq":1,"instance":"payments-1","charge_id":"ch_1","result":"ok","idempotency_key":"ord-1001","amount":1000}
+{"time":"2026-10-02T09:00:04.137Z","level":"INFO","msg":"charge.authorize","audit_seq":2,"instance":"payments-1","charge_id":"ch_1","result":"replayed","idempotency_key":"ord-1001","amount":1000}
+{"time":"2026-10-02T09:00:07.274Z","level":"INFO","msg":"charge.authorize","audit_seq":3,"instance":"payments-1","charge_id":"ch_2","result":"ok","idempotency_key":"ord-1002","amount":1000}
+{"time":"2026-10-02T09:00:10.411Z","level":"INFO","msg":"charge.capture","audit_seq":4,"instance":"payments-1","charge_id":"ch_1","result":"ok","amount":600}
+{"time":"2026-10-02T09:00:13.548Z","level":"INFO","msg":"charge.lookup","audit_seq":5,"instance":"payments-1","charge_id":"ch_1","result":"ok","status":"captured","refunded":0}
+{"time":"2026-10-02T09:00:16.685Z","level":"INFO","msg":"charge.authorize","audit_seq":6,"instance":"payments-1","charge_id":"ch_3","result":"ok","idempotency_key":"ord-1003","amount":1000}
+{"time":"2026-10-02T09:00:19.822Z","level":"INFO","msg":"charge.capture","audit_seq":7,"instance":"payments-1","charge_id":"ch_3","result":"ok","amount":1000}
+{"time":"2026-10-02T09:00:22.959Z","level":"INFO","msg":"charge.void","audit_seq":8,"instance":"payments-1","charge_id":"ch_2","result":"ok"}
+{"time":"2026-10-02T09:00:25.096Z","level":"INFO","msg":"charge.refund","audit_seq":9,"instance":"payments-1","charge_id":"ch_1","result":"ok","amount":600,"refunded":600}
+{"time":"2026-10-02T09:00:28.233Z","level":"INFO","msg":"charge.refund","audit_seq":10,"instance":"payments-1","charge_id":"ch_3","result":"ok","amount":700,"refunded":700}
+{"time":"2026-10-02T09:00:31.370Z","level":"INFO","msg":"charge.refund","audit_seq":11,"instance":"payments-1","charge_id":"ch_3","result":"ok","amount":500,"refunded":1200}
+{"time":"2026-10-02T09:00:34.507Z","level":"INFO","msg":"charge.authorize","audit_seq":12,"instance":"payments-1","charge_id":"","result":"invalid","idempotency_key":"ord-1004","amount":0}
+{"time":"2026-10-02T09:00:37.644Z","level":"INFO","msg":"charge.lookup","audit_seq":13,"instance":"payments-1","charge_id":"ch_3","result":"ok","status":"captured","refunded":1200}
+{"time":"2026-10-02T09:00:40.781Z","level":"INFO","msg":"charge.capture","audit_seq":14,"instance":"payments-1","charge_id":"ch_2","result":"invalid_state","amount":500}
+{"time":"2026-10-02T09:00:43.918Z","level":"INFO","msg":"charge.refund","audit_seq":15,"instance":"payments-1","charge_id":"ch_9","result":"not_found","amount":100}

@@ -1,0 +1,67 @@
+# The payment handler's steps (its audit records, read by auditsteps; its
+# spans, converted by payments.convert.yaml) as calls of
+# model/payments.qnt. Scaffolded by `go tool gotogether scaffold -spec
+# model/payments.qnt -module payments -out payments.binding.yaml`; each
+# parameter is the step field of its name but the result, which is the
+# step's outcome.
+spec: model/payments.qnt
+module: payments
+
+# the ids, keys and amounts the run used
+constants:
+  IDS: '{{ set "id" }}'
+  KEYS: '{{ set "key" }}'
+  AMOUNTS: '{{ set "amount" }}'
+
+# the audit log's results, as the model's
+outcomes:
+  ok: '"ok"'
+  replayed: '"replayed"'
+  invalid: '"invalid"'
+  not_found: '"not_found"'
+  invalid_state: '"invalid_state"'
+  exceeds: '"exceeds"'
+
+actions:
+  authorize:
+    args: { result: '{{.outcome}}' }
+  capture:
+    args: { result: '{{.outcome}}' }
+  refund:
+    args: { result: '{{.outcome}}' }
+  void:
+    args: { result: '{{.outcome}}' }
+  lookup:
+    args: { result: '{{.outcome}}' }
+    # R7: what the lookup answered is the charge as the model holds it
+    expect: >-
+      if (charges.keys().contains({{.id}}))
+        charges.get({{.id}}).status == {{.obs.status}} and charges.get({{.id}}).refunded == {{.obs.refunded}}
+      else {{.obs.status}} == ""
+
+invariants: [refundsWithinCapture, captureWithinAuthorization, oneChargePerKey, voidedNothingCaptured]
+
+# The model on its own (go tool gotogether simulate -binding payments.binding.yaml).
+simulate:
+  constants: { IDS: 'Set("ch_1", "ch_2")', KEYS: 'Set("", "k1")', AMOUNTS: 'Set(0, 400, 600, 1000)' }
+  holds: [captureWithinAuthorization, oneChargePerKey, voidedNothingCaptured]
+  # R5 is the code's to hold: the model takes its decision to refund
+  allows: [refundsWithinCapture]
+  # each requirement's happy path, and its refusals, as a whole lifecycle
+  # (migration_test.go's TestScenariosPossible claims the same in Go)
+  possible:
+    - name: R1 R3 R5 authorized, part captured, refunded in two, a third refused
+      steps:
+        - 'authorize(id = "ch_1", amount = 1000, result = "ok")'
+        - 'capture(id = "ch_1", amount = 600, result = "ok")'
+        - 'refund(id = "ch_1", amount = 400, result = "ok")'
+        - 'refund(id = "ch_1", result = "ok")'
+        - 'refund(id = "ch_1", result = "exceeds")'
+    - name: R2 a retried key answers with its charge
+      steps: ['authorize(id = "ch_1", key = "k1", result = "ok")', 'authorize(id = "ch_1", key = "k1", result = "replayed")']
+    - name: R4 R6 a captured charge is neither captured again nor voided
+      steps: ['capture(id = "ch_1", result = "ok")', 'capture(id = "ch_1", result = "invalid_state")', 'void(id = "ch_1", result = "invalid_state")']
+    - name: R6 R8 a voided charge is not captured
+      steps: ['void(id = "ch_1", result = "ok")', 'capture(id = "ch_1", result = "invalid_state")']
+    - name: R7 R9 a lookup, a refund before any capture
+      steps: ['authorize(id = "ch_1", result = "ok")', 'lookup(id = "ch_1", result = "ok")', 'refund(id = "ch_1", result = "invalid_state")']

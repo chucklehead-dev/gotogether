@@ -1,0 +1,40 @@
+# The payment handler's own OTel spans (payments.go's route, one server
+# span per request) as model steps, for payments.binding.yaml:
+#
+#   go tool gotogether validate -binding payments.binding.yaml -convert payments.convert.yaml testdata/spans/staging.otlp.json
+#
+# The rule format is package convert's (go doc
+# github.com/chucklehead-dev/gotogether/convert). Each request's span
+# carries what its audit record does (payments.* attributes). Requests take
+# the store's lock one at a time and their spans end after it, so end
+# times give the lock's order: one thread for the service.
+actor: =payments
+recorder: =payments-staging
+thread: =payments
+rules:
+  # Outside the context: the merchant's notifications, fire and forget
+  # (the model's context map). A drop is a match: convert names no span
+  # left unmatched.
+  - span: notify merchant
+    drop: true
+  - span: POST /charges
+    action: authorize
+    outcome: attr:payments.result
+    args: { id: attr:payments.charge_id, key: attr:payments.idempotency_key, amount: attr:payments.amount|int }
+  - span: POST /charges/{id}/capture
+    action: capture
+    outcome: attr:payments.result
+    args: { id: attr:payments.charge_id, amount: attr:payments.amount|int }
+  - span: POST /charges/{id}/refund
+    action: refund
+    outcome: attr:payments.result
+    args: { id: attr:payments.charge_id, amount: attr:payments.amount|int }
+  - span: POST /charges/{id}/void
+    action: void
+    outcome: attr:payments.result
+    args: { id: attr:payments.charge_id }
+  - span: GET /charges/{id}
+    action: lookup
+    outcome: attr:payments.result
+    args: { id: attr:payments.charge_id }
+    obs: { status: attr:payments.status, refunded: attr:payments.refunded|int }

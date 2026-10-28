@@ -67,7 +67,9 @@ requirement, and the API's status is the binding's business.
   `args:` and `obs:` from `attr:K`, `outcome:`, `where:`, `drop:`) is
   package convert's doc (`go doc github.com/chucklehead-dev/gotogether/convert`);
   examples/kvstore/kv.convert.yaml is a whole one, its `order:` key
-  putting concurrent requests' spans back in the order they took effect.
+  putting concurrent requests' spans back in the order they took effect;
+  examples/migrate-payments/payments.convert.yaml drops the spans outside
+  the context (`drop: true`). `convert` names the spans no rule matches.
 - `gotogether steps -actions` keeps some actions only: a list to read,
   not a history to validate (the dropped steps changed the state). Sample
   by `-actors`, `-since` and `-until`.

@@ -16,6 +16,7 @@ code changes. The model is the specification: requirements live in the
 - Choosing and drawing the context: [references/bounded-contexts.md](references/bounded-contexts.md).
 - Extracting requirements, with provenance: [references/requirements.md](references/requirements.md).
 - From requirements to the model, its scenarios and its first verdicts on existing runs: [references/first-model.md](references/first-model.md).
+- Every step on one legacy service (a payment handler with tests, an audit log and spans; a bug its log caught first), each Result below shown: examples/migrate-payments, its README's stages.
 - Then the model-first loop: the gotogether-workflow skill; the model's conventions and patterns: gotogether-model, gotogether-patterns.
 
 ## Steps

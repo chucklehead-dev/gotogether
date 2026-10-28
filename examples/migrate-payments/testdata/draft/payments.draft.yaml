@@ -1,0 +1,39 @@
+# The stage-3 draft's binding (testdata/draft/payments.qnt), kept to show
+# what the first checks found in the draft (README.md, stages 3 and 4).
+# Its file name holds no "binding": CI simulates every example binding,
+# and this one is meant to fail (R3's partial capture is impossible here).
+spec: payments.qnt
+module: payments
+
+constants:
+  IDS: '{{ set "id" }}'
+  KEYS: '{{ set "key" }}'
+  AMOUNTS: '{{ set "amount" }}'
+
+outcomes:
+  ok: '"ok"'
+  replayed: '"replayed"'
+  invalid: '"invalid"'
+  not_found: '"not_found"'
+  invalid_state: '"invalid_state"'
+  exceeds: '"exceeds"'
+
+actions:
+  authorize:
+    args: { result: '{{.outcome}}' }
+  capture:
+    args: { result: '{{.outcome}}' }
+  refund:
+    args: { result: '{{.outcome}}' }
+  void:
+    args: { result: '{{.outcome}}' }
+
+invariants: [refundsWithinCapture, captureWithinAuthorization]
+
+simulate:
+  constants: { IDS: 'Set("ch_1")', KEYS: 'Set("")', AMOUNTS: 'Set(600, 1000)' }
+  holds: [captureWithinAuthorization]
+  allows: [refundsWithinCapture]
+  possible:
+    - name: R3 part of an authorization captured
+      steps: ['authorize(id = "ch_1", amount = 1000, result = "ok")', 'capture(id = "ch_1", amount = 600, result = "ok")']

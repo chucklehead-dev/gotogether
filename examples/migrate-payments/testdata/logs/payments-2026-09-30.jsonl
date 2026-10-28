@@ -1,0 +1,4 @@
+{"time":"2026-09-30T23:50:07.000Z","level":"INFO","msg":"charge.refund","audit_seq":4113,"instance":"payments-0","charge_id":"ch_2040","result":"ok","amount":250,"refunded":250}
+{"time":"2026-09-30T23:51:07.137Z","level":"INFO","msg":"charge.lookup","audit_seq":4114,"instance":"payments-0","charge_id":"ch_2040","result":"ok","status":"captured","refunded":250}
+{"time":"2026-09-30T23:52:07.274Z","level":"INFO","msg":"charge.capture","audit_seq":4115,"instance":"payments-0","charge_id":"ch_2041","result":"ok","amount":900}
+{"time":"2026-09-30T23:53:07.411Z","level":"INFO","msg":"charge.void","audit_seq":4116,"instance":"payments-0","charge_id":"ch_2042","result":"ok"}
