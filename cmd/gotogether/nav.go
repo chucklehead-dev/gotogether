@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -32,9 +33,16 @@ func nav(out io.Writer, args []string) (int, error) {
 	take := fset.String("take", "", "one more branch to take after -follow")
 	pkg := fset.String("pkg", ".", "with an exploration's run: the test's package (go test runs in it)")
 	save := fset.Bool("save", false, "with an exploration's run: save the node's run to the exploration's corpus (ExploreConfig.Corpus)")
+	fold := fset.Bool("fold", false, "fold the node's linear stretch: a model's single branches taken until a node of several; a run's choices that are no decision (nominal where the base run's are) passed to its next")
 	asJSON := fset.Bool("json", false, "print the node as one JSON object (the agents' form)")
+	text := fset.Bool("text", false, "print the node as text even on a terminal, where gotogether-nav (the interactive navigator) otherwise opens it")
 	quint := fset.String("quint", "quint", "quint binary")
 	fset.Parse(args)
+	if !*asJSON && !*text && isTerminal(out) {
+		if code, ran, err := navTUI(args); ran {
+			return code, err
+		}
+	}
 	path := *follow
 	if *take != "" {
 		if path != "" {
@@ -46,7 +54,7 @@ func nav(out io.Writer, args []string) (int, error) {
 		if *bind != "" || *actor != "" {
 			return 2, fmt.Errorf("nav -run %s: an exploration's run is the test's, judged by its binding: drop -binding and -actor", *run)
 		}
-		node, err := navRun(*run, *pkg, *at, path, *save)
+		node, err := navRun(*run, *pkg, *at, path, *save, *fold)
 		if err != nil {
 			return 2, err
 		}
@@ -82,11 +90,51 @@ func nav(out io.Writer, args []string) (int, error) {
 	if err != nil {
 		return 2, err
 	}
-	node, err := n.Node(validate.SplitPath(path)...)
+	walk := n.Node
+	if *fold {
+		walk = n.Fold
+	}
+	node, err := walk(validate.SplitPath(path)...)
 	if err != nil {
 		return 2, err
 	}
 	return printNode(out, node, *asJSON, node.String())
+}
+
+// tuiModule is the interactive navigator's module, which `gotogether
+// nav` on a terminal runs when its binary is on PATH (read-only).
+const tuiModule = "github.com/chucklehead-dev/gotogether/qnav"
+
+// navTUI runs gotogether-nav (the interactive navigator, a module of its
+// own: Charm's libraries stay out of the core) with nav's arguments, on
+// the terminal: ran false when it is not installed, after saying how to
+// install it (the node is then printed as text).
+func navTUI(args []string) (code int, ran bool, err error) {
+	bin, err := exec.LookPath("gotogether-nav")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gotogether nav: the interactive navigator is not installed (go install %s/cmd/gotogether-nav@latest); printing the node (-text says so without this line)\n", tuiModule)
+		return 0, false, nil
+	}
+	cmd := exec.Command(bin, args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			return exit.ExitCode(), true, nil
+		}
+		return 2, true, fmt.Errorf("gotogether nav: %s: %w", bin, err)
+	}
+	return 0, true, nil
+}
+
+// isTerminal reports whether out is a terminal (a character device).
+func isTerminal(out io.Writer) bool {
+	f, ok := out.(*os.File)
+	if !ok {
+		return false
+	}
+	fi, err := f.Stat()
+	return err == nil && fi.Mode()&os.ModeCharDevice != 0
 }
 
 // isRunRef reports whether s names an exploration's run (TestX#n:kind=v)
@@ -115,7 +163,7 @@ func printNode(out io.Writer, node any, asJSON bool, text string) (int, error) {
 
 // navRun has the test binary of ref's test navigate it: go test in pkg
 // with GOTOGETHER_RUN naming the run and GOTOGETHER_NAV the node.
-func navRun(ref, pkg, at, follow string, save bool) (*validate.RunNode, error) {
+func navRun(ref, pkg, at, follow string, save, fold bool) (*validate.RunNode, error) {
 	i := strings.LastIndex(ref[:strings.LastIndex(ref, ":")], "#")
 	test := ref[:i]
 	dir, err := os.MkdirTemp("", "gotogether-nav-")
@@ -133,6 +181,9 @@ func navRun(ref, pkg, at, follow string, save bool) (*validate.RunNode, error) {
 	cmd.Env = append(os.Environ(), "GOTOGETHER_RUN="+ref, "GOTOGETHER_NAV="+at, "GOTOGETHER_NAV_FOLLOW="+follow, "GOTOGETHER_NAV_OUT="+outFile)
 	if save {
 		cmd.Env = append(cmd.Env, "GOTOGETHER_NAV_SAVE=1")
+	}
+	if fold {
+		cmd.Env = append(cmd.Env, "GOTOGETHER_NAV_FOLD=1")
 	}
 	var buf bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &buf, &buf
@@ -152,6 +203,9 @@ func navRun(ref, pkg, at, follow string, save bool) (*validate.RunNode, error) {
 func runNodeText(n *validate.RunNode) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "node %s of %s: %s\n", n.ID, n.Run, n.Verdict)
+	if n.Folded > 0 {
+		fmt.Fprintf(&b, "  folded %d choices that were no decision\n", n.Folded)
+	}
 	if n.Elapsed != "" {
 		fmt.Fprintf(&b, "  at %s, after %d choices\n", n.Elapsed, n.At)
 	}

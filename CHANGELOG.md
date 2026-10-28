@@ -35,6 +35,13 @@ The first release. What a user meets, by module:
   (`GOTOGETHER_NAV`, `validate.RunNode`), `gotogether nav` (`-json`), a
   failing run's `navigate:` line and validate's; `qenv.Sim.ChoiceOptions`
   names a choice's options.
+- Navigation sessions and folding (P5): `GOTOGETHER_NAV=serve` makes the
+  test binary a session, a `validate.RunRequest` a line in and a
+  `validate.RunResponse` a line out (`RunSession` first), each node a
+  replay rather than a go test process; `Navigator.Fold`,
+  `RunRequest.Fold` (`GOTOGETHER_NAV_FOLD=1`, `gotogether nav -fold`)
+  advance through a linear stretch to the next decision and say how
+  many they folded (`Node.Folded`, `RunNode.Folded`).
 - validate keeps quint's typechecks and its evaluation modules' compiles
   across processes, by content (docs/DESIGN.md §57: quint's version,
   the spec's and its imports' paths and contents, every .qnt beside

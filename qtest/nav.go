@@ -1,9 +1,11 @@
 package qtest
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -41,7 +43,22 @@ import (
 // GOTOGETHER_NAV_FOLLOW takes options from there in turn ("1,0,2");
 // GOTOGETHER_NAV_OUT is the file the node's JSON goes to (else the
 // test's log); GOTOGETHER_NAV_SAVE=1 saves the node's run to the
-// exploration's corpus.
+// exploration's corpus; GOTOGETHER_NAV_FOLD=1 folds the node's linear
+// stretch (fold).
+//
+// GOTOGETHER_NAV=serve makes the test binary a session (serve): it runs
+// the base run (twice: the first-seed-twice check), then answers
+// validate.RunRequest lines with validate.RunResponse lines until its
+// input ends, each node a replay (milliseconds, the verdicts cached by
+// their steps) instead of a go test process (seconds).
+//
+// Folding: a node asked to fold advances through the choices that are no
+// decision before the next that is: those of one option, and those made
+// nominally where the base run made them nominally too (on the base
+// run's path: the node's choices so far are the base's), stopping at
+// the base run's next choice made otherwise, or at the run's end (off
+// the base path every later choice is nominal). It says how many it
+// folded (RunNode.Folded).
 
 // navigating reports whether GOTOGETHER_NAV asks x (run alone) to
 // navigate.
@@ -59,6 +76,14 @@ type navChooser struct {
 	sim   *qenv.Sim
 	steps func() []qtrace.Step
 
+	// fold: advance at through the choices that are no decision
+	// (foldable), counting them in folded; base is the base run's
+	// choices, onPath whether the node's choices so far are its
+	fold   bool
+	base   []qenv.Choice
+	onPath bool
+	folded int
+
 	reached bool
 	kind    string
 	n       int
@@ -70,7 +95,10 @@ type navChooser struct {
 
 // Choose implements qenv.Chooser.
 func (c *navChooser) Choose(kind string, n int) int {
-	if c.f.i == c.at && !c.reached {
+	if c.f.i == c.at && !c.reached && c.fold && c.foldable(c.at, n) {
+		c.at++
+		c.folded++
+	} else if c.f.i == c.at && !c.reached {
 		c.reached, c.kind, c.n = true, kind, n
 		if c.sim != nil {
 			c.options, c.tasks, c.elapsed = c.sim.ChoiceOptions(kind), c.sim.Tasks(), c.sim.Elapsed().String()
@@ -80,6 +108,15 @@ func (c *navChooser) Choose(kind string, n int) int {
 		}
 	}
 	return c.f.Choose(kind, n)
+}
+
+// foldable reports whether choice i, of n options, is no decision: one
+// option, or nominal where the base run's (on its path) is nominal too.
+func (c *navChooser) foldable(i, n int) bool {
+	if n <= 1 || !c.onPath {
+		return true
+	}
+	return i >= len(c.base) || c.base[i].Value == 0
 }
 
 // ObserveSim is how qenv.New hands the navigator the simulation it
@@ -115,8 +152,9 @@ func fixed(base []deviation, at int) []deviation {
 }
 
 // navigate is the exploration's navigation: its one planned run (the
-// run alone GOTOGETHER_RUN names) as the base, the node GOTOGETHER_NAV
-// names from it, written where GOTOGETHER_NAV_OUT says.
+// run alone GOTOGETHER_RUN names) as the base, then the node
+// GOTOGETHER_NAV names from it, written where GOTOGETHER_NAV_OUT says,
+// or (GOTOGETHER_NAV=serve) a session's nodes.
 func (e *engine) navigate(sources []source) {
 	t, x := e.t, e.x
 	t.Helper()
@@ -135,7 +173,23 @@ func (e *engine) navigate(sources []source) {
 		t.FailNow()
 	}
 	r0.origin = base.origin
-	node, err := e.navNode(r0)
+	b := e.navBase(r0)
+	if os.Getenv("GOTOGETHER_NAV") == "serve" {
+		e.serve(b, base)
+		return
+	}
+	req := validate.RunRequest{Node: os.Getenv("GOTOGETHER_NAV"), Fold: os.Getenv("GOTOGETHER_NAV_FOLD") == "1", Save: os.Getenv("GOTOGETHER_NAV_SAVE") == "1"}
+	for p := range strings.SplitSeq(os.Getenv("GOTOGETHER_NAV_FOLLOW"), ",") {
+		if p = strings.TrimSpace(p); p == "" {
+			continue
+		}
+		o, err := strconv.Atoi(p)
+		if err != nil || o < 0 {
+			t.Fatalf("gotogether: GOTOGETHER_NAV_FOLLOW %q: want options, comma-separated (0 nominal)", p)
+		}
+		req.Follow = append(req.Follow, o)
+	}
+	node, err := e.navNode(b, req)
 	if err != nil {
 		t.Fatalf("gotogether: GOTOGETHER_NAV: %v", err)
 	}
@@ -154,6 +208,104 @@ func (e *engine) navigate(sources []source) {
 		t.Logf("gotogether: node of %s:\n%s", x.ref(), buf.String())
 	}
 }
+
+// A navBase is what every node of a navigation starts from: the base run,
+// its choices (but entropy) and their schedule, whether it drew entropy,
+// and the checker that judges its nodes.
+type navBase struct {
+	r0      *Run
+	ds      []deviation
+	cs      []qenv.Choice
+	entropy bool
+	cc      *validate.Checker
+	inst    string
+}
+
+func (e *engine) navBase(r0 *Run) *navBase {
+	b := &navBase{r0: r0}
+	b.ds, b.cs, b.entropy = baseSchedule(r0)
+	b.cc, b.inst, _ = e.checker()
+	return b
+}
+
+// serve is a navigation session (GOTOGETHER_NAV=serve): requests from
+// GOTOGETHER_NAV_IN (else stdin), one validate.RunRequest a line, each
+// answered by a validate.RunResponse line on GOTOGETHER_NAV_OUT (else
+// stdout), after a first line naming the session, until the input ends.
+// The base run is made a second time first (an exploration's first seed
+// is): a run that does not replay fails t, and the session says so, since
+// none of its nodes would be what it shows.
+func (e *engine) serve(b *navBase, base planned) {
+	t := e.t
+	t.Helper()
+	in, out := io.Reader(os.Stdin), io.Writer(os.Stdout)
+	if p := os.Getenv("GOTOGETHER_NAV_IN"); p != "" {
+		f, err := os.Open(p)
+		if err != nil {
+			t.Fatalf("gotogether: GOTOGETHER_NAV_IN: %v", err)
+		}
+		defer f.Close()
+		in = f
+	}
+	if p := os.Getenv("GOTOGETHER_NAV_OUT"); p != "" {
+		f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+		if err != nil {
+			t.Fatalf("gotogether: GOTOGETHER_NAV_OUT: %v", err)
+		}
+		defer f.Close()
+		out = f
+	}
+	enc := json.NewEncoder(out)
+	enc.SetEscapeHTML(false)
+	send := func(r validate.RunResponse) {
+		if err := enc.Encode(r); err != nil {
+			t.Fatalf("gotogether: GOTOGETHER_NAV=serve: %v", err)
+		}
+	}
+	hello := &validate.RunSession{Run: e.x.ref() + ":" + b.r0.ID(), Choices: len(b.cs)}
+	again := base.chooser
+	if base.again != nil {
+		again = func() qenv.Chooser { return base.again(b.r0) }
+	}
+	if r := e.one(again()); r == nil {
+		t.FailNow()
+	} else if d := sameRun(b.r0, r); d != "" || errText(b.r0.Err) != errText(r.Err) {
+		if d == "" {
+			d = "its end: " + errText(b.r0.Err) + ", then " + errText(r.Err)
+		}
+		msg := fmt.Sprintf("%s ran twice made two runs, first different at %s: the system is not deterministic, so no node replays", e.x.nameOf(b.r0), d)
+		t.Errorf("gotogether: %s", msg)
+		hello.Notes = append(hello.Notes, msg)
+	}
+	if b.entropy {
+		hello.Notes = append(hello.Notes, entropyNote)
+	}
+	send(validate.RunResponse{Session: hello})
+	sc := bufio.NewScanner(in)
+	sc.Buffer(make([]byte, 0, 64<<10), 16<<20)
+	for sc.Scan() {
+		line := bytes.TrimSpace(sc.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		var req validate.RunRequest
+		if err := json.Unmarshal(line, &req); err != nil {
+			send(validate.RunResponse{Error: fmt.Sprintf("a request is one JSON object a line (validate.RunRequest): %v", err)})
+			continue
+		}
+		node, err := e.navNode(b, req)
+		if err != nil {
+			send(validate.RunResponse{Error: err.Error()})
+			continue
+		}
+		send(validate.RunResponse{Node: node})
+	}
+	if err := sc.Err(); err != nil {
+		t.Fatalf("gotogether: GOTOGETHER_NAV=serve: reading requests: %v", err)
+	}
+}
+
+const entropyNote = "the base run drew entropy (qenv.EntropyOf), which a node's schedule does not replay: a node may diverge from it"
 
 // baseSchedule is r's choices as a schedule (its choices made otherwise
 // than nominal), and whether it drew entropy (which a schedule does not
@@ -175,66 +327,78 @@ func baseSchedule(r *Run) ([]deviation, []qenv.Choice, bool) {
 	return ds, cs, entropy
 }
 
-// navNode is the node GOTOGETHER_NAV names, from base run r0.
-func (e *engine) navNode(r0 *Run) (*validate.RunNode, error) {
-	t, x := e.t, e.x
-	ds, cs, entropy := baseSchedule(r0)
+// spec is the node req names from the base: its node (start, fail, @k,
+// an id), then its Follow and Take.
+func (e *engine) spec(b *navBase, req validate.RunRequest) (nodeSpec, error) {
 	var spec nodeSpec
-	switch v := os.Getenv("GOTOGETHER_NAV"); {
+	switch v := req.Node; {
 	case v == "" || v == "start":
 		spec = nodeSpec{nil, 0}
 	case v == "fail":
-		k, err := e.failingChoice(r0, cs)
+		k, err := e.failingChoice(b)
 		if err != nil {
-			return nil, err
+			return spec, err
 		}
-		spec = nodeSpec{fixed(ds, k), k}
+		spec = nodeSpec{fixed(b.ds, k), k}
 	case strings.HasPrefix(v, "@"):
 		k, err := strconv.Atoi(v[1:])
 		if err != nil || k < 0 {
-			return nil, fmt.Errorf("GOTOGETHER_NAV=%q: want start, fail, @<k> or <schedule>@<k>", v)
+			return spec, fmt.Errorf("node %q: want start, fail, @<k> or <schedule>@<k>", v)
 		}
-		spec = nodeSpec{fixed(ds, k), k}
+		spec = nodeSpec{fixed(b.ds, k), k}
 	default:
 		sched, at, ok := strings.Cut(v, "@")
 		k, err := strconv.Atoi(at)
 		if !ok || err != nil || k < 0 {
-			return nil, fmt.Errorf("GOTOGETHER_NAV=%q: want start, fail, @<k> or <schedule>@<k> (a node's id)", v)
+			return spec, fmt.Errorf("node %q: want start, fail, @<k> or <schedule>@<k> (a node's id)", v)
 		}
 		d, err := parseSchedule(sched)
 		if err != nil {
-			return nil, err
+			return spec, err
 		}
 		spec = nodeSpec{fixed(d, k), k}
 	}
-	for p := range strings.SplitSeq(os.Getenv("GOTOGETHER_NAV_FOLLOW"), ",") {
-		if p = strings.TrimSpace(p); p == "" {
-			continue
-		}
-		o, err := strconv.Atoi(p)
-		if err != nil || o < 0 {
-			return nil, fmt.Errorf("GOTOGETHER_NAV_FOLLOW %q: want options, comma-separated (0 nominal)", p)
+	follow := req.Follow
+	if req.Take != nil {
+		follow = append(slices.Clone(follow), *req.Take)
+	}
+	for _, o := range follow {
+		if o < 0 {
+			return spec, fmt.Errorf("follow %v: options are 0 (nominal) and up", follow)
 		}
 		spec = spec.child(o)
 	}
-	nc := &navChooser{f: &forcing{ds: spec.ds}, at: spec.at}
+	return spec, nil
+}
+
+// navNode is the node req names from the base: its replay, stopped (for
+// what the node shows) at its choice, judged whole.
+func (e *engine) navNode(b *navBase, req validate.RunRequest) (*validate.RunNode, error) {
+	t, x := e.t, e.x
+	spec, err := e.spec(b, req)
+	if err != nil {
+		return nil, err
+	}
+	onPath := func(s nodeSpec) bool { return slices.Equal(s.ds, fixed(b.ds, s.at)) }
+	nc := &navChooser{f: &forcing{ds: spec.ds}, at: spec.at, fold: req.Fold, base: b.cs, onPath: onPath(spec)}
 	r := e.one(nc)
 	if r == nil {
 		t.FailNow()
 	}
+	spec.at = nc.at // past the choices it folded
 	r.origin = origin{kind: "schedule", value: schedule(spec.ds)}
-	node := &validate.RunNode{Run: x.ref() + ":" + r0.ID(), ID: spec.id(), Schedule: schedule(spec.ds), At: spec.at, Branches: []validate.RunBranch{}, Steps: []string{}}
-	if entropy {
-		node.Notes = append(node.Notes, "the base run drew entropy (qenv.EntropyOf), which a node's schedule does not replay: a node may diverge from it")
+	node := &validate.RunNode{Run: x.ref() + ":" + b.r0.ID(), ID: spec.id(), Schedule: schedule(spec.ds), At: spec.at, Folded: nc.folded, Branches: []validate.RunBranch{}, Steps: []string{}}
+	if b.entropy {
+		node.Notes = append(node.Notes, entropyNote)
 	}
 	if r.Err != nil {
 		node.Notes = append(node.Notes, "the node's run did not run to its end: "+r.Err.Error())
 	}
 	// a node of the base's own choices replays them: the system is
 	// deterministic, or the node says where it is not
-	if slices.Equal(spec.ds, fixed(ds, spec.at)) {
-		for i := 0; i < spec.at && i < len(cs); i++ {
-			if i >= len(r.Choices) || r.Choices[i].Kind != cs[i].Kind || r.Choices[i].N != cs[i].N {
+	if onPath(spec) {
+		for i := 0; i < spec.at && i < len(b.cs); i++ {
+			if i >= len(r.Choices) || r.Choices[i].Kind != b.cs[i].Kind || r.Choices[i].N != b.cs[i].N {
 				node.Notes = append(node.Notes, fmt.Sprintf("the node's replay diverged from the base run at choice %d: the run is not deterministic, or draws entropy", i))
 				break
 			}
@@ -242,16 +406,16 @@ func (e *engine) navNode(r0 *Run) (*validate.RunNode, error) {
 	}
 	if nc.reached {
 		taken := 0
-		if spec.at < len(cs) && slices.Equal(spec.ds, fixed(ds, spec.at)) {
-			taken = cs[spec.at].Value
+		if spec.at < len(b.cs) && onPath(spec) {
+			taken = b.cs[spec.at].Value
 		}
 		node.Choice = &validate.RunChoice{Kind: nc.kind, N: nc.n, Options: nc.options, Taken: taken}
 		for o := range nc.n {
-			b := validate.RunBranch{Option: o, Child: spec.child(o).id()}
+			br := validate.RunBranch{Option: o, Child: spec.child(o).id()}
 			if o < len(nc.options) {
-				b.Name = nc.options[o]
+				br.Name = nc.options[o]
 			}
-			node.Branches = append(node.Branches, b)
+			node.Branches = append(node.Branches, br)
 		}
 		node.Elapsed = nc.elapsed
 		if nc.tasks != "" {
@@ -264,14 +428,13 @@ func (e *engine) navNode(r0 *Run) (*validate.RunNode, error) {
 	for _, s := range nc.before {
 		node.Steps = append(node.Steps, s.String())
 	}
-	cc, inst, _ := e.checker()
-	node.Model = actorStates(cc, nc.before)
-	judge(t, cc, inst, e.c.searchOptions(), []*Run{r}, func(*Run) string { return "the node's run " + node.ID })
+	node.Model = actorStates(b.cc, nc.before)
+	judge(t, b.cc, b.inst, e.c.searchOptions(), []*Run{r}, func(*Run) string { return "the node's run " + node.ID })
 	node.Verdict = "pass"
 	if !r.Report.OK() {
 		node.Verdict = r.Report.Reason()
 	}
-	if os.Getenv("GOTOGETHER_NAV_SAVE") == "1" {
+	if req.Save {
 		if x.corpus == "" {
 			node.Notes = append(node.Notes, "not saved: the exploration has no corpus (ExploreConfig.Corpus)")
 		} else if p, err := x.save(r); err != nil {
@@ -290,13 +453,13 @@ func (e *engine) checker() (*validate.Checker, string, map[string]string) {
 	return instanceChecker(e.t, e.binding, o, e.c)
 }
 
-// failingChoice is the last choice r0 made before its failing step was
+// failingChoice is the last choice the base run made before its failing step was
 // recorded (index among cs, its choices but entropy): the decision
 // nearest the failure. A run that passes has none.
-func (e *engine) failingChoice(r0 *Run, cs []qenv.Choice) (int, error) {
-	cc, inst, _ := e.checker()
+func (e *engine) failingChoice(b *navBase) (int, error) {
+	r0, cs := b.r0, b.cs
 	r := *r0
-	judge(e.t, cc, inst, e.c.searchOptions(), []*Run{&r}, func(*Run) string { return "the run" })
+	judge(e.t, b.cc, b.inst, e.c.searchOptions(), []*Run{&r}, func(*Run) string { return "the run" })
 	if r.Report.OK() {
 		return 0, fmt.Errorf("%s passes: there is no failing step to open (GOTOGETHER_NAV=start opens its first choice)", e.x.nameOf(r0))
 	}

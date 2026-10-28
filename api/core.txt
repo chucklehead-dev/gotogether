@@ -2144,6 +2144,7 @@ type NavStart struct
     field Actor string
     field At int
 type Navigator struct
+    method (*Navigator) Fold(path ...string) (*Node, error)
     method (*Navigator) Node(path ...string) (*Node, error)
 type Node struct
     field ID string `json:"id"`
@@ -2154,6 +2155,7 @@ type Node struct
     field Invariants []NamedValue `json:"invariants,omitempty"`
     field Branches []Edge `json:"branches"`
     field Disabled []Disabled `json:"disabled,omitempty"`
+    field Folded int `json:"folded,omitempty"`
     method (*Node) String() string
 type Options struct
     field Quint string
@@ -2245,6 +2247,7 @@ type RunNode struct
     field Elapsed string `json:"elapsed,omitempty"`
     field Model []ActorState `json:"model,omitempty"`
     field Verdict string `json:"verdict"`
+    field Folded int `json:"folded,omitempty"`
     field Saved string `json:"saved,omitempty"`
     field Notes []string `json:"notes,omitempty"`
 type RunRecord struct
@@ -2256,6 +2259,20 @@ type RunRecord struct
     field Inputs []RunInput
     field Convert string
     field Artifacts []Artifact
+type RunRequest struct
+    field Node string `json:"node,omitempty"`
+    field Follow []int `json:"follow,omitempty"`
+    field Take *int `json:"take,omitempty"`
+    field Fold bool `json:"fold,omitempty"`
+    field Save bool `json:"save,omitempty"`
+type RunResponse struct
+    field Session *RunSession `json:"session,omitempty"`
+    field Node *RunNode `json:"node,omitempty"`
+    field Error string `json:"error,omitempty"`
+type RunSession struct
+    field Run string `json:"run"`
+    field Choices int `json:"choices"`
+    field Notes []string `json:"notes,omitempty"`
 type RunVerdict struct
     field Verdict Verdict `json:"verdict"`
     field Reason string `json:"reason,omitempty"`

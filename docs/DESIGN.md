@@ -4100,6 +4100,28 @@ The navigators share the explanation and the transitions.
   end, Charm's libraries) is a module of its own, kept out of the core:
   it reads the same types (validate.Node, validate.RunNode) and drives the
   same commands.
+- **Sessions** (`GOTOGETHER_NAV=serve`): a node cost a go test process
+  (seconds: the build check, the binary's start, quint's checker), where
+  its replay is milliseconds. A session is the test binary answering
+  requests (`validate.RunRequest`: a node, options to follow, fold,
+  save) a line at a time with `validate.RunResponse` lines, the base run
+  made once and again first (the first-seed-twice check: a base that
+  does not replay fails the test and the session's first line says so),
+  the checker kept, every node still a replay from the start (a node
+  reached twice is the same replay, not a cached answer: a session hides
+  no nondeterminism), its verdict cached by its steps (judge's cache). A
+  front end runs the compiled binary (`go test -c`): go test buffers a
+  passing package's output.
+- **Folding**: a model's node folds its single branches until a node of
+  several (`Navigator.Fold`: a state seen again or a thousand
+  transitions stop it; Changed is against the state it folded from); a
+  run's node folds the choices that are no decision, those of one
+  option and those made nominally where the base run made them
+  nominally too, to the base run's next choice made otherwise (on its
+  path: the next decision the run made), or to the run's end off it,
+  where every later choice is nominal. One replay either way: the
+  chooser moves its snapshot's choice past each folded one. Both say how
+  many they folded.
 - **Tests that fail without it**: the limiter's rejection names
   `admitted.size() < LIMIT` with its values, by Check and CheckBatch
   (TestRejectionNamesTheConjunct), none under GOTOGETHER_EVAL=quint; the
@@ -4108,4 +4130,7 @@ The navigators share the explanation and the transitions.
   append (its TestMutant); the info lines (TestLinearizeHintOnlyWhereItApplies,
   TestActorsLeftOutNotInSummary); the navigators (TestNavBranchesAgainstBruteForce,
   TestNavNodeJSON, TestNavRun: a node by its id and by following equal,
-  fail's node, its nominal child passing; TestNavFromValidate).
+  fail's node, its nominal child passing; TestNavFromValidate); folding
+  (TestNavFold, TestNavFoldFlag) and sessions (TestNavServe: a node by
+  its id and by following equal, a fold to the base run's next decision
+  and, off its path, to the end; TestNavServeNondeterministic).

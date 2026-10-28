@@ -76,8 +76,13 @@ AGENTS.md has the general requirements.
   With it, `GOTOGETHER_NAV` (start, fail, `@k`, `<schedule>@k`) navigates
   that run instead (DESIGN §58): `GOTOGETHER_NAV_FOLLOW` options taken
   from the node, the node's JSON to `GOTOGETHER_NAV_OUT`,
-  `GOTOGETHER_NAV_SAVE=1` its run to the corpus; `gotogether nav -run`
-  sets them.
+  `GOTOGETHER_NAV_SAVE=1` its run to the corpus, `GOTOGETHER_NAV_FOLD=1`
+  folds its linear stretch; `gotogether nav -run` sets them.
+  `GOTOGETHER_NAV=serve` is a session: `validate.RunRequest` lines from
+  stdin (or the file `GOTOGETHER_NAV_IN`), `validate.RunResponse` lines
+  to stdout (or `GOTOGETHER_NAV_OUT`) until the input ends; run the
+  compiled test binary (`go test -c`), not `go test`, which hides a
+  passing test's output.
   `GOTOGETHER_EVIDENCE=dir` writes each exploration's evidence
   (`gotogether.evidence/2`, with its role: faithful, mutant, replay) as
   dir/<package>/<test>/x<N>.json (the package as its directory in its

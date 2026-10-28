@@ -187,3 +187,51 @@ func TestNavNodeJSON(t *testing.T) {
 		t.Errorf("a rejected call: %v", err)
 	}
 }
+
+// Fold takes a linear stretch in one move: the ticks model's five ticks
+// from init (tick its only branch until fire is enabled), Changed
+// against the state it folded from; a node with several branches folds
+// nothing, and a cycle of single branches (fire at the end, which keeps
+// the state) stops before the state repeats.
+func TestNavFold(t *testing.T) {
+	t.Parallel()
+	skip.Quint(t)
+	c, err := NewChecker("testdata/ticks.yaml", Options{Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, err := c.Nav(NavStart{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nd, err := n.Fold()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nd.Folded != 5 || nd.ID != "tick,tick,tick,tick,tick" || len(nd.Branches) != 2 || !slices.Equal(nd.Changed, []string{"c"}) {
+		t.Fatalf("folded from init: %+v", nd)
+	}
+	// the same node by its path, unfolded
+	byPath, err := n.Node(SplitPath(nd.ID)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(byPath.State) != fmt.Sprint(nd.State) || byPath.Folded != 0 {
+		t.Errorf("by its path: %+v", byPath)
+	}
+	again, err := n.Fold(SplitPath(nd.ID)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Folded != 0 || again.ID != nd.ID || len(again.Changed) != 1 {
+		t.Errorf("a node of two branches folds nothing: %+v", again)
+	}
+	// ten ticks: only fire, which keeps the state
+	end, err := n.Fold(SplitPath(strings.Repeat("tick,", 9) + "tick")...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if end.Folded != 0 || len(end.Branches) != 1 || end.Branches[0].Action != "fire" {
+		t.Errorf("a cycle of single branches: %+v", end)
+	}
+}

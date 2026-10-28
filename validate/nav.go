@@ -56,6 +56,9 @@ type Node struct {
 	Invariants []NamedValue `json:"invariants,omitempty"`
 	Branches   []Edge       `json:"branches"`
 	Disabled   []Disabled   `json:"disabled,omitempty"`
+	// Folded is how many transitions Fold took past its path (the node's
+	// Changed are then against the state it folded from)
+	Folded int `json:"folded,omitempty"`
 }
 
 // An Edge is a branch of a node: a transition of the model's step. Take
@@ -202,22 +205,86 @@ func SplitPath(s string) []string {
 // branch's Take (or its Label, or an action's bare name when one branch
 // applies it, or #n for the n-th branch, from 1), taken in turn.
 func (n *Navigator) Node(path ...string) (*Node, error) {
-	s := n.start
-	var prev qeval.State
-	var taken []string
-	for i, p := range path {
+	s, prev, taken, err := n.walk(path)
+	if err != nil {
+		return nil, err
+	}
+	return n.node(s, prev, taken)
+}
+
+// maxFold bounds a fold: a model whose single branches go on forever
+// (a clock's tick) stops after as many.
+const maxFold = 1000
+
+// Fold is the node path reaches, then the only branch of each node
+// after it taken until a node with none or several: a linear stretch of
+// the model folded into one move, its Folded the transitions taken past
+// path and its Changed against the state path reached. A state seen
+// again (a cycle of single branches) or maxFold transitions stop it.
+func (n *Navigator) Fold(path ...string) (*Node, error) {
+	s, prev, taken, err := n.walk(path)
+	if err != nil {
+		return nil, err
+	}
+	from, folded := s, 0
+	seen := map[string]bool{n.key(s): true}
+	for folded < maxFold {
 		edges, ts, err := n.edges(s)
 		if err != nil {
 			return nil, err
 		}
+		if len(edges) != 1 {
+			break
+		}
+		next := ts[0].State
+		k := n.key(next)
+		if seen[k] {
+			break
+		}
+		seen[k] = true
+		s = next
+		taken = append(taken, edges[0].Take)
+		folded++
+	}
+	if folded > 0 {
+		prev = from
+	}
+	nd, err := n.node(s, prev, taken)
+	if err != nil {
+		return nil, err
+	}
+	nd.Folded = folded
+	return nd, nil
+}
+
+// key is s as one string: its variables' values in the model's order.
+func (n *Navigator) key(s qeval.State) string {
+	var b strings.Builder
+	for _, v := range n.e.m.Vars {
+		b.WriteString(qeval.String(s[v]))
+		b.WriteByte(0)
+	}
+	return b.String()
+}
+
+// walk takes path from the start: the state it reaches, the state before
+// its last transition (nil for none), and its transitions as branches'
+// Take name them.
+func (n *Navigator) walk(path []string) (s, prev qeval.State, taken []string, err error) {
+	s = n.start
+	for i, p := range path {
+		edges, ts, err := n.edges(s)
+		if err != nil {
+			return nil, nil, nil, err
+		}
 		k, err := pick(edges, p)
 		if err != nil {
-			return nil, fmt.Errorf("nav: step %d of the path (%s): %w", i+1, p, err)
+			return nil, nil, nil, fmt.Errorf("nav: step %d of the path (%s): %w", i+1, p, err)
 		}
 		prev, s = s, ts[k].State
 		taken = append(taken, edges[k].Take)
 	}
-	return n.node(s, prev, taken)
+	return s, prev, taken, nil
 }
 
 // pick is the branch p names among edges.
@@ -402,6 +469,9 @@ type RunNode struct {
 	// Verdict is the whole run the node makes (nominal after it):
 	// "pass", or its report's reason
 	Verdict string `json:"verdict"`
+	// Folded is how many choices the node advanced through to reach At,
+	// asked to fold (RunRequest.Fold): choices that were no decision
+	Folded int `json:"folded,omitempty"`
 	// Saved is the corpus entry the node's run was saved to
 	// (GOTOGETHER_NAV_SAVE), Notes what else is to know
 	Saved string   `json:"saved,omitempty"`
@@ -431,4 +501,37 @@ type ActorState struct {
 	Actor string       `json:"actor"`
 	State []NamedValue `json:"state,omitempty"`
 	Error string       `json:"error,omitempty"`
+}
+
+// A RunRequest asks a run navigation session (GOTOGETHER_NAV=serve: the
+// test binary reads one a line) for a node: Node as GOTOGETHER_NAV names
+// one ("" or start, fail, @k, <schedule>@k), then the options of Follow
+// and Take taken in turn (as GOTOGETHER_NAV_FOLLOW); Fold advances it
+// through the choices that are no decision (one option, or nominal where
+// the base run's are too) to the next that is; Save keeps its run in the
+// exploration's corpus.
+type RunRequest struct {
+	Node   string `json:"node,omitempty"`
+	Follow []int  `json:"follow,omitempty"`
+	Take   *int   `json:"take,omitempty"`
+	Fold   bool   `json:"fold,omitempty"`
+	Save   bool   `json:"save,omitempty"`
+}
+
+// A RunResponse is a session's line: first its Session, before any
+// request, then for each request its Node or the Error that it named
+// none (the session goes on).
+type RunResponse struct {
+	Session *RunSession `json:"session,omitempty"`
+	Node    *RunNode    `json:"node,omitempty"`
+	Error   string      `json:"error,omitempty"`
+}
+
+// A RunSession names the run a session navigates and how many choices
+// its base run made (but entropy); Notes say what to know of every node
+// (the base run drew entropy, or did not replay).
+type RunSession struct {
+	Run     string   `json:"run"`
+	Choices int      `json:"choices"`
+	Notes   []string `json:"notes,omitempty"`
 }

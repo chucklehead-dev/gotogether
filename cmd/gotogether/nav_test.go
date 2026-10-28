@@ -65,3 +65,21 @@ func TestNavFromValidate(t *testing.T) {
 		t.Errorf("after release(\"a\"):\n%s", buf.String())
 	}
 }
+
+// -fold takes a model's linear stretch in one call: the ticks model's
+// five ticks from init, to the node where fire is enabled too.
+func TestNavFoldFlag(t *testing.T) {
+	t.Parallel()
+	skip.Quint(t)
+	var buf bytes.Buffer
+	if code, err := nav(&buf, []string{"-binding", "../../validate/testdata/ticks.yaml", "-fold", "-json"}); err != nil || code != 0 {
+		t.Fatalf("nav -fold: %d %v", code, err)
+	}
+	var node validate.Node
+	if err := json.Unmarshal(buf.Bytes(), &node); err != nil {
+		t.Fatalf("%v: %s", err, buf.String())
+	}
+	if node.Folded != 5 || len(node.Branches) != 2 || node.State[0].Value != "5" {
+		t.Errorf("folded from init: %s", buf.String())
+	}
+}
