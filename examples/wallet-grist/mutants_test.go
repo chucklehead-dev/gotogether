@@ -6,17 +6,18 @@ import (
 	"github.com/chucklehead-dev/gotogether/grist/gristtest"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtest"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // mutants are examples/wallet's mutants that grist lets an application
-// write, and one of the ledger's, each a directory of testdata/mutants/
+// write, and two of the ledger's, each a directory of testdata/mutants/
 // whose files replace the app's of the same name (a go build overlay).
 // NoDedupe and UnlockedRecord are not among them: the request record is
 // grist's marker, which no application code reads or writes. WriteSkew
 // is readThenWrite's skew shape: a conditioned read cannot be left out of
 // the condition, so the only skew an application can write is a whole
 // command Unconditioned.
-var mutants = []string{"noValidation", "readThenWrite", "noOutbox", "ledgerNoDedupe", "replicaRead"}
+var mutants = []string{"noValidation", "readThenWrite", "noOutbox", "ledgerNoDedupe", "ledgerAcksUnposted", "replicaRead"}
 
 // TestMutant states what catches the mutant this binary was built with;
 // TestMutants builds and runs it once per mutant. The faithful app passes
@@ -72,6 +73,19 @@ func TestMutant(t *testing.T) {
 		// crashes so: every run rejects, at one seed per push
 		system(commits, deposits).Explore(t, qtest.ExploreConfig{Seeds: seeds(3, 1), Chooser: crashAfterPost}).
 			Expect(t, qtest.All(qtest.Rejects("ledgerPostServed")))
+	case "ledgerAcksUnposted":
+		// a proxy answering every post booked without posting: every step
+		// the model's actions judge is admitted (the call's answer is the
+		// ledger's to give, the effect ok, the checkpoint after it), and
+		// postedApplied holds of no posts at all. Only the generated
+		// obligation ledgerPostEventuallyServed (every answered call of a
+		// Keyed dependency has its served record) says the ledger must
+		// have posted what it answered: no val of the default binding written
+		// by hand catches it (the test-only everyMovePostedOnce would, in
+		// runs without the ledger's faults)
+		system(commits, deposits).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(3, 1)}).
+			Expect(t, qtest.All(qtest.Settles()), qtest.All(qtest.Violates(validate.EventuallyName("ledgerPostEventuallyServed"))),
+				qtest.None(qtest.Violates(validate.EventuallyName("postEventuallyHandled"))), qtest.None(qtest.Violates(validate.EventuallyName("postedApplied"))))
 	case "replicaRead":
 		// a balance read from the ledger's postings misses a deposit not
 		// posted yet

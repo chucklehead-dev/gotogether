@@ -5,6 +5,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/gristsim"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 // doubles are the runs' doubles of the App's dependencies: the mutant
@@ -14,3 +15,6 @@ func doubles() gristsim.Doubles {
 		return Booked{}, nil
 	})}}
 }
+
+// front is nothing, as the app's own: every call reaches the ledger.
+func front(*qenv.Sim, grist.Store) func(context.Context) context.Context { return nil }
