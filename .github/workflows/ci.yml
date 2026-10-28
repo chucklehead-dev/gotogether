@@ -151,7 +151,7 @@ jobs:
           examples/lease/run-demo.sh
           MUTATION=wall-interval CLOCKS=1 examples/lease/run-demo.sh && exit 1 || true
           MUTATION=no-fencing DRIFT=0.25 examples/lease/run-demo.sh && exit 1 || true
-          MUTATION=no-dedupe examples/hello/run-demo.sh && exit 1 || true
+          MUTANT=noDedupe examples/hello/run-demo.sh && exit 1 || true
           examples/retrystorm/run-demo.sh
           examples/counters/run-demo.sh && MUTATION=blind examples/counters/run-demo.sh
 
