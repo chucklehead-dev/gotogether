@@ -1567,6 +1567,7 @@ const FateKilled = validate.FateKilled
 const FateMalformed = validate.FateMalformed
 const FateSurvived = validate.FateSurvived
 const FateUndecided = validate.FateUndecided
+const MutantEnv = "GOTOGETHER_MUTANT"
 const RoleExternal = evidence.RoleExternal
 const RoleFaithful = evidence.RoleFaithful
 const RoleMutant = evidence.RoleMutant
@@ -1594,6 +1595,7 @@ func LinearizeBudget(n int) Option
 func LinearizeByKey(arg string) Option
 func ManifestEvidence(m *validate.Manifest) *Evidence
 func Mismatch(action string) Expectation
+func Mutant() string
 func MutateSteps(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...Option) *StepMutationReport
 func NamedScenario(name string, steps ...Take) Expectation
 func NoSurvivors(equivalent ...string) MutationClaim
@@ -1647,6 +1649,11 @@ type CaseCheck struct
     field Recorder []qobs.Option
     field Global bool
     field SkipIfEmpty bool
+type Catalog struct
+    field Name string
+    field Takes []Take
+    method (Catalog) Exercised(except ...string) TakeEach
+    method (Catalog) Take(name string) Take
 type Claim interface
     judge(reports []*validate.Report) judgment
     String() string
@@ -1703,6 +1710,16 @@ type FaultMap map[string]func(s *connect.Step) *Fault
 type ModelCoverage struct
     field Taken map[string]int `json:"taken"`
     field Never []string `json:"never,omitempty"`
+type Mutants struct
+    field Dir string
+    field Package string
+    field Test string
+    field FullOnly []string
+    field Generated []string
+    field Show []string
+    method (Mutants) Names(t testing.TB) []string
+    method (Mutants) Overlay(t testing.TB, name string) string
+    method (Mutants) Run(t *testing.T)
 type MutationClaim struct
 type MutationReport struct
     field Unreached []qmut.Mutant

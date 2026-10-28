@@ -8,6 +8,24 @@ core's exported API updates `api/core.txt` and adds a line here.
 
 The first release. What a user meets, by module:
 
+- `qtest.Mutants`, `qtest.Mutant()`, `qtest.MutantEnv`
+  (`GOTOGETHER_MUTANT`), ROADMAP H4: the overlay mutant harness, moved
+  from grist's gristtest into the core, so a hand-planted mutant is one
+  way for every system (`testdata/mutants/<name>/` files replacing the
+  package's of the same names, a `go test -overlay` per mutant running
+  `TestMutant`, which switches on `qtest.Mutant()`). Its mutants are
+  found from the directories of `testdata/mutants` (`Mutants.Names`),
+  not listed; `Package` names the directory a harness package's mutants
+  replace files of, `Overlay(t, name)` gives the overlay to `go build` a
+  mutant program, `Generated` are mutants a binary makes of itself (grist's
+  dropped rules), `Show` the output lines to log. `Mutant()` ignores
+  qmut's values of the same variable (a number, `list`).
+- `qtest.Catalog` (ROADMAP H4): a system's blocks by outcome, a Take
+  each with its hint, and its claims `Catalog.Exercised(except...)`
+  (every Take but those excepted, by name or action) and
+  `Catalog.Take(name)`: the twins of the model-wide `Exercised` and
+  `Takes`, which grist's `gristtest.Exercised` and `gristtest.Takes`
+  were (`gristtest.Catalog(App)` builds one).
 - grist (GR10 slice 1): a served node records as
   `<app>/<node>/<incarnation>` (`grist.Identity`, `NewIdentity`, which
   mints a fresh incarnation on every call, `WithIdentity`; Namespace,
