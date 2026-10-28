@@ -52,7 +52,7 @@ type Recorder struct {
 	process string
 
 	mu          sync.Mutex
-	interrupted []qtrace.Step    // SetDiscard
+	interrupted []qtrace.Step    // discarded (hooks.Site)
 	threads     map[string]int64 // a Thread's goroutine
 	issues      []string
 	late        []qtrace.Step // recorded after Close
@@ -151,7 +151,7 @@ func (r *Recorder) checkThread(thread, action string) {
 
 // Interrupted returns the steps this recorder was asked to record by work
 // that never completed (a qenv task unwinding after a crash or at the end
-// of a run: SetDiscard), in the order asked. They are not in the run and
+// of a run: hooks.Site's Discard), in the order asked. They are not in the run and
 // not checked against the model: they say what a crash or the end of the
 // run cut off, for reports.
 func (r *Recorder) Interrupted() []qtrace.Step {
@@ -290,7 +290,7 @@ func Record(ctx context.Context, action string, err error, kv ...any) {
 		r.Record(ctx, action, err, kv...)
 		return
 	}
-	if hooks.Discarding() {
+	if hooks.SiteOf(ctx).Discard {
 		return // interrupted work with nowhere to report it
 	}
 	if hooks.StrictOn() {
@@ -408,8 +408,9 @@ func (r *Recorder) record(ctx context.Context, action string, err error, kv []an
 		return
 	}
 	s.Call = call
-	if hooks.Discarding() {
-		s.Time = hooks.Now()
+	site := hooks.SiteOf(ctx)
+	if site.Discard {
+		s.Time = site.Now()
 		r.mu.Lock()
 		r.interrupted = append(r.interrupted, *s)
 		r.mu.Unlock()
@@ -418,7 +419,7 @@ func (r *Recorder) record(ctx context.Context, action string, err error, kv []an
 	// seq is taken here, after the effect the step describes has happened.
 	// Two concurrent steps may be numbered in either order, but their
 	// times are in the same one (stamp).
-	s.Seq, s.Time = r.stamp()
+	s.Seq, s.Time = r.stamp(site)
 	r.write(ctx, s)
 }
 
@@ -426,10 +427,10 @@ func (r *Recorder) record(ctx context.Context, action string, err error, kv []an
 // order is its steps' time order: qtrace orders one recorder's steps by
 // seq, Linearize reads its records' order as the calls' real-time order,
 // and a within bound is judged along that order on the steps' times.
-func (r *Recorder) stamp() (uint64, time.Time) {
+func (r *Recorder) stamp(site hooks.Site) (uint64, time.Time) {
 	r.stampMu.Lock()
 	defer r.stampMu.Unlock()
-	return r.seq.Add(1), hooks.Now()
+	return r.seq.Add(1), site.Now()
 }
 
 // A Call is an operation recorded when it is invoked (Invoke): its
@@ -470,7 +471,8 @@ func (r *Recorder) Invoke(ctx context.Context, action string, kv ...any) *Call {
 		return nil
 	}
 	c := &Call{r: r, ctx: ctx, action: action, kv: append([]any(nil), expand(kv)...)}
-	if hooks.Discarding() {
+	site := hooks.SiteOf(ctx)
+	if site.Discard {
 		return c // interrupted work: its Done, if any, goes to Interrupted
 	}
 	var keys []any // "when" is the completion's: the invocation is recorded whatever
@@ -481,7 +483,7 @@ func (r *Recorder) Invoke(ctx context.Context, action string, kv ...any) *Call {
 	}
 	s, _ := r.step(ctx, action, nil, keys)
 	s.Invocation, s.Outcome = true, ""
-	c.seq, s.Time = r.stamp()
+	c.seq, s.Time = r.stamp(site)
 	s.Seq = c.seq
 	r.write(ctx, s)
 	return c
@@ -522,11 +524,15 @@ func Settled(ctx context.Context) {
 
 // Settled records that the system has settled (the package's Settled).
 func (r *Recorder) Settled(ctx context.Context) {
-	if r == nil || hooks.Discarding() {
+	if r == nil {
+		return
+	}
+	site := hooks.SiteOf(ctx)
+	if site.Discard {
 		return
 	}
 	s := &qtrace.Step{Action: "settled", Recorder: r.id, Actor: r.actor, Process: r.process, Settled: true}
-	s.Seq, s.Time = r.stamp()
+	s.Seq, s.Time = r.stamp(site)
 	r.write(ctx, s)
 }
 
@@ -547,10 +553,14 @@ func CompleteThrough(ctx context.Context, t time.Time) {
 // acknowledgement of everything up to t. A watermark is a record, not a
 // step, and takes no seq. A log that states none is taken whole.
 func (r *Recorder) CompleteThrough(ctx context.Context, t time.Time) {
-	if r == nil || hooks.Discarding() || t.IsZero() {
+	if r == nil || t.IsZero() {
 		return
 	}
-	s := &qtrace.Step{Action: "complete", Recorder: r.id, Actor: r.actor, Process: r.process, CompleteThrough: t, Time: hooks.Now()}
+	site := hooks.SiteOf(ctx)
+	if site.Discard {
+		return
+	}
+	s := &qtrace.Step{Action: "complete", Recorder: r.id, Actor: r.actor, Process: r.process, CompleteThrough: t, Time: site.Now()}
 	r.write(ctx, s)
 }
 

@@ -28,6 +28,7 @@ type Bytes struct {
 	buf     []byte
 	ended   bool
 	err     error
+	checked checked
 }
 
 // BytesVersion is the version of the byte rule. EncodeChoices writes it in
@@ -98,7 +99,7 @@ func (b *Bytes) Choose(kind string, n int) int {
 		}
 		return v % n
 	}
-	if b.byte() < int(256*(1-b.Rates.Of(kind))) {
+	if b.byte() < int(256*(1-b.checked.of(b.Rates, kind))) {
 		return 0
 	}
 	v := 1

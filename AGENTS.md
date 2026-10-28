@@ -513,7 +513,7 @@ working there:
   deferred code runs), and unwinds at `Close`. Steps recorded while it
   unwinds (`//quint:action` records on return) are not in the run: they
   go to `Recorder.Interrupted`, and `System.Explore` reports them with a
-  failing run (`hooks.SetDiscard`). A task that crashes its own process
+  failing run (`hooks.Site`'s Discard). A task that crashes its own process
   stops in `Crash`; restart from an `OnCrash` hook.
 - A step recorded by the caller on return describes what the caller saw.
   An effect the model must see whether or not its caller survives (a

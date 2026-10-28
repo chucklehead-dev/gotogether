@@ -22,21 +22,48 @@ import (
 
 // Process-wide: the hooks qenv installs, and the strict runs in progress.
 var (
-	discard atomic.Pointer[func() bool]
-	strict  atomic.Int64
+	site   atomic.Pointer[func(context.Context) Site]
+	strict atomic.Int64
 )
 
-// SetDiscard installs a check, made for every step, of whether the
-// calling goroutine is unwinding work that never completed: a qenv task
-// killed by a crash, unwinding when its simulation closes. A step recorded
-// there would claim a completion that did not happen. qenv installs it.
-func SetDiscard(f func() bool) { discard.Store(&f) }
+// A Clock is a simulation's clock, as a step's time is read from it.
+type Clock interface{ Now() time.Time }
 
-// Discarding reports whether the calling goroutine's steps are discarded
-// (SetDiscard's check).
-func Discarding() bool {
-	f := discard.Load()
-	return f != nil && (*f)()
+// A Site is where a step is recorded, as qenv finds it (SetSite): the
+// clock its time is read from, a simulation's (nil: the wall clock), and
+// whether the step is discarded, recorded by work unwinding that never
+// completed (a qenv task killed by a crash, unwinding when its simulation
+// closes), whose step would claim a completion that did not happen.
+type Site struct {
+	Clock   Clock
+	Discard bool
+}
+
+// Now is the time a step recorded now at the site carries: its
+// simulation's, else the wall clock's.
+func (s Site) Now() time.Time {
+	if s.Clock != nil {
+		return s.Clock.Now()
+	}
+	return time.Now()
+}
+
+// SetSite installs qenv's lookup of where a step is recorded: the
+// simulation task the context carries, else the calling goroutine's (a
+// task's, or the goroutine that created the simulation), so that a step
+// recorded in a simulation carries the simulation's virtual time, not the
+// wall clock's, and a client history recorded there has intervals to
+// linearize. One lookup serves both the discard check and the clock, and
+// the context comes first: the goroutine's id costs microseconds.
+func SetSite(f func(context.Context) Site) { site.Store(&f) }
+
+// SiteOf is where a step recorded with ctx is recorded (SetSite's lookup;
+// the wall clock and no discard without one).
+func SiteOf(ctx context.Context) Site {
+	if f := site.Load(); f != nil {
+		return (*f)(ctx)
+	}
+	return Site{}
 }
 
 // Strict turns on, until release is called, the rule that a step must
@@ -437,27 +464,6 @@ func WithPanicStack(ctx context.Context, dst *TaskPanic) context.Context {
 func PanicStackOf(ctx context.Context) (*TaskPanic, bool) {
 	dst, ok := ctx.Value(panicKey{}).(*TaskPanic)
 	return dst, ok
-}
-
-// Process-wide: installed by qenv.
-var clock atomic.Pointer[func() (time.Time, bool)]
-
-// SetClock installs qenv's clock: the virtual time of the simulation the
-// calling goroutine belongs to (a task's, or its creator's), so a step
-// recorded in a simulation carries the simulation's time, not the wall
-// clock's, and a client history recorded there has intervals to
-// linearize.
-func SetClock(f func() (time.Time, bool)) { clock.Store(&f) }
-
-// Now is the time a step recorded now carries: the simulation's, else the
-// wall clock's.
-func Now() time.Time {
-	if f := clock.Load(); f != nil {
-		if t, ok := (*f)(); ok {
-			return t
-		}
-	}
-	return time.Now()
 }
 
 // CompleteSearchOnly makes qtrace's linearization skip its guided search,

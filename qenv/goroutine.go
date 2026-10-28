@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 )
@@ -15,17 +14,32 @@ import (
 // recorder, so that context.Background() inside a simulation records into
 // the simulation's run (the resolver it installs). Go has no goroutine-local
 // storage; the goroutine id comes from the runtime's stack header, read
-// only when a task starts and on that fallback path.
+// only when a task starts and on that fallback path. The goroutines'
+// simulations are in shards by goroutine id (shardOf), each with its own
+// lock: parallel explorations' lookups do not wait on one another.
 // Process-wide.
 var owners struct {
-	sync.Mutex
-	m map[int64][]owner // a stack: a goroutine may create a simulation inside another's lifetime
+	sync.Mutex // ended's, taken before a shard's
 	// ended holds the contexts of tasks whose goroutines have exited,
 	// until their simulation closes: a goroutine a task started with `go`
 	// often outlives it, and its escaped steps still belong to the run
 	// (hooks.SetCreatorRun). Go never reuses a goroutine id.
 	ended map[int64]context.Context
 }
+
+// shards hold each goroutine's simulations: a stack, as a goroutine may
+// create a simulation inside another's lifetime.
+// Process-wide.
+var shards [64]ownerShard
+
+type ownerShard struct {
+	sync.RWMutex
+	m map[int64][]owner
+	_ [32]byte // a shard to a cache line
+}
+
+// shardOf is goroutine id's shard.
+func shardOf(id int64) *ownerShard { return &shards[uint64(id)%uint64(len(shards))] }
 
 // owner is a goroutine's simulation, and its task if it runs one (nil for
 // the goroutine that created the simulation).
@@ -40,35 +54,39 @@ type owner struct {
 var live atomic.Int64
 
 func init() {
-	owners.m = map[int64][]owner{}
+	for i := range shards {
+		shards[i].m = map[int64][]owner{}
+	}
 	owners.ended = map[int64]context.Context{}
 	hooks.SetCreatorRun(func(id int64) (context.Context, bool) {
-		owners.Lock()
-		defer owners.Unlock()
-		if st := owners.m[id]; len(st) > 0 {
-			if o := st[len(st)-1]; o.t != nil {
+		if o, ok := ownerOf(id); ok {
+			if o.t != nil {
 				return o.t.ctx, true
 			}
-			return st[len(st)-1].s.base, true // the goroutine that created the simulation
+			return o.s.base, true // the goroutine that created the simulation
 		}
+		// (disown adds a task's goroutine here before it leaves its shard)
+		owners.Lock()
+		defer owners.Unlock()
 		ctx, ok := owners.ended[id]
 		return ctx, ok
 	})
-	hooks.SetDiscard(func() bool {
+	hooks.SetSite(func(ctx context.Context) hooks.Site {
 		if live.Load() == 0 {
-			return false
+			return hooks.Site{} // the per-step check costs an atomic load
 		}
-		o, ok := ownerOf(goid())
-		return ok && o.t != nil && o.t.killed
-	})
-	hooks.SetClock(func() (time.Time, bool) {
-		if live.Load() == 0 {
-			return time.Time{}, false
+		// the context's task first, as taskOf finds it: a task's step costs
+		// no goroutine lookup
+		if ctx != nil {
+			if t, ok := ctx.Value(ctxKey{}).(*task); ok {
+				return hooks.Site{Clock: t.sim, Discard: t.killed}
+			}
 		}
 		if o, ok := ownerOf(goid()); ok {
-			return o.s.Now(), true // true time: a process's clock may be skewed, a step's time is the run's
+			// true time: a process's clock may be skewed, a step's time is the run's
+			return hooks.Site{Clock: o.s, Discard: o.t != nil && o.t.killed}
 		}
-		return time.Time{}, false
+		return hooks.Site{}
 	})
 	hooks.SetResolver(func() (context.Context, bool) {
 		if live.Load() == 0 {
@@ -101,15 +119,19 @@ func current() (context.Context, bool) {
 func goid() int64 { return hooks.GoroutineID() }
 
 func own(id int64, s *Sim, t *task) {
-	owners.Lock()
-	owners.m[id] = append(owners.m[id], owner{s, t})
-	owners.Unlock()
+	sh := shardOf(id)
+	sh.Lock()
+	sh.m[id] = append(sh.m[id], owner{s, t})
+	sh.Unlock()
 }
 
 func disown(id int64, s *Sim) {
-	owners.Lock()
+	owners.Lock() // ended's, first: the goroutine is in ended before it leaves its shard
 	defer owners.Unlock()
-	st := owners.m[id]
+	sh := shardOf(id)
+	sh.Lock()
+	defer sh.Unlock()
+	st := sh.m[id]
 	for i := len(st) - 1; i >= 0; i-- {
 		if st[i].s == s {
 			if t := st[i].t; t != nil && !s.forgotten {
@@ -121,16 +143,17 @@ func disown(id int64, s *Sim) {
 		}
 	}
 	if len(st) == 0 {
-		delete(owners.m, id)
+		delete(sh.m, id)
 	} else {
-		owners.m[id] = st
+		sh.m[id] = st
 	}
 }
 
 func ownerOf(id int64) (owner, bool) {
-	owners.Lock()
-	defer owners.Unlock()
-	if st := owners.m[id]; len(st) > 0 {
+	sh := shardOf(id)
+	sh.RLock()
+	defer sh.RUnlock()
+	if st := sh.m[id]; len(st) > 0 {
 		return st[len(st)-1], true
 	}
 	return owner{}, false

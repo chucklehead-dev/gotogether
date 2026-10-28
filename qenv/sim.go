@@ -95,9 +95,19 @@ type Sim struct {
 	now       time.Time
 	start     time.Time
 	tasks     []*task // every task, in creation order (task id-1)
-	// options names the options of the choice being made, while the
-	// scheduler or a nemesis makes it (ChoiceOptions)
-	options   func() []string
+	// the choice being made, while the scheduler or a nemesis makes it,
+	// whose options ChoiceOptions names: a scheduling choice among optN
+	// runnable tasks (optCands the predicate waiters among them), or a
+	// family's nemeses (optFam). (A closure made at every step cost a step
+	// an allocation.)
+	optSched  bool
+	optN      int
+	optCands  []*task
+	optFam    *nemFam
+	fams      []nemFam  // the nemesis families, and their buffers (maybeNemesis)
+	famOrder  []int     // the families with a nemesis enabled at this step, in order
+	logLens   []logLen  // maybeNemesis's buffer
+	cands     []*task   // runnable's buffer of predicate waiters
 	checking  []*task   // the tasks selfCheck looks at: every task but those it saw ended and unqueued (Check)
 	runq      fenwick   // the queued runnable tasks, by id: k-th in O(log n)
 	pred      []*task   // tasks waiting on a predicate (evaluated every step)
@@ -262,8 +272,16 @@ type simObserver interface{ ObserveSim(*Sim) }
 // family's, "none" then the nemeses enabled; a declared fault kind's,
 // "nominal" then its options. nil for another choice, or outside one.
 func (s *Sim) ChoiceOptions(kind string) []string {
-	if s.options != nil {
-		return s.options()
+	if s.optSched {
+		ids := s.runnableIDs(s.optN, s.optCands)
+		out := make([]string, len(ids))
+		for i, id := range ids {
+			out[i] = s.tasks[id-1].name
+		}
+		return out
+	}
+	if s.optFam != nil {
+		return append([]string{"none"}, s.optFam.names()...)
 	}
 	if IsFault(kind) {
 		if o := choice.Options(kind); o != nil {
@@ -1132,16 +1150,9 @@ func (s *Sim) Run(d time.Duration) error {
 			}
 			eachLog(s.c, func(r *ChoiceLog) { r.Took("sched.task", n, k) }) // the choice it stands for: replays without it
 		} else {
-			s.options = func() []string {
-				ids := s.runnableIDs(n, cands)
-				out := make([]string, len(ids))
-				for i, id := range ids {
-					out[i] = s.tasks[id-1].name
-				}
-				return out
-			}
+			s.optSched, s.optN, s.optCands = true, n, cands
 			k = s.Choose("sched.task", n)
-			s.options = nil
+			s.optSched, s.optCands = false, nil
 		}
 		t := s.pick(k, cands)
 		s.ran = t.id
@@ -1301,7 +1312,7 @@ func (s *Sim) runnable() (int, []*task) {
 		heap.Pop(&s.timers)
 		s.enqueue(e.t)
 	}
-	var cands []*task
+	cands := s.cands[:0] // (valid until the next call: a step's)
 	keep := s.pred[:0]
 	for _, t := range s.pred {
 		if t.done || t.killed || !t.waiting || t.ready == nil {
@@ -1317,6 +1328,7 @@ func (s *Sim) runnable() (int, []*task) {
 	}
 	s.pred = keep
 	slices.SortFunc(cands, func(a, b *task) int { return cmp.Compare(a.id, b.id) })
+	s.cands = cands
 	return s.runq.total() + len(cands), cands
 }
 
@@ -1477,17 +1489,23 @@ func (s *Sim) selfCheck() {
 // acts (at most one a step). A chooser that picks nemeses by name (Script)
 // picks among all of them, and its pick is recorded as those choices.
 func (s *Sim) maybeNemesis() {
-	var fams []string
-	on := map[string][]*nemesis{}
+	// the enabled nemeses by family, in buffers kept from step to step (a
+	// nemesis is considered at every step)
+	order := s.famOrder[:0]
+	for i := range s.fams {
+		s.fams[i].ns = s.fams[i].ns[:0]
+	}
 	for _, n := range s.nemeses {
 		if n.enabled() && (s.core == nil || n.beyond(s.core)) {
-			if on[n.family] == nil {
-				fams = append(fams, n.family)
+			i := s.famIndex(n.family)
+			if len(s.fams[i].ns) == 0 {
+				order = append(order, i)
 			}
-			on[n.family] = append(on[n.family], n)
+			s.fams[i].ns = append(s.fams[i].ns, n)
 		}
 	}
-	if len(fams) == 0 || s.core == nil && (s.settling || s.faultsOff) {
+	s.famOrder = order
+	if len(order) == 0 || s.core == nil && (s.settling || s.faultsOff) {
 		return
 	}
 	var picked *nemesis
@@ -1495,8 +1513,8 @@ func (s *Sim) maybeNemesis() {
 	if by != nil {
 		var all []*nemesis
 		var names []string
-		for _, f := range fams {
-			for _, n := range on[f] {
+		for _, i := range order {
+			for _, n := range s.fams[i].ns {
 				all, names = append(all, n), append(names, n.name)
 			}
 		}
@@ -1504,39 +1522,37 @@ func (s *Sim) maybeNemesis() {
 			picked = all[k-1]
 		}
 	}
-	for _, f := range fams {
-		ns := on[f]
-		names := make([]string, len(ns))
-		for i, n := range ns {
-			names[i] = n.name
-		}
-		kind := "fault.nemesis." + f
+	for _, fi := range order {
+		f := &s.fams[fi]
+		ns := f.ns
 		k := 0
 		// the logs the choice reaches: a wrapper outside one (Without, a
 		// Swarm) may answer a family it turns off without asking it, and
 		// that log saw no choice, nor any nemesis offered
-		before := map[*ChoiceLog]int{}
-		eachLog(s.c, func(r *ChoiceLog) { before[r] = len(r.Choices) })
+		before := s.logLens[:0]
+		eachLog(s.c, func(r *ChoiceLog) { before = append(before, logLen{r, len(r.Choices)}) })
+		s.logLens = before
 		if by == nil && s.core != nil {
-			k = s.draw(kind, len(ns)+1) // a core settle: the nemeses left are outside the core
+			k = s.draw(f.kind, len(ns)+1) // a core settle: the nemeses left are outside the core
 		} else if by == nil {
-			s.options = func() []string { return append([]string{"none"}, names...) }
-			k = s.Choose(kind, len(ns)+1)
-			s.options = nil
+			s.optFam = f
+			k = s.Choose(f.kind, len(ns)+1)
+			s.optFam = nil
 		} else if i := slices.Index(ns, picked); i >= 0 {
 			k = i + 1
 		}
-		eachLog(s.c, func(r *ChoiceLog) {
+		for _, b := range before {
+			r := b.log
 			if by != nil { // the script chose: record it as the choices it stands for
-				r.Took(kind, len(ns)+1, k)
-			} else if len(r.Choices) == before[r] {
-				return
+				r.Took(f.kind, len(ns)+1, k)
+			} else if len(r.Choices) == b.n {
+				continue
 			}
-			r.Offer(names)
+			r.Offer(f.names())
 			if k > 0 {
 				r.Name(ns[k-1].name) // which nemesis, not its index among those enabled then
 			}
-		})
+		}
 		if k > 0 {
 			if s.Log != nil {
 				s.Log(fmt.Sprintf("%v nemesis %s", s.Elapsed(), ns[k-1].name))
@@ -1545,6 +1561,45 @@ func (s *Sim) maybeNemesis() {
 			return
 		}
 	}
+}
+
+// nemFam is a nemesis family's enabled nemeses at a step (maybeNemesis):
+// its choice's kind, the nemeses, and their names, made again only when
+// they change.
+type nemFam struct {
+	family, kind string
+	ns           []*nemesis
+	named        []*nemesis // the nemeses of names
+	nameList     []string
+}
+
+// names are the names of f's nemeses.
+func (f *nemFam) names() []string {
+	if !slices.Equal(f.named, f.ns) {
+		f.nameList = make([]string, len(f.ns)) // a new slice: a log may keep the last
+		for i, n := range f.ns {
+			f.nameList[i] = n.name
+		}
+		f.named = append(f.named[:0], f.ns...)
+	}
+	return f.nameList
+}
+
+// famIndex is family's index in s.fams, added if new.
+func (s *Sim) famIndex(family string) int {
+	for i := range s.fams {
+		if s.fams[i].family == family {
+			return i
+		}
+	}
+	s.fams = append(s.fams, nemFam{family: family, kind: "fault.nemesis." + family})
+	return len(s.fams) - 1
+}
+
+// logLen is a ChoiceLog and how many choices it held.
+type logLen struct {
+	log *ChoiceLog
+	n   int
 }
 
 // eachLog calls f with every ChoiceLog in c's chain of wrappers.

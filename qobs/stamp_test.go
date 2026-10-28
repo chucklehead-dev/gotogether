@@ -22,22 +22,24 @@ func TestSeqOrderIsTimeOrder(t *testing.T) {
 		held   int64 = -1 // the goroutine whose next clock read waits
 		second       = make(chan struct{})
 	)
-	hooks.SetClock(func() (time.Time, bool) {
-		mu.Lock()
-		hold := held == hooks.GoroutineID()
-		if hold {
-			held = -1
-		}
-		mu.Unlock()
-		if hold {
-			select {
-			case <-second:
-			case <-time.After(200 * time.Millisecond):
+	hooks.SetSite(func(context.Context) hooks.Site {
+		return hooks.Site{Clock: clockFunc(func() time.Time {
+			mu.Lock()
+			hold := held == hooks.GoroutineID()
+			if hold {
+				held = -1
 			}
-		}
-		return time.Time{}, false // the wall clock's
+			mu.Unlock()
+			if hold {
+				select {
+				case <-second:
+				case <-time.After(200 * time.Millisecond):
+				}
+			}
+			return time.Now() // the wall clock's
+		})}
 	})
-	t.Cleanup(func() { hooks.SetClock(func() (time.Time, bool) { return time.Time{}, false }) })
+	t.Cleanup(func() { hooks.SetSite(func(context.Context) hooks.Site { return hooks.Site{} }) })
 
 	for _, kind := range []string{"record", "invoke", "done"} {
 		t.Run(kind, func(t *testing.T) {
@@ -89,3 +91,8 @@ func TestSeqOrderIsTimeOrder(t *testing.T) {
 		})
 	}
 }
+
+// clockFunc is a function as a hooks.Clock.
+type clockFunc func() time.Time
+
+func (f clockFunc) Now() time.Time { return f() }

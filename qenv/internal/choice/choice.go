@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
+	"reflect"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/qobs"
@@ -214,15 +215,50 @@ func (r Rates) Set(kind string, p float64) Rates {
 // Of returns the rate of a fault choice's kind (as the Chooser gets it,
 // "fault.rpc.payments.response", or as reports print it).
 func (r Rates) Of(kind string) float64 {
-	kind = strings.TrimPrefix(kind, "fault.")
-	best, rate := -1, r.Default
-	for k, v := range r.Kinds {
+	r.check()
+	return r.of(kind)
+}
+
+// check panics on a key written with the chooser's prefix (bare).
+func (r Rates) check() {
+	for k := range r.Kinds {
 		bare(k, "a Rates key")
-		if covers(k, kind) && len(k) > best {
-			best, rate = len(k), v
-		}
 	}
-	return rate
+}
+
+// of is Of without check: the rate of the longest key that covers kind,
+// found by its dot-prefixes (the keys that cover "a.b.c" are "a.b.c",
+// "a.b" and "a"), not by ranging over the keys, which made a fault
+// choice cost 280 ns to a schedule choice's 17.
+func (r Rates) of(kind string) float64 {
+	k := strings.TrimPrefix(kind, "fault.")
+	for {
+		if v, ok := r.Kinds[k]; ok {
+			return v
+		}
+		i := strings.LastIndexByte(k, '.')
+		if i < 0 {
+			return r.Default
+		}
+		k = k[:i]
+	}
+}
+
+// checked is the Kinds map a chooser has checked (Rates.check), by its
+// identity and size: a chooser checks its Rates once, not at every
+// choice, and again when they are replaced or a key is added.
+type checked struct {
+	m uintptr
+	n int
+}
+
+// of is r.Of(kind), checking r only if it is not the map last checked.
+func (c *checked) of(r Rates, kind string) float64 {
+	if m, n := reflect.ValueOf(r.Kinds).Pointer(), len(r.Kinds); m != c.m || n != c.n || m == 0 {
+		r.check()
+		c.m, c.n = m, n
+	}
+	return r.of(kind)
 }
 
 // bare panics on a kind written with the chooser's "fault." prefix, which
@@ -253,8 +289,9 @@ var DefaultRates = Rates{Default: 0.05, Kinds: map[string]float64{"nemesis": 0.0
 // Seeded makes choices from a seeded generator: schedule choices uniformly,
 // fault choices at their Rates.
 type Seeded struct {
-	Rates Rates
-	r     *rand.Rand
+	Rates   Rates
+	r       *rand.Rand
+	checked checked
 }
 
 // NewSeeded returns a Seeded chooser with DefaultRates.
@@ -267,7 +304,7 @@ func (s *Seeded) Choose(kind string, n int) int {
 	if !IsFault(kind) {
 		return s.r.IntN(n)
 	}
-	if s.r.Float64() >= s.Rates.Of(kind) {
+	if s.r.Float64() >= s.checked.of(s.Rates, kind) {
 		return 0
 	}
 	return 1 + s.r.IntN(n-1)
