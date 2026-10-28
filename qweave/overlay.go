@@ -221,6 +221,11 @@ func Weave(c Config) (*Result, error) {
 	if len(aspects) == 0 && !c.Cover && !c.Mutate {
 		return r, nil
 	}
+	if c.Cover || c.Mutate {
+		if err := c.checkABI(); err != nil {
+			return nil, err
+		}
+	}
 	patterns := c.Patterns
 	if len(patterns) == 0 {
 		patterns = []string{"./..."}
@@ -317,4 +322,40 @@ func (r *Result) WriteOverlay(dir string) (string, error) {
 	}
 	path := filepath.Join(dir, "overlay.json")
 	return path, os.WriteFile(path, b, 0o644)
+}
+
+// checkABI refuses to weave coverage or mutants into a module whose core's
+// package woven lacks the ABI qweave writes calls to (wovenABI): the
+// woven code would call functions that are not there, or that mean
+// something else. The fix names both versions.
+func (c Config) checkABI() error {
+	pkgs, err := packages.Load(c.packagesConfig(packages.NeedName|packages.NeedTypes|packages.NeedModule, false), wovenPath)
+	if err != nil {
+		return fmt.Errorf("qweave: loading %s: %w", wovenPath, err)
+	}
+	if len(pkgs) != 1 || len(pkgs[0].Errors) > 0 || pkgs[0].Types == nil {
+		why := "it does not load"
+		if len(pkgs) == 1 && len(pkgs[0].Errors) > 0 {
+			why = pkgs[0].Errors[0].Msg
+		}
+		return fmt.Errorf("qweave: -cover and -mutate write calls to %s (%s), which the module in %s cannot load (%s): require the core (go get %s)", wovenPath, wovenABI, c.dir(), why, toolkit)
+	}
+	p := pkgs[0]
+	if p.Types.Scope().Lookup(wovenABI) != nil {
+		return nil
+	}
+	have := "none"
+	for _, n := range p.Types.Scope().Names() {
+		if strings.HasPrefix(n, "ABI") {
+			have = n
+		}
+	}
+	version := "an unknown version"
+	if p.Module != nil {
+		version = p.Module.Path + " " + p.Module.Version
+		if p.Module.Version == "" {
+			version = p.Module.Path + " at " + p.Module.Dir
+		}
+	}
+	return fmt.Errorf("qweave: this qweave writes code for the woven ABI %s, but the module's core (%s) has %s: install the qweave of the core's version (go install %s/qweave/cmd/qweave@<the core's version>), or move the module to a core with %s (go get %s@latest)", wovenABI, version, have, toolkit, wovenABI, toolkit)
 }

@@ -1,4 +1,5 @@
 == github.com/chucklehead-dev/gotogether/binding
+const FormatName = "gotogether.binding/1"
 func AnnotationsOf(fset *token.FileSet, f *ast.File) []Annotation
 func InstanceConstants(spec, instance string) (module string, constants []string, err error)
 func LintRecords(m *Model, recs []RecordCall) []string
@@ -26,6 +27,7 @@ type Annotation struct
     field Action string
     field Keys map[string]string
 type Binding struct
+    field Format string `yaml:"format,omitempty"`
     field Spec string `yaml:"spec"`
     field Module string `yaml:"module"`
     field Constants map[string]string `yaml:"constants"`
@@ -247,6 +249,7 @@ type UnimplementedError struct
     method (*UnimplementedError) Error() string
 
 == github.com/chucklehead-dev/gotogether/convert
+const FormatName = "gotogether.convert/1"
 func Load(p string) (*Rules, error)
 func Parse(b []byte) (*Rules, error)
 type Rule struct
@@ -264,6 +267,7 @@ type Rule struct
     field Order map[string]string `yaml:"order"`
     field Drop bool `yaml:"drop"`
 type Rules struct
+    field Format string `yaml:"format,omitempty"`
     field Recorder string `yaml:"recorder"`
     field Actor string `yaml:"actor"`
     field Process string `yaml:"process"`
@@ -1925,6 +1929,7 @@ const KeyAssumed = "quint.assumed"
 const KeyCall = "quint.call"
 const KeyCompleteThrough = "quint.complete_through_unix_nano"
 const KeyError = "quint.error"
+const KeyFormat = "quint.format"
 const KeyInvocation = "quint.invocation"
 const KeyInvoked = "quint.invoked_unix_nano"
 const KeyLost = "quint.lost"
@@ -1945,12 +1950,14 @@ const PrefixObs = "quint.obs."
 const PrefixOrder = "quint.order."
 const RealTimeSlack = time.Millisecond
 const SpanName = "quint "
+const StepsFormat = "gotogether.steps/1"
 const Undecided LinearizeVerdict = iota (spec 2 of its group)
 func CarryWatermark(recorder, actor string, through time.Time, whole bool) Step
 func ClockOrders(steps []Step, skew time.Duration) ClockAssumption
 func CollectedThrough(steps []Step) map[string]time.Time
 func ForcedOrder(steps []Step) ([]Step, bool)
 func ForcedOrderWithin(steps []Step, skew time.Duration) ([]Step, bool)
+func FormatLine() []byte
 func FromAttributes(t time.Time, layers ...map[string]any) (Step, error)
 func HistorySVG(recorded, order []Step, failedAt int) []byte
 func Key(steps []Step) string
@@ -2107,10 +2114,12 @@ const FateMalformed = "malformed"
 const FateSurvived = "survived"
 const FateUndecided = "undecided"
 const ManifestFormat = "gotogether.run/2"
+const NavProtocol = "gotogether.nav/1"
 const NotEvaluated Verdict = "n/a"
 const Pass Verdict = "pass"
 const Uncollected Cause = "uncollected"
 func Cached(bindingPath string, o Options) (*Checker, error)
+func CheckNavProtocol(p string) error
 func CurrentTools(o Options) Tools
 func EventuallyName(val string) string
 func Finishable(b *binding.Binding) error
@@ -2466,6 +2475,7 @@ type RunModel struct
     field Constants map[string]string `json:"constants,omitempty"`
     field Invariants []string `json:"invariants"`
 type RunNode struct
+    field Protocol string `json:"protocol,omitempty"`
     field Run string `json:"run"`
     field ID string `json:"id"`
     field Schedule string `json:"schedule"`
@@ -2500,6 +2510,7 @@ type RunResponse struct
     field Node *RunNode `json:"node,omitempty"`
     field Error string `json:"error,omitempty"`
 type RunSession struct
+    field Protocol string `json:"protocol,omitempty"`
     field Run string `json:"run"`
     field Choices int `json:"choices"`
     field Notes []string `json:"notes,omitempty"`
@@ -2603,6 +2614,7 @@ type Replayed struct
     field Notes []string
 
 == github.com/chucklehead-dev/gotogether/woven
+const ABI1 = 1
 func Add(wg *sync.WaitGroup, n int)
 func Cond(id int, c bool) bool
 func Done(wg *sync.WaitGroup)

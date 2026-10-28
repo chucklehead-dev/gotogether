@@ -80,6 +80,8 @@ func main() {
 		code, err = shrinkTo(os.Stdout, os.Args[2:])
 	case "nav":
 		code, err = nav(os.Stdout, os.Args[2:])
+	case "doctor":
+		code, err = doctor(os.Stdout, os.Args[2:])
 	case "help", "-h", "-help", "--help":
 		help()
 	case "version":
@@ -110,7 +112,8 @@ func usageTo(w io.Writer) {
 An event-sourced service can have its model written for it: grist (its own module) generates
 the model's skeleton and both bindings from the app's catalog, the app writing only its rules:
   go run github.com/chucklehead-dev/gotogether/grist/cmd/grist@latest new <name>    (docs/grist.md)
-Each command's -h says what it is for, with an example. gotogether version prints the version.
+Each command's -h says what it is for, with an example. gotogether version prints the version,
+gotogether doctor every installed piece's and any skew between them.
 
 usage:
   gotogether scaffold -spec model.qnt -module M [-out m.binding.yaml]

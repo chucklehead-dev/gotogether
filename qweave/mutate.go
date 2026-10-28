@@ -115,6 +115,7 @@ func (w *fileWeaver) mutate() {
 	end := len(w.src)
 	w.edits = append(w.edits, &edit{start: end, end: end, render: func(func(ast.Node) string) (string, error) {
 		var reg strings.Builder
+		fmt.Fprintf(&reg, "\nvar _ = %s.%s // the woven ABI this code calls\n", alias, wovenABI)
 		fmt.Fprintf(&reg, "\nvar %s = %s.RegisterMutants([]%s.Mutant{\n", base, alias, alias)
 		for _, m := range ms {
 			fmt.Fprintf(&reg, "\t{File: %q, Line: %d, Func: %q, Op: %q, Code: %q},\n", rel, m.line, m.fn, m.op, m.code)

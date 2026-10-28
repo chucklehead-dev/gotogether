@@ -48,6 +48,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/formats"
 	"github.com/chucklehead-dev/gotogether/otelio"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"gopkg.in/yaml.v3"
@@ -55,6 +56,10 @@ import (
 
 // Rules is a parsed rule file.
 type Rules struct {
+	// Format, if set, names the rule file's format (FormatName,
+	// gotogether.convert/1): a later major is refused with the fix, not
+	// with its new keys "unknown". Empty: gotogether.convert/1.
+	Format string `yaml:"format,omitempty"`
 	// Recorder groups steps for numbering: an expression; default
 	// resource:service.instance.id, else resource:service.name.
 	Recorder string `yaml:"recorder"`
@@ -87,6 +92,10 @@ type Rule struct {
 	Drop bool `yaml:"drop"`
 }
 
+// FormatName is the rule file format this version reads and writes, the
+// value of a rule file's optional format key.
+const FormatName = "gotogether.convert/1"
+
 // Load reads a rule file.
 func Load(p string) (*Rules, error) {
 	b, err := os.ReadFile(p)
@@ -98,10 +107,23 @@ func Load(p string) (*Rules, error) {
 
 // Parse parses rules from YAML.
 func Parse(b []byte) (*Rules, error) {
+	// the format first: a later file's keys are unknown here, and the
+	// fix is a newer gotogether, not removing them
+	var head struct {
+		Format string `yaml:"format"`
+	}
+	if yaml.Unmarshal(b, &head) == nil && head.Format != "" {
+		if _, err := formats.Convert.Check(head.Format); err != nil {
+			return nil, err
+		}
+	}
 	var r Rules
 	dec := yaml.NewDecoder(bytes.NewReader(b))
 	dec.KnownFields(true)
 	if err := dec.Decode(&r); err != nil {
+		if strings.Contains(err.Error(), "not found in type") {
+			return nil, fmt.Errorf("%w (this gotogether reads %s: a key a later version added is unknown here; upgrade gotogether, or remove the key)", err, formats.Convert.Range())
+		}
 		return nil, err
 	}
 	for i, ru := range r.Rules {

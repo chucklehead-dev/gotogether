@@ -45,7 +45,7 @@ func Sniff(data []byte) Format {
 		return OTLP
 	case first["states"] != nil:
 		return ITF
-	case first[qtrace.KeyAction] != nil:
+	case first[qtrace.KeyAction] != nil, first[qtrace.KeyFormat] != nil: // a step, or the log's format record
 		return StepLog
 	}
 	return Unknown

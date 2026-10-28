@@ -1,6 +1,10 @@
 package choice
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/chucklehead-dev/gotogether/internal/formats"
+)
 
 // Bytes makes choices from a stream of bytes, by one rule shared by every
 // byte-driven chooser (Hegel's, Go fuzzing's, a corpus entry):
@@ -28,7 +32,8 @@ type Bytes struct {
 
 // BytesVersion is the version of the byte rule. EncodeChoices writes it in
 // a header, so a corpus entry encoded by another rule is recognised
-// (Err), not replayed as another run.
+// (Err), not replayed as another run. It is formats.Choices's major
+// (gotogether.choices/1): bump both together.
 const BytesVersion = 1
 
 // header marks an encoded run: 0xff, "qc", the version.
@@ -43,7 +48,11 @@ func FromBytes(data []byte, rates Rates) *Bytes {
 	var err error
 	if len(rest) >= len(header) && rest[0] == header[0] && rest[1] == header[1] && rest[2] == header[2] {
 		if rest[3] != BytesVersion {
+			// the byte rule is formats.Choices, its major in the header
 			err = fmt.Errorf("qenv: choices encoded by byte rule version %d, not %d: encode the run again (EncodeChoices) from its choices", rest[3], BytesVersion)
+			if _, ferr := formats.Choices.Check(formats.Choices.At(int(rest[3]))); ferr != nil && int(rest[3]) > BytesVersion {
+				err = fmt.Errorf("qenv: choices encoded by byte rule version %d: %w", rest[3], ferr)
+			}
 			rest = nil
 		} else {
 			rest = rest[len(header):]

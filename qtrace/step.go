@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/chucklehead-dev/gotogether/internal/formats"
 )
 
 // The telemetry schema. Every model step is one span event named EventName.
@@ -69,6 +71,13 @@ const (
 	// external driver's trace line, a screenshot. Free text for people
 	// reading a failure; no check reads it.
 	KeyRef = "quint.ref"
+
+	// KeyFormat names the step log's format and version (StepsFormat): a
+	// step log's format record (a line of this key alone, WriteJSONL's
+	// and qobs.JSONLSink's first), or an attribute of an OTel step's
+	// event, span or resource. A reader refuses a later major with the
+	// fix; without one, a log is gotogether.steps/1.
+	KeyFormat = "quint.format"
 
 	PrefixArg   = "quint.arg."   // an observed parameter of the action
 	PrefixObs   = "quint.obs."   // an observed projection of the post-state
@@ -188,6 +197,11 @@ func FromAttributes(t time.Time, layers ...map[string]any) (Step, error) {
 			}
 		}
 		return ""
+	}
+	if f := str(KeyFormat); f != "" {
+		if _, err := formats.Steps.Check(f); err != nil {
+			return s, fmt.Errorf("%s: %w", EventName, err)
+		}
 	}
 	s.Action = str(KeyAction)
 	if s.Action == "" {

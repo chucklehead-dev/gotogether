@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/internal/formats"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
@@ -83,7 +84,10 @@ func Decode(path string, v any) error {
 	if err := json.Unmarshal(b, &head); err != nil {
 		return fmt.Errorf("%s: %w (want the JSON of a qtest.Evidence)", path, err)
 	}
-	if head.Format != Format {
+	if _, err := formats.Evidence.Check(head.Format); err != nil {
+		if formats.Evidence.Is(head.Format) {
+			return fmt.Errorf("%s: evidence %w", path, err)
+		}
 		return fmt.Errorf("%s: evidence of format %q, not %q: run the tests again to write it anew", path, head.Format, Format)
 	}
 	if err := json.Unmarshal(b, v); err != nil {
@@ -121,7 +125,7 @@ func Is(path string) bool {
 		return false
 	}
 	var format string
-	return d.Decode(&format) == nil && strings.HasPrefix(format, "gotogether.evidence/")
+	return d.Decode(&format) == nil && formats.Evidence.Is(format)
 }
 
 // OfManifest is a run's manifest as evidence's view (RoleExternal): one

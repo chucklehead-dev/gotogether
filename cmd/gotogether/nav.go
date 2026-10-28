@@ -213,6 +213,9 @@ func navRun(ref, pkg, at, follow string, save, fold bool) (*validate.RunNode, er
 	if err := json.Unmarshal(b, &n); err != nil {
 		return nil, fmt.Errorf("nav -run %s: %w", ref, err)
 	}
+	if err := validate.CheckNavProtocol(n.Protocol); err != nil {
+		return nil, fmt.Errorf("nav -run %s: %w", ref, err)
+	}
 	return &n, nil
 }
 

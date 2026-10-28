@@ -22,7 +22,7 @@ func TestReadJSONLTornTail(t *testing.T) {
 	got, err := ReadJSONL(strings.NewReader(torn))
 	var tt *TornTail
 	// the step before the cut, and the loss of what its recorder wrote after
-	if !errors.As(err, &tt) || tt.Line != 2 || len(got) != 2 || got[0].Action != "a" || got[1].Lost != "suffix" || got[1].LostAfter != 1 {
+	if !errors.As(err, &tt) || tt.Line != 3 /* the format record is line 1 */ || len(got) != 2 || got[0].Action != "a" || got[1].Lost != "suffix" || got[1].LostAfter != 1 {
 		t.Fatalf("torn log: %+v, %v", got, err)
 	}
 	if got, err := ReadJSONL(strings.NewReader(whole)); err != nil || len(got) != 2 {

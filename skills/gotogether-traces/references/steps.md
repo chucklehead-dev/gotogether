@@ -41,6 +41,16 @@ qobs.NewRecorder(sink)`, `qobs.SetGlobal(rec)` or
 `qobshttp.Handler(h, rec)`) and ends with `if err := rec.Close(); err !=
 nil { ... }`, which closes the sink and says whether the log is whole.
 
+A step log's first line names its format, `{"quint.format":
+"gotogether.steps/1"}` (the sinks and `qtrace.WriteJSONL` write it);
+a log another tool writes may start with it or not (none reads as
+steps/1), and a later major is refused with "upgrade gotogether". A
+binding may say `format: gotogether.binding/1` the same way. When a
+check refuses a version, `gotogether doctor` lists the installed
+pieces' versions (CLI, the module's core, qweave's woven ABI,
+gotogether-nav, quint and its evaluator) and names the skew with its
+fix.
+
 Read [references/emitting.md](emitting.md) for the keys a step
 takes (identity, `when:`, `order.<domain>`), outcomes an error can name,
 the sinks and who closes them.

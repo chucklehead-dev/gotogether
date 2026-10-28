@@ -139,7 +139,13 @@ go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest   # the C
 go install github.com/chucklehead-dev/gotogether/qweave/cmd/qweave@latest # weaving: //quint:action, coverage, mutants
 go install github.com/chucklehead-dev/gotogether/qnav/cmd/gotogether-nav@latest # the interactive navigator (gotogether nav opens it on a terminal)
 go install github.com/chucklehead-dev/gotogether/grist/cmd/grist@latest  # grist: `grist new <name>` writes an app module (its own module: go get …/grist@latest)
+gotogether doctor                                                        # every installed piece's version (the module's core, qweave's woven ABI, quint's evaluator), each skew with its fix
 ```
+
+Every file format is named and versioned (`gotogether.steps/1`,
+`gotogether.binding/1`, ...): a later major is refused with the fix,
+and step logs of every earlier major are read for good (docs/DESIGN.md
+§63).
 
 In a module of your own (the examples' `replace` lines are for working
 inside this repository):

@@ -93,6 +93,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/formats"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
@@ -102,7 +103,7 @@ const Protocol = "gotogether.requests/1"
 
 // protocolFamily prefixes every version's name: a header with another
 // version is a request log this package cannot read, not some other file.
-const protocolFamily = "gotogether.requests/"
+const protocolFamily = formats.Prefix + "requests/"
 
 // Event is a record's kind (Record.Event), as the log writes it.
 type Event string
@@ -280,11 +281,10 @@ func Sniff(data []byte) bool {
 // check holds l to the protocol; at names record i (-1: the header).
 func (l *Log) check(at func(int) string) error {
 	h := l.Header
-	switch {
-	case h.Protocol == Protocol:
-	case strings.HasPrefix(h.Protocol, protocolFamily):
-		return fmt.Errorf("%s: protocol %s is a later version than this gotogether reads (%s): upgrade gotogether, or have the driver write %s", at(-1), h.Protocol, Protocol, Protocol)
-	default:
+	if _, err := formats.Requests.Check(h.Protocol); err != nil {
+		if formats.Requests.Is(h.Protocol) {
+			return fmt.Errorf("%s: protocol %w, or have the driver write %s", at(-1), err, Protocol)
+		}
 		return fmt.Errorf("%s: protocol %q is not %q: a request log's header names its protocol", at(-1), h.Protocol, Protocol)
 	}
 	if h.Recorder == "" {

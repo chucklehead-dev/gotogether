@@ -4837,3 +4837,122 @@ not settle has the cycle its model states went round reported with it.
   stutter. The `stampSpec` mutant (a timestamp in the spec) is rejected
   by the faithful model and, against RESEND's, conforms, never settles,
   and has that cycle as its `hot cycle` line.
+
+## 63. Formats and their versions (I13, I14)
+
+Five things cross between pieces installed apart, each at its own
+version: files a run writes and a later gotogether reads (step logs,
+request logs, corpus entries, manifests, evidence), files a person
+writes and every later gotogether reads (bindings, conversion rules),
+the navigation protocol between a test binary and a navigator, the
+woven ABI between qweave's output and the core it is compiled against,
+and the core itself, pinned by every published module. The eleventh
+review found the step log, the binding, the nav protocol and the ABI
+unversioned, and seven core pins across the published modules.
+
+**The policy** (the maintainer's to confirm, ROADMAP's "For the
+maintainer"; one table, `internal/formats`, so adjusting it is a field
+per format):
+- Every format is named `gotogether.<thing>/<major>`. A breaking change
+  (a field renamed, a meaning changed) bumps the major; an added
+  optional field does not.
+- A reader refuses a later major with the fix, upgrading the reader
+  (`Format.Check`: "gotogether.steps/2 is a later version than this
+  gotogether reads (gotogether.steps/1): upgrade gotogether ..."), and
+  another format's name with what it wanted.
+- A reader reads every older major from the format's `Oldest`. For data
+  nobody can write again (step logs, request logs, corpus entries in
+  testdata, bindings and rule files), `Oldest` stays 1 forever. For
+  what every run writes anew (manifests, evidence) only the current
+  major is read, and an older one is refused with how to write it anew,
+  as it was before the policy; the encoded choices' byte rule is the
+  same, for another reason: old bytes under a new rule are another run.
+- The step log's attributes keep the `quint.` namespace: they name model
+  steps, and renaming them would break every log written. Its format
+  key is `quint.format` too.
+
+| format | where | reads |
+|---|---|---|
+| `gotogether.steps/1` | step logs (a format record), OTel steps (span or resource attribute) | 1 on; none named: 1 |
+| `gotogether.requests/1` | qdriver's request log header | 1 |
+| `gotogether.binding/1` | a binding's optional `format:` | 1 on; none: 1 |
+| `gotogether.convert/1` | a rule file's optional `format:` | 1 on; none: 1 |
+| `gotogether.corpus/1` | qtest's corpus entries | 1 on; `gotogether.run/1` is corpus/1 |
+| `gotogether.choices/1` | qenv.EncodeChoices' header (`BytesVersion`) | the current only |
+| `gotogether.run/2` | validate's run manifest | the current only |
+| `gotogether.evidence/2` | qtest's evidence | the current only |
+| `gotogether.nav/1` | RunSession and RunNode's `protocol` | 1 on; none: 1 |
+
+**Unversioned is major 1.** Every log, binding, rule file and session
+written before the policy is the first version of its format, so a log
+without a format record reads as `gotogether.steps/1`, forever. A major
+0 would claim an earlier, different format that never existed, and make
+every reader keep a case for it.
+
+**The step log's record.** A line holding `quint.format` alone, which
+WriteJSONL and JSONLSink write first, and any reader skips (several, for
+logs concatenated with `cat`, each checked). JSONLSink writes it with the
+first step, in one write: a log is never a record alone, an empty log
+stays empty, and a disk sees one write per step, so qenv.Disk's
+schedules (a write is a fault point) are those of before. A per-line
+key would cost 35 bytes a step for nothing a record does not say. OTel
+steps carry the attribute on the step's span (OTelSink), where
+FromAttributes looks as it does for the other non-argument keys, so a
+deployment may set it on the resource instead. A log whose format
+record is refused stops the read there, never mistaken for a torn tail.
+An old gotogether reading a new log fails on its first line ("missing
+quint.action"): nothing older promised to read later logs.
+
+**Bindings and rule files** are decoded strictly (`KnownFields`), so a
+key a later version added is "unknown" to an older one. The format key
+is read first, loosely, and a later major refused with the upgrade
+before the strict decode names its new keys; an unknown key in a file
+naming no later major gets the hint that it may be a later version's.
+
+**The corpus entry** was named `gotogether.run/1`, the manifest's thing,
+which made a corpus entry an "other version's manifest" to a tool
+walking evidence. It is `gotogether.corpus/1` now, and the old name an
+alias of corpus/1, read forever: entries are checked into testdata
+(raftkv's two).
+
+**The navigation protocol.** A test binary is built against the user's
+core, `gotogether nav` and `gotogether-nav` against theirs. The session's
+first line and a one-shot node name `gotogether.nav/1`
+(`validate.NavProtocol`), and both navigators refuse a later one with
+`CheckNavProtocol`'s fix: install the navigator at the module's version.
+
+**The woven ABI.** qweave is a module of its own (no core requirement),
+so the code it writes (`Hit`, `RegisterBlocks`, `Cond`, `Pick`,
+`MutantOn`, `RegisterMutants`) could be compiled against a core whose
+`woven` means something else. `woven.ABI1` is a constant whose name is
+the version: every file qweave instruments references it (`var _ =
+quintwoven.ABI1`), so a skew fails to compile naming it, and before
+weaving with -cover or -mutate qweave loads the module's `woven` and
+refuses one without `ABI1`, naming the module's core and the fix. Any
+change to woven's functions renames it (ABI2). Orchestrion's aspects
+(qenv/weave's orchestrion.yml) ship with the core they call, so they
+cannot skew. `qweave -version` prints the ABI its code calls.
+
+**One core version (I14).** Every published module requires the core at
+one commit, and a published module it requires (qgosim's qweave) at the
+same one: a user's `go get` resolves the newest of their pins, and a
+combination of pins no job built is what a user got. `ci/bump-core.sh
+<pushed commit>` moves them all (GOWORK=off go get, then tidy), and
+internal/ciconfig's `TestCorePinsAgree` fails while they differ, naming
+each pin; its list of modules is the script's, checked against every
+go.mod without a replace. No module may lag: a module the newer core
+breaks is fixed with the bump, since its users get that core anyway. CI's
+`consumer` job builds ci/consumer, an order-sync service on simgrpc,
+simlog, kafkalog and qhegel, copied outside the repository, with no
+replace and no workspace: first with the satellites at the pushed commit
+and the core at their pins' maximum, then with the core at the commit.
+
+**`gotogether doctor`** reports what is installed: the CLI's version and
+its core's woven ABI, the module's core and published modules (`go list
+-m all`), qweave's version and the ABI its code calls (`qweave
+-version`), gotogether-nav's and any named binary's core (their build
+info), quint, the evaluator its version expects (read from its package)
+and whether it is installed, Node, the formats this version reads, and
+the `GOTOGETHER_*` and `QUINT_*` variables in effect. Each skew is a line
+with its fix; `-strict` exits 1 on one. The rest of I21's doctor (the D3
+cache, bindings' formats in the module) is not built.

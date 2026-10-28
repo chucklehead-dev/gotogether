@@ -22,6 +22,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 
+	"github.com/chucklehead-dev/gotogether/internal/formats"
 	"github.com/chucklehead-dev/gotogether/qcover"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
@@ -159,9 +160,11 @@ type exploreSpec struct {
 	baseline string
 }
 
-// corpusFormat names a corpus entry's format: an entry of another is
-// refused with the fix, never replayed as something else.
-const corpusFormat = "gotogether.run/1"
+// corpusFormat names a corpus entry's format (formats.Corpus): an entry
+// of a later major, or of another format, is refused with the fix, never
+// replayed as something else. Entries written as "gotogether.run/1",
+// its name before it had one of its own, are corpus/1.
+const corpusFormat = "gotogether.corpus/1"
 
 // A corpusEntry is a saved run: its choices replay it (qenv.Replay). It
 // names the exploration that saved it (TestX#2), which alone replays it,
@@ -212,10 +215,13 @@ func readCorpus(dir, ref string) (paths []string, entries []corpusEntry, err err
 		if err := json.Unmarshal(b, &e); err != nil {
 			return nil, nil, fmt.Errorf("corpus entry %s: %w", f, err)
 		}
-		if e.Format != corpusFormat {
+		if _, err := formats.Corpus.Check(e.Format); err != nil {
 			from := e.Exploration
 			if from == "" {
 				from = e.Test
+			}
+			if formats.Corpus.Is(e.Format) { // a later version's
+				return nil, nil, fmt.Errorf("corpus entry %s: %w; or delete it (seed %d of %s may find its run again)", f, err, e.Seed, from)
 			}
 			return nil, nil, fmt.Errorf("corpus entry %s has format %q, not %q: it was written by another version of gotogether and cannot be replayed; delete it (seed %d of %s may find its run again)", f, e.Format, corpusFormat, e.Seed, from)
 		}

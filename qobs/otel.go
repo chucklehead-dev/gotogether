@@ -11,7 +11,8 @@ import (
 )
 
 // OTelSink emits each step as a short span "quint <action>" carrying one
-// span event "quint.step" with the schema attributes (see qtrace). The span
+// span event "quint.step" with the schema attributes (see qtrace); the
+// span carries the format (quint.format, gotogether.steps/1). The span
 // is a child of the span in ctx, so steps show up inside the application's
 // own traces.
 //
@@ -26,10 +27,15 @@ func NewOTelSink(tp trace.TracerProvider) *OTelSink {
 }
 
 func (o *OTelSink) Record(ctx context.Context, s *qtrace.Step) {
-	_, span := o.Tracer.Start(ctx, qtrace.SpanName+s.Action, trace.WithTimestamp(s.Time))
+	_, span := o.Tracer.Start(ctx, qtrace.SpanName+s.Action, trace.WithTimestamp(s.Time), trace.WithAttributes(stepsFormat))
 	span.AddEvent(qtrace.EventName, trace.WithTimestamp(s.Time), trace.WithAttributes(attributes(s)...))
 	span.End(trace.WithTimestamp(s.Time))
 }
+
+// stepsFormat is the format attribute of every step's span: the event's
+// attributes are the step's alone, and a reader looks for the format
+// on the span (or the resource, where a deployment may set it). Read-only.
+var stepsFormat = attribute.String(qtrace.KeyFormat, qtrace.StepsFormat)
 
 // attributes encodes a step in the schema: the native step log's
 // attributes (qtrace.Step.Attributes) as OTel attributes, but its time,

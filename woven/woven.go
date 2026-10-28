@@ -12,8 +12,10 @@
 //
 // There is no compatibility promise to users: nothing here is to be
 // called by hand, and any of it may change in any release. It is stable
-// only within one version of the toolkit, for code woven by that
-// version's aspects and qweave. A user names qenv/weave in a tool file
+// only within one ABI version (ABI1), for code woven by aspects and a
+// qweave of that version: qweave is a module of its own, built at its own
+// commit, so the code it writes names the ABI it was written for
+// (var _ = woven.ABI1) and qweave refuses a module whose core lacks it. A user names qenv/weave in a tool file
 // (its aspects), and reads coverage and mutants through qcover, qmut and
 // qtest.
 //
@@ -38,6 +40,14 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/internal/wovenrt"
 )
+
+// ABI1 names the woven ABI this version provides, and its number. Code
+// qweave writes references it, so a build against a core of another ABI
+// fails to compile naming it, and qweave checks the module's core for it
+// before weaving. Any change to this package's functions or their meaning
+// renames it (ABI2), so old woven code stops compiling instead of calling
+// a function whose meaning changed.
+const ABI1 = 1
 
 // Go is a go statement marked //qenv:go: in a simulation, fn runs as a new
 // task and the go statement starts a goroutine that does nothing;

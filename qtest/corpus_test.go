@@ -85,15 +85,24 @@ func TestCorpusStaleAndForeign(t *testing.T) {
 	}
 	foreign := t.TempDir()
 	write(foreign, "old.json", corpusEntry{Exploration: t.Name() + "#1", Seed: 3, Choices: []qenv.Choice{{Kind: "sched", N: 2}}})
-	if errs := explore(foreign); len(errs) == 0 || !strings.Contains(errs[0], `has format "", not "gotogether.run/1"`) || !strings.Contains(errs[0], "delete it") {
+	if errs := explore(foreign); len(errs) == 0 || !strings.Contains(errs[0], `has format "", not "gotogether.corpus/1"`) || !strings.Contains(errs[0], "delete it") {
 		t.Errorf("a foreign entry: %q", errs)
 	}
-	stale := t.TempDir()
-	write(stale, "stale.json", corpusEntry{Format: corpusFormat, Exploration: t.Name() + "#1", Seed: 3,
-		Choices: []qenv.Choice{{Kind: "fault.no.such.kind", N: 7, Value: 5}}})
-	errs := strings.Join(explore(stale), "\n")
-	if !strings.Contains(errs, "corpus entry stale.json is stale") || !strings.Contains(errs, "GOTOGETHER_RUN='"+t.Name()+"#1:seed=3'") {
-		t.Errorf("a stale entry: %s", errs)
+	later := t.TempDir()
+	write(later, "later.json", corpusEntry{Format: "gotogether.corpus/2", Exploration: t.Name() + "#1", Seed: 3})
+	if errs := explore(later); len(errs) == 0 || !strings.Contains(errs[0], "gotogether.corpus/2 is a later version than this gotogether reads") || !strings.Contains(errs[0], "delete it") {
+		t.Errorf("a later version's entry: %q", errs)
+	}
+	// an entry under the format's old name (gotogether.run/1) is read as
+	// corpus/1: here it replays, and is stale
+	for _, format := range []string{corpusFormat, "gotogether.run/1"} {
+		stale := t.TempDir()
+		write(stale, "stale.json", corpusEntry{Format: format, Exploration: t.Name() + "#1", Seed: 3,
+			Choices: []qenv.Choice{{Kind: "fault.no.such.kind", N: 7, Value: 5}}})
+		errs := strings.Join(explore(stale), "\n")
+		if !strings.Contains(errs, "corpus entry stale.json is stale") || !strings.Contains(errs, "GOTOGETHER_RUN='"+t.Name()+"#1:seed=3'") {
+			t.Errorf("a stale entry of %s: %s", format, errs)
+		}
 	}
 }
 

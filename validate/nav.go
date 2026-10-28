@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/formats"
 	"github.com/chucklehead-dev/gotogether/internal/qeval"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
@@ -449,6 +450,9 @@ func (nd *Node) String() string {
 // nav -run ... -json` prints it (the test binary writes it; its types are
 // here so that the CLI, which a test package does not build, reads it): ID is "<schedule>@<k>", the choices before k fixed.
 type RunNode struct {
+	// Protocol is the navigation protocol of the binary that wrote the
+	// node (NavProtocol; "" before it had one: nav/1)
+	Protocol string `json:"protocol,omitempty"`
 	Run      string `json:"run"`
 	ID       string `json:"id"`
 	Schedule string `json:"schedule"`
@@ -503,6 +507,27 @@ type ActorState struct {
 	Error string       `json:"error,omitempty"`
 }
 
+// NavProtocol is the run navigation protocol this version speaks: the
+// RunRequest, RunResponse, RunSession and RunNode lines between a test
+// binary (GOTOGETHER_NAV) and a navigator (gotogether nav,
+// gotogether-nav), each built against its own version of gotogether. A
+// session's first line and a node name it.
+const NavProtocol = "gotogether.nav/1"
+
+// CheckNavProtocol refuses a protocol a session or node names that this
+// version does not speak, with the fix (a later one: upgrade the
+// navigator). "" is a binary's from before the protocol had a name:
+// nav/1.
+func CheckNavProtocol(p string) error {
+	if p == "" {
+		return nil
+	}
+	if _, err := formats.Nav.Check(p); err != nil {
+		return fmt.Errorf("the test binary's navigation protocol: %w", err)
+	}
+	return nil
+}
+
 // A RunRequest asks a run navigation session (GOTOGETHER_NAV=serve: the
 // test binary reads one a line) for a node: Node as GOTOGETHER_NAV names
 // one ("" or start, fail, @k, <schedule>@k), then the options of Follow
@@ -531,7 +556,11 @@ type RunResponse struct {
 // its base run made (but entropy); Notes say what to know of every node
 // (the base run drew entropy, or did not replay).
 type RunSession struct {
-	Run     string   `json:"run"`
-	Choices int      `json:"choices"`
-	Notes   []string `json:"notes,omitempty"`
+	// Protocol is the session's navigation protocol (NavProtocol; ""
+	// from a binary built before it had one: nav/1): a navigator
+	// refuses one it does not speak (CheckNavProtocol)
+	Protocol string   `json:"protocol,omitempty"`
+	Run      string   `json:"run"`
+	Choices  int      `json:"choices"`
+	Notes    []string `json:"notes,omitempty"`
 }

@@ -426,7 +426,7 @@ func TestValidateManifest(t *testing.T) {
 	}
 	// a later version's manifest is skipped, named, not the suite's end
 	os.WriteFile(filepath.Join(dir, "future.json"), []byte(`{"format": "gotogether.run/9"}`), 0o644)
-	if code, out = capture(t, func() (int, error) { return evidence([]string{dir}) }); code != 0 || !strings.Contains(out, `warning: `) || !strings.Contains(out, `"gotogether.run/9"`) {
+	if code, out = capture(t, func() (int, error) { return evidence([]string{dir}) }); code != 0 || !strings.Contains(out, `warning: `) || !strings.Contains(out, `gotogether.run/9 is a later version than this gotogether reads`) {
 		t.Errorf("evidence with a future manifest: exit %d:\n%s", code, out)
 	}
 	os.Remove(filepath.Join(dir, "future.json"))

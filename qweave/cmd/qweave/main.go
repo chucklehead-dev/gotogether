@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime/debug"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/qweave"
@@ -29,11 +30,20 @@ func run() int {
 	cover := flag.Bool("cover", false, "instrument the main module's blocks for qcover (which code each model step ran)")
 	coverPkg := flag.String("coverpkg", "", "with -cover or -mutate, only packages with these comma-separated import path prefixes")
 	mutate := flag.Bool("mutate", false, "weave mutant schemata into the main module's packages for qmut (System.Mutate)")
+	version := flag.Bool("version", false, "print qweave's version and the woven ABI its code calls, and exit")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: qweave [-C dir] [-tool file] [-cover] [-mutate] [-coverpkg prefixes] [-v] go <command> [arguments]")
+		fmt.Fprintln(os.Stderr, "usage: qweave [-version] [-C dir] [-tool file] [-cover] [-mutate] [-coverpkg prefixes] [-v] go <command> [arguments]")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+	if *version {
+		v := "(devel)"
+		if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" {
+			v = bi.Main.Version
+		}
+		fmt.Printf("qweave %s woven %s\n", v, qweave.WovenABI)
+		return 0
+	}
 	if *chdir != "" {
 		if err := os.Chdir(*chdir); err != nil {
 			fmt.Fprintln(os.Stderr, err)

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/formats"
 	"github.com/chucklehead-dev/gotogether/internal/memo"
 	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -681,7 +682,10 @@ func ReadManifest(path string) (*Manifest, error) {
 	if err := json.Unmarshal(b, &m); err != nil {
 		return nil, fmt.Errorf("%s: %w (want a run manifest, %s: gotogether validate -manifest writes one)", path, err, ManifestFormat)
 	}
-	if m.Format != ManifestFormat {
+	if _, err := formats.Manifest.Check(m.Format); err != nil {
+		if formats.Manifest.Is(m.Format) && !formats.Corpus.Is(m.Format) { // another version's
+			return nil, fmt.Errorf("%s: %w: %w", path, ErrManifestFormat, err)
+		}
 		return nil, fmt.Errorf("%s: %w: a file of format %q, not a run manifest of %q: write it anew with this version (gotogether validate -manifest, or the test under GOTOGETHER_EVIDENCE)", path, ErrManifestFormat, m.Format, ManifestFormat)
 	}
 	dir, err := filepath.Abs(filepath.Dir(path))
@@ -713,7 +717,8 @@ func IsManifest(path string) bool {
 		return false
 	}
 	var format string
-	return d.Decode(&format) == nil && strings.HasPrefix(format, "gotogether.run/")
+	// a corpus entry named gotogether.run/1 (its old name) is none
+	return d.Decode(&format) == nil && formats.Manifest.Is(format) && !formats.Corpus.Is(format)
 }
 
 // copy is a copy of m whose files can be rewritten.

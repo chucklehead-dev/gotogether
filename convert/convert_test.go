@@ -2,6 +2,7 @@ package convert
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/otelio"
@@ -208,5 +209,19 @@ func TestUnmatched(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("Unmatched = %v, want %v", got, want)
 		}
+	}
+}
+
+// A rule file may name its format; a later major is refused with the
+// upgrade, not with its new keys unknown.
+func TestRulesFormat(t *testing.T) {
+	if _, err := Parse([]byte("format: " + FormatName + "\nrules: []\n")); err != nil {
+		t.Errorf("this version's format: %v", err)
+	}
+	if _, err := Parse([]byte("format: gotogether.convert/2\nsampled: true\nrules: []\n")); err == nil || !strings.Contains(err.Error(), "gotogether.convert/2 is a later version than this gotogether reads") {
+		t.Errorf("a later major: %v", err)
+	}
+	if _, err := Parse([]byte("sampled: true\nrules: []\n")); err == nil || !strings.Contains(err.Error(), "a key a later version added") {
+		t.Errorf("an unknown key: %v", err)
 	}
 }

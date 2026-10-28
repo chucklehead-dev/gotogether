@@ -185,7 +185,9 @@ func (s *seen) read(path string) int {
 		if len(bytes.TrimSpace(line)) == 0 || json.Unmarshal(line, &m) != nil {
 			continue
 		}
-		if m[qtrace.KeyRecorder] == RecorderID || m[qtrace.KeyLost] != nil {
+		// the nemesis's own steps, loss records and a log's format record
+		// (qtrace.FormatLine) are none of the system's
+		if m[qtrace.KeyRecorder] == RecorderID || m[qtrace.KeyLost] != nil || m[qtrace.KeyAction] == nil {
 			continue
 		}
 		n++

@@ -7,11 +7,24 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"github.com/chucklehead-dev/gotogether/internal/formats"
 )
 
 // KeyTime is the step log's timestamp field (Unix nanoseconds). It is the
 // only key of the native step log that is not an OTel attribute key.
 const KeyTime = "quint.time_unix_nano"
+
+// StepsFormat is the step log's format at the version this build writes
+// (KeyFormat): a reader refuses a later major with the fix and reads
+// every earlier one. A log without a format record is
+// gotogether.steps/1, as every log written before it had a name.
+const StepsFormat = "gotogether.steps/1"
+
+// FormatLine is a step log's format record (with the newline): the
+// first line WriteJSONL and qobs.JSONLSink write. A log may hold several
+// (logs concatenated), each checked; none is a step.
+func FormatLine() []byte { return []byte(`{"` + KeyFormat + `":"` + StepsFormat + `"}` + "\n") }
 
 // Attributes flattens a step into the schema's attribute keys: exactly the
 // attributes an OTel span event carries, plus KeyTime. The native step log
@@ -71,8 +84,12 @@ func (s *Step) MarshalLine() ([]byte, error) {
 	return append(b, '\n'), nil
 }
 
-// WriteJSONL writes steps as a native step log.
+// WriteJSONL writes steps as a native step log, after its format record
+// (FormatLine).
 func WriteJSONL(w io.Writer, steps []Step) error {
+	if _, err := w.Write(FormatLine()); err != nil {
+		return err
+	}
 	for i := range steps {
 		b, err := steps[i].MarshalLine()
 		if err != nil {
@@ -120,10 +137,13 @@ func ReadJSONL(r io.Reader) ([]Step, error) {
 			continue
 		}
 		s, err := parseLine(line, n)
+		if errors.Is(err, errFormatRecord) {
+			continue
+		}
 		if err != nil {
 			// no newline after it: the writer stopped here. A whole object
 			// followed by more is no cut-off line, wherever it is.
-			if i == len(lines)-1 && !errors.Is(err, errTrailing) {
+			if i == len(lines)-1 && !errors.Is(err, errTrailing) && !errors.As(err, new(formatError)) {
 				return tornAt(out), &TornTail{Line: n, Text: raw}
 			}
 			return nil, err
@@ -144,6 +164,13 @@ func parseLine(line string, n int) (Step, error) {
 	// silently dropped once, losing a record or hiding a corruption.
 	if _, err := dec.Token(); err != io.EOF {
 		return Step{}, fmt.Errorf("line %d: %w after the step's object at offset %d: write one object per line", n, errTrailing, dec.InputOffset())
+	}
+	// a format record: its version checked, no step
+	if f, ok := raw[KeyFormat]; ok && len(raw) == 1 {
+		if _, err := formats.Steps.Check(fmt.Sprint(f)); err != nil {
+			return Step{}, fmt.Errorf("line %d: %w", n, formatError{err})
+		}
+		return Step{}, errFormatRecord
 	}
 	attrs := map[string]any{}
 	for k, v := range raw {
@@ -171,6 +198,16 @@ func parseLine(line string, n int) (Step, error) {
 	s.Source = fmt.Sprintf("line %d", n)
 	return s, nil
 }
+
+// errFormatRecord is parseLine's answer for a format record, which is
+// no step.
+var errFormatRecord = errors.New("format record") // read-only
+
+// formatError is a format record's refusal: a whole line, never a torn
+// one.
+type formatError struct{ error }
+
+func (e formatError) Unwrap() error { return e.error }
 
 // errTrailing is a line's error when its object is followed by more.
 var errTrailing = errors.New("trailing data") // read-only

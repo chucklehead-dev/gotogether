@@ -13,7 +13,9 @@ import (
 
 // JSONLSink writes each step as one line of the native step log: a flat
 // JSON object with the same keys as the OTel attributes (see qtrace), no
-// OTel involved. `gotogether validate` reads it like OTLP/JSON.
+// OTel involved, after the log's format record (qtrace.FormatLine,
+// gotogether.steps/1), which goes out with the first step.
+// `gotogether validate` reads it like OTLP/JSON.
 type JSONLSink struct {
 	mu  sync.Mutex
 	w   io.Writer
@@ -23,6 +25,10 @@ type JSONLSink struct {
 	// sync: Sync the writer after each step (Synced)
 	sync   bool
 	closed bool // Close was called: a later step is an error, not lost in a buffer
+	// headed: the format record is written (with the first step, in its
+	// write: a log is never a format record alone, and a disk sees one
+	// write per step)
+	headed bool
 }
 
 // Durability is how much of a step log survives its writer's end.
@@ -103,7 +109,11 @@ func (j *JSONLSink) Record(_ context.Context, s *qtrace.Step) {
 		return
 	}
 	if err == nil {
+		if !j.headed {
+			b = append(qtrace.FormatLine(), b...)
+		}
 		_, err = j.w.Write(b)
+		j.headed = j.headed || err == nil
 	}
 	if s, ok := j.w.(interface{ Sync() error }); ok && err == nil && j.sync {
 		err = s.Sync()

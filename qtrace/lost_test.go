@@ -78,8 +78,8 @@ func TestReadJSONLLostTail(t *testing.T) {
 	if len(tr.Issues) != 0 || len(issues) != 1 || issues[0].Kind != "settle" {
 		t.Errorf("issues %v, trace's %v", issues, tr.Issues)
 	}
-	// the whole log settles
-	whole2, _ := ReadJSONL(strings.NewReader(strings.Join(strings.SplitAfter(whole, "\n")[:2], "")))
+	// the whole log settles (its format record, a, the settle)
+	whole2, _ := ReadJSONL(strings.NewReader(strings.Join(strings.SplitAfter(whole, "\n")[:3], "")))
 	if traces, _ := Reconstruct(whole2); !traces[0].Settled {
 		t.Errorf("the log up to its settle did not settle")
 	}

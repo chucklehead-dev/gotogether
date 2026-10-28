@@ -46,6 +46,25 @@ The first release. What a user meets, by module:
   the actions it calls) and `Binding.LintChoices` (`lint -binding`'s
   warning when the action's expect reads what it chose); validate gives
   a failure quint drew after such a step no verdict.
+- Formats and ABIs versioned (ROADMAP I13, DESIGN §63): every format is
+  `gotogether.<thing>/<major>`, a later major refused with the fix. The
+  step log's first line is its format record (`qtrace.KeyFormat`,
+  `qtrace.StepsFormat`, `qtrace.FormatLine`; OTel steps carry it on their
+  span), a log without one read as `gotogether.steps/1` for good;
+  bindings and rule files take an optional `format:`
+  (`binding.FormatName`, `convert.FormatName`, `Binding.Format`,
+  `Rules.Format`); corpus entries are `gotogether.corpus/1`, the old name
+  `gotogether.run/1` read as it; the navigation protocol is named in a
+  session's and a node's `protocol` (`validate.NavProtocol`,
+  `CheckNavProtocol`, `RunSession.Protocol`, `RunNode.Protocol`); the
+  woven ABI is `woven.ABI1`, referenced by the code qweave writes, which
+  refuses a core without it (qweave: `WovenABI`, `-version`).
+  `gotogether doctor` reports the installed pieces' versions and names
+  each skew with its fix.
+- One core version (ROADMAP I14): every published module requires the
+  core at one commit (`ci/bump-core.sh`), checked on every push, and a
+  consumer module outside the repository builds them as a user does.
+
 - The examples' doubles published (ROADMAP H7's second half):
   `qenv/simlog`, a package of the core (Kafka's contract on qenv: an
   idempotent `Producer`, group `Member`s with fencing, the seams

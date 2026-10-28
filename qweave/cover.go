@@ -19,6 +19,16 @@ const wovenPath = "github.com/chucklehead-dev/gotogether/woven"
 // import it already.
 const wovenAlias = "quintwoven"
 
+// wovenABI is the woven ABI the code qweave writes calls (woven.ABI1):
+// each file it instruments references the constant, so a core of another
+// ABI fails to compile naming it, and Weave checks the module's core for
+// it first (checkABI). Renamed with woven's.
+const wovenABI = WovenABI
+
+// WovenABI is the woven ABI qweave's code calls: the name of the
+// constant of package woven it references (qweave -version prints it).
+const WovenABI = "ABI1"
+
 // coverBlock is a block found for instrumentation.
 type coverBlock struct {
 	at                 int // offset of the inserted call
@@ -101,6 +111,7 @@ func (w *fileWeaver) instrument() {
 		}
 	}
 	var reg strings.Builder
+	fmt.Fprintf(&reg, "\nvar _ = %s.%s // the woven ABI this code calls\n", alias, wovenABI)
 	fmt.Fprintf(&reg, "\nvar %s = %s.RegisterBlocks([]%s.Block{\n", base, alias, alias)
 	for i, b := range bs {
 		text := fmt.Sprintf("%s.Hit(%s+%d); ", alias, base, i)

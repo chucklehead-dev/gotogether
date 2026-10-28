@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/internal/formats"
 	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
@@ -133,7 +134,10 @@ func readEntry(path, ref string) (corpusEntry, error) {
 	if err := json.Unmarshal(b, &e); err != nil {
 		return e, fmt.Errorf("%s: %w", path, err)
 	}
-	if e.Format != corpusFormat {
+	if _, err := formats.Corpus.Check(e.Format); err != nil {
+		if formats.Corpus.Is(e.Format) {
+			return e, fmt.Errorf("%s: %w", path, err)
+		}
 		return e, fmt.Errorf("%s has format %q, not %q: written by another version of gotogether", path, e.Format, corpusFormat)
 	}
 	if e.Exploration != ref {

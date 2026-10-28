@@ -225,7 +225,7 @@ func TestShrinkCommandMisbehavingDriver(t *testing.T) {
 	}
 	// each rerun of one action has a torn log: the one-removals never decide
 	code, out, err := shrink([]string{"-out", "torn", "-v"}, "-tear-single")
-	if code != 1 || err != nil || !strings.Contains(out, "reruns' step logs were torn (reruns ") || !strings.Contains(out, "its step log is torn: line 2") ||
+	if code != 1 || err != nil || !strings.Contains(out, "reruns' step logs were torn (reruns ") || !strings.Contains(out, "its step log is torn: line 3") ||
 		!strings.Contains(out, "not minimal: a sequence with one action fewer was never decided") {
 		t.Errorf("torn reruns: exit %d, %v:\n%s", code, err, out)
 	}

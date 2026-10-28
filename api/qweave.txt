@@ -1,4 +1,5 @@
 == github.com/chucklehead-dev/gotogether/qweave
+const WovenABI = "ABI1"
 func Hash(aspects []*Aspect) string
 func Load(path string) ([]*Aspect, []Skipped, error)
 func ToolFile(dir string, preferGosim bool) string

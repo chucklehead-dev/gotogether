@@ -25,6 +25,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/chucklehead-dev/gotogether/internal/formats"
 	"github.com/chucklehead-dev/gotogether/internal/memo"
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -33,6 +34,11 @@ import (
 
 // Binding is the parsed binding file.
 type Binding struct {
+	// Format, if set, names the binding format the file is written in
+	// (FormatName, gotogether.binding/1): a binding of a later major is
+	// refused with the fix (upgrade gotogether), not with its new keys
+	// "unknown". Empty: gotogether.binding/1.
+	Format string `yaml:"format,omitempty"`
 	// Spec is the .qnt file (relative to the binding file) and Module the
 	// parameterised module in it to instantiate.
 	Spec   string `yaml:"spec"`
@@ -241,11 +247,16 @@ func Load(path string) (*Binding, error) {
 	if err != nil {
 		return nil, err
 	}
+	// the format first: a later binding's keys are unknown here, and
+	// the fix is a newer gotogether, not removing them
+	if err := checkFormat(b, formats.Binding); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	var bd Binding
 	dec := yaml.NewDecoder(bytes.NewReader(b))
 	dec.KnownFields(true)
 	if err := dec.Decode(&bd); err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+		return nil, fmt.Errorf("%s: %w%s", path, err, unknownKeyHint(err, formats.Binding))
 	}
 	abs, _ := filepath.Abs(path)
 	bd.Dir, bd.Path = filepath.Dir(abs), abs
@@ -264,6 +275,33 @@ func Load(path string) (*Binding, error) {
 		w.Bound = d
 	}
 	return &bd, nil
+}
+
+// FormatName is the binding format this version reads and writes, the
+// value of a binding's optional format key.
+const FormatName = "gotogether.binding/1"
+
+// checkFormat refuses YAML whose format key names a major of f this
+// version does not read, with the fix. No key, or YAML that does not
+// parse (the strict decode reports it), passes.
+func checkFormat(b []byte, f formats.Format) error {
+	var head struct {
+		Format string `yaml:"format"`
+	}
+	if yaml.Unmarshal(b, &head) != nil || head.Format == "" {
+		return nil
+	}
+	_, err := f.Check(head.Format)
+	return err
+}
+
+// unknownKeyHint is what an unknown key's error adds: the key may be a
+// later version's, which an added optional key does not mark.
+func unknownKeyHint(err error, f formats.Format) string {
+	if !strings.Contains(err.Error(), "not found in type") {
+		return ""
+	}
+	return fmt.Sprintf(" (this gotogether reads %s: a key a later version added is unknown here; upgrade gotogether, or remove the key)", f.Range())
 }
 
 // checkActors fails on a pattern of Actors that is no glob.

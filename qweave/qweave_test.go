@@ -262,3 +262,24 @@ func TestWeaveBesideAnImportCycle(t *testing.T) {
 		t.Errorf("guarded.go was not woven beside the cycle: %v", r.Files)
 	}
 }
+
+// A module whose core has another woven ABI than the code qweave writes
+// calls is refused before weaving, naming both and the fix; woven code
+// names the ABI, so a build that got past the check would not compile.
+func TestWeaveRefusesAnotherABI(t *testing.T) {
+	for _, c := range []qweave.Config{{Dir: "testdata/oldabi", Cover: true}, {Dir: "testdata/oldabi", Mutate: true}} {
+		_, err := qweave.Weave(c)
+		if err == nil || !strings.Contains(err.Error(), "woven ABI "+qweave.WovenABI) || !strings.Contains(err.Error(), "has ABI0") || !strings.Contains(err.Error(), "go install") {
+			t.Errorf("cover %v mutate %v: %v", c.Cover, c.Mutate, err)
+		}
+	}
+	r, err := qweave.Weave(qweave.Config{Dir: "testdata/cover", Cover: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range r.Files {
+		if !strings.Contains(string(b), "var _ = quintwoven."+qweave.WovenABI) {
+			t.Errorf("the woven file names no ABI:\n%s", b)
+		}
+	}
+}

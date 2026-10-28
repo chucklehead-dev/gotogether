@@ -263,7 +263,7 @@ func (e *engine) serve(b *navBase, base planned) {
 			t.Fatalf("gotogether: GOTOGETHER_NAV=serve: %v", err)
 		}
 	}
-	hello := &validate.RunSession{Run: e.x.ref() + ":" + b.r0.ID(), Choices: len(b.cs)}
+	hello := &validate.RunSession{Protocol: validate.NavProtocol, Run: e.x.ref() + ":" + b.r0.ID(), Choices: len(b.cs)}
 	again := base.chooser
 	if base.again != nil {
 		again = func() qenv.Chooser { return base.again(b.r0) }
@@ -388,7 +388,7 @@ func (e *engine) navNode(b *navBase, req validate.RunRequest) (*validate.RunNode
 	}
 	spec.at = nc.at // past the choices it folded
 	r.origin = origin{kind: "schedule", value: schedule(spec.ds)}
-	node := &validate.RunNode{Run: x.ref() + ":" + b.r0.ID(), ID: spec.id(), Schedule: schedule(spec.ds), At: spec.at, Folded: nc.folded, Branches: []validate.RunBranch{}, Steps: []string{}}
+	node := &validate.RunNode{Protocol: validate.NavProtocol, Run: x.ref() + ":" + b.r0.ID(), ID: spec.id(), Schedule: schedule(spec.ds), At: spec.at, Folded: nc.folded, Branches: []validate.RunBranch{}, Steps: []string{}}
 	if b.entropy {
 		node.Notes = append(node.Notes, entropyNote)
 	}

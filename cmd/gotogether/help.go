@@ -37,6 +37,8 @@ var commands = map[string]command{
 		"gotogether cover -covdir covdata -sim ev/app/TestX/x1.json"},
 	"skills": {"list the agent skills (skills list, the default), or install them into a project (skills install; its -h)",
 		"gotogether skills install -target all"},
+	"doctor": {"report the installed pieces' versions (the CLI and its core, the module's core and published modules, qweave's woven ABI, gotogether-nav, binaries named, quint, its evaluator, Node) and the formats this version reads, naming each skew with its fix",
+		"gotogether doctor\n  gotogether doctor -C ./service -strict ./bin/service"},
 	"skills install": {"install the agent skills into a project (.agents/skills and .claude/skills by default)", "gotogether skills install"},
 }
 
@@ -87,7 +89,7 @@ func isZeroValue(f *flag.Flag) bool {
 
 // commandNames are main's commands, for the unknown command's
 // did-you-mean.
-var commandNames = []string{"scaffold", "simulate", "evidence", "lint", "steps", "validate", "shrink", "nav", "itf", "convert", "cover", "skills", "help", "version"}
+var commandNames = []string{"scaffold", "simulate", "evidence", "lint", "steps", "validate", "shrink", "nav", "itf", "convert", "cover", "skills", "doctor", "help", "version"}
 
 // unknownCommand says that name is no command, with the nearest one if
 // it is a likely misspelling, and where the list is: the whole usage
