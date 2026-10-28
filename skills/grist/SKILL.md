@@ -141,7 +141,11 @@ for it. No binding is written by hand.
    [`references/model.md`](references/model.md) before writing or
    changing a model**: the holes, the marks, the names Quint refuses,
    exactly-once claims. Check it alone: `gotogether simulate -binding
-   <app>.binding.yaml`.
+   <app>.binding.yaml`: its invariants, and the generated `possible:`
+   entries, one per command outcome (ok, each refusal, its rules' too)
+   and per query, processor step, call and site, each reached by the
+   model on its own or FAIL (rules too strict for any conforming run to
+   show it: a model that can never refuse `limit` fails here).
 3. **Witness**: `func TestGenerated(t *testing.T) { gristtest.Generated(t,
    App) }` fails when the checked-in skeleton or bindings are not what
    the catalog generates now (regenerate; `GRIST_UPDATE=1` writes them)
@@ -190,7 +194,15 @@ for it. No binding is written by hand.
    or a command whole, each with its reason. A run that took none of the
    app's blocks passes every other claim. It is not applied by default:
    a contrast test's workload is narrow by design, and claims the one
-   outcome it needs, `qtest.Takes("borrow").Outcome("limit")`. The
+   outcome it needs, `qtest.Takes("borrow").Outcome("limit")`.
+   **Acceptance scenarios** in the catalog's values:
+   `gristtest.Scenario("at the limit", JoinCmd.With(Join{Member: "a"}),
+   ..., BorrowCmd.With(Borrow{Member: "a", Book: "b"}).Refused(ErrLimit))`
+   (`Command.With(args)`, `Invocation.Refused(err)`: a declared refusal),
+   checked possible in the model first (`qtest.Possible(t, commits,
+   scenario)`, arguments in the model's STRS and INTS) and claimed of
+   runs like any expectation (`All(scenario)`, `Some`): a miss names, per
+   run, how far it got and where it stopped. The
    summary's "never" list names the binding's actions (the app's
    blocks) apart from grist's helpers (`appends`, `readsThrough`).
 5. **Prove each check can fail** with a mutant per claim (files in

@@ -47,6 +47,26 @@ The first release. What a user meets, by module:
   leaves out is in a report's Issues and no longer in its Summary; the
   Linearize hint is given only to an actor whose own steps are a
   client's history.
+- Possibility claims (ROADMAP P3, DESIGN §59): a binding's
+  `simulate.possible` (`binding.Possible`: a predicate, an action's
+  name, or `{name, steps}` in turn, a step naming parameters' values;
+  `StepPattern`, `ParseStepPattern`, `Simulation.SearchStates`,
+  `Binding.PossibleModule`, `EvalModule.Possible`), checked by
+  `gotogether simulate` with the Go evaluator's bounded search
+  (`validate.Checker.Possible`, `PossibleSearch`, `PossibleResult`;
+  `-states`) and quint's sampling, each reached with its witness or
+  failing (exit 1) as forbidden or not found within the bound. The
+  grist generator writes one per command outcome and per query,
+  processor step, call and site; its model's identities are thirty,
+  taken in turn (`nextID`), where four could never reach the library's
+  loan limit.
+- Scenario claims (ROADMAP P4, DESIGN §59): `qtest.Scenario`,
+  `NamedScenario` (Takes in turn, others between; a miss names per run
+  the longest prefix and where it stopped, and whether the model can),
+  `Take.With` (an argument's value), `qtest.Possible` (a scenario in the
+  model alone); grist's `Command.With`, `Invocation` (`Refused`), and
+  `gristtest.Scenario`, used in `grist new`'s starter and
+  examples/library.
 - Navigators (ROADMAP P5, DESIGN §58): `validate.Checker.Nav` (a
   model's states: `Navigator.Node`, `Node`, `Edge`, `Disabled`,
   `NavStart`, `SplitPath`), the run navigator in test binaries

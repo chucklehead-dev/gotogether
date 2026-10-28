@@ -4161,3 +4161,102 @@ The navigators share the explanation and the transitions.
   (qnav's TestLimiter, TestFold, TestRunDiff, TestHelloRun,
   TestGristRejection: without folding, the change marks or back, they
   fail).
+
+## 59. Possibility and scenario claims (P3, P4)
+
+pavlov's `:possible` and its scenarios check what a model must be able
+to do, where every check before them said what it must not: a model too
+strict to reach a scenario a conforming run would show passes every
+invariant and judges a code that never shows the scenario faithful.
+
+- **A possible** (`binding.Simulation.Possible`, `simulate: possible:`)
+  is a Quint predicate over the state, a model action's name (taken by
+  some trace), or `{name, steps}`: actions some trace takes in turn,
+  others between, each a name or a call naming some parameters' values
+  (`buy(result = "short")`). A bare string that names an action is a
+  step, any other a predicate (`Possible.Resolve`, against the model).
+- **The Go evaluator searches first** (`validate.Checker.Possible`,
+  `qeval.Model.Reach`): from init by the model's step, distinct states
+  by Key, a parent tree for the witness. The predicates and one-step
+  sequences share one breadth-first search (a predicate's path is the
+  shortest; a step is a property of a transition, checked on every one,
+  a seen state's too); a longer sequence has its own, its node a state
+  and the steps taken, best first (the most steps taken, then the
+  shallowest), so a scenario the model can follow directly costs as many
+  expansions as it has steps. Greedy matching of a sequence is exact:
+  taking each step at its first chance is the longest prefix any path
+  through those transitions takes. Bounded by states (default 2000,
+  `simulate.searchStates`, `-states`) and depth (the trace's steps): a
+  search a bound cut says "not found within the bound", with its extent;
+  only a search no bound cut says impossible, the whole state graph seen.
+  The predicates are vals of a module of their own
+  (`binding.PossibleModule`), so a predicate quint refuses fails the
+  search, never the binding's evaluation module.
+- **quint samples what the evaluator did not find**: the predicates in
+  one `quint run --witnesses` (how many traces each held in), then, for
+  each one found, a run with `--invariant not(P) --mbt` stopping at it,
+  whose ITF's `mbt::actionTaken` is the witness; sequences of names in
+  sampled traces' `mbt::actionTaken`, a batch of 100 ITF files at a
+  time, until each is found or the samples are spent. A step naming a
+  parameter is the evaluator's alone (quint records no action's
+  arguments). With `-verify`, predicates go to Apalache (`quint verify
+  --invariant not(P)`: no counterexample is a bounded proof of
+  impossibility). The evaluator calling impossible what quint found is
+  the evaluator's bug, an error, never a verdict. A possible neither
+  found fails simulate (exit 1): "the model forbids it" after a complete
+  search, else "the model may be too strict", each with nav to find the
+  guard and the knobs if it is only rare. The evaluator runs first
+  because it is cheap (milliseconds a state, its witness the shortest
+  and with arguments); quint confirming what it found would double
+  simulate's time for what TestAgreesWithQuint already holds it to.
+- **The grist generator writes one per Take** (gristtest.Takes): each
+  command by each outcome (ok, each refusal, its rules' too) as the
+  predicate that the model's step can answer so next (an identity left,
+  some arguments of the step's draws with that outcome: a refusal leaves
+  no trace in the state, so "it happened" is no predicate), each query,
+  processor step, declared call and site by name. Possibles are in the
+  default and calls bindings, not a variant's. Checking them on the
+  three examples found the generator's own limit: four identities, one
+  per command, could never reach the library's loan limit (a join, two
+  books, three borrows, then the refused one), and with ten drawn at
+  random a trace's refusals spent them first (0 of 10000 sampled
+  traces). Identities are now thirty, taken in turn (`nextID`: the
+  first unanswered), so a trace of simulate's default length never runs
+  out and the step never draws a used one; the limit was then reached
+  in 58 of 1000.
+- **A scenario** (`qtest.Scenario`, `NamedScenario`) is an Expectation:
+  a run's steps take its Takes in turn (each Take's action, Outcome and
+  `With` arguments, compared as Quint values), so Some, All, None and
+  Expect take it as they take any; the actors' calls are merged by their
+  steps' times. A claim no run meets lists, per run, the longest prefix
+  taken with each step's place, where it stopped, the next step's near
+  misses (taken with another outcome or arguments) and its hint, then
+  whether the model on its own can follow it (the evaluator's search for
+  the same sequence: the system is to be driven there, or the scenario
+  names what the model forbids). A Take's outcome reaches the model
+  through the parameter the binding passes `{{.outcome}}`, mapped by its
+  outcomes. `qtest.Possible(t, binding, scenarios...)` is the model-first
+  check, no run needed.
+- **grist's scenario** is written in the catalog's values:
+  `Command.With(args)` is a `grist.Invocation` (the command's action,
+  its scalar arguments as the generated model's parameters, renames
+  included, and Quint literals), `Refused(err)` expects a refusal the
+  command or its rules declare (another panics);
+  `gristtest.Scenario(name, invocations...)` is the NamedScenario of
+  their Takes. `grist new`'s starter and examples/library check one in
+  the model (`qtest.Possible`) and in runs.
+- **Tests that fail without it**: `TestReachAgainstBruteForce` (every
+  path of the vending model to depth 7: found exactly when some path
+  meets the goal, a predicate's path the shortest, a complete search's
+  "not found" no path; the progress and the order ablated fail it),
+  `TestSimulatePossible` (vending's possibles reached, its strict
+  variant's impossible, quint and the evaluator agreeing on each),
+  `TestPossibleResolve`, `TestScenarioAgainstBruteForce` (every step
+  list of up to five over two actions and two outcomes, every scenario
+  of up to three: holds exactly when an increasing choice of steps
+  takes it, the prefix the longest; the outcome filter ablated fails
+  it), `TestScenarioMiss`, `TestScenarioOverRuns`, grist's
+  `TestGeneratedPossibles` (the shop's outcomes reached; its rule
+  mutated never to refuse full, `addItem.full` not), gristtest's
+  `TestScenario`, library's `TestAtTheLimitPossible` and `TestAtTheLimit`,
+  the starter's `TestScenariosPossible` and `TestFull` (TestNewIsGreen).

@@ -42,7 +42,11 @@ code (`connect`), Hegel-driven Go runs are judged by the model
    binding for recorded runs. The binding's `simulate` section says which
    the model guarantees (`holds`) and which are requirements on the code
    the model lets a bad implementation break (`allows`); `gotogether
-   simulate -binding` checks both (gotogether-workflow §1).
+   simulate -binding` checks both (gotogether-workflow §1). Its
+   `possible` list says what the model must be able to do (a predicate
+   some trace reaches, an action some trace takes, `steps:` taken in
+   turn): each scenario a conforming run should show, so a model too
+   strict for it fails before any code is checked against it.
 6. **Restarts.** If the process can crash and restart, give the model one
    parameterless action for it (`action crash = ...`); the binding's
    `restart: crash` inserts it where the recorded process identity changes.

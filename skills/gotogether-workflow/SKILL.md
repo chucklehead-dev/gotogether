@@ -34,6 +34,30 @@ simulate:
 
 A model with no `step` (replay only) says `skip: <why>`. The command
 exits 1 on a misclassified invariant, naming it and the fix.
+
+Model first means scenarios first, each with a possibility check, then
+safety, then liveness, then code. Write each acceptance scenario as a
+`possible` (or, in Go, `qtest.Scenario` checked by `qtest.Possible`):
+a model too strict to reach it passes every invariant and judges a code
+that never shows it faithful.
+
+```yaml
+simulate:
+  possible:
+    - 'balance > 0'                           # a predicate some trace reaches
+    - refund                                  # an action some trace takes
+    - name: overdraft refused
+      steps: [deposit, 'withdraw(result = "insufficient")']   # in turn, others between
+```
+
+Each is reported reached with its witness (the Go evaluator's shortest
+path with arguments, else quint's sampled trace), or FAIL: "the model
+forbids it" after a search that saw the whole state graph, "not
+reached in N sampled traces ... not found within the bound" otherwise.
+Find the guard with `gotogether nav -binding`; raise `-samples`,
+`-steps` or `simulate.searchStates` only if it is rare, not forbidden.
+A grist app's bindings carry one per command outcome and per processor
+step, generated.
 - Also check that each `holds` property *can* fail. Temporarily break
   the model (drop a guard), or write a `run` test that reaches a
   violating state. A property that never fails checks nothing.

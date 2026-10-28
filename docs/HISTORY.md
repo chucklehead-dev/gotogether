@@ -1743,6 +1743,46 @@ program run by its model checker), their findings ROADMAP's P track:
   choices, and grist's blocks are data-shaped enough to explore
   in-process; the way to pavlov's checking for free runs through qeval.
 
+### P3 and P4: possibilities and scenarios
+
+ROADMAP's P3 and P4 as built (DESIGN §59). The decisions they left:
+- **Which checker first**: the Go evaluator's bounded search, then
+  quint's sampling for what it did not find. Both on every possible
+  doubled simulate's time for a confirmation TestAgreesWithQuint
+  already makes; the evaluator's witness is the shortest and names the
+  arguments, quint's names the actions alone. A sequence naming an
+  argument is the evaluator's only: quint's ITF records no action's
+  arguments.
+- **quint's predicates in one run** (`--witnesses`), then a run per one
+  found for its trace (it stops there): one sampling per possible cost
+  a grist app a minute.
+- **"Impossible" only after a complete search**: a grist model's log
+  grows without bound, so its searches are always cut, and say "not
+  found within the bound (2000 states, depth 4)"; vending's 25 states
+  are a whole graph, and its strict variant's possibles say impossible.
+- **A command outcome is "can answer so next"**, not "answered so": a
+  refusal commits nothing to the log, so no predicate over the state
+  says it happened; the step's own enabling (an identity left, the
+  outcome of some drawn arguments) is one.
+- **The generator's identities**: four, one per command, made the
+  library's loan limit unreachable by the model on its own (a join, two
+  books, three borrows and the refused fourth are six commands); ten
+  drawn at random were spent by refusals before it (0 of 10000 traces).
+  Thirty, taken in turn (`nextID`), reach it in 58 of 1000 and never
+  draw a used one: the step's commands are no longer disabled by a
+  draw, and two states differing by an identity's name no longer exist.
+- **A scenario is an Expectation**, not a claim of its own, so Some,
+  All, None, Mutate and Runs take it unchanged; its failure lines are
+  the exploration's (per run, and the model's verdict on the sequence),
+  added where a claim no run meets is reported.
+- **Arguments compared as values** (`Take.With`, itf.ParseQuint both
+  sides): a set's order and spaces are no difference; a literal itf
+  cannot read is compared as text.
+- **grist's Invocation** carries the model's parameter names (the
+  generator's renames, `item_` for a field `item`), so a
+  scenario written in Go values matches the binding's arguments
+  without the author knowing the renames.
+
 ### P1: blocking rules (grist)
 
 ROADMAP's P1 as built (docs/grist.md §2.4.1). The decisions it left:

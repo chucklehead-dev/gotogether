@@ -118,13 +118,14 @@ is not taken. The maintainer's decisions of 2026-10-28, as recommended:
   (about 0.2-0.5 ms a transition: 10^5 states in under a minute). A
   bounded exhaustive alternative to `gotogether simulate`'s sampling;
   grist's growing log needs the depth bound.
-- **P3. Possibility claims (S).** In the model: a binding's
+- **P3. Possibility claims (S). Done** (DESIGN §59; HISTORY: "P3 and
+  P4: possibilities and scenarios"). In the model: a binding's
   `simulate: possible: [P, ...]` (some trace reaches P; quint's
   counterexample to `not(P)`, or P2's search), catching a model too
   strict to reach the scenario a conforming run would prove; the
   generator emits one per command outcome and processor result. In runs:
   Takes and Exercised already cover the code's side.
-- **P4. Scenario claims (S).** `qtest.Scenario(qtest.Takes("submit"),
+- **P4. Scenario claims (S). Done** (DESIGN §59). `qtest.Scenario(qtest.Takes("submit"),
   qtest.Takes("verify").Outcome("ok"), qtest.Takes("open"))`: a run's
   steps contain the sequence, others allowed between; `Some`/`All` over
   runs; a failure names the longest prefix matched and where the run
