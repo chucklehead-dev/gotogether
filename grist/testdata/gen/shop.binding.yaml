@@ -59,3 +59,24 @@ eventually: [allShipped]
 # The model on its own (gotogether simulate)
 simulate:
   holds: [stockBounded]
+  # every outcome of every command, and every processor's steps, each reachable by the
+  # model on its own: one its rules forbid is one no conforming run can show (P3)
+  possible:
+    - name: addItem.ok
+      when: 'nextID(answered) != Set() and STRS.exists(item_ => INTS.exists(qty => STRS.exists(of_ => STRS.exists(principal => addItemRuled(log, { item: item_, qty: qty, of: of_, principal: principal }).outcome == "ok"))))'
+    - name: addItem.full
+      when: 'nextID(answered) != Set() and STRS.exists(item_ => INTS.exists(qty => STRS.exists(of_ => STRS.exists(principal => addItemRuled(log, { item: item_, qty: qty, of: of_, principal: principal }).outcome == "full"))))'
+    - name: addItem.closed
+      when: 'nextID(answered) != Set() and STRS.exists(item_ => INTS.exists(qty => STRS.exists(of_ => STRS.exists(principal => addItemRuled(log, { item: item_, qty: qty, of: of_, principal: principal }).outcome == "closed"))))'
+    - name: noteItem.ok
+      when: 'nextID(answered) != Set() and STRS.exists(item_ => STRS.exists(principal => noteItemOutcome(log, { item: item_, principal: principal }) == "ok"))'
+    - count
+    - showItem
+    - ship
+    - notifyEffect
+    - notify
+    - chargeEffect
+    - charge
+    - warehouseHold
+    - warehouseHoldServed
+    - warehousePicks

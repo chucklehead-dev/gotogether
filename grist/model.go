@@ -548,7 +548,7 @@ func (g *gen) claim(name, what string) string {
 // claimBlocks claims the actions the blocks and the skeleton's helpers
 // are, before any helper is named.
 func (g *gen) claimBlocks() {
-	for _, n := range []string{"appends", "refuses", "readsThrough", "processes", "effectStep", "answers", "denied", "init", "step", "IDS", "KEYS"} {
+	for _, n := range []string{"appends", "refuses", "readsThrough", "processes", "effectStep", "answers", "denied", "init", "step", "IDS", "KEYS", "nextID"} {
 		g.claim(n, "the skeleton's "+n)
 	}
 	for _, c := range g.c.Commands {
@@ -939,8 +939,8 @@ func (g *gen) storeModule(b *strings.Builder) {
 		fmt.Fprintf(b, "    %s' = %s,\n", v[0], v[1])
 	}
 	b.WriteString("  }\n\n")
-	b.WriteString("  // the identities and effect keys the model on its own draws\n")
-	b.WriteString("  pure val IDS = Set(\"i1\", \"i2\", \"i3\", \"i4\")\n  pure val KEYS = Set(\"k1\", \"k2\", \"k3\")\n\n")
+	b.WriteString("  // the identities, in the order commands take them, and the effect keys the\n  // model on its own draws\n")
+	b.WriteString("  pure val IDS = " + idList + "\n  pure val KEYS = Set(\"k1\", \"k2\", \"k3\")\n  // the next identity a command answers (none once all are): the first\n  // unanswered, so that the model on its own never draws a used one (a\n  // command that would be disabled) nor two that differ only by name\n  pure def nextID(answered: Set[str]): Set[str] =\n    IDS.foldl(Set(), (s, i) => if (s == Set() and not(answered.contains(i))) Set(i) else s)\n\n")
 	b.WriteString("  // a command's commit of b, answering id\n  action appends(b: List[Event], id: str): bool = all {\n")
 	b.WriteString(g.frame("    ", map[string]string{"log": "log.concat(b)", "appended": "b", "answered": "answered.union(Set(id))"}))
 	b.WriteString("  }\n\n")
@@ -1191,6 +1191,21 @@ func (g *gen) rulesDefs(b *strings.Builder) {
 	}
 }
 
+// idList is the identities the model on its own gives commands, in turn:
+// one per command, as many as simulate's default steps, so that a trace
+// never runs out of them. A refusal past a limit needs every command
+// before it (a library's limit of 3: a join, two books, three borrows,
+// then the refused one): with four, as there once were, the library's
+// model could never refuse it, and with ten a trace's refusals spent
+// them before it could (simulate's possibles, P3).
+var idList = func() string { // read-only
+	ids := make([]string, 30)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("%q", fmt.Sprintf("i%d", i+1))
+	}
+	return "[" + strings.Join(ids, ", ") + "]"
+}()
+
 // recordFrom is c's arguments' record from the picks fs.
 func recordFrom(c CatalogBlock, fs []field) string {
 	orig, _ := scalarFields(c.Args)
@@ -1209,7 +1224,7 @@ func (g *gen) storeStep(b *strings.Builder) {
 		d := newDraws()
 		ps := d.add(fs)
 		d.pick("principal", "STRS")
-		d.pick("id", "IDS")
+		d.pick("id", "nextID(answered)")
 		reads := fmt.Sprintf("triplesOf(%sNeeds(args_, result_))", c.Quint)
 		if len(c.Rules) > 0 {
 			reads = fmt.Sprintf("triplesOf(%sNeeds(args_, if (verdict_.decided == \"ok\") \"ok\" else result_).union(verdict_.needs))", c.Quint)
@@ -1269,7 +1284,7 @@ func (g *gen) callsModule(b *strings.Builder) {
 	fmt.Fprintf(b, "  import grist.* from \"./grist\"\n  import %sEvents.* from \"./%s_gen\"\n  import %sRules.* from \"./%s_rules\"\n", g.aq, g.c.Name, g.aq, g.c.Name)
 	fmt.Fprintf(b, "  export grist.*\n  export %sEvents.*\n  export %sRules.*\n\n", g.aq, g.aq)
 	b.WriteString("  var log: List[Event]\n  var answered: Set[str]\n\n  action init = all { log' = [], answered' = Set() }\n\n")
-	b.WriteString("  pure val IDS = Set(\"i1\", \"i2\", \"i3\")\n\n")
+	b.WriteString("  pure val IDS = " + idList + "\n  // the next identity a command answers (none once all are): the first\n  // unanswered, so that the model on its own never draws a used one (a\n  // command that would be disabled) nor two that differ only by name\n  pure def nextID(answered: Set[str]): Set[str] =\n    IDS.foldl(Set(), (s, i) => if (s == Set() and not(answered.contains(i))) Set(i) else s)\n\n")
 	b.WriteString("  action answers(b: List[Event], id: str): bool = all {\n    freshKey(answered, id),\n    log' = log.concat(b),\n    answered' = answered.union(Set(id)),\n  }\n\n")
 	b.WriteString("  // a call the API refused (403: the block's policy refused the actor) ran\n  // nothing and answers nothing: its key stays unanswered\n")
 	b.WriteString("  action denied: bool = all { log' = log, answered' = answered }\n")
@@ -1298,7 +1313,7 @@ func (g *gen) callsModule(b *strings.Builder) {
 		d := newDraws()
 		ps := d.add(fs)
 		d.pick("principal", "STRS")
-		d.pick("id", "IDS")
+		d.pick("id", "nextID(answered)")
 		outcome := fmt.Sprintf("%sOutcome(log, %s)", c.Quint, recordFrom(c, ps))
 		if len(c.Rules) > 0 {
 			outcome = fmt.Sprintf("%sRuled(log, %s).outcome", c.Quint, recordFrom(c, ps))
@@ -1476,7 +1491,11 @@ func (g *gen) binding(name string, m marks) []byte {
 	if len(ev) > 0 {
 		fmt.Fprintf(&b, "eventually: [%s]\n", strings.Join(ev, ", "))
 	}
-	if len(inv)+len(viol) > 0 {
+	var possibles []string
+	if name == "default" || name == "calls" {
+		possibles = g.possibles(calls)
+	}
+	if len(inv)+len(viol)+len(possibles) > 0 {
 		b.WriteString("\n# The model on its own (gotogether simulate)\nsimulate:\n")
 		if len(inv) > 0 {
 			fmt.Fprintf(&b, "  holds: [%s]\n", strings.Join(inv, ", "))
@@ -1484,8 +1503,75 @@ func (g *gen) binding(name string, m marks) []byte {
 		if len(viol) > 0 {
 			fmt.Fprintf(&b, "  allows: [%s]\n", strings.Join(viol, ", "))
 		}
+		if len(possibles) > 0 {
+			b.WriteString("  # every outcome of every command, and every processor's steps, each reachable by the\n  # model on its own: one its rules forbid is one no conforming run can show (P3)\n  possible:\n")
+			for _, p := range possibles {
+				b.WriteString(p)
+			}
+		}
 	}
 	return []byte(b.String())
+}
+
+// possibles are a binding's possible entries (binding.Possible), as
+// gristtest.Takes names what runs must take: each command's outcomes (ok,
+// each refusal), as the state from which the model's step can answer so
+// (a fresh id, and some arguments of the step's domains whose outcome it
+// is: a refusal leaves no trace in the state), and each query; with the
+// store's, each processor's steps, declared call's and site's, by name.
+func (g *gen) possibles(calls bool) []string {
+	var out []string
+	for _, c := range g.c.Commands {
+		for _, o := range append([]string{"ok"}, c.Refuses...) {
+			out = append(out, fmt.Sprintf("    - name: %s.%s\n      when: '%s'\n", c.Quint, o, commandCan(c, o)))
+		}
+	}
+	for _, q := range g.c.Queries {
+		out = append(out, fmt.Sprintf("    - %s\n", q.Quint))
+	}
+	if calls {
+		return out
+	}
+	for _, p := range g.c.Processors {
+		switch {
+		case p.Shape == "emits":
+			out = append(out, fmt.Sprintf("    - %s\n", p.Quint))
+		case p.Shape == "effect":
+			out = append(out, fmt.Sprintf("    - %sEffect\n    - %s\n", p.Quint, p.Quint))
+			if p.Delivery == AtMostOnce && p.Success != "" {
+				out = append(out, fmt.Sprintf("    - %sOutcome\n", p.Quint))
+			}
+		}
+	}
+	for _, d := range g.c.Dependencies {
+		for _, call := range d.Calls {
+			out = append(out, fmt.Sprintf("    - %s\n    - %sServed\n", call.Quint, call.Quint))
+		}
+	}
+	for _, s := range g.c.Sites {
+		out = append(out, fmt.Sprintf("    - %s\n", s.Quint))
+	}
+	return out
+}
+
+// commandCan is the predicate that the model's step can take command c
+// with outcome o: an identity left, and some arguments in the domains the
+// step draws them from with o their outcome (its rules' verdict too).
+func commandCan(c CatalogBlock, o string) string {
+	fs, _ := scalarFields(c.Args)
+	d := newDraws()
+	ps := d.add(fs)
+	d.pick("principal", "STRS")
+	outcome := fmt.Sprintf("%sOutcome(log, %s)", c.Quint, recordFrom(c, ps))
+	if len(c.Rules) > 0 {
+		outcome = fmt.Sprintf("%sRuled(log, %s).outcome", c.Quint, recordFrom(c, ps))
+	}
+	pred := fmt.Sprintf("%s == %q", outcome, o)
+	for i := len(d.order) - 1; i >= 0; i-- {
+		n := d.order[i]
+		pred = fmt.Sprintf("%s.exists(%s => %s)", d.dom[n], n, pred)
+	}
+	return "nextID(answered) != Set() and " + pred
 }
 
 // argTemplates are the templates of the fields whose parameter is not

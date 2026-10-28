@@ -28,3 +28,17 @@ invariants: [noOverdraft]
 # The model on its own (gotogether simulate)
 simulate:
   holds: [noOverdraft]
+  # every outcome of every command, and every processor's steps, each reachable by the
+  # model on its own: one its rules forbid is one no conforming run can show (P3)
+  possible:
+    - name: deposit.ok
+      when: 'nextID(answered) != Set() and STRS.exists(account => INTS.exists(amount => STRS.exists(principal => depositOutcome(log, { account: account, amount: amount, principal: principal }) == "ok")))'
+    - name: deposit.invalid
+      when: 'nextID(answered) != Set() and STRS.exists(account => INTS.exists(amount => STRS.exists(principal => depositOutcome(log, { account: account, amount: amount, principal: principal }) == "invalid")))'
+    - name: transfer.ok
+      when: 'nextID(answered) != Set() and STRS.exists(src => STRS.exists(dest => INTS.exists(amount => STRS.exists(principal => transferOutcome(log, { src: src, dest: dest, amount: amount, principal: principal }) == "ok"))))'
+    - name: transfer.invalid
+      when: 'nextID(answered) != Set() and STRS.exists(src => STRS.exists(dest => INTS.exists(amount => STRS.exists(principal => transferOutcome(log, { src: src, dest: dest, amount: amount, principal: principal }) == "invalid"))))'
+    - name: transfer.insufficient-funds
+      when: 'nextID(answered) != Set() and STRS.exists(src => STRS.exists(dest => INTS.exists(amount => STRS.exists(principal => transferOutcome(log, { src: src, dest: dest, amount: amount, principal: principal }) == "insufficient-funds"))))'
+    - read

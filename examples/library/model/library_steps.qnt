@@ -40,9 +40,15 @@ module libraryGen {
     mailerSendRecords' = [],
   }
 
-  // the identities and effect keys the model on its own draws
-  pure val IDS = Set("i1", "i2", "i3", "i4")
+  // the identities, in the order commands take them, and the effect keys the
+  // model on its own draws
+  pure val IDS = ["i1", "i2", "i3", "i4", "i5", "i6", "i7", "i8", "i9", "i10", "i11", "i12", "i13", "i14", "i15", "i16", "i17", "i18", "i19", "i20", "i21", "i22", "i23", "i24", "i25", "i26", "i27", "i28", "i29", "i30"]
   pure val KEYS = Set("k1", "k2", "k3")
+  // the next identity a command answers (none once all are): the first
+  // unanswered, so that the model on its own never draws a used one (a
+  // command that would be disabled) nor two that differ only by name
+  pure def nextID(answered: Set[str]): Set[str] =
+    IDS.foldl(Set(), (s, i) => if (s == Set() and not(answered.contains(i))) Set(i) else s)
 
   // a command's commit of b, answering id
   action appends(b: List[Event], id: str): bool = all {
@@ -352,7 +358,7 @@ module libraryGen {
         nondet book = STRS.oneOf()
         nondet copies = INTS.oneOf()
         nondet principal = STRS.oneOf()
-        nondet id = IDS.oneOf()
+        nondet id = nextID(answered).oneOf()
         {
           val args_: AddBookArgs = { book: book, copies: copies, principal: principal }
           val result_ = addBookOutcome(log, args_)
@@ -363,7 +369,7 @@ module libraryGen {
         nondet member = STRS.oneOf()
         nondet book = STRS.oneOf()
         nondet principal = STRS.oneOf()
-        nondet id = IDS.oneOf()
+        nondet id = nextID(answered).oneOf()
         {
           val args_: BorrowArgs = { member: member, book: book, principal: principal }
           val verdict_ = borrowRuled(log, args_)
@@ -374,7 +380,7 @@ module libraryGen {
       {
         nondet member = STRS.oneOf()
         nondet principal = STRS.oneOf()
-        nondet id = IDS.oneOf()
+        nondet id = nextID(answered).oneOf()
         {
           val args_: JoinArgs = { member: member, principal: principal }
           val result_ = joinOutcome(log, args_)
@@ -385,7 +391,7 @@ module libraryGen {
         nondet member = STRS.oneOf()
         nondet book = STRS.oneOf()
         nondet principal = STRS.oneOf()
-        nondet id = IDS.oneOf()
+        nondet id = nextID(answered).oneOf()
         {
           val args_: ReturnBookArgs = { member: member, book: book, principal: principal }
           val result_ = returnBookOutcome(log, args_)
@@ -454,7 +460,12 @@ module libraryCallsGen {
 
   action init = all { log' = [], answered' = Set() }
 
-  pure val IDS = Set("i1", "i2", "i3")
+  pure val IDS = ["i1", "i2", "i3", "i4", "i5", "i6", "i7", "i8", "i9", "i10", "i11", "i12", "i13", "i14", "i15", "i16", "i17", "i18", "i19", "i20", "i21", "i22", "i23", "i24", "i25", "i26", "i27", "i28", "i29", "i30"]
+  // the next identity a command answers (none once all are): the first
+  // unanswered, so that the model on its own never draws a used one (a
+  // command that would be disabled) nor two that differ only by name
+  pure def nextID(answered: Set[str]): Set[str] =
+    IDS.foldl(Set(), (s, i) => if (s == Set() and not(answered.contains(i))) Set(i) else s)
 
   action answers(b: List[Event], id: str): bool = all {
     freshKey(answered, id),
@@ -541,27 +552,27 @@ module libraryCallsGen {
         nondet book = STRS.oneOf()
         nondet copies = INTS.oneOf()
         nondet principal = STRS.oneOf()
-        nondet id = IDS.oneOf()
+        nondet id = nextID(answered).oneOf()
         addBook(book, copies, id, principal, addBookOutcome(log, { book: book, copies: copies, principal: principal }))
       },
       {
         nondet member = STRS.oneOf()
         nondet book = STRS.oneOf()
         nondet principal = STRS.oneOf()
-        nondet id = IDS.oneOf()
+        nondet id = nextID(answered).oneOf()
         borrow(member, book, id, principal, borrowRuled(log, { member: member, book: book, principal: principal }).outcome)
       },
       {
         nondet member = STRS.oneOf()
         nondet principal = STRS.oneOf()
-        nondet id = IDS.oneOf()
+        nondet id = nextID(answered).oneOf()
         join(member, id, principal, joinOutcome(log, { member: member, principal: principal }))
       },
       {
         nondet member = STRS.oneOf()
         nondet book = STRS.oneOf()
         nondet principal = STRS.oneOf()
-        nondet id = IDS.oneOf()
+        nondet id = nextID(answered).oneOf()
         returnBook(member, book, id, principal, returnBookOutcome(log, { member: member, book: book, principal: principal }))
       },
       {

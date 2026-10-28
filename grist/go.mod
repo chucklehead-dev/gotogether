@@ -3,7 +3,7 @@ module github.com/chucklehead-dev/gotogether/grist
 go 1.26.1
 
 require (
-	github.com/chucklehead-dev/gotogether v0.0.0-20261027182013-2873940c28a1
+	github.com/chucklehead-dev/gotogether v0.0.0-20261028070245-74fe3b0cd86b
 	github.com/jackc/pgx/v5 v5.11.0
 	modernc.org/sqlite v1.40.1
 )

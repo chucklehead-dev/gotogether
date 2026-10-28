@@ -75,13 +75,30 @@ func TestFaithfulAtClients(t *testing.T) {
 var fill = gristsim.Config{Tenants: []string{"t1"}, Clients: 2, Ops: 4, Send: []string{"add-item"},
 	Gen: map[string]func(pick func(int) int) any{"add-item": func(p func(int) int) any { return AddItem{Item: "a", Qty: 1 + p(3)} }}}
 
+// fillUp is an acceptance scenario, in the catalog's own values: an
+// item filled, then an addition past its capacity refused by the
+// capacity rule. Its arguments are in the model's domains (STRS, INTS in
+// model/{{.Name}}_rules.qnt), so the model on its own can follow it.
+var fillUp = gristtest.Scenario("fill up",
+	Add.With(AddItem{Item: "a", Qty: 3}),
+	Add.With(AddItem{Item: "a", Qty: 3}).Refused(ErrFull))
+
+// TestScenariosPossible: the model on its own can follow each acceptance
+// scenario, before any run is checked against it (a model whose rules
+// never refused past the capacity would fail here).
+func TestScenariosPossible(t *testing.T) {
+	t.Parallel()
+	qtest.Possible(t, commits, fillUp)
+}
+
 // TestFull: the faithful app at the mutant's shape refuses past the
-// capacity (the capacity rule's refusal), and no run rejects an addition.
+// capacity (the capacity rule's refusal), some run following the fill-up
+// scenario, and no run rejects an addition.
 func TestFull(t *testing.T) {
 	t.Parallel()
 	qtest.RequireQuint(t)
 	system(commits, fill).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(10, 3)}).
-		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("addItem")))
+		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("addItem")), fillUp)
 }
 
 // TestGenerated: the model's skeleton and the bindings are what the

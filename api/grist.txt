@@ -180,6 +180,7 @@ type CatalogSite struct
 type Command[C any] struct
     method (*Command[C]) Execute(ctx context.Context, s Store, env Envelope, args C) (Receipt, error)
     method (*Command[C]) Name() string
+    method (*Command[C]) With(args C) Invocation
 type Delivery int
     method (Delivery) MarshalText() ([]byte, error)
     method (Delivery) String() string
@@ -237,6 +238,14 @@ type Identity struct
     field Host string
     field Zone string
     method (Identity) String() string
+type Invocation struct
+    field Command string
+    field Action string
+    field Outcome string
+    field Params []string
+    field Values []string
+    method (Invocation) Refused(err error) Invocation
+    method (Invocation) String() string
 type KeyNames []string
 type KeyedReadModel[S any] struct
     embed ReadModel[S]
@@ -367,6 +376,7 @@ func Exercised(app *grist.App, except ...string) qtest.Claim
 func Generated(t testing.TB, app *grist.App)
 func Mutant() string
 func NewTier(t testing.TB, app *grist.App, cfg TierConfig) *Tier
+func Scenario(name string, steps ...grist.Invocation) qtest.Expectation
 func Takes(app *grist.App) []qtest.Take
 type Mutants struct
     field Names []string

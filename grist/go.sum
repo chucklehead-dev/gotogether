@@ -1,7 +1,7 @@
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
-github.com/chucklehead-dev/gotogether v0.0.0-20261027182013-2873940c28a1 h1:l83vctzL5TjcSn2nEKKoZ5/lf6ZyW37rHuy3sgEv7WA=
-github.com/chucklehead-dev/gotogether v0.0.0-20261027182013-2873940c28a1/go.mod h1:kZ6XGpgMaZWrMgym3rpruW/ZJC8aHY2RqEnbkQDO+q8=
+github.com/chucklehead-dev/gotogether v0.0.0-20261028070245-74fe3b0cd86b h1:gpGRIhRCoRDt4aGRmCdp2m946w7KJizC0bsO5EKRa+o=
+github.com/chucklehead-dev/gotogether v0.0.0-20261028070245-74fe3b0cd86b/go.mod h1:kZ6XGpgMaZWrMgym3rpruW/ZJC8aHY2RqEnbkQDO+q8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=

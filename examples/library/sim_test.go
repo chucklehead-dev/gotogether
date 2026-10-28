@@ -138,6 +138,41 @@ func TestGreedy(t *testing.T) {
 		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("borrow")), qtest.Takes("borrow").Outcome("limit"))
 }
 
+// atTheLimit is the loan limit as an acceptance scenario, in the
+// catalog's own values: a member holding three loans is refused a
+// fourth, though a copy is free. Its books and copies are in the
+// model's domains (STRS, INTS), so the model on its own can follow it.
+var atTheLimit = gristtest.Scenario("a member at the limit",
+	JoinCmd.With(Join{Member: "a"}),
+	AddCmd.With(AddBook{Book: "a", Copies: 3}), AddCmd.With(AddBook{Book: "b", Copies: 1}),
+	BorrowCmd.With(Borrow{Member: "a", Book: "a"}), BorrowCmd.With(Borrow{Member: "a", Book: "a"}), BorrowCmd.With(Borrow{Member: "a", Book: "a"}),
+	BorrowCmd.With(Borrow{Member: "a", Book: "b"}).Refused(ErrLimit))
+
+// TestAtTheLimitPossible: the model on its own can follow the scenario
+// (checked before any run: a model whose rules never refused at the limit
+// would fail here, with the search's extent).
+func TestAtTheLimitPossible(t *testing.T) {
+	t.Parallel()
+	qtest.Possible(t, commits, atTheLimit)
+}
+
+// limit is the scenario as a workload: its first six calls a prologue,
+// then one client asking for the fourth loan.
+var limit = gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 1, Send: []string{"borrow"},
+	Prologue: []gristsim.Call{{Name: "join", Args: Join{Member: "a"}},
+		{Name: "add-book", Args: AddBook{Book: "a", Copies: 3}}, {Name: "add-book", Args: AddBook{Book: "b", Copies: 1}},
+		{Name: "borrow", Args: Borrow{Member: "a", Book: "a"}}, {Name: "borrow", Args: Borrow{Member: "a", Book: "a"}}, {Name: "borrow", Args: Borrow{Member: "a", Book: "a"}}},
+	Gen: map[string]func(pick func(int) int) any{"borrow": func(func(int) int) any { return Borrow{Member: "a", Book: "b"} }}}
+
+// TestAtTheLimit: every run of the workload follows the scenario, and
+// conforms.
+func TestAtTheLimit(t *testing.T) {
+	t.Parallel()
+	qtest.RequireQuint(t)
+	system(commits, limit).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: seeds(3, 1)}).
+		Expect(t, qtest.Conforms(), qtest.All(atTheLimit))
+}
+
 // crashAfterMail crashes the node just after the first receipt's mail,
 // before its checkpoint: the restarted node mails it again under the same
 // key. The noDedupe mutant's shape.

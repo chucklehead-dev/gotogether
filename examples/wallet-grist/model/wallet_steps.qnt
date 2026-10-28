@@ -40,9 +40,15 @@ module walletGen {
     ledgerPostRecords' = [],
   }
 
-  // the identities and effect keys the model on its own draws
-  pure val IDS = Set("i1", "i2", "i3", "i4")
+  // the identities, in the order commands take them, and the effect keys the
+  // model on its own draws
+  pure val IDS = ["i1", "i2", "i3", "i4", "i5", "i6", "i7", "i8", "i9", "i10", "i11", "i12", "i13", "i14", "i15", "i16", "i17", "i18", "i19", "i20", "i21", "i22", "i23", "i24", "i25", "i26", "i27", "i28", "i29", "i30"]
   pure val KEYS = Set("k1", "k2", "k3")
+  // the next identity a command answers (none once all are): the first
+  // unanswered, so that the model on its own never draws a used one (a
+  // command that would be disabled) nor two that differ only by name
+  pure def nextID(answered: Set[str]): Set[str] =
+    IDS.foldl(Set(), (s, i) => if (s == Set() and not(answered.contains(i))) Set(i) else s)
 
   // a command's commit of b, answering id
   action appends(b: List[Event], id: str): bool = all {
@@ -284,7 +290,7 @@ module walletGen {
         nondet account = STRS.oneOf()
         nondet amount = INTS.oneOf()
         nondet principal = STRS.oneOf()
-        nondet id = IDS.oneOf()
+        nondet id = nextID(answered).oneOf()
         {
           val args_: DepositArgs = { account: account, amount: amount, principal: principal }
           val result_ = depositOutcome(log, args_)
@@ -296,7 +302,7 @@ module walletGen {
         nondet dest = STRS.oneOf()
         nondet amount = INTS.oneOf()
         nondet principal = STRS.oneOf()
-        nondet id = IDS.oneOf()
+        nondet id = nextID(answered).oneOf()
         {
           val args_: TransferArgs = { src: src, dest: dest, amount: amount, principal: principal }
           val result_ = transferOutcome(log, args_)
@@ -365,7 +371,12 @@ module walletCallsGen {
 
   action init = all { log' = [], answered' = Set() }
 
-  pure val IDS = Set("i1", "i2", "i3")
+  pure val IDS = ["i1", "i2", "i3", "i4", "i5", "i6", "i7", "i8", "i9", "i10", "i11", "i12", "i13", "i14", "i15", "i16", "i17", "i18", "i19", "i20", "i21", "i22", "i23", "i24", "i25", "i26", "i27", "i28", "i29", "i30"]
+  // the next identity a command answers (none once all are): the first
+  // unanswered, so that the model on its own never draws a used one (a
+  // command that would be disabled) nor two that differ only by name
+  pure def nextID(answered: Set[str]): Set[str] =
+    IDS.foldl(Set(), (s, i) => if (s == Set() and not(answered.contains(i))) Set(i) else s)
 
   action answers(b: List[Event], id: str): bool = all {
     freshKey(answered, id),
@@ -406,7 +417,7 @@ module walletCallsGen {
         nondet account = STRS.oneOf()
         nondet amount = INTS.oneOf()
         nondet principal = STRS.oneOf()
-        nondet id = IDS.oneOf()
+        nondet id = nextID(answered).oneOf()
         deposit(account, amount, id, principal, depositOutcome(log, { account: account, amount: amount, principal: principal }))
       },
       {
@@ -414,7 +425,7 @@ module walletCallsGen {
         nondet dest = STRS.oneOf()
         nondet amount = INTS.oneOf()
         nondet principal = STRS.oneOf()
-        nondet id = IDS.oneOf()
+        nondet id = nextID(answered).oneOf()
         transfer(src, dest, amount, id, principal, transferOutcome(log, { src: src, dest: dest, amount: amount, principal: principal }))
       },
       {

@@ -54,3 +54,31 @@ eventually: [everyBorrowReceipted]
 # The model on its own (gotogether simulate)
 simulate:
   holds: [copiesHeld, withinLimit]
+  # every outcome of every command, and every processor's steps, each reachable by the
+  # model on its own: one its rules forbid is one no conforming run can show (P3)
+  possible:
+    - name: addBook.ok
+      when: 'nextID(answered) != Set() and STRS.exists(book => INTS.exists(copies => STRS.exists(principal => addBookOutcome(log, { book: book, copies: copies, principal: principal }) == "ok")))'
+    - name: addBook.invalid
+      when: 'nextID(answered) != Set() and STRS.exists(book => INTS.exists(copies => STRS.exists(principal => addBookOutcome(log, { book: book, copies: copies, principal: principal }) == "invalid")))'
+    - name: borrow.ok
+      when: 'nextID(answered) != Set() and STRS.exists(member => STRS.exists(book => STRS.exists(principal => borrowRuled(log, { member: member, book: book, principal: principal }).outcome == "ok")))'
+    - name: borrow.not-member
+      when: 'nextID(answered) != Set() and STRS.exists(member => STRS.exists(book => STRS.exists(principal => borrowRuled(log, { member: member, book: book, principal: principal }).outcome == "not-member")))'
+    - name: borrow.unavailable
+      when: 'nextID(answered) != Set() and STRS.exists(member => STRS.exists(book => STRS.exists(principal => borrowRuled(log, { member: member, book: book, principal: principal }).outcome == "unavailable")))'
+    - name: borrow.limit
+      when: 'nextID(answered) != Set() and STRS.exists(member => STRS.exists(book => STRS.exists(principal => borrowRuled(log, { member: member, book: book, principal: principal }).outcome == "limit")))'
+    - name: join.ok
+      when: 'nextID(answered) != Set() and STRS.exists(member => STRS.exists(principal => joinOutcome(log, { member: member, principal: principal }) == "ok"))'
+    - name: join.already-member
+      when: 'nextID(answered) != Set() and STRS.exists(member => STRS.exists(principal => joinOutcome(log, { member: member, principal: principal }) == "already-member"))'
+    - name: returnBook.ok
+      when: 'nextID(answered) != Set() and STRS.exists(member => STRS.exists(book => STRS.exists(principal => returnBookOutcome(log, { member: member, book: book, principal: principal }) == "ok")))'
+    - name: returnBook.not-held
+      when: 'nextID(answered) != Set() and STRS.exists(member => STRS.exists(book => STRS.exists(principal => returnBookOutcome(log, { member: member, book: book, principal: principal }) == "not-held")))'
+    - memberLoans
+    - receiptsEffect
+    - receipts
+    - mailerSend
+    - mailerSendServed
