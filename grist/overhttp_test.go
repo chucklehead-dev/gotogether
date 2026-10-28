@@ -53,10 +53,21 @@ func TestCallOverHTTP(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// three caller steps, and the two outcome events: the processor
+	// appends an outcome after its call's step is recorded, so the third
+	// step's grist.unknown could still be on its way (once read before it)
+	outcomeTypes := grist.Selector{Types: []string{"grist.failed", "grist.unknown"}}
 	deadline := time.Now().Add(10 * time.Second)
-	for len(byAction(sink.Steps(), "bankPay")) < 3 {
+	for {
+		outs, _, err := st.Read(context.Background(), "t1", outcomeTypes, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(byAction(sink.Steps(), "bankPay")) >= 3 && len(outs) >= 2 {
+			break
+		}
 		if time.Now().After(deadline) {
-			t.Fatalf("caller steps %v: want three within 10 s", byAction(sink.Steps(), "bankPay"))
+			t.Fatalf("caller steps %v, outcome events %v: want three and two within 10 s", byAction(sink.Steps(), "bankPay"), outcomes(outs))
 		}
 		time.Sleep(5 * time.Millisecond)
 	}

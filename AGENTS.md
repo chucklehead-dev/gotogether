@@ -114,11 +114,15 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   qenv/simlog/kinesislog) have no `replace`: `go install …@version` refuses one, and a
   dependency's is ignored. They require each other at pushed commits
   (pseudo-versions, until tags), all at one commit: `TestCorePinsAgree`
-  (internal/ciconfig) fails while their pins differ. A change to the
-  core that another published module needs: push it, then
+  (internal/ciconfig) fails while their pins differ, not while they
+  lag the core: a push to the core alone keeps them green. A change to
+  the core that another published module needs: push it, then
   `ci/bump-core.sh <commit>` (every published module, GOWORK=off go get
   and tidy) and push again; until then CI tests each module against the
-  older core. CI's consumer job builds ci/consumer from outside the
+  older core. The bump is routine: any agent runs it, never a `go get`
+  of the core in one module (that split the pins twice). Two bumps that
+  race conflict in go.mod and go.sum: take origin's and run the script
+  again at the newer commit. CI's consumer job builds ci/consumer from outside the
   repository, as a user would. Formats are versioned by one table
   (internal/formats, DESIGN §63): a breaking change to a format bumps
   its major there; the woven ABI's is `woven.ABI1`'s name.
