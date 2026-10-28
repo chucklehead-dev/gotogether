@@ -1,0 +1,23 @@
+== github.com/chucklehead-dev/gotogether/qenv/kubesim
+func AsWriter(ctx context.Context, name string) context.Context
+func NewCluster(s *qenv.Sim, name string, scheme *runtime.Scheme, objs ...client.Object) *Cluster
+func NewDeployment(key client.ObjectKey, image string, replicas int32) *appsv1.Deployment
+type Cluster struct
+    field Name string
+    field Client client.Client
+    field PodTimes []time.Duration
+    field OnWrite func(ctx context.Context, w Write)
+    method (*Cluster) Stored(key client.ObjectKey, obj client.Object) error
+type Fleet struct
+    field Members []*Cluster
+    method (*Fleet) Cluster(name string) (*Cluster, error)
+    method (*Fleet) Names() []string
+    method (*Fleet) Reader(_ context.Context, name string) (client.Reader, error)
+    method (*Fleet) Writer(_ context.Context, name string) (client.Writer, error)
+type Write struct
+    field Verb string
+    field Subresource string
+    field Object client.Object
+    field Writer string
+var ErrUnavailable = errors.New("kubesim: the API server did not answer")
+

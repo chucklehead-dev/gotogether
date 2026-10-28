@@ -43,7 +43,8 @@ const (
 
 // Clusters is the controller's view of the fleet. Production implements
 // it over multicluster-runtime (cmd/fleet-controller), with uncached reads;
-// the simulation over controller-runtime fake clients (package kubesim).
+// the simulation over controller-runtime fake clients (qenv/kubesim's
+// Fleet).
 type Clusters interface {
 	Names() []string
 	Reader(ctx context.Context, cluster string) (client.Reader, error)

@@ -203,7 +203,7 @@ jobs:
         run: ci/install-quint.sh
       - name: vet and test each published module in the workspace
         run: |
-          for m in qhegel qweave qanalysis qgosim grist qnav qenv/simgrpc; do
+          for m in qhegel qweave qanalysis qgosim grist qnav qenv/simgrpc qenv/kubesim; do
             echo "::group::$m"
             (cd $m && go vet ./... && go test -short -count=1 -timeout 30m ./...) || exit 1
             echo "::endgroup::"
@@ -243,7 +243,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [qenv/simgrpc]
+        module: [qenv/simgrpc, qenv/kubesim]
     name: doubles (${{ matrix.module }})
     runs-on: ubuntu-latest
     defaults:

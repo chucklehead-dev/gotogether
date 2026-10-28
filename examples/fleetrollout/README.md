@@ -10,7 +10,7 @@ its status reports that generation fully rolled out.
 The same controller (package `rollout`) runs in two environments. Both
 produce the same steps, checked by the same model:
 
-| | Simulated (`kubesim` on [`qenv`](../../qenv)) | Real (`cmd/fleet-controller` on [kwok](https://kwok.sigs.k8s.io)) |
+| | Simulated ([`qenv/kubesim`](../../qenv/kubesim) on [`qenv`](../../qenv)) | Real (`cmd/fleet-controller` on [kwok](https://kwok.sigs.k8s.io)) |
 |---|---|---|
 | Member clusters | controller-runtime fake clients behind interceptors | three kwok clusters: real etcd, kube-apiserver and kube-controller-manager; pods on fake nodes |
 | The controller | `Reconcile` every 200 ms, in a crashable process | a multicluster-runtime manager watching the Deployment in every member |
@@ -73,7 +73,7 @@ first try, just as the simulated lag did.
 Under a production workload (`TestRolloutUnderProductionWorkload`):
 - SimKube's scaling trace, a real cluster's Deployments scaled over 19
   minutes, is replayed onto the members as another writer
-  (`Config.Workload`, `kubesim.Fleet.Replay`, 60 times faster) while the
+  (`Config.Workload`, `Replay`, 60 times faster) while the
   rollout runs, through the same faults.
 - The faithful controller conforms, and `IgnoreObservedGeneration` still
   violates `withinBudget`, though in fewer runs: the scalings perturb its
@@ -84,8 +84,8 @@ Under a production workload (`TestRolloutUnderProductionWorkload`):
 - **The model had no other writers.** Replaying a real workload put
   another writer's updates on the members, and the model had no step for
   them. A real cluster has autoscalers and people with kubectl. `scale` is
-  the environment's spec change, recorded at the API server under
-  `kubesim.AsWriter`: the generation moves on, and the cluster is
+  the environment's spec change, recorded at the API server (kubesim's
+  `OnWrite`) for writes under `kubesim.AsWriter`: the generation moves on, and the cluster is
   complete again only when its status catches up.
 
 - **In-memory progress breaks under lost responses, not just restarts.** I
@@ -117,8 +117,8 @@ Under a production workload (`TestRolloutUnderProductionWorkload`):
 | | |
 |---|---|
 | `rollout/` | the controller, against the `Clusters` seam (reader and writer per member); mutants; `observe`/`patch` recording |
-| `kubesim/` | simulated members: fake clients with generation and conflict semantics, request faults, a Deployment controller with lag |
-| `fleet.go` | the simulated fleet: `Run(chooser, config)`, with an optional production workload (`Config.Workload`, a SimKube trace) |
+| `fleet.go` | the simulated fleet on `qenv/kubesim` (a published module, first written here: fake clients with generation and conflict semantics, request faults, a Deployment controller with lag): `Run(chooser, config)`, the members' patch and scale steps recorded where their API servers apply them |
+| `replay.go` | an optional production workload replayed as another writer (`Config.Workload`, a SimKube trace) |
 | `cmd/fleet-controller` | the real controller (multicluster-runtime, static `clusters` provider, uncached reads, durable step log); `-verify` for the final reads |
 | `kwok/fleet.yaml`, `kwok-demo.sh` | the members' node and Deployment; the end-to-end run |
 | `kwokstages.go`, `cmd/kwok-stages` | kwok pod Stages timed by a trace's lifetimes (`TRACE=` in the demo) |

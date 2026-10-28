@@ -60,7 +60,7 @@ func TestInMemoryProgress(t *testing.T) {
 	// the time), 13.5% with the API's faults at 0.15: 40 seeds miss it
 	// with probability 0.3%; 26 (-short) miss it 2.3% of the time at the
 	// 13.6% of seeds 1 to 140, 4.8% at the 11% of seeds 41 to 140 alone
-	system(fleetrollout.Config{Mutation: rollout.InMemoryProgress, NoCrashes: true}).WithRates(qenv.DefaultRates.Set("kube.request", 0.15)).
+	system(fleetrollout.Config{Mutation: rollout.InMemoryProgress, NoCrashes: true}).WithRates(qenv.DefaultRates.Set("kube", 0.15)).
 		Explore(t, qtest.ExploreConfig{Seeds: 40, ShortSeeds: 26}).Expect(t, qtest.Violates("withinBudget"))
 }
 

@@ -1,5 +1,5 @@
 // Package fleetrollout runs the rollout controller (package rollout)
-// against a simulated fleet (package kubesim) in a qenv simulation: member
+// against a simulated fleet (qenv/kubesim) in a qenv simulation: member
 // clusters whose API servers fail requests and lose responses, whose
 // Deployment status lags its spec, and a controller process that crashes
 // and restarts. cmd/fleet-controller runs the same controller against
@@ -9,12 +9,16 @@ package fleetrollout
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
-	"github.com/chucklehead-dev/gotogether/examples/fleetrollout/kubesim"
+	appsv1 "k8s.io/api/apps/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/chucklehead-dev/gotogether/examples/fleetrollout/rollout"
 	"github.com/chucklehead-dev/gotogether/examples/sktrace"
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qenv/kubesim"
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
@@ -25,7 +29,7 @@ type Config struct {
 	// NoCrashes keeps the controller up.
 	NoCrashes bool
 	// Workload, if set, is a production trace replayed onto the fleet as
-	// another writer while the rollout runs (kubesim.Fleet.Replay), Speed
+	// another writer while the rollout runs (Replay), Speed
 	// times faster (default 60: a trace's minute in a second).
 	Workload *sktrace.Trace
 	Speed    float64
@@ -36,6 +40,29 @@ type Config struct {
 
 // Target is the image rolled out; members start at web:v1.
 const Target = "web:v2"
+
+// Web is the Deployment every member runs: default/web, 3 replicas.
+var Web = client.ObjectKey{Namespace: "default", Name: "web"}
+
+// newMember is a member cluster running Web at web:v1, whose API server
+// records each update it applies to Web where it lands: the rollout's as
+// patch steps, another writer's (kubesim.AsWriter) as scale steps.
+func newMember(s *qenv.Sim, name string) *kubesim.Cluster {
+	m := kubesim.NewCluster(s, name, nil, kubesim.NewDeployment(Web, "web:v1", 3))
+	m.OnWrite = func(ctx context.Context, w kubesim.Write) {
+		d, ok := w.Object.(*appsv1.Deployment)
+		if !ok || w.Verb != "update" || w.Subresource != "" || client.ObjectKeyFromObject(d) != Web {
+			return
+		}
+		if w.Writer != "" {
+			rv, _ := strconv.ParseInt(d.ResourceVersion, 10, 64)
+			qobs.Record(ctx, "scale", nil, "cluster", name, "rv", rv, "generation", d.Generation, "writer", w.Writer)
+			return
+		}
+		rollout.RecordPatch(ctx, name, d)
+	}
+	return m
+}
 
 // Run rolls Target out across the simulated fleet, with c making the
 // choices: 20 s of virtual time with faults, a settle of up to 30 s
@@ -48,7 +75,7 @@ func Run(c qenv.Chooser, cfg Config) (*kubesim.Fleet, error) {
 	defer s.Close()
 	f := &kubesim.Fleet{}
 	for i := 1; i <= cfg.Members; i++ {
-		m := kubesim.NewCluster(s, fmt.Sprintf("m%d", i), "web:v1")
+		m := newMember(s, fmt.Sprintf("m%d", i))
 		m.PodTimes = cfg.PodTimes
 		f.Members = append(f.Members, m)
 	}
@@ -56,10 +83,10 @@ func Run(c qenv.Chooser, cfg Config) (*kubesim.Fleet, error) {
 		if cfg.Speed == 0 {
 			cfg.Speed = 60
 		}
-		f.Replay(s, cfg.Workload, cfg.Speed)
+		Replay(s, f, cfg.Workload, cfg.Speed)
 	}
 	newController := func() *rollout.Controller {
-		return &rollout.Controller{Clusters: f, Key: kubesim.Web, Image: Target, MaxUnavailable: 1, Mutation: cfg.Mutation}
+		return &rollout.Controller{Clusters: f, Key: Web, Image: Target, MaxUnavailable: 1, Mutation: cfg.Mutation}
 	}
 	// a level-based controller: reconcile, wait, repeat; a restart starts
 	// a new Controller, with nothing remembered
@@ -79,7 +106,9 @@ func Run(c qenv.Chooser, cfg Config) (*kubesim.Fleet, error) {
 	}
 	final := newController()
 	for _, m := range f.Members {
-		final.Observe(s.Context(), m.Name, m.Read())
+		d := &appsv1.Deployment{}
+		_ = m.Stored(Web, d)
+		final.Observe(s.Context(), m.Name, d)
 	}
 	qobs.Record(s.Context(), "settle", nil)
 	return f, nil
