@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/internal/qeval"
+	"github.com/chucklehead-dev/gotogether/itf"
 )
 
 // The state-graph explorer (P2): a binding's model, its simulation's
@@ -87,8 +89,53 @@ type GraphResult struct {
 	// model's compile)
 	Elapsed time.Duration
 
-	// graph is the explored graph, for what builds on it
+	// graph is the explored graph, for what builds on it; e the
+	// evaluator that explored it
 	graph *qeval.Graph
+	e     *evaluator
+	keys  map[string]bool // its states' keys, made by Lacks
+}
+
+// Lacks is the first state of tr, a trace quint sampled of the same
+// instance (its variables named as the model names them, mbt:: ones
+// aside), that is no state of r's graph: its index, with the state as
+// text, or -1. Every state quint reaches is reachable, so a complete
+// graph lacking one is the Go evaluator's error: its "holds" and "live"
+// rest on the evaluator alone, and this is quint's check of them
+// (review 11, O1: a fold the evaluator folded in the wrong order made a
+// complete graph of states quint never visits, missing the one it does).
+func (r *GraphResult) Lacks(tr *itf.Trace) (int, string, error) {
+	if r.graph == nil || r.e == nil {
+		return -1, "", fmt.Errorf("graph: no graph to compare with")
+	}
+	if r.keys == nil {
+		r.keys = map[string]bool{}
+		for _, s := range r.graph.States {
+			r.keys[r.e.m.Key(s)] = true
+		}
+	}
+	for i, st := range tr.States {
+		s := qeval.State{}
+		for _, v := range r.e.m.Vars {
+			short := v[strings.LastIndex(v, ":")+1:]
+			x, ok := st.Vars[short]
+			if !ok {
+				return -1, "", fmt.Errorf("graph: quint's trace has no variable %s", short)
+			}
+			val, err := qeval.FromITF(x)
+			if err != nil {
+				return -1, "", fmt.Errorf("graph: quint's state %d: %w", i, err)
+			}
+			s[v] = val
+		}
+		if hooks.TamperEval.Load() == 8 && i == len(tr.States)-1 && i > 0 {
+			return i, stateText(r.e, s), nil // the evaluator's graph made to lack quint's last state
+		}
+		if !r.keys[r.e.m.Key(s)] {
+			return i, stateText(r.e, s), nil
+		}
+	}
+	return -1, "", nil
 }
 
 // A GraphBound is the bounds a graph was searched with (0: none).
@@ -258,7 +305,7 @@ func (c *Checker) Graph(cfg GraphSearch) (*GraphResult, error) {
 	}
 	g, err := e.m.Explore(consts, e.em.Init, step, bound, label)
 	r := &GraphResult{States: len(g.States), Starts: g.Starts, Transitions: g.Edges(), Complete: g.Complete, Cut: g.Cut,
-		Bound: GraphBound{bound.States, bound.Depth}, graph: g}
+		Bound: GraphBound{bound.States, bound.Depth}, graph: g, e: e}
 	if err != nil {
 		var u *qeval.Unsupported
 		var ee *qeval.EvalError

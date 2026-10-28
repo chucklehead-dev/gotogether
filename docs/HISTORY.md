@@ -2752,6 +2752,13 @@ verdicts quint does not give. Each reproduction is a regression test now
   order; otherwise Unsupported, and quint judges. The repository's folds
   (grist's min, the examples' sums and maxima) are all of the shapes;
   `TestAgreesWithQuint` agrees on every model as before.
+- **O1, `-graph`'s "holds" on the evaluator alone.** A complete graph
+  is now checked against quint's sampling of the instance (up to 50
+  traces): a state quint reaches that the graph lacks is an evaluator
+  bug, a FAIL that voids the graph's verdicts. With F1's old fold
+  restored, rr's run fails on its first sampled state
+  (`TestSimulateGraphCheckedByQuint`, by a tampered graph). Truncated
+  graphs claim no proof and are not checked.
 - **F2, a choice inside a bound action** (high). An action that chooses
   (`any { x' = 1, ..., x' = 4 }`, a die's nondet) whose expect reads the
   result: quint's replay draws the choice, and three validations of one

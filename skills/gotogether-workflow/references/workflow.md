@@ -36,7 +36,9 @@ exits 1 on a misclassified invariant, naming it and the fix.
 
 `-graph` checks the same classification over every reachable state
 instead of samples (the Go evaluator, breadth first, no quint process):
-in a complete graph `holds` is proved for the instance and `allows`
+in a complete graph `holds` is proved for the instance (quint samples
+it too, and a state quint reaches that the graph lacks fails the run as
+an evaluator bug) and `allows`
 gets the shortest counterexample, with a Quint run that replays it
 (`-out cex.qnt`, then `quint test --main simulate --match gtg_
 cex.qnt`). It also fails on a deadlock (a reachable state the step

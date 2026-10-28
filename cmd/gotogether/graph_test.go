@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
@@ -263,4 +264,27 @@ func TestSimulateGraphEventually(t *testing.T) {
 		t.Fatalf("-out: %v\n%s", err, src)
 	}
 	replayInQuint(t, out)
+}
+
+// A complete graph's verdicts are checked against quint's sampling: every
+// state quint reaches must be in the graph. With the evaluator made to
+// lack one (TamperEval 8, as a fold folded in the wrong order made it:
+// review 11, O1) the run fails loudly as an evaluator bug, its "holds"
+// void; untampered it says the sample agreed.
+func TestSimulateGraphCheckedByQuint(t *testing.T) {
+	skip.Quint(t)
+	code, got := capture(t, func() (int, error) {
+		return simulate([]string{"-graph", "-binding", "../../validate/testdata/vending.yaml"})
+	})
+	if code != 0 || !strings.Contains(got, "every state they reach is in the graph") {
+		t.Errorf("exit %d, want 0 and the sample's agreement in\n%s", code, got)
+	}
+	hooks.TamperEval.Store(8)
+	defer hooks.TamperEval.Store(0)
+	code, got = capture(t, func() (int, error) {
+		return simulate([]string{"-graph", "-binding", "../../validate/testdata/vending.yaml"})
+	})
+	if code != 1 || !strings.Contains(got, "a state the Go evaluator's complete graph lacks") || strings.Contains(got, "  holds ") {
+		t.Errorf("tampered: exit %d, want 1, the evaluator bug named and no holds, in\n%s", code, got)
+	}
 }

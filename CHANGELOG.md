@@ -31,6 +31,9 @@ The first release. What a user meets, by module:
   are still every run's. New: `qenv.CoverageWith(runs, sites...)` and
   `Sim.FaultSites()`; qtest's coverage passes its runs' sites itself.
   `TestFaultPoints` passed or failed by test order.
+- `simulate -graph` checks a complete graph against quint's sampling
+  of the instance (review 11, O1): a state quint reaches that the graph
+  lacks fails the run as an evaluator bug; `validate.GraphResult.Lacks`.
 - Clocks across recorders (review 11, F5): `qtest.ClockSkew`,
   `validate -skew`, `validate.SearchOptions.Skew` and
   `qtrace.LinearizeOptions.Skew` set how far apart recorders' clocks may

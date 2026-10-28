@@ -4479,7 +4479,25 @@ quint process but the cached compile: `gotogether simulate -graph`, and
   checked, those at the depth bound (not expanded) included.
 - **Complete or not.** Complete means no bound cut the search and the
   evaluator refused nothing: every state reachable (within the depth
-  bound, if set) was checked, and "holds" is a proof for the instance.
+  bound, if set) was checked, and "holds" is a proof for the instance,
+  as far as the evaluator is right.
+- **Checked by quint's sampling.** That proviso was the whole proof: no
+  quint process looked, and a fold the evaluator folded in the wrong
+  order (review 11, F1) made a complete graph of states quint never
+  visits, lacking the one it does, and "proved" an invariant quint
+  violates. `simulate -graph` now also samples the instance with quint
+  (`simulate.samples` traces, at most 50, of `simulate.steps`) and
+  requires every state quint reaches to be a node of a complete graph
+  (`GraphResult.Lacks`, by `Model.Key`): every state quint reaches is
+  reachable, so a missing one is an evaluator bug, a FAIL (exit 1) that
+  names the state and voids the graph's verdicts (none says `holds`).
+  The old fold is caught at once (the round robin's first sampled
+  state); `TestSimulateGraphCheckedByQuint` tampers the graph to lack a
+  state (`hooks.TamperEval` 8). A sample is no proof that the graph has
+  no extra states (an evaluator that reaches a state quint cannot would
+  show a false violation, which its replay in quint refutes) nor that it
+  lacks none quint's sample missed: it is the evaluator's run-time audit,
+  as a sampled pass is (§56).
   State identity is `Model.Key`, each variable's value written as a
   Quint literal in the order of Vars: strings quoted, sets and maps in
   Compare's order, records by field name, every compound bracketed, so

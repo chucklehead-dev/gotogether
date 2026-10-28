@@ -60,7 +60,7 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   not quint's own set order, which no quint version promises. Example:
   `examples/shards`, a rebalance protocol over a set fold, `-graph` and
   quint agreeing in its README.
-- **I3. `-graph` cross-checked against quint (S). In progress.** A
+- **I3. `-graph` cross-checked against quint (S). Done.** A
   graph's "holds" rested on the evaluator alone. Every `-graph` run also
   samples quint (`simulate.samples`) and requires each state quint
   visits to be a node of a complete graph: a missing one is an evaluator

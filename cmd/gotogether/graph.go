@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
@@ -50,19 +51,38 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 	if err != nil {
 		return 2, fmt.Errorf("simulate -graph: %w", err)
 	}
+	// a complete graph's verdicts are the evaluator's alone: quint samples
+	// the instance, and every state it reaches must be in the graph
+	var sampledLine string
+	evalBug := false
+	if r.Complete {
+		n, lack, err := crossCheck(b, overrides, quint, r, steps, samples, seed)
+		switch {
+		case err != nil:
+			return 2, err
+		case lack != "":
+			evalBug = true
+			r.Complete, r.Cut, r.Stopped = false, "error", "quint reached a state the graph lacks: "+lack
+			sampledLine = fmt.Sprintf("  FAIL    quint's sampling reached a state the Go evaluator's complete graph lacks (%s): an evaluator bug (internal/qeval), so the graph's verdicts are void. "+
+				"Report it with the binding; meanwhile check the model with simulate without -graph (quint's sampling)\n", lack)
+		default:
+			sampledLine = fmt.Sprintf("  sampled quint's %s of up to %d steps: every state they reach is in the graph (the evaluator's verdicts checked against quint's)\n", plural(n, "trace"), steps)
+		}
+	}
 	bounds := fmt.Sprintf("at most %d states", r.Bound.States)
 	if r.Bound.Depth > 0 {
 		bounds += fmt.Sprintf(", depth %d", r.Bound.Depth)
 	}
 	fmt.Printf("simulate %s: %s(%s), its state graph by the Go evaluator (%s)\n", bpath, b.Module, strings.Join(constantList(b, overrides), ", "), bounds)
 	fmt.Printf("  graph   %s, %.1fs\n", r.Extent(), r.Elapsed.Seconds())
+	fmt.Print(sampledLine)
 	where := "no reachable state"
 	if !r.Complete {
 		where = fmt.Sprintf("none of the %d states explored", r.States)
 	}
-	raise := "raise -states or -depth (simulate.graphStates, simulate.graphDepth)"
+	raise := "raise -states or -depth (simulate.graphStates, simulate.graphDepth) for a proof"
 	if r.Cut == "unsupported" || r.Cut == "error" {
-		raise = "simulate without -graph samples the model with quint"
+		raise = "simulate without -graph samples the model with quint, bounded too"
 	}
 	holds, allows := set(sim.Holds), set(sim.Allows)
 	code, unchecked := 0, false
@@ -83,7 +103,7 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 		case holds[inv] && v.Held() && r.Complete:
 			fmt.Printf("  holds   %s: no reachable state violates it (the whole graph, %d states%s)\n", inv, r.States, depthNote(r))
 		case holds[inv] && v.Held():
-			fmt.Printf("  bounded %s: %s violates it, which proves nothing past them (the graph is truncated: %s for a proof)\n", inv, where, raise)
+			fmt.Printf("  bounded %s: %s violates it, which proves nothing past them (the graph is truncated: %s)\n", inv, where, raise)
 		case allows[inv] && v.Violated:
 			fmt.Printf("  allows  %s: a state %d steps from init violates it (the code must not): %s\n", inv, len(v.Counterexample.Steps)-1, callsOf(v.Counterexample))
 		case holds[inv]:
@@ -209,6 +229,9 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 		}
 		fmt.Printf("  wrote   %s: quint test --main simulate --match 'gtg_' %s replays each counterexample\n", out, filepath.Base(out))
 	}
+	if evalBug {
+		return 1, nil
+	}
 	if code == 0 && (unchecked || r.Cut == "unsupported" || r.Cut == "error") {
 		if r.Cut == "unsupported" || r.Cut == "error" {
 			fmt.Printf("  stopped %s\n", r.Stopped)
@@ -326,4 +349,56 @@ func capitalize(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// crossChecked bounds the traces crossCheck samples: the check is a
+// membership test per state, and a few dozen traces find a state the
+// graph lacks where one is reachable often (a fold's order: in every one).
+const crossChecked = 50
+
+// crossCheck samples b's instance with quint (min(samples, crossChecked)
+// traces of up to steps steps, seed's) and looks for a state the graph r
+// lacks: how many traces it read, and the first such state, with where
+// it was, or "". The one quint process of a -graph run without possibles
+// (review 11, O1).
+func crossCheck(b *binding.Binding, overrides []string, quint string, r *validate.GraphResult, steps, samples int, seed string) (int, string, error) {
+	n := min(max(samples, 1), crossChecked)
+	dir, err := os.MkdirTemp("", "gotogether-graph-*")
+	if err != nil {
+		return 0, "", err
+	}
+	defer os.RemoveAll(dir)
+	file := filepath.Join(dir, "simulate.qnt")
+	src, err := simulationModule(b, overrides, file)
+	if err != nil {
+		return 0, "", err
+	}
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		return 0, "", err
+	}
+	argv := backendArgs([]string{"run", "--main", "simulate", "--out-itf", filepath.Join(dir, "t_{seq}.itf.json"), "--n-traces", fmt.Sprint(n),
+		"--max-steps", fmt.Sprint(steps), "--max-samples", fmt.Sprint(n)})
+	if seed != "" {
+		argv = append(argv, "--seed", seed)
+	}
+	out, qerr := runQuint(quint, dir, append(argv, file))
+	files, _ := filepath.Glob(filepath.Join(dir, "t_*.itf.json"))
+	if len(files) == 0 {
+		return 0, "", fmt.Errorf("simulate -graph: quint's sampling of the instance wrote no trace to check the graph against: %v\n%s", qerr, out)
+	}
+	slices.Sort(files)
+	for _, f := range files {
+		tr, err := itf.ReadFile(f)
+		if err != nil {
+			return 0, "", fmt.Errorf("simulate -graph: %s: %w", f, err)
+		}
+		i, st, err := r.Lacks(tr)
+		if err != nil {
+			return 0, "", fmt.Errorf("simulate -graph: %w", err)
+		}
+		if i >= 0 {
+			return len(files), fmt.Sprintf("%s, state %d of a sampled trace", st, i), nil
+		}
+	}
+	return len(files), "", nil
 }

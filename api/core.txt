@@ -2264,6 +2264,7 @@ type GraphResult struct
     field Stops []string
     field Elapsed time.Duration
     method (*GraphResult) Extent() string
+    method (*GraphResult) Lacks(tr *itf.Trace) (int, string, error)
     method (*GraphResult) NeverEnabled() []string
 type GraphSearch struct
     field Constants []string
