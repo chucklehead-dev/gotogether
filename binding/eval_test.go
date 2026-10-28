@@ -7,8 +7,10 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	syncatomic "sync/atomic"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/memo"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
@@ -82,46 +84,53 @@ func TestEvalModuleCompiles(t *testing.T) {
 		ps, _ := filepath.Glob(g)
 		paths = append(paths, ps...)
 	}
-	n := 0
-	for _, p := range paths {
-		b, err := Load(p)
-		if err != nil {
-			continue
-		}
-		t.Run(strings.TrimPrefix(p, "../"), func(t *testing.T) {
-			m, err := LoadModel("", b.SpecPath(), b.Module)
+	// Bindings share models (counters' six bindings one): each spec is
+	// typechecked once, and the bindings compile in parallel (a quint
+	// process each, most of the package's cost).
+	var models memo.Map[string, *Model]
+	var n syncatomic.Int32
+	t.Run("bindings", func(t *testing.T) {
+		for _, p := range paths {
+			b, err := Load(p)
 			if err != nil {
-				t.Skipf("model: %v", err)
+				continue
 			}
-			dir := t.TempDir()
-			qnt := filepath.Join(dir, "eval.qnt")
-			em, err := b.EvalModule(m, qnt)
-			if err != nil {
-				t.Errorf("no evaluation module: %v", err) // every binding of the repository has one
-			}
-			if err := os.WriteFile(qnt, []byte(em.Text), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			ir := filepath.Join(dir, "ir.json")
-			f, _ := os.Create(ir)
-			cmd := exec.Command("quint", "compile", "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, qnt)
-			var stderr strings.Builder
-			cmd.Dir, cmd.Stdout, cmd.Stderr = dir, f, &stderr
-			err = cmd.Run()
-			f.Close()
-			if err != nil {
-				t.Fatalf("quint compile: %v\n%s\n%s", err, stderr.String(), em.Text)
-			}
-			data, _ := os.ReadFile(ir)
-			for _, name := range append(append(mapValues(em.Expects), mapValues(em.Actions)...), append(mapValues(em.Invariants), mapValues(em.Eventually)...)...) {
-				if !strings.Contains(string(data), `"name":"`+name+`"`) {
-					t.Errorf("%s is not in the compiled IR", name)
+			t.Run(strings.TrimPrefix(p, "../"), func(t *testing.T) {
+				t.Parallel()
+				m, err := models.Do(b.SpecPath()+"\x00"+b.Module, func() (*Model, error) { return LoadModel("", b.SpecPath(), b.Module) })
+				if err != nil {
+					t.Skipf("model: %v", err)
 				}
-			}
-			n++
-		})
-	}
-	if n < 15 {
+				dir := t.TempDir()
+				qnt := filepath.Join(dir, "eval.qnt")
+				em, err := b.EvalModule(m, qnt)
+				if err != nil {
+					t.Errorf("no evaluation module: %v", err) // every binding of the repository has one
+				}
+				if err := os.WriteFile(qnt, []byte(em.Text), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				ir := filepath.Join(dir, "ir.json")
+				f, _ := os.Create(ir)
+				cmd := exec.Command("quint", "compile", "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, qnt)
+				var stderr strings.Builder
+				cmd.Dir, cmd.Stdout, cmd.Stderr = dir, f, &stderr
+				err = cmd.Run()
+				f.Close()
+				if err != nil {
+					t.Fatalf("quint compile: %v\n%s\n%s", err, stderr.String(), em.Text)
+				}
+				data, _ := os.ReadFile(ir)
+				for _, name := range append(append(mapValues(em.Expects), mapValues(em.Actions)...), append(mapValues(em.Invariants), mapValues(em.Eventually)...)...) {
+					if !strings.Contains(string(data), `"name":"`+name+`"`) {
+						t.Errorf("%s is not in the compiled IR", name)
+					}
+				}
+				n.Add(1)
+			})
+		}
+	})
+	if n := n.Load(); n < 15 {
 		t.Errorf("%d bindings' modules compiled", n)
 	}
 }

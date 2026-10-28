@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/binding"
@@ -33,23 +34,29 @@ func TestAgreesWithQuint(t *testing.T) {
 	}
 	sort.Strings(paths)
 	seen := map[string]bool{}
-	checked := 0
-	for _, p := range paths {
-		b, err := binding.Load(p)
-		if err != nil {
-			continue // not a binding (a convert rule, a corpus)
-		}
-		key := b.SpecPath() + "|" + fmt.Sprint(b.Constants)
-		if seen[key] || templated(b.Constants) {
-			continue
-		}
-		seen[key] = true
-		t.Run(strings.TrimPrefix(p, "../../"), func(t *testing.T) {
-			if agree(t, b) {
-				checked++
+	// each model's quint processes (a compile, a run) in parallel: run one
+	// after another they were most of the package's wall time
+	var agreed atomic.Int32
+	t.Run("models", func(t *testing.T) {
+		for _, p := range paths {
+			b, err := binding.Load(p)
+			if err != nil {
+				continue // not a binding (a convert rule, a corpus)
 			}
-		})
-	}
+			key := b.SpecPath() + "|" + fmt.Sprint(b.Constants)
+			if seen[key] || templated(b.Constants) {
+				continue
+			}
+			seen[key] = true
+			t.Run(strings.TrimPrefix(p, "../../"), func(t *testing.T) {
+				t.Parallel()
+				if agree(t, b) {
+					agreed.Add(1)
+				}
+			})
+		}
+	})
+	checked := agreed.Load()
 	if checked < 10 {
 		t.Errorf("only %d models checked: the evaluator refuses most of the repository's", checked)
 	}
