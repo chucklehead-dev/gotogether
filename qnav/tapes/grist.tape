@@ -21,7 +21,7 @@ Type "stty rows 35 cols 105 && cd ../../examples/counters && clear" Enter
 Show
 
 Type "gotogether-nav -binding counters.binding.yaml -run ../../qnav/tapes/testdata/blind.jsonl" Sleep 400ms Enter
-Wait+Screen@60s /branches \(86\)/
+Wait+Screen@60s /branches \(26\)/
 Sleep 1.5s
 Type "/showCounter" Sleep 300ms Enter
 Wait+Screen /grist: event 1/

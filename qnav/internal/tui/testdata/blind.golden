@@ -2,20 +2,20 @@ gotogether-nav  model counters: the state before call 5, which the model rejects
   state after 4 of its 27 calls)
 path: failing step
 
-branches (86)
+branches (26)
 › createCounter("a", "a", "i1", "a", 1, Set(("counter-created", "name", "a")), "ok")
-  createCounter("a", "a", "i2", "a", 1, Set(("counter-created", "name", "a")), "ok")
-  createCounter("a", "a", "i3", "a", 1, Set(("counter-created", "name", "a")), "ok")
-  createCounter("a", "a", "i4", "a", 1, Set(("counter-created", "name", "a")), "ok")
   createCounter("a", "a", "i1", "b", 1, Set(("counter-created", "name", "a")), "ok")
-  createCounter("a", "a", "i2", "b", 1, Set(("counter-created", "name", "a")), "ok")
-  createCounter("a", "a", "i3", "b", 1, Set(("counter-created", "name", "a")), "ok")
-  createCounter("a", "a", "i4", "b", 1, Set(("counter-created", "name", "a")), "ok")
   createCounter("a", "b", "i1", "a", 1, Set(("counter-created", "name", "b")), "ok")
-  createCounter("a", "b", "i2", "a", 1, Set(("counter-created", "name", "b")), "ok")
-  createCounter("a", "b", "i3", "a", 1, Set(("counter-created", "name", "b")), "ok")
-  createCounter("a", "b", "i4", "a", 1, Set(("counter-created", "name", "b")), "ok")
-  … 74 below
+  createCounter("a", "b", "i1", "b", 1, Set(("counter-created", "name", "b")), "ok")
+  createCounter("b", "a", "i1", "a", 1, Set(("counter-created", "name", "a")), "ok")
+  createCounter("b", "a", "i1", "b", 1, Set(("counter-created", "name", "a")), "ok")
+  createCounter("b", "b", "i1", "a", 1, Set(("counter-created", "name", "b")), "ok")
+  createCounter("b", "b", "i1", "b", 1, Set(("counter-created", "name", "b")), "ok")
+  incrementCounter("a", 1, "i1", "a", 1, Set(("counter-created", "counter", "a")), "unknown-counter…
+  incrementCounter("a", 1, "i1", "b", 1, Set(("counter-created", "counter", "a")), "unknown-counter…
+  incrementCounter("a", 2, "i1", "a", 1, Set(("counter-created", "counter", "a")), "unknown-counter…
+  incrementCounter("a", 2, "i1", "b", 1, Set(("counter-created", "counter", "a")), "unknown-counter…
+  … 14 below
 
 the run's next call, which the model rejects
   call 5 (createCounter("a", "c", "t1-c2-1", "client2", 0, Set(("counter-created", "name",
@@ -38,12 +38,12 @@ the run's next call, which the model rejects
       grist: event 1 (counter-created events tagged counter="c", name="c"), appended after
         the decision read through position 0, matches its read of counter-created events tagged
         name="c": a concurrent append, which the commit should have conflicted on (its condition)
-      enabled instead: createCounter (32 ways, e.g. createCounter(counter = "a", name = "a",
+      enabled instead: createCounter (8 ways, e.g. createCounter(counter = "a", name = "a",
         id = "i1", principal = "a", readPos = 1, reads = Set(("counter-created", "name", "a")),
-        result = "ok")), incrementCounter (32 ways, e.g. incrementCounter(counter = "a", by = 1, id
-        = "i1", principal = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")),
-        result = "unknown-counter")), retireCounter (16 ways, e.g. retireCounter(counter = "a", id =
+        result = "ok")), incrementCounter (8 ways, e.g. incrementCounter(counter = "a", by = 1, id =
         "i1", principal = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result
+        = "unknown-counter")), retireCounter (4 ways, e.g. retireCounter(counter = "a", id = "i1",
+        principal = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result =
 ── lines 1–28 of 202 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
@@ -54,7 +54,7 @@ gotogether-nav  model counters: the state before call 5, which the model rejects
   state after 4 of its 27 calls)
 path: failing step
 
-branches (86)
+branches (26)
 › showCounter("a", 1)
   showCounter("b", 1)
 
@@ -79,13 +79,13 @@ the run's next call, which the model rejects
       grist: event 1 (counter-created events tagged counter="c", name="c"), appended after
         the decision read through position 0, matches its read of counter-created events tagged
         name="c": a concurrent append, which the commit should have conflicted on (its condition)
-      enabled instead: createCounter (32 ways, e.g. createCounter(counter = "a", name = "a",
+      enabled instead: createCounter (8 ways, e.g. createCounter(counter = "a", name = "a",
         id = "i1", principal = "a", readPos = 1, reads = Set(("counter-created", "name", "a")),
-        result = "ok")), incrementCounter (32 ways, e.g. incrementCounter(counter = "a", by = 1, id
-        = "i1", principal = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")),
-        result = "unknown-counter")), retireCounter (16 ways, e.g. retireCounter(counter = "a", id =
+        result = "ok")), incrementCounter (8 ways, e.g. incrementCounter(counter = "a", by = 1, id =
         "i1", principal = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result
-        = "unknown-counter")), showCounter(counter = "a", readPos = 1), showCounter(counter = "b",
+        = "unknown-counter")), retireCounter (4 ways, e.g. retireCounter(counter = "a", id = "i1",
+        principal = "a", readPos = 1, reads = Set(("counter-created", "counter", "a")), result =
+        "unknown-counter")), showCounter(counter = "a", readPos = 1), showCounter(counter = "b",
         readPos = 1), welcome(trigger = 1, ok = true), and 3 more
 
 state  (* changed by the last move)
