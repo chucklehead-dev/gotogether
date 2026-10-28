@@ -15,7 +15,6 @@ The first release. What a user meets, by module:
   command that runs from where you are; `validate -compiled` refused for
   a stale model leaves no empty artifacts directory; grist's `serve`
   logs a clean stop without an error field.
-
 - The Go evaluator's searches (`simulate -graph`, liveness, `Reach`)
   are 1.6-2x faster, with half the allocations (ROADMAP I39); a search
   raises the process's GC percent to 400 while it runs, unless it is
