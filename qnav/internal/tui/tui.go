@@ -1,6 +1,6 @@
 // Package tui is gotogether-nav's interactive navigator (DESIGN §58): a
 // bubbletea model over a model's navigator (validate.Navigator) or a
-// run's navigation session (validate.RunRequest in, validate.RunNode
+// run's navigation session (navproto.Request in, navproto.Node
 // out). Its state (the nodes visited, the cursor, the filter) changes in
 // Update alone and View renders it, so tests drive it with key messages
 // and compare the screens it renders, without a terminal.
@@ -9,6 +9,8 @@ package tui
 import (
 	"fmt"
 	"strings"
+
+	"github.com/chucklehead-dev/gotogether/validate/navproto"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -26,7 +28,7 @@ type ModelNav interface {
 
 // A RunNav answers a run's nodes: a navigation session.
 type RunNav interface {
-	Node(req validate.RunRequest) (*validate.RunNode, error)
+	Node(req navproto.Request) (*navproto.Node, error)
 }
 
 // Config is what the navigator opens: a model (Model, from Path, folded
@@ -65,7 +67,7 @@ type entry struct {
 	path  []string
 	title string
 	m     *validate.Node
-	r     *validate.RunNode
+	r     *navproto.Node
 	// why is the recorded call the model rejects from a model's node
 	why    string
 	cursor int
@@ -118,7 +120,7 @@ func (m *Model) Init() tea.Cmd {
 		if label == "" {
 			label = "start"
 		}
-		return m.runCmd(label, validate.RunRequest{Node: c.Node, Follow: c.Follow, Fold: c.Fold})
+		return m.runCmd(label, navproto.Request{Node: c.Node, Follow: c.Follow, Fold: c.Fold})
 	}
 	return func() tea.Msg {
 		e := entry{label: "init", nav: c.Model, path: c.Path, title: c.Title, why: c.Why}
@@ -148,7 +150,7 @@ func pathOf(n *validate.Node) []string {
 }
 
 // runCmd fetches a run's node.
-func (m *Model) runCmd(label string, req validate.RunRequest) tea.Cmd {
+func (m *Model) runCmd(label string, req navproto.Request) tea.Cmd {
 	run := m.c.Run
 	return func() tea.Msg {
 		n, err := run.Node(req)
@@ -313,7 +315,7 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, k.Fold):
 		m.busy = true
 		if c.r != nil {
-			return m, m.runCmd("fold", validate.RunRequest{Node: c.r.ID, Fold: true})
+			return m, m.runCmd("fold", navproto.Request{Node: c.r.ID, Fold: true})
 		}
 		return m, modelCmd("fold", c.nav, c.title, c.path, true)
 	case key.Matches(msg, k.Fail):
@@ -324,7 +326,7 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.busy = true
-		return m, m.runCmd("save", validate.RunRequest{Node: c.r.ID, Save: true})
+		return m, m.runCmd("save", navproto.Request{Node: c.r.ID, Save: true})
 	case key.Matches(msg, k.Filter):
 		m.filtering = true
 		return m, m.filter.Focus()
@@ -397,7 +399,7 @@ func (m *Model) take() tea.Cmd {
 	if c.r != nil {
 		br := c.r.Branches[b.i]
 		label := strings.TrimSpace(fmt.Sprintf("%d %s", br.Option, br.Name))
-		return m.runCmd(label, validate.RunRequest{Node: br.Child})
+		return m.runCmd(label, navproto.Request{Node: br.Child})
 	}
 	e := c.m.Branches[b.i]
 	return modelCmd(e.Take, c.nav, c.title, append(append([]string{}, c.path...), e.Take), false)
@@ -409,7 +411,7 @@ func (m *Model) fail() tea.Cmd {
 	c := m.cur()
 	if c.r != nil {
 		m.busy = true
-		return m.runCmd("fail", validate.RunRequest{Node: "fail"})
+		return m.runCmd("fail", navproto.Request{Node: "fail"})
 	}
 	if m.c.Failing == nil {
 		m.status = "no failing step: the model was opened without a run (-run steps.jsonl)"

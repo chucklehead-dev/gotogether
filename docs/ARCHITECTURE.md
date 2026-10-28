@@ -63,8 +63,9 @@ package-level variable says whether it is read-only or process-wide
 | input | `otelio`, `convert`, `input`, `qdriver` | other shapes of the same steps: OTLP files, plain spans turned into steps by rules, an external driver's request log |
 | reconstruction | `qtrace.Reconstruct` | steps into one trace per actor, ordered (seq, threads, Lamport or domain clocks), invocations matched with completions (pending calls kept), settles, losses |
 | binding | `binding`, internal/replay | a trace's steps as the model's actions and values: templates, observations, the generated replay module |
-| judging | `validate` (Checker, Report), internal/qeval, internal/quintcmd | is this trace a behaviour of the model: the Go evaluator first, quint for what it cannot decide and for every failure's report; linearization, pending calls, history checks |
-| model analysis | `validate`'s Graph, Possible and Nav, `cmd/gotogether simulate` | the model on its own: invariants proved over a complete graph, liveness as cycles, possibilities, step-by-step navigation |
+| judging | `validate` (Checker, Report, the model navigator `Nav`), internal/qeval, internal/quintcmd | is this trace a behaviour of the model: the Go evaluator first, quint for what it cannot decide and for every failure's report; linearization, pending calls, history checks; the model state by state, from init or a run's state |
+| model analysis | `validate/model` (Simulate, Analyzer: Graph, Possible), above `validate` (it builds on the Checker's compiled model, through validate/internal/evalshare); `cmd/gotogether simulate` and `qtest.Model` print and claim its Report | the model on its own: invariants proved over a complete graph, liveness as cycles, possibilities, each verdict with its bound |
+| navigation protocol | `validate/navproto` (a leaf: internal/formats alone) | the lines between a test binary serving its runs and a navigator (`gotogether nav`, gotogether-nav, qnav): versioned, so each side may be another version |
 | exploration | `qtest` (System, Explore, Exhaust, Sweep, Mutants, Expect), `qshrink`, `qsweep`, `qcover`, `qmut` | many runs, each judged, claimed over (`Rejects`, `Some(...)`, `Exercised`), shrunk, mutated, swept |
 | simulation | `qenv` and its doubles (`qenv/qhttp`, `qenv/qsql`, `qenv/simlog`), `qenv/weave`, `qenv/fault`, `qhistory`, `qnemesis` | the system on virtual time with every nondeterministic choice made by a Chooser: processes, crashes, a transactional Store, queues, lossy RPC; real deployments' nemeses |
 | load | `qmeta` (imports nothing of the module), `qload` | a CTMC predicting recovery from a load spike; a load simulation on qenv confirming it |
@@ -231,6 +232,7 @@ install`. The examples and internal/hegelprops are not published.
 - **To build on grist**: [the grist guide](grist-guide.md).
 - **To change the recording side**: `qtrace/step.go` (the Step), then
   `qobs/qobs.go` (the Recorder), then `qtrace.Reconstruct`.
+- **To change the model alone**: `validate/model` (`simulate.go`, `graph.go`, `live.go`), DESIGN §61, §62, §69, §70.
 - **To change judging**: `validate/run.go` (the Checker) and `validate/judge.go` (Judge),
   internal/replay (the replay module), internal/qeval (`eval.go`, and
   `TestAgreesWithQuint`, which every change must keep passing).

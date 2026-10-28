@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/validate/model"
+
 	"github.com/chucklehead-dev/gotogether/grist/internal/gen"
 
 	"github.com/chucklehead-dev/gotogether/binding"
@@ -48,7 +50,7 @@ func TestGeneratedPossibles(t *testing.T) {
 		}
 		return dir
 	}
-	search := func(t *testing.T, dir string) map[string]validate.PossibleResult {
+	search := func(t *testing.T, dir string) map[string]model.PossibleResult {
 		c, err := validate.NewChecker(filepath.Join(dir, "shop.binding.yaml"), validate.Options{})
 		if err != nil {
 			t.Fatal(err)
@@ -67,11 +69,11 @@ func TestGeneratedPossibles(t *testing.T) {
 				ps = append(ps, p)
 			}
 		}
-		rs, err := c.Possible(ps, validate.PossibleSearch{States: 500, Depth: 6})
+		rs, err := model.For(c).Possible(ps, model.PossibleSearch{States: 500, Depth: 6})
 		if err != nil {
 			t.Fatal(err)
 		}
-		out := map[string]validate.PossibleResult{}
+		out := map[string]model.PossibleResult{}
 		for i, r := range rs {
 			out[ps[i].Text()] = r
 		}

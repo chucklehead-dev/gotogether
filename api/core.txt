@@ -1844,7 +1844,7 @@ type ModelCheck struct
 type ModelClaim interface
     String() string
     needs(n *modelNeeds) error
-    judgeModel(rep *validate.SimulateReport) (tri, string)
+    judgeModel(rep *model.Report) (tri, string)
 type ModelCoverage struct
     field Taken map[string]int `json:"taken"`
     field Never []string `json:"never,omitempty"`
@@ -2201,7 +2201,6 @@ const CompiledFormat = "gotogether.model/1"
 const DefaultHiddenDepth = 4
 const DefaultLinearizeBudget = qtrace.DefaultLinearizeBudget
 const DefaultResolveBudget = 200
-const DefaultSearchStates = 100000
 const Defect Cause = "defect"
 const Dropped Cause = "dropped"
 const Fail Verdict = "fail"
@@ -2210,14 +2209,12 @@ const FateMalformed = "malformed"
 const FateSurvived = "survived"
 const FateUndecided = "undecided"
 const ManifestFormat = "gotogether.run/2"
-const NavProtocol = "gotogether.nav/1"
 const NotEvaluated Verdict = "n/a"
 const Pass Verdict = "pass"
 const ReportFormat = "gotogether.report/1"
 const Uncollected Cause = "uncollected"
 func CacheDir() string
 func Cached(bindingPath string, o Options) (*Checker, error)
-func CheckNavProtocol(p string) error
 func Compile(bindingPath string, opt Options) (*CompiledModel, error)
 func CurrentTools(o Options) Tools
 func EventuallyName(val string) string
@@ -2232,7 +2229,6 @@ func NewManifest(r RunRecord) (*Manifest, error)
 func QuintSupported(v string) bool
 func ReadManifest(path string) (*Manifest, error)
 func RecordID(s *qtrace.Step) string
-func Simulate(bindingPath string, opt SimulateOptions) (*SimulateReport, error)
 func SplitPath(s string) []string
 func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error)
 type Absence struct
@@ -2244,14 +2240,6 @@ type Absence struct
     field Due time.Time
     field Why string
     method (Absence) String() string
-type ActionCoverage struct
-    field Action string
-    field Transitions int
-    field States int
-type ActorState struct
-    field Actor string `json:"actor"`
-    field State []NamedValue `json:"state,omitempty"`
-    field Error string `json:"error,omitempty"`
 type ActorVerdict struct
     field Actor string `json:"actor"`
     field Verdict Verdict `json:"verdict"`
@@ -2281,15 +2269,12 @@ type Checker struct
     method (*Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProcess int) (reports []*Report, errs []error)
     method (*Checker) Close() error
     method (*Checker) Compiled() *CompiledModel
-    method (*Checker) Graph(cfg GraphSearch) (*GraphResult, error)
     method (*Checker) Judge(ctx context.Context, steps []qtrace.Step, opt SearchOptions) (*Judgment, error)
     method (*Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt SearchOptions, check BatchCheck) ([]*Judgment, []error)
     method (*Checker) Key(steps []qtrace.Step) string
     method (*Checker) MarkHot(rep *Report, steps []qtrace.Step)
     method (*Checker) MutateSteps(ctx context.Context, steps []qtrace.Step, opt SearchOptions, check BatchCheck, mopts ...qtrace.MutationOption) (*StepMutants, error)
     method (*Checker) Nav(start NavStart) (*Navigator, error)
-    method (*Checker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]PossibleResult, error)
-    method (*Checker) Simulate(opt SimulateOptions) (*SimulateReport, error)
     method (*Checker) WithConstants(constants map[string]string) (*Checker, error)
     method (*Checker) WithInvariants(invariants ...string) (*Checker, error)
 type CompiledModel struct
@@ -2307,10 +2292,6 @@ type Condition struct
     field In string `json:"in"`
     field Expr string `json:"expr"`
     field Values []NamedValue `json:"values,omitempty"`
-type Counterexample struct
-    field Steps []GraphStep
-    field Replay string
-    field Sampled []int
 type Disabled struct
     field Action string `json:"action"`
     field Why *Explanation `json:"why,omitempty"`
@@ -2425,20 +2406,6 @@ type Edge struct
     field Action string `json:"action"`
     field Args []NamedValue `json:"args,omitempty"`
     field Picks []NamedValue `json:"picks,omitempty"`
-type EventualVerdict struct
-    field Name string
-    field Hot bool
-    field Lasso *HotLasso
-    field HotStates int
-    field Lassos int
-    field Unfair int
-    field Stutters int
-    field UnfairBy string
-    field Unsupported string
-    field Unchecked int
-    field Error string
-    field Counterexample *Counterexample
-    method (EventualVerdict) Live() bool
 type Explanation struct
     field Action string `json:"action"`
     field Conditions []Condition `json:"conditions,omitempty"`
@@ -2479,44 +2446,6 @@ type Finish struct
     field Reason string
     field Actor string
     field Why string
-type GraphBound struct
-    field States int
-    field Depth int
-type GraphResult struct
-    field States int
-    field Starts int
-    field Transitions int
-    field Depth int
-    field Complete bool
-    field Cut string
-    field Stopped string
-    field Bound GraphBound
-    field Invariants []InvariantVerdict
-    field Deadlocks int
-    field Terminals int
-    field Deadlock *Counterexample
-    field Quiescent int
-    field Actions []ActionCoverage
-    field Eventually []EventualVerdict
-    field Unfair []string
-    field Stops []string
-    field Elapsed time.Duration
-    method (*GraphResult) Extent() string
-    method (*GraphResult) Lacks(tr *itf.Trace) (int, string, error)
-    method (*GraphResult) NeverEnabled() []string
-type GraphSearch struct
-    field Constants []string
-    field Invariants []string
-    field Terminal string
-    field States int
-    field Depth int
-    field Eventually []string
-    field Unfair []string
-    field Stops []string
-type GraphStep struct
-    field Call string
-    field Picks []NamedValue
-    field State []NamedValue
 type HotCycle struct
     field Vals []string
     field From int
@@ -2525,17 +2454,6 @@ type HotCycle struct
     field Repeats int
     field State []NamedValue
     method (*HotCycle) String() string
-type HotLasso struct
-    field Prefix *Counterexample
-    field Cycle []GraphStep
-    field Stutter bool
-    field Ends bool
-    field Repeated []NamedValue
-    field Takes []string
-    field Obliged []string
-    field Component int
-    field Replay string
-    field Sampled []int
 type ITFOptions struct
     embed Options
     field Binding *binding.Binding
@@ -2556,15 +2474,6 @@ type InvariantResult struct
     field Failure *Failure
     field Eventually bool
     field Within bool
-type InvariantVerdict struct
-    field Name string
-    field Violated bool
-    field Counterexample *Counterexample
-    field Error string
-    field Unsupported string
-    field Checked int
-    field Unchecked int
-    method (InvariantVerdict) Held() bool
 type Judgment struct
     field Report *Report
     field Steps []qtrace.Step
@@ -2589,27 +2498,6 @@ type Manifest struct
     method (*Manifest) Bundle(dir string) error
     method (*Manifest) Verify() (warnings []string, err error)
     method (*Manifest) Write(path string) error
-type ModelBound struct
-    field Kind string
-    field States int
-    field Depth int
-    field Traces int
-    field Steps int
-    field Stopped string
-    method (ModelBound) Proves() bool
-    method (ModelBound) String() string
-type ModelVerdict struct
-    field Name string
-    field Class string
-    field Held bool
-    field Violated bool
-    field Bound ModelBound
-    field Counterexample *Counterexample
-    field Lasso *HotLasso
-    field Error string
-    field Unchecked string
-    field Trace string
-    field Replayed string
 type NamedValue struct
     field Name string `json:"name"`
     field Value string `json:"value"`
@@ -2639,28 +2527,6 @@ type Options struct
     field VerdictsOnly bool
     field Eval string
     field NoEnvBackend bool
-type PossibleResult struct
-    field Possible binding.Possible
-    field Found bool
-    field Path []string
-    field Complete bool
-    field Cut string
-    field Nodes int
-    field Depth int
-    method (PossibleResult) Verdict() string
-type PossibleSearch struct
-    field Constants []string
-    field States int
-    field Depth int
-type PossibleVerdict struct
-    field Possible binding.Possible
-    field Found bool
-    field Impossible bool
-    field Eval *PossibleResult
-    field EvalErr string
-    field Quint string
-    field Verdict string
-    field Line string
 type Report struct
     field Issues []qtrace.Issue
     field Actors []*Result
@@ -2702,10 +2568,6 @@ type Result struct
     method (*Result) Reason() string
     method (*Result) Summary() string
     method (*Result) VerboseSummary() string
-type RunBranch struct
-    field Option int `json:"option"`
-    field Name string `json:"name,omitempty"`
-    field Child string `json:"child"`
 type RunCheck struct
     field Linearize bool `json:"linearize,omitempty"`
     field Key string `json:"linearizeKey,omitempty"`
@@ -2718,11 +2580,6 @@ type RunCheck struct
     field Format string `json:"format,omitempty"`
     field NoVars bool `json:"noVars,omitempty"`
     method (RunCheck) SearchOptions() SearchOptions
-type RunChoice struct
-    field Kind string `json:"kind"`
-    field N int `json:"n"`
-    field Options []string `json:"options,omitempty"`
-    field Taken int `json:"taken"`
 type RunInput struct
     field Path string
     field Format string
@@ -2737,23 +2594,6 @@ type RunModel struct
     field Convert *File `json:"convert,omitempty"`
     field Constants map[string]string `json:"constants,omitempty"`
     field Invariants []string `json:"invariants"`
-type RunNode struct
-    field Protocol string `json:"protocol,omitempty"`
-    field Run string `json:"run"`
-    field ID string `json:"id"`
-    field Schedule string `json:"schedule"`
-    field At int `json:"at"`
-    field Path string `json:"path,omitempty"`
-    field Choice *RunChoice `json:"choice,omitempty"`
-    field Branches []RunBranch `json:"branches"`
-    field Steps []string `json:"steps"`
-    field Tasks []string `json:"tasks,omitempty"`
-    field Elapsed string `json:"elapsed,omitempty"`
-    field Model []ActorState `json:"model,omitempty"`
-    field Verdict string `json:"verdict"`
-    field Folded int `json:"folded,omitempty"`
-    field Saved string `json:"saved,omitempty"`
-    field Notes []string `json:"notes,omitempty"`
 type RunRecord struct
     field Options Options
     field Binding *binding.Binding
@@ -2763,21 +2603,6 @@ type RunRecord struct
     field Inputs []RunInput
     field Convert string
     field Artifacts []Artifact
-type RunRequest struct
-    field Node string `json:"node,omitempty"`
-    field Follow []int `json:"follow,omitempty"`
-    field Take *int `json:"take,omitempty"`
-    field Fold bool `json:"fold,omitempty"`
-    field Save bool `json:"save,omitempty"`
-type RunResponse struct
-    field Session *RunSession `json:"session,omitempty"`
-    field Node *RunNode `json:"node,omitempty"`
-    field Error string `json:"error,omitempty"`
-type RunSession struct
-    field Protocol string `json:"protocol,omitempty"`
-    field Run string `json:"run"`
-    field Choices int `json:"choices"`
-    field Notes []string `json:"notes,omitempty"`
 type RunVerdict struct
     field Verdict Verdict `json:"verdict"`
     field Reason string `json:"reason,omitempty"`
@@ -2792,34 +2617,6 @@ type SearchOptions struct
     field ResolvePending bool
     field ResolveBudget int
     field Skew time.Duration
-type SimulateOptions struct
-    field Quint string
-    field Seed string
-    field Steps int
-    field Samples int
-    field Constants []string
-    field Invariants []string
-    field Eventually []string
-    field Possibles []binding.Possible
-    field Verify int
-    field Graph bool
-    field States int
-    field Depth int
-    field Unfair []string
-    field Stops []string
-    field Out string
-    field Replay bool
-type SimulateReport struct
-    field Binding string
-    field Skipped string
-    field Graph *GraphResult
-    field Invariants []ModelVerdict
-    field Eventually []ModelVerdict
-    field Possibles []PossibleVerdict
-    field Deadlocks *ModelVerdict
-    field EvaluatorBug string
-    field Code int
-    field Text string
 type StepMutants struct
     field Original *Judgment
     field Mutants []StepMutation
@@ -2906,6 +2703,221 @@ type Replayed struct
     field Differs string
     field Warnings []string
     field Notes []string
+
+== github.com/chucklehead-dev/gotogether/validate/model
+const DefaultSearchStates = 100000
+func For(c *validate.Checker) *Analyzer
+func New(bindingPath string, opt validate.Options) (*Analyzer, error)
+func Simulate(bindingPath string, opt SimulateOptions) (*Report, error)
+type ActionCoverage struct
+    field Action string
+    field Transitions int
+    field States int
+type Analyzer struct
+    method (*Analyzer) Checker() *validate.Checker
+    method (*Analyzer) Close() error
+    method (*Analyzer) Graph(cfg GraphSearch) (*GraphResult, error)
+    method (*Analyzer) Possible(ps []binding.Possible, cfg PossibleSearch) ([]PossibleResult, error)
+    method (*Analyzer) Simulate(opt SimulateOptions) (*Report, error)
+type Bound struct
+    field Kind string
+    field States int
+    field Depth int
+    field Traces int
+    field Steps int
+    field Stopped string
+    method (Bound) Proves() bool
+    method (Bound) String() string
+type Counterexample struct
+    field Steps []GraphStep
+    field Replay string
+    field Sampled []int
+type EventualVerdict struct
+    field Name string
+    field Hot bool
+    field Lasso *HotLasso
+    field HotStates int
+    field Lassos int
+    field Unfair int
+    field Stutters int
+    field UnfairBy string
+    field Unsupported string
+    field Unchecked int
+    field Error string
+    field Counterexample *Counterexample
+    method (EventualVerdict) Live() bool
+type GraphBound struct
+    field States int
+    field Depth int
+type GraphResult struct
+    field States int
+    field Starts int
+    field Transitions int
+    field Depth int
+    field Complete bool
+    field Cut string
+    field Stopped string
+    field Bound GraphBound
+    field Invariants []InvariantVerdict
+    field Deadlocks int
+    field Terminals int
+    field Deadlock *Counterexample
+    field Quiescent int
+    field Actions []ActionCoverage
+    field Eventually []EventualVerdict
+    field Unfair []string
+    field Stops []string
+    field Elapsed time.Duration
+    method (*GraphResult) Extent() string
+    method (*GraphResult) Lacks(tr *itf.Trace) (int, string, error)
+    method (*GraphResult) NeverEnabled() []string
+type GraphSearch struct
+    field Constants []string
+    field Invariants []string
+    field Terminal string
+    field States int
+    field Depth int
+    field Eventually []string
+    field Unfair []string
+    field Stops []string
+type GraphStep struct
+    field Call string
+    field Picks []validate.NamedValue
+    field State []validate.NamedValue
+type HotLasso struct
+    field Prefix *Counterexample
+    field Cycle []GraphStep
+    field Stutter bool
+    field Ends bool
+    field Repeated []validate.NamedValue
+    field Takes []string
+    field Obliged []string
+    field Component int
+    field Replay string
+    field Sampled []int
+type InvariantVerdict struct
+    field Name string
+    field Violated bool
+    field Counterexample *Counterexample
+    field Error string
+    field Unsupported string
+    field Checked int
+    field Unchecked int
+    method (InvariantVerdict) Held() bool
+type PossibleResult struct
+    field Possible binding.Possible
+    field Found bool
+    field Path []string
+    field Complete bool
+    field Cut string
+    field Nodes int
+    field Depth int
+    method (PossibleResult) Verdict() string
+type PossibleSearch struct
+    field Constants []string
+    field States int
+    field Depth int
+type PossibleVerdict struct
+    field Possible binding.Possible
+    field Found bool
+    field Impossible bool
+    field Eval *PossibleResult
+    field EvalErr string
+    field Quint string
+    field Verdict string
+    field Line string
+type Report struct
+    field Binding string
+    field Skipped string
+    field Graph *GraphResult
+    field Invariants []Verdict
+    field Eventually []Verdict
+    field Possibles []PossibleVerdict
+    field Deadlocks *Verdict
+    field EvaluatorBug string
+    field Code int
+    field Text string
+type SimulateOptions struct
+    field Quint string
+    field Seed string
+    field Steps int
+    field Samples int
+    field Constants []string
+    field Invariants []string
+    field Eventually []string
+    field Possibles []binding.Possible
+    field Verify int
+    field Graph bool
+    field States int
+    field Depth int
+    field Unfair []string
+    field Stops []string
+    field Out string
+    field Replay bool
+type Verdict struct
+    field Name string
+    field Class string
+    field Held bool
+    field Violated bool
+    field Bound Bound
+    field Counterexample *Counterexample
+    field Lasso *HotLasso
+    field Error string
+    field Unchecked string
+    field Trace string
+    field Replayed string
+
+== github.com/chucklehead-dev/gotogether/validate/navproto
+const Protocol = "gotogether.nav/1"
+func CheckProtocol(p string) error
+type ActorState struct
+    field Actor string `json:"actor"`
+    field State []NamedValue `json:"state,omitempty"`
+    field Error string `json:"error,omitempty"`
+type Branch struct
+    field Option int `json:"option"`
+    field Name string `json:"name,omitempty"`
+    field Child string `json:"child"`
+type Choice struct
+    field Kind string `json:"kind"`
+    field N int `json:"n"`
+    field Options []string `json:"options,omitempty"`
+    field Taken int `json:"taken"`
+type NamedValue struct
+    field Name string `json:"name"`
+    field Value string `json:"value"`
+type Node struct
+    field Protocol string `json:"protocol,omitempty"`
+    field Run string `json:"run"`
+    field ID string `json:"id"`
+    field Schedule string `json:"schedule"`
+    field At int `json:"at"`
+    field Path string `json:"path,omitempty"`
+    field Choice *Choice `json:"choice,omitempty"`
+    field Branches []Branch `json:"branches"`
+    field Steps []string `json:"steps"`
+    field Tasks []string `json:"tasks,omitempty"`
+    field Elapsed string `json:"elapsed,omitempty"`
+    field Model []ActorState `json:"model,omitempty"`
+    field Verdict string `json:"verdict"`
+    field Folded int `json:"folded,omitempty"`
+    field Saved string `json:"saved,omitempty"`
+    field Notes []string `json:"notes,omitempty"`
+type Request struct
+    field Node string `json:"node,omitempty"`
+    field Follow []int `json:"follow,omitempty"`
+    field Take *int `json:"take,omitempty"`
+    field Fold bool `json:"fold,omitempty"`
+    field Save bool `json:"save,omitempty"`
+type Response struct
+    field Session *Session `json:"session,omitempty"`
+    field Node *Node `json:"node,omitempty"`
+    field Error string `json:"error,omitempty"`
+type Session struct
+    field Protocol string `json:"protocol,omitempty"`
+    field Run string `json:"run"`
+    field Choices int `json:"choices"`
+    field Notes []string `json:"notes,omitempty"`
 
 == github.com/chucklehead-dev/gotogether/woven
 const ABI1 = 1

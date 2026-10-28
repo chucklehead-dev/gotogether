@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/validate/navproto"
+
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qenv/qhttp"
@@ -181,7 +183,7 @@ func TestNavRefused(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var n validate.RunNode
+	var n navproto.Node
 	if err := jsonUnmarshal(b, &n); err != nil {
 		t.Fatal(err)
 	}

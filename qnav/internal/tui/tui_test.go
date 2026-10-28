@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/validate/navproto"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/chucklehead-dev/gotogether/input"
@@ -244,9 +246,9 @@ func TestHelloRun(t *testing.T) {
 }
 
 // fakeRun answers nodes from a table, by id.
-type fakeRun map[string]*validate.RunNode
+type fakeRun map[string]*navproto.Node
 
-func (f fakeRun) Node(req validate.RunRequest) (*validate.RunNode, error) {
+func (f fakeRun) Node(req navproto.Request) (*navproto.Node, error) {
 	id := req.Node
 	if id == "" {
 		id = "@0"
@@ -258,12 +260,12 @@ func (f fakeRun) Node(req validate.RunRequest) (*validate.RunNode, error) {
 // it, and none at the first.
 func TestRunDiff(t *testing.T) {
 	t.Parallel()
-	state := func(count string) []validate.ActorState {
-		return []validate.ActorState{{Actor: "default", State: []validate.NamedValue{{Name: "applied", Value: "Set(1)"}, {Name: "count", Value: count}}}}
+	state := func(count string) []navproto.ActorState {
+		return []navproto.ActorState{{Actor: "default", State: []navproto.NamedValue{{Name: "applied", Value: "Set(1)"}, {Name: "count", Value: count}}}}
 	}
 	run := fakeRun{
-		"@0": {Run: "TestX#1:seed=1", ID: "@0", Verdict: "pass", Model: state("1"), Choice: &validate.RunChoice{Kind: "sched.task", N: 2, Options: []string{"a", "b"}},
-			Branches: []validate.RunBranch{{Option: 0, Name: "a", Child: "@1"}, {Option: 1, Name: "b", Child: "0:1@1"}}},
+		"@0": {Run: "TestX#1:seed=1", ID: "@0", Verdict: "pass", Model: state("1"), Choice: &navproto.Choice{Kind: "sched.task", N: 2, Options: []string{"a", "b"}},
+			Branches: []navproto.Branch{{Option: 0, Name: "a", Child: "@1"}, {Option: 1, Name: "b", Child: "0:1@1"}}},
 		"@1": {Run: "TestX#1:seed=1", ID: "@1", Verdict: "pass", Model: state("2")},
 	}
 	d := drive(t, Config{Title: "TestX#1:seed=1", Run: run})

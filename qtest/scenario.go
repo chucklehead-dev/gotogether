@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/validate/model"
+
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
@@ -215,7 +217,7 @@ func modelVerdict(c *validate.Checker, sc *scenario) string {
 	if err != nil {
 		return "not searched (" + err.Error() + ")"
 	}
-	rep, err := c.Simulate(validate.SimulateOptions{Invariants: []string{}, Eventually: []string{}, Possibles: []binding.Possible{p}})
+	rep, err := model.For(c).Simulate(model.SimulateOptions{Invariants: []string{}, Eventually: []string{}, Possibles: []binding.Possible{p}})
 	switch {
 	case err != nil:
 		return "not searched (" + err.Error() + ")"

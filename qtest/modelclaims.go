@@ -6,12 +6,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/validate/model"
+
 	"github.com/chucklehead-dev/gotogether/binding"
-	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // Model claims (I17): what the model on its own does, before any code
-// runs, judged by validate.Simulate (the engine `gotogether simulate`
+// runs, judged by model.Simulate (the engine `gotogether simulate`
 // prints), with the vocabulary runs' claims have:
 //
 //	qtest.Model(t, "hello.binding.yaml").Expect(t,
@@ -50,7 +51,7 @@ type ModelClaim interface {
 	needs(n *modelNeeds) error
 	// judgeModel is the claim's value in rep, with what it saw and its
 	// bound
-	judgeModel(rep *validate.SimulateReport) (tri, string)
+	judgeModel(rep *model.Report) (tri, string)
 }
 
 // modelNeeds are what one Expect's claims need: the invariants, eventual
@@ -92,7 +93,7 @@ func (m *ModelCheck) Expect(t testing.TB, claims ...ModelClaim) {
 			t.Fatalf("qtest.Model(%s): %s: %v", m.binding, c, err)
 		}
 	}
-	rep, err := validate.Simulate(m.binding, validate.SimulateOptions{Invariants: n.invariants, Eventually: n.eventually, Possibles: n.possibles, Graph: n.graph, Replay: n.graph})
+	rep, err := model.Simulate(m.binding, model.SimulateOptions{Invariants: n.invariants, Eventually: n.eventually, Possibles: n.possibles, Graph: n.graph, Replay: n.graph})
 	if err != nil {
 		t.Fatalf("qtest.Model(%s): %v", m.binding, err)
 	}
@@ -124,7 +125,7 @@ func knownName(b *binding.Binding, name string, eventual bool) error {
 }
 
 // verdictOf is the verdict named name among vs, nil if none.
-func verdictOf(vs []validate.ModelVerdict, name string) *validate.ModelVerdict {
+func verdictOf(vs []model.Verdict, name string) *model.Verdict {
 	for i := range vs {
 		if vs[i].Name == name {
 			return &vs[i]
@@ -134,7 +135,7 @@ func verdictOf(vs []validate.ModelVerdict, name string) *validate.ModelVerdict {
 }
 
 // calls is a counterexample's steps after init as one line.
-func calls(cx *validate.Counterexample) string {
+func calls(cx *model.Counterexample) string {
 	if cx == nil {
 		return ""
 	}
@@ -151,7 +152,7 @@ func calls(cx *validate.Counterexample) string {
 // witnessed is a verdict's witness's value: yes if quint replayed it or
 // cannot replay it as drawn, unknown if quint's replay fails it (the
 // evaluator's error).
-func witnessed(v *validate.ModelVerdict, what string) (tri, string) {
+func witnessed(v *model.Verdict, what string) (tri, string) {
 	switch {
 	case v.Replayed == "replayed":
 		return yes, what + " (replayed by quint test)"
@@ -186,7 +187,7 @@ func (c proves) needs(n *modelNeeds) error {
 	return nil
 }
 
-func (c proves) judgeModel(rep *validate.SimulateReport) (tri, string) {
+func (c proves) judgeModel(rep *model.Report) (tri, string) {
 	v := verdictOf(rep.Invariants, c.inv)
 	switch {
 	case v == nil:
@@ -250,7 +251,7 @@ func (c RefutesClaim) needs(n *modelNeeds) error {
 	return nil
 }
 
-func (c RefutesClaim) judgeModel(rep *validate.SimulateReport) (tri, string) {
+func (c RefutesClaim) judgeModel(rep *model.Report) (tri, string) {
 	eventual := verdictOf(rep.Eventually, c.r.name) != nil
 	vs := rep.Invariants
 	if eventual {
@@ -308,7 +309,7 @@ func (c live) needs(n *modelNeeds) error {
 	return nil
 }
 
-func (c live) judgeModel(rep *validate.SimulateReport) (tri, string) {
+func (c live) judgeModel(rep *model.Report) (tri, string) {
 	v := verdictOf(rep.Eventually, c.val)
 	switch {
 	case v == nil:
@@ -336,7 +337,7 @@ func (noDeadlocks) String() string { return "having no deadlock" }
 
 func (noDeadlocks) needs(n *modelNeeds) error { n.graph = true; return nil }
 
-func (noDeadlocks) judgeModel(rep *validate.SimulateReport) (tri, string) {
+func (noDeadlocks) judgeModel(rep *model.Report) (tri, string) {
 	v := rep.Deadlocks
 	switch {
 	case v == nil:
@@ -403,7 +404,7 @@ func (p *possible) needs(n *modelNeeds) error {
 	return nil
 }
 
-func (p *possible) judgeModel(rep *validate.SimulateReport) (tri, string) {
+func (p *possible) judgeModel(rep *model.Report) (tri, string) {
 	v := yes
 	// the claim's value: no if one is impossible, else unknown if one has
 	// no verdict

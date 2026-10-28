@@ -84,6 +84,14 @@ func TestSkillLinksResolve(t *testing.T) {
 func TestSkillsAvoidDeprecated(t *testing.T) {
 	deprecated := []struct{ text, instead string }{
 		{"qtest.Check(", "qtest.Validate(...).Expect"},
+		{"validate.Simulate", "model.Simulate (validate/model)"},
+		{"validate.GraphSearch", "model.GraphSearch (validate/model)"},
+		{"validate.GraphResult", "model.GraphResult (validate/model)"},
+		{"validate.PossibleSearch", "model.PossibleSearch (validate/model)"},
+		{"Checker.Graph(", "model.For(c).Graph(...) (validate/model)"},
+		{"validate.RunNode", "navproto.Node (validate/navproto)"},
+		{"validate.RunRequest", "navproto.Request (validate/navproto)"},
+		{"validate.NavProtocol", "navproto.Protocol (validate/navproto)"},
 		{"qtest.Possible(t,", "qtest.Model(t, binding).Expect(t, qtest.Possible(scenarios...))"},
 		{"simulate.searchStates", "simulate.search.states (gotogether.binding/2)"},
 		{"simulate.graphStates", "simulate.search.states (gotogether.binding/2)"},

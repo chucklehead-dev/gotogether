@@ -3,6 +3,8 @@ package names
 import (
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/validate/navproto"
+
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/convert"
 	"github.com/chucklehead-dev/gotogether/internal/evidence"
@@ -26,7 +28,7 @@ func TestNamesAreTheTables(t *testing.T) {
 		{convert.FormatName, formats.Convert},
 		{validate.ManifestFormat, formats.Manifest},
 		{evidence.Format, formats.Evidence},
-		{validate.NavProtocol, formats.Nav},
+		{navproto.Protocol, formats.Nav},
 		{validate.CompiledFormat, formats.Model},
 		{validate.ReportFormat, formats.Report},
 		{formats.Choices.At(qenv.BytesVersion), formats.Choices},

@@ -11,15 +11,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/validate/navproto"
+
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
-	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // navAt navigates the run spec names (GOTOGETHER_RUN) at node (and
 // follow) through an exhaustive search of race, as `gotogether nav -run`
 // does in a test binary, and returns the node it wrote.
-func navAt(t *testing.T, spec, node, follow string) *validate.RunNode {
+func navAt(t *testing.T, spec, node, follow string) *navproto.Node {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "node.json")
 	t.Setenv("GOTOGETHER_RUN", spec)
@@ -32,7 +33,7 @@ func navAt(t *testing.T, spec, node, follow string) *validate.RunNode {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var n validate.RunNode
+	var n navproto.Node
 	if err := jsonUnmarshal(b, &n); err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +110,7 @@ func depositors(c qenv.Chooser) error {
 
 // serveAt runs a navigation session (GOTOGETHER_NAV=serve) of the run
 // spec names in system run, its requests reqs, and returns its lines.
-func serveAt(t testing.TB, spec string, run func(qenv.Chooser) error, reqs ...string) []validate.RunResponse {
+func serveAt(t testing.TB, spec string, run func(qenv.Chooser) error, reqs ...string) []navproto.Response {
 	t.Helper()
 	dir := t.TempDir()
 	in, out := filepath.Join(dir, "in.jsonl"), filepath.Join(dir, "out.jsonl")
@@ -126,9 +127,9 @@ func serveAt(t testing.TB, spec string, run func(qenv.Chooser) error, reqs ...st
 	if err != nil {
 		t.Fatal(err)
 	}
-	var lines []validate.RunResponse
+	var lines []navproto.Response
 	for l := range strings.SplitSeq(strings.TrimSpace(string(b)), "\n") {
-		var r validate.RunResponse
+		var r navproto.Response
 		if err := jsonUnmarshal([]byte(l), &r); err != nil {
 			t.Fatalf("a session's line %q: %v", l, err)
 		}
@@ -201,7 +202,7 @@ func TestNavServeNondeterministic(t *testing.T) {
 		})
 		return s.Run(time.Second)
 	}
-	var rs []validate.RunResponse
+	var rs []navproto.Response
 	done := make(chan struct{})
 	go func() { //qenv:ok failTB's Fatalf ends the goroutine (runtime.Goexit)
 		defer close(done)

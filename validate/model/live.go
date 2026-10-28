@@ -1,4 +1,4 @@
-package validate
+package model
 
 import (
 	"errors"
@@ -7,10 +7,12 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/internal/qeval"
+	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/internal/evalshare"
 )
 
 // Liveness as cycles (P6): each of a binding's eventual vals over the
-// state graph Checker.Graph explored. A fair cycle of states where the
+// state graph Analyzer.Graph explored. A fair cycle of states where the
 // val is false, reachable from init, is a behaviour of the model that
 // never makes it true: "can stay hot forever", a lasso of the shortest
 // path to the cycle's component and a cycle in it. Fairness is weak, per
@@ -77,7 +79,7 @@ type HotLasso struct {
 	Cycle     []GraphStep
 	Stutter   bool
 	Ends      bool
-	Repeated  []NamedValue
+	Repeated  []validate.NamedValue
 	Takes     []string
 	Obliged   []string
 	Component int
@@ -88,7 +90,7 @@ type HotLasso struct {
 // liveness judges each eventual val over the graph of ce: the families
 // are the labels' branch actions (branch, "" for a transition no action
 // names, which is step's own), fair as unfair and stops say.
-func (c *Checker) liveness(ce *cexWriter, evs []string, branch []string, unfair, stops []string) ([]EventualVerdict, error) {
+func (c *modelChecker) liveness(ce *cexWriter, evs []string, branch []string, unfair, stops []string) ([]EventualVerdict, error) {
 	g, e := ce.g, ce.e
 	consts := map[string]qeval.Value{}
 	names := map[string]int{}
@@ -122,7 +124,7 @@ func (c *Checker) liveness(ce *cexWriter, evs []string, branch []string, unfair,
 	var out []EventualVerdict
 	for _, ev := range evs {
 		v := EventualVerdict{Name: ev}
-		val, ok := e.em.Eventually[ev]
+		val, ok := e.Module.Eventually[ev]
 		if !ok {
 			return nil, fmt.Errorf("graph: %s is not one of the binding's eventual vals (%s)", ev, strings.Join(c.Binding.Eventually, ", "))
 		}
@@ -131,7 +133,7 @@ func (c *Checker) liveness(ce *cexWriter, evs []string, branch []string, unfair,
 			if !g.Expanded[id] {
 				continue // in no cycle: its edges are unknown
 			}
-			x, err := e.m.Eval(consts, s, val)
+			x, err := e.Model.Eval(consts, s, val)
 			var u *qeval.Unsupported
 			if errors.As(err, &u) {
 				if v.Unchecked++; v.Unsupported == "" {
@@ -209,8 +211,8 @@ func (w *cexWriter) lasso(ev string, comp qeval.Component, famName []string, fam
 		at, prev = ed.To, t.State
 	}
 	conds := []string{"not(" + ev + ")"}
-	for _, v := range w.e.m.Vars {
-		conds = append(conds, fmt.Sprintf("%s == %s", shortName(v), qeval.String(entry[v])))
+	for _, v := range w.e.Model.Vars {
+		conds = append(conds, fmt.Sprintf("%s == %s", evalshare.ShortName(v), qeval.String(entry[v])))
 	}
 	h.Replay = replay + ".expect(and { " + strings.Join(conds, ", ") + " })"
 	return h

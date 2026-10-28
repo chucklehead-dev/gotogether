@@ -12,6 +12,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/qeval"
 	"github.com/chucklehead-dev/gotogether/internal/replay"
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate/internal/evalshare"
 )
 
 // resumeConfirm is how many starts quint confirms a resume's failure
@@ -269,4 +270,4 @@ func describeState(h *hiddenSearch, state qeval.State) string {
 
 // shortName is a variable's name as the replay module sees it (the
 // model imported unqualified).
-func shortName(v string) string { return v[strings.LastIndex(v, ":")+1:] }
+func shortName(v string) string { return evalshare.ShortName(v) }

@@ -78,7 +78,7 @@ review" on.
 | I14 | one core version (`ci/bump-core.sh`, the consumer job) | e93b353 |
 | I15 (part) | shuffled tests, wider race job, qhegel captures at fd 1 | d0afb10 |
 | I16 | explicit quantifiers | 03fa005 |
-| I17 | `validate.Simulate`, model claims, `qtest.Possible` a claim, `gotogether.binding/2`'s one search bound | c40570f, 55d2504 |
+| I17 | `model.Simulate`, model claims, `qtest.Possible` a claim, `gotogether.binding/2`'s one search bound | c40570f, 55d2504 |
 | I19 | validation at volume: `partition:` | f27adb0 |
 | I20 | on-call reports, `-json` | a985abe |
 | I21 | the Action, the image, `compile`/`-compiled` | 1c0e469, 7173581 |

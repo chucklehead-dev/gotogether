@@ -243,7 +243,7 @@ Each step names the Choreo transition it chose. The graph is complete,
 so this is a refutation of the design for three participants; the
 `grep -v` only hid the state after each step. The same check runs in
 Go (`TestGraphFindsEarlyDecision`, through `validate.NewChecker` and
-`Checker.Graph`), and `MODEL=early-decision ./run-demo.sh` runs it as a
+`model.Analyzer.Graph`), and `MODEL=early-decision ./run-demo.sh` runs it as a
 demo.
 
 ```sh

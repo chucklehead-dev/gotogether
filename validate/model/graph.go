@@ -1,4 +1,4 @@
-package validate
+package model
 
 import (
 	"errors"
@@ -12,6 +12,8 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/internal/qeval"
 	"github.com/chucklehead-dev/gotogether/itf"
+	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/internal/evalshare"
 )
 
 // The state-graph explorer (P2): a binding's model, its simulation's
@@ -23,7 +25,7 @@ import (
 // is proved for the instance; a violated one has the shortest
 // counterexample, as a Quint run that replays it.
 
-// A GraphSearch sets Checker.Graph's instance and bounds: Constants
+// A GraphSearch sets Analyzer.Graph's instance and bounds: Constants
 // (NAME=expr, over the binding's and its simulate section's), the
 // Invariants to check (nil: the binding's), Terminal (a predicate: a
 // state the step cannot leave where it holds is an end the model means,
@@ -47,7 +49,7 @@ type GraphSearch struct {
 // states, under a minute at the evaluator's usual cost.
 const DefaultSearchStates = 100000
 
-// A GraphResult is Checker.Graph's report on a model's state graph.
+// A GraphResult is Analyzer.Graph's report on a model's state graph.
 type GraphResult struct {
 	// States, Starts and Transitions are the graph's extent: the states
 	// found, how many of them are initial, and its edges (each a branch's
@@ -92,7 +94,7 @@ type GraphResult struct {
 	// graph is the explored graph, for what builds on it; e the
 	// evaluator that explored it
 	graph *qeval.Graph
-	e     *evaluator
+	e     *evalshare.Eval
 	keys  map[string]bool // its states' keys, made by Lacks
 }
 
@@ -111,12 +113,12 @@ func (r *GraphResult) Lacks(tr *itf.Trace) (int, string, error) {
 	if r.keys == nil {
 		r.keys = map[string]bool{}
 		for _, s := range r.graph.States {
-			r.keys[r.e.m.Key(s)] = true
+			r.keys[r.e.Model.Key(s)] = true
 		}
 	}
 	for i, st := range tr.States {
 		s := qeval.State{}
-		for _, v := range r.e.m.Vars {
+		for _, v := range r.e.Model.Vars {
 			short := v[strings.LastIndex(v, ":")+1:]
 			x, ok := st.Vars[short]
 			if !ok {
@@ -131,7 +133,7 @@ func (r *GraphResult) Lacks(tr *itf.Trace) (int, string, error) {
 		if hooks.TamperEval.Load() == 8 && i == len(tr.States)-1 && i > 0 {
 			return i, stateText(r.e, s), nil // the evaluator's graph made to lack quint's last state
 		}
-		if !r.keys[r.e.m.Key(s)] {
+		if !r.keys[r.e.Model.Key(s)] {
 			return i, stateText(r.e, s), nil
 		}
 	}
@@ -188,8 +190,8 @@ type Counterexample struct {
 // itself (Picks: after the call's arguments), and the state after it.
 type GraphStep struct {
 	Call  string
-	Picks []NamedValue
-	State []NamedValue
+	Picks []validate.NamedValue
+	State []validate.NamedValue
 }
 
 // An ActionCoverage is how often the graph took one of the step's
@@ -241,7 +243,7 @@ func (r *GraphResult) Extent() string {
 // quint refuses. A construct the evaluator does not take, met during the
 // search, is no error: the result is cut "unsupported", naming it, and
 // never complete.
-func (c *Checker) Graph(cfg GraphSearch) (*GraphResult, error) {
+func (c *modelChecker) Graph(cfg GraphSearch) (*GraphResult, error) {
 	sim := c.Binding.Simulate
 	if sim == nil {
 		sim = &binding.Simulation{}
@@ -270,17 +272,17 @@ func (c *Checker) Graph(cfg GraphSearch) (*GraphResult, error) {
 		preds = append(preds, terminal)
 	}
 	cc := c.simulationInstance(cfg.Constants)
-	e := evaluatorOf(cc, func(path string) (*binding.EvalModule, error) { return cc.Binding.PossibleModule(c.Model, path, preds) })
-	if e.err != nil {
-		return nil, fmt.Errorf("graph: the Go evaluator has no evaluation module for %s: %w", c.Binding.SpecPath(), e.err)
+	e := evalshare.EvaluatorOf(cc.Checker, func(path string) (*binding.EvalModule, error) { return cc.Binding.PossibleModule(c.Model, path, preds) })
+	if e.Err != nil {
+		return nil, fmt.Errorf("graph: the Go evaluator has no evaluation module for %s: %w", c.Binding.SpecPath(), e.Err)
 	}
-	step, ok := e.em.Actions["step"]
+	step, ok := e.Module.Actions["step"]
 	if !ok {
 		return nil, fmt.Errorf("graph: %s has no step action: the graph is step's transitions", c.Binding.Module)
 	}
-	if len(e.em.Consts) > 0 {
+	if len(e.Module.Consts) > 0 {
 		return nil, fmt.Errorf("graph: the binding computes constants from a run's steps (%s): give them values (the simulate section's constants, or -const)",
-			strings.Join(slices.Sorted(maps.Keys(e.em.Consts)), ", "))
+			strings.Join(slices.Sorted(maps.Keys(e.Module.Consts)), ", "))
 	}
 	// the time is the search's and the checks', not quint's compile
 	started := time.Now()
@@ -294,7 +296,7 @@ func (c *Checker) Graph(cfg GraphSearch) (*GraphResult, error) {
 		}
 		return evs
 	}
-	g, err := e.m.Explore(consts, e.em.Init, step, bound, label)
+	g, err := e.Model.Explore(consts, e.Module.Init, step, bound, label)
 	r := &GraphResult{States: len(g.States), Starts: g.Starts, Transitions: g.Edges(), Complete: g.Complete, Cut: g.Cut,
 		Bound: GraphBound{bound.States, bound.Depth}, graph: g, e: e}
 	if err != nil {
@@ -320,9 +322,9 @@ func (c *Checker) Graph(cfg GraphSearch) (*GraphResult, error) {
 	// nearest one, its path from the parent tree a shortest
 	for _, inv := range invs {
 		v := InvariantVerdict{Name: inv}
-		val := e.em.Possible[inv]
+		val := e.Module.Possible[inv]
 		for id, s := range g.States {
-			x, err := e.m.Eval(consts, s, val)
+			x, err := e.Model.Eval(consts, s, val)
 			var u *qeval.Unsupported
 			if errors.As(err, &u) {
 				// not checked here; the states after it still are, since a
@@ -351,7 +353,7 @@ func (c *Checker) Graph(cfg GraphSearch) (*GraphResult, error) {
 	// deadlocks, the terminal states set apart
 	for _, id := range g.Deadlocks() {
 		if terminal != "" {
-			x, err := e.m.Eval(consts, g.States[id], e.em.Possible[terminal])
+			x, err := e.Model.Eval(consts, g.States[id], e.Module.Possible[terminal])
 			if err != nil {
 				return nil, fmt.Errorf("graph: terminal %s in state %s: %w", terminal, stateText(e, g.States[id]), err)
 			}
@@ -378,12 +380,12 @@ func (c *Checker) Graph(cfg GraphSearch) (*GraphResult, error) {
 	// coverage: each transition's branch action, once per label
 	branch := make([]string, len(g.Labels))
 	for i, l := range g.Labels {
-		if a, ok := branchEvent(c.Model, qeval.Transition{Events: l}); ok {
+		if a, ok := evalshare.BranchEvent(c.Model, qeval.Transition{Events: l}); ok {
 			branch[i] = a.Action
 		}
 	}
 	cov := map[string]*ActionCoverage{}
-	for _, a := range e.m.BranchActions(step) {
+	for _, a := range e.Model.BranchActions(step) {
 		if !c.Model.Helpers[a] {
 			r.Actions = append(r.Actions, ActionCoverage{Action: a})
 		}
@@ -447,7 +449,7 @@ func (c *Checker) Graph(cfg GraphSearch) (*GraphResult, error) {
 // simulationInstance is c with its binding's constants overridden by its
 // simulate section's, then by overrides (NAME=expr): the instance
 // simulate runs.
-func (c *Checker) simulationInstance(overrides []string) *Checker {
+func (c *modelChecker) simulationInstance(overrides []string) *modelChecker {
 	b := *c.Binding
 	b.Constants = maps.Clone(c.Binding.Constants)
 	if b.Constants == nil {
@@ -461,9 +463,9 @@ func (c *Checker) simulationInstance(overrides []string) *Checker {
 			b.Constants[strings.TrimSpace(k)] = strings.TrimSpace(v)
 		}
 	}
-	cc := *c
-	cc.Binding = &b
-	return &cc
+	cv := *c.Checker
+	cv.Binding = &b
+	return &modelChecker{&cv}
 }
 
 // searchBound is a search's bounds: states and depth as given, else the
@@ -483,18 +485,18 @@ func searchBound(sim *binding.Simulation, states, depth int) qeval.Bound {
 }
 
 // stateText is a state as a report says it.
-func stateText(e *evaluator, s qeval.State) string {
+func stateText(e *evalshare.Eval, s qeval.State) string {
 	var parts []string
-	for _, v := range e.m.Vars {
-		parts = append(parts, fmt.Sprintf("%s = %s", shortName(v), qeval.String(s[v])))
+	for _, v := range e.Model.Vars {
+		parts = append(parts, fmt.Sprintf("%s = %s", evalshare.ShortName(v), qeval.String(s[v])))
 	}
 	return strings.Join(parts, ", ")
 }
 
 // cexWriter writes a graph's paths as counterexamples.
 type cexWriter struct {
-	c    *Checker
-	e    *evaluator
+	c    *modelChecker
+	e    *evalshare.Eval
 	g    *qeval.Graph
 	step string
 }
@@ -505,14 +507,14 @@ type cexWriter struct {
 // is replayed as step), else step; sampled when the call has other
 // successors too, which quint may draw instead.
 func (w *cexWriter) replayStep(prev qeval.State, t qeval.Transition, k int) (call string, sampled bool) {
-	key := w.e.m.Key(t.State)
+	key := w.e.Model.Key(t.State)
 	reaches := func(name string, args []qeval.Value) (ok, sampled bool) {
-		succs, err := w.e.m.Successors(map[string]qeval.Value{}, prev, name, args...)
+		succs, err := w.e.Model.Successors(map[string]qeval.Value{}, prev, name, args...)
 		if err != nil {
 			return false, false
 		}
 		for _, s := range succs {
-			if w.e.m.Key(s) == key {
+			if w.e.Model.Key(s) == key {
 				return true, len(succs) > 1
 			}
 		}
@@ -529,10 +531,10 @@ func (w *cexWriter) replayStep(prev qeval.State, t qeval.Transition, k int) (cal
 }
 
 // named is a state's variables as a report names them.
-func (w *cexWriter) named(s qeval.State) []NamedValue {
-	var out []NamedValue
-	for _, v := range w.e.m.Vars {
-		out = append(out, NamedValue{Name: shortName(v), Value: qeval.String(s[v])})
+func (w *cexWriter) named(s qeval.State) []validate.NamedValue {
+	var out []validate.NamedValue
+	for _, v := range w.e.Model.Vars {
+		out = append(out, validate.NamedValue{Name: evalshare.ShortName(v), Value: qeval.String(s[v])})
 	}
 	return out
 }
@@ -546,8 +548,8 @@ func (w *cexWriter) path(id int, end string) *Counterexample {
 	if w.g.Starts > 1 {
 		// init has several states: the replay starts in this one's values
 		var parts []string
-		for _, v := range w.e.m.Vars {
-			parts = append(parts, fmt.Sprintf("%s' = %s", shortName(v), qeval.String(start[v])))
+		for _, v := range w.e.Model.Vars {
+			parts = append(parts, fmt.Sprintf("%s' = %s", evalshare.ShortName(v), qeval.String(start[v])))
 		}
 		run = "all { " + strings.Join(parts, ", ") + " }"
 		cx.Steps[0].Call = "init (" + stateText(w.e, start) + ")"
@@ -574,12 +576,12 @@ func (w *cexWriter) steps(prev qeval.State, ts []qeval.Transition, first int) (o
 			st.Call = a.String()
 			for _, ev := range t.Events[k+1:] {
 				if ev.Action == "" {
-					st.Picks = append(st.Picks, NamedValue{Name: ev.Pick, Value: qeval.String(ev.Value)})
+					st.Picks = append(st.Picks, validate.NamedValue{Name: ev.Pick, Value: qeval.String(ev.Value)})
 				}
 			}
 		} else {
 			for _, p := range t.Picks() {
-				st.Picks = append(st.Picks, NamedValue{Name: p.Pick, Value: qeval.String(p.Value)})
+				st.Picks = append(st.Picks, validate.NamedValue{Name: p.Pick, Value: qeval.String(p.Value)})
 			}
 		}
 		// the call checked by the evaluator: the transition's state among

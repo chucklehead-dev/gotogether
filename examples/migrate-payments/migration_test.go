@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/validate/model"
+
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -107,7 +109,7 @@ func TestDraftForbidsPartialCapture(t *testing.T) {
 	for k, v := range sim.Constants {
 		consts = append(consts, k+"="+v)
 	}
-	rs, err := c.Possible(sim.Possible, validate.PossibleSearch{Constants: consts})
+	rs, err := model.For(c).Possible(sim.Possible, model.PossibleSearch{Constants: consts})
 	if err != nil {
 		t.Fatal(err)
 	}

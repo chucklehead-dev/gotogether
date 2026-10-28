@@ -8,6 +8,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/qeval"
 	"github.com/chucklehead-dev/gotogether/itf"
+	"github.com/chucklehead-dev/gotogether/validate/internal/evalshare"
 )
 
 // Why a step was rejected (H2). quint's report of a step the model
@@ -438,11 +439,5 @@ func (e *evaluator) enabledInstead(c *Checker, consts map[string]qeval.Value, s 
 // first action it applies below step (a frame condition, a helper, is
 // part of its caller's).
 func branchEvent(m *binding.Model, t qeval.Transition) (qeval.Event, bool) {
-	for _, a := range t.Actions() {
-		if a.Action == "step" || m.Helpers[a.Action] {
-			continue
-		}
-		return a, true
-	}
-	return qeval.Event{}, false
+	return evalshare.BranchEvent(m, t)
 }

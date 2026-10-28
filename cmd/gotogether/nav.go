@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/validate/navproto"
+
 	"github.com/chucklehead-dev/gotogether/input"
 	"github.com/chucklehead-dev/gotogether/internal/overlay"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -165,7 +167,7 @@ func printNode(out io.Writer, node any, asJSON bool, text string) (int, error) {
 // navRun has the test binary of ref's test navigate it: go test in pkg
 // with GOTOGETHER_RUN naming the run and GOTOGETHER_NAV the node, built
 // with the overlay of the mutant GOTOGETHER_MUTANT names.
-func navRun(ref, pkg, at, follow string, save, fold bool) (*validate.RunNode, error) {
+func navRun(ref, pkg, at, follow string, save, fold bool) (*navproto.Node, error) {
 	i := strings.LastIndex(ref[:strings.LastIndex(ref, ":")], "#")
 	test := ref[:i]
 	dir, err := os.MkdirTemp("", "gotogether-nav-")
@@ -209,11 +211,11 @@ func navRun(ref, pkg, at, follow string, save, fold bool) (*validate.RunNode, er
 		}
 		return nil, fmt.Errorf("nav -run %s: the test wrote no node (go test -run '%s' in %s: %v%s)\n%s", ref, pattern, pkg, runErr, hint, buf.String())
 	}
-	var n validate.RunNode
+	var n navproto.Node
 	if err := json.Unmarshal(b, &n); err != nil {
 		return nil, fmt.Errorf("nav -run %s: %w", ref, err)
 	}
-	if err := validate.CheckNavProtocol(n.Protocol); err != nil {
+	if err := navproto.CheckProtocol(n.Protocol); err != nil {
 		return nil, fmt.Errorf("nav -run %s: %w", ref, err)
 	}
 	return &n, nil
@@ -229,7 +231,7 @@ func names(paths []string) []string {
 }
 
 // runNodeText is a run node as a person reads it.
-func runNodeText(n *validate.RunNode) string {
+func runNodeText(n *navproto.Node) string {
 	var b strings.Builder
 	if n.Path != "" { // in words first, the id after
 		fmt.Fprintf(&b, "node %s (%s) of %s: %s\n", n.Path, n.ID, n.Run, n.Verdict)

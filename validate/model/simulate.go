@@ -1,4 +1,4 @@
-package validate
+package model
 
 import (
 	"fmt"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/confidence"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // Simulate is the one engine for a model on its own (I17): the binding's
@@ -27,7 +28,7 @@ import (
 //     counterexample. The section's verifySteps caps N, and verifySkip
 //     says why a model is not verified;
 //   - with Graph, the Go evaluator explores the state graph from init
-//     within the section's one search bound (Checker.Graph): "holds" in a
+//     within the section's one search bound (Analyzer.Graph): "holds" in a
 //     complete graph is a proof for the instance (cross-checked by quint's
 //     sampling of the instance), a violation the shortest counterexample;
 //     deadlocks, the actions never enabled, and each eventual val judged
@@ -44,7 +45,7 @@ import (
 // simulate section that names an invariant it lacks, options that
 // contradict each other, a quint that fails other than by a violation, a
 // model with no step.
-func Simulate(bindingPath string, opt SimulateOptions) (*SimulateReport, error) {
+func Simulate(bindingPath string, opt SimulateOptions) (*Report, error) {
 	b, err := binding.Load(bindingPath)
 	if err != nil {
 		return nil, err
@@ -52,9 +53,8 @@ func Simulate(bindingPath string, opt SimulateOptions) (*SimulateReport, error) 
 	return simulate(bindingPath, b, nil, opt)
 }
 
-// Simulate is the package's Simulate of c's binding, with c's model and
-// evaluator: one compile for a test that checks runs and the model alone.
-func (c *Checker) Simulate(opt SimulateOptions) (*SimulateReport, error) {
+// Simulate is Simulate of c's binding, with c's model and evaluator.
+func (c *modelChecker) Simulate(opt SimulateOptions) (*Report, error) {
 	if opt.Quint == "" {
 		opt.Quint = c.Options.Quint
 	}
@@ -104,9 +104,9 @@ type SimulateOptions struct {
 	Replay bool
 }
 
-// A SimulateReport is Simulate's: every verdict, with what bounds it,
+// A Report is Simulate's: every verdict, with what bounds it,
 // and the report as `gotogether simulate` prints it.
-type SimulateReport struct {
+type Report struct {
 	// Binding is the binding's path as given.
 	Binding string
 	// Skipped, if set, says why nothing was checked: the section's skip,
@@ -116,11 +116,11 @@ type SimulateReport struct {
 	Graph *GraphResult
 	// Invariants and Eventually are each one's verdict, in the order
 	// checked; Possibles each possible's.
-	Invariants, Eventually []ModelVerdict
+	Invariants, Eventually []Verdict
 	Possibles              []PossibleVerdict
 	// Deadlocks is the graph's verdict on the states the step cannot
 	// leave (with Graph): Held when none is a deadlock.
-	Deadlocks *ModelVerdict
+	Deadlocks *Verdict
 	// EvaluatorBug, if set, is quint reaching a state the evaluator's
 	// complete graph lacks: the graph's verdicts are void.
 	EvaluatorBug string
@@ -132,18 +132,18 @@ type SimulateReport struct {
 	Text string
 }
 
-// A ModelVerdict is one invariant's or eventual val's verdict in the
+// A Verdict is one invariant's or eventual val's verdict in the
 // model alone (Name "deadlock" for the graph's deadlocks). Three-valued:
 // Held (no violation within Bound), Violated (a witness), or neither (no
 // verdict: Error or Unchecked says why). Held is a proof only as far as
-// Bound goes (ModelBound.Proves).
-type ModelVerdict struct {
+// Bound goes (Bound.Proves).
+type Verdict struct {
 	Name string
 	// Class is the simulate section's: "holds", "allows", or "" for
 	// unclassified.
 	Class            string
 	Held, Violated   bool
-	Bound            ModelBound
+	Bound            Bound
 	Counterexample   *Counterexample
 	Lasso            *HotLasso
 	Error, Unchecked string
@@ -155,14 +155,14 @@ type ModelVerdict struct {
 	Replayed string
 }
 
-// A ModelBound is what a model verdict covers. Kind is "complete" (every
+// A Bound is what a model verdict covers. Kind is "complete" (every
 // reachable state of the instance), "depth" (every state within Depth
 // steps: every trace of up to Depth steps), "states" (the first States
 // states breadth first, which proves nothing past them), "stopped" (the
 // evaluator could not go on: Stopped), "verified" (quint verify, every
 // trace of up to Steps steps), or "sampled" (quint run, Traces traces of
 // up to Steps steps).
-type ModelBound struct {
+type Bound struct {
 	Kind                         string
 	States, Depth, Traces, Steps int
 	Stopped                      string
@@ -170,11 +170,11 @@ type ModelBound struct {
 
 // Proves reports whether a verdict held within b is a proof as far as b
 // says: every reachable state, or every trace within a depth.
-func (b ModelBound) Proves() bool {
+func (b Bound) Proves() bool {
 	return b.Kind == "complete" || b.Kind == "depth" || b.Kind == "verified"
 }
 
-func (b ModelBound) String() string {
+func (b Bound) String() string {
 	switch b.Kind {
 	case "complete":
 		return fmt.Sprintf("the whole state graph, %d states", b.States)
@@ -213,13 +213,13 @@ type PossibleVerdict struct {
 // sim is one Simulate: its report as it is written.
 type sim struct {
 	b   strings.Builder
-	rep *SimulateReport
+	rep *Report
 }
 
 func (s *sim) printf(format string, a ...any) { fmt.Fprintf(&s.b, format, a...) }
 
-func simulate(bpath string, b *binding.Binding, checker *Checker, opt SimulateOptions) (rep *SimulateReport, err error) {
-	s := &sim{rep: &SimulateReport{Binding: bpath}}
+func simulate(bpath string, b *binding.Binding, checker *modelChecker, opt SimulateOptions) (rep *Report, err error) {
+	s := &sim{rep: &Report{Binding: bpath}}
 	defer func() {
 		if rep != nil {
 			rep.Text = s.b.String()
@@ -304,12 +304,12 @@ func simulate(bpath string, b *binding.Binding, checker *Checker, opt SimulateOp
 		// the possibles need the model's actions (a name alone is a step
 		// if it is one) and its evaluator, as the graph does
 		if checker == nil {
-			c, err := NewChecker(bpath, Options{Quint: opt.Quint})
+			c, err := validate.NewChecker(bpath, validate.Options{Quint: opt.Quint})
 			if err != nil {
 				return nil, err
 			}
 			defer c.Close()
-			checker = c
+			checker = &modelChecker{c}
 		}
 		if possibles, err = resolvePossibles(checker, possibleList); err != nil {
 			return nil, err
@@ -375,9 +375,9 @@ func simulate(bpath string, b *binding.Binding, checker *Checker, opt SimulateOp
 			}
 		}
 	}
-	bound := ModelBound{Kind: "sampled", Traces: samples, Steps: steps}
+	bound := Bound{Kind: "sampled", Traces: samples, Steps: steps}
 	if verify > 0 {
-		bound = ModelBound{Kind: "verified", Steps: verify}
+		bound = Bound{Kind: "verified", Steps: verify}
 	}
 	code := 0
 	for _, inv := range invariants {
@@ -413,7 +413,7 @@ func simulate(bpath string, b *binding.Binding, checker *Checker, opt SimulateOp
 			}
 			return nil, fmt.Errorf("simulate: quint %s --invariant %s: %w\n%s", argv[0], inv, err, out)
 		}
-		v := ModelVerdict{Name: inv, Class: classOf(inv, holds, allows), Held: !violated, Violated: violated, Bound: bound}
+		v := Verdict{Name: inv, Class: classOf(inv, holds, allows), Held: !violated, Violated: violated, Bound: bound}
 		if violated {
 			v.Trace = out
 		}

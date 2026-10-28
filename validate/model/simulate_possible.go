@@ -1,4 +1,4 @@
-package validate
+package model
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 // own must be able to do, checked by quint (a predicate's witness is its
 // counterexample to not(P); a sequence of actions is looked for in
 // sampled traces' mbt::actionTaken) and by the Go evaluator's bounded
-// search where the model is in its fragment (Checker.Possible).
+// search where the model is in its fragment (Analyzer.Possible).
 // Either finding it reaches it; neither fails simulate, saying what to
 // do. The evaluator calling impossible what quint found is its bug.
 
@@ -51,7 +51,7 @@ func possibleVals(cs []*possibleCheck) string {
 }
 
 // resolvePossibles reads the binding's possibles against its model.
-func resolvePossibles(c *Checker, ps []binding.Possible) ([]*possibleCheck, error) {
+func resolvePossibles(c *modelChecker, ps []binding.Possible) ([]*possibleCheck, error) {
 	var out []*possibleCheck
 	for _, p := range ps {
 		when, steps, err := p.Resolve(c.Model)

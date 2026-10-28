@@ -1,4 +1,4 @@
-package validate
+package model
 
 import (
 	"os"
@@ -12,6 +12,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/itf"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // The simulation module imports the binding's instance, with its
@@ -63,17 +64,17 @@ var graphAgreement = []struct {
 	path          string
 	states, depth int
 }{
-	{"../validate/testdata/graph.yaml", 0, 0},
-	{"../validate/testdata/vending.yaml", 0, 0},
-	{"../validate/testdata/limiter.yaml", 0, 0},
+	{"../testdata/graph.yaml", 0, 0},
+	{"../testdata/vending.yaml", 0, 0},
+	{"../testdata/limiter.yaml", 0, 0},
 	// account's amounts make a hundred transitions a state: 4 steps to
 	// underLimit's violation
-	{"../validate/testdata/account.yaml", 0, 4},
-	{"../examples/hello/hello.binding.yaml", 0, 0},
+	{"../testdata/account.yaml", 0, 4},
+	{"../../examples/hello/hello.binding.yaml", 0, 0},
 	// lease's stale write is 11 steps deep, past its first 5000 states
-	{"../examples/lease/lease.binding.yaml", 20000, 0},
-	{"../examples/jobqueue/jobqueue.binding.yaml", 0, 0},
-	{"../examples/twophase/twophase.binding.yaml", 0, 0},
+	{"../../examples/lease/lease.binding.yaml", 20000, 0},
+	{"../../examples/jobqueue/jobqueue.binding.yaml", 0, 0},
+	{"../../examples/twophase/twophase.binding.yaml", 0, 0},
 }
 
 // The explorer against quint, on the repository's small models: each
@@ -110,7 +111,7 @@ func TestGraphAgreesWithQuint(t *testing.T) {
 // agreeGraph holds one binding's graph to quint, and returns how many
 // invariants both found violated.
 func agreeGraph(t *testing.T, path string, states, depth int) int {
-	c, err := NewChecker(path, Options{})
+	c, err := newChecker(path, validate.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,11 +195,11 @@ func agreeGraph(t *testing.T, path string, states, depth int) int {
 func TestSimulatePossible(t *testing.T) {
 	skip.Quint(t)
 	for b, want := range map[string]int{"vending.yaml": 0, "vending_strict.yaml": 1} {
-		path := filepath.Join("testdata", b)
+		path := filepath.Join("../testdata", b)
 		if rep, err := Simulate(path, SimulateOptions{}); err != nil || rep.Code != want {
 			t.Errorf("%s: %v; want code %d", b, err, want)
 		}
-		c, err := NewChecker(path, Options{})
+		c, err := newChecker(path, validate.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}

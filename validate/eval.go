@@ -20,6 +20,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate/internal/evalshare"
 )
 
 // An evaluator is a binding's model compiled for the Go evaluator: its
@@ -41,6 +42,14 @@ type evaluator struct {
 	// eventual val, past the first false one, as quint's detail replay
 	// does (a footprint's walk: what those evaluations read)
 	judgeAll bool
+}
+
+// validate/model reaches the evaluator through evalshare
+func init() {
+	evalshare.EvaluatorOf = func(checker any, make func(path string) (*binding.EvalModule, error)) *evalshare.Eval {
+		e := evaluatorOf(checker.(*Checker), make)
+		return &evalshare.Eval{Module: e.em, Model: e.m, Err: e.err, Literal: e.literal}
+	}
 }
 
 // Process-wide: each evaluation module compiled once, by its text and

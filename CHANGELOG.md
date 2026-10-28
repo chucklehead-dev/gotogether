@@ -19,6 +19,25 @@ The first release. What a user meets, by module:
   are 1.6-2x faster, with half the allocations (ROADMAP I39); a search
   raises the process's GC percent to 400 while it runs, unless it is
   already higher or off, and puts it back.
+- validate split (ROADMAP I18; breaking): model analysis has its own
+  package, `validate/model`, and the run navigation protocol its own,
+  `validate/navproto`; validate keeps judging runs (and the model
+  navigator, which starts from a run's state). Fixes:
+  `validate.Simulate` is `model.Simulate`, `Checker.Simulate`,
+  `Checker.Graph` and `Checker.Possible` are `model.For(c).Simulate`,
+  `.Graph`, `.Possible` (or `model.New(path, opts)`, an `Analyzer` to
+  Close); `SimulateReport`, `ModelVerdict`, `ModelBound` are
+  `model.Report`, `model.Verdict`, `model.Bound`; `SimulateOptions`,
+  `PossibleVerdict`, `GraphSearch`, `GraphResult`, `GraphBound`,
+  `GraphStep`, `InvariantVerdict`, `Counterexample`, `ActionCoverage`,
+  `EventualVerdict`, `HotLasso`, `PossibleSearch`, `PossibleResult` and
+  `DefaultSearchStates` keep their names under `model.`. `RunNode`,
+  `RunChoice`, `RunBranch`, `RunRequest`, `RunResponse`, `RunSession`,
+  `NavProtocol` and `CheckNavProtocol` are `navproto.Node`, `Choice`,
+  `Branch`, `Request`, `Response`, `Session`, `Protocol` and
+  `CheckProtocol`; `ActorState` is `navproto.ActorState`, its state
+  `[]navproto.NamedValue`. qnav reads the protocol from navproto.
+
 - Model claims through one Expect (ROADMAP I17's second half;
   breaking): `qtest.Possible(t, binding, scenarios...)` is gone, its
   name now the claim (I17's first half called it `qtest.Follows`):

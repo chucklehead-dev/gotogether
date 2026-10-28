@@ -1,4 +1,4 @@
-package validate
+package model
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/qeval"
+	"github.com/chucklehead-dev/gotogether/validate/internal/evalshare"
 )
 
 // Possibility checks (P3): whether the model on its own can reach what a
@@ -17,7 +18,7 @@ import (
 // bound" unless the search was complete (every state within the depth
 // seen), and only then impossible.
 
-// A PossibleSearch bounds Checker.Possible's search and sets its
+// A PossibleSearch bounds Analyzer.Possible's search and sets its
 // instance: Constants (NAME=expr, over the binding's), at most States
 // search nodes and Depth transitions (default: the binding's
 // simulate.search, else DefaultSearchStates and no depth bound: one bound
@@ -65,7 +66,7 @@ func (r PossibleResult) Verdict() string {
 // no search: the model outside the evaluator's fragment, no step action,
 // a constant computed from a run's steps with no value given, a possible
 // that names no action or parameter of the model.
-func (c *Checker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]PossibleResult, error) {
+func (c *modelChecker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]PossibleResult, error) {
 	cc := c.simulationInstance(cfg.Constants)
 	b := cc.Binding
 	type goal struct {
@@ -84,29 +85,29 @@ func (c *Checker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]Possibl
 			preds = append(preds, when)
 		}
 	}
-	e := evaluatorOf(cc, func(path string) (*binding.EvalModule, error) { return b.PossibleModule(c.Model, path, preds) })
-	if e.err != nil {
-		return nil, fmt.Errorf("possible: the Go evaluator has no evaluation module for %s: %w", b.SpecPath(), e.err)
+	e := evalshare.EvaluatorOf(cc.Checker, func(path string) (*binding.EvalModule, error) { return b.PossibleModule(c.Model, path, preds) })
+	if e.Err != nil {
+		return nil, fmt.Errorf("possible: the Go evaluator has no evaluation module for %s: %w", b.SpecPath(), e.Err)
 	}
-	step, ok := e.em.Actions["step"]
+	step, ok := e.Module.Actions["step"]
 	if !ok {
 		return nil, fmt.Errorf("possible: %s has no step action: the search takes step's transitions", b.Module)
 	}
-	if len(e.em.Consts) > 0 {
+	if len(e.Module.Consts) > 0 {
 		return nil, fmt.Errorf("possible: the binding computes constants from a run's steps (%s): give them values (the simulate section's constants, or -const)",
-			strings.Join(slices.Sorted(maps.Keys(e.em.Consts)), ", "))
+			strings.Join(slices.Sorted(maps.Keys(e.Module.Consts)), ", "))
 	}
 	consts := map[string]qeval.Value{}
-	init, err := e.m.Init(consts, e.em.Init)
+	init, err := e.Model.Init(consts, e.Module.Init)
 	if err != nil {
 		return nil, fmt.Errorf("possible: init: %w", err)
 	}
 	qgoals := make([]qeval.Goal, len(goals))
 	for i, g := range goals {
 		if g.when != "" {
-			val := e.em.Possible[g.when]
+			val := e.Module.Possible[g.when]
 			qgoals[i].Holds = func(s qeval.State) (bool, error) {
-				v, err := e.m.Eval(consts, s, val)
+				v, err := e.Model.Eval(consts, s, val)
 				if err != nil {
 					return false, fmt.Errorf("possible %q: %w", ps[i].Text(), err)
 				}
@@ -119,7 +120,7 @@ func (c *Checker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]Possibl
 			continue
 		}
 		for _, sp := range g.steps {
-			m, err := e.stepMatcher(c.Model, sp)
+			m, err := stepMatcher(e, c.Model, sp)
 			if err != nil {
 				return nil, fmt.Errorf("possible %q: %w", ps[i].Text(), err)
 			}
@@ -127,7 +128,7 @@ func (c *Checker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]Possibl
 		}
 	}
 	bound := searchBound(c.Binding.Simulate, cfg.States, cfg.Depth)
-	rs, err := e.m.Reach(consts, init, step, qgoals, bound)
+	rs, err := e.Model.Reach(consts, init, step, qgoals, bound)
 	if err != nil {
 		return nil, fmt.Errorf("possible: %w", err)
 	}
@@ -135,7 +136,7 @@ func (c *Checker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]Possibl
 	for i, r := range rs {
 		pr := PossibleResult{Possible: ps[i], Found: r.Found, Complete: r.Complete, Cut: r.Cut, Nodes: r.Nodes, Depth: r.Depth}
 		for _, t := range r.Path {
-			if a, ok := branchEvent(c.Model, t); ok {
+			if a, ok := evalshare.BranchEvent(c.Model, t); ok {
 				pr.Path = append(pr.Path, a.String())
 			} else {
 				pr.Path = append(pr.Path, "step")
@@ -148,17 +149,17 @@ func (c *Checker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]Possibl
 
 // stepMatcher is whether a transition takes sp: its branch's action is
 // sp's, each parameter sp names at sp's value.
-func (e *evaluator) stepMatcher(m *binding.Model, sp binding.StepPattern) (func(qeval.Transition) bool, error) {
+func stepMatcher(e *evalshare.Eval, m *binding.Model, sp binding.StepPattern) (func(qeval.Transition) bool, error) {
 	want := make([]qeval.Value, len(sp.Values))
 	for i, lit := range sp.Values {
-		v, err := e.literal(lit)
+		v, err := e.Literal(lit)
 		if err != nil {
 			return nil, fmt.Errorf("step %s: %s = %s: %w", sp.Text, sp.Params[i], lit, err)
 		}
 		want[i] = v
 	}
 	return func(t qeval.Transition) bool {
-		a, ok := branchEvent(m, t)
+		a, ok := evalshare.BranchEvent(m, t)
 		if !ok || a.Action != sp.Action {
 			return false
 		}

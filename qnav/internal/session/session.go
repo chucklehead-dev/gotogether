@@ -1,6 +1,6 @@
 // Package session runs an exploration's run navigation session: the
 // test binary of the run's test, compiled once, answering
-// validate.RunRequest lines with validate.RunResponse lines
+// navproto.Request lines with navproto.Response lines
 // (GOTOGETHER_NAV=serve, DESIGN §58), so that each node is a replay
 // rather than a go test process.
 package session
@@ -20,14 +20,15 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/chucklehead-dev/gotogether/validate/navproto"
+
 	"github.com/chucklehead-dev/gotogether/internal/overlay"
-	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // A Session is a running navigation session of one run.
 type Session struct {
 	// Info is the session's first line: the run, its choices, its notes
-	Info validate.RunSession
+	Info navproto.Session
 
 	cmd  *exec.Cmd
 	in   io.WriteCloser
@@ -140,7 +141,7 @@ func Start(pkg, ref string) (*Session, error) {
 	}
 	// the binary is built against the module's core, this navigator
 	// against its own: a protocol it does not speak is refused with the fix
-	if err := validate.CheckNavProtocol(r.Session.Protocol); err != nil {
+	if err := navproto.CheckProtocol(r.Session.Protocol); err != nil {
 		s.Close()
 		return nil, fmt.Errorf("the session of %s: %w", ref, err)
 	}
@@ -157,13 +158,13 @@ func (s *Session) fail(err error) error {
 }
 
 // read is the session's next response.
-func (s *Session) read() (validate.RunResponse, error) {
+func (s *Session) read() (navproto.Response, error) {
 	for s.out.Scan() {
 		line := bytes.TrimSpace(s.out.Bytes())
 		if !bytes.HasPrefix(line, []byte("{")) {
 			continue // the test's own output (windows)
 		}
-		var r validate.RunResponse
+		var r navproto.Response
 		if err := json.Unmarshal(line, &r); err != nil {
 			continue
 		}
@@ -176,11 +177,11 @@ func (s *Session) read() (validate.RunResponse, error) {
 	if err == nil {
 		err = io.ErrUnexpectedEOF
 	}
-	return validate.RunResponse{}, fmt.Errorf("the test binary ended (%v)", err)
+	return navproto.Response{}, fmt.Errorf("the test binary ended (%v)", err)
 }
 
 // Node asks the session for the node req names.
-func (s *Session) Node(req validate.RunRequest) (*validate.RunNode, error) {
+func (s *Session) Node(req navproto.Request) (*navproto.Node, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	b, err := json.Marshal(req)

@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/validate/navproto"
+
 	"github.com/chucklehead-dev/gotogether/internal/overlay"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -49,7 +51,7 @@ import (
 //
 // GOTOGETHER_NAV=serve makes the test binary a session (serve): it runs
 // the base run (twice: the first-seed-twice check), then answers
-// validate.RunRequest lines with validate.RunResponse lines until its
+// navproto.Request lines with navproto.Response lines until its
 // input ends, each node a replay (milliseconds, the verdicts cached by
 // their steps) instead of a go test process (seconds).
 //
@@ -245,7 +247,7 @@ func (e *engine) navigate(sources []source) {
 		e.serve(b, base)
 		return
 	}
-	req := validate.RunRequest{Node: os.Getenv("GOTOGETHER_NAV"), Fold: os.Getenv("GOTOGETHER_NAV_FOLD") == "1", Save: os.Getenv("GOTOGETHER_NAV_SAVE") == "1"}
+	req := navproto.Request{Node: os.Getenv("GOTOGETHER_NAV"), Fold: os.Getenv("GOTOGETHER_NAV_FOLD") == "1", Save: os.Getenv("GOTOGETHER_NAV_SAVE") == "1"}
 	for p := range strings.SplitSeq(os.Getenv("GOTOGETHER_NAV_FOLLOW"), ",") {
 		if p = strings.TrimSpace(p); p == "" {
 			continue
@@ -296,8 +298,8 @@ func (e *engine) navBase(r0 *Run) *navBase {
 }
 
 // serve is a navigation session (GOTOGETHER_NAV=serve): requests from
-// GOTOGETHER_NAV_IN (else stdin), one validate.RunRequest a line, each
-// answered by a validate.RunResponse line on GOTOGETHER_NAV_OUT (else
+// GOTOGETHER_NAV_IN (else stdin), one navproto.Request a line, each
+// answered by a navproto.Response line on GOTOGETHER_NAV_OUT (else
 // stdout), after a first line naming the session, until the input ends.
 // The base run is made a second time first (an exploration's first seed
 // is): a run that does not replay fails t, and the session says so, since
@@ -324,12 +326,12 @@ func (e *engine) serve(b *navBase, base planned) {
 	}
 	enc := json.NewEncoder(out)
 	enc.SetEscapeHTML(false)
-	send := func(r validate.RunResponse) {
+	send := func(r navproto.Response) {
 		if err := enc.Encode(r); err != nil {
 			t.Fatalf("gotogether: GOTOGETHER_NAV=serve: %v", err)
 		}
 	}
-	hello := &validate.RunSession{Protocol: validate.NavProtocol, Run: e.x.ref() + ":" + b.r0.ID(), Choices: len(b.cs)}
+	hello := &navproto.Session{Protocol: navproto.Protocol, Run: e.x.ref() + ":" + b.r0.ID(), Choices: len(b.cs)}
 	again := base.chooser
 	if base.again != nil {
 		again = func() qenv.Chooser { return base.again(b.r0) }
@@ -347,7 +349,7 @@ func (e *engine) serve(b *navBase, base planned) {
 	if b.entropy {
 		hello.Notes = append(hello.Notes, entropyNote)
 	}
-	send(validate.RunResponse{Session: hello})
+	send(navproto.Response{Session: hello})
 	sc := bufio.NewScanner(in)
 	sc.Buffer(make([]byte, 0, 64<<10), 16<<20)
 	for sc.Scan() {
@@ -355,17 +357,17 @@ func (e *engine) serve(b *navBase, base planned) {
 		if len(line) == 0 {
 			continue
 		}
-		var req validate.RunRequest
+		var req navproto.Request
 		if err := json.Unmarshal(line, &req); err != nil {
-			send(validate.RunResponse{Error: fmt.Sprintf("a request is one JSON object a line (validate.RunRequest): %v", err)})
+			send(navproto.Response{Error: fmt.Sprintf("a request is one JSON object a line (navproto.Request): %v", err)})
 			continue
 		}
 		node, err := e.navNode(b, req)
 		if err != nil {
-			send(validate.RunResponse{Error: err.Error()})
+			send(navproto.Response{Error: err.Error()})
 			continue
 		}
-		send(validate.RunResponse{Node: node})
+		send(navproto.Response{Node: node})
 	}
 	if err := sc.Err(); err != nil {
 		t.Fatalf("gotogether: GOTOGETHER_NAV=serve: reading requests: %v", err)
@@ -396,7 +398,7 @@ func baseSchedule(r *Run) ([]deviation, []qenv.Choice, bool) {
 
 // spec is the node req names from the base: its node (start, fail, @k,
 // an id), then its Follow and Take.
-func (e *engine) spec(b *navBase, req validate.RunRequest) (nodeSpec, error) {
+func (e *engine) spec(b *navBase, req navproto.Request) (nodeSpec, error) {
 	var spec nodeSpec
 	switch v := req.Node; {
 	case v == "" || v == "start":
@@ -440,7 +442,7 @@ func (e *engine) spec(b *navBase, req validate.RunRequest) (nodeSpec, error) {
 
 // navNode is the node req names from the base: its replay, stopped (for
 // what the node shows) at its choice, judged whole.
-func (e *engine) navNode(b *navBase, req validate.RunRequest) (*validate.RunNode, error) {
+func (e *engine) navNode(b *navBase, req navproto.Request) (*navproto.Node, error) {
 	t, x := e.t, e.x
 	spec, err := e.spec(b, req)
 	if err != nil {
@@ -454,7 +456,7 @@ func (e *engine) navNode(b *navBase, req validate.RunRequest) (*validate.RunNode
 	}
 	spec.at = nc.at // past the choices it folded
 	r.origin = origin{kind: "schedule", value: schedule(spec.ds)}
-	node := &validate.RunNode{Protocol: validate.NavProtocol, Run: x.ref() + ":" + b.r0.ID(), ID: spec.id(), Schedule: schedule(spec.ds), At: spec.at, Folded: nc.folded, Branches: []validate.RunBranch{}, Steps: []string{},
+	node := &navproto.Node{Protocol: navproto.Protocol, Run: x.ref() + ":" + b.r0.ID(), ID: spec.id(), Schedule: schedule(spec.ds), At: spec.at, Folded: nc.folded, Branches: []navproto.Branch{}, Steps: []string{},
 		Path: pathWords(nc.path)}
 	if b.entropy {
 		node.Notes = append(node.Notes, entropyNote)
@@ -477,9 +479,9 @@ func (e *engine) navNode(b *navBase, req validate.RunRequest) (*validate.RunNode
 		if spec.at < len(b.cs) && onPath(spec) {
 			taken = b.cs[spec.at].Value
 		}
-		node.Choice = &validate.RunChoice{Kind: nc.kind, N: nc.n, Options: nc.options, Taken: taken}
+		node.Choice = &navproto.Choice{Kind: nc.kind, N: nc.n, Options: nc.options, Taken: taken}
 		for o := range nc.n {
-			br := validate.RunBranch{Option: o, Child: spec.child(o).id()}
+			br := navproto.Branch{Option: o, Child: spec.child(o).id()}
 			if o < len(nc.options) {
 				br.Name = nc.options[o]
 			}
@@ -558,16 +560,18 @@ func (e *engine) failingChoice(b *navBase) (int, error) {
 
 // actorStates are each actor's model state after steps, by the Go
 // evaluator, or why there is none.
-func actorStates(cc *validate.Checker, steps []qtrace.Step) []validate.ActorState {
+func actorStates(cc *validate.Checker, steps []qtrace.Step) []navproto.ActorState {
 	traces, _ := cc.Binding.Reconstruct(steps)
-	var out []validate.ActorState
+	var out []navproto.ActorState
 	for _, tr := range traces {
-		as := validate.ActorState{Actor: tr.Actor}
+		as := navproto.ActorState{Actor: tr.Actor}
 		n, err := cc.Nav(validate.NavStart{Steps: steps, Actor: tr.Actor, At: -1})
 		if err == nil {
 			var nd *validate.Node
 			if nd, err = n.Node(); err == nil {
-				as.State = nd.State
+				for _, v := range nd.State {
+					as.State = append(as.State, navproto.NamedValue{Name: v.Name, Value: v.Value})
+				}
 			}
 		}
 		if err != nil {

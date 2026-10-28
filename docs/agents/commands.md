@@ -114,8 +114,8 @@ AGENTS.md has the general requirements.
   qnav (its own module): `cd qnav && go test ./...` (hello's session
   skipped with -short); its tapes need vhs, ttyd and ffmpeg (qnav's
   README), `go test ./tapes/`, `tapes/render.sh` for the media.
-  `GOTOGETHER_NAV=serve` is a session: `validate.RunRequest` lines from
-  stdin (or the file `GOTOGETHER_NAV_IN`), `validate.RunResponse` lines
+  `GOTOGETHER_NAV=serve` is a session: `navproto.Request` lines from
+  stdin (or the file `GOTOGETHER_NAV_IN`), `navproto.Response` lines
   to stdout (or `GOTOGETHER_NAV_OUT`) until the input ends; run the
   compiled test binary (`go test -c`), not `go test`, which hides a
   passing test's output.

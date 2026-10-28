@@ -5,12 +5,12 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/validate/navproto"
+
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-
-	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // styles are the screen's. Colors are the terminal's sixteen (ANSI), so
@@ -312,7 +312,7 @@ func (m *Model) runScreen(c *entry) screen {
 	for _, s := range steps {
 		out = append(out, "  "+s)
 	}
-	var parent *validate.RunNode
+	var parent *navproto.Node
 	if len(m.stack) > 1 {
 		parent = m.stack[len(m.stack)-2].r
 	}

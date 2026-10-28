@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/model"
 )
 
-// simulate runs the binding's model on its own: validate.Simulate (the
+// simulate runs the binding's model on its own: model.Simulate (the
 // one engine for the model alone, qtest.Model's too) with the flags'
 // options, its report printed (and, with -json and the other machine
 // reports, read from its lines). By default quint samples; with -verify
@@ -40,7 +40,7 @@ func simulateCmd(args []string, mr *machineReports, log *simLog) (int, error) {
 	consts := fset.String("const", "", "constants to set, NAME=expr,... (over the binding's and its simulate section's)")
 	invs := fset.String("invariants", "", "comma-separated invariants instead of the binding's (classified as the binding says)")
 	verify := fset.Int("verify", 0, "check each invariant in every trace of up to this many steps with quint verify (Apalache), instead of sampling with quint run")
-	states := fset.Int("states", 0, fmt.Sprintf("states the Go evaluator's searches visit at most, the possibles' and -graph's (default: the binding's simulate.search.states, else %d)", validate.DefaultSearchStates))
+	states := fset.Int("states", 0, fmt.Sprintf("states the Go evaluator's searches visit at most, the possibles' and -graph's (default: the binding's simulate.search.states, else %d)", model.DefaultSearchStates))
 	graph := fset.Bool("graph", false, "explore the model's state graph with the Go evaluator instead of sampling with quint: every invariant in every reachable state "+
 		"(within -states and -depth), deadlocks, actions never enabled, the shortest counterexamples, and each eventual val as cycles (a fair one keeping it false forever)")
 	depth := fset.Int("depth", 0, "the longest path from init the Go evaluator's searches explore, the possibles' and -graph's (default: the binding's simulate.search.depth, else none)")
@@ -57,7 +57,7 @@ func simulateCmd(args []string, mr *machineReports, log *simLog) (int, error) {
 	if *bpath == "" {
 		return 2, fmt.Errorf("simulate needs -binding b.yaml")
 	}
-	opt := validate.SimulateOptions{Quint: *quint, Seed: *seed, Steps: *steps, Samples: *samples, Constants: splitTop(*consts),
+	opt := model.SimulateOptions{Quint: *quint, Seed: *seed, Steps: *steps, Samples: *samples, Constants: splitTop(*consts),
 		Verify: *verify, Graph: *graph, States: *states, Depth: *depth, Out: *out}
 	if *invs != "" {
 		opt.Invariants = splitList(*invs)
@@ -68,7 +68,7 @@ func simulateCmd(args []string, mr *machineReports, log *simLog) (int, error) {
 	if *stops != "" {
 		opt.Stops = splitList(*stops)
 	}
-	rep, err := validate.Simulate(*bpath, opt)
+	rep, err := model.Simulate(*bpath, opt)
 	if err != nil {
 		return 2, err
 	}

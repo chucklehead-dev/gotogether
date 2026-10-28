@@ -1,4 +1,4 @@
-package validate
+package model
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ import (
 )
 
 // graph is Simulate with Graph (`simulate -graph`): the binding's
-// instance explored by the Go evaluator (Checker.Graph), each invariant
+// instance explored by the Go evaluator (Analyzer.Graph), each invariant
 // judged as the simulate section classifies it over every state the
 // graph holds, then its deadlocks, the actions it never took, the
 // eventual vals as cycles, and the possibles (searched by the evaluator
@@ -23,7 +23,7 @@ import (
 // for a verdict that fails, 2 for a graph the evaluator could not finish
 // or an invariant it could not evaluate, with nothing failing: it never
 // says complete then.
-func (s *sim) graph(bpath string, b *binding.Binding, checker *Checker, possibles []*possibleCheck, overrides, invariants, eventually []string, opt SimulateOptions) error {
+func (s *sim) graph(bpath string, b *binding.Binding, checker *modelChecker, possibles []*possibleCheck, overrides, invariants, eventually []string, opt SimulateOptions) error {
 	sec := b.Simulate
 	if sec == nil {
 		sec = &binding.Simulation{}
@@ -86,7 +86,7 @@ func (s *sim) graph(bpath string, b *binding.Binding, checker *Checker, possible
 	code, unchecked := 0, false
 	for _, v := range r.Invariants {
 		inv := v.Name
-		mv := ModelVerdict{Name: inv, Class: classOf(inv, holds, allows), Held: v.Held(), Violated: v.Violated, Bound: bound,
+		mv := Verdict{Name: inv, Class: classOf(inv, holds, allows), Held: v.Held(), Violated: v.Violated, Bound: bound,
 			Counterexample: v.Counterexample, Error: v.Error, Unchecked: v.Unsupported}
 		s.rep.Invariants = append(s.rep.Invariants, mv)
 		switch {
@@ -129,7 +129,7 @@ func (s *sim) graph(bpath string, b *binding.Binding, checker *Checker, possible
 			s.printf("  bounded %s: %s violates it, which proves nothing past them (unclassified, the graph truncated)\n", inv, where)
 		}
 	}
-	s.rep.Deadlocks = &ModelVerdict{Name: "deadlock", Held: r.Deadlocks == 0, Violated: r.Deadlocks > 0, Bound: bound, Counterexample: r.Deadlock}
+	s.rep.Deadlocks = &Verdict{Name: "deadlock", Held: r.Deadlocks == 0, Violated: r.Deadlocks > 0, Bound: bound, Counterexample: r.Deadlock}
 	switch {
 	case r.Deadlocks > 0:
 		code = 1
@@ -251,8 +251,8 @@ func (s *sim) graph(bpath string, b *binding.Binding, checker *Checker, possible
 }
 
 // graphBound is what r's verdicts cover.
-func graphBound(r *GraphResult) ModelBound {
-	b := ModelBound{States: r.States, Depth: r.Bound.Depth}
+func graphBound(r *GraphResult) Bound {
+	b := Bound{States: r.States, Depth: r.Bound.Depth}
 	switch {
 	case r.Complete:
 		b.Kind = "complete"
@@ -272,7 +272,7 @@ func graphBound(r *GraphResult) ModelBound {
 // would not reproduce it.
 func (s *sim) replay(b *binding.Binding, overrides []string, quint string) error {
 	type one struct {
-		v      *ModelVerdict
+		v      *Verdict
 		name   string
 		replay string
 		drawn  []int
@@ -500,7 +500,7 @@ func crossCheck(b *binding.Binding, overrides []string, quint string, r *GraphRe
 // It returns the exit code its verdicts make (1 for a failure) and
 // whether one was unchecked (the evaluator refused it somewhere, and no
 // cycle was found).
-func (s *sim) reportEventually(r *GraphResult, holds, allows map[string]bool, bound ModelBound) (code int, unchecked bool) {
+func (s *sim) reportEventually(r *GraphResult, holds, allows map[string]bool, bound Bound) (code int, unchecked bool) {
 	if len(r.Eventually) == 0 {
 		return 0, false
 	}
@@ -523,7 +523,7 @@ func (s *sim) reportEventually(r *GraphResult, holds, allows map[string]bool, bo
 		"and live is so only for a system at least this fair); a stutter is no step\n", nOf(len(r.Eventually), "eventual val"), fairness)
 	for _, v := range r.Eventually {
 		ev := v.Name
-		s.rep.Eventually = append(s.rep.Eventually, ModelVerdict{Name: ev, Class: classOf(ev, holds, allows), Held: v.Live(), Violated: v.Hot, Bound: bound,
+		s.rep.Eventually = append(s.rep.Eventually, Verdict{Name: ev, Class: classOf(ev, holds, allows), Held: v.Live(), Violated: v.Hot, Bound: bound,
 			Lasso: v.Lasso, Counterexample: v.Counterexample, Error: v.Error, Unchecked: v.Unsupported})
 		if v.Error != "" {
 			code = 1
