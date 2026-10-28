@@ -126,13 +126,17 @@ func TestFaithfulConforms(t *testing.T) {
 		// ...
 		qtest.Reaches("rpc.counter.request").Faulted().InAtLeast(0.3),
 		// ...
-		qtest.Exercised())
+		qtest.Exercised(),
+		// ...
+		qtest.Some(retried))
 }
 
 func TestNoDedupeCountsRetries(t *testing.T) {
 	qtest.RequireQuint(t)
 	system(NoDedupe).WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).
-		Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()))
+		Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()),
+			// ...
+			qtest.None(retried))
 	// ...
 }
 

@@ -22,7 +22,7 @@ forgets to dedupe) and expects the model to reject a step: its output's
 [Hegel](https://hegel.dev), a property-based tester, then shrinks that
 failure to the single fault it needs.
 
-Read `hello.go` and `hello_test.go` (130 lines together), then pick a
+Read `hello.go` and `hello_test.go` (175 lines together), then pick a
 workflow from the table below. Agents start from the `gotogether-start`
 skill (`gotogether skills install`).
 
@@ -361,8 +361,10 @@ func Run(c qenv.Chooser, m Mutation) error {
 }
 ```
 
-and its tests: the system bound to the model, explored by seeds, and shrunk
-by Hegel to the one fault the bug needs:
+and its tests: the system bound to the model, an acceptance scenario
+checked possible in the model on its own (before any run) and claimed of
+the runs, explored by seeds, and shrunk by Hegel to the one fault the bug
+needs:
 
 <!-- from examples/hello/hello_test.go -->
 ```go
@@ -377,9 +379,21 @@ func system(m Mutation) qtest.System {
 // lossy loses or duplicates one message in five.
 var lossy = qenv.Rates{Default: 0.2}
 
+// retried is the acceptance criterion in the model's actions: request 1
+// applied, then seen again (its retry after a lost response, or a
+// duplicate) and recognised as a replay, then the client done.
+var retried = qtest.NamedScenario("a retry recognised",
+	qtest.Takes("apply").With("id", "1"), qtest.Takes("replay").With("id", "1"), qtest.Takes("done"))
+
+func TestRetryPossible(t *testing.T) {
+	qtest.Possible(t, "hello.binding.yaml", retried)
+}
+
 func TestNoDedupeCountsRetries(t *testing.T) {
 	system(NoDedupe).WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).
-		Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()))
+		Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()),
+			// it never recognises a retry: no run follows the scenario
+			qtest.None(retried))
 }
 
 func TestHegelShrinks(t *testing.T) {

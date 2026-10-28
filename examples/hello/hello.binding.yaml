@@ -20,3 +20,11 @@ invariants: [exactlyOnce]
 # guarantees, which it allows to fail and the code must not.
 simulate:
   holds: [exactlyOnce]
+  # what the model must be able to do: a request applied and then seen
+  # again (a retry, a duplicate), recognised as a replay; the client done.
+  # A model too strict for either would judge a counter that never meets a
+  # retry faithful
+  possible:
+    - name: a retry recognised
+      steps: [apply, replay]
+    - done

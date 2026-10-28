@@ -22,6 +22,19 @@ func system(m Mutation) qtest.System {
 // lossy loses or duplicates one message in five.
 var lossy = qenv.Rates{Default: 0.2}
 
+// retried is the acceptance criterion in the model's actions: request 1
+// applied, then seen again (its retry after a lost response, or a
+// duplicate) and recognised as a replay, then the client done.
+var retried = qtest.NamedScenario("a retry recognised",
+	qtest.Takes("apply").With("id", "1"), qtest.Takes("replay").With("id", "1"), qtest.Takes("done"))
+
+// The model on its own can follow the scenario, before any run: a model
+// whose replay needed something no run does would fail here, with the
+// search's extent, where every run would still conform to it.
+func TestRetryPossible(t *testing.T) {
+	qtest.Possible(t, "hello.binding.yaml", retried)
+}
+
 // Through lost requests, lost responses and duplicates, every request
 // counts once.
 func TestFaithfulConforms(t *testing.T) {
@@ -34,7 +47,9 @@ func TestFaithfulConforms(t *testing.T) {
 		qtest.Reaches("rpc.counter.request").Faulted().InAtLeast(0.3),
 		// and every model action was taken (a replay of a seen request),
 		// every fault kind faulted: nothing the model allows went untried
-		qtest.Exercised())
+		qtest.Exercised(),
+		// and some run met a retry of its first request and recognised it
+		qtest.Some(retried))
 }
 
 // Without dedupe a retried request is counted again: the model has no
@@ -43,7 +58,9 @@ func TestFaithfulConforms(t *testing.T) {
 func TestNoDedupeCountsRetries(t *testing.T) {
 	qtest.RequireQuint(t)
 	system(NoDedupe).WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).
-		Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()))
+		Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()),
+			// it never recognises a retry: no run follows the scenario
+			qtest.None(retried))
 	system(NoDedupe).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 5}).Expect(t, qtest.Conforms())
 }
 
