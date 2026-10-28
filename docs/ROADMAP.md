@@ -326,15 +326,22 @@ Then, in order, each item reviewed before the next:
   cgroup); the cluster simulated as named qenv choices (a graceful
   terminate, a router whose endpoints lag, hosts and zones, a store that
   fails over or is restored, projected files, a delayed autoscaler in
-  qload); `grist/kube` (no client-go) writing annotated manifests, a
-  pre-deploy lint, the kind tier and a canary gated by the model;
+  qload); `grist/kube` (no client-go) writing annotated manifests and
+  the lint's rules; client-go only in executables of their own, reached
+  by PATH as `gotogether nav` reaches gotogether-nav (`gotogether kube`:
+  the kind tier, a canary gated by the model, the live lint; `<app>
+  kube`: GR7's controller, a client of the app's HTTP API);
   sizing from the app's own service times with recovery as the
   criterion (`<app> sizing`). Correctness stays the store's: no
   Kubernetes Lease, ownership fenced in the log. Eleven slices; the
   first two fix today's recorder ids shared by every pod (pid 1) and
   30 s of drain inside the default 30 s grace. After H7 (slice 4 needs
-  its upcasting; slice 11 grist slice 3's leases); six questions for
-  the maintainer (§10).
+  its upcasting; slice 11 grist slice 3's leases). The maintainer's
+  decisions (2026-10-28, §10): no Kubernetes Lease, not even a hint; a
+  45 s grace generated; a rewind fails closed until `<app> resume`; no
+  app binary links client-go; sizing enters manifests only with
+  `-sizing`; the canary an Argo Rollouts Job analysis or HTTPRoute
+  weights, no controller of ours.
 - **Slice 3's rest**: upcasting, snapshots, gristpure, gristhegel,
   leases, screens and Datastar (the read models' cost on long histories
   first: snapshots before a second real app).

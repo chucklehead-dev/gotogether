@@ -1806,6 +1806,11 @@ the default grace, so a slow drain is killed in its flush; `-addr`
 defaults to loopback. The reviewers disagreed on a Kubernetes Lease as
 a hint; the design keeps no Lease at all (heartbeats and the fence in
 the log), the specialist's minimal-client elector the alternative.
+The maintainer decided the six questions the same day (the doc's §10):
+five as recommended, and client-go isolated to executables of their own
+reached as subcommands (`gotogether kube`, `<app> kube`, as `gotogether
+nav` execs gotogether-nav), GR7's controller a client of the app's HTTP
+API, a build tag rejected.
 
 ### E: a run gotogether did not drive
 
