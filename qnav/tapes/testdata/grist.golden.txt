@@ -17,8 +17,8 @@ the run's next call, which the model rejects
   call 5 (createCounter("a", "c", "t1-c2-1", "client2", 0, Set(("counter-created", "name", "c")), "ok"))
     why: the model's createCounter(counter = "a", name = "c", id = "t1-c2-1", caller = "client2",
       readPos = 0, reads = Set(("counter-created", "name", "c")), result = "ok") is disabled:
-      in createCounter, the else branch of if (result == "idempotency-key-reused"), the else branch of
-        if (result == "conflict"): conditionHolds(log, readPos, reads_) is false
+      in createCounter, the else branch of if (result == "idempotency-key-reused"), the else
+        branch of if (result == "conflict"): conditionHolds(log, readPos, reads_) is false
         where log = [{ cause: ("command", "t1-c1-1"), ints: [], strs: ["c", "c", "client1"],
           tags: Set(("counter", "c"), ("name", "c")), typ: "counter-created" }], readPos = 0, reads_ =
           Set({ tags: Set(("name", "c")), typ: "counter-created" })
@@ -29,7 +29,7 @@ the run's next call, which the model rejects
         not(matches(log[i], r))) is false
         where i < readPos = false, reads.forall(r => not(matches(log[i], r))) = false, i = 0
       grist: event 1 (counter-created events tagged counter="c", name="c"), appended after the
-── lines 1–17 of 191 (pgup/pgdn scroll)
+── lines 1–17 of 179 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -47,8 +47,8 @@ the run's next call, which the model rejects
   call 5 (createCounter("a", "c", "t1-c2-1", "client2", 0, Set(("counter-created", "name", "c")), "ok"))
     why: the model's createCounter(counter = "a", name = "c", id = "t1-c2-1", caller = "client2",
       readPos = 0, reads = Set(("counter-created", "name", "c")), result = "ok") is disabled:
-      in createCounter, the else branch of if (result == "idempotency-key-reused"), the else branch of
-        if (result == "conflict"): conditionHolds(log, readPos, reads_) is false
+      in createCounter, the else branch of if (result == "idempotency-key-reused"), the else
+        branch of if (result == "conflict"): conditionHolds(log, readPos, reads_) is false
         where log = [{ cause: ("command", "t1-c1-1"), ints: [], strs: ["c", "c", "client1"],
           tags: Set(("counter", "c"), ("name", "c")), typ: "counter-created" }], readPos = 0, reads_ =
           Set({ tags: Set(("name", "c")), typ: "counter-created" })
@@ -65,7 +65,7 @@ the run's next call, which the model rejects
         "i1", caller = "a", readPos = 1, reads = Set(("counter-created", "name", "a")), result = "ok")),
         incrementCounter (8 ways, e.g. incrementCounter(counter = "a", by = 1, id = "i1", caller = "a",
         readPos = 1, reads = Set(("counter-created", "counter", "a")), result = "unknown-counter")),
-── lines 1–23 of 191 (pgup/pgdn scroll)
+── lines 1–23 of 179 (pgup/pgdn scroll)
 
 /showCounter
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
