@@ -1,0 +1,10 @@
+# graph_wrap.qnt: a step around its branches, its end at n = 3.
+spec: graph_wrap.qnt
+module: graph_wrap
+actions:
+  inc: {}
+  dec: {}
+invariants: [small]
+simulate:
+  allows: [small]
+  terminal: "n == 3"

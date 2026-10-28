@@ -2,8 +2,10 @@ package qeval
 
 import (
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
+	"unsafe"
 )
 
 // An Event is what led to a transition (Transitions): an action applied
@@ -55,6 +57,36 @@ func short(s string) string {
 type Transition struct {
 	Events []Event
 	State  State
+	// key is State's Key, where Transitions computed it
+	key string
+}
+
+// eventsKey is a list of events as a string, equal exactly when the
+// events are: each action's name and arguments, each choice's name and
+// value, as written in full (String cuts long values short, and two
+// labels differing past the cut are two labels).
+func eventsKey(b *strings.Builder, evs []Event) {
+	for _, e := range evs {
+		eventKey(b, e)
+	}
+}
+
+// eventKey is one event of eventsKey.
+func eventKey(b *strings.Builder, e Event) {
+	if e.Action != "" {
+		b.WriteString(e.Action)
+		b.WriteByte('(')
+		for _, a := range e.Args {
+			write(b, a)
+			b.WriteByte(',')
+		}
+		b.WriteByte(')')
+	} else {
+		b.WriteString(e.Pick)
+		b.WriteByte('=')
+		write(b, e.Value)
+	}
+	b.WriteByte('|')
 }
 
 // Actions are the transition's actions, outermost first.
@@ -100,28 +132,50 @@ func (m *Model) Transitions(consts map[string]Value, s State, name string, args 
 		return nil, err
 	}
 	seen := map[string]bool{}
+	// a call's successors are shared by every choice around it that does
+	// not change it (callAction): each assignment's state and Key once
+	type built struct {
+		st  State
+		key string
+	}
+	states := map[unsafe.Pointer]built{}
+	display := map[string]string{}
+	var key strings.Builder
 	for _, sc := range succs {
-		st := State{}
-		for _, v := range m.Vars {
-			x, ok := sc.a[v]
-			if !ok {
-				return nil, unsupported(name, "leaves %s unassigned", v)
+		p := reflect.ValueOf(sc.a).UnsafePointer()
+		bs, ok := states[p]
+		if !ok {
+			bs.st = State{}
+			for _, v := range m.Vars {
+				x, ok := sc.a[v]
+				if !ok {
+					return nil, unsupported(name, "leaves %s unassigned", v)
+				}
+				bs.st[v] = x
 			}
-			st[v] = x
+			bs.key = m.Key(bs.st)
+			states[p] = bs
 		}
-		evs := make([]Event, len(sc.lab))
-		var key strings.Builder
-		for i, l := range sc.lab {
-			if l.Action != "" {
-				l.Action = m.Display(l.Action)
-			}
-			evs[i] = l
-			key.WriteString(l.String() + "|")
+		key.Reset()
+		for l := sc.lab; l != nil; l = l.next {
+			eventKey(&key, l.ev)
 		}
-		k := key.String() + m.Key(st)
-		if !seen[k] {
+		key.WriteString(bs.key)
+		if k := key.String(); !seen[k] {
 			seen[k] = true
-			out = append(out, Transition{Events: evs, State: st})
+			evs := sc.lab.slice()
+			for i, l := range evs {
+				if l.Action != "" {
+					d, ok := display[l.Action]
+					if !ok {
+						d = m.Display(l.Action)
+						display[l.Action] = d
+					}
+					l.Action = d
+				}
+				evs[i] = l
+			}
+			out = append(out, Transition{Events: evs, State: bs.st, key: bs.key})
 		}
 	}
 	return out, nil

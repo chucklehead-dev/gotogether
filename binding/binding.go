@@ -190,7 +190,9 @@ type Simulation struct {
 	// Terminal is a Quint predicate over the state saying where the model
 	// means to stop: `gotogether simulate -graph` reports a state the step
 	// cannot leave as a deadlock unless it holds there (a protocol that
-	// has finished, a log at its bound).
+	// has finished, a log at its bound). A state the step can leave only
+	// by a stutter (a read) is never a deadlock, so a model that can
+	// always read needs none: the report counts such states as quiet.
 	Terminal string `yaml:"terminal"`
 	// GraphStates and GraphDepth bound `gotogether simulate -graph`'s
 	// state graph for this model (default 100000 states, no depth bound):

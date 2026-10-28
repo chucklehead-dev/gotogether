@@ -4398,7 +4398,11 @@ quint process but the cached compile: `gotogether simulate -graph`, and
   action applied with its arguments and the choices it made itself. The
   step's own choices used by no branch are dropped (bank's step picks a
   transfer's accounts for a deposit too: about 130 labelled transitions a
-  state, 37 edges), merging edges that differ only in them.
+  state, 37 edges), merging edges that differ only in them. A label is
+  interned by its events written in full: `Event.String` cuts a value
+  past 200 characters, and interning by it once gave two calls whose
+  arguments differ past the cut one label, so the second state's path
+  named the first call (`TestExploreLongLabels`).
 - **Shortest counterexamples.** Ids are in breadth-first order, so the
   first id where an invariant is false is a nearest violating state and
   its path up the parent tree a shortest trace. Every state found is
@@ -4406,6 +4410,10 @@ quint process but the cached compile: `gotogether simulate -graph`, and
 - **Complete or not.** Complete means no bound cut the search and the
   evaluator refused nothing: every state reachable (within the depth
   bound, if set) was checked, and "holds" is a proof for the instance.
+  State identity is `Model.Key`, each variable's value written as a
+  Quint literal in the order of Vars: strings quoted, sets and maps in
+  Compare's order, records by field name, every compound bracketed, so
+  equal keys are equal states (operators, which no state holds, aside).
   A state at the depth bound cuts it even if it has no successor
   (unknown, since it is not expanded). The default bound is 100000
   states (`-states`, `simulate.graphStates`) and no depth bound
@@ -4417,11 +4425,13 @@ quint process but the cached compile: `gotogether simulate -graph`, and
   dependent fold, a set past 65,536) stops it: the graph found so far
   stays (its paths are real traces, a violation in it is real), cut
   "unsupported", `Stopped` naming the construct; an invariant the
-  evaluator cannot evaluate is "unchecked". Either exits 2 when nothing
-  failed, and the report says to sample without -graph.
+  evaluator cannot evaluate in some states is "unchecked" (never held),
+  still checked in the others, where a violation is one. Either exits 2
+  when nothing failed, and the report says to sample without -graph.
 - **Classified as simulate classifies.** `holds` in a complete graph is
-  proved; in a truncated one, "none of the N states explored violates
-  it"; violated, it fails with the shortest counterexample. `allows`
+  proved; in a truncated one it is "bounded" ("none of the N states
+  explored violates it, which proves nothing past them"), never "holds";
+  violated, it fails with the shortest counterexample. `allows`
   passes with the shortest violating path, and fails when the complete
   graph has none (checking the code against it proves nothing).
 - **Deadlocks** are expanded states with no edge. quint run says
@@ -4431,7 +4441,13 @@ quint process but the cached compile: `gotogether simulate -graph`, and
   examples, both complete graphs: twophase (99 states, 9 deadlocks:
   every participant decided, the protocol's end, unsaid) and crossdb
   (10377 states, 128: a resource stuck deleting once the model's three
-  database ids are spent, the finite pool's end).
+  database ids are spent, the finite pool's end). A state with a
+  stutter (an edge back to itself) is no deadlock, so a model whose step
+  can always stutter (a read, a grist model's queries) never has one:
+  the report counts its quiescent states (every edge back to itself)
+  instead, which say where it stops, and fails on none of them.
+  `terminal:` is any Quint predicate over the state, evaluated where
+  the step has no edge (a non-Boolean is an error).
 - **Actions never enabled, and coverage**: each of the step's actions
   with the edges taking it and the states it is enabled in. One never
   taken in a complete graph is dead in the instance (vending's repair,
@@ -4442,15 +4458,23 @@ quint process but the cached compile: `gotogether simulate -graph`, and
   --match gtg_ f.qnt`): init (or, where init has several states, the
   start's values assigned), each step its branch's call with literal
   arguments, then `.expect(not(inv))` or, for a deadlock,
-  `.then(step.fail())`. It replays exactly where no step chooses inside
-  its action; where one does (`Counterexample.Sampled`), quint draws
-  those choices itself. The run calls the action, not step: the
-  evaluator found the transition through step, so a guard step adds
-  around a branch is not re-checked by the replay.
+  `.then(step.fail())`. Each call is checked by the evaluator before it
+  is written: the branch's call where it alone reaches the path's state,
+  else step (a step that assigns more than its branch, `all { any {
+  inc, dec }, n' = n + 1 }`, once replayed as `inc`, which quint
+  refused to typecheck). The replay is exact where each call has one
+  successor; where one has others (`Counterexample.Sampled`), quint
+  draws among them and may miss the path. A call replayed as the
+  branch's action does not re-check a guard step adds around it (the
+  evaluator found the transition through step).
 - **Possibles under -graph**: the evaluator's search at the graph's
   bounds, then quint's sampling for what it did not find, as without
   -graph (a grist app's deep scenarios, which a 20000-state breadth-
-  first prefix four or five steps deep never reaches).
+  first prefix four or five steps deep never reaches). The report says
+  when it samples ("sampling N possibles the Go evaluator did not find
+  with quint"), and each such possible names quint's trace: it is the
+  one quint process of -graph, and no verdict of the graph's rests on
+  it.
 - **Cost.** A state's expansion is its step's whole choice product.
   The smoke run (every binding of the repository with invariants, 20000
   states each, one core): 0.1-0.7 ms a state for most (checkout 6.2 s,
@@ -4459,7 +4483,17 @@ quint process but the cached compile: `gotogether simulate -graph`, and
   14.3: 10^5 states in 10-65 s), 1.2-9 ms where the product is large
   (wallet-grist 26 s, account's amounts 29, webjobs 56, broadcast 71,
   bank's 135 picks 90, payd 93, kvstore's `0.to(revision)` 188). No
-  model met a construct the evaluator refuses.
+  model met a construct the evaluator refuses. The P2 review's profile
+  (kvstore) found a step's choice product re-evaluating each branch for
+  every value of the choices it does not use, and every labelled
+  transition building its label's text and its state's Key: a call's
+  successors are now computed once per state (`callAction`: an action's
+  body binds only its parameters; a call with an operator argument,
+  Choreo's, is not remembered, since no key writes a closure), labels
+  are lists a choice prepends to in one allocation, and a state's Key is
+  computed once per assignment. At 20000 states, on one machine:
+  kvstore 137 s to 78, payd 72 to 20, bank 62 to 30 (CPU 2-3.7 times
+  less at 6000), the same graphs.
 - **Tests that fail without it**: `TestExploreAgainstBruteForce` (every
   path of graph.qnt and vending to each depth bound from every initial
   state: the same states at their least depths, each path a trace of

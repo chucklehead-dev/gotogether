@@ -254,3 +254,49 @@ func TestExploreUnsupported(t *testing.T) {
 		t.Fatalf("graph after %v: %d states, complete %v, cut %q", err, len(g.States), g.Complete, g.Cut)
 	}
 }
+
+// Labels are interned by their events in full: two calls whose
+// arguments differ only past Event.String's cut are two labels, and each
+// state's path names the call that reached it (one label for both once
+// replayed the first call's arguments to reach the second's state).
+func TestExploreLongLabels(t *testing.T) {
+	m := compile(t, "longargs.qnt", "longargs", "init", "step")
+	g, err := m.Explore(map[string]Value{}, "init", "step", Bound{}, actionsOnly)
+	if err != nil || !g.Complete || len(g.States) != 3 {
+		t.Fatalf("%v: %d states, complete %v", err, len(g.States), g.Complete)
+	}
+	if len(g.Labels) != 2 {
+		t.Fatalf("%d labels, want 2: %v", len(g.Labels), g.Labels)
+	}
+	for id := 1; id < len(g.States); id++ {
+		path := g.Path(id)
+		if len(path) != 1 || len(path[0].Events) != 1 {
+			t.Fatalf("state %d's path %v", id, path)
+		}
+		if got, want := path[0].Events[0].Args[0], g.States[id][m.Vars[0]]; Compare(got, want) != 0 {
+			t.Errorf("state %d reached by store(%s), its value %s", id, String(got), String(want))
+		}
+	}
+}
+
+// A step's calls are computed once per call in a state (callAction),
+// but a call with an operator argument is never taken for another: two
+// calls of apply with different operators reach two states.
+func TestTransitionsOperatorArguments(t *testing.T) {
+	m := compile(t, "opargs.qnt", "opargs", "init", "step")
+	inits, err := m.Successors(map[string]Value{}, nil, "init")
+	if err != nil || len(inits) != 1 {
+		t.Fatalf("init: %v, %v", inits, err)
+	}
+	ts, err := m.Transitions(map[string]Value{}, inits[0], "step")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, tr := range ts {
+		got = append(got, String(tr.State[m.Vars[0]]))
+	}
+	if slices.Sort(got); !slices.Equal(got, []string{"2", "3"}) {
+		t.Fatalf("step from x = 1 reaches %v, want [2 3]", got)
+	}
+}

@@ -107,3 +107,45 @@ func TestCheckerGraphUnsupported(t *testing.T) {
 		t.Fatalf("positive in the states found: %+v", r.Invariants[0])
 	}
 }
+
+// A counterexample's replay calls a branch's action only where the
+// evaluator finds that call alone reaches the path's state: graph_wrap's
+// step counts its steps itself, so inc alone leaves n unassigned and
+// each step is replayed as step, exactly (dec is never enabled, so step
+// has one successor). Its end, n = 3, is terminal, not a deadlock.
+func TestCheckerGraphReplaysStep(t *testing.T) {
+	skip.Quint(t)
+	t.Parallel()
+	r := graphOf(t, "testdata/graph_wrap.yaml", GraphSearch{})
+	small := r.Invariants[0]
+	if !r.Complete || !small.Violated {
+		t.Fatalf("%s, small %+v", r.Extent(), small)
+	}
+	want := "init.then(step).then(step).then(step).expect(not(small))"
+	if got := small.Counterexample.Replay; got != want || len(small.Counterexample.Sampled) > 0 {
+		t.Fatalf("small's replay %s (sampled %v), want %s exactly", got, small.Counterexample.Sampled, want)
+	}
+	if r.Deadlocks != 0 || r.Terminals != 1 {
+		t.Fatalf("deadlocks %d, terminals %d", r.Deadlocks, r.Terminals)
+	}
+}
+
+// An invariant the evaluator cannot evaluate in one state is not held,
+// and is still checked in the others: graph_partial's small, unevaluable
+// at x = 1, is violated at x = 3. The state at x = 4, which only read
+// leaves, is quiescent, not a deadlock.
+func TestCheckerGraphPartlyUnsupported(t *testing.T) {
+	skip.Quint(t)
+	t.Parallel()
+	r := graphOf(t, "testdata/graph_partial.yaml", GraphSearch{})
+	small := r.Invariants[0]
+	if small.Held() || !small.Violated || small.Unchecked != 1 || small.Unsupported == "" {
+		t.Fatalf("small %+v", small)
+	}
+	if got := small.Counterexample.Replay; got != "init.then(inc).then(inc).then(inc).expect(not(small))" {
+		t.Fatalf("small's replay %s", got)
+	}
+	if r.Deadlocks != 0 || r.Quiescent != 1 {
+		t.Fatalf("deadlocks %d, quiescent %d", r.Deadlocks, r.Quiescent)
+	}
+}

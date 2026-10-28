@@ -107,7 +107,10 @@ func (s *search) run(starts []State) error {
 			if p < len(s.steps) && s.steps[p](t) {
 				p++
 			}
-			k := s.m.Key(t.State)
+			k := t.key
+			if k == "" {
+				k = s.m.Key(t.State)
+			}
 			id := k + "#" + strconv.Itoa(p)
 			if j, ok := s.seen[id]; ok && (s.b.Depth == 0 || s.nodes[j].depth <= nd.depth+1) {
 				if s.edge != nil && s.edge(i, t, j) {
@@ -296,12 +299,7 @@ func cutOf(err error) string {
 // label is the id of a transition's events, interned.
 func (g *Graph) label(evs []Event) int {
 	var b strings.Builder
-	for _, e := range evs {
-		b.WriteString(e.Action)
-		b.WriteByte('|')
-		b.WriteString(e.String())
-		b.WriteByte(';')
-	}
+	eventsKey(&b, evs)
 	k := b.String()
 	if id, ok := g.labels[k]; ok {
 		return id

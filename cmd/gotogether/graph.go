@@ -28,6 +28,14 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 	if sim == nil {
 		sim = &binding.Simulation{}
 	}
+	if out != "" {
+		// the module imports the model by a path relative to its own
+		abs, err := filepath.Abs(out)
+		if err != nil {
+			return 2, err
+		}
+		out = abs
+	}
 	if checker == nil {
 		c, err := validate.NewChecker(bpath, validate.Options{Quint: quint})
 		if err != nil {
@@ -59,9 +67,10 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 	for _, v := range r.Invariants {
 		inv := v.Name
 		switch {
-		case v.Unsupported != "":
+		case v.Unsupported != "" && !v.Violated:
 			unchecked = true
-			fmt.Printf("  unchecked %s: the Go evaluator cannot evaluate it (%s); simulate without -graph samples it with quint\n", inv, v.Unsupported)
+			fmt.Printf("  unchecked %s: the Go evaluator cannot evaluate it in %s (%s), and it holds in the %d it could; simulate without -graph samples it with quint\n",
+				inv, plural(v.Unchecked, "state"), v.Unsupported, v.Checked)
 			continue
 		case v.Error != "":
 			code = 1
@@ -72,7 +81,7 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 		case holds[inv] && v.Held() && r.Complete:
 			fmt.Printf("  holds   %s: no reachable state violates it (the whole graph, %d states%s)\n", inv, r.States, depthNote(r))
 		case holds[inv] && v.Held():
-			fmt.Printf("  holds   %s: %s violates it (the graph is truncated: %s for a proof)\n", inv, where, raise)
+			fmt.Printf("  bounded %s: %s violates it, which proves nothing past them (the graph is truncated: %s for a proof)\n", inv, where, raise)
 		case allows[inv] && v.Violated:
 			fmt.Printf("  allows  %s: a state %d steps from init violates it (the code must not): %s\n", inv, len(v.Counterexample.Steps)-1, callsOf(v.Counterexample))
 		case holds[inv]:
@@ -94,7 +103,7 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 		case r.Complete:
 			fmt.Printf("  holds   %s: no reachable state violates it (unclassified: add it to simulate.holds to keep it so)\n", inv)
 		default:
-			fmt.Printf("  holds   %s: %s violates it (unclassified, the graph truncated)\n", inv, where)
+			fmt.Printf("  bounded %s: %s violates it, which proves nothing past them (unclassified, the graph truncated)\n", inv, where)
 		}
 	}
 	switch {
@@ -105,6 +114,11 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 			plural(r.Deadlocks, "reachable state"), terminalNote(r), bpath, cexText(r.Deadlock))
 	case r.Terminals > 0:
 		fmt.Printf("  ends    %s the step cannot leave, each terminal (simulate.terminal)\n", plural(r.Terminals, "reachable state"))
+	}
+	if r.Quiescent > 0 {
+		// not deadlocks: a model whose step can always stutter (a read, a
+		// grist query) never deadlocks, so say where it stops
+		fmt.Printf("  quiet   %s only a stutter leaves (every edge back to itself), so no deadlock there\n", plural(r.Quiescent, "reachable state"))
 	}
 	if never := r.NeverEnabled(); len(never) > 0 {
 		if r.Complete {
@@ -140,6 +154,10 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 			left = append(left, c)
 		}
 		if len(left) > 0 {
+			// the one quint process -graph runs: say so, the header
+			// having promised the evaluator's graph
+			fmt.Printf("  sampling %s the Go evaluator did not find with quint (%d traces of %d steps): not part of the graph's verdicts\n",
+				plural(len(left), "possible"), samples, steps)
 			dir, err := os.MkdirTemp("", "gotogether-simulate-*")
 			if err != nil {
 				return 2, err
@@ -230,7 +248,7 @@ func cexText(cx *validate.Counterexample) string {
 	}
 	fmt.Fprintf(&b, "    replay: run r = %s\n", cx.Replay)
 	if len(cx.Sampled) > 0 {
-		fmt.Fprintf(&b, "    (steps %v choose within their action: quint's replay draws those choices itself)\n", cx.Sampled)
+		fmt.Fprintf(&b, "    (steps %v have other successors than the path's: quint's replay draws among them, so it may not reproduce the path; the path above is the evaluator's)\n", cx.Sampled)
 	}
 	return b.String()
 }

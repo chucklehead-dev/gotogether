@@ -64,6 +64,12 @@ type GraphResult struct {
 	// deadlock's path (nil for none)
 	Deadlocks, Terminals int
 	Deadlock             *Counterexample
+	// Quiescent are the expanded states whose every edge returns to them
+	// (only a stutter, such as a read, is enabled): not deadlocks, since
+	// the step can take one, so a model whose step can always stutter (a
+	// grist model's queries) has no deadlock at all, and these are where
+	// it stops
+	Quiescent int
 	// Actions are the step's actions with how often each was taken, in
 	// the order the step names them
 	Actions []ActionCoverage
@@ -81,11 +87,13 @@ type GraphBound struct {
 }
 
 // An InvariantVerdict is one invariant over a state graph: violated in
-// some reachable state (Counterexample the shortest path to the nearest),
-// its evaluation failed (Error: the model's runtime error, with the path
-// to the state; Unsupported: a construct the evaluator does not take, so
-// it was not checked), or held in every state the graph holds (Checked
-// of them).
+// some reachable state (Counterexample the shortest path to the nearest
+// the evaluator could check), its evaluation failed (Error: the model's
+// runtime error, with the path to the state), or held in every state
+// checked (Checked of them). Unsupported names a construct the evaluator
+// does not take, met in Unchecked states, where the invariant was not
+// checked: it is not Held then, though a violation elsewhere still is
+// one.
 type InvariantVerdict struct {
 	Name           string
 	Violated       bool
@@ -93,6 +101,7 @@ type InvariantVerdict struct {
 	Error          string
 	Unsupported    string
 	Checked        int
+	Unchecked      int
 }
 
 // Held says the invariant was checked in every state of the graph and
@@ -106,9 +115,11 @@ func (v InvariantVerdict) Held() bool {
 // over the binding's instance (its start init, or the start's values
 // where init has several states; each step its action's call), ending in
 // what the path shows (`.expect(not(inv))`, a deadlock's
-// `.then(step.fail())`); Sampled are the steps whose action makes
-// choices of its own, which quint's replay draws at random rather than
-// the path's (where there are none it replays exactly).
+// `.then(step.fail())`). Each step's call is checked by the evaluator:
+// the branch's call where it alone reaches the path's state, else step.
+// Sampled are the steps whose call has other successors too, which
+// quint's replay may draw instead of the path's (where there are none it
+// replays exactly).
 type Counterexample struct {
 	Steps   []GraphStep
 	Replay  string
@@ -246,7 +257,7 @@ func (c *Checker) Graph(cfg GraphSearch) (*GraphResult, error) {
 	for _, d := range g.Depth {
 		r.Depth = max(r.Depth, d)
 	}
-	ce := &cexWriter{c: c, e: e, g: g}
+	ce := &cexWriter{c: c, e: e, g: g, step: step}
 	// each invariant in every state, in id order: the first violated is a
 	// nearest one, its path from the parent tree a shortest
 	for _, inv := range invs {
@@ -256,8 +267,12 @@ func (c *Checker) Graph(cfg GraphSearch) (*GraphResult, error) {
 			x, err := e.m.Eval(consts, s, val)
 			var u *qeval.Unsupported
 			if errors.As(err, &u) {
-				v.Unsupported = fmt.Sprintf("%s: %s", u.Op, u.Why)
-				break
+				// not checked here; the states after it still are, since a
+				// violation in one is real whatever the others hold
+				if v.Unchecked++; v.Unsupported == "" {
+					v.Unsupported = fmt.Sprintf("%s: %s", u.Op, u.Why)
+				}
+				continue
 			}
 			if err != nil {
 				v.Error, v.Counterexample = err.Error(), ce.path(id, "")
@@ -282,6 +297,9 @@ func (c *Checker) Graph(cfg GraphSearch) (*GraphResult, error) {
 			if err != nil {
 				return nil, fmt.Errorf("graph: terminal %s in state %s: %w", terminal, stateText(e, g.States[id]), err)
 			}
+			if _, ok := x.(qeval.Bool); !ok {
+				return nil, fmt.Errorf("graph: terminal %s is no Boolean: %s", terminal, qeval.String(x))
+			}
 			if x == qeval.Bool(true) {
 				r.Terminals++
 				continue
@@ -289,6 +307,14 @@ func (c *Checker) Graph(cfg GraphSearch) (*GraphResult, error) {
 		}
 		if r.Deadlocks++; r.Deadlock == nil {
 			r.Deadlock = ce.path(id, ".then(step.fail())")
+		}
+	}
+	// states only a stutter leaves: no deadlock (each has an edge), and
+	// where a step can always stutter (a read, a grist query) there is
+	// never one, so they say where such a model stops
+	for i, out := range g.Out {
+		if g.Expanded[i] && len(out) > 0 && !slices.ContainsFunc(out, func(ed qeval.Edge) bool { return ed.To != i }) {
+			r.Quiescent++
 		}
 	}
 	// coverage: each transition's branch action, once per label
@@ -367,9 +393,39 @@ func stateText(e *evaluator, s qeval.State) string {
 
 // cexWriter writes a graph's paths as counterexamples.
 type cexWriter struct {
-	c *Checker
-	e *evaluator
-	g *qeval.Graph
+	c    *Checker
+	e    *evaluator
+	g    *qeval.Graph
+	step string
+}
+
+// replayStep is how a replay takes transition t from state prev: its
+// branch's call, if that call alone reaches t's state (a step that does
+// more than call its branch, `all { any { inc, dec }, n' = n + 1 }`,
+// is replayed as step), else step; sampled when the call has other
+// successors too, which quint may draw instead.
+func (w *cexWriter) replayStep(prev qeval.State, t qeval.Transition, k int) (call string, sampled bool) {
+	key := w.e.m.Key(t.State)
+	reaches := func(name string, args []qeval.Value) (ok, sampled bool) {
+		succs, err := w.e.m.Successors(map[string]qeval.Value{}, prev, name, args...)
+		if err != nil {
+			return false, false
+		}
+		for _, s := range succs {
+			if w.e.m.Key(s) == key {
+				return true, len(succs) > 1
+			}
+		}
+		return false, false
+	}
+	if k >= 0 {
+		a := t.Events[k]
+		if ok, sampled := reaches(a.Action, a.Args); ok {
+			return callLiteral(a), sampled
+		}
+	}
+	_, sampled = reaches(w.step, nil)
+	return "step", sampled
 }
 
 // path is the counterexample of state id: its path from its start, and
@@ -394,15 +450,16 @@ func (w *cexWriter) path(id int, end string) *Counterexample {
 		run = "all { " + strings.Join(parts, ", ") + " }"
 		cx.Steps[0].Call = "init (" + stateText(w.e, start) + ")"
 	}
+	prev := start
 	for i, t := range w.g.Path(id) {
 		st := GraphStep{Call: "step", State: named(t.State)}
-		call := "step"
-		if k := branchIndex(w.c.Model, t); k >= 0 {
-			// the replay applies the action itself: step's choice of it and
-			// of its arguments made by the call; choices after it are the
-			// action's own
+		k := branchIndex(w.c.Model, t)
+		if k >= 0 {
+			// the replay applies the action itself where it can: step's
+			// choice of it and of its arguments made by the call; choices
+			// after it are the action's own
 			a := t.Events[k]
-			st.Call, call = a.String(), callLiteral(a)
+			st.Call = a.String()
 			for _, ev := range t.Events[k+1:] {
 				if ev.Action == "" {
 					st.Picks = append(st.Picks, NamedValue{Name: ev.Pick, Value: qeval.String(ev.Value)})
@@ -413,11 +470,15 @@ func (w *cexWriter) path(id int, end string) *Counterexample {
 				st.Picks = append(st.Picks, NamedValue{Name: p.Pick, Value: qeval.String(p.Value)})
 			}
 		}
-		if len(st.Picks) > 0 {
+		// the call checked by the evaluator: the transition's state among
+		// its successors, and its only one unless quint draws (Sampled)
+		call, sampled := w.replayStep(prev, t, k)
+		if sampled {
 			cx.Sampled = append(cx.Sampled, i+1)
 		}
 		cx.Steps = append(cx.Steps, st)
 		run += ".then(" + call + ")"
+		prev = t.State
 	}
 	cx.Replay = run + end
 	return cx

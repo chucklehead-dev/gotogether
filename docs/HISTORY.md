@@ -1878,6 +1878,49 @@ ROADMAP's P2 as built (DESIGN §61). The decisions it left:
   sampled them; and testdata fixtures whose invariants are unclassified
   on purpose (their violations are what their tests are about).
 
+### P2's review
+
+A model checker's reading of the explorer, its findings by severity:
+- **Replays that quint refused.** A counterexample's step called the
+  branch's action whatever the step did around it: a step that assigns
+  more than its branch (`all { any { inc, dec }, n' = n + 1 }`) was
+  replayed as `inc`, which quint does not typecheck. Each call is now
+  checked by the evaluator first (the branch's call where it alone
+  reaches the path's state, else step), and `Sampled` means what quint
+  draws: a call with other successors than the path's, not a step that
+  printed picks (twophase's deadlock, its picks deterministic, replays
+  exactly now).
+- **Labels merged past 200 characters.** Labels were interned by
+  `Event.String`, which cuts a value short: two calls differing only
+  past the cut were one label, and the second state's path named the
+  first call. Interned by the events written in full.
+- **An invariant unevaluable in one state hid violations in others**
+  (the check stopped at the first Unsupported). It goes on; the verdict
+  is never held, and a violation found is reported.
+- **"holds" on a truncated graph.** The report printed `holds` for an
+  invariant no explored state violates in a graph a bound cut; it says
+  `bounded` now, "which proves nothing past them". `-out` with a
+  relative path failed after the whole search (the module imports the
+  model by a path relative to its own); quint's sampling of possibles
+  under -graph is announced; a non-Boolean `terminal` is an error, not
+  a deadlock.
+- **Deadlocks under stutters.** A state with a self-loop is no
+  deadlock, so a model that can always read (grist's queries) never
+  has one: said in DESIGN §61, and the states only a stutter leaves
+  are counted (`quiet`), never failed.
+- **Sound as found**: Key (every value a bracketed or quoted Quint
+  literal, Compare-canonical), every initial state a start, invariants
+  checked in every state found (starts and states at the depth bound
+  included), Complete only when no bound cut and nothing was refused,
+  and edges whose labels drop the step's unused choices kept per target.
+- **Cost**: a call's successors computed once per state, labels as
+  lists, a state's Key once per assignment; at 20000 states kvstore
+  137 s to 78, payd 72 to 20, bank 62 to 30 (DESIGN §61). A call with an
+  operator argument (Choreo's step_with) is not remembered: the first
+  version of the memo keyed it without the closure and lost twophase's
+  commits, which TestGraphAgreesWithQuint caught and
+  `TestTransitionsOperatorArguments` now does in -short.
+
 ### P1: blocking rules (grist)
 
 ROADMAP's P1 as built (docs/grist.md §2.4.1). The decisions it left:

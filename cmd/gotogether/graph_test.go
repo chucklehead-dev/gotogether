@@ -17,7 +17,8 @@ import (
 // fails on its deadlock (exit 1) and passes once simulate.terminal says
 // it is the model's end; vending passes; a binding the evaluator cannot
 // follow to the end exits 2, never complete; -graph with -verify is
-// refused. -out's module replays the counterexamples in quint test.
+// refused. -out's module (a path relative to the working directory too)
+// replays the counterexamples in quint test.
 func TestSimulateGraph(t *testing.T) {
 	skip.Quint(t)
 	out := filepath.Join(t.TempDir(), "cex.qnt")
@@ -43,6 +44,18 @@ func TestSimulateGraph(t *testing.T) {
 		}
 	}
 	replayInQuint(t, out)
+	// -out relative to the working directory (the module's import is
+	// relative to its own), and a step around its branches replayed as
+	// step: graph_wrap allows small's violation and ends at n = 3
+	wd, _ := os.Getwd()
+	rel, err := filepath.Rel(wd, filepath.Join(t.TempDir(), "wrap.qnt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code, err := simulate([]string{"-graph", "-binding", "../../validate/testdata/graph_wrap.yaml", "-out", rel}); code != 0 || err != nil {
+		t.Errorf("graph_wrap -out %s: exit %d, %v; want 0", rel, code, err)
+	}
+	replayInQuint(t, must(filepath.Abs(rel)))
 	if code, err := simulate([]string{"-graph", "-verify", "3", "-binding", "../../validate/testdata/graph.yaml"}); code != 2 || err == nil {
 		t.Errorf("-graph -verify: exit %d, %v; want refused", code, err)
 	}

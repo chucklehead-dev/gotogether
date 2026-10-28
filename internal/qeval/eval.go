@@ -74,6 +74,13 @@ type evaluation struct {
 	depth  int
 	// labels: each successor carries what led to it (Transitions)
 	labels bool
+	// acts are the successors of each action call made so far (its
+	// declaration and arguments), in this state: an action's successors
+	// depend on nothing else (its body binds only its parameters), and a
+	// step's choices call the same branch with the same arguments for
+	// every value of the choices it does not take (kvstore's write(key,
+	// value) once for each expected revision)
+	acts map[string][]succ
 }
 
 func (m *Model) evaluation(consts map[string]Value, s State) *evaluation {
@@ -233,7 +240,33 @@ type assignment map[string]Value
 // and the choices made, in order.
 type succ struct {
 	a   assignment
-	lab []Event
+	lab *events
+}
+
+// events are a successor's labels as a list, first event first: a
+// choice puts its event before each of its successors' in one small
+// allocation, where a slice would copy them all at each choice around
+// them.
+type events struct {
+	ev   Event
+	next *events
+}
+
+// then is x's events followed by y's (y's shared).
+func (x *events) then(y *events) *events {
+	if x == nil {
+		return y
+	}
+	return &events{x.ev, x.next.then(y)}
+}
+
+// slice is the events in order.
+func (x *events) slice() []Event {
+	var out []Event
+	for ; x != nil; x = x.next {
+		out = append(out, x.ev)
+	}
+	return out
 }
 
 // action is what e does as an action: its successors (none: disabled). A
@@ -267,9 +300,9 @@ func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 						if err != nil {
 							return nil, err
 						}
-						var lab []Event
+						var lab *events
 						if ev.labels {
-							lab = append(slices.Clip(x.lab), y.lab...)
+							lab = x.lab.then(y.lab)
 						}
 						prod = append(prod, succ{z, lab})
 					}
@@ -297,21 +330,11 @@ func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 			return ev.action(e.Args[2], en)
 		}
 		if d, args, ok := ev.calledAction(e, en); ok {
-			body, e2, err := ev.bindArgs(d, args, nil, d.Name)
-			if err != nil {
-				return nil, err
-			}
-			out, err := ev.action(body, e2)
-			return ev.label(out, Event{Action: d.Name, Params: ev.m.paramsOf(d), Args: args}), err
+			return ev.callAction(d, args, true)
 		}
 	case "name":
 		if d, _, ok := ev.calledAction(e, en); ok {
-			body, e2, err := ev.bindArgs(d, nil, nil, d.Name)
-			if err != nil {
-				return nil, err
-			}
-			out, err := ev.action(body, e2)
-			return ev.label(out, Event{Action: d.Name}), err
+			return ev.callAction(d, nil, false)
 		}
 	case "let":
 		d := e.Opdef
@@ -378,6 +401,55 @@ func (ev *evaluation) calledAction(e *Expr, en *env) (*Decl, []Value, bool) {
 	return d, args, true
 }
 
+// callAction is the successors of action d applied to args (an
+// application, with its parameters' names, or the action named),
+// labelled with the call, each call's computed once per evaluation
+// (acts). The result is the caller's to change: label rewrites its
+// elements.
+func (ev *evaluation) callAction(d *Decl, args []Value, applied bool) ([]succ, error) {
+	var b strings.Builder
+	b.WriteString(strconv.FormatInt(d.ID, 10))
+	if applied {
+		b.WriteByte('(')
+	}
+	memo := true
+	for _, a := range args {
+		if _, ok := a.(*Lambda); ok {
+			// an operator argument (Choreo's step_with) is its closure, which
+			// no key writes: such a call is not remembered
+			memo = false
+			break
+		}
+		b.WriteByte(',')
+		write(&b, a)
+	}
+	k := b.String()
+	if out, ok := ev.acts[k]; ok && memo {
+		return slices.Clone(out), nil
+	}
+	body, e2, err := ev.bindArgs(d, args, nil, d.Name)
+	if err != nil {
+		return nil, err
+	}
+	out, err := ev.action(body, e2)
+	if err != nil {
+		return nil, err
+	}
+	var params []string
+	if applied {
+		params = ev.m.paramsOf(d)
+	}
+	out = ev.label(out, Event{Action: d.Name, Params: params, Args: args})
+	if !memo {
+		return out, nil
+	}
+	if ev.acts == nil {
+		ev.acts = map[string][]succ{}
+	}
+	ev.acts[k] = slices.Clone(out)
+	return out, nil
+}
+
 // label puts what led to out (a call, a pick) before each successor's
 // own labels, in a labelled evaluation.
 func (ev *evaluation) label(out []succ, l Event) []succ {
@@ -385,7 +457,7 @@ func (ev *evaluation) label(out []succ, l Event) []succ {
 		return out
 	}
 	for i := range out {
-		out[i].lab = append([]Event{l}, out[i].lab...)
+		out[i].lab = &events{l, out[i].lab}
 	}
 	return out
 }

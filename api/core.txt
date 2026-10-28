@@ -2161,6 +2161,7 @@ type GraphResult struct
     field Deadlocks int
     field Terminals int
     field Deadlock *Counterexample
+    field Quiescent int
     field Actions []ActionCoverage
     field Elapsed time.Duration
     method (*GraphResult) Extent() string
@@ -2202,6 +2203,7 @@ type InvariantVerdict struct
     field Error string
     field Unsupported string
     field Checked int
+    field Unchecked int
     method (InvariantVerdict) Held() bool
 type Judgment struct
     field Report *Report

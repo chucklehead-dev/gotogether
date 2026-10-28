@@ -48,7 +48,11 @@ The first release. What a user meets, by module:
   and `DefaultGraphStates`; `binding.Simulation.Terminal`,
   `GraphStates` and `GraphDepth` (`simulate.terminal`, `graphStates`,
   `graphDepth`). New flags `-graph`, `-depth`, `-out`; `-states` bounds
-  the graph under `-graph`.
+  the graph under `-graph`. `InvariantVerdict.Unchecked` counts the
+  states where the evaluator could not evaluate an invariant (it is
+  still checked in the others), `GraphResult.Quiescent` the states only
+  a stutter leaves; a counterexample's replay takes step where its
+  branch's call alone does not reach the path's state.
 - grist: a simulated cluster (GR10 slice 2, docs/grist.md §0.16).
   `gristsim.Config.Cluster` (`gristsim.Cluster{Grace, Drain,
   EndpointLag, Disruptions, Rolling, Pace}`, `gristsim.DefaultGrace`

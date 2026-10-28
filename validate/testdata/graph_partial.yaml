@@ -1,0 +1,8 @@
+# graph_partial.qnt: an invariant unevaluable in one state, violated in
+# another; a state only a stutter leaves.
+spec: graph_partial.qnt
+module: graph_partial
+actions:
+  inc: {}
+  read: {}
+invariants: [small]

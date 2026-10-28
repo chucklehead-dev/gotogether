@@ -133,6 +133,17 @@ seeds, not by hand.
   qtest.ActionShrink[A]{...}).Expect(t, qtest.Violates("inv"),
   qtest.AtMostActions(n))`, its Expectations judged on the minimal
   run as `Run.Expect` judges them;
+- the model alone: the binding's `simulate` section (`holds`, `allows`,
+  `possible`, `terminal`), judged by `gotogether simulate`. With
+  `-graph`, `holds` is printed only for a complete graph (a proof for
+  the instance); a truncated one says `bounded` (no state explored
+  violates it, which proves nothing past them), an invariant the
+  evaluator cannot evaluate somewhere `unchecked` (exit 2), a state the
+  step cannot leave `deadlock` (exit 1) unless `terminal` holds there
+  (`ends`), and states only a stutter leaves `quiet` (never a failure:
+  a model that can always read, a grist model, has no deadlock). A
+  counterexample's replay marked as drawing among successors may not
+  reproduce in quint test; the path printed is the evaluator's;
 - connect: a replay error (`StepError`: `step`, `state`, `check`), no
   expectation type: assert `err != nil` for a mutant (examples/bank's
   `TestModelDrivenCatchesOnlyDivergence`).
