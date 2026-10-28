@@ -26,7 +26,9 @@ a replay of the run with its choices forced, a few hundred milliseconds
 with its verdict, rather than a `go test` process (seconds). A mutant's
 run is its mutant binary's: `GOTOGETHER_MUTANT=<name>`, as the run's
 navigate line sets it, has the binary built with the overlay of
-`testdata/mutants/<name>` (`qtest.Mutants`).
+`testdata/mutants/<name>` (`qtest.Mutants`), over the files of
+`GOTOGETHER_MUTANT_PACKAGE`'s directory when the line sets it (a harness
+package's mutants of another package, payd's).
 
 ![a failing run: hello's noDedupe mutant](tapes/media/hello.gif)
 
