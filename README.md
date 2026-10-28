@@ -112,7 +112,8 @@ testing, where Quint traces drive the implementation). It adds:
   crashes, lost answers and isolation levels like any other system.
   `go run github.com/chucklehead-dev/gotogether/grist/cmd/grist@latest new <name>`
   writes an app whose tests pass on their first run
-  ([docs/grist.md](docs/grist.md), the `grist` skill).
+  ([the user guide](docs/grist-guide.md); the design note,
+  [docs/grist.md](docs/grist.md); the `grist` skill).
 
 ```
                     ┌────────────── one Quint model ──────────────┐
@@ -679,7 +680,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `qnav` (module) | `gotogether-nav`, the navigators' TUI (Charm's v2 libraries): a model's states or a run's choices, enter to take a branch, back, fold, the failing step, save; its VHS tapes are its docs' GIFs ([qnav](qnav)) |
 | `qanalysis` (module) | analyzers `quintsim`, `quintweave`, `quintaction` (`cmd/quintvet`, a golangci plugin); `cmd/actionmap` |
 | `qgosim` (module) | qenv and whole programs in gosim (the fork, `github.com/chucklehead-dev/gosim`) |
-| `grist` (module) | an event-sourced framework checked by its model ([docs/grist.md](docs/grist.md), slice 1): `New`, `NewEvent`, `NewReadModel`, `NewKeyedReadModel`, `NewCommand` (conditioned on its `Reads`, checked against the App; `Unconditioned`; idempotent by `Envelope.ID`, a key's first answer final), `NewQuery`, `NewProcessor` (`Emit`, `Skip`, `Effect` with `AtLeastOnce` or `AtMostOnce`, `EffectKey`), `Events`, options (`ConditionTries`, `TransientTries`, `EffectTries`, `BatchSize`), `Catalog`; every step recorded by the framework, each commit's from the store's step log (`Relay`, `WithRelay`) |
+| `grist` (module) | an event-sourced framework checked by its model ([the user guide](docs/grist-guide.md); design: [docs/grist.md](docs/grist.md)): `New`, `NewEvent`, `NewReadModel`, `NewKeyedReadModel`, `NewCommand` (conditioned on its `Reads`, checked against the App; `Unconditioned`; idempotent by `Envelope.ID`, a key's first answer final), `NewQuery`, `NewProcessor` (`Emit`, `Skip`, `Effect` with `AtLeastOnce` or `AtMostOnce`, `EffectKey`), `Events`, options (`ConditionTries`, `TransientTries`, `EffectTries`, `BatchSize`), `Catalog`; every step recorded by the framework, each commit's from the store's step log (`Relay`, `WithRelay`) |
 | `grist/store` | grist's store contract: `Store`, `Batch`, `Condition`, `Marker`, `Selector`, `StepLog` (a commit's step in its transaction, what grist records it from), the errors (`Permanent`), and the reference evaluations `CheckCondition` and `Select` |
 | `grist/memstore`, `grist/simstore` | grist's stores: in memory for unit tests; over a `qenv.Store` for simulations |
 | `grist/storetest` | the store contract suite (`Run`, `Checks`): conditions, reads and concurrent appends against brute force, checkpoints, markers, a waiter woken, copies, the step log, tenant isolation |

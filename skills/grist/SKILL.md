@@ -12,6 +12,7 @@ the walk-through: read its README's table first.
 
 ## Choose your path
 
+- A person asking how grist works: [the user guide](https://github.com/chucklehead-dev/gotogether/blob/main/docs/grist-guide.md) (docs/grist-guide.md), block by block, with its troubleshooting table.
 - A new app: `grist new <name>`, then the Steps.
 - Every block's API, rules, dependencies, the generator's layout, explorations: [references/loop.md](references/loop.md).
 - The real tier, the HTTP API, the binary, a simulated cluster (`gristsim.Cluster`), PostgreSQL, a store of your own: [references/triage.md](references/triage.md).

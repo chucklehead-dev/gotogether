@@ -313,6 +313,8 @@ the recorded alternative, should heartbeats measure too costly.
 
 ### 3.6 Configuration, secrets, certificates
 
+<!-- not built: grist.FromSource -->
+
 Three kinds, three rules:
 
 - **Secrets and certificates** are files that change. A `FileSource`
@@ -426,6 +428,8 @@ its new format at once breaks the v1 nodes still running):
   (version 2, written as 1), `TestRollingUpdate`, the mutant `eagerV2`.
 
 ## 4. Lens (a): what is simulated, and how
+
+<!-- not built: gristsim.Throttled qenv.NewProjection qload.Autoscaler -->
 
 Every row is a named choice (option 0 nominal), so Explore samples it,
 Exhaust bounds it, Hegel shrinks it away, Coverage says whether a run
@@ -581,6 +585,8 @@ u (qrole), not CPU.
 
 ### 5.4 Jobs for replays, rebuilds and backfills
 
+<!-- not built: gristtest.Replay -->
+
 `<app> replay -tenant t1 -processor restock -from 0` (a processor's
 checkpoint moved back under its log lease, its effects keyed as before
 so a Keyed dependency replays rather than repeats), `<app> rebuild`
@@ -676,6 +682,8 @@ reason into the comment.
 
 ## 7. The real tier on a cluster
 
+<!-- not built: gristtest.KubeTier -->
+
 `gristtest.KubeTier` drives the cluster through `gotogether kube tier`
 (gotogether-kube's driver, exec'd: the test skips with the install hint
 when it is missing, so the app's test binary links no client-go either).
@@ -749,6 +757,8 @@ failing setting is.
 
 ### 8.2 The three tiers, each checking the next
 
+<!-- not built: qload.Autoscaler gristsim.Load -->
+
 1. **The chain** (`qmeta.New` over `Params{Lambda, Mu, Workers,
    Timeout, Retries, Queue, Orbit, Backoff, RetryBudget}`), one per hop:
    the API (workers = replicas × per-pod concurrency, bounded by the
@@ -787,6 +797,8 @@ failing setting is.
 | lease heartbeat and takeover (§3.5) | arithmetic, then exploration | takeover > heartbeat + max stall (Stalls, GC) + drift × takeover; failover within a `within` bound | no chain: correctness is fenced, this is lag and duplicates |
 
 ### 8.4 The API
+
+<!-- not built: qload.Autoscaler -->
 
 As built (slice 6; docs/HISTORY.md, grist §0.17), the generic helpers
 in qmeta and qload (core), the catalog's part in grist/gristload:
@@ -921,6 +933,8 @@ terminationGracePeriodSeconds:
 ```
 
 ## 9. Slices
+
+<!-- not built: grist.FromSource qenv.NewProjection gristsim.Load qload.Autoscaler -->
 
 Each is one agent's work, reviewed before the next; each acceptance
 names the mutant it must catch (an overlay, `qtest.Mutants`), with
@@ -1108,6 +1122,8 @@ The maintainer took the recommendation on five and reshaped the sixth
    (§5.1).
 
 ## 11. The reviewers' ideas: taken and left
+
+<!-- not built: gristtest.Deploy qmeta.ServiceOf -->
 
 - **Newcomer** (deploying `grist new`'s shop). Taken: the first month's
   bites (§1), no Lease for correctness, the cluster as fault kinds (§4),

@@ -504,6 +504,8 @@ leaves out.)
 
 ### 3.7 Service A calls service B: one seam, both sides
 
+<!-- not built: gristtest.Linked -->
+
 A peer is a dependency that is itself a grist App, and its calls are
 B's commands:
 
@@ -583,6 +585,8 @@ with `//qenv:ok` exemptions as today. Timers are GR8's.
   party's order says nothing of the tenant's log; the cause does.
 
 ## 4. Slices
+
+<!-- not built: gristtest.Linked -->
 
 Each is one agent's work, reviewed before the next; each acceptance test
 names the mutant it must catch, built as an overlay
@@ -691,6 +695,8 @@ names the mutant it must catch, built as an overlay
    adds a recorder, not a seam.
 
 ## 5. Decisions (the maintainer, 2026-10-27)
+
+<!-- not built: gristtest.Linked -->
 
 The maintainer took the recommendation on all five; each below is now
 the design, and the slices build on it.

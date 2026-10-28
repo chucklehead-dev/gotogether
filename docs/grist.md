@@ -1,5 +1,32 @@
 # grist: an event-sourced application framework checked by its model
 
+**Building an app? Read [the user guide](grist-guide.md).** This is the
+design note, for maintainers: why each block is the way it is, what is
+designed and not built, and in what order. Names a section designs and
+the code does not have are listed in a `not built` HTML comment under its heading, in its
+source (internal/docsnippets checks every other backticked name exists).
+
+| section | status |
+|---|---|
+| §1 grain's two mistakes | built: both made impossible by default (slice 1) |
+| §2.1 events and versions, §2.2 read models and snapshots, §2.3 reads | built |
+| §2.4 commands, §2.4.1 rules | built; `Within`, `Also` and sub-decisions designed |
+| §2.5 queries | built |
+| §2.6 processors | built (Emit, Skip, Effect at least and at most once, Fail); dispatch and `OnError` designed |
+| §2.7 periodic tasks, §2.8 screens | designed (slice 3) |
+| §2.9 topology and boot verification | built (Verify); sinks designed |
+| §2.10 the store | built (memstore, simstore, sqlstore on SQLite, PostgreSQL and qsql); tables designed |
+| §3.1 to §3.3.1 steps, model, guarantees, obligations | built |
+| §3.4 leases | designed (slice 3) |
+| §3.5 to §3.8 seams, gristsim, explorations, the real tier | built; gristhegel and ShrinkCommands designed |
+| §4.1 analyzers (gristflow) | designed |
+| §4.2 boot verification, §4.3 authorization | built |
+| §5 the API layer | built (the HTTP API); Datastar designed |
+| §6 the agent workflow | built (skills/grist, `grist new`) |
+| §7 module layout | built |
+| §8 slices | 1 and 2 built, 3 designed |
+| §9 to §11 | open questions and rejected options |
+
 Status: slices 1 and 2 built (grist/, the SQL store, the HTTP API,
 `grist/client`, `grist.Main`, `AtMostOnce`), the generator, `grist new`
 and the test harnesses (GR2), GR3's declared calls (simulated and on
@@ -390,6 +417,8 @@ event matching it would have changed the answer.
 
 ### 2.4 Commands
 
+<!-- not built: grist.Within grist.Also grist.Sub -->
+
 A command is a struct (its arguments) and a decision: **reads and a
 command in, events or an error out**.
 
@@ -409,7 +438,7 @@ func decideCreate(r *grist.Reads, c CreateCounter) ([]grist.Event, error) {
 	return []grist.Event{Created.Of(CounterCreated{Counter: c.Counter, Name: c.Name})}, nil
 }
 
-var Create = grist.NewCommand(App, "create-counter", decideCreate, grist.Authorize(grist.Role("editor")))
+var Create = grist.NewCommand(App, "create-counter", decideCreate, grist.Authorize(grist.Callers("editor")))
 ```
 
 **The append is conditioned on the read set** (§2.3). When the
@@ -581,13 +610,15 @@ A query is reads and arguments in, a result out; it never appends.
 var Show = grist.NewQuery(App, "show-counter",
 	func(r *grist.Reads, q struct{ Counter string }) (CounterView, error) {
 		return CounterView{ /* CounterNames.Get(r), Totals.For(r, q.Counter) */ }, nil
-	}, grist.Authorize(grist.Role("viewer")))
+	}, grist.Authorize(grist.Callers("viewer")))
 ```
 
 Its step (§3.1) records the result and the pinned position P, so the
 model checks that the answer is the fold of the log through P.
 
 ### 2.6 Processors
+
+<!-- not built: grist.Dispatch grist.OnError -->
 
 A processor subscribes to event types and handles each event (in
 position order, per tenant) after its checkpoint. **Its handler reads
@@ -655,6 +686,8 @@ checkpoint in one transaction, but records **one step per trigger**
 
 ### 2.7 Periodic tasks (slice 3)
 
+<!-- not built: grist.NewPeriodic grist.CatchUp -->
+
 `grist.NewPeriodic(App, "daily-totals", grist.Every(24*time.Hour),
 handler)`, the handler given the tick's time and a `Reads`. Its commit
 for (task, tenant, slot) carries a tick row and is conditioned on its
@@ -675,6 +708,8 @@ the queries it renders and the commands its actions send, and
 
 ### 2.9 Topology and boot verification
 
+<!-- not built: grist.Sink -->
+
 The registry is the topology (no separate EDN model to keep in step):
 each block's edges are what its constructor was given and what the
 analyzer proves the code emits and reads (§4), checked in as
@@ -694,6 +729,8 @@ name is not a valid Quint identifier once mapped (`create-counter`
 becomes `createCounter`; `to` is reserved).
 
 ### 2.10 The store
+
+<!-- not built: grist.Table -->
 
 grist owns its store interface; it does not reuse hallgren/eventsourcing's
 `core.EventStore`, which appends by aggregate and version. grist has no
@@ -1298,6 +1335,8 @@ and retry a lost response with the same key.
 
 ### 3.7 Explorations, Hegel, shrinking and mutants
 
+<!-- not built: gristtest.ShrinkCommands -->
+
 Explore and Exhaust with every claim of today across the Store's three
 isolation levels; `qhegel.Shrink` on a System's runs; qweave `-mutate`
 on the application's folds and decisions (`System.Mutate`) and
@@ -1413,6 +1452,8 @@ positions rendered, and after a settle the last patch shows the head (an
 eventual val).
 
 ## 6. The agent workflow
+
+<!-- not built: grist.Todo -->
 
 A skill, `skills/grist/SKILL.md` (symlinked into `.agents/skills` and
 `.claude/skills`), grain's `/grain` loop with gotogether's checks:
@@ -1566,6 +1607,8 @@ catches which mutant, `run-demo.sh` shows claims 1 and 3, and the
 skill's first version walks through the example.
 
 ### 8.2 Slice 2: the real tier
+
+<!-- not built: qtest.Actors -->
 
 That one binding checks a simulation and a real database, and that the
 model and binding are generated.

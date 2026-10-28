@@ -60,7 +60,7 @@ rules:
 
 | | OTel spans | Native step log | Model-level ITF |
 |---|---|---|---|
-| What the app writes | `quint.step` span events (`qobs.OTelSink`) | one JSON object per step, the same keys (`qobs.JSONLSink` / `FileSink`) | the binding applied in-process: `mbt::actionTaken`, `mbt::nondetPicks`, `gotogether::expect`, `obs::*` (`binding.StepsToITF`, `demo -itf`, `qtest`) |
+| What the app writes | `quint.step` span events (`qobs.OTelSink`) | one JSON object per step, the same keys (`qobs.JSONLSink` / `FileSink`) | the binding applied in-process: `mbt::actionTaken`, `mbt::nondetPicks`, `gotogether::expect`, `obs::*` (`Binding.StepsToITF`, `demo -itf`, `qtest`) |
 | Needs | an OTel SDK and pipeline; spans never sampled out | a writable file or `io.Writer` | the binding file, and argument templates that render to Quint literals |
 | Terms | implementation (ids, errors) | implementation | model (interned ids, model values) |
 | Check with | `gotogether validate -binding b.yaml spans.jsonl` | `gotogether validate -binding b.yaml steps.jsonl` | `gotogether validate trace.itf.json` (the trace names its model; no binding) |

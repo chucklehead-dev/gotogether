@@ -37,7 +37,8 @@ Add a block (an event, a command, a rule, a processor, a dependency's call) in G
 run ./cmd/{{.Name}} model`: it names each new hole and a stub for it),
 fill the holes in `model/{{.Name}}_rules.qnt`, mark the invariants in
 `model/{{.Name}}.qnt`, and write a
-mutant per claim. skills/grist says how.
+mutant per claim. [grist's user guide](https://github.com/chucklehead-dev/gotogether/blob/main/docs/grist-guide.md)
+says how, block by block (the `grist` skill, for an agent).
 
 ```sh
 go test -short -v ./...        # every claim, each test's summary (needs quint on PATH; about a minute)

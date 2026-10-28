@@ -3102,6 +3102,48 @@ say what happened. What changed, each with a test that fails without it:
   1, the one closest to enabled"); a run node's title is in words first
   ("after 4 choices: client ran 4 times").
 
+### I27 and I34: the structure written down
+
+ROADMAP's I27 and I34, from the designer's F5, F6 and F19 and the
+architect's F3 and F14 (review 11): grist's only user doc was a design
+note that opened with slices and a codename, and taught two names
+(`UpcastFrom`, `Reindex`) never built; the toolkit's structure was in
+AGENTS.md's terse index and DESIGN's 64 sections in build order.
+
+**I27, grist's user guide.** docs/grist-guide.md, what is built and
+nothing else: `grist new` and the loop; events, read models, reads,
+commands, rules, queries, processors, dependencies and calls,
+authorization; the HTTP API's routes and codes and grist/client; the
+binary's commands; the generated model (what the generator writes, the
+holes it names, quoted from a real run: a `remove-item` added to a
+fresh app, its three holes and the fold warning), testing, versioning
+with the tutorial on library's book-added (the lock's refusal, the
+upcaster, the `dropsCopies` mutant's CheckUpcasters finding and its
+`Mismatch("addBook")` on the kept log, readers first), snapshots,
+production, and a troubleshooting table of the messages as the code
+writes them. Decided:
+- **A guide in docs/, the note kept for maintainers.** grist/README.md
+  (the roadmap's first idea) would be pkg.go.dev's page, where relative
+  links to examples break; it waits for the module's tag. grist.md opens
+  with "Building an app? Read the user guide" and a table marking each
+  section built or designed.
+- **Prose names checked.** internal/docsnippets checked fenced blocks
+  only, and only the core's packages: grist's eight are in its map now
+  (grist.md's `grist.Role` in two proposed blocks was caught and made
+  `grist.Callers`), and TestProseNames checks every backticked
+  `pkg.Ident` outside fences against its package's exports. A design
+  says what it has not built with `<!-- not built: grist.Within ... -->`
+  under its section's heading (22 names in grist.md, grist-platform.md
+  and grist-instrumentation.md), and a marker naming what is exported
+  fails, so a built name cannot stay marked. Records are exempt (HISTORY,
+  ROADMAP, CHANGELOG, DESIGN, refactors, performance, the TRIAL.md
+  friction logs): they name what was. instrumentation.md's
+  `binding.StepsToITF` (a method) became `Binding.StepsToITF`.
+- **The skill links the guide.** The grist skill's versions reference
+  shrank to the rules an agent must not get wrong and its results table,
+  the walk-through linked; loop.md and triage.md link the guide (by URL:
+  installed skills carry no docs/).
+
 ### H4: one vocabulary
 
 ROADMAP's H4 as built, with two leftovers of P7's review. The decisions

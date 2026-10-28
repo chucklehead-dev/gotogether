@@ -1,6 +1,10 @@
 # Triage: what each grist failure means and what to do
 
-From the grist skill (its SKILL.md says when to read this).
+From the grist skill (its SKILL.md says when to read this). The user
+guide's [troubleshooting table](https://github.com/chucklehead-dev/gotogether/blob/main/docs/grist-guide.md#10-troubleshooting)
+and [running in production](https://github.com/chucklehead-dev/gotogether/blob/main/docs/grist-guide.md#9-running-in-production)
+are the person-facing account (docs/grist-guide.md); this page adds what
+an agent reads off a failing run.
 
 ## Triage
 

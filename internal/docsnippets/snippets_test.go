@@ -4,8 +4,10 @@
 // parses, and every name it takes from one of the toolkit's packages
 // (qtest.System, qenv.Rates) is one that package exports. A renamed or removed API in a
 // snippet once lived on until a reader tried it. Methods and fields are
-// not checked (that needs the snippets type-checked), nor code outside
-// fences: TestSkillsAvoidDeprecated's list covers prose.
+// not checked (that needs the snippets type-checked). Outside fences,
+// a backticked `pkg.Ident` in prose is held to the same rule
+// (prose_test.go), and TestSkillsAvoidDeprecated's list names the old
+// names a doc must not teach.
 package docsnippets
 
 import (
@@ -34,6 +36,10 @@ var packages = map[string]string{
 	"qgosim": "qgosim", "qweave": "qweave", "qlint": "qlint", "qdriver": "qdriver", "bombadil": "qdriver/bombadil",
 	"simgrpc": "qenv/simgrpc", "kubesim": "qenv/kubesim", "simlog": "qenv/simlog",
 	"kafkalog": "qenv/simlog/kafkalog", "kinesislog": "qenv/simlog/kinesislog", "kinesisfake": "qenv/simlog/kinesislog/kinesisfake",
+	// grist's packages (its own module, in this repository): the guide's
+	// and the skill's snippets are an app's first code
+	"grist": "grist", "gristtest": "grist/gristtest", "gristsim": "grist/gristsim", "gristload": "grist/gristload",
+	"memstore": "grist/memstore", "simstore": "grist/simstore", "sqlstore": "grist/sqlstore", "storetest": "grist/storetest",
 }
 
 // docs are the files whose snippets are checked: HISTORY's and ROADMAP's

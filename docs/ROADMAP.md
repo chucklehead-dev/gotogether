@@ -330,19 +330,26 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   and likewise rules with no refusal mutant, commands no scenario
   takes, a stale grist.lock: in the generator's warnings, where the
   loop already looks.
-- **I27. grist's user guide (M). In progress** for H7's docs (dc959e8
-  landed docs/grist.md §2.1-§2.2 as built and the grist skill's
-  versions reference). The README links docs/grist.md, a design note
-  that opens with slices and a codename; the generated app's README is
-  the best user doc there is. grist/README.md (the module's page on
-  pkg.go.dev) as the guide: an app's tour, what one writes and what is
-  generated, the loop, versioning (upcasting, snapshots, grist.lock),
-  costs, what is not built; grist.md's sections marked *built* or
-  *designed*; backticked `pkg.Ident` in docs/*.md checked against
-  api/*.txt (how `UpcastFrom` got through), "designed, not built"
-  behind an explicit marker. Example: the tutorial "Changing an event"
-  on library (a struct changed, `grist model` refusing, the upcaster,
-  the kept v1 log replayed, `snapshotPastItsPosition` caught).
+- **I27. grist's user guide (M). Done** (HISTORY: "I27 and I34: the
+  structure written down"; dc959e8 had landed grist.md §2.1-§2.2 as
+  built and the grist skill's versions reference). docs/grist-guide.md
+  is the guide the README links: `grist new` and the loop, every block,
+  the HTTP API, `grist.Main`'s commands, the generated model and what an
+  app writes, testing (Generated, explorations, Exercised, scenarios,
+  mutants, the real tier, Upgrade), versioning with the tutorial
+  "Changing an event" on library's book-added (the lock's refusal, the
+  upcaster, `dropsCopies` caught, the kept v1 log judged, readers
+  first), snapshots, production (identity, probes, the drain, -grace,
+  rolling restarts, sizing, validating the steps) and a troubleshooting
+  table of real messages. grist.md opens with a status table (built or
+  designed per section) and points users to the guide; backticked
+  `pkg.Ident` in prose is checked against the packages' exports
+  (internal/docsnippets' TestProseNames; grist's packages added to its
+  map), a design not built behind `<!-- not built: ... -->`; the grist
+  skill's references link the guide. Left: grist/README.md as
+  pkg.go.dev's page (the guide's first section, once the module is
+  tagged), and the guide's ops section to follow I25 (the DSN from a
+  file, migrations, failover).
 
 ### Usability: the first hour
 

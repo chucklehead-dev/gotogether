@@ -4,14 +4,17 @@ From the grist skill (its SKILL.md says when to read this).
 
 ## grist: an application checked by its model
 
-grist (module `github.com/chucklehead-dev/gotogether/grist`, design in
-docs/grist.md, slice 1 built, slice 2's SQL store and HTTP API built;
-what each changed is in docs/HISTORY.md, "grist's build notes") records every block's step itself: each commit and
-committed refusal from the row it wrote in its own transaction (the
-store's step log, read back by `grist.Relay`), each query on return,
-each effect. The application writes
-its decisions and folds; its model is one tenant's log.
+grist (module `github.com/chucklehead-dev/gotogether/grist`) records
+every block's step itself: each commit and committed refusal from the
+row it wrote in its own transaction (the store's step log, read back by
+`grist.Relay`), each query on return, each effect. The application
+writes its decisions and folds; its model is one tenant's log.
 examples/counters is the walk-through: read its README's table first.
+The person-facing account of all of this, block by block, is
+[the user guide](https://github.com/chucklehead-dev/gotogether/blob/main/docs/grist-guide.md)
+(docs/grist-guide.md); point a user there rather than restating it.
+This page is the agent's checklist of the same mechanics; the design
+and its reasons are docs/grist.md.
 
 ## The first hour
 
