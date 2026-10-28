@@ -59,12 +59,12 @@ func TestMutants(t *testing.T) {
 		{ledger.NoDedupe, noFaults, qtest.Conforms()},
 		// a retry after a lost response (or a duplicated request) runs the
 		// key again
-		{ledger.NoDedupe, qenv.DefaultRates, reapplied},
+		{ledger.NoDedupe, qenv.DefaultRates, qtest.Some(reapplied)},
 		// an overdraft needs no fault, only a client asking for it
-		{ledger.NoFundsCheck, noFaults, qtest.Rejects("transfer")},
+		{ledger.NoFundsCheck, noFaults, qtest.Some(qtest.Rejects("transfer"))},
 		// a lost update needs only an interleaving: the balances a
 		// transfer leaves are not the model's
-		{ledger.SplitTxn, noFaults, qtest.Mismatch("transfer")},
+		{ledger.SplitTxn, noFaults, qtest.Some(qtest.Mismatch("transfer"))},
 	}
 	for _, c := range cases {
 		name := c.m.String() + "/faults"

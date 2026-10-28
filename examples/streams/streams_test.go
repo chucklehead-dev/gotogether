@@ -66,10 +66,10 @@ func TestMutants(t *testing.T) {
 		{pipeline.CommitFirst, 10, 2, qenv.DefaultRates, qtest.All(qtest.Violates("committedApplied"))},
 		// a redelivery (a lost commit, a rewind, an eviction, a crash, a
 		// duplicate write) applies an event twice
-		{pipeline.NoDedupe, 20, 8, qenv.DefaultRates, qtest.Violates("appliedAtMostOnce")},
+		{pipeline.NoDedupe, 20, 8, qenv.DefaultRates, qtest.Some(qtest.Violates("appliedAtMostOnce"))},
 		// a lost request retried behind the next one: the key's later event
 		// is applied first
-		{pipeline.NonIdempotentProducer, 60, 20, faulty, qtest.Violates("perKeyOrder")},
+		{pipeline.NonIdempotentProducer, 60, 20, faulty, qtest.Some(qtest.Violates("perKeyOrder"))},
 		// each partition's first record skipped, in every run
 		{pipeline.OffByOne, 10, 2, qenv.DefaultRates, qtest.All(qtest.Violates("committedApplied"))},
 	}
