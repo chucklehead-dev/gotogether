@@ -195,10 +195,50 @@ across CI runs only with the key reviewed.
 
 quint's REPL loads a model once and could evaluate many replays: the
 typecheck that is 90% of every process would be paid once per model
-per test binary. Tried on counters: `quint -r counters.qnt::counters`
-fails with QNT101 ("Multiple modules conflict on the same name:
-countersCalls"), a REPL bug with multi-module files, in quint 0.33.
-Worth reporting upstream; D1 makes it moot for passing runs.
+per test binary.
+
+**Unblocked** (grist's acyclic model layout, docs/HISTORY.md). The REPL
+of quint 0.33 refused counters' model with QNT101 ("Multiple modules
+conflict on the same name: countersCalls"). The cause is a file import
+cycle, not multi-module files: reproduced minimally, `a.qnt` holding
+`module rules { pure def f(x: int): int = x + 1 }` and `module main {
+import rules.*  import gen.* from "./b" ... }`, `b.qnt` holding `module
+gen { import rules.* from "./a"  var v: int ... }`; `quint typecheck
+a.qnt` and `quint run` accept it, `quint -r a.qnt::main` refuses it
+(QNT101 on main and rules), on both backends, and the REPL still exits
+0. With `rules` in a third file the REPL loads it. grist's generated
+layout was that cycle (counters.qnt imported counters_gen.qnt, which
+imported countersRules back); it is now acyclic, and grist's
+`TestModelsLoadInREPL` loads every example's model (failing on the old
+layout). Upstream may still want the report: typecheck accepts what the
+REPL refuses.
+
+**Measured** on counters (4 cores shared with other work, so ±20%), a
+kept batch of TestFaithful (4 runs, 99 steps with every check, 16
+tests with the eventual vals'): `quint -r counters.qnt::counters` loads
+and evaluates all 99 steps true, one input per step, state kept between
+inputs.
+
+| | CPU s |
+|---|---|
+| `quint typecheck counters.qnt` | 4.8 |
+| `quint test` of the batch (one process, as CheckBatch runs it) | 11.6 |
+| REPL: load alone | 5.2 |
+| REPL: per input, `true` | 0.12 (0.09 TypeScript) |
+| REPL: per step input (an action with its expect) | 0.20 (0.16 TypeScript) |
+| REPL: the batch, a step per input (99) | 25.2 (20.7 TypeScript) |
+| REPL: the batch as its 32 segment defs and 16 test runs | 25.7 |
+
+The load is paid once, as hoped, but every input costs about 0.1 CPU s
+on counters' model whatever it says (2 ms on a three-line model): the
+REPL analyses each input against the whole loaded module. A batch of
+counters then costs twice its one `quint test` process, and a session
+would save at most the 4.8 s typecheck per batch while paying 2-6 s of
+inputs. So the premise holds (the model loads once and evaluates
+replays) and the gain does not: not worth a session backend on quint
+0.33. It would be if the REPL's per-input analysis were incremental
+(upstream), or for models far smaller than grist's. D1 makes it moot
+for passing runs.
 
 ### D5. Fewer seeds or smaller workloads: not done
 
