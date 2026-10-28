@@ -104,6 +104,13 @@ The first release. What a user meets, by module:
   session of its test binary. `gotogether nav` opens it on a terminal
   when it is installed (`-text` prints the node). Its VHS tapes
   (qnav/tapes) render the docs' GIFs and are checked as text.
+- The Go evaluator also decides passing runs of bindings with `within`
+  obligations (docs/DESIGN.md §56): a run it passes has its bounded
+  responses judged on its own states, and is a pass with no quint
+  process when every one is met; one late, never met or with no verdict
+  is quint's to judge and report, on quint's states. Shadow compares
+  the obligations' verdicts and evidence on both states. (webjobs -short:
+  138 → 81 CPU s, raftkv 106 → 43; docs/performance.md.)
 - validate keeps quint's typechecks and its evaluation modules' compiles
   across processes, by content (docs/DESIGN.md §57: quint's version,
   the spec's and its imports' paths and contents, every .qnt beside

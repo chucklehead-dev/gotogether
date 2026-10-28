@@ -154,9 +154,11 @@ s.Net().OnHeal(func(a, b *qenv.Process) { qobs.Record(s.Context(), "heal", nil, 
 (`Isolate`, `Heal`), to place them. Settle the run (`Sim.Settle`): an exploration
 claiming conformance fails if no run judged the obligation, since a run
 that stalls in silence, unsettled, leaves it open. Its vals are computed
-by the Go evaluator on quint's states; one it cannot evaluate, or steps
-whose times go back along the order checked, is no verdict, said as an
-issue.
+by the Go evaluator on the replay's states (the evaluator's for a run it
+passes, quint's for one it does not, and for every obligation not met:
+a missed one is reported on quint's states); one it cannot evaluate, or
+steps whose times go back along the order checked, is no verdict, said
+as an issue.
 
 ## 6. Spec model vs mechanism model, plus a lemma
 

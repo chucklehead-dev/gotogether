@@ -119,15 +119,12 @@ type runEval struct {
 // runEvaluator is how c's checks of runs use the evaluator, nil when
 // quint judges them alone: under GOTOGETHER_EVAL=quint, for a search's
 // candidates (quint confirms the evaluator's conclusions there), for a
-// binding with hidden actions (the evaluator's search, checkHidden), for
-// one with bounded responses (judged on quint's states: shadowed only),
-// and for a binding with no evaluator.
+// binding with hidden actions (the evaluator's search, checkHidden), and
+// for a binding with no evaluator. A binding's bounded responses are
+// judged on the evaluator's states of a run it passes (decide).
 func (c *Checker) runEvaluator() *runEval {
 	mode := c.Options.evalMode()
 	if mode == "quint" || c.mode.history != nil || c.mode.quintOnly || len(c.Binding.Hidden) > 0 {
-		return nil
-	}
-	if mode != "shadow" && len(c.Binding.Within) > 0 {
 		return nil
 	}
 	e := evaluatorFor(c)
@@ -180,6 +177,11 @@ func (e *evaluator) judgeRun(c *Checker, tr *qtrace.Trace, plan *binding.Plan, k
 	}
 	v.eventual = w.eventual
 	v.pass = w.violated < 0 && w.eventual == ""
+	if hooks.TamperEval.Load() == 7 && len(v.states) > 0 {
+		for i := range v.states {
+			v.states[i] = w.final // every state the last: an obligation it opened is met at once
+		}
+	}
 	if t := hooks.TamperEval.Load(); t == 1 && v.pass || t == 3 && v.pass && len(plan.Calls)%2 == 1 {
 		return runVerdict{at: 0, violated: -2}, nil // rejects (quint judges the run)
 	}
@@ -200,8 +202,42 @@ func (e *evaluator) passed(b *binding.Binding, res *Result, plan *binding.Plan, 
 		res.ITF = path
 	}
 	fillPass(b, res, plan)
+	return true
+}
+
+// decide makes res, trace t's plan p's, the evaluator's pass v: passed's
+// result, its bounded responses (the binding's within) judged on the
+// evaluator's states as judgeWithin judges quint's. false, res as
+// newResult left it, when it cannot (passed's) or an obligation is not
+// met in it (late, never, or no verdict: a report that fails, or is not
+// OK, is quint's): quint judges the run.
+func (re *runEval) decide(c *Checker, t *qtrace.Trace, p *binding.Plan, v runVerdict, res *Result, opt Options, base string) bool {
+	fresh := *res
+	if !re.e.passed(c.Binding, res, p, v, opt, base) {
+		*res = fresh
+		return false
+	}
+	if len(c.Binding.Within) > 0 {
+		probe := res.clone()
+		c.judgeWithin(t, probe)
+		for _, inv := range probe.Invariants {
+			if inv.Within && inv.Verdict != Pass {
+				*res = fresh
+				return false
+			}
+		}
+	}
 	evalPassed.Add(1)
 	return true
+}
+
+// clone is r with copies of what judgeWithin adds to.
+func (r *Result) clone() *Result {
+	c := *r
+	c.Invariants = slices.Clone(r.Invariants)
+	c.Issues = slices.Clone(r.Issues)
+	c.withins = slices.Clone(r.withins)
+	return &c
 }
 
 // fillPass fills res as a passing replay of plan: its steps, conformance
@@ -238,7 +274,7 @@ func (c *Checker) checkPlan(ctx context.Context, re *runEval, t *qtrace.Trace, p
 	if verr != nil {
 		re.note(fmt.Sprintf("refused %s %s %d calls: %v", c.Binding.SpecPath(), nameOf(t.Actor), len(p.Calls), verr))
 	}
-	if verr == nil && v.pass && !re.shadow && re.e.passed(c.Binding, res, p, v, o, observedBase(t)) {
+	if verr == nil && v.pass && !re.shadow && re.decide(c, t, p, v, res, o, observedBase(t)) {
 		return res, nil, nil
 	}
 	r, err := validatePlanIn(ctx, c.Binding, t, p, o, res, verr == nil && !v.pass)
@@ -253,12 +289,13 @@ func (c *Checker) checkPlan(ctx context.Context, re *runEval, t *qtrace.Trace, p
 // result passed would fill, and the same states as quint's ITF (when it
 // wrote one); else the disagreement, the shadow's error.
 func (re *runEval) compare(c *Checker, t *qtrace.Trace, p *binding.Plan, v runVerdict, q *Result) (err error) {
+	within := "" // the bounded responses compared, for the log
 	defer func() {
 		outcome := "agree"
 		if err != nil {
 			outcome = "DISAGREE"
 		}
-		re.note(fmt.Sprintf("%s %s %s %d calls, settled %v: %s", outcome, c.Binding.SpecPath(), nameOf(t.Actor), len(p.Calls), t.Settled, v))
+		re.note(fmt.Sprintf("%s %s %s %d calls, settled %v: %s%s", outcome, c.Binding.SpecPath(), nameOf(t.Actor), len(p.Calls), t.Settled, v, within))
 	}()
 	qv := verdictOfResult(q)
 	if !v.agrees(qv) {
@@ -287,7 +324,53 @@ func (re *runEval) compare(c *Checker, t *qtrace.Trace, p *binding.Plan, v runVe
 	if err := sameStates(path, q.ITF); err != nil {
 		return disagreement(t.Actor, "passes through other states ("+err.Error()+")", "passes, its ITF "+q.ITF, t.Steps)
 	}
+	if len(c.Binding.Within) > 0 {
+		// the bounded responses, judged on each one's states as a check
+		// judges them: each obligation's verdict, where it failed, the
+		// evidence the report prints, and what is absent
+		mine.ITF = path
+		theirs := q.clone()
+		c.judgeWithin(t, mine)
+		c.judgeWithin(t, theirs)
+		a, b := withinText(mine), withinText(theirs)
+		within = " | within: " + a
+		if a != b {
+			return disagreement(t.Actor, "judges its bounded responses so: "+a, "so: "+b, t.Steps)
+		}
+	}
 	return nil
+}
+
+// withinText is what judgeWithin added to r, one line: each obligation's
+// verdict, its failure's step and note, its issues, and the obligations
+// not met or not judged.
+func withinText(r *Result) string {
+	var parts []string
+	for _, i := range r.Invariants {
+		if !i.Within {
+			continue
+		}
+		p := fmt.Sprintf("%s %s", i.Name, i.Verdict)
+		if f := i.Failure; f != nil {
+			p += fmt.Sprintf(" at call %d: %s", f.Index+1, f.Note)
+		}
+		if i.cause != "" {
+			p += " (" + i.cause + ")"
+		}
+		parts = append(parts, p)
+	}
+	for _, is := range r.Issues {
+		if is.Kind == "within" {
+			parts = append(parts, is.String())
+		}
+	}
+	for _, o := range r.withins {
+		parts = append(parts, fmt.Sprintf("%s %s due %s: %s", o.name, o.how, stamp(o.due), o.note))
+	}
+	if r.noVerdict != "" {
+		parts = append(parts, "no verdict: "+r.noVerdict)
+	}
+	return strings.Join(parts, "; ")
 }
 
 // resultLine is a passing result's steps and checks, one line.

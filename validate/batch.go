@@ -158,7 +158,7 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 					re.note(fmt.Sprintf("refused %s %s %d calls: %v", c.Binding.SpecPath(), nameOf(it.trace.Actor), len(it.plan.Calls), err))
 				}
 				if it.judged && it.ev.pass && !re.shadow {
-					it.decided = re.e.passed(c.Binding, it.res, it.plan, it.ev, opt, fmt.Sprintf("run%d_%s", it.run, sanitize(it.trace.Actor)))
+					it.decided = re.decide(c, it.trace, it.plan, it.ev, it.res, opt, fmt.Sprintf("run%d_%s", it.run, sanitize(it.trace.Actor)))
 				}
 			}()
 		}

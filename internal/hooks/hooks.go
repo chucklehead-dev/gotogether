@@ -371,7 +371,9 @@ var CompleteSearchOnly atomic.Bool
 // every run of an odd number of calls it would pass; and in its search
 // over hidden actions' or a resume's states, 4: no state takes the first
 // step, 5: every expect holds; 6: it passes every run it judges, the
-// unsound evaluator only GOTOGETHER_EVAL=shadow catches).
+// unsound evaluator only GOTOGETHER_EVAL=shadow catches; 7: a run's
+// states it reports are all its last, so a bounded response it opened
+// is met at once, also shadow's to catch).
 //
 // Process-wide: a test's.
 var TamperEval atomic.Int32

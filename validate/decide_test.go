@@ -164,3 +164,108 @@ func TestShadowCatchesAWrongPass(t *testing.T) {
 		}
 	}
 }
+
+func withinSteps(electAt int) []qtrace.Step {
+	at := func(s int) time.Time { return time.Unix(0, 0).Add(time.Duration(s) * time.Second) }
+	return []qtrace.Step{
+		{Action: "crash", Recorder: "n", Seq: 1, Time: at(0)},
+		{Action: "heal", Recorder: "n", Seq: 2, Time: at(1)},
+		{Action: "elect", Recorder: "n", Seq: 3, Time: at(electAt)},
+	}
+}
+
+// A binding's bounded responses are judged on the evaluator's states of a
+// run it passes: an obligation met is a pass with no quint replay; one
+// missed (late) is quint's to report, its module and its failure note
+// judged on quint's states; GOTOGETHER_EVAL=quint replays every run.
+func TestEvaluatorDecidesWithin(t *testing.T) {
+	skip.Quint(t)
+	bin, log := countingQuint(t)
+	ctx := context.Background()
+	for _, eval := range []string{"go", "quint"} {
+		c, err := NewChecker("testdata/within.yaml", Options{Quint: bin, Dir: t.TempDir(), Eval: eval})
+		if err != nil {
+			t.Fatal(err)
+		}
+		name := c.Binding.Within[0].Name()
+		c.Check(ctx, withinSteps(2)) // the evaluator's compile, once
+		replays(t, log)
+		verdict := func(rep *Report) *InvariantResult {
+			for i, inv := range rep.Actors[0].Invariants {
+				if inv.Name == name {
+					return &rep.Actors[0].Invariants[i]
+				}
+			}
+			return nil
+		}
+		for _, batch := range []bool{false, true} {
+			check := func(steps []qtrace.Step) *Report {
+				if !batch {
+					rep, err := c.Check(ctx, steps)
+					if err != nil {
+						t.Fatal(err)
+					}
+					return rep
+				}
+				reps, errs := c.CheckBatch(ctx, [][]qtrace.Step{steps}, 0)
+				if errs[0] != nil {
+					t.Fatal(errs[0])
+				}
+				return reps[0]
+			}
+			rep := check(withinSteps(2))
+			n := replays(t, log)
+			if w := verdict(rep); !rep.OK() || w == nil || w.Verdict != Pass {
+				t.Fatalf("%s, batch %v: an obligation met: %s", eval, batch, rep.Summary())
+			}
+			byEval := strings.Contains(rep.Summary(), "judged by the Go evaluator")
+			switch {
+			case eval == "go" && (n != 0 || !byEval):
+				t.Errorf("go, batch %v: an obligation met started %d quint replays (want none), by the evaluator %v", batch, n, byEval)
+			case eval == "quint" && (n == 0 || byEval):
+				t.Errorf("quint, batch %v: an obligation met started no quint replay", batch)
+			}
+			rep = check(withinSteps(5))
+			n = replays(t, log)
+			w := verdict(rep)
+			if rep.OK() || w == nil || w.Verdict != Fail || w.Failure == nil || !strings.Contains(rep.Summary(), w.Failure.Note) {
+				t.Fatalf("%s, batch %v: an obligation missed: %s", eval, batch, rep.Summary())
+			}
+			if a := rep.Actors[0]; n == 0 || a.Module == "" || strings.Contains(rep.Summary(), "judged by the Go evaluator") {
+				t.Errorf("%s, batch %v: a missed obligation's report is not quint's (%d replays):\n%s", eval, batch, n, rep.Summary())
+			}
+		}
+	}
+}
+
+// An evaluator whose states are wrong (TamperEval 7: every state its
+// last, so an obligation is met at once) passes a run whose obligation was
+// missed, and the shadow catches it, by Check and CheckBatch.
+func TestShadowCatchesAWrongWithin(t *testing.T) {
+	skip.Quint(t)
+	t.Setenv("GOTOGETHER_SHADOW_LOG", "") // its disagreements are made: not the nightly's to count
+	defer hooks.TamperEval.Store(0)
+	ctx := context.Background()
+	late := withinSteps(5)
+	for _, eval := range []string{"go", "shadow"} {
+		c, err := NewChecker("testdata/within.yaml", Options{Dir: t.TempDir(), Eval: eval})
+		if err != nil {
+			t.Fatal(err)
+		}
+		hooks.TamperEval.Store(0)
+		if rep, err := c.Check(ctx, late); err != nil || rep.OK() {
+			t.Fatalf("%s, a right evaluator: %v %v", eval, err, rep)
+		}
+		hooks.TamperEval.Store(7)
+		rep, err := c.Check(ctx, late)
+		_, errs := c.CheckBatch(ctx, [][]qtrace.Step{late}, 0)
+		switch {
+		case eval == "go" && (err != nil || !rep.OK()):
+			t.Errorf("go: the tampered evaluator's pass is the verdict (the shadow's to catch): %v\n%v", err, rep)
+		case eval == "shadow" && (err == nil || !strings.Contains(err.Error(), "GOTOGETHER_EVAL=shadow")):
+			t.Errorf("shadow, Check: %v", err)
+		case eval == "shadow" && (errs[0] == nil || !strings.Contains(errs[0].Error(), "GOTOGETHER_EVAL=shadow")):
+			t.Errorf("shadow, CheckBatch: %v", errs)
+		}
+	}
+}

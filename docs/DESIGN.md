@@ -3924,9 +3924,19 @@ ones that fail.
   quint's replays as before, as does every run under
   `GOTOGETHER_EVAL=quint`. A search's candidates and its confirmations
   (a checker with a history) are §45's: quint confirms what the
-  evaluator concluded there. A binding with bounded responses (`within`)
-  stays quint's: its obligations are judged on quint's states.
-  Hidden actions and resumes are the evaluator's searches, as before.
+  evaluator concluded there. Hidden actions and resumes are the
+  evaluator's searches, as before.
+- **Bounded responses.** A binding with `within` obligations was quint's
+  at first, its obligations judged on quint's ITF states (webjobs: 125
+  of its 134 CPU s quint). Now a run the evaluator passes has its
+  obligations judged on the evaluator's states, by the same code
+  (judgeWithin over the ITF the evaluator writes, its vals computed by
+  the evaluator as before): every obligation met is the pass; one late,
+  never met, or with no verdict sends the run to quint as before, so a
+  report that fails or is not OK is judged on quint's states. Under
+  shadow each passing run's obligations are judged on both states and
+  compared, verdict, failing step, note and absences, beside the
+  states themselves.
 - **A choice quint samples.** quint's replay of `nondet x = oneOf(S)`
   picks one value at random, not one that enables the action
   (`oneOf(1.to(1000))` with `x == 7` fails `quint test` at almost every
@@ -3944,7 +3954,8 @@ ones that fail.
   shadow's own re-planning of each actor on one thread, which compared
   the evaluator with quint on plans no check made. Rejected runs take
   the detail-only path in shadow too, so the shadow runs exactly the
-  path that decides outside it. The nightly's evaluator-shadow jobs run
+  path that decides outside it (with `within`, the obligations judged
+  on each one's states, compared too). The nightly's evaluator-shadow jobs run
   every example so (the grist examples added), and print how many runs
   the two judged and how many the evaluator refused
   (`GOTOGETHER_SHADOW_LOG`); a disagreement fails the job by name.

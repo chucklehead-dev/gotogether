@@ -205,7 +205,9 @@ jobs:
     # guards the evaluator's passes, which decide every run outside shadow
     # (validate/decide.go): each run's plan is judged by the evaluator as
     # a check judges it, and by quint, and a verdict, a passing result or
-    # an ITF state they differ on is the run's error. The log
+    # an ITF state they differ on is the run's error, and so are a passing
+    # run's bounded responses (within: webjobs, raftkv) judged on each
+    # one's states otherwise (verdict, failing step, note). The log
     # (GOTOGETHER_SHADOW_LOG) counts the runs compared and refused.
     #
     # seeds: the explorations' count where 500 would not fit 110m, each

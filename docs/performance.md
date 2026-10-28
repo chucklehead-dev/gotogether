@@ -266,6 +266,25 @@ with `within` obligations, by judging them on its own states, would
 save it most of its 125 quint CPU s: a change to what decides a pass,
 the maintainer's.
 
+**Done** (docs/DESIGN.md §56, "Bounded responses"). The bindings with
+`within` are webjobs' and raftkv's two (library's and fleetrollout's
+only name vals "within..."). Here, CI's flags (GOTOGETHER_STRICT=1,
+-short, its -skip), a fresh quint cache each, the PATH wrapper counting:
+
+| | CPU s before → after | quint processes | `quint test` |
+|---|---|---|---|
+| examples/webjobs | 138 → 81 | 26 → 11 | 23 → 8 |
+| examples/raftkv | 106 → 43 | 19 → 8 | 14 → 3 |
+
+Before the switch, the shadow judged every run of both examples' -short
+and full suites both ways, the obligations judged on each one's states:
+webjobs 15 runs -short and 383 full (139 with obligations compared, 2
+missed ones among them), raftkv 97 -short (82 with obligations, 12
+missed: late leaders after a heal), and in full mode 248 (the same 82 and 12; its TestLinearizeScale, which the nightly skips for its length in shadow, was cut at 2h30m with every test before it judged), and validate's
+and qtest's within, resume, absent and lost tests (162 runs, 82 with
+obligations): no disagreement.
+
+
 ### D4. A quint session for many replays
 
 quint's REPL loads a model once and could evaluate many replays: the
