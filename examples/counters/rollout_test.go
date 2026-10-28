@@ -1,6 +1,9 @@
 package counters
 
 import (
+	"bytes"
+	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/examples/counters/release1"
@@ -40,4 +43,30 @@ func TestRollingUpdate(t *testing.T) {
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Takes("retireCounter").Outcome("ok"))
 	upgrade(t, calls, qtest.Linearize()).Explore(t, n).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Completes()), qtest.All(gristtest.ReadersFirst()), qtest.All(gristtest.NoClientErrors()))
+}
+
+// release1Catalog is release 1's catalog as deployed: what CI keeps of
+// the release that runs (`counters catalog > deployed.json` by its
+// binary), for `go run ./cmd/counters catalog -diff release1/catalog.json`
+// before release 2 ships (docs/tutorials/grist-on-kubernetes.md).
+const release1Catalog = "release1/catalog.json"
+
+// The kept catalog is release 1's (GRIST_UPDATE=1 writes it again): a
+// catalog -diff against a stale one would judge the rollout of another
+// release.
+func TestRelease1Catalog(t *testing.T) {
+	b, err := json.MarshalIndent(release1.App.Catalog(), "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b = append(b, '\n')
+	if os.Getenv("GRIST_UPDATE") != "" {
+		if err := os.WriteFile(release1Catalog, b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	kept, err := os.ReadFile(release1Catalog)
+	if err != nil || !bytes.Equal(kept, b) {
+		t.Fatalf("%s is not release 1's catalog (%v): GRIST_UPDATE=1 go test -run TestRelease1Catalog . writes it", release1Catalog, err)
+	}
 }

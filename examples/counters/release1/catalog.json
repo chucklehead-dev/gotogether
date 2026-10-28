@@ -1,0 +1,440 @@
+{
+  "name": "counters",
+  "events": [
+    {
+      "name": "grist.failed",
+      "version": 1,
+      "body": {
+        "additionalProperties": false,
+        "properties": {
+          "processor": {
+            "type": "string"
+          },
+          "trigger": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "processor",
+          "trigger"
+        ],
+        "type": "object"
+      },
+      "tags": [
+        "processor"
+      ]
+    },
+    {
+      "name": "grist.unknown",
+      "version": 1,
+      "body": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "processor": {
+            "type": "string"
+          },
+          "trigger": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "processor",
+          "error",
+          "trigger"
+        ],
+        "type": "object"
+      },
+      "tags": [
+        "processor"
+      ]
+    },
+    {
+      "name": "counter-created",
+      "version": 1,
+      "body": {
+        "additionalProperties": false,
+        "properties": {
+          "counter": {
+            "type": "string"
+          },
+          "creator": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "counter",
+          "name",
+          "creator"
+        ],
+        "type": "object"
+      },
+      "tags": [
+        "counter",
+        "name"
+      ]
+    },
+    {
+      "name": "counter-incremented",
+      "version": 1,
+      "body": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "type": "integer"
+          },
+          "counter": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "counter",
+          "by"
+        ],
+        "type": "object"
+      },
+      "tags": [
+        "counter"
+      ]
+    },
+    {
+      "name": "average-computed",
+      "version": 1,
+      "body": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "sum": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sum",
+          "count"
+        ],
+        "type": "object"
+      },
+      "tags": []
+    },
+    {
+      "name": "notified",
+      "version": 1,
+      "body": {
+        "additionalProperties": false,
+        "properties": {
+          "counter": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "counter"
+        ],
+        "type": "object"
+      },
+      "tags": [
+        "counter"
+      ]
+    },
+    {
+      "name": "counter-retired",
+      "version": 1,
+      "body": {
+        "additionalProperties": false,
+        "properties": {
+          "counter": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "counter",
+          "total"
+        ],
+        "type": "object"
+      },
+      "tags": [
+        "counter"
+      ]
+    },
+    {
+      "name": "paid-out",
+      "version": 1,
+      "body": {
+        "additionalProperties": false,
+        "properties": {
+          "counter": {
+            "type": "string"
+          },
+          "retired": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "counter",
+          "retired"
+        ],
+        "type": "object"
+      },
+      "tags": [
+        "counter"
+      ]
+    }
+  ],
+  "readModels": [
+    {
+      "name": "counter-names",
+      "version": 1,
+      "types": [
+        "counter-created"
+      ],
+      "keys": null,
+      "fingerprint": "f32567e164b1cff63b80eadb0"
+    },
+    {
+      "name": "totals",
+      "version": 1,
+      "types": [
+        "counter-incremented"
+      ],
+      "keys": [
+        "counter"
+      ],
+      "fingerprint": "f8ecdb8e77a8896c0954a4375"
+    }
+  ],
+  "commands": [
+    {
+      "name": "create-counter",
+      "quint": "createCounter",
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "counter": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "counter",
+          "name"
+        ],
+        "type": "object"
+      },
+      "authorized": true,
+      "refuses": [
+        "name-taken"
+      ]
+    },
+    {
+      "name": "increment-counter",
+      "quint": "incrementCounter",
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "type": "integer"
+          },
+          "counter": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "counter",
+          "by"
+        ],
+        "type": "object"
+      },
+      "authorized": true,
+      "refuses": [
+        "unknown-counter"
+      ]
+    },
+    {
+      "name": "retire-counter",
+      "quint": "retireCounter",
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "counter": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "counter"
+        ],
+        "type": "object"
+      },
+      "authorized": true,
+      "refuses": [
+        "unknown-counter",
+        "not-creator"
+      ]
+    }
+  ],
+  "queries": [
+    {
+      "name": "show-counter",
+      "quint": "showCounter",
+      "args": {
+        "additionalProperties": false,
+        "properties": {
+          "counter": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "counter"
+        ],
+        "type": "object"
+      },
+      "result": {
+        "additionalProperties": false,
+        "properties": {
+          "names": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "names"
+        ],
+        "type": "object"
+      },
+      "authorized": true
+    }
+  ],
+  "processors": [
+    {
+      "name": "average",
+      "quint": "average",
+      "on": "counter-incremented",
+      "effectTries": 3,
+      "shape": "emits",
+      "emits": [
+        "average-computed"
+      ]
+    },
+    {
+      "name": "welcome",
+      "quint": "welcome",
+      "on": "counter-created",
+      "effectTries": 3,
+      "shape": "effect",
+      "guarantee": "AtLeastOnce",
+      "success": "notified",
+      "uses": [
+        "mailerSend"
+      ]
+    },
+    {
+      "name": "payout",
+      "quint": "payout",
+      "on": "counter-retired",
+      "effectTries": 3,
+      "shape": "effect",
+      "guarantee": "AtMostOnce",
+      "success": "paid-out",
+      "uses": [
+        "bankPay"
+      ]
+    }
+  ],
+  "rules": [],
+  "sites": null,
+  "dependencies": [
+    {
+      "name": "mailer",
+      "quint": "mailer",
+      "calls": [
+        {
+          "name": "send",
+          "quint": "mailerSend",
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "counter": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "counter",
+              "name"
+            ],
+            "type": "object"
+          },
+          "response": {
+            "additionalProperties": false,
+            "properties": {},
+            "required": [],
+            "type": "object"
+          },
+          "users": [
+            "welcome"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bank",
+      "quint": "bank",
+      "calls": [
+        {
+          "name": "pay",
+          "quint": "bankPay",
+          "request": {
+            "additionalProperties": false,
+            "properties": {
+              "amount": {
+                "type": "integer"
+              },
+              "counter": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "counter",
+              "amount"
+            ],
+            "type": "object"
+          },
+          "response": {
+            "additionalProperties": false,
+            "properties": {
+              "ref": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "ref"
+            ],
+            "type": "object"
+          },
+          "keyed": true,
+          "refuses": [
+            "declined"
+          ],
+          "users": [
+            "payout"
+          ]
+        }
+      ]
+    }
+  ]
+}

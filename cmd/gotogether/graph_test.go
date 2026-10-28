@@ -18,11 +18,12 @@ import (
 // fails on its deadlock (exit 1) and passes once simulate.terminal says
 // it is the model's end; vending passes; a binding the evaluator cannot
 // follow to the end exits 2, never complete; -graph with -verify is
-// refused. -out's module (a path relative to the working directory too)
-// replays the counterexamples in quint test.
+// refused. -out's module (in a directory it makes, and at a path
+// relative to the working directory) replays the counterexamples in
+// quint test.
 func TestSimulateGraph(t *testing.T) {
 	skip.Quint(t)
-	out := filepath.Join(t.TempDir(), "cex.qnt")
+	out := filepath.Join(t.TempDir(), "replays", "cex.qnt") // a directory -out makes
 	for _, c := range []struct {
 		args []string
 		want int

@@ -168,7 +168,7 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 	var cov []string
 	for _, a := range r.Actions {
 		if a.Transitions > 0 {
-			cov = append(cov, fmt.Sprintf("%s %d in %d states", a.Action, a.Transitions, a.States))
+			cov = append(cov, fmt.Sprintf("%s %d in %s", a.Action, a.Transitions, plural(a.States, "state")))
 		}
 	}
 	if len(cov) > 0 {
@@ -275,6 +275,11 @@ func writeReplays(b *binding.Binding, overrides []string, path string, runs []st
 		return err
 	}
 	src = strings.TrimSuffix(src, "}\n") + strings.Join(runs, "\n") + "\n}\n"
+	// a directory -out names that does not exist yet is made: the report
+	// was printed before the write once failed on it
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
 	return os.WriteFile(path, []byte(src), 0o644)
 }
 
