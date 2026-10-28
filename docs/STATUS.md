@@ -7,9 +7,10 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-**As of 2026-10-28.** main at `78d96d6` (I24) and, after it, the
-format policy's commit (pre-release, the current major only; HISTORY
-"Formats: the current major only"). CI green through I24. **Nothing is tagged**: every module is pre-release,
+**As of 2026-10-28.** main at the published modules' bump to `d6f2fd8`,
+the format policy's commit (pre-release, the current major only;
+HISTORY "Formats: the current major only"), after I24 (`78d96d6`). CI
+green through I24. **Nothing is tagged**: every module is pre-release,
 published modules require each other at pseudo-versions, and breaking
 renames still land (R5 waits for the maintainer).
 
