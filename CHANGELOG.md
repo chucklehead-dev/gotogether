@@ -26,7 +26,7 @@ The first release. What a user meets, by module:
   commit and the `Failover.LoseTail` acknowledged before it),
   `Store.FailOver` (one now), `Store.Restores` (`nemesis.restore.<name>`:
   back to a backup taken every period), `Store.Backup`, `Store.Restore`,
-  `Store.Restored`, `Store.Lost` and `qenv.ErrUnavailable` (qsql's
+  `Store.Restored`, `Store.Lost`, `Store.Commits` and `qenv.ErrUnavailable` (qsql's
   SQLSTATE 25006). The history checker starts afresh after a rewind.
 
 - Verdicts state their bounds (ROADMAP I9): no claim has a verdict over

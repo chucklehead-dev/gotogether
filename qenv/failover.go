@@ -92,16 +92,17 @@ func (st *Store) Backup() { st.backup, st.hasBackup = st.seq, true }
 // the store put back to its latest backup (a CSI snapshot's, a backup's
 // restore: every commit after it gone, every open transaction reset).
 // A backup is taken at the first commit at least every after the last
-// (and at the first commit), and by Backup; the nemesis is enabled while
-// a backup has commits after it, at most max times a run (default 1).
+// (and at the first commit; every 0: at every commit, so a restore loses
+// the last one), and by Backup; the nemesis is enabled while a backup has
+// commits after it, at most max times a run (default 1).
 func (st *Store) Restores(every time.Duration, max int) {
-	if every <= 0 {
-		panic(fmt.Sprintf("qenv: store %s: Restores(%v, %d): give how often a backup is taken", st.Name, every, max))
+	if every < 0 {
+		panic(fmt.Sprintf("qenv: store %s: Restores(%v, %d): give how often a backup is taken (0: at every commit)", st.Name, every, max))
 	}
 	if max <= 0 {
 		max = 1
 	}
-	st.backupEvery = every
+	st.backupEvery, st.backups = every, true
 	st.sim.Nemesis("restore."+st.Name, func() bool {
 		return st.restores < max && st.hasBackup && st.lastCommit() > st.backup
 	}, func() { st.Restore() })
@@ -129,6 +130,10 @@ func (st *Store) Restored() int { return st.restores }
 
 // Lost is how many commits failovers and restores lost.
 func (st *Store) Lost() int { return st.lost }
+
+// Commits is how many commits that wrote the store holds (those lost
+// aside): a scenario's clock, to fail over or restore after the k-th.
+func (st *Store) Commits() int { return len(st.commits) }
 
 // lastCommit is the sequence number of the last commit that wrote (0:
 // none).

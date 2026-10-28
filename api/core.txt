@@ -861,6 +861,7 @@ type Store struct
     method (*Store) Backup()
     method (*Store) Begin(ctx context.Context) Txn
     method (*Store) Changed() *Signal
+    method (*Store) Commits() int
     method (*Store) FailOver(lose int, readOnly time.Duration) int
     method (*Store) Failovers(f Failover)
     method (*Store) Keys(prefix string) []string

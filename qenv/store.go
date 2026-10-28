@@ -128,6 +128,7 @@ type Store struct {
 	hasBackup     bool
 	backupAt      time.Time
 	backupEvery   time.Duration
+	backups       bool // Restores: backups taken at commits
 	restores      int
 	lost          int
 	noValidation  bool // tests only: a store that keeps no level, for the history check to catch
@@ -483,7 +484,7 @@ func (tx *tx) Commit() error {
 	}
 	var commit int64
 	if len(tx.order) > 0 {
-		if st.backupEvery > 0 && (!st.hasBackup || !st.sim.Now().Before(st.backupAt.Add(st.backupEvery))) {
+		if st.backups && (!st.hasBackup || st.backupEvery == 0 || !st.sim.Now().Before(st.backupAt.Add(st.backupEvery))) {
 			st.Backup() // the store as it was before this commit
 			st.backupAt = st.sim.Now()
 		}
