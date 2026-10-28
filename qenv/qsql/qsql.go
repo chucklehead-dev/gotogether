@@ -9,11 +9,15 @@
 //
 // The SQL is a subset (one table at a time, equality, and ranges on a
 // key column whose earlier key columns are fixed; upserts and RETURNING;
-// the error for anything else names the subset):
+// a join that looks a second table's rows up by its whole key; the error
+// for anything else names the subset):
 //
 //	CREATE TABLE grist_events (tenant TEXT NOT NULL, pos BIGINT NOT NULL, body BLOB, PRIMARY KEY (tenant, pos))
 //	UPDATE grist_heads SET head = head + $1 WHERE tenant = $2 RETURNING head
 //	SELECT pos, body FROM grist_events WHERE tenant = $1 AND pos > $2 AND pos <= $3 ORDER BY pos DESC LIMIT $4
+//	SELECT grist_index.pos, grist_events.body FROM grist_index JOIN grist_events
+//		ON grist_events.tenant = grist_index.tenant AND grist_events.pos = grist_index.pos
+//		WHERE grist_index.tenant = $1 AND grist_index.k = $2 ORDER BY grist_index.pos LIMIT $3
 //	INSERT INTO grist_checkpoints (tenant, processor, pos) VALUES ($1, $2, $3)
 //		ON CONFLICT (tenant, processor) DO UPDATE SET pos = excluded.pos WHERE grist_checkpoints.pos = $4
 //

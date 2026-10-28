@@ -9,10 +9,11 @@ import (
 // subset is what the parser accepts, for every error that finds something
 // else: the fix is to write the statement in it, or to keep the query out
 // of the simulation.
-const subset = "qsql runs one table at a time, with equality, and ranges on a key column: " +
+const subset = "qsql runs one table at a time (and a join that looks a second table's rows up by its key), with equality, and ranges on a key column: " +
 	"CREATE TABLE [IF NOT EXISTS] t (col TYPE [PRIMARY KEY] [UNIQUE] [NOT NULL], ... [, PRIMARY KEY (col, ...)]) with TEXT, INTEGER, BIGINT, BOOLEAN, BLOB, BYTEA, TIMESTAMP; " +
 	"INSERT INTO t [(cols)] VALUES (...)[, (...)] [ON CONFLICT [(cols)] DO NOTHING | ON CONFLICT (cols) DO UPDATE SET col = ? | col = excluded.col | col = t.col + ?, ... [WHERE t.col ...]] [RETURNING cols|*]; " +
 	"SELECT cols|* FROM t [WHERE col = ? AND ... [AND k > ? AND k <= ? | AND k BETWEEN ? AND ?]] [ORDER BY key cols [ASC|DESC]] [LIMIT n] [FOR UPDATE]; " +
+	"SELECT t.col, u.col, ... FROM t [INNER] JOIN u ON u.key1 = t.col AND ... [WHERE t.col ...] [ORDER BY t.key ...] [LIMIT n] (every column qualified; ON fixes all of u's PRIMARY KEY by t's columns; WHERE and ORDER BY on t's); " +
 	"UPDATE t SET col = ? | col = col + ? | col = col - ?, ... [WHERE ...] [RETURNING cols|*]; " +
 	"DELETE FROM t [WHERE ...] [RETURNING cols|*]; " +
 	"a range (<, <=, >, >=, BETWEEN) is on one column of the PRIMARY KEY, every key column before it fixed by equality; " +
@@ -202,6 +203,20 @@ type selectStmt struct {
 	orderBy   []orderTerm
 	limit     *expr
 	forUpdate bool
+	join      *joinClause // nil: one table
+}
+
+// qualified is a column named with its table (t.col).
+type qualified struct{ table, col string }
+
+// joinClause is a JOIN u ON ...: a lookup of u's rows by its primary key,
+// whose columns ON equates to columns of the statement's table (an inner
+// join: a row of t with no row of u is left out). cols are the selected
+// columns, each qualified (selectStmt.cols is nil).
+type joinClause struct {
+	table string
+	on    [][2]qualified // t's column, u's column
+	cols  []qualified
 }
 
 type setClause struct {
@@ -245,6 +260,9 @@ type parser struct {
 	// where a column is the existing row's (t.col) or the proposed row's
 	// (excluded.col), and Postgres refuses one unqualified (42702)
 	upsert bool
+	// join: the joined table, while parsing a join's WHERE and ORDER BY,
+	// where every column is qualified and the statement's table's
+	join string
 }
 
 // parse parses one statement of the subset.
@@ -360,9 +378,15 @@ func (p *parser) column(table, what string) (string, error) {
 	if t := p.peek(); t.kind == tPunct && t.text == "." {
 		p.i++
 		if n != table {
+			if p.join != "" && n == p.join {
+				return "", syntaxErr(p.q, t.pos, fmt.Sprintf("the qualifier %s. in WHERE or ORDER BY (a join's conditions and order are on %s's columns; ON looks %s's rows up by its key)", n, table, n))
+			}
 			return "", syntaxErr(p.q, t.pos, fmt.Sprintf("the qualifier %s. (columns of the statement's table %s only: one table at a time)", n, table))
 		}
 		return p.name(what)
+	}
+	if p.join != "" {
+		return "", syntaxErr(p.q, at.pos, fmt.Sprintf("the column %s unqualified in a join (write %s.%s: every column of a join is qualified, as both tables may have it)", n, table, n))
 	}
 	if p.upsert {
 		return "", ambiguous(p.q, at.pos, table, n)
@@ -625,7 +649,9 @@ func (p *parser) names() ([]string, error) {
 
 func (p *parser) selectStmt() (statement, error) {
 	s := &selectStmt{}
-	if !p.punct("*") {
+	var sel []qualified // the columns as written: table "" if unqualified
+	star := p.punct("*")
+	if !star {
 		for {
 			n, err := p.name("a column name or *")
 			if err != nil {
@@ -634,7 +660,15 @@ func (p *parser) selectStmt() (statement, error) {
 			if t := p.peek(); t.kind == tPunct && t.text == "(" {
 				return nil, syntaxErr(p.q, p.toks[p.i-1].pos, fmt.Sprintf("the function %s(...) (select columns)", n))
 			}
-			s.cols = append(s.cols, n)
+			c := qualified{col: n}
+			if dot := p.peek(); dot.kind == tPunct && dot.text == "." {
+				p.i++
+				c.table = n
+				if c.col, err = p.name("a column name"); err != nil {
+					return nil, err
+				}
+			}
+			sel = append(sel, c)
 			if !p.punct(",") {
 				break
 			}
@@ -646,6 +680,35 @@ func (p *parser) selectStmt() (statement, error) {
 	var err error
 	if s.table, err = p.name("a table name"); err != nil {
 		return nil, err
+	}
+	at := p.peek()
+	if p.kw("inner") && !isKw(p.peek(), "join") {
+		return nil, p.unexpected(p.peek(), "JOIN")
+	}
+	if p.kw("join") {
+		if s.join, err = p.joinOn(s.table); err != nil {
+			return nil, err
+		}
+		if star {
+			return nil, syntaxErr(p.q, at.pos, "SELECT * in a join (name the columns, each qualified: t.col, u.col)")
+		}
+		for _, c := range sel {
+			if c.table != s.table && c.table != s.join.table {
+				if c.table == "" {
+					return nil, syntaxErr(p.q, at.pos, fmt.Sprintf("the column %s unqualified in a join (write %s.%s or %s.%s: every column of a join is qualified, as both tables may have it)", c.col, s.table, c.col, s.join.table, c.col))
+				}
+				return nil, syntaxErr(p.q, at.pos, fmt.Sprintf("the qualifier %s. (columns of the join's tables %s and %s only)", c.table, s.table, s.join.table))
+			}
+		}
+		s.join.cols = sel
+		p.join = s.join.table
+	} else {
+		for _, c := range sel {
+			if c.table != "" && c.table != s.table {
+				return nil, syntaxErr(p.q, at.pos, fmt.Sprintf("the qualifier %s. (columns of the statement's table %s only: one table at a time)", c.table, s.table))
+			}
+			s.cols = append(s.cols, c.col)
+		}
 	}
 	if s.where, err = p.where(s.table); err != nil {
 		return nil, err
@@ -683,8 +746,70 @@ func (p *parser) selectStmt() (statement, error) {
 		}
 		s.forUpdate = true
 	}
+	if s.forUpdate && s.join != nil {
+		return nil, syntaxErr(p.q, at.pos, "FOR UPDATE in a join (lock the rows of one table at a time)")
+	}
+	p.join = ""
 	s.n = p.max
 	return s, nil
+}
+
+// joinOn reads a join's table and its ON clause: conjuncts u.col = t.col
+// (either way round), one column of each table.
+func (p *parser) joinOn(table string) (*joinClause, error) {
+	j := &joinClause{}
+	var err error
+	if j.table, err = p.name("the joined table's name"); err != nil {
+		return nil, err
+	}
+	if j.table == table {
+		return nil, syntaxErr(p.q, p.toks[p.i-1].pos, fmt.Sprintf("a join of %s with itself (a self-join needs aliases, which qsql does not parse)", table))
+	}
+	if err := p.expectKw("on"); err != nil {
+		return nil, err
+	}
+	side := func() (qualified, error) {
+		at := p.peek()
+		var q qualified
+		var err error
+		if q.table, err = p.name("a qualified column (t.col)"); err != nil {
+			return q, err
+		}
+		if !p.punct(".") {
+			return q, syntaxErr(p.q, at.pos, fmt.Sprintf("the column %s unqualified in ON (write %s.%s or %s.%s)", q.table, table, q.table, j.table, q.table))
+		}
+		if q.col, err = p.name("a column name"); err != nil {
+			return q, err
+		}
+		if q.table != table && q.table != j.table {
+			return q, syntaxErr(p.q, at.pos, fmt.Sprintf("the qualifier %s. in ON (columns of %s and %s only)", q.table, table, j.table))
+		}
+		return q, nil
+	}
+	for {
+		a, err := side()
+		if err != nil {
+			return nil, err
+		}
+		if t := p.peek(); !p.punct("=") {
+			return nil, syntaxErr(p.q, t.pos, fmt.Sprintf("%s after %s.%s in ON (equalities of a column of each table only: %s.col = %s.col)", t, a.table, a.col, j.table, table))
+		}
+		at := p.peek()
+		b, err := side()
+		if err != nil {
+			return nil, err
+		}
+		if a.table == b.table {
+			return nil, syntaxErr(p.q, at.pos, fmt.Sprintf("%s.%s = %s.%s in ON (an equality of a column of each table: %s.col = %s.col)", a.table, a.col, b.table, b.col, j.table, table))
+		}
+		if a.table != table {
+			a, b = b, a
+		}
+		j.on = append(j.on, [2]qualified{a, b})
+		if !p.kw("and") {
+			return j, nil
+		}
+	}
 }
 
 // where reads an optional WHERE clause: conjuncts col = value, col < value

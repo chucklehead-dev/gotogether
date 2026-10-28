@@ -54,6 +54,11 @@ func TestParse(t *testing.T) {
 			&insertStmt{n: 2, table: "c", cols: []string{"k", "n"}, rows: [][]expr{{{param: 1}, {param: 2}}}, onConflict: true, target: []string{"k"}, doUpdate: []setClause{{"n", '+', expr{ref: "n"}}}}},
 		{`DELETE FROM accounts WHERE id = ? RETURNING id, balance`, &deleteStmt{n: 1, table: "accounts", where: []cond{{"id", "=", expr{param: 1}}}, ret: returning{on: true, cols: []string{"id", "balance"}}}},
 		{`DELETE FROM accounts`, &deleteStmt{table: "accounts"}},
+		{`SELECT accounts.id FROM accounts`, &selectStmt{table: "accounts", cols: []string{"id"}}},
+		// a lookup join, its columns qualified
+		{`SELECT ix.pos, ev.body FROM ix INNER JOIN ev ON ev.tenant = ix.tenant AND ix.pos = ev.pos WHERE ix.tenant = $1 AND ix.pos > $2 ORDER BY ix.pos DESC LIMIT $3`,
+			&selectStmt{n: 3, table: "ix", where: []cond{{"tenant", "=", expr{param: 1}}, {"pos", ">", expr{param: 2}}}, orderBy: []orderTerm{{"pos", true}}, limit: &expr{param: 3},
+				join: &joinClause{table: "ev", on: [][2]qualified{{{"ix", "tenant"}, {"ev", "tenant"}}, {{"ix", "pos"}, {"ev", "pos"}}}, cols: []qualified{{"ix", "pos"}, {"ev", "body"}}}}},
 	} {
 		got, err := parse(tc.q)
 		if err != nil {
@@ -106,7 +111,20 @@ func TestUpsertAmbiguous(t *testing.T) {
 // and the subset (or a fix of its own).
 func TestParseErrors(t *testing.T) {
 	for _, tc := range []struct{ q, says string }{
-		{`SELECT a FROM t JOIN u ON a = b`, `"JOIN"`},
+		{`SELECT a FROM t JOIN u ON a = b`, `the column a unqualified in ON (write t.a or u.a)`},
+		{`SELECT a FROM t LEFT JOIN u ON u.a = t.a`, `"LEFT"`},
+		{`SELECT * FROM t JOIN u ON u.a = t.a`, `SELECT * in a join`},
+		{`SELECT a FROM t JOIN u ON u.a = t.a`, `the column a unqualified in a join (write t.a or u.a`},
+		{`SELECT t.a FROM t JOIN u ON u.a = t.a WHERE a = 1`, `the column a unqualified in a join (write t.a`},
+		{`SELECT t.a FROM t JOIN u ON u.a = t.a WHERE u.b = 1`, `the qualifier u. in WHERE or ORDER BY`},
+		{`SELECT t.a FROM t JOIN u ON u.a = t.a ORDER BY u.a`, `the qualifier u. in WHERE or ORDER BY`},
+		{`SELECT t.a FROM t JOIN u ON u.a = u.b`, `u.a = u.b in ON (an equality of a column of each table`},
+		{`SELECT t.a FROM t JOIN u ON u.a < t.a`, `"<" after u.a in ON`},
+		{`SELECT t.a FROM t JOIN u ON v.a = t.a`, `the qualifier v. in ON`},
+		{`SELECT v.a FROM t JOIN u ON u.a = t.a`, `the qualifier v. (columns of the join's tables t and u only)`},
+		{`SELECT t.a FROM t JOIN t ON t.a = t.a`, `a join of t with itself`},
+		{`SELECT t.a FROM t JOIN u ON u.a = t.a FOR UPDATE`, `FOR UPDATE in a join`},
+		{`SELECT t.a FROM t INNER u ON u.a = t.a`, `"u" where JOIN goes`},
 		{`SELECT a FROM t WHERE a = 1 OR b = 2`, `"OR"`},
 		{`SELECT a FROM t WHERE a <> 1`, `"<>" after a (equality and ranges only`},
 		{`SELECT a FROM t WHERE a != 1`, `"!" after a (equality and ranges only`},

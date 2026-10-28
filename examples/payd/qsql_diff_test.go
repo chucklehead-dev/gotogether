@@ -13,8 +13,9 @@ import (
 	"github.com/chucklehead-dev/gotogether/qenv/qsql"
 )
 
-// qsql's keys of several columns, ranges, ORDER BY with LIMIT, upserts
-// and RETURNING (what grist's sqlstore issues, docs/grist.md §2.10)
+// qsql's keys of several columns, ranges, ORDER BY with LIMIT, upserts,
+// RETURNING and joins by a key (what grist's sqlstore issues,
+// docs/grist.md §2.10)
 // against SQLite: random statements over small tables run on both, and
 // every result (rows, rows affected, whether it failed) agrees. Rows
 // SQL leaves unordered (no ORDER BY, RETURNING) are compared as sets;
@@ -31,7 +32,7 @@ func TestQsqlAgainstSQLite(t *testing.T) {
 		}
 		return int64(r.IntN(5) - 1)
 	}
-	ranged := 0
+	ranged, joined := 0, 0
 	for round := range 30 {
 		s := qenv.New(qenv.Nominal{})
 		st := qenv.NewStore(s, "db", qenv.Serializable)
@@ -45,6 +46,7 @@ func TestQsqlAgainstSQLite(t *testing.T) {
 			for _, ddl := range []string{
 				`CREATE TABLE t (a TEXT NOT NULL, b INTEGER NOT NULL, c INTEGER NOT NULL, v INTEGER, PRIMARY KEY (a, b, c))`,
 				`CREATE TABLE h (tenant TEXT PRIMARY KEY, head INTEGER NOT NULL)`,
+				`CREATE TABLE u (a TEXT NOT NULL, b INTEGER NOT NULL, w INTEGER, PRIMARY KEY (a, b))`,
 			} {
 				if _, err := db.Exec(ddl); err != nil {
 					t.Fatalf("%s: %v", ddl, err)
@@ -106,6 +108,8 @@ func TestQsqlAgainstSQLite(t *testing.T) {
 				tenant := texts[r.IntN(3)]
 				both(false, "INSERT INTO h (tenant, head) VALUES (?, 0) ON CONFLICT (tenant) DO NOTHING", tenant)
 				both(false, "UPDATE h SET head = head + ? WHERE tenant = ? RETURNING head", int64(1+r.IntN(3)), texts[r.IntN(4)])
+				// a row for joins to find, or none
+				both(false, "INSERT INTO u (a, b, w) VALUES (?, ?, ?) ON CONFLICT DO NOTHING", val("a"), int64(r.IntN(3)), nullable(r))
 			default: // a range query, an UPDATE or a DELETE over one
 				fixed := r.IntN(4)
 				var where []string
@@ -134,10 +138,27 @@ func TestQsqlAgainstSQLite(t *testing.T) {
 				if len(where) > 0 {
 					clause = " WHERE " + strings.Join(where, " AND ")
 				}
+				// in a join every column is qualified: t's here
+				qualified := clause
+				for _, col := range []string{"a", "b", "c", "v"} {
+					qualified = strings.ReplaceAll(qualified, " "+col+" ", " t."+col+" ")
+				}
 				if strings.ContainsAny(clause, "<>") || strings.Contains(clause, "BETWEEN") {
 					ranged++
 				}
-				switch r.IntN(6) {
+				switch r.IntN(7) {
+				case 6: // a join of t's rows to u's by u's key, some with none (left out)
+					joined++
+					stmt := "SELECT t.a, t.b, t.c, u.w FROM t JOIN u ON u.a = t.a AND t.b = u.b"
+					if r.IntN(3) == 0 {
+						stmt += " AND u.w = t.v"
+					}
+					stmt += qualified + " ORDER BY " + []string{"t.a, t.b, t.c", "t.a DESC, t.b DESC, t.c DESC"}[r.IntN(2)]
+					if r.IntN(2) == 0 {
+						stmt += " LIMIT ?"
+						args = append(args, int64(r.IntN(4)))
+					}
+					both(true, stmt, args...)
 				case 0:
 					both(false, "UPDATE t SET v = v + ?"+clause+" RETURNING a, b, c, v", append([]any{int64(10)}, args...)...)
 				case 1:
@@ -164,8 +185,8 @@ func TestQsqlAgainstSQLite(t *testing.T) {
 		lite.Close()
 		s.Close()
 	}
-	if ranged < 300 {
-		t.Fatalf("only %d statements had a range", ranged)
+	if ranged < 300 || joined < 200 {
+		t.Fatalf("only %d statements had a range and %d a join", ranged, joined)
 	}
 }
 

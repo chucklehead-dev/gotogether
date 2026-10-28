@@ -28,7 +28,14 @@ rows := qsql.Table(st, "accounts") // committed rows, for final-state checks
   ... AND k > ? AND k <= ? | k BETWEEN ? AND ?] [ORDER BY key cols
   [DESC]] [LIMIT n | LIMIT NULL] [FOR UPDATE]`, `UPDATE ... SET c = ? | c = c + ? | c
   = c - ? [WHERE ...] [RETURNING ...]`, `DELETE ... [RETURNING ...]`; `?`
-  or `$n`. A range (`<`, `<=`, `>`, `>=`, `BETWEEN`) is on one key
+  or `$n`. A join looks a second table's rows up by its whole key:
+  `SELECT t.c, u.d FROM t [INNER] JOIN u ON u.k1 = t.c1 AND u.k2 = t.c2
+  [AND u.d = t.e] [WHERE t....] [ORDER BY t....] [LIMIT n]`, every column
+  qualified, ON fixing all of u's `PRIMARY KEY`, WHERE and ORDER BY on
+  t's columns (an inner join; no aliases, no FOR UPDATE). Each joined
+  row is a read of its own, so at read committed a commit may fall
+  between t's rows and u's, where PostgreSQL reads the statement in one
+  snapshot: join rows that never change once committed. A range (`<`, `<=`, `>`, `>=`, `BETWEEN`) is on one key
   column, every key column before it fixed by equality (`WHERE tenant =
   ? AND pos > ?` over `PRIMARY KEY (tenant, pos)`), and is a predicate
   read of that range alone: serializable aborts a transaction whose

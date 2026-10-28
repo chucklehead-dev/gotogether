@@ -703,6 +703,9 @@ func (t *tx) query(s *selectStmt, args []any) (*result, error) {
 			return nil, err
 		}
 	}
+	if s.join != nil {
+		return t.joinQuery(s, tb, args)
+	}
 	cols := s.cols
 	if cols == nil {
 		cols = tb.colNames()
@@ -740,6 +743,125 @@ func (t *tx) query(s *selectStmt, args []any) (*result, error) {
 		res.rows = append(res.rows, project(r.val, cols))
 	}
 	return res, nil
+}
+
+// joinQuery runs a SELECT with a JOIN: the statement's table's rows as a
+// query of it alone finds them, in its order, and for each the joined
+// table's row whose key ON names, by key (a read, a seam, per row, as
+// find's unique lookup; at read committed a commit may fall between
+// them, where PostgreSQL reads the statement in one snapshot: a join of
+// rows that never change once committed, as grist's events, reads the
+// same). A row with no joined row, or one ON's other columns do not
+// match, is left out (an inner join); LIMIT counts the joined rows.
+func (t *tx) joinQuery(s *selectStmt, tb *table, args []any) (*result, error) {
+	j := s.join
+	ub, err := t.table(j.table)
+	if err != nil {
+		return nil, err
+	}
+	of := func(table string) *table {
+		if table == tb.name {
+			return tb
+		}
+		return ub
+	}
+	var cols []string
+	for _, c := range j.cols {
+		if _, ok := of(c.table).col(c.col); !ok {
+			return nil, undefinedColumn(of(c.table), c.col)
+		}
+		cols = append(cols, c.col)
+	}
+	// on: each of u's columns ON names, with t's column it equals
+	type eq struct {
+		t, u colDef
+	}
+	var on []eq
+	for _, pair := range j.on {
+		ti, ok := tb.col(pair[0].col)
+		if !ok {
+			return nil, undefinedColumn(tb, pair[0].col)
+		}
+		ui, ok := ub.col(pair[1].col)
+		if !ok {
+			return nil, undefinedColumn(ub, pair[1].col)
+		}
+		on = append(on, eq{tb.cols[ti], ub.cols[ui]})
+	}
+	for _, i := range ub.key {
+		if !slices.ContainsFunc(on, func(e eq) bool { return e.u.name == ub.cols[i].name }) {
+			return nil, &Error{Code: "42601", Message: fmt.Sprintf("JOIN %s ON ...: ON does not fix %s.%s, a column of its PRIMARY KEY (%s): a join looks the joined table's rows up by its whole key (ON %s); %s",
+				ub.name, ub.name, ub.cols[i].name, strings.Join(ub.keyNames(), ", "), joinExample(tb, ub), subset)}
+		}
+	}
+	limit, err := t.limit(s, args)
+	if err != nil {
+		return nil, err
+	}
+	cs, none, err := t.conds(tb, s.where, args)
+	if err != nil {
+		return nil, err
+	}
+	desc, err := order(tb, s.orderBy, cs)
+	if err != nil || none {
+		return &result{cols: cols}, err
+	}
+	rows := t.find(tb, cs)
+	if desc {
+		slices.Reverse(rows)
+	}
+	res := &result{cols: cols}
+	for _, r := range rows {
+		if limit >= 0 && int64(len(res.rows)) >= limit {
+			break
+		}
+		key := map[string]any{}
+		null := false
+		for _, e := range on {
+			v := r.val[e.t.name]
+			if v == nil {
+				null = true // NULL equals nothing
+				break
+			}
+			if v, err = coerce(ub, e.u, v); err != nil {
+				return nil, err
+			}
+			key[e.u.name] = v
+		}
+		if null {
+			continue
+		}
+		k := ub.rowKey(key)
+		t.read[k] = true
+		v, ok := t.txn.Get(k)
+		if !ok {
+			continue
+		}
+		u := asRow(v)
+		if !slices.ContainsFunc(on, func(e eq) bool { return !equal(u[e.u.name], key[e.u.name]) }) {
+			out := make([]any, len(j.cols))
+			for i, c := range j.cols {
+				row := r.val
+				if c.table != tb.name {
+					row = u
+				}
+				out[i] = project(row, []string{c.col})[0]
+			}
+			res.rows = append(res.rows, out)
+		}
+	}
+	res.affected = int64(len(res.rows))
+	return res, nil
+}
+
+// joinExample is an ON clause that fixes u's key by t's same-named
+// columns, for an error's fix.
+func joinExample(tb, ub *table) string {
+	var on []string
+	for _, k := range ub.keyNames() {
+		on = append(on, fmt.Sprintf("%s.%s = %s.%s", ub.name, k, tb.name, k))
+	}
+	return strings.Join(on, " AND ")
 }
 
 // project is a row's values of cols, bytes copied.
