@@ -331,19 +331,21 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   dialect (qsql gained a lookup join): 4-8x faster
   (`BenchmarkRead`, grist/sqlstore). Left: PostgreSQL in CI, so its
   numbers are measured there too (I41's nightly benchmarks).
-- **I24. grist's reads at scale (M).** A read with snapshots on costs
-  about twice `SnapshotEvery` events (dc959e8 kept short logs as they
-  were), with no in-process memo though folds are pure; a failed
-  `PutSnapshot` is ignored (a read-only role folds from 0 forever,
-  silently); `/metrics` says nothing of folds or snapshots; retired
-  fingerprints' snapshots are never pruned. A memo keyed by (tenant,
-  read model, fingerprint, key); `grist_fold_events` and
-  `grist_snapshot_{hits,misses,put_failures}`; pruning after a put,
-  deferred while two fingerprints are live in a rollout;
-  `grist.Snapshots(every)` an App option in place of the context
-  setting, gristsim's field mapped to it (the audit built with I22:
-  `grist.SnapshotAudit`, the same setting's shape). Example: counters at 10⁵
-  events, snapshots on and off, the fold cost printed.
+- **I24. grist's reads at scale (M). Done** (HISTORY: "I24: grist's
+  reads at scale"; docs/grist.md §2.2, docs/grist-guide.md §8). A node's
+  memo of read models' states per store (a read at the head reads one
+  event); snapshots and memoized states anchored at their last folded
+  event, so a rewound log invalidates both (mutants `memoTrustsPosition`,
+  `snapshotTrustsPosition`); `ReadStats` and `/metrics` (folds, memo,
+  snapshot hits, misses, failed puts, prunes); `store.SnapshotPruner`,
+  a put pruning other fingerprints' snapshots ten cadences behind (a
+  live release's in a rollout kept); `grist.Snapshots`,
+  `grist.AuditSnapshots` and `grist.Memo` App options in place of the
+  context settings; counters' `TestReadCost` (10⁴ increments: 10,001
+  events without, 1,002 from the snapshot, 2 from the memo). Left: a
+  processor reading behind the head still refolds from the start when
+  the only snapshot is later than its trigger (the memo does not help
+  it either: its state is past the trigger).
 - **I25. grist's operations basics (M; GR10 slice 3 moved up). Done**
   (docs/HISTORY.md (I25 and GR10 slice 3; grist §0.18)). Left, each
   concrete: (1) `LISTEN/NOTIFY`: an `sqlstore.Options` hook the binary

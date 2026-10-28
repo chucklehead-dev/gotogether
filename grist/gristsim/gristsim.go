@@ -32,6 +32,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/client"
 	"github.com/chucklehead-dev/gotogether/grist/internal/calls"
+	"github.com/chucklehead-dev/gotogether/grist/internal/readcfg"
 	"github.com/chucklehead-dev/gotogether/grist/internal/values"
 	"github.com/chucklehead-dev/gotogether/grist/simstore"
 	"github.com/chucklehead-dev/gotogether/grist/sqlstore"
@@ -106,8 +107,9 @@ type Config struct {
 	// (store.<app>.commit: a commit applied whose answer is lost).
 	CommitFaults bool
 	// SnapshotEvery is how many events a read folds before it takes a
-	// read model's snapshot (grist.SnapshotEvery; 0: grist's default,
-	// which a simulation's short logs never reach; negative: none). A
+	// read model's snapshot and memoizes its state, for this simulation
+	// in place of the App's (grist.Snapshots; 0: the App's, by default
+	// one a simulation's short logs never reach; negative: none). A
 	// small one makes the runs read from snapshots, through the store's
 	// snapshot faults (store.<app>.snapshot: a put torn or lost) and the
 	// node's crashes, and the model judges every decision made from one
@@ -496,7 +498,9 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 	}
 	if n := cfg.SnapshotEvery; n != 0 {
 		d := deps
-		deps = func(ctx context.Context) context.Context { return grist.SnapshotEvery(d(ctx), n) }
+		deps = func(ctx context.Context) context.Context {
+			return readcfg.With(d(ctx), readcfg.Settings{Every: n, HasEvery: true})
+		}
 	}
 	if cfg.Cluster != nil && cfg.HTTP {
 		return errors.New("gristsim: Config.Cluster with Config.HTTP: a cluster's nodes serve the API as qenv.Services behind its router; the HTTP tier's cluster is not built yet")

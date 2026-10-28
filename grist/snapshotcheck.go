@@ -119,9 +119,12 @@ func (m *ReadModel[S]) checkSnapshots(ctx context.Context, app *App, st Store, t
 			if err != nil {
 				return append(ps, fmt.Sprintf("read model %s, tenant %s: %v", m.info.name, tenant, err))
 			}
+			if len(before) == 0 {
+				continue // nothing folded at p: no snapshot to take
+			}
 			ss := st.(SnapshotStore)
 			fp, _ := m.info.fp()
-			m.save(readsAt(ctx, app, st, tenant, p, ""), ss, snapshotKey(tags), fp, s)
+			m.save(readsAt(ctx, app, st, tenant, p, ""), ss, snapshotKey(tags), fp, s, before[len(before)-1])
 			if !at(fmt.Sprintf("a snapshot taken at %d plus the events after it", p), m.getWith(readsAt(ctx, app, st, tenant, head, ""), tags, math.MaxInt, true)) {
 				break
 			}

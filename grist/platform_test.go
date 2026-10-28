@@ -251,6 +251,8 @@ func TestMainHealth(t *testing.T) {
 	_, metrics := get(t, hu+"/metrics")
 	for _, want := range []string{
 		`grist_effects_in_flight 1`,
+		"# TYPE grist_fold_events_total counter",
+		`grist_snapshot_put_failures_total 0`,
 		`grist_processor_lag{processor="note",tenant="t1"} 0`, // the checkpoint moved before the effect (at most once)
 		`grist_relay_backlog `,
 		`grist_ready 1`,

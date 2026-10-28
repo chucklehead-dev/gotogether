@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync/atomic"
 
 	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
 )
@@ -55,16 +54,26 @@ type App struct {
 	deps       map[string]*Dependency // by name
 	depOrder   []*Dependency          // in registration order, for the Catalog
 	problems   []string
-	// audits counts the snapshot reads refolded from the start to check
-	// them (SnapshotAudit), auditMisses those whose snapshot was wrong:
-	// Main's /metrics, SnapshotAudits
-	audits, auditMisses atomic.Int64
+	// every, audit and memoSize are the read settings (Snapshots,
+	// AuditSnapshots, Memo)
+	every, audit, memoSize int
+	// stats are the read counters (ReadStats), memos the memo's states,
+	// one table per store (memo.go)
+	stats readStats
+	memos memos
 }
 
-// New returns an empty App named name.
-func New(name string) *App {
+// New returns an empty App named name, its reads configured by opts
+// (Snapshots, AuditSnapshots, Memo).
+func New(name string, opts ...AppOption) *App {
 	a := &App{Name: name, events: map[string]*eventInfo{}, names: map[string]string{}, quintNames: map[string]string{},
-		commands: map[string]*commandInfo{}, queries: map[string]*queryInfo{}}
+		commands: map[string]*commandInfo{}, queries: map[string]*queryInfo{},
+		every: DefaultSnapshotEvery, audit: DefaultSnapshotAudit, memoSize: DefaultMemoEntries}
+	for _, o := range opts {
+		if o.apply != nil {
+			o.apply(a)
+		}
+	}
 	a.events[failedType] = failedInfo()
 	a.events[unknownType] = unknownInfo()
 	return a

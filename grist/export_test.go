@@ -1,6 +1,11 @@
 package grist
 
-import "time"
+import (
+	"context"
+	"time"
+
+	"github.com/chucklehead-dev/gotogether/grist/internal/readcfg"
+)
 
 // NewMainServer is serve's http.Server, for its bounds' test.
 var NewMainServer = newMainServer
@@ -42,8 +47,30 @@ const (
 // does for its relay.
 func RelayFor(r *Relay, a *App) { r.app.Store(a) }
 
-// SnapshotSum is a snapshot's checksum, for a test that writes one.
+// SnapshotSum is a snapshot's checksum, for a test that writes one: the
+// snapshot's fields and its last event's identity (EventID).
 var SnapshotSum = snapshotSum
+
+// EventID is a stored event's identity, a snapshot's and the memo's
+// anchor.
+var EventID = eventID
+
+// SnapshotEvery is ctx with reads' snapshots every n events, in place of
+// the App's (gristsim's Config.SnapshotEvery's override).
+func SnapshotEvery(ctx context.Context, n int) context.Context {
+	return readcfg.With(ctx, readcfg.Settings{Every: n, HasEvery: true})
+}
+
+// SnapshotAudit is ctx with one in n reads from a snapshot or the memo
+// audited, in place of the App's.
+func SnapshotAudit(ctx context.Context, n int) context.Context {
+	return readcfg.With(ctx, readcfg.Settings{Audit: n, HasAudit: true})
+}
+
+// NoMemo is ctx with the memo off, for a test of snapshots' own reads.
+func NoMemo(ctx context.Context) context.Context {
+	return readcfg.With(ctx, readcfg.Settings{Memo: 0, HasMemo: true})
+}
 
 // ExitStatus is a helper binary's exit status, as Main passes it on.
 type ExitStatus = exitStatus

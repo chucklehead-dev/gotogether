@@ -107,7 +107,7 @@ func (c *counted) Read(ctx context.Context, t string, q store.Selector, at store
 // added at version 1 every hundred), a node started afresh (the store
 // opened again) answers member-loans folding every one of a's events
 // without snapshots, and only those since the last snapshot with them:
-// at most SnapshotEvery's, whatever n. The times are logged for
+// at most the cadence's (and the snapshot's last event), whatever n. The times are logged for
 // docs/grist.md (10^4 under -short, 10^5 too in full mode).
 func TestSnapshotsMakeStartFast(t *testing.T) {
 	sizes := []int{10_000}
@@ -148,24 +148,30 @@ func TestSnapshotsMakeStartFast(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		ask := func(st *counted, ctx context.Context) (time.Duration, int64) {
+		// ask reads through st (c, or c hidden as a plain Store: no
+		// snapshots, and no memo, which a store value has no identity for)
+		ask := func(c *counted, st grist.Store, ctx context.Context) (time.Duration, int64) {
 			t.Helper()
-			before := st.n.Load()
+			before := c.n.Load()
 			start := time.Now() //qenv:ok the real tier's start, timed
 			res, _, err := App.Query(ctx, st, grist.Envelope{ID: "q", Tenant: "t1", Caller: "probe"}, "member-loans", json.RawMessage(`{"member":"a"}`))
 			var loans struct{ Count int }
 			if err != nil || json.Unmarshal(res, &loans) != nil || loans.Count != 0 {
 				t.Fatalf("member-loans: %s (%v), want no loans", res, err)
 			}
-			return time.Since(start), st.n.Load() - before //qenv:ok
+			return time.Since(start), c.n.Load() - before //qenv:ok
 		}
-		cold, coldN := ask(open(), grist.SnapshotEvery(ctx, 0))
-		first, _ := ask(open(), ctx) // folds the log and takes a snapshot
-		warm, warmN := ask(open(), ctx)
+		c := open()
+		cold, coldN := ask(c, struct{ grist.Store }{c}, ctx)
+		c = open()
+		first, _ := ask(c, c, ctx) // folds the log and takes a snapshot
+		c = open()
+		warm, warmN := ask(c, c, ctx)
 		t.Logf("%d events: a fresh node's first read folds %d events in %v without snapshots; %d in %v from the snapshot (%v the read that took it)",
 			n, coldN, cold.Round(time.Millisecond), warmN, warm.Round(time.Microsecond), first.Round(time.Millisecond))
-		if coldN < int64(n) || warmN > grist.DefaultSnapshotEvery {
-			t.Errorf("%d events: %d folded without snapshots (want all of a's), %d with (want at most %d)", n, coldN, warmN, grist.DefaultSnapshotEvery)
+		if coldN < int64(n) || warmN > grist.DefaultSnapshotEvery+1 {
+			t.Errorf("%d events: %d folded without snapshots (want all of a's), %d with (want at most %d: the first %d and the snapshot's last event)",
+				n, coldN, warmN, grist.DefaultSnapshotEvery+1, grist.DefaultSnapshotEvery)
 		}
 	}
 }

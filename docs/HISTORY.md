@@ -2487,6 +2487,66 @@ claim such as `Some(Not(NoClientErrors()))` is not shown in the test's
 summary line; hello's mutant report says "schedule 3" where its nav
 command says `schedule=1:2`; the quint cache had grown to 3.2 GB here; `serve -steps DIR/` fails ("is a directory") when DIR does not exist, where it could make it.
 
+### I24: grist's reads at scale
+
+ROADMAP I24 (the eleventh review's architect). A read with snapshots on
+cost about twice the cadence's events whatever the log's length, with no
+memo though folds are pure; a failed put was ignored (a read-only role
+folded from 0 forever, silently); `/metrics` said nothing of folds or
+snapshots; retired fingerprints' snapshots were never pruned; and the
+cadence was the one grist setting carried in a context. What was built
+(docs/grist.md §2.2, docs/grist-guide.md §8):
+- **The memo**: each node keeps the states its reads folded, a table per
+  store (keyed by a weak reference to the store, so two simulations of
+  one App in parallel never share one and a table goes with its store),
+  least recently used out first (`grist.Memo`, `DefaultMemoEntries`).
+  Only a read that folded the cadence's events, or read a snapshot,
+  memoizes, so short logs, and simulations' schedules, are unchanged.
+  counters' `TestReadCost` (SQLite, show-counter of 10⁴ increments):
+  10,001 events read in 59 ms without snapshots or the memo, 1,002 in
+  5 ms on a node started afresh, 2 in 0.15 ms from the memo; at 10⁵
+  (full mode) 100,001 in 559 ms, 1,002 in 6 ms, 2 in 0.24 ms.
+- **Anchored at the last folded event**: a snapshot's position is its
+  read model's last folded event, and its checksum covers that event's
+  identity (type, version, tags, body, time, cause); a memoized state
+  keeps the same anchor. A read reads the anchor again first: another
+  event there, or none, means the log was rewound (I25's failover or
+  restore) and refilled, and the state is not used. The rewind tests:
+  memstore's `Backup`/`Restore`, ten other events appended at the
+  positions given back, then a read: `TestRewindInvalidatesTheMemo`
+  (30, not the old history's 20), `TestRewindInvalidatesSnapshots` (the
+  old snapshot put again after the restore, a fold begun before it that
+  lands after, ignored). Mutants: `memoTrustsPosition` and
+  `snapshotTrustsPosition` answer 20 there. `snapshotPastItsPosition`
+  (a snapshot labelled one past what it folded) is retired: the anchor
+  makes such a label name no event it folded, so the snapshot is never
+  read (an equivalent mutant: a refold). A read from a snapshot reads
+  one event more (its anchor): library's and grist's counts moved by one.
+- **Counted**: `App.ReadStats`, and on `/metrics`
+  `grist_fold_events_total`, `grist_memo_hits_total`,
+  `grist_memo_stale_total`, `grist_snapshot_hits_total`,
+  `grist_snapshot_misses_total`, `grist_snapshot_put_failures_total`,
+  `grist_snapshots_pruned_total` beside the audit's two.
+- **Pruned after a put**: `store.SnapshotPruner` (memstore, simstore by
+  a prefix scan, sqlstore by its key's prefix then each row by its whole
+  key, which qsql takes; storetest's `Snapshots` checks it): a put prunes
+  the key's snapshots of other fingerprints more than ten cadences
+  behind it. Deferral by position, not by a registry of live releases:
+  during a rollout each release keeps its fingerprint's snapshots near
+  the head of the keys it reads (`TestSnapshotsPruned`: the old release
+  reading again keeps its own beside the new one's).
+- **App options**: `grist.New(name, opts ...AppOption)` with
+  `grist.Snapshots`, `grist.AuditSnapshots` and `grist.Memo`; the
+  context settings `SnapshotEvery` and `SnapshotAudit` are gone, with no
+  shim (pre-release: the examples migrated); gristsim's
+  `Config.SnapshotEvery` overrides the cadence for one simulation
+  through an internal context key, since a shared App cannot change per
+  run. Library's cold read hides the store's snapshots (a plain
+  `grist.Store` value, which also has no memo).
+
+Left: a processor reading behind the head refolds from the start when
+the only snapshot, and the memoized state, are past its trigger.
+
 ### I25 and GR10 slice 3: grist's operations basics, store failover and restore
 
 ROADMAP I25 (the adopter's review's AD5 and AD6), docs/grist.md §2.11,

@@ -622,7 +622,7 @@ func TestFaithfulAtClients(t *testing.T) {
 | `HTTP` | the API on a simulated network, clients through `grist/client` |
 | `Nodes`, `Cluster` | several nodes; a cluster with a lagging router, drains, a rolling restart (§9.5) |
 | `Doubles`, `Setup` | dependencies' handlers per run; a `NewDep`'s value |
-| `SnapshotEvery` | decisions made from snapshots (§8) |
+| `SnapshotEvery` | decisions made from snapshots and the memo (§8), the cadence for one simulation |
 
 Fault kinds are named as reports print them: `nemesis` (crashes, per
 scheduling step), `store.<app>.commit`, `store.<app>.snapshot`,
@@ -896,8 +896,9 @@ addition: the upcast count is 0 where the command added 2.
 refolds), so the deployed version's snapshots are never read, and the
 first reads fold from the start and take new ones. `gristtest.Snapshots`
 checks the snapshots of the old log agree with a fold from the start.
-grist's own `snapshotPastItsPosition` mutant (a snapshot labelled one
-position past what it folded) is what that check catches.
+grist's own `fingerprintByVersion` mutant (a fingerprint of the name and
+version alone, reusing a changed fold's snapshots) is what that check
+catches.
 
 **8. Roll it out readers first** (next section).
 
@@ -946,35 +947,54 @@ for an event it cannot read; a release writing the new version at once
 shows its negation in some run, `qtest.Some(qtest.Not(gristtest.ReadersFirst()))` (counters' `eagerV2`
 mutant).
 
-## 8. Snapshots
+## 8. Snapshots and the memo
 
-A read folds from the read model's latest snapshot (its state as JSON at
-a position) and the events after it; a read that folded more than
-`grist.DefaultSnapshotEvery` events (1000) takes a new one. A read model
-with fewer events reads as it always did. Snapshots live in the store
-(`grist.SnapshotStore`: memstore, simstore, sqlstore's `grist_snapshots`
-table), keyed by the read model's **fingerprint**: its name, version,
-keys, the shapes of the events it folds, its upcasters and what its fold
-makes of generated events. A fold changed in a way generated events show
-gets a new fingerprint by itself; bump the read model's version when the
-fold's meaning changes in a way they may not (the generator warns when
-the fingerprint changed at the same version). A snapshot whose checksum
+A read folds from the read model's state where a cache has it and the
+events after it:
+- **The memo**: each node keeps the states its reads folded, per store,
+  in memory (up to `grist.DefaultMemoEntries`, 4096, least recently used
+  out first). A read of one reads its last folded event (checked to be
+  the one it folded) and the events after it: a read at the head costs
+  one event.
+- **Snapshots**: the state as JSON at its last folded event, in the store
+  (`grist.SnapshotStore`: memstore, simstore, sqlstore's
+  `grist_snapshots` table), so a node started afresh reads it. A read
+  that folded `grist.DefaultSnapshotEvery` events (1000) since one takes
+  a new one.
+
+Only a read that folded that many events memoizes or snapshots, so a read
+model with fewer reads as it always did. Both are keyed by the read
+model's **fingerprint**: its name, version, keys, the shapes of the
+events it folds, its upcasters and what its fold makes of generated
+events. A fold changed in a way generated events show gets a new
+fingerprint by itself; bump the read model's version when the fold's
+meaning changes in a way they may not (the generator warns when the
+fingerprint changed at the same version). A snapshot whose checksum
 fails, past the read's position, or of another fingerprint is never
-read.
+read; nor is a snapshot or a memoized state whose last event the log no
+longer holds: a rewound log (a failover's lost tail, a restore, §9's
+`ErrRewound`) refilled with other events invalidates both.
 
-- `grist.SnapshotEvery(ctx, n)` changes the threshold for reads under
-  ctx (`grist.Dependencies` sets it for a node; 0 turns snapshots off).
+- The App's options: `grist.New(name, grist.Snapshots(n))` (0: no
+  snapshots and no memo), `grist.Memo(entries)` (0: none),
+  `grist.AuditSnapshots(oneIn)`.
 - A deployed node audits one in `grist.DefaultSnapshotAudit` (100) reads
-  from a snapshot: it refolds the key, compares, answers from the fold
-  and replaces a wrong snapshot. `grist.SnapshotAudit(ctx, n)` changes
-  the rate; alert on `grist_snapshot_audit_mismatches_total`.
+  from a snapshot or the memo: it refolds the key, compares, answers from
+  the fold and replaces a wrong snapshot.
+- After a put, the key's snapshots of other fingerprints more than ten
+  times the snapshot cadence behind it are pruned: a retired release's.
+  In a rollout each release keeps its own near the head.
+- `/metrics` (§9.3) says what reads cost and whether the caches serve.
 - In tests: `gristtest.Snapshots(t, App, st)`, and
-  `gristsim.Config{SnapshotEvery: 2}` with `store.<app>.snapshot` faults
-  (torn, lost) claimed `qtest.Reaches("store.<app>.snapshot").Faulted()`.
+  `gristsim.Config{SnapshotEvery: 2}` (the cadence for one simulation)
+  with `store.<app>.snapshot` faults (torn, lost) claimed
+  `qtest.Reaches("store.<app>.snapshot").Faulted()`.
 
-examples/library's `TestSnapshotsMakeStartFast`: a fresh node's first
-read of a member with 10⁴ events folds all of them without snapshots,
-and at most 1000 with them.
+examples/counters' `TestReadCost` (SQLite, show-counter of a counter
+with 10⁴ increments): 10,001 events read in 59 ms without snapshots or
+the memo; 1,002 in 5 ms on a node started afresh (the snapshot); 2 in
+0.15 ms from the memo; at 10⁵, 100,001 in 559 ms, 1,002 in 6 ms and 2 in 0.24 ms. examples/library's `TestSnapshotsMakeStartFast`
+measures a fresh node's first read the same way.
 
 ## 9. Running in production
 
@@ -1032,7 +1052,12 @@ Prometheus' text format:
 | `grist_api_requests_in_flight`, `grist_effects_in_flight` | work in hand |
 | `grist_relay_backlog` | committed steps not yet recorded to the steps file |
 | `grist_processor_lag`, `grist_processor_oldest_trigger_age_seconds` | per processor and tenant: the head minus the checkpoint while a trigger waits, and its age |
-| `grist_snapshot_audits_total`, `grist_snapshot_audit_mismatches_total` | §8 |
+| `grist_fold_events_total` | events read models folded: what reads cost (§8) |
+| `grist_memo_hits_total`, `grist_memo_stale_total` | reads served from the memo; memoized states a rewind made stale |
+| `grist_snapshot_hits_total`, `grist_snapshot_misses_total` | snapshot lookups that found a sound one, and those that did not |
+| `grist_snapshot_put_failures_total` | puts the store failed (a read-only role): reads go on folding the log |
+| `grist_snapshots_pruned_total` | retired releases' snapshots deleted |
+| `grist_snapshot_audits_total`, `grist_snapshot_audit_mismatches_total` | §8's audit; alert on a mismatch |
 
 ### 9.4 The drain and -grace
 

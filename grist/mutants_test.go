@@ -10,9 +10,9 @@ import (
 )
 
 // grist's own mutants, each a directory of testdata/mutants whose files
-// replace grist's of the same name (qtest.Mutants): snapshots taken at
-// the wrong position, reused after their fold changed, and reused after
-// an upcaster was fixed. TestMutant
+// replace grist's of the same name (qtest.Mutants): a memoized state and
+// a snapshot trusting their position after a rewind, snapshots reused
+// after their fold changed, and reused after an upcaster was fixed. TestMutant
 // states the harness that catches each; the faithful grist passes it
 // (TestCheckSnapshotsAgree, TestSnapshotOfAChangedFold).
 func TestMutant(t *testing.T) {
@@ -20,16 +20,26 @@ func TestMutant(t *testing.T) {
 	switch qtest.Mutant() {
 	case "":
 		t.Skip("grist as it is: TestMutants runs this test built with each mutant's overlay")
-	case "snapshotPastItsPosition":
-		// a snapshot labelled one past what it folded skips the event at
-		// that position: CheckSnapshots' snapshot at the position before
-		// an event of the read model's, plus the events after it, misses it
-		a, added, _ := items()
-		s := newCounting(t)
-		interleaved(t, s, added)
-		err := a.CheckSnapshots(ctx, s)
-		if err == nil || !strings.Contains(err.Error(), "a snapshot taken at 2 plus the events after it gives") {
-			t.Errorf("CheckSnapshots: %v, want the snapshot at 2 (before x's event at 3) named", err)
+	case "memoTrustsPosition":
+		// the memo checks its anchor's position, not the event there: after
+		// a restore and a refill the old history's state answers
+		// (TestRewindInvalidatesTheMemo is the contrast)
+		a, added, q := items()
+		ctx := grist.SnapshotAudit(grist.SnapshotEvery(ctx, 5), 0)
+		s, _ := rewound(t, ctx, a, q, added)
+		if n := countOf(t, ctx, q, s); n != 20 {
+			t.Errorf("after the restore: %d, want 20, the old history's memo", n)
+		}
+	case "snapshotTrustsPosition":
+		// a snapshot's checksum without its last event: the old history's
+		// snapshot, put after the restore, is read (TestRewindInvalidatesSnapshots
+		// is the contrast)
+		a, added, q := items()
+		ctx := grist.NoMemo(grist.SnapshotAudit(grist.SnapshotEvery(ctx, 5), 0))
+		s, stale := rewound(t, ctx, a, q, added)
+		s.PutSnapshot(ctx, "t1", stale)
+		if n := countOf(t, ctx, q, s); n != 20 {
+			t.Errorf("after the restore and the late put: %d, want 20, the stale snapshot read", n)
 		}
 	case "fingerprintByVersion":
 		// a fold changed at the same version keeps its fingerprint: the

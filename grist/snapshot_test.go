@@ -62,7 +62,7 @@ func TestSnapshotsCutReads(t *testing.T) {
 	s := newCounting(t)
 	addItems(t, s, added, "x", 50)
 	addItems(t, s, added, "y", 7) // another key's: never read for x
-	ctx := grist.SnapshotEvery(context.Background(), 10)
+	ctx := grist.NoMemo(grist.SnapshotEvery(context.Background(), 10))
 	ask := func(ctx context.Context, want int) int64 {
 		t.Helper()
 		before := s.read.Load()
@@ -76,13 +76,13 @@ func TestSnapshotsCutReads(t *testing.T) {
 		t.Fatalf("the first read folded %d events and took %d snapshots, want 50 and 1", n, s.puts.Load())
 	}
 	addItems(t, s, added, "x", 4)
-	if n := ask(ctx, 54); n != 10+4 || s.puts.Load() != 1 {
-		t.Errorf("a read after the snapshot read %d events (took %d snapshots), want the first 10 and the 4 after it (and no new one: fewer than 10)", n, s.puts.Load())
+	if n := ask(ctx, 54); n != 10+1+4 || s.puts.Load() != 1 {
+		t.Errorf("a read after the snapshot read %d events (took %d snapshots), want the first 10, the snapshot's last event and the 4 after it (and no new one: fewer than 10)", n, s.puts.Load())
 	}
 	addItems(t, s, added, "x", 10)
 	ask(ctx, 64) // 14 since the snapshot: a new one at the head
-	if n := ask(ctx, 64); n != 10 || s.puts.Load() != 2 {
-		t.Errorf("a read at the newest snapshot's head read %d events (%d snapshots taken), want the first 10 alone (2)", n, s.puts.Load())
+	if n := ask(ctx, 64); n != 10+1 || s.puts.Load() != 2 {
+		t.Errorf("a read at the newest snapshot's head read %d events (%d snapshots taken), want the first 10 and the snapshot's last event (2)", n, s.puts.Load())
 	}
 	if n := ask(grist.SnapshotEvery(context.Background(), 0), 64); n != 64 {
 		t.Errorf("with snapshots off a read folded %d events, want all 64", n)
@@ -146,7 +146,7 @@ func TestSnapshotsKeepTheReadSet(t *testing.T) {
 func TestSnapshotsUntrustedIgnored(t *testing.T) {
 	a, added, q := items()
 	fp := a.Catalog().ReadModels[0].Fingerprint
-	ctx := grist.SnapshotEvery(context.Background(), 2)
+	ctx := grist.NoMemo(grist.SnapshotEvery(context.Background(), 2))
 	for _, c := range []struct {
 		name string
 		snap store.Snapshot
@@ -159,26 +159,26 @@ func TestSnapshotsUntrustedIgnored(t *testing.T) {
 		s := newCounting(t)
 		addItems(t, s, added, "x", 5)
 		if c.sum {
-			c.snap.Sum = grist.SnapshotSum(c.snap)
+			c.snap.Sum = sum(s.Store, c.snap)
 		} else {
-			c.snap.Sum = grist.SnapshotSum(store.Snapshot{Name: "counts", Key: "item=x", Fingerprint: fp, Pos: 3, State: json.RawMessage(`100`)}) // the state it was written with, before the tear
+			c.snap.Sum = sum(s.Store, store.Snapshot{Name: "counts", Key: "item=x", Fingerprint: fp, Pos: 3, State: json.RawMessage(`100`)}) // the state it was written with, before the tear
 		}
 		s.Store.PutSnapshot(context.Background(), "t1", c.snap)
 		if n, _, err := q.Run(ctx, s, grist.Envelope{ID: "q", Tenant: "t1"}, ItemQuery{Item: "x"}); err != nil || n != 5 {
 			t.Errorf("%s snapshot: count %d (%v), want 5, the fold from the start", c.name, n, err)
 		}
-		if got := s.read.Load(); got != 5 {
-			t.Errorf("%s snapshot: %d events read, want all 5", c.name, got)
+		if got, want := s.read.Load(), int64(2+3); c.snap.Pos <= 5 && got != want+3 || c.snap.Pos > 5 && got != want {
+			t.Errorf("%s snapshot: %d events read, want the first 2, %sthe 3 after them", c.name, got, map[bool]string{true: "the 3 from the snapshot's position (its last event checked), ", false: ""}[c.snap.Pos <= 5])
 		}
 	}
 	// the control: a sound snapshot at 3 is read, the 2 events after it folded onto it
 	s := newCounting(t)
 	addItems(t, s, added, "x", 5)
 	snap := store.Snapshot{Name: "counts", Key: "item=x", Fingerprint: fp, Pos: 3, State: json.RawMessage(`3`)}
-	snap.Sum = grist.SnapshotSum(snap)
+	snap.Sum = sum(s.Store, snap)
 	s.Store.PutSnapshot(context.Background(), "t1", snap)
-	if n, _, err := q.Run(ctx, s, grist.Envelope{ID: "q", Tenant: "t1"}, ItemQuery{Item: "x"}); err != nil || n != 5 || s.read.Load() != 2+2 {
-		t.Errorf("a sound snapshot: count %d (%v) from %d events read, want 5 from 4 (the first 2, the 2 after the snapshot)", n, err, s.read.Load())
+	if n, _, err := q.Run(ctx, s, grist.Envelope{ID: "q", Tenant: "t1"}, ItemQuery{Item: "x"}); err != nil || n != 5 || s.read.Load() != 2+3 {
+		t.Errorf("a sound snapshot: count %d (%v) from %d events read, want 5 from 5 (the first 2, the snapshot's last event, the 2 after it)", n, err, s.read.Load())
 	}
 }
 
@@ -275,7 +275,7 @@ func TestCheckSnapshotsFindsAStaleOne(t *testing.T) {
 		t.Fatalf("a store with no snapshot: %v", err)
 	}
 	snap := store.Snapshot{Name: "counts", Key: "item=x", Fingerprint: a.Catalog().ReadModels[0].Fingerprint, Pos: 4, State: json.RawMessage(`8`)}
-	snap.Sum = grist.SnapshotSum(snap)
+	snap.Sum = sum(s.Store, snap)
 	s.Store.PutSnapshot(context.Background(), "t1", snap)
 	err := a.CheckSnapshots(context.Background(), s)
 	if err == nil || !strings.Contains(err.Error(), "read model counts, tenant t1, key item=x: its stored snapshot plus the events after it gives 10 at the head (6); a fold from the start gives 6") {
@@ -391,9 +391,9 @@ func TestSnapshotAudit(t *testing.T) {
 	s := newCounting(t)
 	addItems(t, s, added, "x", 12)
 	snap := store.Snapshot{Name: "counts", Key: "item=x", Fingerprint: a.Catalog().ReadModels[0].Fingerprint, Pos: 4, State: json.RawMessage(`8`)}
-	snap.Sum = grist.SnapshotSum(snap)
+	snap.Sum = sum(s.Store, snap)
 	s.Store.PutSnapshot(context.Background(), "t1", snap)
-	ctx := grist.SnapshotEvery(context.Background(), 10)
+	ctx := grist.NoMemo(grist.SnapshotEvery(context.Background(), 10))
 	count := func(ctx context.Context) int {
 		t.Helper()
 		n, _, err := q.Run(ctx, s, grist.Envelope{ID: "q", Tenant: "t1"}, ItemQuery{Item: "x"})
@@ -408,15 +408,26 @@ func TestSnapshotAudit(t *testing.T) {
 	if n := count(grist.SnapshotAudit(ctx, 1)); n != 12 {
 		t.Errorf("audited: %d, want the refold's 12", n)
 	}
-	if audited, wrong := a.SnapshotAudits(); audited != 1 || wrong != 1 {
-		t.Errorf("SnapshotAudits: %d audited, %d wrong; want 1 and 1", audited, wrong)
+	if rs := a.ReadStats(); rs.Audits != 1 || rs.AuditMismatches != 1 {
+		t.Errorf("ReadStats: %d audited, %d wrong; want 1 and 1", rs.Audits, rs.AuditMismatches)
 	}
 	// the snapshot replaced: the next read from it is right, unaudited
 	if n := count(grist.SnapshotAudit(ctx, 0)); n != 12 {
 		t.Errorf("after the audit, unaudited: %d, want 12 from the replaced snapshot", n)
 	}
 	count(grist.SnapshotAudit(ctx, 1))
-	if audited, wrong := a.SnapshotAudits(); audited != 2 || wrong != 1 {
-		t.Errorf("SnapshotAudits: %d audited, %d wrong; want 2 and 1: the replaced snapshot is right", audited, wrong)
+	if rs := a.ReadStats(); rs.Audits != 2 || rs.AuditMismatches != 1 {
+		t.Errorf("ReadStats: %d audited, %d wrong; want 2 and 1: the replaced snapshot is right", rs.Audits, rs.AuditMismatches)
 	}
+}
+
+// sum is snap's checksum (grist.SnapshotSum) with its anchor: the identity
+// of the item-added event st holds at snap.Pos in t1 ("" for none).
+func sum(st grist.Store, snap store.Snapshot) string {
+	evs, _, err := st.Read(context.Background(), "t1", grist.Selector{Types: []string{"item-added"}, After: snap.Pos - 1, Limit: 1}, 0)
+	anchor := ""
+	if err == nil && len(evs) > 0 && evs[0].Pos == snap.Pos {
+		anchor = grist.EventID(evs[0])
+	}
+	return grist.SnapshotSum(snap, anchor)
 }

@@ -310,9 +310,24 @@ The first release. What a user meets, by module:
   trigger; `<app> catalog -diff deployed.json` (safe, readers first,
   breaking: exit 0, 3, 4); gristsim's `Config.From` (with `Upgraded`),
   `Relay.RenderAs`, `gristtest.Upgrade`, `ReadersFirst` and
-  `WritersFirst`. The runtime snapshot audit: `grist.SnapshotAudit`,
-  `DefaultSnapshotAudit`, `App.SnapshotAudits`, two counters on
-  `/metrics`.
+  `WritersFirst`. The runtime snapshot audit (now `grist.AuditSnapshots`,
+  below).
+- grist's reads at scale (ROADMAP I24, breaking): the read settings are
+  the App's options, `grist.New(name, opts ...AppOption)` with
+  `grist.Snapshots(every)`, `grist.AuditSnapshots(oneIn)` and
+  `grist.Memo(entries)` (`DefaultMemoEntries`); `grist.SnapshotEvery(ctx,
+  n)`, `grist.SnapshotAudit(ctx, n)` and `App.SnapshotAudits` are gone
+  (gristsim's `Config.SnapshotEvery` overrides the cadence for one
+  simulation). A node's memo of read models' states, per store; a
+  snapshot sits at its last folded event and its checksum covers that
+  event's identity, so a rewound log invalidates snapshots and memoized
+  states alike (snapshots stored before this change fail the checksum
+  and are refolded once). `App.ReadStats` and `/metrics`'
+  `grist_fold_events_total`, `grist_memo_{hits,stale}_total`,
+  `grist_snapshot_{hits,misses,put_failures}_total`,
+  `grist_snapshots_pruned_total`; `store.SnapshotPruner` (memstore,
+  simstore, sqlstore; storetest's `Snapshots` checks it): a put prunes the
+  key's snapshots of other fingerprints far behind it.
 - The examples' doubles published (ROADMAP H7's second half):
   `qenv/simlog`, a package of the core (Kafka's contract on qenv: an
   idempotent `Producer`, group `Member`s with fencing, the seams

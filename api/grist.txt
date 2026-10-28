@@ -3,10 +3,12 @@ const AtLeastOnce = catalog.AtLeastOnce
 const AtMostOnce = catalog.AtMostOnce
 const CauseHeader = "Grist-Cause"
 const DefaultDrainDelay = 5 * time.Second
+const DefaultMemoEntries = 4096
 const DefaultSnapshotAudit = 100
 const DefaultSnapshotEvery = 1000
 const ReplayedHeader = "Idempotent-Replayed"
 func Appends(types ...EventName) Option
+func AuditSnapshots(oneIn int) AppOption
 func Authenticated(caller, tenant string) bool
 func Authorize(p Policy) Option
 func BatchSize(n int) Option
@@ -34,8 +36,9 @@ func Keys(names ...string) KeyNames
 func Local(h Handlers) Transport
 func Main(app *App, opts ...ServeOption)
 func MaxBody(n int64) ServeOption
+func Memo(entries int) AppOption
 func Middleware(m func(http.Handler) http.Handler) ServeOption
-func New(name string) *App
+func New(name string, opts ...AppOption) *App
 func NewCall[Req, Resp any](d *Dependency, name string, opts ...Option) *Call[Req, Resp]
 func NewCommand[C any](app *App, name string, decide func(r *Reads, c C) ([]Event, error), opts ...Option) *Command[C]
 func NewDep[T any](name string, fallback T) *Dep[T]
@@ -62,8 +65,7 @@ func Resume(ctx context.Context, s Store, tenant string) error
 func ServeCalls(d *Dependency, h Handlers) http.Handler
 func ServeDependency(d *Dependency, h Handlers) ServeOption
 func Skip() Result
-func SnapshotAudit(ctx context.Context, n int) context.Context
-func SnapshotEvery(ctx context.Context, n int) context.Context
+func Snapshots(every int) AppOption
 func Tag(key string, value any) TagPair
 func Terminating(ctx context.Context) context.Context
 func TransientTries(n int) Option
@@ -87,10 +89,11 @@ type App struct
     method (*App) Processors() []string
     method (*App) Queries() []string
     method (*App) Query(ctx context.Context, s Store, env Envelope, name string, args json.RawMessage) (json.RawMessage, Position, error)
+    method (*App) ReadStats() ReadStats
     method (*App) ResultType(name string) reflect.Type
-    method (*App) SnapshotAudits() (audited, mismatched int64)
     method (*App) Start(ctx context.Context, s Store, opts ...StartOption) error
     method (*App) Verify() error
+type AppOption struct
 type CallHandler struct
 type CallInfo struct
     field App string
@@ -268,6 +271,16 @@ type ReadModel[S any] struct
     method (*ReadModel[S]) Fold(events []Stored) (S, error)
     method (*ReadModel[S]) Get(r *Reads) S
     method (*ReadModel[S]) Name() string
+type ReadStats struct
+    field Folded int64
+    field MemoHits int64
+    field MemoStale int64
+    field SnapshotHits int64
+    field SnapshotMisses int64
+    field SnapshotPutFailures int64
+    field SnapshotsPruned int64
+    field Audits int64
+    field AuditMismatches int64
 type Reads struct
     method (*Reads) Caller() string
     method (*Reads) Exists(t EventName, tags ...TagPair) bool
@@ -596,6 +609,7 @@ type Store struct
     method (*Store) Heads(context.Context) (map[string]store.Position, error)
     method (*Store) Marker(_ context.Context, t, id string) (store.Marker, bool, error)
     method (*Store) Name() string
+    method (*Store) PruneSnapshots(_ context.Context, t, name, key, keep string, before store.Position) (int, error)
     method (*Store) PutSnapshot(_ context.Context, t string, snap store.Snapshot) error
     method (*Store) Read(_ context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error)
     method (*Store) Restore(b *Backup)
@@ -616,6 +630,7 @@ type Store struct
     method (*Store) Heads(ctx context.Context) (map[string]store.Position, error)
     method (*Store) Marker(ctx context.Context, t, id string) (store.Marker, bool, error)
     method (*Store) Name() string
+    method (*Store) PruneSnapshots(ctx context.Context, t, name, key, keep string, before store.Position) (int, error)
     method (*Store) PutSnapshot(ctx context.Context, t string, snap store.Snapshot) error
     method (*Store) Read(ctx context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error)
     method (*Store) StepCount(ctx context.Context, t string) (int64, error)
@@ -652,6 +667,7 @@ type Store struct
     method (*Store) Marker(ctx context.Context, t, id string) (store.Marker, bool, error)
     method (*Store) Name() string
     method (*Store) Prune(ctx context.Context, r Retention) (Pruned, error)
+    method (*Store) PruneSnapshots(ctx context.Context, t, name, key, keep string, before store.Position) (int, error)
     method (*Store) PutSnapshot(ctx context.Context, t string, snap store.Snapshot) error
     method (*Store) Read(ctx context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error)
     method (*Store) StepCount(ctx context.Context, t string) (int64, error)
@@ -749,6 +765,8 @@ type Snapshot struct
     field State json.RawMessage
     field Sum string
     method (Snapshot) Clone() Snapshot
+type SnapshotPruner interface
+    PruneSnapshots(ctx context.Context, tenant, name, key, keep string, before Position) (int, error)
 type SnapshotStore interface
     PutSnapshot(ctx context.Context, tenant string, snap Snapshot) error
     GetSnapshot(ctx context.Context, tenant, name, key, fingerprint string) (Snapshot, bool, error)

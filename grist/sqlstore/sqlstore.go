@@ -815,6 +815,47 @@ func (s *Store) PutSnapshot(ctx context.Context, t string, snap store.Snapshot) 
 	return classify(err)
 }
 
+// PruneSnapshots implements store.SnapshotPruner: the key's rows read by
+// its primary key's prefix, each one pruned deleted by its whole key (the
+// statements every dialect and qsql take).
+func (s *Store) PruneSnapshots(ctx context.Context, t, name, key, keep string, before store.Position) (int, error) {
+	if _, err := head(ctx, s.db, t); err != nil {
+		return 0, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT fingerprint, pos FROM grist_snapshots WHERE tenant = $1 AND name = $2 AND k = $3`, t, name, key)
+	if err != nil {
+		return 0, classify(err)
+	}
+	var gone []string
+	for rows.Next() {
+		var fp string
+		var pos int64
+		if err := rows.Scan(&fp, &pos); err != nil {
+			rows.Close()
+			return 0, classify(err)
+		}
+		if fp != keep && store.Position(pos) < before {
+			gone = append(gone, fp)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, classify(err)
+	}
+	rows.Close()
+	n := 0
+	for _, fp := range gone {
+		res, err := s.db.ExecContext(ctx, `DELETE FROM grist_snapshots WHERE tenant = $1 AND name = $2 AND k = $3 AND fingerprint = $4`, t, name, key, fp)
+		if err != nil {
+			return n, classify(err)
+		}
+		if k, err := res.RowsAffected(); err == nil {
+			n += int(k)
+		}
+	}
+	return n, nil
+}
+
 // GetSnapshot implements store.SnapshotStore.
 func (s *Store) GetSnapshot(ctx context.Context, t, name, key, fingerprint string) (store.Snapshot, bool, error) {
 	if _, err := head(ctx, s.db, t); err != nil {

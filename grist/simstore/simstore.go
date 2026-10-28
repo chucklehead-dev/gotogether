@@ -406,6 +406,26 @@ func (s *Store) PutSnapshot(ctx context.Context, t string, snap store.Snapshot) 
 	})
 }
 
+// PruneSnapshots implements store.SnapshotPruner: one transaction over
+// the key's snapshots (a scan of its prefix).
+func (s *Store) PruneSnapshots(ctx context.Context, t, name, key, keep string, before store.Position) (int, error) {
+	n := 0
+	err := qenv.Retry(ctx, s.db, snapshotTries, func(tx qenv.Txn) error {
+		n = 0
+		if _, ok := head(tx, t); !ok {
+			return store.ErrUnknownTenant
+		}
+		for _, kv := range tx.Scan(snapshotKey(t, name, key, "")) {
+			if snap, ok := kv.Val.(store.Snapshot); ok && snap.Name == name && snap.Key == key && snap.Fingerprint != keep && snap.Pos < before {
+				tx.Delete(kv.Key)
+				n++
+			}
+		}
+		return nil
+	})
+	return n, err
+}
+
 // GetSnapshot implements store.SnapshotStore.
 func (s *Store) GetSnapshot(ctx context.Context, t, name, key, fingerprint string) (store.Snapshot, bool, error) {
 	tx := s.db.Begin(ctx)

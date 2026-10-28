@@ -1060,5 +1060,39 @@ func snapshots(ctx context.Context, s store.Store) error {
 	if _, _, err := ss.GetSnapshot(ctx, "nobody", "rm", "", "f1"); !errors.Is(err, store.ErrUnknownTenant) {
 		return fmt.Errorf("GetSnapshot of an unknown tenant: %v, want ErrUnknownTenant", err)
 	}
+	return pruning(ctx, ss, b, others[1].snap)
+}
+
+// pruning checks a SnapshotPruner (when the store is one) on what
+// snapshots left: (t1, rm, "") holding f1 at 2 (b) and f2 at 6, beside
+// other keys, names and tenants. A prune deletes the key's snapshots of
+// other fingerprints than the one kept below the position given, and no
+// other.
+func pruning(ctx context.Context, ss store.SnapshotStore, f1, f2 store.Snapshot) error {
+	p, ok := ss.(store.SnapshotPruner)
+	if !ok {
+		return nil
+	}
+	f3 := store.Snapshot{Name: "rm", Key: "", Fingerprint: "f3", Pos: 20, State: []byte(`20`), Sum: "3"}
+	if err := ss.PutSnapshot(ctx, "t1", f3); err != nil {
+		return err
+	}
+	has := func(t, name, key, fp string) bool {
+		_, found, err := ss.GetSnapshot(ctx, t, name, key, fp)
+		return err == nil && found
+	}
+	if n, err := p.PruneSnapshots(ctx, "t1", "rm", "", "f3", 6); err != nil || n != 1 || has("t1", "rm", "", "f1") || !has("t1", "rm", "", "f2") || !has("t1", "rm", "", "f3") {
+		return fmt.Errorf("PruneSnapshots(t1, rm, \"\", keep f3, before 6) = %d, %v; f1 (at %d) kept %v, f2 (at %d) %v, f3 %v; want 1, f1 deleted alone",
+			n, err, f1.Pos, has("t1", "rm", "", "f1"), f2.Pos, has("t1", "rm", "", "f2"), has("t1", "rm", "", "f3"))
+	}
+	if n, err := p.PruneSnapshots(ctx, "t1", "rm", "", "f3", 100); err != nil || n != 1 || has("t1", "rm", "", "f2") || !has("t1", "rm", "", "f3") {
+		return fmt.Errorf("PruneSnapshots(keep f3, before 100) = %d, %v; want f2 deleted, f3 kept", n, err)
+	}
+	if !has("t1", "rm", "account=x", "f1") || !has("t1", "other", "", "f1") || !has("t2", "rm", "", "f1") {
+		return fmt.Errorf("a prune of (t1, rm, \"\") deleted another key's, read model's or tenant's snapshot")
+	}
+	if _, err := p.PruneSnapshots(ctx, "nobody", "rm", "", "f3", 100); !errors.Is(err, store.ErrUnknownTenant) {
+		return fmt.Errorf("PruneSnapshots of an unknown tenant: %v, want ErrUnknownTenant", err)
+	}
 	return nil
 }

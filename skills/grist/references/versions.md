@@ -39,20 +39,27 @@ What an agent must not get wrong:
   `gristsim.Cluster`, claimed `gristtest.ReadersFirst()` at the clients;
   the deployed release kept as a package of its own (counters' `release1`).
 
-## Snapshots
+## Snapshots and the memo
 
-- On by default past `grist.DefaultSnapshotEvery` events per read;
-  `grist.SnapshotEvery(ctx, n)` changes it (0: off). Keyed by the read
-  model's fingerprint (shapes, upcasters, what the fold makes of
-  generated events): bump the read model's version when a fold's meaning
-  changes in a way generated events may not show.
+- On by default past `grist.DefaultSnapshotEvery` events per read:
+  snapshots in the store, and each node's memo of states in memory (a
+  read at the head then reads one event). `grist.New(name,
+  grist.Snapshots(n))` changes the cadence (0: both off),
+  `grist.Memo(entries)` the memo. Keyed by the read model's fingerprint
+  (shapes, upcasters, what the fold makes of generated events): bump the
+  read model's version when a fold's meaning changes in a way generated
+  events may not show.
+- Each is checked against its last folded event: a rewound log
+  (`ErrRewound`) invalidates both.
 - The state must survive JSON, or the read model is never snapshotted.
 - `gristtest.Snapshots(t, App, st)`; `gristsim.Config{SnapshotEvery: 2}`
   with `store.<app>.snapshot` faults, claimed
   `qtest.Reaches("store.<app>.snapshot").Faulted()`.
-- A deployed node audits one read in `grist.DefaultSnapshotAudit` from a
-  snapshot (`grist.SnapshotAudit` to change it); alert on
-  `grist_snapshot_audit_mismatches_total`.
+- A deployed node audits one read in `grist.DefaultSnapshotAudit`
+  (`grist.AuditSnapshots` to change it); alert on
+  `grist_snapshot_audit_mismatches_total` and
+  `grist_snapshot_put_failures_total`; `grist_fold_events_total` is what
+  reads cost.
 
 ## Results
 

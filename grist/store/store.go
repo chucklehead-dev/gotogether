@@ -229,6 +229,19 @@ type SnapshotStore interface {
 	GetSnapshot(ctx context.Context, tenant, name, key, fingerprint string) (Snapshot, bool, error)
 }
 
+// A SnapshotPruner is a SnapshotStore that deletes the snapshots a
+// retired fold left: grist prunes after each put, a key's snapshots of
+// other fingerprints far behind it (a release no node runs any more).
+// memstore, simstore and sqlstore are; grist/storetest's Snapshots checks
+// it when a store is.
+type SnapshotPruner interface {
+	// PruneSnapshots deletes tenant's snapshots of read model name and
+	// key whose fingerprint is not keep and whose position is below
+	// before, returning how many it deleted. A tenant never created is
+	// ErrUnknownTenant.
+	PruneSnapshots(ctx context.Context, tenant, name, key, keep string, before Position) (int, error)
+}
+
 // A Snapshot is a read model's state at a position: what folding its
 // events through Pos (those carrying Key's tags, for a keyed one) from
 // its initial value gives, encoded as JSON. Fingerprint names the fold

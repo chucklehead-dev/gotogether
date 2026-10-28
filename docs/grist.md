@@ -290,19 +290,21 @@ snapshots': bump it when what the fold means changes.
 **Snapshots** (slice 3's, built in H7). Slices 1 and 2 folded the log on
 every read, so a read's cost grew with the log, a fresh node's first
 read included. A read now folds from the read model's latest snapshot
-(its state as JSON at a position) and the events after it, and one that
-folded `grist.SnapshotEvery`'s events (default 1000, `SnapshotEvery(ctx,
-n)` to change or turn off) takes a new one at its position. A snapshot
+(its state as JSON at its last folded event) and the events after it,
+and one that folded the App's `grist.Snapshots` cadence of events
+(default 1000; `grist.New(name, grist.Snapshots(n))`, 0 off) takes a new
+one there; a node also keeps the states its reads folded in memory, the
+memo (I24, below), so a repeated read at the head reads one event. A snapshot
 changes what a read costs, never what it conditions: the read set is the
 read model's whole selector either way, so the model is unchanged (no
 snapshot appears in it), and a decision made from a snapshot is judged
-as any other. Only a read that folded SnapshotEvery's events takes one,
+as any other. Only a read that folded the cadence's events takes one,
 so a read model of fewer has none: a read first reads its first
-SnapshotEvery events (which pin the position, as the read would), and a
+the cadence's events (which pin the position, as the read would), and a
 short log's read is that one read, no snapshot looked up, so a
 simulation's schedules and stored choices are what they were. A long
 one's costs those events, the snapshot and its tail: about twice
-SnapshotEvery's, whatever the log's length. examples/library's
+the cadence's, whatever the log's length. examples/library's
 `TestSnapshotsMakeStartFast` (a SQLite file, member a's loans, a node
 started afresh; one machine, -short and full):
 
@@ -315,7 +317,7 @@ started afresh; one machine, -short and full):
 once. sqlstore reads a type's events in one statement (ROADMAP I23:
 `grist_index JOIN grist_events`, about 6-8 µs an event on SQLite and
 PostgreSQL), so a read's cost is still its events'; a read's first
-SnapshotEvery events come from each of its types' index with a LIMIT,
+the cadence's events come from each of its types' index with a LIMIT,
 never the whole index.)
 
 The decisions, with their reasons:
@@ -345,7 +347,10 @@ The decisions, with their reasons:
   warnings' companion: its snapshots refold from the start after the
   deploy; bump the version if the meaning changed).
 - **A snapshot is checked before it is read**: its checksum (a hash of
-  every other field, so a torn write fails it), its fingerprint, its
+  every other field and of its last folded event's identity, the event
+  at its position: so a torn write fails it, and so does a snapshot of a
+  rewound log's old history, put by a fold begun before the restore and
+  committed after it), its fingerprint, its
   position within the read's (a log restored to an earlier point leaves
   snapshots past its head), its state decoding onto a fresh initial
   value (so a fold that mutates in place is safe). Any failure folds
@@ -362,24 +367,52 @@ The decisions, with their reasons:
   simstore's snapshot faults (`store.<app>.snapshot`: a put torn, its
   state cut short, or lost) and node crashes (a crash mid-snapshot leaves
   none: a put is one transaction), judged by the model
-  (examples/library's `TestSnapshots`). Mutants: a snapshot labelled one
-  past the position it folded (`snapshotPastItsPosition`), and a
-  fingerprint of the name and version alone, which reuses a changed
-  fold's snapshot (`fingerprintByVersion`), both grist's own
-  (grist/testdata/mutants), both caught by CheckSnapshots; and a
-  fingerprint without the upcasters (`upcasterFixKeepsSnapshots`),
-  caught by `TestFixedUpcasterRefolds`' claim.
+  (examples/library's `TestSnapshots`). Mutants, grist's own
+  (grist/testdata/mutants): a fingerprint of the name and version alone,
+  which reuses a changed fold's snapshot (`fingerprintByVersion`, caught
+  by CheckSnapshots); a fingerprint without the upcasters
+  (`upcasterFixKeepsSnapshots`, caught by `TestFixedUpcasterRefolds`'
+  claim); a snapshot and a memoized state trusting their position after
+  a rewind (`snapshotTrustsPosition`, `memoTrustsPosition`, caught by
+  `TestRewindInvalidatesSnapshots` and `TestRewindInvalidatesTheMemo`).
+  The anchor retired `snapshotPastItsPosition` (a snapshot labelled one
+  past what it folded): its label no longer names its last event, so it
+  is never read.
+- **The memo** (I24). Snapshots cut a read to about twice the cadence;
+  a node's repeated reads of one key paid that each time. Each node now
+  keeps the states its reads folded (`grist.Memo(entries)`, default
+  `DefaultMemoEntries`, least recently used out first), one table per
+  store (a weak reference: two simulations of one App in parallel never
+  share one, and it goes with its store), keyed like a snapshot by
+  (tenant, read model, key, fingerprint) with its last folded event's
+  position and identity. A read of a memoized state reads that event
+  again and the events after it; another event there (a rewind refilled
+  the position) or none drops it, counted stale. Only a read that folded
+  the cadence's events, or read a snapshot, memoizes, so a short log's
+  reads, and a simulation's schedules, are as they were; a memoized
+  state that folded the cadence's events since a snapshot takes one.
+- **Pruned after a put** (I24): the key's snapshots of other
+  fingerprints more than ten times the cadence behind it
+  (`store.SnapshotPruner`, every tier; storetest's `Snapshots` holds it
+  to the contract). During a rollout each release's nodes keep their own
+  fingerprint's snapshots near the head of the keys they read, so the
+  two releases' are both kept; one that far behind is a retired
+  release's (pruning a live one's costs a fold, never an answer).
+- **Counted** (I24): `ReadStats` and Main's `/metrics` say what reads
+  cost and whether the caches serve: `grist_fold_events_total`, memo
+  hits and stale states, snapshot hits, misses, failed puts (a
+  read-only role folds from 0 forever: now visible) and prunes.
 - **Audited where it runs.** CheckSnapshots checks a test's store
   before a deploy; a deployed node audits its own: one in
-  `grist.DefaultSnapshotAudit` (100) reads from a snapshot also refolds
-  its key from the start, through the same position and selector (the
-  read set unchanged), and compares (`grist.SnapshotAudit(ctx, n)`
-  changes the rate, 0 turns it off). The sample is a hash of the
+  `grist.DefaultSnapshotAudit` (100) reads from a snapshot or the memo
+  also refolds its key from the start, through the same position and
+  selector (the read set unchanged), and compares (the App's
+  `grist.AuditSnapshots(n)` changes the rate, 0 turns it off). The sample is a hash of the
   snapshot and the read's position, not a random draw, so a
   simulation's runs replay. A wrong snapshot is answered by the refold,
   replaced by it, and counted: `grist_snapshot_audits_total` and
   `grist_snapshot_audit_mismatches_total` on Main's `/metrics`
-  (`App.SnapshotAudits`), an alert's input, since a mismatch is a fold
+  (`App.ReadStats`), an alert's input, since a mismatch is a fold
   changed without a new fingerprint or a store returning another
   snapshot than was put (`TestSnapshotAudit`).
 

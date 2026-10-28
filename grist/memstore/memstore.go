@@ -287,6 +287,24 @@ func (s *Store) PutSnapshot(_ context.Context, t string, snap store.Snapshot) er
 	return nil
 }
 
+// PruneSnapshots implements store.SnapshotPruner.
+func (s *Store) PruneSnapshots(_ context.Context, t, name, key, keep string, before store.Position) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tn := s.tenants[t]
+	if tn == nil {
+		return 0, store.ErrUnknownTenant
+	}
+	n := 0
+	for k, snap := range tn.snapshots {
+		if k[0] == name && k[1] == key && k[2] != keep && snap.Pos < before {
+			delete(tn.snapshots, k)
+			n++
+		}
+	}
+	return n, nil
+}
+
 // GetSnapshot implements store.SnapshotStore.
 func (s *Store) GetSnapshot(_ context.Context, t, name, key, fingerprint string) (store.Snapshot, bool, error) {
 	s.mu.Lock()
