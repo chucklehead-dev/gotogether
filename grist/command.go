@@ -253,7 +253,8 @@ func (c *Command[C]) execute(ctx context.Context, s Store, env Envelope, args C)
 		}
 		var r *Reads
 		var events []Event
-		outcome := "" // a refusal's name: the marker's outcome
+		outcome := ""   // a refusal's name: the marker's outcome
+		byRule := false // the refusal is a rule's (NewRule), declared by it
 		if err == nil && conflicted != nil {
 			r, outcome = conflicted, conflictOutcome
 		} else if err == nil {
@@ -272,11 +273,24 @@ func (c *Command[C]) execute(ctx context.Context, s Store, env Envelope, args C)
 				if derr == nil {
 					derr = checkEvents("command "+c.info.name, events)
 				}
+				if derr == nil {
+					derr = c.app.checkAppends("command "+c.info.name, o.appends, events)
+				}
 				var rej *Rejected
 				if derr != nil && errors.As(derr, &rej) && o.refuses != nil && !slices.Contains(o.refuses, rej.Name) {
 					derr = fmt.Errorf("grist: command %s refused %s, which its Refuses does not declare (%v): add it, so its model has the outcome", c.info.name, rej.Name, o.refuses)
 				}
+				// the rules on what the decision appends, on its own reads:
+				// their reads join the condition, a refusal is the command's
+				var ruled *ruleRefusal
+				if derr == nil {
+					ruled, derr = c.app.applyRules(r, events)
+					err = r.err // a store error: the try is retried
+				}
 				switch {
+				case err != nil:
+				case ruled != nil:
+					outcome, events, byRule = ruled.rej.Name, nil, true
 				case derr != nil && errors.As(derr, &rej):
 					outcome, events = rej.Name, nil
 				case derr != nil:
@@ -304,7 +318,7 @@ func (c *Command[C]) execute(ctx context.Context, s Store, env Envelope, args C)
 		// once committed (Relay): no hook, so a node that dies between the
 		// commit and its record loses no step
 		step := newRowStep(c.info.quint, len(events), append(kv, c.app.batchObs(events, "command", env.ID)...)...)
-		if o.refuses == nil && outcome != "" && outcome != conflictOutcome {
+		if o.refuses == nil && outcome != "" && outcome != conflictOutcome && !byRule {
 			// a refusal of a command that declares none: still a refusal
 			// (remembered, answered), but its binding has no outcome for it,
 			// and says so; the step's error says why and what to declare

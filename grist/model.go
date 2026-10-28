@@ -60,7 +60,8 @@ type Generated struct {
 // A Hole is one definition the generated skeleton leaves to the
 // application: a rule's predicate (a command's outcome, its events, the
 // reads it needs), a query's answer, a processor's events, a site's
-// guard, the domains the model on its own draws from.
+// guard, a rule's verdict and the reads it needs, the domains the model
+// on its own draws from.
 type Hole struct {
 	Name string
 	// Doc says what it is for, and Stub is a definition that typechecks
@@ -94,7 +95,10 @@ func modelFile(app string) string { return "model/" + app + ".qnt" }
 //   - module <app>Gen, the store's side: the log, checkpoints, the last
 //     batch, effect steps, answered ids and one list per site; one action
 //     per command (a reused key; a conflict, if it is conditioned; ok and
-//     each refusal it declares, with freshKey, covers and conditionHolds),
+//     each refusal it declares, with freshKey, covers and conditionHolds;
+//     one a rule guards: its outcome its decision's, then, when ok, the
+//     first refusal of its rules' holes on what it appends, <command>Ruled,
+//     its read set covering what every rule that ran needs),
 //     per query, per processor by its declared shape (Emits, or Delivers'
 //     effect, checkpoint and outcome actions over grist.qnt's at-least-once
 //     or at-most-once defs) and per site, every frame condition, and step;
@@ -563,6 +567,19 @@ func (g *gen) claimBlocks() {
 		g.claim(s.Quint, "site "+s.Name)
 		g.claim(s.Quint+"Records", "site "+s.Name)
 	}
+	if len(g.c.Rules) > 0 {
+		for _, n := range []string{"RuleVerdict", "CommandVerdict", "noRule", "rulesOf"} {
+			g.claim(n, "the skeleton's "+n)
+		}
+		for _, r := range g.c.Rules {
+			g.claim(r.Quint+"Ruled", "rule "+r.Name)
+		}
+		for _, c := range g.c.Commands {
+			if len(c.Rules) > 0 {
+				g.claim(c.Quint+"Ruled", "command "+c.Name)
+			}
+		}
+	}
 	g.claimCalls()
 	for _, h := range g.holes {
 		g.claim(h.Name, "the hole "+h.Name)
@@ -586,8 +603,11 @@ func (g *gen) collectHoles() {
 	for _, c := range g.c.Commands {
 		args := upper(c.Quint) + "Args"
 		outcomes := `"ok"`
-		for _, r := range c.Refuses {
+		for _, r := range ownRefusals(c) {
 			outcomes += ` or "` + r + `"`
+		}
+		if len(c.Rules) > 0 {
+			outcomes += "; the refusals of the rules guarding it (" + strings.Join(c.Rules, ", ") + ") are theirs, after an ok"
 		}
 		g.hole(c.Quint+"Outcome", fmt.Sprintf("%s's rule: the outcome its decision reaches on log (%s)", c.Name, outcomes),
 			fmt.Sprintf(`pure def %sOutcome(log: List[Event], c: %s): str = "ok"`, c.Quint, args))
@@ -595,6 +615,16 @@ func (g *gen) collectHoles() {
 			fmt.Sprintf(`pure def %sEvents(log: List[Event], c: %s): List[Event] = []`, c.Quint, args))
 		g.hole(c.Quint+"Needs", fmt.Sprintf("the reads %s's rule needs for result: its committed step's read set must cover each (covers)", c.Name),
 			fmt.Sprintf(`pure def %sNeeds(c: %s, result: str): Set[Read] = Set()`, c.Quint, args))
+	}
+	for _, r := range g.c.Rules {
+		refusals := make([]string, len(r.Refuses))
+		for i, x := range r.Refuses {
+			refusals[i] = `"` + x + `"`
+		}
+		g.hole(r.Quint+"Refusal", fmt.Sprintf("rule %s's verdict on e, a %s event a command appends, on log as the command read it: \"\" admits it, else its refusal (%s), which the command's outcome then is", r.Name, r.On, strings.Join(refusals, " or ")),
+			fmt.Sprintf(`pure def %sRefusal(log: List[Event], e: Event): str = ""`, r.Quint))
+		g.hole(r.Quint+"Needs", fmt.Sprintf("the reads rule %s needs for its verdict refusal on e (\"\": admitted): the read set of every command step it ran in must cover each (covers)", r.Name),
+			fmt.Sprintf(`pure def %sNeeds(e: Event, refusal: str): Set[Read] = Set()`, r.Quint))
 	}
 	for _, q := range g.c.Queries {
 		g.hole(q.Quint+"Answer", fmt.Sprintf("%s's answer on log (its result's scalar fields)", q.Name),
@@ -927,6 +957,7 @@ func (g *gen) storeModule(b *strings.Builder) {
 	b.WriteString("  action effectStep(p: str, trigger: int, key: str, ok: bool): bool = all {\n    keyStable(effects, p, trigger, key),\n")
 	b.WriteString(g.frame("    ", map[string]string{"appended": "[]", "effects": "effects.append((p, trigger, key, ok))"}))
 	b.WriteString("  }\n")
+	g.rulesDefs(b)
 	for _, c := range g.c.Commands {
 		g.command(b, c)
 	}
@@ -963,16 +994,31 @@ func (g *gen) command(b *strings.Builder, c CatalogBlock) {
 		refusals = "refusals " + strings.Join(c.Refuses, ", ")
 	}
 	doc := fmt.Sprintf("%s: %s; %s. Every committed outcome needs its id fresh and its read set covering what its rule needs; ok and a refusal need the rule's outcome", c.Name, cond, refusals)
+	ruled := len(c.Rules) > 0
+	if ruled {
+		doc = fmt.Sprintf("%s: %s; %s. Its outcome is its decision's, then, when that is ok, the first refusal of the rules guarding it (%s, %sRuled); every committed outcome needs its id fresh and its read set covering what its decision and every rule that ran need; ok and a refusal need that outcome", c.Name, cond, refusals, strings.Join(c.Rules, ", "), c.Quint)
+	}
 	if c.Unconditioned == "" {
 		doc += " and the condition to have held, a conflict needs it not to"
 	}
 	b.WriteString("\n" + comment("  ", doc+". A reused key commits nothing."))
 	fmt.Fprintf(b, "  action %s(%s): bool = {\n", c.Quint, params(fs, "id: str", "principal: str", "readPos: int", "reads: Set[(str, str, str)]", "result: str"))
 	fmt.Fprintf(b, "    val args_: %s = %s\n    val reads_ = readsOf(reads)\n", args, recordValue(fs, "principal: principal"))
+	if ruled {
+		fmt.Fprintf(b, "    val verdict_ = %sRuled(log, args_)\n", c.Quint)
+	}
 	b.WriteString("    if (result == \"idempotency-key-reused\") all { answered.contains(id), readsThrough(readPos) }\n    else all {\n")
 	b.WriteString("      freshKey(answered, id),\n")
-	fmt.Fprintf(b, "      %sNeeds(args_, result).forall(n => covers(reads_, n)),\n", c.Quint)
+	if ruled {
+		// a rule's refusal comes after an ok decision, whose reads are ok's
+		fmt.Fprintf(b, "      %sNeeds(args_, if (result != \"conflict\" and verdict_.decided == \"ok\") \"ok\" else result).forall(n => covers(reads_, n)),\n", c.Quint)
+	} else {
+		fmt.Fprintf(b, "      %sNeeds(args_, result).forall(n => covers(reads_, n)),\n", c.Quint)
+	}
 	commit := fmt.Sprintf("result == %sOutcome(log, args_),\n        if (result == \"ok\") appends(caused(%sEvents(log, args_), (\"command\", id)), id)\n        else refuses(readPos, id),\n", c.Quint, c.Quint)
+	if ruled {
+		commit = fmt.Sprintf("result == verdict_.outcome,\n        verdict_.needs.forall(n => covers(reads_, n)),\n        if (result == \"ok\") appends(caused(%sEvents(log, args_), (\"command\", id)), id)\n        else refuses(readPos, id),\n", c.Quint)
+	}
 	if c.Unconditioned != "" {
 		fmt.Fprintf(b, "      0 <= readPos,\n      %s", strings.ReplaceAll(commit, "\n        ", "\n      "))
 	} else {
@@ -1092,8 +1138,57 @@ func (d *draws) branch(call string) string {
 // commandCall is the step's call of command c with its picks fs: its
 // rule's outcome and the reads that outcome needs.
 func commandCall(c CatalogBlock, fs []field, extra ...string) string {
+	if len(c.Rules) > 0 {
+		return fmt.Sprintf("{\n        val args_: %sArgs = %s\n        val verdict_ = %sRuled(log, args_)\n        val result_ = verdict_.outcome\n        %s\n      }",
+			upper(c.Quint), recordFrom(c, fs), c.Quint, applied(c.Quint, paramNames(fs, extra...)))
+	}
 	return fmt.Sprintf("{\n        val args_: %sArgs = %s\n        val result_ = %sOutcome(log, args_)\n        %s\n      }",
 		upper(c.Quint), recordFrom(c, fs), c.Quint, applied(c.Quint, paramNames(fs, extra...)))
+}
+
+// ownRefusals are c's refusals but those only its rules add.
+func ownRefusals(c CatalogBlock) []string {
+	var out []string
+	for _, r := range c.Refuses {
+		if !slices.Contains(c.RuleRefuses, r) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// rulesDefs writes the rules' verdicts, when the App has rules: each
+// rule's on one event after the ones before it, every rule's on a batch
+// (rulesOf), and each guarded command's outcome (<command>Ruled).
+func (g *gen) rulesDefs(b *strings.Builder) {
+	if len(g.c.Rules) == 0 {
+		return
+	}
+	b.WriteString("\n" + comment("  ", "The rules (grist.NewRule), run on the events an ok decision appends, on its reads, before the append: their verdicts so far (the first refusal, \"\" for none, and the reads of every rule that ran), and a guarded command's (its decision's outcome, then its rules')"))
+	b.WriteString("  type RuleVerdict = { refusal: str, needs: Set[Read] }\n  type CommandVerdict = { decided: str, outcome: str, needs: Set[Read] }\n")
+	b.WriteString("  pure val noRule: RuleVerdict = { refusal: \"\", needs: Set() }\n")
+	for _, r := range g.c.Rules {
+		guard := fmt.Sprintf("acc.refusal != \"\" or e.typ != %q", r.On)
+		fmt.Fprintf(b, "\n  // rule %s on %s, after acc: no verdict once one refused\n", r.Name, r.On)
+		fmt.Fprintf(b, "  pure def %sRuled(log: List[Event], e: Event, acc: RuleVerdict): RuleVerdict =\n", r.Quint)
+		fmt.Fprintf(b, "    val refusal = if (%s) \"\" else %sRefusal(log, e)\n", guard, r.Quint)
+		fmt.Fprintf(b, "    if (%s) acc\n    else { refusal: refusal, needs: acc.needs.union(%sNeeds(e, refusal)) }\n", guard, r.Quint)
+	}
+	apply := "acc"
+	for _, r := range g.c.Rules {
+		apply = fmt.Sprintf("%sRuled(log, e, %s)", r.Quint, apply)
+	}
+	b.WriteString("\n" + comment("  ", "the rules on b's events, in batch order, an event's in registration order: the first refusal wins"))
+	fmt.Fprintf(b, "  pure def rulesOf(log: List[Event], b: List[Event]): RuleVerdict =\n    b.foldl(noRule, (acc, e) => %s)\n", apply)
+	for _, c := range g.c.Commands {
+		if len(c.Rules) == 0 {
+			continue
+		}
+		b.WriteString("\n" + comment("  ", fmt.Sprintf("%s's outcome: its decision's (%sOutcome), then, when ok, the first refusal of its rules (%s) on what it appends (%sEvents)", c.Name, c.Quint, strings.Join(c.Rules, ", "), c.Quint)))
+		fmt.Fprintf(b, "  pure def %sRuled(log: List[Event], c: %sArgs): CommandVerdict =\n", c.Quint, upper(c.Quint))
+		fmt.Fprintf(b, "    val decided = %sOutcome(log, c)\n    val ruled = rulesOf(log, if (decided == \"ok\") %sEvents(log, c) else [])\n", c.Quint, c.Quint)
+		b.WriteString("    { decided: decided, outcome: if (ruled.refusal != \"\") ruled.refusal else decided, needs: ruled.needs }\n")
+	}
 }
 
 // recordFrom is c's arguments' record from the picks fs.
@@ -1115,7 +1210,11 @@ func (g *gen) storeStep(b *strings.Builder) {
 		ps := d.add(fs)
 		d.pick("principal", "STRS")
 		d.pick("id", "IDS")
-		calls = append(calls, d.branch(commandCall(c, ps, "id", "principal", "log.length()", fmt.Sprintf("triplesOf(%sNeeds(args_, result_))", c.Quint), "result_")))
+		reads := fmt.Sprintf("triplesOf(%sNeeds(args_, result_))", c.Quint)
+		if len(c.Rules) > 0 {
+			reads = fmt.Sprintf("triplesOf(%sNeeds(args_, if (verdict_.decided == \"ok\") \"ok\" else result_).union(verdict_.needs))", c.Quint)
+		}
+		calls = append(calls, d.branch(commandCall(c, ps, "id", "principal", "log.length()", reads, "result_")))
 	}
 	for _, q := range g.c.Queries {
 		fs, _ := scalarFields(q.Args)
@@ -1174,6 +1273,7 @@ func (g *gen) callsModule(b *strings.Builder) {
 	b.WriteString("  action answers(b: List[Event], id: str): bool = all {\n    freshKey(answered, id),\n    log' = log.concat(b),\n    answered' = answered.union(Set(id)),\n  }\n\n")
 	b.WriteString("  // a call the API refused (403: the block's policy refused the actor) ran\n  // nothing and answers nothing: its key stays unanswered\n")
 	b.WriteString("  action denied: bool = all { log' = log, answered' = answered }\n")
+	g.rulesDefs(b)
 	for _, c := range g.c.Commands {
 		fs, _ := scalarFields(c.Args)
 		fmt.Fprintf(b, "\n  action %s(%s): bool = {\n", c.Quint, params(fs, "id: str", "principal: str", "result: str"))
@@ -1181,7 +1281,11 @@ func (g *gen) callsModule(b *strings.Builder) {
 		if c.Unconditioned == "" {
 			b.WriteString("    else if (result == \"conflict\") answers([], id)\n")
 		}
-		fmt.Fprintf(b, "    else all {\n      result == %sOutcome(log, args_),\n      answers(if (result == \"ok\") caused(%sEvents(log, args_), (\"command\", id)) else [], id),\n    }\n  }\n", c.Quint, c.Quint)
+		outcome := fmt.Sprintf("%sOutcome(log, args_)", c.Quint)
+		if len(c.Rules) > 0 {
+			outcome = fmt.Sprintf("%sRuled(log, args_).outcome", c.Quint)
+		}
+		fmt.Fprintf(b, "    else all {\n      result == %s,\n      answers(if (result == \"ok\") caused(%sEvents(log, args_), (\"command\", id)) else [], id),\n    }\n  }\n", outcome, c.Quint)
 	}
 	for _, q := range g.c.Queries {
 		fs, _ := scalarFields(q.Args)
@@ -1195,7 +1299,11 @@ func (g *gen) callsModule(b *strings.Builder) {
 		ps := d.add(fs)
 		d.pick("principal", "STRS")
 		d.pick("id", "IDS")
-		calls = append(calls, d.branch(fmt.Sprintf("%s(%s)", c.Quint, paramNames(ps, "id", "principal", fmt.Sprintf("%sOutcome(log, %s)", c.Quint, recordFrom(c, ps))))))
+		outcome := fmt.Sprintf("%sOutcome(log, %s)", c.Quint, recordFrom(c, ps))
+		if len(c.Rules) > 0 {
+			outcome = fmt.Sprintf("%sRuled(log, %s).outcome", c.Quint, recordFrom(c, ps))
+		}
+		calls = append(calls, d.branch(fmt.Sprintf("%s(%s)", c.Quint, paramNames(ps, "id", "principal", outcome))))
 	}
 	for _, q := range g.c.Queries {
 		fs, _ := scalarFields(q.Args)

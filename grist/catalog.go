@@ -20,7 +20,10 @@ type Catalog struct {
 	Commands   []CatalogBlock     `json:"commands"` // sorted by name
 	Queries    []CatalogBlock     `json:"queries"`  // sorted by name
 	Processors []CatalogProcessor `json:"processors"`
-	Sites      []CatalogSite      `json:"sites"` // in registration order
+	// Rules are the App's rules (NewRule), in registration order: the
+	// order they run in on one event.
+	Rules []CatalogRule `json:"rules"`
+	Sites []CatalogSite `json:"sites"` // in registration order
 	// Dependencies are the App's dependencies (NewDependency), in
 	// registration order, each with its calls.
 	Dependencies []CatalogDependency `json:"dependencies"`
@@ -107,9 +110,27 @@ type CatalogBlock struct {
 	// Authorized says the block declares a Policy (Authorize); Internal
 	// that no adapter serves it (Internal).
 	Authorized, Internal bool
-	// Refuses are a command's declared rejections (Refuses), in the order
-	// given; nil when it declares none.
+	// Refuses are a command's rejections: those it declares (Refuses), in
+	// the order given, then those its rules add (RuleRefuses) that it does
+	// not declare; nil when it declares none and no rule guards it.
 	Refuses []string
+	// Appends are the event types a command declares it appends (Appends),
+	// nil when it declares none; Rules are the rules that guard it (each
+	// on an event type it appends), in registration order, and
+	// RuleRefuses their rejections, in that order.
+	Appends, Rules, RuleRefuses []string
+}
+
+// A CatalogRule is a registered rule (NewRule).
+type CatalogRule struct {
+	Name  string `json:"name"`
+	Quint string `json:"quint"` // the prefix of its holes (Quint+"Refusal", Quint+"Needs")
+	On    string `json:"on"`    // the event type it guards
+	// Refuses are its declared rejections (Refuses), in the order given;
+	// Guards the commands it guards (those declaring On in Appends),
+	// sorted.
+	Refuses []string `json:"refuses"`
+	Guards  []string `json:"guards"`
 }
 
 // MarshalJSON writes the event with its body as a JSON Schema.
@@ -138,7 +159,10 @@ func (b CatalogBlock) MarshalJSON() ([]byte, error) {
 		Authorized    bool           `json:"authorized"`
 		Internal      bool           `json:"internal,omitempty"`
 		Refuses       []string       `json:"refuses,omitempty"`
-	}{b.Name, b.Quint, Schema(b.Args), res, b.Unconditioned, b.Authorized, b.Internal, b.Refuses})
+		Appends       []string       `json:"appends,omitempty"`
+		Rules         []string       `json:"rules,omitempty"`
+		RuleRefuses   []string       `json:"ruleRefuses,omitempty"`
+	}{b.Name, b.Quint, Schema(b.Args), res, b.Unconditioned, b.Authorized, b.Internal, b.Refuses, b.Appends, b.Rules, b.RuleRefuses})
 }
 
 func nonNil(s []string) []string {
@@ -245,10 +269,32 @@ func (a *App) Catalog() Catalog {
 		c.ReadModels = append(c.ReadModels, CatalogReadModel{Name: rm.name, Version: rm.version,
 			Types: append([]string(nil), rm.types...), Keys: append([]string(nil), rm.keys...)})
 	}
+	c.Rules = []CatalogRule{}
+	for _, ri := range a.rules {
+		c.Rules = append(c.Rules, CatalogRule{Name: ri.name, Quint: ri.quint, On: ri.on.name, Refuses: slices.Clone(ri.opts.refuses), Guards: nonNil(a.guards(ri))})
+	}
 	for _, n := range a.Commands() {
 		ci := a.commands[n]
-		c.Commands = append(c.Commands, CatalogBlock{Name: ci.name, Quint: ci.quint, Args: ci.args, Unconditioned: ci.opts.unconditioned,
-			Authorized: ci.opts.authorize != nil, Internal: ci.opts.internal, Refuses: slices.Clone(ci.opts.refuses)})
+		cb := CatalogBlock{Name: ci.name, Quint: ci.quint, Args: ci.args, Unconditioned: ci.opts.unconditioned,
+			Authorized: ci.opts.authorize != nil, Internal: ci.opts.internal, Refuses: slices.Clone(ci.opts.refuses)}
+		if ci.opts.appends != nil {
+			cb.Appends = typeNames(ci.opts.appends)
+		}
+		for _, ri := range a.rules {
+			if !slices.Contains(cb.Appends, ri.on.name) {
+				continue
+			}
+			cb.Rules = append(cb.Rules, ri.name)
+			for _, r := range ri.opts.refuses {
+				if !slices.Contains(cb.RuleRefuses, r) {
+					cb.RuleRefuses = append(cb.RuleRefuses, r)
+				}
+				if !slices.Contains(cb.Refuses, r) {
+					cb.Refuses = append(cb.Refuses, r)
+				}
+			}
+		}
+		c.Commands = append(c.Commands, cb)
 	}
 	for _, n := range a.Queries() {
 		qi := a.queries[n]

@@ -106,21 +106,51 @@ module shopGen {
     warehouseHoldRecords' = warehouseHoldRecords,
   }
 
-  // add-item: conditioned on its reads; refusals full. Every committed
-  // outcome needs its id fresh and its read set covering what its rule needs;
-  // ok and a refusal need the rule's outcome and the condition to have held,
-  // a conflict needs it not to. A reused key commits nothing.
+  // The rules (grist.NewRule), run on the events an ok decision appends, on
+  // its reads, before the append: their verdicts so far (the first refusal,
+  // "" for none, and the reads of every rule that ran), and a guarded
+  // command's (its decision's outcome, then its rules')
+  type RuleVerdict = { refusal: str, needs: Set[Read] }
+  type CommandVerdict = { decided: str, outcome: str, needs: Set[Read] }
+  pure val noRule: RuleVerdict = { refusal: "", needs: Set() }
+
+  // rule open-shop on item-added, after acc: no verdict once one refused
+  pure def openShopRuled(log: List[Event], e: Event, acc: RuleVerdict): RuleVerdict =
+    val refusal = if (acc.refusal != "" or e.typ != "item-added") "" else openShopRefusal(log, e)
+    if (acc.refusal != "" or e.typ != "item-added") acc
+    else { refusal: refusal, needs: acc.needs.union(openShopNeeds(e, refusal)) }
+
+  // the rules on b's events, in batch order, an event's in registration
+  // order: the first refusal wins
+  pure def rulesOf(log: List[Event], b: List[Event]): RuleVerdict =
+    b.foldl(noRule, (acc, e) => openShopRuled(log, e, acc))
+
+  // add-item's outcome: its decision's (addItemOutcome), then, when ok, the
+  // first refusal of its rules (open-shop) on what it appends (addItemEvents)
+  pure def addItemRuled(log: List[Event], c: AddItemArgs): CommandVerdict =
+    val decided = addItemOutcome(log, c)
+    val ruled = rulesOf(log, if (decided == "ok") addItemEvents(log, c) else [])
+    { decided: decided, outcome: if (ruled.refusal != "") ruled.refusal else decided, needs: ruled.needs }
+
+  // add-item: conditioned on its reads; refusals full, closed. Its outcome is
+  // its decision's, then, when that is ok, the first refusal of the rules
+  // guarding it (open-shop, addItemRuled); every committed outcome needs its
+  // id fresh and its read set covering what its decision and every rule that
+  // ran need; ok and a refusal need that outcome and the condition to have
+  // held, a conflict needs it not to. A reused key commits nothing.
   action addItem(item_: str, qty: int, of_: str, id: str, principal: str, readPos: int, reads: Set[(str, str, str)], result: str): bool = {
     val args_: AddItemArgs = { item: item_, qty: qty, of: of_, principal: principal }
     val reads_ = readsOf(reads)
+    val verdict_ = addItemRuled(log, args_)
     if (result == "idempotency-key-reused") all { answered.contains(id), readsThrough(readPos) }
     else all {
       freshKey(answered, id),
-      addItemNeeds(args_, result).forall(n => covers(reads_, n)),
+      addItemNeeds(args_, if (result != "conflict" and verdict_.decided == "ok") "ok" else result).forall(n => covers(reads_, n)),
       if (result == "conflict") all { not(conditionHolds(log, readPos, reads_)), refuses(readPos, id) }
       else all {
         conditionHolds(log, readPos, reads_),
-        result == addItemOutcome(log, args_),
+        result == verdict_.outcome,
+        verdict_.needs.forall(n => covers(reads_, n)),
         if (result == "ok") appends(caused(addItemEvents(log, args_), ("command", id)), id)
         else refuses(readPos, id),
       },
@@ -393,8 +423,9 @@ module shopGen {
         nondet id = IDS.oneOf()
         {
           val args_: AddItemArgs = { item: item_, qty: qty, of: of_, principal: principal }
-          val result_ = addItemOutcome(log, args_)
-          addItem(item_, qty, of_, id, principal, log.length(), triplesOf(addItemNeeds(args_, result_)), result_)
+          val verdict_ = addItemRuled(log, args_)
+          val result_ = verdict_.outcome
+          addItem(item_, qty, of_, id, principal, log.length(), triplesOf(addItemNeeds(args_, if (verdict_.decided == "ok") "ok" else result_).union(verdict_.needs)), result_)
         }
       },
       {
@@ -536,12 +567,38 @@ module shopCallsGen {
   // nothing and answers nothing: its key stays unanswered
   action denied: bool = all { log' = log, answered' = answered }
 
+  // The rules (grist.NewRule), run on the events an ok decision appends, on
+  // its reads, before the append: their verdicts so far (the first refusal,
+  // "" for none, and the reads of every rule that ran), and a guarded
+  // command's (its decision's outcome, then its rules')
+  type RuleVerdict = { refusal: str, needs: Set[Read] }
+  type CommandVerdict = { decided: str, outcome: str, needs: Set[Read] }
+  pure val noRule: RuleVerdict = { refusal: "", needs: Set() }
+
+  // rule open-shop on item-added, after acc: no verdict once one refused
+  pure def openShopRuled(log: List[Event], e: Event, acc: RuleVerdict): RuleVerdict =
+    val refusal = if (acc.refusal != "" or e.typ != "item-added") "" else openShopRefusal(log, e)
+    if (acc.refusal != "" or e.typ != "item-added") acc
+    else { refusal: refusal, needs: acc.needs.union(openShopNeeds(e, refusal)) }
+
+  // the rules on b's events, in batch order, an event's in registration
+  // order: the first refusal wins
+  pure def rulesOf(log: List[Event], b: List[Event]): RuleVerdict =
+    b.foldl(noRule, (acc, e) => openShopRuled(log, e, acc))
+
+  // add-item's outcome: its decision's (addItemOutcome), then, when ok, the
+  // first refusal of its rules (open-shop) on what it appends (addItemEvents)
+  pure def addItemRuled(log: List[Event], c: AddItemArgs): CommandVerdict =
+    val decided = addItemOutcome(log, c)
+    val ruled = rulesOf(log, if (decided == "ok") addItemEvents(log, c) else [])
+    { decided: decided, outcome: if (ruled.refusal != "") ruled.refusal else decided, needs: ruled.needs }
+
   action addItem(item_: str, qty: int, of_: str, id: str, principal: str, result: str): bool = {
     val args_: AddItemArgs = { item: item_, qty: qty, of: of_, principal: principal }
     if (result == "denied") denied
     else if (result == "conflict") answers([], id)
     else all {
-      result == addItemOutcome(log, args_),
+      result == addItemRuled(log, args_).outcome,
       answers(if (result == "ok") caused(addItemEvents(log, args_), ("command", id)) else [], id),
     }
   }
@@ -569,7 +626,7 @@ module shopCallsGen {
         nondet of_ = STRS.oneOf()
         nondet principal = STRS.oneOf()
         nondet id = IDS.oneOf()
-        addItem(item_, qty, of_, id, principal, addItemOutcome(log, { item: item_, qty: qty, of: of_, principal: principal }))
+        addItem(item_, qty, of_, id, principal, addItemRuled(log, { item: item_, qty: qty, of: of_, principal: principal }).outcome)
       },
       {
         nondet item_ = STRS.oneOf()

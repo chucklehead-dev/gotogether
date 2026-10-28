@@ -11,6 +11,7 @@ module: shop
 
 outcomes:
   ok: '"ok"'
+  closed: '"closed"'
   full: '"full"'
   no-stock: '"no-stock"'
   unknown: '"unknown"'

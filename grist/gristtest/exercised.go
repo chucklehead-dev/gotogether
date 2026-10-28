@@ -2,6 +2,7 @@ package gristtest
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -11,7 +12,8 @@ import (
 
 // Exercised is the claim that an exploration's runs took every block of
 // app's catalog, judged by the store's binding: every command committed
-// ok and refused by each refusal it declares (grist.Refuses), every query
+// ok and refused by each refusal it declares (grist.Refuses) and each
+// its rules add (grist.NewRule), every query
 // answered, every processor's steps (an Emits processor's handling, a
 // Delivers processor's effect and checkpoint, an at-most-once outcome
 // when it declares a success event), every site's record and every
@@ -62,8 +64,11 @@ func Takes(app *grist.App) []qtest.Take {
 		out = append(out, qtest.Takes(cmd.Quint).Outcome("ok").Hint(fmt.Sprintf(
 			"no %s committed: send it where its rule says ok (gristsim Config.Prologue for the calls it needs first, Config.Gen for its arguments, a name listed twice in Config.Send to send it twice as often)", cmd.Name)))
 		for _, r := range cmd.Refuses {
-			out = append(out, qtest.Takes(cmd.Quint).Outcome(r).Hint(fmt.Sprintf(
-				"no %s was refused %s: send it where its rule refuses it so (Config.Gen's arguments, the state Config.Prologue leaves), or except %q with the reason", cmd.Name, r, cmd.Quint+"."+r)))
+			hint := fmt.Sprintf("no %s was refused %s: send it where its rule refuses it so (Config.Gen's arguments, the state Config.Prologue leaves), or except %q with the reason", cmd.Name, r, cmd.Quint+"."+r)
+			if rules := refusing(c, cmd, r); len(rules) > 0 {
+				hint = fmt.Sprintf("no %s was refused %s by its rules (%s): send it where its decision says ok and a rule refuses what it appends (Config.Gen's arguments, the state Config.Prologue leaves), or except %q with the reason", cmd.Name, r, strings.Join(rules, ", "), cmd.Quint+"."+r)
+			}
+			out = append(out, qtest.Takes(cmd.Quint).Outcome(r).Hint(hint))
 		}
 	}
 	for _, q := range c.Queries {
@@ -94,6 +99,21 @@ func Takes(app *grist.App) []qtest.Take {
 	}
 	for _, s := range c.Sites {
 		out = append(out, qtest.Takes(s.Quint).Hint(fmt.Sprintf("the %s site recorded nothing: the effect that makes it must run (its processor's line) and reach the dependency (attach it: gristsim Config.Setup, TierConfig.Deps)", s.Name)))
+	}
+	return out
+}
+
+// refusing are the rules guarding cmd that refuse r (none when only its
+// decision does).
+func refusing(c grist.Catalog, cmd grist.CatalogBlock, r string) []string {
+	var out []string
+	if !slices.Contains(cmd.RuleRefuses, r) {
+		return nil
+	}
+	for _, rule := range c.Rules {
+		if slices.Contains(cmd.Rules, rule.Name) && slices.Contains(rule.Refuses, r) {
+			out = append(out, rule.Name)
+		}
 	}
 	return out
 }

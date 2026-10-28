@@ -81,6 +81,10 @@ type Result struct {
 	delivery  Delivery
 	onSuccess *Event
 	err       error
+	// blocked says err is a rule's refusal of the result's appends
+	// (poller.blocked): recorded with the trigger's step, so the run's
+	// report names the rule
+	blocked bool
 }
 
 // Emit appends events with the processor's checkpoint, in one
@@ -381,6 +385,7 @@ type pending struct {
 	trigger Position
 	events  []Event
 	skip    bool
+	err     string // the step's error text: a rule's refusal (Result.blocked)
 }
 
 // handle handles evs (triggers after checkpoint cp, read with the head
@@ -410,7 +415,11 @@ func (pl *poller) handle(ctx context.Context, cp, head Position, evs []Stored) {
 			group = append(group, pending{trigger: e.Pos, events: res.events, skip: delivers})
 			continue
 		case failResult:
-			group = append(group, pending{trigger: e.Pos, events: []Event{failedEvent(pl.p.name, e.Pos)}, skip: delivers})
+			p := pending{trigger: e.Pos, events: []Event{failedEvent(pl.p.name, e.Pos)}, skip: delivers}
+			if res.blocked {
+				p.err = res.err.Error()
+			}
+			group = append(group, p)
 			continue
 		}
 		if !flush() {
@@ -450,11 +459,44 @@ func (pl *poller) decide(ctx context.Context, e Stored) (Result, bool) {
 		if err := checkEvents("processor "+pl.p.name, res.events); err != nil {
 			res = Fail(err)
 		}
+		if err := pl.blocked(r, res); r.err != nil {
+			pl.pause(ctx)
+			return Result{}, false
+		} else if err != nil {
+			res = Fail(err)
+			res.blocked = true
+		}
 		if res.kind != failResult || try >= pl.p.opts.effectTries {
 			return res, true
 		}
 		backoff(ctx, try)
 	}
+}
+
+// blocked is the error of a result whose appends (an Emit's events, an
+// effect's OnSuccess) a rule refuses, or whose rule fails: rules guard
+// commands only, and a processor's appends are not supported yet (to
+// block one until the rule admits it is later work), so its trigger
+// fails visibly, naming the rule, instead of the event committing past
+// the rule. A store error is r.err's.
+func (pl *poller) blocked(r *Reads, res Result) error {
+	var events []Event
+	switch res.kind {
+	case emitResult:
+		events = res.events
+	case effectResult:
+		if res.onSuccess != nil {
+			events = []Event{*res.onSuccess}
+		}
+	}
+	ruled, err := pl.app.applyRules(r, events)
+	switch {
+	case err != nil:
+		return fmt.Errorf("grist: processor %s: %w", pl.p.name, err)
+	case ruled != nil:
+		return fmt.Errorf("grist: processor %s appends an event rule %s refuses (%s): rules guard commands only, a processor's appends are not supported yet; check it in the handler (Skip), or append the event from a command (Dispatch)", pl.p.name, ruled.rule, ruled.rej.Name)
+	}
+	return nil
 }
 
 // effectContext is ctx as an effect's f gets it: its key (EffectKey) and
@@ -497,7 +539,9 @@ func (pl *poller) commitAt(ctx context.Context, cp Position, group []pending, sl
 	// with its own events: the relay gives each the head after them
 	steps := make([]rowStep, 0, len(group))
 	for _, g := range group {
-		steps = append(steps, pl.step(g.trigger, g.events, slot, g.skip, kv...))
+		st := pl.step(g.trigger, g.events, slot, g.skip, kv...)
+		st.Error = g.err
+		steps = append(steps, st)
 	}
 	b := store.Batch{Events: events, Checkpoint: &store.CheckpointMove{Processor: pl.p.name, From: cp, To: group[len(group)-1].trigger},
 		Time: qenv.Now(ctx).UnixMilli(), Cause: "processor:" + pl.p.name, Step: encodeRow(steps)}

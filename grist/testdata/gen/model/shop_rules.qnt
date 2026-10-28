@@ -13,6 +13,10 @@ module shopRules {
   pure def addItemEvents(log: List[Event], c: AddItemArgs): List[Event] = [itemAdded(c.item, c.qty, false)]
   pure def addItemNeeds(c: AddItemArgs, result: str): Set[Read] = stockReads(c.item)
 
+  // the open-shop rule: a shop takes four additions, read from items
+  pure def openShopRefusal(log: List[Event], e: Event): str = if (itemsEvents(log).length() >= 4) "closed" else ""
+  pure def openShopNeeds(e: Event, refusal: str): Set[Read] = itemsReads
+
   pure def noteItemOutcome(log: List[Event], c: NoteItemArgs): str = "ok"
   pure def noteItemEvents(log: List[Event], c: NoteItemArgs): List[Event] = [itemNoted]
   pure def noteItemNeeds(c: NoteItemArgs, result: str): Set[Read] = Set()

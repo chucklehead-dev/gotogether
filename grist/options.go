@@ -34,8 +34,11 @@ type options struct {
 	// declares none; shape is a processor's declared result (Emits,
 	// Delivers): its delivery, the event types it emits, its success
 	// event's type
-	refuses  []string
-	shape    shape
+	refuses []string
+	shape   shape
+	// appends are a command's declared event types (Appends), nil when it
+	// declares none
+	appends  []EventName
 	declared int // how many of Emits and Delivers were given
 	// keyed says a call's dependency applies each key once (Keyed); uses
 	// are the calls a processor's effect makes (Uses)
@@ -70,7 +73,7 @@ func (a *App) options(kind, name string, opts []Option) options {
 	o := defaultOptions()
 	for _, opt := range opts {
 		if opt.apply == nil {
-			a.problems = append(a.problems, fmt.Sprintf("%s %q: a zero grist.Option: build one with its constructor (Authorize, Internal, Unconditioned, Refuses, ConditionTries, TransientTries, EffectTries, BatchSize, Emits, Delivers, Uses, Keyed)", kind, name))
+			a.problems = append(a.problems, fmt.Sprintf("%s %q: a zero grist.Option: build one with its constructor (Authorize, Internal, Unconditioned, Refuses, Appends, ConditionTries, TransientTries, EffectTries, BatchSize, Emits, Delivers, Uses, Keyed)", kind, name))
 			continue
 		}
 		ok := false
@@ -88,7 +91,7 @@ func (a *App) options(kind, name string, opts []Option) options {
 	if o.declared > 1 {
 		a.problems = append(a.problems, fmt.Sprintf("%s %q: more than one of Emits and Delivers: a processor declares one result shape", kind, name))
 	}
-	for _, e := range append(append([]EventName(nil), o.shape.emits...), o.shape.success) {
+	for _, e := range append(append(append([]EventName(nil), o.shape.emits...), o.shape.success), o.appends...) {
 		if e != nil && a.events[e.Name()] != e.registered() {
 			a.problems = append(a.problems, fmt.Sprintf("%s %q: it declares %q, an event of another App: register it on %s", kind, name, e.Name(), a.Name))
 		}
@@ -111,12 +114,12 @@ func tries(name string, n int, set func(*options, int)) Option {
 
 func kindsOf(option string) []string {
 	switch option {
-	case "Unconditioned", "ConditionTries":
+	case "Unconditioned", "ConditionTries", "Appends":
 		return []string{"command"}
 	case "EffectTries", "BatchSize", "Emits", "Delivers", "Uses":
 		return []string{"processor"}
 	case "Refuses":
-		return []string{"command", "call"}
+		return []string{"command", "call", "rule"}
 	case "Keyed":
 		return []string{"call"}
 	}
@@ -220,7 +223,9 @@ func BatchSize(n int) Option {
 
 // Refuses declares the rejections a command's decision may return (each
 // a Rejection's value), so the model generator (Generate) writes an
-// outcome branch for each and the binding an outcome. On a call
+// outcome branch for each and the binding an outcome. On a rule
+// (NewRule), the rejections its check may return, which every command it
+// guards may then refuse with (required). On a call
 // (NewCall), the dependency's answers that say the call did not happen
 // (a declined payment): Do returns each as NotApplied of its *Rejected. A decision that
 // returns a rejection it does not declare is its error (recorded with its

@@ -13,6 +13,7 @@ const ShutdownTimeout = 10 * time.Second
 func ActorFromHeader(name string) ServeOption
 func ActorOf(ctx context.Context) string
 func Actors(names ...string) Policy
+func Appends(types ...EventName) Option
 func Authenticated(actor, tenant string) bool
 func Authorize(p Policy) Option
 func BatchSize(n int) Option
@@ -52,6 +53,7 @@ func NewProcessor[E any](app *App, name string, on *EventType[E], h func(ctx con
 func NewQuery[Q, R any](app *App, name string, f func(r *Reads, q Q) (R, error), opts ...Option) *QueryBlock[Q, R]
 func NewReadModel[S any](app *App, name string, version int, init func() S, handlers ...Handler[S]) *ReadModel[S]
 func NewRelay(s Store) (*Relay, error)
+func NewRule[E any](app *App, name string, on *EventType[E], check func(r *Reads, e E) error, opts ...Option) *Rule[E]
 func NewSite[T any](app *App, name string) *Site[T]
 func NotApplied(err error) error
 func OnSuccess(e Event) EffectOption
@@ -109,6 +111,7 @@ type Catalog struct
     field Commands []CatalogBlock `json:"commands"`
     field Queries []CatalogBlock `json:"queries"`
     field Processors []CatalogProcessor `json:"processors"`
+    field Rules []CatalogRule `json:"rules"`
     field Sites []CatalogSite `json:"sites"`
     field Dependencies []CatalogDependency `json:"dependencies"`
 type CatalogBlock struct
@@ -120,6 +123,9 @@ type CatalogBlock struct
     field Authorized bool
     field Internal bool
     field Refuses []string
+    field Appends []string
+    field Rules []string
+    field RuleRefuses []string
     method (CatalogBlock) MarshalJSON() ([]byte, error)
 type CatalogCall struct
     field Name string
@@ -155,6 +161,12 @@ type CatalogReadModel struct
     field Version int `json:"version"`
     field Types []string `json:"types"`
     field Keys []string `json:"keys"`
+type CatalogRule struct
+    field Name string `json:"name"`
+    field Quint string `json:"quint"`
+    field On string `json:"on"`
+    field Refuses []string `json:"refuses"`
+    field Guards []string `json:"guards"`
 type CatalogSite struct
     field Name string
     field Quint string
@@ -240,6 +252,8 @@ type Relay struct
     method (*Relay) Err() error
     method (*Relay) Flush(ctx context.Context) error
 type Result struct
+type Rule[E any] struct
+    method (*Rule[E]) Name() string
 type Selector = store.Selector
 type ServeOption struct
 type Site[T any] struct
@@ -329,6 +343,7 @@ type Doubles map[*grist.Dependency]grist.Handlers
 == github.com/chucklehead-dev/gotogether/grist/gristtest
 const MutantEnv = "GRIST_MUTANT"
 func Answered(t testing.TB, app *grist.App, traces []*qtrace.Trace)
+func DroppedRule(app *grist.App) (rule string, caught qtest.Claim, ok bool)
 func Exercised(app *grist.App, except ...string) qtest.Claim
 func Generated(t testing.TB, app *grist.App)
 func Mutant() string
@@ -339,6 +354,7 @@ type Mutants struct
     field FullOnly []string
     field Dir string
     field Test string
+    field App *grist.App
     method (Mutants) Run(t *testing.T)
 type Node struct
     field Relay *grist.Relay

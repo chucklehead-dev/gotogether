@@ -10,6 +10,7 @@ module: shopCalls
 
 outcomes:
   ok: '"ok"'
+  closed: '"closed"'
   full: '"full"'
   conflict: '"conflict"'
   denied: '"denied"'

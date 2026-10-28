@@ -17,7 +17,7 @@ import (
 // strings, integers, booleans, a tag of each kind it takes, a field
 // Quint reserves (of) and one it does not record (a slice); a plain and a
 // keyed read model; a conditioned command with refusals, an
-// Unconditioned one without; a query of a struct and one of a scalar;
+// Unconditioned one without; a rule on the first one's event; a query of a struct and one of a scalar;
 // processors that emit, effect at least once with a success event and at
 // most once without; a site; a dependency's Keyed call with a refusal,
 // used by both effects.
@@ -64,6 +64,9 @@ type (
 
 var errFull = grist.Rejection("full")
 
+// errClosed is the open-shop rule's refusal: a shop takes four additions.
+var errClosed = grist.Rejection("closed")
+
 // errNoStock is the warehouse's refusal of a reservation.
 var errNoStock = grist.Rejection("no-stock")
 
@@ -74,13 +77,19 @@ func shopApp() *grist.App {
 	noted := grist.NewEvent[itemNoted](a, "item-noted")
 	stock := grist.NewKeyedReadModel(a, "stock", 1, grist.Keys("item"), func() int { return 0 },
 		grist.On(added, func(s int, e itemAdded, m grist.Meta) int { return s + e.Qty }))
-	grist.NewReadModel(a, "items", 1, func() int { return 0 }, grist.On(added, func(s int, e itemAdded, m grist.Meta) int { return s + 1 }))
+	items := grist.NewReadModel(a, "items", 1, func() int { return 0 }, grist.On(added, func(s int, e itemAdded, m grist.Meta) int { return s + 1 }))
 	grist.NewCommand(a, "add-item", func(r *grist.Reads, c addItem) ([]grist.Event, error) {
 		if stock.For(r, c.Item)+c.Qty > 3 {
 			return nil, errFull
 		}
 		return []grist.Event{added.Of(itemAdded{Item: c.Item, Qty: c.Qty})}, nil
-	}, grist.Refuses(errFull), grist.Authorize(grist.Authenticated))
+	}, grist.Refuses(errFull), grist.Appends(added), grist.Authorize(grist.Authenticated))
+	grist.NewRule(a, "open-shop", added, func(r *grist.Reads, e itemAdded) error {
+		if items.Get(r) >= 4 {
+			return errClosed
+		}
+		return nil
+	}, grist.Refuses(errClosed))
 	grist.NewCommand(a, "note-item", func(r *grist.Reads, c noteItem) ([]grist.Event, error) {
 		return []grist.Event{noted.Of(itemNoted{})}, nil
 	}, grist.Unconditioned("notes are advisory"), grist.Internal())

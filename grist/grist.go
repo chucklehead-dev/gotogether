@@ -46,6 +46,7 @@ type App struct {
 	queries    map[string]*queryInfo
 	processors []*processorInfo
 	readModels []*readModelInfo
+	rules      []*ruleInfo // in registration order
 	sites      []*siteInfo
 	deps       map[string]*Dependency // by name
 	depOrder   []*Dependency          // in registration order, for the Catalog
@@ -83,6 +84,9 @@ func (a *App) register(kind, name string) {
 		a.problems = append(a.problems, fmt.Sprintf("%s %q: %v", kind, name, err))
 		return
 	}
+	if kind == "rule" {
+		return // its model is holes the generator names, no action
+	}
 	actions := []string{q}
 	if kind == "processor" {
 		actions = append(actions, q+"Effect", q+"Outcome") // its effect steps' action, an at-most-once outcome's
@@ -98,7 +102,9 @@ func (a *App) register(kind, name string) {
 // Verify checks the registry as boot does (docs/grist.md §2.9, slice 1's
 // part): every name unique and a Quint identifier once mapped, every
 // event a block consumes or emits registered on this App, no event field
-// a float or a time. It returns every problem found, each naming the
+// a float or a time, every rule on an event some block appends (a
+// command's Appends, a processor's Emits or Delivers), with its refusals
+// declared. It returns every problem found, each naming the
 // block and the fix; nil when the App may start.
 func (a *App) Verify() error {
 	ps := append([]string(nil), a.problems...)
@@ -114,6 +120,7 @@ func (a *App) Verify() error {
 			ps = append(ps, fmt.Sprintf("processor %q subscribes to %q, an event of another App: register it on %s", p.name, p.on, a.Name))
 		}
 	}
+	ps = append(ps, a.verifyRules()...)
 	if len(ps) == 0 {
 		return nil
 	}
