@@ -764,6 +764,94 @@ jobs:
           ./run-demo.sh
           if MUTANT=noDedupe ./run-demo.sh; then echo "mutant passed"; exit 1; fi
 
+  action:
+    # the Action (.github/actions/gotogether) as an adopter uses it, on
+    # hello: quint pinned and cached, the CLI built from the action's own
+    # source, doctor strict, a validation and a compile; a mutant's runs
+    # fail the step. action-compiled then judges with no quint or Node
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: validate
+        uses: ./.github/actions/gotogether
+        with:
+          working-directory: examples/hello
+          doctor: strict
+          run: |
+            go run ./cmd/hello-sim -seeds 5 -out runs
+            gotogether validate -binding hello.binding.yaml runs/*.jsonl
+            gotogether compile -binding hello.binding.yaml -o hello.model.json
+      - name: the Action's result is the validation's
+        run: test "${{ steps.validate.outputs.result }}" = PASS
+      - id: mutant
+        continue-on-error: true
+        uses: ./.github/actions/gotogether
+        with:
+          working-directory: examples/hello
+          doctor: "false"
+          run: |
+            d=$PWD
+            echo "{\"Replace\":{\"$d/hello.go\":\"$d/testdata/mutants/noDedupe/hello.go\"}}" > "$RUNNER_TEMP/overlay.json"
+            go run -overlay "$RUNNER_TEMP/overlay.json" ./cmd/hello-sim -seeds 5 -out mruns
+            gotogether validate -binding hello.binding.yaml mruns/*.jsonl
+      - name: the mutant's runs failed the step
+        run: test "${{ steps.mutant.outcome }}" = failure && test "${{ steps.mutant.outputs.result }}" = FAIL
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hello-compiled
+          path: |
+            examples/hello/hello.model.json
+            examples/hello/runs/
+            examples/hello/mruns/
+
+  action-compiled:
+    # the compiled model judged by the Go evaluator alone: the Action with
+    # compiled: 'true' installs neither Node nor quint, and quint must be
+    # nowhere (DESIGN §64)
+    needs: action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: hello-compiled
+          path: examples/hello
+      - id: compiled
+        uses: ./.github/actions/gotogether
+        with:
+          working-directory: examples/hello
+          compiled: "true"
+          run: |
+            if command -v quint; then echo "quint is installed: -compiled must need none"; exit 1; fi
+            gotogether validate -binding hello.binding.yaml -compiled hello.model.json runs/*.jsonl
+      - name: the compiled model passes the runs quint passed
+        run: test "${{ steps.compiled.outputs.result }}" = PASS
+      - id: mutant
+        continue-on-error: true
+        uses: ./.github/actions/gotogether
+        with:
+          working-directory: examples/hello
+          compiled: "true"
+          doctor: "false"
+          run: gotogether validate -binding hello.binding.yaml -compiled hello.model.json mruns/*.jsonl
+      - name: and fails the mutant's
+        run: test "${{ steps.mutant.outcome }}" = failure && test "${{ steps.mutant.outputs.result }}" = FAIL
+
+  image:
+    # the pinned image (ci/image/Dockerfile) builds, doctor inside finds no
+    # skew, and it validates hello; it is pushed nowhere (docs/ci.md)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build
+        run: docker build -f ci/image/Dockerfile -t gotogether:ci .
+      - name: doctor inside
+        run: docker run --rm gotogether:ci gotogether doctor -strict
+      - name: validate hello inside
+        run: |
+          docker run --rm -e GOFLAGS=-buildvcs=false -v "$PWD:/w" -w /w/examples/hello gotogether:ci bash -c \
+            'go run ./cmd/hello-sim -seeds 3 -out /tmp/runs && gotogether validate -binding hello.binding.yaml /tmp/runs/*.jsonl'
+
   streams:
     runs-on: ubuntu-latest
     defaults:

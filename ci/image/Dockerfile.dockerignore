@@ -1,0 +1,13 @@
+# the build context is the repository; the CLI needs the root module only
+.git
+.gosim
+examples
+grist
+qhegel
+qweave
+qanalysis
+qgosim
+qnav
+internal/hegelprops
+docs
+**/testdata

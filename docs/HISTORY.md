@@ -3008,6 +3008,52 @@ in a tenant serializing on its head row is by design (dense positions,
 conditions under the lock), and is in I25 with LISTEN/NOTIFY; steps and
 markers growing forever was in I25 already (retention).
 
+### I21: packaging, and a model compiled for the evaluator alone
+
+ROADMAP's I21, from the adopter's review (review 11, AD3: every
+adopting repository copied `ci/install-quint.sh`, pinned quint by hand
+and had no word on what to run when). DESIGN §64 has the design. What
+was built, and decided:
+- **A composite Action, not a reusable workflow.** It runs in the
+  adopter's job, after their checkout and build, where a reusable
+  workflow would be a job of its own that cannot see their binary under
+  test. It reuses install-quint.sh from its own checkout, caches `~/.quint`
+  and gotogether's cache of quint's typechecks and compiles, builds the
+  CLI from its own source by default (the CLI is the ref the action is
+  pinned at: one pin, not two that drift), runs `doctor`, and writes the
+  `RESULT:` lines to the job summary, a failing one an annotation. CI's
+  `action` job uses it on hello (a pass, then the noDedupe mutant's runs
+  failing the step), `action-compiled` with no quint at all.
+- **An image built, published nowhere.** `ci/image/Dockerfile` pins Go,
+  Node (checked against nodejs.org's SHASUMS256), quint and its
+  evaluator; CI's `image` job builds it and runs `doctor -strict` and a
+  validation inside. Which registry and name is the maintainer's call.
+- **doctor, extended**: the quint cache's place and size, a quint older
+  than 0.32 as a skew, `-binding` (a binding's format, its spec found)
+  and `-compiled` (a compiled model checked as validate checks it).
+  Still missing from the entry's list: qhegel's version beyond what the
+  module requires (doctor lists the published modules it resolves).
+- **The tiering guide is a document**, docs/ci.md, with this
+  repository's costs: per push, nightly, per release.
+- **The compiled model (the M half).** `gotogether compile` and
+  `validate -compiled` (DESIGN §64). The soundness rules come from the
+  eleventh review's silent wrong answers: the evaluator's refusals (F1's
+  set fold, F2's choice) are no verdict, "needs quint", where the default
+  path hands them to quint; nothing is sampled, and the report says the
+  evaluator alone judged; staleness is refused by the binding's and the
+  sources' sha256 and by writing the evaluation module again and
+  comparing it, text for text, so an artifact of an older toolkit whose
+  module differs is refused rather than judged against vals it does not
+  have. Failures are written in quint's terms from the evaluator's walk
+  (a disabled step against an expect false told apart by whether the
+  walk kept a state after it; each invariant's first failing state found
+  by evaluating it on every state, as each of quint's invariant runs
+  reports its own), and `TestCompiledAgreesWithQuint` compares reason,
+  kind, index and call with quint's on the account and within models
+  (ablated: the expect-false case read as disabled fails it).
+  `TestCompiledStaleRefused` fails with any of its checks removed;
+  `TestCompiledUnsupportedIsNoVerdict` with a refusal taken as a pass.
+
 ### Eleventh review: the first hour (I28–I32)
 
 The usability designer's two newcomers (a REST developer, a team lead

@@ -23,7 +23,9 @@ description: Start here for checking Go code against a Quint model with gotogeth
 The full table (liveness, journeys, external drivers, coverage, gosim,
 weaving, Kubernetes, PCT, fuzzing): [references/questions.md](references/questions.md).
 The first hour in your own module, the glossary and the first commands:
-[references/first-hour.md](references/first-hour.md).
+[references/first-hour.md](references/first-hour.md). CI (the Action, the
+tiers, a model compiled for a pipeline with no quint):
+[references/ci.md](references/ci.md).
 
 ## Steps
 
@@ -53,6 +55,7 @@ The first hour in your own module, the glossary and the first commands:
 | under `TestMutants`: `as expected, some run showing an apply step the model cannot take: 23 of 30 runs`, then `step 2, apply(id=1): the model's apply(id = 1) is disabled: ...` | a catch: a mutant's build, its runs failing as its claim says (`TestMutant` itself SKIPs in the app's build) | its `navigate:` line opens the step; `GOTOGETHER_VERBOSE=1` prints the whole report |
 | `30 runs, all conform (quint confirmed 2)` | every run conforms; quint judged a sample of them too | `GOTOGETHER_VERBOSE=1` for the evaluator's breakdown |
 | `no step was recorded; the run's doubles saw a request to bank refused, nothing listening` | a client ran before its server listened | start the server's process first, or retry a refused connection |
+| `NO VERDICT (needs quint)` from `validate -compiled` | the Go evaluator alone could not decide it | validate without `-compiled` ([references/ci.md](references/ci.md)) |
 | `gotogether lint` errors | the binding, an annotation or simulated code does not fit | each names the fix |
 | a verdict you cannot place | a claim's report | gotogether-workflow's verdicts reference |
 

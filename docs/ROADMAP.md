@@ -247,7 +247,14 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
 
 ### Adoption: packaging
 
-- **I21. Packaging (S, then M).** A GitHub Action (`setup-gotogether`:
+- **I21. Packaging (S, then M). Done** (DESIGN §64, HISTORY "I21:
+  packaging"): the Action (`.github/actions/gotogether`, composite: it
+  runs in the adopter's job), the image (`ci/image/Dockerfile`, built by
+  CI, published nowhere: the maintainer's call), doctor's cache, quint,
+  binding and compiled-model checks, docs/ci.md's tiers, and `gotogether
+  compile` with `validate -compiled`. Left: publishing the image and
+  tagging the Action (after R5's tags), the CI-budget reference
+  repository, `-manifest` and searches under `-compiled`. What it was: A GitHub Action (`setup-gotogether`:
   quint and its evaluator pinned and cached, `validate` and `evidence
   -strict` steps with annotations) and a container image with quint
   pinned, so no repository copies `install-quint.sh`; `gotogether

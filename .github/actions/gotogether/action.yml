@@ -1,0 +1,138 @@
+# gotogether's GitHub Action (ROADMAP I21, docs/ci.md): Go, Node, quint and
+# its Rust evaluator at pinned versions, the gotogether CLI, quint's
+# install and the cache of typechecks and compiles kept between runs,
+# gotogether doctor, then your command, its result in the job summary.
+#
+#   - uses: chucklehead-dev/gotogether/.github/actions/gotogether@<commit>
+#     with:
+#       working-directory: service
+#       run: gotogether validate -binding stock.binding.yaml runs/*.jsonl
+#
+# With compiled: 'true' it installs neither Node nor quint: for
+# `gotogether validate -compiled model.json` (gotogether compile's).
+name: gotogether
+description: Check Go code against a Quint model with gotogether (quint and its evaluator pinned and cached)
+inputs:
+  run:
+    description: "The command to run, in bash, with gotogether on PATH: gotogether validate ..., gotogether simulate ..., go test ./..."
+    required: true
+  working-directory:
+    description: Where to run it (and whose go.mod gives Go's version)
+    default: "."
+  gotogether-version:
+    description: "The CLI's version: a tag or commit of github.com/chucklehead-dev/gotogether (go install ...@version), or 'action' (built from this action's own source, the default: the CLI of the ref you pinned the action at)"
+    default: action
+  quint-version:
+    description: quint's version (npm), its Rust evaluator the one it expects
+    default: "0.33.0"
+  node-version:
+    description: Node's version, for quint
+    default: "22"
+  go-version:
+    description: "Go's version; empty: the working directory's go.mod"
+    default: ""
+  compiled:
+    description: "'true': no Node and no quint (validate -compiled judges with the Go evaluator alone)"
+    default: "false"
+  cache:
+    description: "'true': keep quint's install and gotogether's cache of quint's typechecks and compiles between runs (actions/cache)"
+    default: "true"
+  doctor:
+    description: "'true': gotogether doctor first (versions and skews); 'strict': fail the job on a skew; 'false': skip it"
+    default: "true"
+outputs:
+  result:
+    description: "The last RESULT line's verdict: PASS, FAIL, NO VERDICT, or empty (the command printed none)"
+    value: ${{ steps.run.outputs.result }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.go-version }}
+        go-version-file: ${{ inputs.go-version == '' && format('{0}/go.mod', inputs.working-directory) || '' }}
+        cache-dependency-path: ${{ inputs.working-directory }}/go.sum
+    - if: inputs.compiled != 'true'
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+    - name: Where quint and the cache live
+      shell: bash
+      run: |
+        echo "QUINT_HOME=$HOME/.quint" >> "$GITHUB_ENV"
+        echo "GOTOGETHER_CACHE=$HOME/.cache/gotogether/quint" >> "$GITHUB_ENV"
+    - if: inputs.compiled != 'true' && inputs.cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.quint
+          ~/.npm
+        key: gotogether-quint-${{ runner.os }}-${{ runner.arch }}-${{ inputs.quint-version }}
+    - if: inputs.compiled != 'true'
+      name: Install quint ${{ inputs.quint-version }} and its Rust evaluator
+      shell: bash
+      env:
+        QUINT_VERSION: ${{ inputs.quint-version }}
+      run: '"$GITHUB_ACTION_PATH/../../../ci/install-quint.sh"'
+    # quint's typechecks and compiles by content (validate's cache, DESIGN
+    # §57): a model unchanged since the last run is not typechecked again
+    - if: inputs.compiled != 'true' && inputs.cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/gotogether/quint
+        key: gotogether-models-${{ runner.os }}-${{ inputs.quint-version }}-${{ hashFiles(format('{0}/**/*.qnt', inputs.working-directory)) }}
+        restore-keys: gotogether-models-${{ runner.os }}-${{ inputs.quint-version }}-
+    - name: Install the gotogether CLI (${{ inputs.gotogether-version }})
+      shell: bash
+      env:
+        GOWORK: "off"
+        VERSION: ${{ inputs.gotogether-version }}
+      run: |
+        if [ "$VERSION" = action ]; then
+          (cd "$GITHUB_ACTION_PATH/../../.." && go install ./cmd/gotogether)
+        else
+          go install "github.com/chucklehead-dev/gotogether/cmd/gotogether@$VERSION"
+        fi
+        echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+    - if: inputs.doctor != 'false'
+      name: gotogether doctor
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: gotogether doctor -C . ${{ inputs.doctor == 'strict' && '-strict' || '' }}
+    - id: run
+      name: gotogether
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        GOTOGETHER_RUN: ${{ inputs.run }}
+      run: |
+        out="$RUNNER_TEMP/gotogether-output.txt"
+        set +e
+        bash -o pipefail -c "$GOTOGETHER_RUN" 2>&1 | tee "$out"
+        code=${PIPESTATUS[0]}
+        set -e
+        result=$( (grep -E '^RESULT: ' "$out" || true) | tail -1 | sed -E 's/^RESULT: (PASS|FAIL|NO VERDICT).*/\1/')
+        echo "result=$result" >> "$GITHUB_OUTPUT"
+        # each failing result line an annotation on the run
+        (grep -E '^RESULT: (FAIL|NO VERDICT)' "$out" || true) | while IFS= read -r line; do
+          echo "::error title=gotogether::${line#RESULT: }"
+        done
+        {
+          first=$(head -1 <<<"$GOTOGETHER_RUN")
+          [ "$first" = "$GOTOGETHER_RUN" ] || first="$first ..."
+          echo "### gotogether: \`$first\`"
+          echo
+          if grep -qE '^RESULT: ' "$out"; then
+            grep -E '^RESULT: ' "$out" | sed 's/^/- /'
+          else
+            echo "- exit status $code (no RESULT line)"
+          fi
+          echo
+          echo "<details><summary>output (the first 400 lines)</summary>"
+          echo
+          echo '```'
+          head -400 "$out"
+          echo '```'
+          echo "</details>"
+        } >> "$GITHUB_STEP_SUMMARY"
+        exit "$code"

@@ -267,9 +267,13 @@ deliberately and say why in the commit and the README.
 - `go test ./...`: adds the `FindViolation` shrinking tests.
 - A separate job runs the real environment and validates its logs
   (`gotogether validate`). Keep it in CI so model drift shows up.
-- Install quint and its Rust evaluator in CI (`ci/install-quint.sh`).
+- Install quint and its Rust evaluator in CI: the Action
+  (`chucklehead-dev/gotogether/.github/actions/gotogether@<commit>`, with
+  `run:` your command) pins and caches them, or `ci/install-quint.sh`.
   Tests that need quint start with `qtest.RequireQuint(t)`, so they skip
-  without it.
+  without it. The tiers (per push, nightly, per release) and a pipeline
+  with no quint (`gotogether compile`, `validate -compiled`):
+  gotogether-start's references/ci.md.
 - **Strict mode.** Set `GOTOGETHER_STRICT=1` (or `true`; another value
   but `0` or `false` fails, naming it) in every job that installs
   what its tests need: each toolkit skip then fails with its message

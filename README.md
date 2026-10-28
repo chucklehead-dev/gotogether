@@ -161,6 +161,25 @@ go install github.com/chucklehead-dev/gotogether/grist/cmd/grist@latest  # grist
 gotogether doctor                                                        # every installed piece's version (the module's core, qweave's woven ABI, quint's evaluator), each skew with its fix
 ```
 
+In CI, the Action (`.github/actions/gotogether`) pins Go, Node, quint
+and its evaluator, caches quint's typechecks and compiles, and puts each
+result in the job summary; `ci/image/Dockerfile` is the same in an image
+(built by CI, published nowhere yet). What to run per push, nightly and
+per release: [docs/ci.md](docs/ci.md).
+
+```yaml
+- uses: chucklehead-dev/gotogether/.github/actions/gotogether@<commit>
+  with:
+    working-directory: service
+    run: gotogether validate -binding stock.binding.yaml runs/*.jsonl
+```
+
+A pipeline with no Node or quint (a canary, a CronJob) validates with a
+compiled model: `gotogether compile -binding b.yaml -o model.json` where
+quint is, then `gotogether validate -binding b.yaml -compiled model.json
+runs/*.jsonl`, the Go evaluator alone judging, a run it cannot decide no
+verdict, a stale artifact refused (DESIGN §64).
+
 Every file format is named and versioned (`gotogether.steps/1`,
 `gotogether.binding/1`, ...): a later major is refused with the fix,
 and step logs of every earlier major are read for good (docs/DESIGN.md
