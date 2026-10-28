@@ -4447,7 +4447,14 @@ quint process but the cached compile: `gotogether simulate -graph`, and
   the report counts its quiescent states (every edge back to itself)
   instead, which say where it stops, and fails on none of them.
   `terminal:` is any Quint predicate over the state, evaluated where
-  the step has no edge (a non-Boolean is an error).
+  the step has no edge (a non-Boolean is an error). twophase declares
+  its end (every node decided) and is -graph's first demo: both
+  invariants proved over 99 states, and a model mutant (the coordinator
+  deciding on one vote) refuted with a counterexample quint replays.
+  The binding's actions step never calls are listed (`outside`): no
+  state of the graph comes from them, so an invariant about their
+  effect holds vacuously (crossdb's settledCorrectly, whose antecedent
+  only settle sets).
 - **Actions never enabled, and coverage**: each of the step's actions
   with the edges taking it and the states it is enabled in. One never
   taken in a complete graph is dead in the instance (vending's repair,

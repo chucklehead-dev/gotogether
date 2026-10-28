@@ -1920,6 +1920,15 @@ A model checker's reading of the explorer, its findings by severity:
   version of the memo keyed it without the closure and lost twophase's
   commits, which TestGraphAgreesWithQuint caught and
   `TestTransitionsOperatorArguments` now does in -short.
+- **Vacuous proofs.** crossdb's settledCorrectly "held" over its whole
+  graph because its step never settles (settle, audit and secret are
+  the binding's, judged on recorded runs). The report lists such
+  actions (`outside`), the invariant left as the binding classifies it.
+- **The examples' deadlocks**: twophase's 9 are its end (every node
+  decided), declared as `terminal`, and the example is -graph's first
+  demo (`TestGraphProvesInvariants`, `TestGraphFindsEarlyDecision`,
+  `MODEL=early-decision ./run-demo.sh`). crossdb's 128 are the id
+  pool's: see its commit.
 
 ### P1: blocking rules (grist)
 

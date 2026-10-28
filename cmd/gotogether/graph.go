@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
@@ -126,6 +128,23 @@ func simulateGraph(bpath string, b *binding.Binding, checker *validate.Checker, 
 		} else {
 			fmt.Printf("  never   %s: no state explored enables it (within the bound)\n", strings.Join(never, ", "))
 		}
+	}
+	// the binding's actions the step never calls: no state of the graph
+	// comes from them, so an invariant about what they do (an audit's, a
+	// settle's) holds in it vacuously
+	inStep := map[string]bool{b.Restart: true}
+	for _, a := range r.Actions {
+		inStep[a.Action] = true
+	}
+	var outside []string
+	for _, a := range slices.Sorted(maps.Keys(b.Actions)) {
+		if !inStep[a] {
+			outside = append(outside, a)
+		}
+	}
+	if len(outside) > 0 {
+		fmt.Printf("  outside %s: the binding's, never called by step, so no state of the graph comes from them (an invariant about their effect holds vacuously)\n",
+			strings.Join(outside, ", "))
 	}
 	var cov []string
 	for _, a := range r.Actions {

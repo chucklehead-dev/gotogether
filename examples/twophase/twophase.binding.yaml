@@ -20,7 +20,11 @@ actions:
 invariants: [consistency, commitIsDecided]
 
 # The model on its own (gotogether simulate): which invariants the design
-# guarantees, which it allows to fail and the code must not.
+# guarantees, which it allows to fail and the code must not. Its whole
+# state graph is 99 states: `gotogether simulate -graph` proves both for
+# this instance. The protocol ends when every node has decided, where no
+# transition is enabled: terminal says that end is meant, not a deadlock.
 simulate:
   holds: [consistency, commitIsDecided]
+  terminal: 'NODES.forall(n => stage(n) == Committed or stage(n) == Aborted)'
   verifySkip: Choreo's recursive step is beyond Apalache's encoding (a recursive substitution that does not end)

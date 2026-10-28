@@ -56,6 +56,22 @@ func TestSimulateGraph(t *testing.T) {
 		t.Errorf("graph_wrap -out %s: exit %d, %v; want 0", rel, code, err)
 	}
 	replayInQuint(t, must(filepath.Abs(rel)))
+	// what the report says beside the verdicts: an invariant of a graph a
+	// bound cut is bounded, never holds; a state only a stutter leaves is
+	// quiet; an action of the binding's that step never calls is outside
+	for _, c := range []struct {
+		args         []string
+		want, absent string
+	}{
+		{[]string{"-binding", "../../validate/testdata/graph.yaml", "-states", "5"}, "  bounded positive: none of the 5 states explored", "  holds   positive"},
+		{[]string{"-binding", "../../validate/testdata/graph_partial.yaml"}, "  quiet   1 reachable state only a stutter leaves", ""},
+		{[]string{"-binding", "../../validate/testdata/graph_wrap.yaml"}, "  outside reset: the binding's, never called by step", ""},
+	} {
+		_, got := capture(t, func() (int, error) { return simulate(append([]string{"-graph"}, c.args...)) })
+		if !strings.Contains(got, c.want) || c.absent != "" && strings.Contains(got, c.absent) {
+			t.Errorf("%v: want %q (and no %q) in\n%s", c.args, c.want, c.absent, got)
+		}
+	}
 	if code, err := simulate([]string{"-graph", "-verify", "3", "-binding", "../../validate/testdata/graph.yaml"}); code != 2 || err == nil {
 		t.Errorf("-graph -verify: exit %d, %v; want refused", code, err)
 	}

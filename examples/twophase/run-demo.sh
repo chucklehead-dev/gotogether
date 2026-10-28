@@ -1,12 +1,30 @@
 #!/usr/bin/env bash
-# Simulate two-phase commit, then check the step logs against the Choreo
-# model with gotogether. MUTATION=early-commit | impatient | volatile-decision
-# injects a bug.
+# Prove the Choreo model's invariants over its whole state graph, then
+# simulate two-phase commit and check the step logs against the model
+# with gotogether. MUTATION=early-commit | impatient | volatile-decision
+# injects a bug into the code; MODEL=early-decision into the model (the
+# coordinator commits once any participant has prepared), which the
+# graph refutes with a counterexample quint replays.
 set -euo pipefail
 cd "$(dirname "$0")"
 out=$(mktemp -d)
 go build -o "$out/twophase-sim" ./cmd/twophase-sim
 (cd ../.. && go build -o "$out/gotogether" ./cmd/gotogether)
+echo "== the model alone: every reachable state ${MODEL:+(model $MODEL)}"
+case "${MODEL:-}" in
+"") "$out/gotogether" simulate -graph -binding twophase.binding.yaml ;;
+early-decision)
+  cp -r model "$out/model" && cp twophase.binding.yaml "$out/"
+  sed -i.orig 's/ctx.messages.preparedIn() == PARTICIPANTS/ctx.messages.preparedIn().size() > 0/' "$out/model/twophase.qnt"
+  code=0
+  "$out/gotogether" simulate -graph -binding "$out/twophase.binding.yaml" -out "$out/cex.qnt" > "$out/graph" || code=$?
+  grep -v '^         ' "$out/graph" # the states along the path left out
+  if [ "$code" != 1 ]; then echo "the graph refuted nothing (exit $code)"; exit 1; fi
+  echo "== quint replays the counterexample"
+  (cd "$out" && quint test --main simulate --match gtg_ cex.qnt | grep -E 'ok|failed')
+  exit 0 ;;
+*) echo "MODEL=$MODEL: early-decision or nothing"; exit 2 ;;
+esac
 echo "== two-phase commit ${MUTATION:+(mutation $MUTATION)}"
 "$out/twophase-sim" -seeds "${SEEDS:-30}" -mutation "${MUTATION:-}" -out "$out/runs"
 if "$out/gotogether" validate -binding twophase.binding.yaml "$out/runs"/*.jsonl > "$out/report"; then

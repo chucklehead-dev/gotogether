@@ -4,6 +4,7 @@ module: graph_wrap
 actions:
   inc: {}
   dec: {}
+  reset: {}
 invariants: [small]
 simulate:
   allows: [small]
