@@ -369,6 +369,31 @@ func TestStrictSerializability(t *testing.T) {
 	}
 }
 
+// A transaction of unknown outcome (its client timed out at 1) that a
+// later read saw committed, but when is not known: its timeout is no
+// completion, and real time orders nothing after it. Elle's :info. Taken
+// as its completion, T2's empty read made a G-single-realtime of it
+// (review 11, F4). The same history with T1 known committed at 1 is one.
+func TestUnknownCompletionOrdersNothing(t *testing.T) {
+	at := func(s int) time.Time { return time.Unix(int64(s), 0) }
+	h := []qhistory.Txn{
+		{ID: 1, Ops: []qhistory.Op{app("x", 1)}, Outcome: qhistory.Unknown, Invoked: at(0), Completed: at(1)},
+		{ID: 2, Ops: []qhistory.Op{rd("x")}, Outcome: qhistory.Committed, Invoked: at(2), Completed: at(3)},
+		{ID: 3, Ops: []qhistory.Op{rd("x", 1)}, Outcome: qhistory.Committed, Invoked: at(4), Completed: at(5)},
+	}
+	rep, err := qhistory.Check(qhistory.StrictSerializable, h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rep.OK() {
+		t.Errorf("an unknown outcome's timeout taken as its completion:\n%s", rep)
+	}
+	h[0].Outcome = qhistory.Committed
+	if rep, _ := qhistory.Check(qhistory.StrictSerializable, h); !rep.Has("G-single-realtime") {
+		t.Errorf("committed at 1, T2's read is stale:\n%s", rep)
+	}
+}
+
 // A real-time cycle is said as the others are, from the real-time edge
 // that closes it: its dependencies with their keys, real time's without,
 // in the cycle's order. Its kind counts real time's edges as writes'
@@ -400,8 +425,9 @@ func TestRealTimeCycleText(t *testing.T) {
 // some serial order of its transactions (that real time allows) replays
 // every read exactly. Histories are made by running random transactions
 // in a random serial order, given random intervals, and sometimes a read
-// truncated; a last reader sees every key whole, so every append is
-// observed.
+// truncated, and sometimes one of unknown outcome (a client's timeout);
+// a last reader sees every key whole, so every append is observed and
+// every transaction that appends committed.
 func TestStrictAgainstBruteForce(t *testing.T) {
 	rng := rand.New(rand.NewPCG(9, 10))
 	at := func(u int) time.Time { return time.Unix(0, int64(u)) }
@@ -427,6 +453,11 @@ func TestStrictAgainstBruteForce(t *testing.T) {
 			}
 			from := rng.IntN(10)
 			x.Invoked, x.Completed = at(from), at(from+1+rng.IntN(5))
+			if rng.IntN(4) == 0 && slices.ContainsFunc(x.Ops, func(o qhistory.Op) bool { return o.Kind == qhistory.Append }) {
+				// its client timed out at Completed: it committed (the last
+				// reader sees its appends), at some time after it began
+				x.Outcome = qhistory.Unknown
+			}
 			txns[i] = x
 		}
 		if rng.IntN(3) == 0 { // a stale read: one fewer value
@@ -467,7 +498,8 @@ func TestStrictAgainstBruteForce(t *testing.T) {
 
 // bruteSerial reports whether some serial order of txns (with strict,
 // one in which a transaction completed before another was invoked comes
-// first) replays every read exactly.
+// first; an Unknown one's completion is no time) replays every read
+// exactly.
 func bruteSerial(txns []qhistory.Txn, strict bool) bool {
 	n := len(txns)
 	used := make([]bool, n)
@@ -483,7 +515,7 @@ func bruteSerial(txns []qhistory.Txn, strict bool) bool {
 			if strict {
 				blocked := false
 				for j := range txns {
-					if !used[j] && j != i && txns[j].Completed.Before(txns[i].Invoked) {
+					if !used[j] && j != i && txns[j].Outcome != qhistory.Unknown && txns[j].Completed.Before(txns[i].Invoked) {
 						blocked = true
 						break
 					}

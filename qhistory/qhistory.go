@@ -88,7 +88,11 @@ const (
 // it ran them, and its outcome. Invoked and Completed, when known (both,
 // from one clock, the clients' or a simulation's), are when the client
 // began it and learned its outcome: strict serializability orders a
-// transaction completed before another was invoked first.
+// transaction completed before another was invoked first. An Unknown
+// transaction's Completed is ignored, as Elle ignores an :info
+// operation's: a client that timed out at t learned nothing, and the
+// transaction may have committed after t (review 11, F4: a timeout taken
+// as its completion made a G-single-realtime of a history that has none).
 type Txn struct {
 	ID                 int
 	Ops                []Op
@@ -392,7 +396,7 @@ func Check(level Level, txns []Txn) (*Report, error) {
 		var timed []dep
 		for _, a := range txns {
 			for _, b := range txns {
-				if a.ID != b.ID && committed(a.ID) && committed(b.ID) && !a.Completed.IsZero() && !b.Invoked.IsZero() && a.Completed.Before(b.Invoked) {
+				if a.ID != b.ID && committed(a.ID) && committed(b.ID) && a.Outcome != Unknown && !a.Completed.IsZero() && !b.Invoked.IsZero() && a.Completed.Before(b.Invoked) {
 					e := dep{a.ID, b.ID, "rt", ""}
 					rt.Add(int64(a.ID), int64(b.ID), "rt", "")
 					out[a.ID] = append(out[a.ID], e)

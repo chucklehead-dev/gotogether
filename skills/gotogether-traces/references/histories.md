@@ -32,6 +32,10 @@ if err != nil || !rep.OK() {
 - A transaction of unknown outcome committed if some committed read saw
   its value; its reads then count. Never mark a timed-out commit
   Aborted: a G1a would be the checker's error, not the database's.
+- `StrictSerializable` also orders a transaction completed before
+  another was invoked (`Txn.Invoked`, `Completed`). An Unknown one's
+  `Completed` is ignored (Elle's `:info`): it may have committed after
+  its client gave up, so recording the timeout is safe.
 - Few keys and short transactions make conflicts, and anomalies show.
   The checker is linear in the history plus a cycle search per
   strongly connected component: thousands of transactions are cheap.

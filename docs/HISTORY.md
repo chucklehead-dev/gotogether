@@ -2752,6 +2752,16 @@ verdicts quint does not give. Each reproduction is a regression test now
   order; otherwise Unsupported, and quint judges. The repository's folds
   (grist's min, the examples' sums and maxima) are all of the shapes;
   `TestAgreesWithQuint` agrees on every model as before.
+- **F4, an unknown outcome's timeout as its completion** (medium).
+  qhistory's real-time edges used `Completed` of every committed or seen
+  transaction, an Unknown one's too: a timeout at 1 of an append a later
+  read saw made T2's empty read at 2 a G-single-realtime, though the
+  append may have committed after 2. An Unknown transaction's completion
+  is now no time, as Elle's `:info` (`TestUnknownCompletionOrdersNothing`;
+  `TestStrictAgainstBruteForce` now draws Unknown transactions too, and
+  fails without the fix). qenv's store history (internal/history, the
+  same classifier) has no real-time edges and only committed
+  transactions, so nothing there changes.
 
 ### H4: one vocabulary
 
