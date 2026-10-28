@@ -34,10 +34,11 @@ ENV QUINT_HOME=/opt/quint
 COPY ci/install-quint.sh /usr/local/bin/install-quint.sh
 RUN QUINT_VERSION=${QUINT_VERSION} install-quint.sh && chmod -R a+rX /opt/quint
 
-# the CLI, from the context's source
+# the CLI, from the context's source; the source removed from outside
+# it (go clean in a removed working directory fails: getwd)
 WORKDIR /src/gotogether
 COPY . .
-RUN GOWORK=off CGO_ENABLED=0 go install ./cmd/gotogether && rm -rf /src/gotogether && go clean -cache
+RUN GOWORK=off CGO_ENABLED=0 go install ./cmd/gotogether && go clean -cache && cd / && rm -rf /src/gotogether
 
 WORKDIR /work
 CMD ["gotogether", "doctor"]
