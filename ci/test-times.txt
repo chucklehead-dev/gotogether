@@ -9,9 +9,9 @@
 # outside load), within 15% of each other. A deliberate change of a
 # package's cost sets its line from the sorted file the job prints, with
 # the reason; packages under ten CPU seconds have none.
-examples/bank 45 # 36.5 CPU s on CI (run 431; 91 in run 427, before d6640dc)
+examples/bank 27 # 23.1 CPU s on CI (run 442: passes decided by the Go evaluator, 8178000, typechecks and compiles cached, 54c27fd; 36.5 in run 431)
 examples/checkout 110 # 95.8 CPU s on CI (run 431; 251 in run 427, before d6640dc batched short traces into one quint process)
-examples/counters 500 # 438 CPU s on CI (run 431, 69ab69c+5d5eaf0: short batches in one quint process, d6640dc; the poller spin gone, 7bc208e); 428 of its 449 CPU s here quint
+examples/counters 325 # 280 CPU s on CI (run 442: passes decided by the Go evaluator, 8178000, typechecks and compiles cached, 54c27fd; 438 in run 431, after d6640dc and 7bc208e)
 examples/glomers/broadcast 51
 examples/glomers/gcounter 47
 examples/glomers/kafka 51
@@ -19,14 +19,14 @@ examples/glomers/uniqueids 33
 examples/hello 39
 examples/jobqueue 33
 examples/kvstore 61
-examples/lease 85 # 72.2 CPU s on CI (run 431; 188 in run 427, before d6640dc)
+examples/lease 35 # 30.4 CPU s on CI (run 442, 8178000 and 54c27fd; 72.2 in run 431, 188 in run 427)
 examples/payd 150
 examples/quorumkv 128
 examples/raftkv 145
 examples/retrystorm 51
-examples/twophase 70 # 60.8 CPU s on CI (run 431; 188 in run 427, before d6640dc)
+examples/twophase 55 # 47.0 CPU s on CI (run 442, 8178000 and 54c27fd; 60.8 in run 431)
 examples/wallet 119
-examples/webjobs 156 # 13 checks under -short (the client per mutant, a cmd/webjobs overlay build each, its compile counted; TestShrink is full mode): 135-155 CPU s
+examples/webjobs 205 # 179 CPU s on CI (run 442): 13 checks under -short (the client per mutant, a cmd/webjobs overlay build each, its compile counted, and since 8178000 each overlay process's compile of the evaluation module, cached across processes by 54c27fd; TestShrink is full mode); 135-155 before
 binding 385 # 217 and 384 CPU s, 130 and 241 s wall on CI (runs 431 and 434; 332 CPU s and 439 s wall in run 427, before b7606ee ran TestEvalModuleCompiles in parallel, a typecheck per spec, and d6640dc)
 cmd/gotogether 200 # 176-195 CPU s: validate-command tests in parallel (reports to a writer, not the process's stdout) and models typechecked once per content (validate's loadModel); a -short matrix replays every failing run and the passing runs its flags shape
 internal/qeval 210 # 180-206 CPU s (wall 194 s alone, 343-361 s in the full run)
@@ -34,5 +34,5 @@ internal/simdeps 20 # 14.3 CPU s on CI (run 348), under 4 here with a warm build
 qenv/internal/profile 15 # 10.9 CPU s on CI (run 348)
 qload 13 # 8-12 CPU s
 qmeta 15
-qtest 515 # 295 and 514 CPU s on CI (runs 431 and 434); 473 in run 427, before d6640dc (relative to internal/qeval: -20%); here 400 against 488
-validate 1220 # 706 and 1218 CPU s on CI (runs 431 and 434: CI runners differ by 1.7x, internal/qeval, unchanged, 180 and 307 in them); 1266 in run 427, before d6640dc (relative to internal/qeval: -29%); here 944 (913 of it quint, 730 processes) against 1311 before
+qtest 290 # 181 CPU s on CI (run 442, internal/qeval 221 in it: about 250 on run 434's slower runner; passes decided by the Go evaluator, 8178000); 295 and 514 in runs 431 and 434
+validate 960 # 603 CPU s on CI (run 442, internal/qeval 221 in it: about 840 on run 434's slower runner; passes decided by the Go evaluator, 8178000); 706 and 1218 in runs 431 and 434; here 718 (557 quint processes) against 940 (730) before
