@@ -34,9 +34,9 @@ func (s *Step) Attributes() map[string]any {
 	if !s.Time.IsZero() { // a zero Time's UnixNano overflows: no time is no key, read back as zero
 		m[KeyTime] = s.Time.UnixNano()
 	}
-	for k, v := range map[string]string{KeyActor: s.Actor, KeyProcess: s.Process, KeyThread: s.Thread, KeyError: s.Error, KeyRef: s.Ref} {
-		if v != "" {
-			m[k] = v
+	for _, kv := range [...]struct{ k, v string }{{KeyActor, s.Actor}, {KeyProcess, s.Process}, {KeyThread, s.Thread}, {KeyError, s.Error}, {KeyRef, s.Ref}} {
+		if kv.v != "" {
+			m[kv.k] = kv.v
 		}
 	}
 	if !s.Invoked.IsZero() {
@@ -75,13 +75,14 @@ func (s *Step) Attributes() map[string]any {
 	return m
 }
 
-// MarshalLine encodes a step as one step-log line (with the newline).
+// MarshalLine encodes a step as one step-log line (with the newline):
+// json.Marshal(s.Attributes()), byte for byte (AppendLine).
 func (s *Step) MarshalLine() ([]byte, error) {
-	b, err := json.Marshal(s.Attributes())
+	b, err := s.AppendLine(make([]byte, 0, 256))
 	if err != nil {
 		return nil, err
 	}
-	return append(b, '\n'), nil
+	return b, nil
 }
 
 // WriteJSONL writes steps as a native step log, after its format record
@@ -90,9 +91,10 @@ func WriteJSONL(w io.Writer, steps []Step) error {
 	if _, err := w.Write(FormatLine()); err != nil {
 		return err
 	}
+	var b []byte
 	for i := range steps {
-		b, err := steps[i].MarshalLine()
-		if err != nil {
+		var err error
+		if b, err = steps[i].AppendLine(b[:0]); err != nil {
 			return err
 		}
 		if _, err := w.Write(b); err != nil {

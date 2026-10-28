@@ -2084,6 +2084,7 @@ type Step struct
     field Order map[string]int64
     field Source string
     field Ref string
+    method (*Step) AppendLine(b []byte) ([]byte, error)
     method (*Step) Attributes() map[string]any
     method (*Step) Get(name string) (any, bool)
     method (*Step) MarshalLine() ([]byte, error)

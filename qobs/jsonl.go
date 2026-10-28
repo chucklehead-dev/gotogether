@@ -98,8 +98,20 @@ func (j *JSONLSink) Flush() error {
 	return j.err
 }
 
+// lineBufs are the buffers steps are encoded in, outside the sink's
+// lock: steps recorded on several cores encode in parallel.
+// Process-wide.
+var lineBufs = sync.Pool{New: func() any { b := make([]byte, 0, 512); return &b }}
+
 func (j *JSONLSink) Record(_ context.Context, s *qtrace.Step) {
-	b, err := s.MarshalLine()
+	bp := lineBufs.Get().(*[]byte)
+	b, err := s.AppendLine((*bp)[:0])
+	defer func() {
+		if cap(b) <= 64<<10 { // a huge step's buffer is not kept
+			*bp = b[:0]
+			lineBufs.Put(bp)
+		}
+	}()
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	if j.closed {
@@ -110,7 +122,7 @@ func (j *JSONLSink) Record(_ context.Context, s *qtrace.Step) {
 	}
 	if err == nil {
 		if !j.headed {
-			b = append(qtrace.FormatLine(), b...)
+			b = append(qtrace.FormatLine(), b...) // (once: a copy the pool does not keep)
 		}
 		_, err = j.w.Write(b)
 		j.headed = j.headed || err == nil
