@@ -202,6 +202,12 @@ jobs:
           # context.Background() is often deliberate, and t.Context() ends
           # before its cleanups)
           "$RUNNER_TEMP/quintvet" -quintsim=false -quintweave=false -quintaction=false -test=false ./...
+          # the grist applications' code by type (GR3 slice 4): what
+          # escapes a simulation (lint -sim's check, above, by syntax), and
+          # an effect calling a dependency past grist's declared calls
+          for m in counters library wallet-grist; do
+            (cd examples/$m && "$RUNNER_TEMP/quintvet" -quintweave=false -quintaction=false -quintctx=false ./...) || exit 1
+          done
       - name: fuzzing the faithful shop (coverage-guided, the model judging every run)
         if: matrix.part == 'tools'
         working-directory: examples/checkout

@@ -28,7 +28,7 @@ of building it as a newcomer to grist.
 | [doubles_test.go](doubles_test.go) | the runs' doubles: none (the `noDedupe` mutant replaces it) |
 | [model/library_gen.qnt](model/library_gen.qnt), [model/library_steps.qnt](model/library_steps.qnt), `*.binding.yaml`, [model/grist.qnt](model/grist.qnt), [grist.lock](grist.lock) | generated (grist.lock: every stored version's shape, every read model's fingerprint; a version whose struct changed is the generator's error): `go run ./cmd/library model` (never edit them; `TestGenerated` fails when they are stale), the catalog's obligations among them (`receiptsEventuallyHandled`, `mailerSendEventuallyServed`: eventual vals the store's binding judges at a settle, docs/grist.md §3.3.1) |
 | [cmd/library](cmd/library/main.go) | the binary (`grist.Main`): `model`, `catalog`, `verify`, `serve -db sqlite:PATH` |
-| [testdata/mutants](testdata/mutants) | `noCopyCheck`, `staleLimit`, `noDedupe`, `wrongReceipt`, `dropsCopies`; `drop-loan-limit` is generated (`gristtest.RuleMutants(App)`: the app with its rule dropped); `qtest.Mutants` finds and runs them all |
+| [testdata/mutants](testdata/mutants) | `noCopyCheck`, `staleLimit`, `noDedupe`, `wrongReceipt`, `dropsCopies`, `clockReceipt`; `drop-loan-limit` is generated (`gristtest.RuleMutants(App)`: the app with its rule dropped); `qtest.Mutants` finds and runs them all |
 
 ## Which check catches which mutant
 
@@ -44,6 +44,8 @@ of building it as a newcomer to grist.
 | `TestAtTheLimitPossible` | the model on its own (`qtest.Possible`) | a model too strict for the scenario `a member at the limit` (`gristtest.Scenario`: a join, a book of three copies and one of one, three borrows, then a fourth refused `limit`) to happen; the generated binding's `borrow.limit` possible says the same of any limit refusal (`gotogether simulate`) |
 | `TestAtTheLimit` | the scenario as a workload: its first six calls a prologue, one client asking the fourth loan, no faults | nothing: `Conforms`, `All(atTheLimit)` (every run follows the scenario; a miss would name the longest prefix taken and where it stopped) |
 | `TestReceiptOnce` | a scripted crash just after a receipt's mail, before its checkpoint | nothing: `Conforms` (the mail sent again, the mailer replaying its first answer), `All(Settles)`, the crash reached |
+| `TestLintSim` | `gotogether lint -sim`'s check over the app's code (qlint.Sim) | nothing: no wall clock, random source, goroutine or multi-case select in a decision, fold, handler or effect |
+| `TestMutant` (`clockReceipt`: the receipts' effect skipping a borrow older than a day, read from `time.Since`) | the lint over the mutant's file | `time.Since reads the wall clock in a grist application` at processors.go:19, the fix the event's `Meta.Time` (GR3 slice 4) |
 | `TestMutant` (`noDedupe`) | the same, a mailer double sending every try | `All(Rejects("mailerSendServed"))`: a second served record of one key, which the generated `mailerSendAdmits` refuses (`Send` is `Keyed`; no rule written by hand) |
 | `TestMutant` (`wrongReceipt`) | borrows, no faults | `All(Rejects("mailerSendServed"))`: a receipt naming no borrow (member and book swapped), refused where the mailer sends it (its request not `receiptsMailerSend`'s for its trigger), the first record of it |
 | `TestRealHTTP` | the real tier: SQLite, real HTTP, the mailer's default double in process (`TierConfig.Local`: one `grist.Local` for the tier), every fifth answer lost (gristtest.Tier) | nothing: both bindings conform, every answer has its store-side step |

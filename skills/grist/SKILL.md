@@ -47,6 +47,7 @@ the walk-through: read its README's table first.
 - [ ] Every block is authorized or internal; `App.Verify()` is clean.
 - [ ] The generated files are committed and `TestGenerated` passes.
 - [ ] The generator printed no warning left unread (a fold's inputs changed).
+- [ ] `gotogether lint -sim .` and quintvet's `quintraw` are clean: no clock, rand or `go` in the app's code; effects call declared calls only.
 - [ ] grist.lock is committed; a changed event is a new version with an upcaster, `gristtest.Upcasts` passes.
 - [ ] The clients' side is judged too: `.WithBinding(calls, qtest.Linearize())`.
 
@@ -69,6 +70,7 @@ the walk-through: read its README's table first.
 | `model actions taken N of M (never: ...)` | what no run reached | widen `Send`, `Prologue`, `Gen` |
 | `NO VERDICT`, `checks the actors */clients` on serve's steps | the calls binding judges clients' recordings | record the clients (`grist/client`), or validate the commits binding alone |
 | panic: `"..." alone is a claim over runs with no quantifier` | a scenario or `NoClientErrors` over runs bare | `qtest.Some(scenario)`, `qtest.All(gristtest.NoClientErrors())`; a mutant's client errors `qtest.Some(qtest.Not(gristtest.NoClientErrors()))` |
+| `... in a grist application ...: use the event's Meta.Time` (lint -sim); `a grist effect calls ... directly` (quintraw) | code the model cannot see | [references/loop.md](references/loop.md): `Meta.Time`, a command's arguments, a processor; a declared call (`Call.Do`) |
 | `missing go.sum entry` running `gotogether` | the CLI is not a tool of the app | `go get -tool .../cmd/gotogether`, then `go tool gotogether` |
 
 ## Run it, do not infer it

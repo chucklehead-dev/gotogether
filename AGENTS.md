@@ -68,7 +68,7 @@ qload/ qmeta/ load simulation (open/closed-loop clients, servers, triggers, the 
 qcover/ qrun/ code coverage by model step (woven by qweave -cover); a run's state found from its context or goroutine
 qnemesis/     a real deployment's nemesis (processes, containers, Toxiproxy links), its faults recorded as steps and re-made in qenv
 qlint/        simulation and weaving lints (gotogether lint -sim, -weave); per file for qanalysis
-qanalysis/    separate module (x/tools): analyzers (cmd/quintvet, golangci plugin), static action map (cmd/actionmap)
+qanalysis/    separate module (x/tools): analyzers (cmd/quintvet, golangci plugin; quintraw: a grist effect's raw calls), static action map (cmd/actionmap)
 qmut/         mutant schemata (woven by qweave -mutate): one build, a mutant per run; qtest's System.Mutate explores each
 qhistory/     a real database's isolation level from a list-append workload's history (Elle's; Adya's anomalies)
 qsweep/       covering arrays (pairwise and t-way rows with constraints, sequence covering); System.Sweep runs them
@@ -503,8 +503,12 @@ working there:
   calls, math/rand's and crypto/rand's package functions (called, or
   taken as values: `now := time.Now`; quintvet's quintsim sees them
   through the types, dot imports and shadowing included) and selects of
-  two or more cases in files that import qenv, tests included; `//qenv:ok` exempts a
-  line (give the reason after it). The core's own simulated code (qenv, its
+  two or more cases in files that import qenv, tests included, and in a
+  grist application's non-test files (importing grist; its findings name
+  grist's fixes: `Meta.Time`, a command's arguments, a processor); `//qenv:ok` exempts a
+  line (give the reason after it). quintvet's quintraw reports a grist
+  effect calling net/http, gRPC or database/sql directly (`//grist:raw
+  <reason>` exempts). The core's own simulated code (qenv, its
   internals, qload, qrole, qobs, qrun, qcover, qmut) is held to it too
   (qlint's TestCoreStaysInTheSimulation), every exemption with its reason.
 - `//quint:action` arguments split on spaces outside quotes and brackets

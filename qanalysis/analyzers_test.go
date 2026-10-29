@@ -13,7 +13,15 @@ import (
 // The analyzers report what gotogether lint reports, at the same places
 // (qlint's own test has the same fixtures).
 func TestSim(t *testing.T) {
-	analysistest.Run(t, analysistest.TestData(), qanalysis.Sim, "simapp")
+	analysistest.Run(t, analysistest.TestData(), qanalysis.Sim, "simapp", "simgrist")
+}
+
+// quintraw: an effect's raw HTTP, gRPC and database calls, in a
+// function literal, a closure within it and a function given by name;
+// //grist:raw with a reason exempts a line, without one is reported; the
+// same calls outside an effect are not.
+func TestRaw(t *testing.T) {
+	analysistest.Run(t, analysistest.TestData(), qanalysis.Raw, "rawapp")
 }
 
 func TestWeave(t *testing.T) {

@@ -247,3 +247,18 @@ for it. No binding is written by hand.
    before what it would cause (wallet-grist's `noOutbox` is
    `Rejects("post")`, never a lost post): a mutant of the declaration
    shows the mismatch, not its consequence.
+
+## Lints: what the model cannot see
+
+`gotogether lint -sim .` checks the app's non-test files (those
+importing grist) for the wall clock (use the event's `Meta.Time`),
+math/rand's and crypto/rand's functions (a command's argument instead),
+`go` statements (a processor instead) and multi-case selects;
+`//qenv:ok <reason>` exempts a line. quintvet's `quintraw` (`go run
+github.com/chucklehead-dev/gotogether/qanalysis/cmd/quintvet
+-quintweave=false -quintaction=false ./...`) reports an effect calling
+`net/http`'s client, a gRPC `ClientConn` or `database/sql` directly:
+declare the dependency (`grist.NewDependency`, `NewCall`, `Uses`) and
+call `Call.Do`; `//grist:raw <reason>` exempts a line grist cannot
+declare yet. examples/library's `clockReceipt` mutant is the lint's
+catch (`TestMutant`), `TestLintSim` its contrast.

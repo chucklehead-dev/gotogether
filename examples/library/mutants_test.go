@@ -1,11 +1,13 @@
 package library
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/grist/gristtest"
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qlint"
 	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
@@ -39,6 +41,19 @@ func TestMutant(t *testing.T) {
 		// the contrast)
 		system(commits, greedy).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 6}).
 			Expect(t, qtest.Some(qtest.Rejects("borrow")))
+	case "clockReceipt":
+		// the receipts' effect reading the wall clock (a borrow older than a
+		// day mailed no receipt): gotogether lint -sim, over the
+		// application's code, names the line and grist's fix, the event's
+		// Meta.Time; the faithful tree is clean (TestLintSim)
+		fs, err := qlint.Sim(filepath.Join("testdata", "mutants", mutant))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(fs) != 1 || !strings.HasSuffix(fs[0].Pos, "processors.go:19:7") ||
+			!strings.Contains(fs[0].What, "time.Since reads the wall clock in a grist application") || !strings.Contains(fs[0].Fix, "Meta.Time") {
+			t.Errorf("lint -sim of the mutant: %v, want time.Since at processors.go:19 with the fix Meta.Time", fs)
+		}
 	case "noDedupe":
 		// the mailer without its dedupe (a double sending every try): the
 		// receipt mailed again after the scripted crash is a second served
@@ -75,4 +90,17 @@ func TestMutant(t *testing.T) {
 func TestMutants(t *testing.T) {
 	t.Parallel()
 	qtest.Mutants{Generated: gristtest.RuleMutants(App)}.Run(t)
+}
+
+// TestLintSim: the application's code reads no wall clock, no random
+// source and starts no goroutine (gotogether lint -sim, which CI runs over
+// the repository); the clockReceipt mutant's does (TestMutant).
+func TestLintSim(t *testing.T) {
+	fs, err := qlint.Sim(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range fs {
+		t.Errorf("%s", f)
+	}
 }

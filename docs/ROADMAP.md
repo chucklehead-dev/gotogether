@@ -980,8 +980,11 @@ Then, in order, each item reviewed before the next:
   committing nothing), counters' `TestRealHTTP` retiring through a bank
   behind `ServeCalls` and judged by its real variant (the mailer a third
   party's), `payTwice` caught from the steps file, the lost answer with
-  the node killed probed over HTTP. Next: slice 4 (lints for an app's
-  own code).
+  the node killed probed over HTTP. Slice 4 built (HISTORY: "GR3 slice
+  4"): `lint -sim` and quintsim over a grist application's non-test
+  files with grist's fixes, the quintvet check `quintraw` (an effect's
+  raw HTTP, gRPC or SQL call; `//grist:raw <reason>`), library's
+  `clockReceipt` mutant caught by the lint. Next: slice 5 (peer calls).
   Candidate example apps for the declared calls (not built):
   - *payments*, calling a third-party PSP: `authorize` `Keyed`, at least
     once, refusing `declined`; `capture` at most once, reading the

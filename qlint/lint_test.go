@@ -224,3 +224,71 @@ func run(s *qenv.Sim) {
 		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
+
+// A grist application's code is checked: its non-test files importing
+// grist (decisions, folds, handlers and effects gristsim runs in a
+// simulation), each finding naming grist's fix (an event's Meta.Time, a
+// command's arguments, a processor); its tests, which drive a real tier
+// or gristsim, are not, unless they import qenv.
+func TestLintGristApp(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, src string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("processors.go", `package shop
+
+import (
+	"math/rand"
+	"time"
+
+	"github.com/chucklehead-dev/gotogether/grist"
+)
+
+var App = grist.New("shop")
+
+func stamp() int64 {
+	go func() {}()
+	if rand.Intn(2) == 0 {
+		return 0
+	}
+	return time.Now().UnixMilli()
+}
+
+func ok() time.Time { return time.Now() } //qenv:ok a log line's time
+`)
+	write("real_test.go", `package shop
+
+import "time"
+
+import "github.com/chucklehead-dev/gotogether/grist"
+
+var _ = grist.New
+var started = time.Now()
+`)
+	fs, err := qlint.Sim(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range fs {
+		got = append(got, filepath.Base(f.Pos)+" "+f.What+": "+f.Fix)
+	}
+	all := strings.Join(got, "\n")
+	for _, want := range []string{
+		"processors.go:13:2 goroutine started with `go` in a grist application",
+		"make it a processor (grist.NewProcessor)",
+		"processors.go:14:5 math/rand.Intn draws from a source seeded at random in a grist application",
+		"take the value from the command's arguments",
+		"processors.go:17:9 time.Now reads the wall clock in a grist application",
+		"use the event's Meta.Time",
+	} {
+		if !strings.Contains(all, want) {
+			t.Errorf("findings lack %q:\n%s", want, all)
+		}
+	}
+	if len(fs) != 3 {
+		t.Errorf("%d findings, want 3 (the test file and the //qenv:ok line are not):\n%s", len(fs), all)
+	}
+}

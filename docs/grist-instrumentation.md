@@ -1,8 +1,9 @@
 # grist instrumentation (GR3): every seam recorded and simulated by construction
 
 Status: design, 2026-10-27, for docs/ROADMAP.md's GR3. **Slices 1 to
-3 are built** (§4; docs/HISTORY.md (grist §0.12), §0.13 and §0.14 say what
-building them changed, and the text below is corrected where they did):
+4 are built** (§4; docs/HISTORY.md (grist §0.12), §0.13 and §0.14 say what
+building the first three changed, HISTORY's "GR3 slice 4" the fourth's,
+and the text below is corrected where they did):
 `grist.NewDependency`, `grist.NewCall`, `Keyed`, `Uses`, `Call.Do`,
 `Handlers`, `Local`, `Transport`, `gristsim.Config.Doubles`,
 `grist.DefaultHandlers` (the default double), `grist.OverHTTP`,
@@ -661,14 +662,30 @@ names the mutant it must catch, built as an overlay
    its mailer a third party's. `grist.Main` gained `ServeDependency` and
    `serve -dependency NAME=URL`; the lost answer is a 502, as a proxy
    gives.
-4. **Lints for an app's own code.** `lint -sim` over files importing
-   grist (clock, rand, `go`, multi-case selects), with fixtures, and a
-   `quintvet` check that an effect calls no `net/http` client, gRPC
-   connection or `*sql.DB` directly (the seam grist cannot record), the
-   escape `//grist:raw <reason>`. **Example: library**. **Acceptance**:
-   a mutant mailer effect stamping its receipt with `time.Now()` fails
-   the lint, naming the line and the fix (`Meta.Time`); the faithful
-   tree is clean, CI runs it.
+4. **Lints for an app's own code** (built, 2026-10-29: docs/HISTORY.md,
+   "GR3 slice 4", with what it changed here). `gotogether lint -sim` and
+   quintvet's `quintsim` over a grist application's non-test files (those
+   importing grist: the clock, rand, `go`, multi-case selects), each
+   finding naming grist's fix (an event's `Meta.Time`, a command's
+   arguments, a processor), with fixtures (qlint's `TestLintGristApp`,
+   qanalysis's `simgrist`); the quintvet check `quintraw`: an effect (the
+   function given to `grist.Effect`, its closures, a package function
+   named there) calling a `net/http` client, a gRPC `ClientConn` or
+   `database/sql` directly, the escape `//grist:raw <reason>` (a reason
+   required). **Example: library**. **Acceptance**, as built: the mutant
+   `clockReceipt`, its receipts' effect skipping a borrow older than a
+   day by `time.Since` (the receipt has no field to stamp: its request is
+   compared field by field with the model's, whose events carry no time),
+   fails the lint at the line, naming `Meta.Time` (library's
+   `TestMutant`); the faithful tree is clean (`TestLintSim`), and CI runs
+   both checks: the root's `lint -sim .`, which walks the examples, and
+   quintvet over counters, library and wallet-grist. Two corrections:
+   an app's test files are not linted unless they import qenv (they
+   drive a real tier, on the real clock, or gristsim, which runs the
+   simulation itself: counters' had 27 findings, every one legitimate);
+   and the doc's "stamping its receipt with `time.Now()`" became a
+   decision by the clock, since a stamp would be a field the model cannot
+   compute.
 5. **Peer calls.** `NewPeer`, `NewPeerCall` over grist/client, the key
    qualified by the caller's App, `caller` `service:<app>`, B's API
    server named after B, actors naming the service (question 1),

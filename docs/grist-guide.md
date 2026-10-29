@@ -761,7 +761,33 @@ client got has its store-side step (`gristtest.Answered`).
 - `gristtest.Upgrade(t, binding, deployed.App, App, cfg)`: a rolling
   update from the deployed release (§7.3).
 
-### 6.8 What it costs
+### 6.8 Lints: what the model cannot see
+
+An application's code runs under gristsim in virtual time, and the model
+computes every decision from what the step records. Two checks find
+code that leaves both (GR3 slice 4):
+- `gotogether lint -sim .` (and quintvet's `quintsim`, by type) over the
+  app's non-test files, those importing grist: the wall clock (use the
+  event's `Meta.Time`, the time it was appended, the same on every node
+  and replay), math/rand's and crypto/rand's functions (take the value
+  from the command's arguments), `go` statements (make it a processor),
+  selects of several cases. `//qenv:ok <reason>` exempts a line.
+- quintvet's `quintraw`: an effect (the function given to
+  `grist.Effect`) calling `net/http`'s client, a gRPC `ClientConn` or
+  `database/sql` directly, past the declared calls grist records and
+  simulates: declare it (`grist.NewDependency`, `NewCall`, `Uses`) and
+  call `Call.Do`. `//grist:raw <reason>` exempts a line.
+
+```sh
+go run github.com/chucklehead-dev/gotogether/cmd/gotogether lint -sim .
+go run github.com/chucklehead-dev/gotogether/qanalysis/cmd/quintvet -quintweave=false -quintaction=false ./...
+```
+
+examples/library's `clockReceipt` mutant (its receipts' effect skipping
+a borrow older than a day, read from `time.Since`) fails the lint at the
+line, naming `Meta.Time`; `TestLintSim` keeps the faithful tree clean.
+
+### 6.9 What it costs
 
 The scaffold's suite: about a minute under `-short`, about six without.
 Judging a run costs more than simulating it: counters judges a run of
@@ -1142,6 +1168,8 @@ verdict ("NO VERDICT: checks the actors */clients").
 | `grist: conflict: the decision's reads changed on every try` (409) | contention past `ConditionTries` | the key's final answer: retry under a new id, or read less (a keyed read model) |
 | `grist: the command's outcome is unknown (an append may have committed): retry it with the same id` (503) | an append's commit was not confirmed | retry with the same id; the marker answers |
 | `NO VERDICT`, `checks the actors */clients` | the calls binding judges clients' recordings | record the clients (`grist/client`) or validate the commits binding alone |
+| `time.Now reads the wall clock in a grist application ...: use the event's Meta.Time` (`lint -sim`, quintsim) | a decision, fold, handler or effect reading the clock, which no model computes and gristsim runs in virtual time | the event's `Meta.Time`; a random value from the command's arguments; a goroutine as a processor (§6.8) |
+| `a grist effect calls (*http.Client).Do directly ...` (quintraw) | a dependency reached past the declared calls: no step, no faults, no model | declare it (`grist.NewCall`, `Uses`) and call `Call.Do`, or `//grist:raw <reason>` (§6.8) |
 | `missing go.sum entry` running `gotogether` | the CLI is not a tool of the app | `go get -tool github.com/chucklehead-dev/gotogether/cmd/gotogether`, then `go tool gotogether` |
 | `two different records` from validate, no verdict | two nodes recorded under one recorder id | a node identity per pod (`POD_NAME`, §9.2) |
 

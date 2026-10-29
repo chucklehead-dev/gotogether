@@ -164,7 +164,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | GR3 slices 4-6 (lints for an app's own code; peer calls; spans of declared calls; [grist-instrumentation.md](grist-instrumentation.md) §4) | M each | unblocked (after H4); 5 is GR4's groundwork |
+| 1 | GR3 slices 5-6 (peer calls; spans of declared calls; [grist-instrumentation.md](grist-instrumentation.md) §4) | M each | unblocked (after H4); 5 is GR4's groundwork |
 | 2 | GR4, several services simulated together | L | after H5, H6, I22 (all done) |
 | 3 | GR5 streams, GR6 gRPC, GR7 controllers | M, M, L | on the published doubles (H7) |
 | 4 | GR8 sagas and timers, GR9 checkout as grist services | M, L | GR9 proves GR4 and GR8 compose |

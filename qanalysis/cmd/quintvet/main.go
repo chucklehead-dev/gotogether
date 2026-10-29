@@ -1,7 +1,7 @@
 // Command quintvet runs gotogether's analyzers (qanalysis): quintsim,
-// quintweave, quintaction and quintctx. Standalone:
+// quintweave, quintaction, quintctx and quintraw. Standalone:
 //
-//	quintvet ./...                                      # all four
+//	quintvet ./...                                      # all five
 //	quintvet -quintweave=false -quintaction.binding app.binding.yaml ./...
 //
 // or as go vet's tool, which runs it per package with the build's types:

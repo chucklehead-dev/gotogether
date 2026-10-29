@@ -15,7 +15,7 @@
 //	      gotogether:
 //	        type: module
 //	        settings:
-//	          analyzers: [quintsim, quintaction]   # default: all four
+//	          analyzers: [quintsim, quintaction]   # default: all five
 //	          binding: app.binding.yaml            # quintaction's -binding
 package golangci
 
@@ -33,7 +33,8 @@ func init() { register.Plugin("gotogether", New) }
 
 // Settings are the plugin's settings in .golangci.yml.
 type Settings struct {
-	// Analyzers to run, by name (quintsim, quintweave, quintaction; empty:
+	// Analyzers to run, by name (quintsim, quintweave, quintaction, quintctx,
+	// quintraw; empty:
 	// all).
 	Analyzers []string `json:"analyzers"`
 	// Binding and Quint are quintaction's -binding and -quint.
@@ -68,7 +69,7 @@ func (p *plugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	for _, name := range p.s.Analyzers {
 		i := slices.IndexFunc(qanalysis.All, func(a *analysis.Analyzer) bool { return a.Name == name })
 		if i < 0 {
-			return nil, fmt.Errorf("gotogether: no analyzer %q (have quintsim, quintweave, quintaction, quintctx)", name)
+			return nil, fmt.Errorf("gotogether: no analyzer %q (have quintsim, quintweave, quintaction, quintctx, quintraw)", name)
 		}
 		out = append(out, qanalysis.All[i])
 	}

@@ -2487,6 +2487,43 @@ claim such as `Some(Not(NoClientErrors()))` is not shown in the test's
 summary line; hello's mutant report says "schedule 3" where its nav
 command says `schedule=1:2`; the quint cache had grown to 3.2 GB here; `serve -steps DIR/` fails ("is a directory") when DIR does not exist, where it could make it.
 
+### GR3 slice 4: lints for an application's own code
+
+docs/grist-instrumentation.md §4's slice 4. grist records and simulates
+what goes through its blocks and declared calls; an application's own
+code can leave both (the wall clock in a decision, a raw HTTP call in an
+effect), and nothing said so.
+- **`lint -sim` over a grist application** (qlint's `simFile`, so the
+  CLI and quintsim alike): a non-test file importing grist is checked as
+  a file importing qenv is, its findings naming grist's fixes: the
+  event's `Meta.Time` for the clock (the time it was appended, the same
+  on every node and replay; qenv's otherwise), a command's arguments for
+  a random value, a processor for a goroutine. An app's tests are not
+  checked unless they import qenv: they drive a real tier on the real
+  clock, or gristsim, which runs the simulation itself (counters' tests
+  had 27 findings, all legitimate). Fixtures: qlint's
+  `TestLintGristApp`, qanalysis's `simgrist`.
+- **quintraw** (qanalysis's `Raw`): the function given to
+  `grist.Effect` (a literal, its closures, a package function named
+  there) calling `http.Get`/`Post`/`Head`/`PostForm`, an `*http.Client`'s
+  methods, a gRPC `ClientConn`'s `Invoke` or `NewStream`, `grpc.NewClient`
+  or `Dial`, or `database/sql`'s `Open` and an `*sql.DB`'s, `*sql.Conn`'s
+  or `*sql.Tx`'s statements. `//grist:raw <reason>` on the line or the
+  one above exempts it; one without a reason is reported. Fixture
+  `rawapp`, with stubs of grist and gRPC.
+- **library**: the mutant `clockReceipt` (the receipts' effect skips a
+  borrow older than a day, by `time.Since`) fails the lint at
+  processors.go:19 naming `Meta.Time` (`TestMutant`); `TestLintSim` keeps
+  the tree clean. CI: the root's `lint -sim .` walks every example, and
+  the tools part runs quintvet over counters, library and wallet-grist
+  (all clean).
+
+What the doc had wrong: its mutant stamped the receipt with `time.Now()`,
+but a receipt has no time field, and one could not be modelled (the site
+compares the request field by field with the model's, whose events carry
+no time); the mutant decides by the clock instead. And "files importing
+grist" needed "non-test": an app's tests are the real tier's.
+
 ### I26: the generator warns on what an app forgot
 
 ROADMAP I26 (the eleventh review's designer: a newcomer added an event

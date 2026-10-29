@@ -6,9 +6,10 @@ yaml.v3 and Hegel.
 
 | Analyzer | Reports | Same as |
 |---|---|---|
-| `quintsim` | in files importing qenv: `go` statements, the wall clock and math/rand's functions, called or as values (`now := time.Now`; by type: dot imports too), steps recorded with `context.Background()`; with a context in scope, fixes: `go f()` to `qenv.Go`, `time.Now()`/`time.Sleep` to qenv's | `gotogether lint -sim` |
+| `quintsim` | in files importing qenv, and a grist application's non-test files (importing grist; each fix grist's: an event's `Meta.Time`, a command's arguments, a processor): `go` statements, the wall clock and math/rand's functions, called or as values (`now := time.Now`; by type: dot imports too), steps recorded with `context.Background()`; with a context in scope, fixes: `go f()` to `qenv.Go`, `time.Now()`/`time.Sleep` to qenv's | `gotogether lint -sim` |
 | `quintweave` | unmarked `go` statements, sync method values, embedded sync types (for packages woven by qenv/weave); fixes: `//qenv:go` above a function literal's `go`, a method value called from a function literal | `gotogether lint -weave` |
 | `quintctx` | `context.Background()` or `TODO()` in a function with a `context.Context` parameter or a test's `t` (fix: pass it, or `t.Context()`); not in closures, not a nil parameter's default; `//quintctx:ok` exempts a line | |
+| `quintraw` | a grist effect (the function given to `grist.Effect`, its closures, a package function named there) calling `net/http`'s client, a gRPC `ClientConn` or `database/sql` directly, past the declared calls grist records (fix: `grist.NewCall`, `Call.Do`); `//grist:raw <reason>` on the line or the one above exempts it | |
 | `quintaction` | `//quint:action` without `action:`; expressions using locals (only parameters, the receiver and named results are in scope on return); with `-binding`: actions not in the model, fields the binding uses but the annotation does not record, literal `qobs.Record` actions not in the model; fixes: a local every return returns in one place named as that result, a misspelled parameter spelled, a misspelled action (directive or `Record`) named as the model's nearest, a missing field recorded from the parameter or named result of its name | `gotogether lint -binding -src` |
 
 The first two wrap package `qlint`, so the CLI and the analyzers find the
@@ -16,7 +17,7 @@ same things.
 
 ```sh
 go install github.com/chucklehead-dev/gotogether/qanalysis/cmd/quintvet@latest
-quintvet ./...                                           # all four
+quintvet ./...                                           # all five
 quintvet -fix ./...                                      # and apply their fixes
 quintvet -quintweave=false -quintaction.binding app.binding.yaml ./...
 go vet -vettool=$(which quintvet) -quintweave=false ./... # per package, with go vet
@@ -52,5 +53,5 @@ cd qanalysis && go run ./cmd/actionmap -C .. -coverage /tmp/k/checkout-coverage.
 ```
 
 Tests: `go test ./...` (analysistest fixtures in `testdata/src`, with
-stubs of qenv and qobs; the binding test and the checkout comparison need
+stubs of qenv, qobs, grist and gRPC; the binding test and the checkout comparison need
 quint, and the latter skips under `-short`).

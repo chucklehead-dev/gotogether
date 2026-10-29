@@ -24,3 +24,7 @@ Gotchas for agents (and humans) before changing qanalysis or the binding lint; A
   `pass.TypesInfo`: a `*types.Func` of the package, no receiver, so a
   dot import is seen and a local that shadows `time` is not). A rule
   change goes in both modes, with a qlint test and a simapp fixture.
+  The rule covers a grist application's non-test files (importing grist,
+  `gristPath`; the simgrist fixture), with grist's fixes; quintraw
+  (raw.go) is typed only, its stubs of grist and gRPC under
+  testdata/src.

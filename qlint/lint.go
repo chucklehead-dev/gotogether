@@ -70,6 +70,13 @@ func (f Finding) String() string { return f.Pos + ": " + f.What + ": " + f.Fix }
 // name (time.Now); with it (SimFileTyped, the analyzers) by what the name
 // denotes, so a dot import is seen and a local variable named time is not.
 //
+// A grist application's code is checked too: the non-test files that
+// import grist (its decisions, folds, handlers and effects run in a
+// simulation under gristsim, and on every node of the real tier), each
+// finding saying what grist offers in its place (an event's Meta.Time
+// for the wall clock, a command's arguments for a random value, a
+// processor for a goroutine).
+//
 // A line with a //qenv:ok comment is exempt, for code that runs outside
 // the simulation on purpose (a real server next to a simulated client).
 func Sim(dir string) ([]Finding, error) {
@@ -97,6 +104,11 @@ func Sim(dir string) ([]Finding, error) {
 }
 
 const qenvPath = "github.com/chucklehead-dev/gotogether/qenv"
+
+// gristPath is grist's package: a file importing it is an application's
+// code, which gristsim runs in a simulation (its decisions, folds,
+// handlers and effects) and the real tier serves.
+const gristPath = "github.com/chucklehead-dev/gotogether/grist"
 
 // Read-only.
 var wallClock = map[string]string{
@@ -141,7 +153,8 @@ func init() {
 }
 
 // SimFile is Sim's check of one parsed file (with comments): nothing
-// unless the file imports qenv.
+// unless the file imports qenv, or is a grist application's (a non-test
+// file importing grist).
 func SimFile(fset *token.FileSet, f *ast.File) []Finding { return simFile(fset, f, nil, false) }
 
 // SimFileTyped is SimFile with the file's type information: a function
@@ -164,7 +177,13 @@ func simFile(fset *token.FileSet, f *ast.File, info *types.Info, all bool) []Fin
 		}
 		names[p] = name
 	}
-	if _, ok := names[qenvPath]; !all && (!ok || f.Name.Name == "qenv") {
+	_, sim := names[qenvPath]
+	_, imp := names[gristPath]
+	// app: a grist application's own code, not a simulation's: its
+	// non-test files (its tests drive a real tier, or gristsim, which
+	// runs the simulation itself; one importing qenv is a simulation's)
+	app := imp && !sim && !strings.HasSuffix(fset.Position(f.Package).Filename, "_test.go")
+	if !all && (!sim && !app || sim && f.Name.Name == "qenv") {
 		return nil
 	}
 	exempt := map[int]bool{}
@@ -226,11 +245,19 @@ func simFile(fset *token.FileSet, f *ast.File, info *types.Info, all bool) []Fin
 	escapes := func(pkgPath, name string) (what, fix string) {
 		switch pkgPath {
 		case "math/rand", "math/rand/v2", "crypto/rand":
+			if !randConstructors[name] && app {
+				return pkgPath + "." + name + " draws from a source seeded at random in a grist application, so a run does not replay and no model can compute it",
+					"take the value from the command's arguments (the caller chooses it, and the step records it), or derive it from what the decision read"
+			}
 			if !randConstructors[name] {
 				return pkgPath + "." + name + " draws from a source seeded at random, so a run does not replay",
 					"draw from the run's chooser (Sim.Choose(kind, n)), or from rand.New with a seed the run chose"
 			}
 		case "time":
+			if wallClock[name] != "" && app {
+				return "time." + name + " reads the wall clock in a grist application, which gristsim runs in virtual time and no model can compute",
+					"use the event's Meta.Time (the time it was appended, the same on every node and every replay); elsewhere " + wallClock[name] + ", which is the clock outside a simulation"
+			}
 			if wallClock[name] != "" {
 				return "time." + name + " reads the wall clock, which does not move in a simulation", "use " + wallClock[name]
 			}
@@ -264,6 +291,11 @@ func simFile(fset *token.FileSet, f *ast.File, info *types.Info, all bool) []Fin
 		}
 		switch n := n.(type) {
 		case *ast.GoStmt:
+			if app {
+				add(n, "goroutine started with `go` in a grist application: its work is no block's, recorded nowhere and outside a simulation",
+					"make it a processor (grist.NewProcessor) on the event that starts it, or start it with qenv.Go(ctx, name, fn)")
+				break
+			}
 			add(n, "goroutine started with `go`, outside the simulation", "start it with qenv.Go(ctx, name, fn)")
 		case *ast.SelectStmt:
 			cases := 0

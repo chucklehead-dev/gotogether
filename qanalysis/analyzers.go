@@ -1,7 +1,8 @@
 // Package qanalysis has gotogether's checks as go/analysis passes:
 // what escapes a qenv simulation (Sim), what qenv/weave cannot rewrite
 // (Weave), //quint:action annotations against their binding (Action),
-// and fresh contexts where the function has one of its own (Ctx).
+// fresh contexts where the function has one of its own (Ctx), and a
+// grist effect calling a dependency past the seam grist records (Raw).
 // They run in a multichecker (cmd/quintvet, also usable as `go vet
 // -vettool`) and in golangci-lint as a module plugin (package golangci).
 //
@@ -30,7 +31,7 @@ import (
 )
 
 // All are the analyzers, for a multichecker.
-var All = []*analysis.Analyzer{Sim, Weave, Action, Ctx}
+var All = []*analysis.Analyzer{Sim, Weave, Action, Ctx, Raw}
 
 // Sim reports code in files that import qenv that escapes the simulation:
 // go statements, the wall clock, steps recorded with a background context

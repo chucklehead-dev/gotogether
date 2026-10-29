@@ -331,6 +331,15 @@ The first release. What a user meets, by module:
   `Relay.RenderAs`, `gristtest.Upgrade`, `ReadersFirst` and
   `WritersFirst`. The runtime snapshot audit (now `grist.AuditSnapshots`,
   below).
+- Lints for a grist application's own code (ROADMAP GR3 slice 4):
+  `gotogether lint -sim` and quintvet's `quintsim` check a grist
+  application's non-test files (importing grist) for the clock, rand,
+  `go` and multi-case selects, each finding naming grist's fix (the
+  event's `Meta.Time`, a command's arguments, a processor); qanalysis's
+  new analyzer `quintraw` (`qanalysis.Raw`, in `All` and the golangci
+  plugin) reports a grist effect calling `net/http`'s client, a gRPC
+  `ClientConn` or `database/sql` directly, `//grist:raw <reason>`
+  exempting a line.
 - grist's generator warns on what an app forgot (ROADMAP I26): `<app>
   model` and `gristtest.Generated` (which now logs the warnings on every
   run) name an event a block appends that nothing reads (no read model
