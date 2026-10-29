@@ -24,11 +24,12 @@ composition, not a prerequisite for it. R5 remains the maintainer's call.
 GR4's first increment is built: acyclic peer graphs, one store/node/API
 per peer, shared peers instantiated once, per-service model judgments
 and an independent end-to-end posting check (docs/grist-composition.md).
-The next increment adds a combined causal protocol model over the same
+A combined causal protocol model is built over the same
 histories (`gristtest.ProtocolSteps`), including missing, duplicate and
-premature-posting contrasts. Left for GR4: order search over concurrent
-extensions, per-service configuration, cycles, clusters and rollouts. The earlier tracks below retain their
-item identifiers and technical dependencies; their historical release
+premature-posting contrasts. Bounded universal order search now checks
+concurrent extensions with explicit exhaustion and counterexample identities.
+Left for GR4: per-service configuration, cycles, clusters and rollouts.
+The earlier tracks below retain their item identifiers and technical dependencies; their historical release
 recommendations do not override this prerelease order.
 
 ## Eleventh review: integrity before tags (I)
@@ -1042,8 +1043,14 @@ Then, in order, each item reviewed before the next:
   edges, independent of clocks and arrival order. The chain's model
   rejects duplicate and premature postings and checks allPosted at
   settle; local models can conform while each contrast fails it.
-  Still open: every concurrent extension (the projection chooses one),
-  cyclic simulations, per-peer doubles/configuration, SQL peers,
+  Bounded universal order search is built: CheckProtocolOrders explores
+  distinct command extensions, retaining processor barriers and checking
+  tenants separately. A counterexample retains native identities; only
+  exhaustive completion establishes that every ordering passed. A
+  two-order simulation exposes a model whose canonical extension passes
+  but another fails; the business protocol passes every extension.
+  Still open: reducing the cost of large concurrent searches, cyclic
+  simulations, per-peer doubles/configuration, SQL peers,
   clusters, upgrades and remote feeds.
 - **GR5. Stream publishers and consumers (M).** A processor that
   publishes to a stream (Kafka via franz-go, Kinesis, the simulated

@@ -548,6 +548,7 @@ type Managed struct
 func Answered(t testing.TB, app *grist.App, traces []*qtrace.Trace)
 func Capture(st grist.Store) *Capturing
 func Catalog(app *grist.App) qtest.Catalog
+func CheckProtocolOrders(ctx context.Context, steps []qtrace.Step, limit int, check func(context.Context, []qtrace.Step) (bool, error), apps ...*grist.App) (ProtocolSearch, error)
 func DroppedRule(app *grist.App) (rule string, caught qtest.Claim, ok bool)
 func Generated(t testing.TB, app *grist.App)
 func Linked(t testing.TB, a, b *grist.App, steps []qtrace.Step)
@@ -584,6 +585,10 @@ type LoggedBatch struct
 type Node struct
     field Relay *grist.Relay
     method (*Node) Kill()
+type ProtocolSearch struct
+    field Checked int
+    field Exhaustive bool
+    field Counterexample []qtrace.Step
 type Tier struct
     field Store grist.Store
     field Client *client.Client

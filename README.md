@@ -139,7 +139,9 @@ testing, where Quint traces drive the implementation). It adds:
   [docs/grist.md](docs/grist.md); the `grist` skill). For a system of
   Apps, `gristtest.ProtocolSteps` projects native commits and peer-call
   causes into a combined model's history, alongside each App's local
-  checks ([the composition experiment](docs/grist-composition.md)).
+  checks; `CheckProtocolOrders` checks bounded alternative causal orderings
+  and distinguishes exhaustive results from hitting the limit
+  ([the composition experiment](docs/grist-composition.md)).
 
 ```
                     ┌────────────── one Quint model ──────────────┐

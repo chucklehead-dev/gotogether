@@ -146,6 +146,13 @@ for it. No binding is written by hand.
    A combined system model takes `gristtest.ProtocolSteps(run.Recorded,
    apps...)`: native command commits ordered by each store and peer-call
    causes, one actor `protocol/<tenant>`, one deterministic extension.
+   Use `gristtest.CheckProtocolOrders` with a positive limit and a callback
+   that judges each ordering as supplied (`validate.Checker.Check`).
+   Check errors first, then Counterexample, then Exhaustive; a limit hit
+   without a counterexample is inconclusive. Save the counterexample as
+   JSONL for replay; its protocol.recorder/seq retain native identities.
+   This is universal robustness over the evidence, not finding a passing
+   serialization. Tenants are independent; processor barriers still apply.
    Validate that projection as well as each App's original records;
    never merge independent clocks or infer a cause from an id's spelling.
    The caller's model has the caller's step

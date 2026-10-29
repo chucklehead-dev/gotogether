@@ -12,6 +12,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
@@ -106,4 +107,64 @@ func TestProtocolDuplicatePosting(t *testing.T) {
 	duplicate = append(duplicate[:3], duplicate[2], duplicate[3])
 	duplicate[3].Seq, duplicate[4].Seq = 4, 5
 	qtest.Validate(t, binding, duplicate).Expect(t, qtest.Rejects("ledgerPost"))
+}
+
+// A canonical extension can serialize independent work and hide a model's
+// unjustified one-order-at-a-time restriction. The same real simulation
+// history passes the business protocol under every causal ordering.
+func TestProtocolOrdersConcurrentHistory(t *testing.T) {
+	qtest.RequireQuint(t)
+	orders, bank, ledger := postingChain(false)
+	sink := &qobs.MemorySink{}
+	base := qenv.NewSeeded(1)
+	base.Rates = qenv.NoFaults
+	c := qenv.WithContext(base, qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink)))
+	if err := gristsim.Run(c, orders, gristsim.Config{Tenants: []string{"t1"}, Clients: 2, Ops: 1,
+		Send: []string{"place"}, Ints: []int{1}, Peers: []*grist.App{bank, ledger}}); err != nil {
+		t.Fatal(err)
+	}
+	native := sink.Steps()
+	canonical, err := gristtest.ProtocolSteps(native, orders, bank, ledger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const serial = "testdata/protocol/serial.binding.yaml"
+	qtest.Validate(t, serial, canonical).Expect(t, qtest.Conforms(), qtest.Settles())
+	checker, err := validate.NewChecker(serial, validate.Options{NoITF: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer checker.Close()
+	strict, err := gristtest.CheckProtocolOrders(t.Context(), native, 32, func(ctx context.Context, steps []qtrace.Step) (bool, error) {
+		report, err := checker.Check(ctx, steps)
+		if err != nil {
+			return false, err
+		}
+		return report.OK(), nil
+	}, orders, bank, ledger)
+	if err != nil || strict.Exhaustive || strict.Checked < 2 || len(strict.Counterexample) == 0 {
+		t.Fatalf("want a noncanonical counterexample: %+v, %v", strict, err)
+	}
+	qtest.Validate(t, serial, strict.Counterexample).Expect(t, qtest.Rejects("ordersPlace"))
+	for _, s := range strict.Counterexample {
+		if !s.Settled && (s.Source == "" || s.Obs["protocol.recorder"] == nil || s.Obs["protocol.seq"] == nil) {
+			t.Fatalf("counterexample lost identity: %+v", s)
+		}
+	}
+	faithful, err := validate.NewChecker("testdata/protocol/chain.binding.yaml", validate.Options{NoITF: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer faithful.Close()
+	checked, err := gristtest.CheckProtocolOrders(t.Context(), native, 32, func(ctx context.Context, steps []qtrace.Step) (bool, error) {
+		report, err := faithful.Check(ctx, steps)
+		if err != nil {
+			return false, err
+		}
+		return report.OK(), nil
+	}, orders, bank, ledger)
+	if err != nil || !checked.Exhaustive || checked.Checked != 5 || len(checked.Counterexample) != 0 {
+		t.Fatalf("faithful concurrent protocol: %+v, %v", checked, err)
+	}
+	t.Logf("strict model failed ordering %d; faithful protocol passed all %d orderings", strict.Checked, checked.Checked)
 }

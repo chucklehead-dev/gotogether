@@ -31,6 +31,7 @@ import (
 // It uses neither wall clocks nor relay arrival order. Independent commits
 // take one deterministic extension, ordered by App name then store seq:
 // this checks that extension, not every interleaving of concurrent work.
+// Use CheckProtocolOrders to check bounded alternatives as well.
 // Original recorder/seq and source survive in each projected step's Source.
 // protocol.recorder and protocol.seq observations keep that identity when
 // a projected stream is written to a file and read back.
@@ -38,6 +39,22 @@ import (
 // ambiguous causes and cycles are refused before that renumbering. A settle
 // is preserved only when every contributing native actor was settled.
 func ProtocolSteps(steps []qtrace.Step, apps ...*grist.App) ([]qtrace.Step, error) {
+	return protocolSteps(steps, apps, nil)
+}
+
+// protocolGraph retains command dependencies while projecting away processor
+// commits. Its indices follow the canonical extension, not native sequence.
+type protocolGraph struct {
+	commands []protocolCommand
+	settles  map[string]qtrace.Step
+}
+
+type protocolCommand struct {
+	step   qtrace.Step
+	before []int
+}
+
+func protocolSteps(steps []qtrace.Step, apps []*grist.App, graph *protocolGraph) ([]qtrace.Step, error) {
 	byName := map[string]*grist.App{}
 	commands := map[string]map[string]string{}
 	prefix := map[string]string{}
@@ -80,6 +97,7 @@ func ProtocolSteps(steps []qtrace.Step, apps ...*grist.App) ([]qtrace.Step, erro
 		trigger     int64
 		next        []*node
 		indegree    int
+		frontier    map[int]bool
 	}
 	var nodes []*node
 	parents := map[event]*node{}
@@ -221,7 +239,20 @@ func ProtocolSteps(steps []qtrace.Step, apps ...*grist.App) ([]qtrace.Step, erro
 			return nil, fmt.Errorf("gristtest.ProtocolSteps: causal cycle between commits: check peer keys and trigger positions")
 		}
 		n := nodes[heap.Pop(ready).(int)]
+		// Keep only the nearest command predecessors. Non-command commits
+		// forward their frontier so they remain causal barriers without
+		// multiplying equivalent projected orders during the search.
+		if graph != nil && commands[n.app][n.s.Action] != "" {
+			graph.commands = append(graph.commands, protocolCommand{before: slices.Sorted(maps.Keys(n.frontier))})
+			n.frontier = map[int]bool{len(graph.commands) - 1: true}
+		}
 		for _, next := range n.next {
+			if graph != nil {
+				if next.frontier == nil {
+					next.frontier = map[int]bool{}
+				}
+				maps.Copy(next.frontier, n.frontier)
+			}
 			next.indegree--
 			if next.indegree == 0 {
 				heap.Push(ready, indices[next])
@@ -255,6 +286,9 @@ func ProtocolSteps(steps []qtrace.Step, apps ...*grist.App) ([]qtrace.Step, erro
 			settleTime = s.Time
 		}
 		out = append(out, s)
+		if graph != nil {
+			graph.commands[len(graph.commands)-1].step = s
+		}
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("gristtest.ProtocolSteps: no committed commands of the supplied Apps: record both ends of the protocol")
@@ -263,6 +297,14 @@ func ProtocolSteps(steps []qtrace.Step, apps ...*grist.App) ([]qtrace.Step, erro
 		if settled[tenant] {
 			out = append(out, qtrace.Step{Action: "settled", Actor: "protocol/" + tenant, Recorder: "grist/protocol/" + tenant,
 				Seq: seq[tenant] + 1, Time: settleTime, Record: qtrace.Record{Settled: true}})
+		}
+	}
+	if graph != nil {
+		graph.settles = map[string]qtrace.Step{}
+		for _, s := range out {
+			if s.Settled {
+				graph.settles[s.Actor] = s
+			}
 		}
 	}
 	return out, nil

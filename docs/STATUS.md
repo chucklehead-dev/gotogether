@@ -17,11 +17,11 @@ renames still land (R5 waits for the maintainer).
 
 The first GR4 composition increment is built on that baseline: acyclic
 peer graphs, shared services instantiated once, and a three-service
-experiment with per-service models plus posting conservation. The next
-increment adds a combined protocol model and a causal projection
-(`gristtest.ProtocolSteps`), with missing, duplicate and premature-posting
-contrasts. See
-[grist-composition.md](grist-composition.md). The maintainer's direction:
+experiment with per-service models plus posting conservation. A combined
+protocol model and causal projection (`gristtest.ProtocolSteps`) are built, with missing, duplicate and premature-posting
+contrasts. `CheckProtocolOrders` now explores bounded alternative causal
+orderings, distinguishing counterexamples, exhaustive checks and limit
+exhaustion. See [grist-composition.md](grist-composition.md). The maintainer's direction:
 correctness first, then composition and an adoption trial; keep APIs
 flexible. GR3 slice 6 is deferred, and release hardening is not a gate.
 
@@ -103,6 +103,7 @@ review" on.
 | GR3 s5 | peer calls: actors naming the App, `grist.NewPeer`, `gristsim.Config.Peers`, `gristtest.Linked`, examples/payouts | HISTORY "GR3 slice 5" |
 | GR4 first | acyclic peer graphs, shared peers, three-service conservation experiment; Linked matches command identity | HISTORY "GR4: the first composition experiment" |
 | GR4 protocol | ProtocolSteps and a combined causal model; missing, duplicate and premature posting contrasts | HISTORY "GR4: a combined protocol model" |
+| GR4 order search | bounded universal causal ordering checks; counterexample identities and explicit exhaustion | HISTORY "GR4: concurrent protocol orderings" |
 | I27, I34 | grist's user guide; ARCHITECTURE.md, example tracks | b382007, c41bd82 |
 | I28-I32 | the first hour: a catch shown, progress, reserved names, reports in words, help | 15cf741, c0eb502, eb1520b, acd5fb1 |
 | I33, I36 | `gotogether init -kind http`, analyzers that fix, JSON Schemas | 9708379, 79c034c, dce024f |
@@ -180,7 +181,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | GR4's next experiment: order search over independent concurrent commands, or the next per-service control an adopter needs | M-L | the combined causal model and its contrasts are built; one deterministic extension is checked today |
+| 1 | GR4's next experiment: the next per-service control an adopter needs | M-L | combined protocol and bounded universal order search are built; avoid speculative configuration before an adoption trial |
 | 2 | Adoption trial on an independently maintained service | S-M | measure modeling and integration friction before choosing another adapter |
 | 3 | GR3 slice 6 (spans of declared calls) | M | deferred until an experiment needs spans; adds a recorder, not a seam |
 | 4 | GR5 streams, GR6 gRPC, GR7 controllers | M, M, L | on the published doubles (H7) |

@@ -2,9 +2,9 @@
 
 Built 2026-10-29. This is a prerelease experiment in whether declared
 calls compose. It extends GR3 slice 5's pair; it does not finish GR4's
-deployment platform. The next increment adds a combined Quint protocol
-model through `gristtest.ProtocolSteps`; it leaves the runtime and wire
-formats unchanged.
+deployment platform. The combined Quint protocol
+model uses `gristtest.ProtocolSteps` and bounded `CheckProtocolOrders`
+search; runtime and wire formats stay unchanged.
 
 An App still declares another App with `grist.NewPeer`, and its command
 with `grist.NewPeerCall`. In a simulation, `gristsim.Config.Peers` lists
@@ -129,11 +129,58 @@ No source record is mutated.
 
 A heap produces one deterministic topological extension, breaking ties
 by App name and committed sequence within each tenant. Neither wall
-clocks nor input arrival order is a causal edge. This does **not**
-quantify over all extensions: a model sensitive to unrelated concurrent
-commands needs an explicit order search in a later increment. The
-projection is an experimental native-record adapter, not a new format
-or a general-purpose actor merge.
+clocks nor input arrival order is a causal edge. `ProtocolSteps` checks
+only that extension. The projection is an experimental native-record
+adapter, not a new format or a general-purpose actor merge.
+
+## Concurrent orderings
+
+`gristtest.CheckProtocolOrders` checks alternative command orderings from
+that same native evidence. Give it a positive ordering limit and a check
+that judges each candidate as supplied, for example a reusable
+`validate.Checker` for the combined binding:
+
+```go
+search, err := gristtest.CheckProtocolOrders(ctx, recorded, 256,
+    func(ctx context.Context, order []qtrace.Step) (bool, error) {
+        report, err := checker.Check(ctx, order)
+        if err != nil {
+            return false, err
+        }
+        return report.OK(), nil
+    }, orders, bank, ledger)
+```
+
+Check `err` first: invalid evidence, cancellation and evaluator failures
+are errors, never model counterexamples. Then interpret the result:
+
+| Result | Meaning |
+| --- | --- |
+| `Counterexample` is nonempty | This ordering failed the supplied check; `Checked` includes it. |
+| `Exhaustive` is true | Every causal command ordering of every tenant passed. |
+| Neither | `Checked` orderings passed, but the limit prevented a complete check; inconclusive. |
+
+The search stops at the first failing candidate. Its `Counterexample`
+is the full projected ordering, including its recorded settle, with
+fresh dense sequences. `protocol.recorder` and `protocol.seq` identify
+the original commits, while Source retains their diagnostic locations.
+`qtrace.WriteJSONL` can save it for ordinary combined-binding validation;
+the identity observations survive export. The callback must not modify
+candidates or reorder them with an existential search such as Linearize.
+
+This is a **universal robustness check**: some ordering allowed by the
+recorded evidence fails. That can expose an implementation defect, an
+overconstrained model, or missing causal evidence. It does not prove that
+the failing ordering actually occurred, and it is not a search for one
+passing serialization. An exhaustive result covers this collected
+history only. Reaching the limit never claims all orderings passed.
+
+Processor commits carry causal constraints through to command successors
+without becoming actions or generating duplicate projected orderings.
+Tenants are separate model instances, checked in sorted order under one
+total limit; their cross product and cross-tenant shuffles add no useful
+checks. Within a tenant the deterministic first candidate matches
+`ProtocolSteps`. Finite prefixes receive no invented settle.
 
 ## Contrast cases and validation
 
@@ -163,3 +210,15 @@ reject incomplete or cyclic evidence, preserve identity through JSONL,
 and compare its canonical extension against every permutation of a
 small history. Removing causal edges must fail the faithful chain:
 without them, alphabetical order puts bank before its order.
+
+`TestProtocolOrdersConcurrentHistory` records two orders in the real
+three-service simulation. An intentionally overconstrained model allows
+only one order in flight: the canonical ordering passes, but the second
+candidate fails at `ordersPlace`. The business protocol model passes all
+five causal orderings of that same history. This contrast demonstrates
+why finding one passing serialization is insufficient for this check.
+Search tests compare all results against brute-force permutations,
+including processor barriers, reversed input, limits at and below the
+exact count, tenant isolation, cancellation and evaluator errors.
+Disabling alternative branches must fail both the oracle and the
+order-sensitive model contrast.

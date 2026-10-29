@@ -1,0 +1,10 @@
+actors: ['protocol/*']
+spec: serial.qnt
+module: serial
+outcomes:
+  ok: '"ok"'
+actions:
+  ordersPlace: {}
+  bankPay: {}
+  ledgerPost: {}
+eventually: [allPosted]

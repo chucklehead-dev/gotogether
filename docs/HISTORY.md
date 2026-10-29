@@ -6870,3 +6870,29 @@ with its subject.
 - **A `qenv.Signal` waiter is tagged with the task's wait generation:**
   a timed-out wait woken by a later `Notify` once shortened the next
   sleep.
+
+## GR4: concurrent protocol orderings
+
+Built 2026-10-29, after the combined protocol model. A deterministic
+extension can hide an overconstrained model by serializing independent
+work. `gristtest.CheckProtocolOrders` explores distinct causal command
+orderings under a positive total limit, stopping at the first failed
+check. It retains the existing native-evidence validation and peer/store
+edges; processor commits pass their dependencies to command successors
+without multiplying equivalent projections. Tenants are independent
+model instances, checked separately rather than as a cross product.
+
+`ProtocolSearch` distinguishes a counterexample (with native recorder
+and sequence identity), an exhaustive all-pass result, and inconclusive
+limit exhaustion. Tool/evidence failures and cancellation are errors.
+This is universal robustness over the collected evidence, not
+existential linearizability and not a claim about other executions.
+
+The real two-order chain simulation supplies the contrast: a deliberately
+serial model passes the canonical projection and fails another valid
+ordering; the business protocol model passes all five. Search results
+are checked against independent brute-force permutations, including
+processor barriers, and alternative-branch ablation must break the
+oracle and the combined-model contrast. Limits, independent tenants,
+JSONL counterexamples, finite prefixes, cancellation and tool errors
+have direct tests. See [grist-composition.md](grist-composition.md).

@@ -10,6 +10,12 @@ and adds a line here.
 
 The first release. What a user meets, by module:
 
+- grist (GR4 concurrent orderings): `gristtest.CheckProtocolOrders` checks
+  bounded alternative causal command orderings, returning the first
+  counterexample with native identities or an explicit exhaustive result.
+  A limit reached without a failure is inconclusive. Processor barriers
+  do not duplicate projections; tenants are checked independently.
+
 - grist (GR4 protocol): `gristtest.ProtocolSteps` projects native command
   commits into one system-model actor per tenant, ordered by each store
   and by recorded peer-call causes. It rejects incomplete, ambiguous or
