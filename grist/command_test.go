@@ -370,7 +370,7 @@ func TestCommandSteps(t *testing.T) {
 		readPos int64
 	}{{"ok", 2, 0}, {"name-taken", 3, 1}} {
 		s := st[i]
-		if s.Action != "createCounter" || s.Actor != "t1" || s.Process != "counters" || s.Outcome != want.outcome ||
+		if s.Action != "createCounter" || s.Actor != "counters/t1" || s.Process != "counters" || s.Outcome != want.outcome ||
 			s.Order["pos"] != want.order || s.Args["readPos"] != want.readPos || s.Args["name"] != "a" || s.Args["id"] != []string{"c1", "c2"}[i] {
 			t.Errorf("step %d: %s actor %s process %s outcome %s order %v args %v; want createCounter of t1 at counters, %s, order.pos %d, readPos %d",
 				i+1, s.Action, s.Actor, s.Process, s.Outcome, s.Order, s.Args, want.outcome, want.order, want.readPos)

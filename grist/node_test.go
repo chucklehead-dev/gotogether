@@ -59,7 +59,7 @@ func TestNodeStartsNewTenants(t *testing.T) {
 	}
 	found := false
 	for _, step := range sink.Steps() {
-		found = found || step.Actor == "t2" && step.Action == "sum" && step.Recorder == grist.RecorderID("procs", "t2")
+		found = found || step.Actor == "procs/t2" && step.Action == "sum" && step.Recorder == grist.RecorderID("procs", "t2")
 	}
 	if !found {
 		t.Error("no relayed sum step of t2")

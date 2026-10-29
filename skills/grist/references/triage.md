@@ -141,7 +141,8 @@ an agent reads off a failing run.
   Grace: 45 * time.Second, EndpointLag: 3 * time.Second, Disruptions: 1,
   Drain: app's drain, Rolling: true}}` runs the nodes (3 by default) as an
   orchestrator does: every node serves the API behind a router whose view
-  lags (`route.api.lag`, option `stale`), each node may be sent SIGTERM
+  lags (`route.<app>.lag`, option `stale`; each node's API
+  `rpc.<app>.<node>.*`), each node may be sent SIGTERM
   (`nemesis.terminate.<node>`; `Rolling` restarts each in turn under
   load) and drains as `Main` does (the same `grist.Drain` schedule: serve
   on for the delay, shut down, quiet, stop, flush, exit), then restarts.

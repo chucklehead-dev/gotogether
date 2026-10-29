@@ -184,8 +184,8 @@ func TestCallSteps(t *testing.T) {
 	}
 	for _, c := range calls {
 		tr := c.Args["trigger"].(int64)
-		key := fmt.Sprintf("payer/t1/%d", tr)
-		if c.Call == 0 || c.Actor != "t1" || c.Process != "calls" || c.Args["processor"] != "payer" || c.Args["key"] != key || c.Args["amount"] == nil {
+		key := fmt.Sprintf("calls/payer/t1/%d", tr)
+		if c.Call == 0 || c.Actor != "calls/t1" || c.Process != "calls" || c.Args["processor"] != "payer" || c.Args["key"] != key || c.Args["amount"] == nil {
 			t.Errorf("caller step %+v: want a completion (Call set) of actor t1, process calls, processor payer, key %s, the request's amount", c, key)
 		}
 		if c.Outcome != wantOutcome[tr] {
@@ -278,7 +278,7 @@ func TestSiteAfterItsCommit(t *testing.T) {
 	}
 	var trace *qtrace.Trace
 	for _, tr := range traces {
-		if tr.Actor == "t1" {
+		if tr.Actor == "calls/t1" {
 			trace = tr
 		}
 	}
@@ -324,7 +324,7 @@ func TestReplayedRecorded(t *testing.T) {
 		t.Errorf("replay %+v: want the served record's fields, outcome, thread and place %+v", r, s)
 	}
 	calls := byAction(steps, "bankPay")
-	if len(calls) != 1 || calls[0].Outcome != "ok" || calls[0].Args["ref"] != "ref-payer/t1/1" {
+	if len(calls) != 1 || calls[0].Outcome != "ok" || calls[0].Args["ref"] != "ref-calls/payer/t1/1" {
 		t.Errorf("caller steps %v: want one, answered with the first application's ref", calls)
 	}
 }
@@ -349,9 +349,9 @@ func TestSiteOrderPerKey(t *testing.T) {
 	})})
 	body, _ := json.Marshal(payReq{Amount: 5})
 	for _, c := range []grist.CallInfo{
-		{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 7, Key: "payer/t1/1"}, // the retry, served first
-		{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 4, Key: "payer/t1/1"}, // the delayed first try
-		{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 2, Head: 4, Key: "payer/t1/2"},
+		{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 7, Key: "calls/payer/t1/1"}, // the retry, served first
+		{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 4, Key: "calls/payer/t1/1"}, // the delayed first try
+		{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 2, Head: 4, Key: "calls/payer/t1/2"},
 	} {
 		if _, err := tr.Call(ctx, c, "pay", body); err != nil {
 			t.Fatal(err)
@@ -377,7 +377,7 @@ func TestSiteOrderPerKey(t *testing.T) {
 	}
 	var order []uint64
 	for _, s := range traces[0].Steps {
-		if s.Args["key"] == "payer/t1/1" {
+		if s.Args["key"] == "calls/payer/t1/1" {
 			order = append(order, s.Seq)
 		}
 	}
@@ -406,7 +406,7 @@ func TestCallDeclarations(t *testing.T) {
 	grist.NewCall[payReq, payResp](d, "odd", grist.Refuses(grist.Rejection("unknown")))
 	other := grist.New("other")
 	foreign := grist.NewCall[payReq, payResp](grist.NewDependency(other, "bank"), "pay")
-	grist.NewDependency(a, "api")
+	grist.NewDependency(a, "decl")
 	grist.NewProcessor(a, "emits", ev, func(ctx context.Context, r *grist.Reads, e amount, m grist.Meta) grist.Result {
 		return grist.Skip()
 	}, grist.Emits(), grist.Uses(ok))
@@ -420,7 +420,7 @@ func TestCallDeclarations(t *testing.T) {
 		`call bank/both: its request and its response both have a field "ref"`,
 		`call bank/odd: a refusal named "unknown"`,
 		`processor "foreign" uses call bank/pay, of another App's dependency`,
-		`dependency "api": api is the name of the App's own API service`,
+		`dependency "decl": decl is the name of the App's own API service`,
 	} {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("Verify: %v\nwant it to say %s", err, want)
@@ -446,7 +446,7 @@ func TestDefaultHandlers(t *testing.T) {
 	tr := grist.Local(grist.DefaultHandlers(bank))
 	body, _ := json.Marshal(payReq{Amount: 5})
 	for _, call := range []string{"pay", "pay", "tip", "tip"} {
-		for _, key := range []string{"payer/t1/1", "payer/t1/2"} {
+		for _, key := range []string{"calls/payer/t1/1", "calls/payer/t1/2"} {
 			out, err := tr.Call(ctx, grist.CallInfo{App: "defaults", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 2, Key: key}, call, body)
 			if err != nil || string(out) != `{}` {
 				t.Errorf("%s %s: %s, %v: want the acknowledgement", call, key, out, err)

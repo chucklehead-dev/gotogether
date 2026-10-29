@@ -18,7 +18,7 @@ Order: H1 → H3 → H2 with P5 → P1, P3, P4, P7 → H4 → H5 → H6 (with P8
 eleventh review's I track: I1-I11 first (most in progress), I12-I18
 before R5, I22 (done, with GR10 slice 4) and GR10 slice 3 before GR4, I23-I25 before a second real grist app, I26-I36 alongside,
 I37-I41 after I13, and I42-I51 each decided before it starts. GR3's
-slices 4-6 after H4, GR4-GR9 after H5, H6 and I22, P9 after GR4; G8-G12
+slices 4-6 after H4 (4 and 5 done), GR4-GR9 after H5, H6 and I22, P9 after GR4; G8-G12
 and the items left from S, X, Y, T and E alongside; R5 when the
 maintainer says (the I track's "For the maintainer").
 
@@ -984,7 +984,13 @@ Then, in order, each item reviewed before the next:
   4"): `lint -sim` and quintsim over a grist application's non-test
   files with grist's fixes, the quintvet check `quintraw` (an effect's
   raw HTTP, gRPC or SQL call; `//grist:raw <reason>`), library's
-  `clockReceipt` mutant caught by the lint. Next: slice 5 (peer calls).
+  `clockReceipt` mutant caught by the lint. Slice 5 built (HISTORY:
+  "GR3 slice 5"): actors naming the App (`<app>/<tenant>`), the API
+  service and the effect keys named after it, peers (`grist.NewPeer`,
+  `grist.NewPeerCall`, `client.Peer`, `gristsim.Config.Peers`,
+  `gristtest.Linked`), the generated mutant `freshKey`, and
+  examples/payouts (a payouts service and its bank). Next: slice 6
+  (spans of declared calls), then GR4.
   Candidate example apps for the declared calls (not built):
   - *payments*, calling a third-party PSP: `authorize` `Keyed`, at least
     once, refusing `declined`; `capture` at most once, reading the
@@ -1007,7 +1013,12 @@ Then, in order, each item reviewed before the next:
   integration between services: a service's event feed with remote
   consumer checkpoints, a packaged inbox/outbox, service identities
   (an actor that is a service, Internal blocks callable by named
-  peers).
+  peers). GR3 slice 5 laid its ground: actors naming the App, a peer's
+  commands as declared calls under the effect's key (`grist.NewPeer`),
+  one peer App beside the App in a run (`gristsim.Config.Peers`: its own
+  store, one node, its API on qhttp; no peers of its own, no `From` or
+  `Cluster`), and the cross-service check by key (`gristtest.Linked`);
+  GR4 grows that into compositions.
 - **GR5. Stream publishers and consumers (M).** A processor that
   publishes to a stream (Kafka via franz-go, Kinesis, the simulated
   log examples/streams has) with the checkpoint and the publish's

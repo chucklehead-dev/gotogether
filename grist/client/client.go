@@ -1,6 +1,6 @@
 // Package client calls a grist App's HTTP API (grist.NewHandler) and
 // records its calls where the client sees them, as a simulation's
-// clients do (actor <tenant>/clients: qobs.Invoke before the first
+// clients do (actor <app>/<tenant>/clients: qobs.Invoke before the first
 // request, Call.Done with the answer, every retry inside the one call),
 // so a client-side binding judges a real tier's clients as it judges a
 // simulation's. Over qhttp's Transport it is gristsim's HTTP tier
@@ -8,7 +8,8 @@
 //
 // The server records the store's side (commits from its step log,
 // refusals at their commit, queries on return); the client records only
-// its own.
+// its own. Peer is a Client as the transport of another App's calls of
+// this one's commands (grist.NewPeer).
 package client
 
 import (
@@ -403,7 +404,7 @@ func Params(args json.RawMessage) (url.Values, error) {
 }
 
 // Do calls command or query name for env and records the call as a
-// client's (actor <tenant>/clients: invoked before the first request,
+// client's (actor <app>/<tenant>/clients: invoked before the first request,
 // done with the answer). A request that got no answer, a 503, or a 5xx
 // that is not grist's is sent again under the same id (the same
 // Idempotency-Key: a key's first answer is final, so a retry of a

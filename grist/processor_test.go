@@ -141,13 +141,13 @@ func TestEffectAtLeastOnce(t *testing.T) {
 	a, added, _ := procApp(func(ctx context.Context) error {
 		k := grist.EffectKey(ctx)
 		keys[k]++
-		if k == "note/t1/1" || k == "note/t1/2" && keys[k] == 1 {
+		if k == "procs/note/t1/1" || k == "procs/note/t1/2" && keys[k] == 1 {
 			return errDown // the first trigger's always fails, the second's once
 		}
 		return nil
 	})
 	log, steps := simulate(t, a, added, qenv.NewSeeded(1))
-	if keys["note/t1/1"] != effectTries || keys["note/t1/2"] != 2 || keys["note/t1/3"] != 1 {
+	if keys["procs/note/t1/1"] != effectTries || keys["procs/note/t1/2"] != 2 || keys["procs/note/t1/3"] != 1 {
 		t.Errorf("effect runs by key %v: want %d for the failing trigger, 2 and 1", keys, effectTries)
 	}
 	var outcomes []string
@@ -189,7 +189,7 @@ func TestEffectCrashAfter(t *testing.T) {
 	if len(c.Remaining()) != 0 {
 		t.Fatalf("the crash never happened: %v", c.Remaining())
 	}
-	if runs["note/t1/1"] != 2 || runs["note/t1/2"] != 1 {
+	if runs["procs/note/t1/1"] != 2 || runs["procs/note/t1/2"] != 1 {
 		t.Errorf("effect runs %v: want the first trigger's twice (the crash after it), the others once", runs)
 	}
 	noted := 0
@@ -262,7 +262,7 @@ func TestPollerCheckpointRaced(t *testing.T) {
 	if !w.moved {
 		t.Fatal("the checkpoint was never moved between the poller's reads")
 	}
-	if runs["note/t1/1"] != 0 {
+	if runs["procs/note/t1/1"] != 0 {
 		t.Errorf("effect runs %v: the first trigger, checkpointed by the other poller before this one read it, ran here", runs)
 	}
 }

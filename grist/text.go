@@ -24,8 +24,8 @@ func checkText(what, s string) error {
 // CheckTenant is the error of a tenant name grist refuses, naming the
 // fix; nil for a name it takes: non-empty, valid UTF-8 without NUL (what
 // every store holds alike) and without a slash, which no tenant name
-// holds, so that "<tenant>/clients" (a run's client-side actor,
-// gristsim.ClientsActor) names no tenant. A node relays no tenant it
+// holds, so that a step's actor (<app>/<tenant>, and a run's client side
+// <app>/<tenant>/clients: gristsim.ClientsActor) names one tenant. A node relays no tenant it
 // refuses (Relay.Err names it), and a command or query to one is refused.
 func CheckTenant(t string) error {
 	if t == "" {
@@ -35,7 +35,7 @@ func CheckTenant(t string) error {
 		return err
 	}
 	if strings.ContainsRune(t, '/') {
-		return fmt.Errorf("grist: tenant %q holds a slash, which grist keeps for actors beside a tenant's (<tenant>/clients): name tenants without one", t)
+		return fmt.Errorf("grist: tenant %q holds a slash, which grist keeps for its actors (<app>/<tenant>, <app>/<tenant>/clients): name tenants without one", t)
 	}
 	return nil
 }

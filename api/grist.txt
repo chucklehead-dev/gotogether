@@ -47,6 +47,8 @@ func NewEvent[E any](app *App, name string, opts ...EventOption) *EventType[E]
 func NewHandler(app *App, s Store, opts ...ServeOption) (http.Handler, error)
 func NewIdentity() Identity
 func NewKeyedReadModel[S any](app *App, name string, version int, keys KeyNames, init func() S, handlers ...Handler[S]) *KeyedReadModel[S]
+func NewPeer(app, peer *App) *Dependency
+func NewPeerCall[C any](d *Dependency, cmd *Command[C]) *Call[C, struct{}]
 func NewProcessor[E any](app *App, name string, on *EventType[E], h func(ctx context.Context, r *Reads, e E, m Meta) Result, opts ...Option) *Processor
 func NewQuery[Q, R any](app *App, name string, f func(r *Reads, q Q) (R, error), opts ...Option) *QueryBlock[Q, R]
 func NewReadModel[S any](app *App, name string, version int, init func() S, handlers ...Handler[S]) *ReadModel[S]
@@ -57,6 +59,7 @@ func NotApplied(err error) error
 func OnSuccess(e Event) EffectOption
 func On[S, E any](t *EventType[E], f func(s S, e E, m Meta) S) Handler[S]
 func OverHTTP(base string, c *http.Client) Transport
+func PeerCaller(app string) string
 func RecorderID(storeName, tenant string) string
 func Refuses(rejections ...error) Option
 func Rejection(name string) error
@@ -145,6 +148,7 @@ type CatalogCall = catalog.CatalogCall
 type CatalogDependency = catalog.CatalogDependency
     field Name string `json:"name"`
     field Quint string `json:"quint"`
+    field Peer string `json:"peer,omitempty"`
     field Calls []CatalogCall `json:"calls"`
 type CatalogEvent = catalog.CatalogEvent
     field Name string
@@ -199,6 +203,7 @@ type Dep[T any] struct
     method (*Dep[T]) With(ctx context.Context, v T) context.Context
 type Dependency struct
     method (*Dependency) Name() string
+    method (*Dependency) Peer() *App
     method (*Dependency) String() string
     method (*Dependency) With(ctx context.Context, t Transport) context.Context
 type Drain struct
@@ -346,6 +351,7 @@ const DefaultMaxRetryDelay = 5 * time.Second
 const DefaultRetryDelay = 100 * time.Millisecond
 func DefaultBudget() *Budget
 func Params(args json.RawMessage) (url.Values, error)
+func Peer(c *Client) grist.Transport
 type Budget struct
     field Ratio float64
     field Max float64
@@ -487,7 +493,8 @@ const DependencyTimeout = time.Second
 const MaxAttempts = 50
 const RetryDelay = 100 * time.Millisecond
 const Upgraded = "upgraded"
-func ClientsActor(tenant string) string
+func Actor(app *grist.App, tenant string) string
+func ClientsActor(app *grist.App, tenant string) string
 func Do(ctx context.Context, app *grist.App, st grist.Store, env grist.Envelope, name string, args json.RawMessage) error
 func Gen(typ reflect.Type, alphabet []string, ints []int, pick func(n int) int) any
 func Run(c qenv.Chooser, app *grist.App, cfg Config) error
@@ -526,6 +533,7 @@ type Config struct
     field From *grist.App
     field Store *Managed
     field Log func(string)
+    field Peers []*grist.App
 type Doubles map[*grist.Dependency]grist.Handlers
 type Managed struct
     field Failover *qenv.Failover
@@ -542,8 +550,11 @@ func Capture(st grist.Store) *Capturing
 func Catalog(app *grist.App) qtest.Catalog
 func DroppedRule(app *grist.App) (rule string, caught qtest.Claim, ok bool)
 func Generated(t testing.TB, app *grist.App)
+func Linked(t testing.TB, a, b *grist.App, steps []qtrace.Step)
+func Links(a, b *grist.App, steps []qtrace.Step) []string
 func NewTier(t testing.TB, app *grist.App, cfg TierConfig) *Tier
 func NoClientErrors() qtest.Expectation
+func PeerMutants(app *grist.App) []string
 func ReadLog(t testing.TB, path string) Log
 func ReadersFirst() qtest.Expectation
 func RuleMutants(app *grist.App) []string

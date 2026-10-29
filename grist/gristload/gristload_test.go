@@ -83,17 +83,17 @@ func recording(app *grist.App, n int, place, look, mail, growth time.Duration) [
 		}
 		inv := next("clients")
 		args := map[string]any{"id": id}
-		steps = append(steps, qtrace.Step{Action: quint[name], Recorder: "clients", Seq: inv, Actor: tenant + "/clients", Record: qtrace.Record{Invocation: true}, Time: now, Args: args})
+		steps = append(steps, qtrace.Step{Action: quint[name], Recorder: "clients", Seq: inv, Actor: "shop/" + tenant + "/clients", Record: qtrace.Record{Invocation: true}, Time: now, Args: args})
 		end := now.Add(d)
 		if name == "place" {
 			heads[tenant]++
-			steps = append(steps, qtrace.Step{Action: quint[name], Recorder: "grist/shop/" + tenant, Seq: next("grist/shop/" + tenant), Actor: tenant,
+			steps = append(steps, qtrace.Step{Action: quint[name], Recorder: "grist/shop/" + tenant, Seq: next("grist/shop/" + tenant), Actor: "shop/" + tenant,
 				Outcome: "ok", Time: end.Add(-time.Microsecond), Args: map[string]any{"id": id}, Obs: map[string]any{"head": heads[tenant], "events": `["placed"]`}})
 			m := next("n1")
-			steps = append(steps, qtrace.Step{Action: sendQ, Recorder: "n1", Seq: m, Actor: tenant, Record: qtrace.Record{Invocation: true}, Time: end})
-			steps = append(steps, qtrace.Step{Action: sendQ, Recorder: "n1", Seq: next("n1"), Call: m, Actor: tenant, Outcome: "ok", Time: end.Add(exp(mail))})
+			steps = append(steps, qtrace.Step{Action: sendQ, Recorder: "n1", Seq: m, Actor: "shop/" + tenant, Record: qtrace.Record{Invocation: true}, Time: end})
+			steps = append(steps, qtrace.Step{Action: sendQ, Recorder: "n1", Seq: next("n1"), Call: m, Actor: "shop/" + tenant, Outcome: "ok", Time: end.Add(exp(mail))})
 		}
-		steps = append(steps, qtrace.Step{Action: quint[name], Recorder: "clients", Seq: next("clients"), Call: inv, Actor: tenant + "/clients", Outcome: "ok", Time: end, Args: args})
+		steps = append(steps, qtrace.Step{Action: quint[name], Recorder: "clients", Seq: next("clients"), Call: inv, Actor: "shop/" + tenant + "/clients", Outcome: "ok", Time: end, Args: args})
 		now = end.Add(time.Millisecond)
 	}
 	return steps

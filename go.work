@@ -19,6 +19,7 @@ use (
 	./examples/library
 	./examples/migrate-payments
 	./examples/payd
+	./examples/payouts
 	./examples/quorumkv
 	./examples/raftkv
 	./examples/retrystorm

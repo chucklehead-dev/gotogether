@@ -70,8 +70,8 @@ func (g *gen) obligations() []obligation {
 		}
 	}
 	for _, c := range g.calls() {
-		if !c.Keyed || len(c.users) == 0 {
-			continue
+		if !c.Keyed || len(c.users) == 0 || c.peer {
+			continue // a peer's commit is in its own trace: gristtest.Linked
 		}
 		users := make([]string, len(c.users))
 		for i, p := range c.users {

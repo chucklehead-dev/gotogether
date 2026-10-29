@@ -1311,7 +1311,7 @@ func (g *gen) storeStep(b *strings.Builder) {
 
 func (g *gen) callsModule(b *strings.Builder) {
 	fmt.Fprintf(b, "// The clients' side (%s.calls.binding.yaml): every call where a client\n", g.c.Name)
-	b.WriteString("// saw it (actor <tenant>/clients), linearized by qtest.Linearize: no\n// positions, no processors, the log the commands' events alone. A key's first\n// answer is final here too; a call the API denied (403) answers nothing.\n")
+	b.WriteString("// saw it (actor <app>/<tenant>/clients), linearized by qtest.Linearize: no\n// positions, no processors, the log the commands' events alone. A key's first\n// answer is final here too; a call the API denied (403) answers nothing.\n")
 	fmt.Fprintf(b, "module %sCallsGen {\n", g.aq)
 	fmt.Fprintf(b, "  import grist.* from \"./grist\"\n  import %sEvents.* from \"./%s_gen\"\n  import %sRules.* from \"./%s_rules\"\n", g.aq, g.c.Name, g.aq, g.c.Name)
 	fmt.Fprintf(b, "  export grist.*\n  export %sEvents.*\n  export %sRules.*\n\n", g.aq, g.aq)
@@ -1392,15 +1392,15 @@ func (g *gen) binding(name string, m marks) []byte {
 	module := g.aq
 	switch {
 	case calls:
-		b.WriteString("# The clients' calls (actor <tenant>/clients: qobs.Invoke before the first\n# request, Call.Done with the answer, every retry inside the one call),\n# linearized by qtest.Linearize: no positions, no processors.\n")
+		fmt.Fprintf(&b, "# The clients' calls (actor %s/<tenant>/clients: qobs.Invoke before the first\n# request, Call.Done with the answer, every retry inside the one call),\n# linearized by qtest.Linearize: no positions, no processors.\n", g.c.Name)
 		module = g.aq + "Calls"
-		b.WriteString("actors: ['*/clients']\n")
+		fmt.Fprintf(&b, "actors: ['%s/*/clients']\n", g.c.Name)
 	default:
-		b.WriteString("# The store's steps (actor the tenant): every parameter the step's field, the\n# outcome as result, each commit's head and batch, each query's answer\n# compared with the model's. No restart: every step's process is the store.\n")
+		fmt.Fprintf(&b, "# The store's steps (actor %s/<tenant>): every parameter the step's field, the\n# outcome as result, each commit's head and batch, each query's answer\n# compared with the model's. No restart: every step's process is the store.\n", g.c.Name)
 		if name != "default" {
 			fmt.Fprintf(&b, "# A test-only variant (%s): the same steps, judged by its own vals.\n", file)
 		}
-		b.WriteString("actors: ['!*/clients']\n")
+		fmt.Fprintf(&b, "actors: ['%s/*', '!*/clients']\n", g.c.Name)
 	}
 	fmt.Fprintf(&b, "spec: model/%s.qnt\nmodule: %s\n\noutcomes:\n  ok: '\"ok\"'\n", g.c.Name, module)
 	var refusals []string
@@ -1586,6 +1586,10 @@ func (g *gen) possibles(calls bool) []string {
 	}
 	for _, d := range g.c.Dependencies {
 		for _, call := range d.Calls {
+			if d.Peer != "" {
+				out = append(out, fmt.Sprintf("    - %s\n", call.Quint)) // its site is the peer's
+				continue
+			}
 			out = append(out, fmt.Sprintf("    - %s\n    - %sServed\n", call.Quint, call.Quint))
 		}
 	}

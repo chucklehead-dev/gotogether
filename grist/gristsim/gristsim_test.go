@@ -55,7 +55,7 @@ func run(t *testing.T, cfg gristsim.Config) []qtrace.Step {
 // own recorder, on simstore and on sqlstore over qsql alike, the clients
 // calling over a qenv.Service or the HTTP API; at the clients, every
 // command and query is a call (invoked, then done) of actor
-// <tenant>/clients.
+// <app>/<tenant>/clients.
 func TestBothSides(t *testing.T) {
 	for _, cfg := range []gristsim.Config{{Check: true}, {Check: true, SQL: true}, {Check: true, HTTP: true}, {Check: true, SQL: true, HTTP: true}} {
 		bothSides(t, run(t, cfg))
@@ -84,7 +84,7 @@ func bothSides(t *testing.T, steps []qtrace.Step) {
 	for _, s := range steps {
 		switch {
 		case s.Settled:
-		case s.Actor == gristsim.ClientsActor("t1") || s.Actor == gristsim.ClientsActor("t2"):
+		case s.Actor == "notes/t1/clients" || s.Actor == "notes/t2/clients":
 			if s.Invocation {
 				calls++
 			} else if s.Call != 0 {
@@ -94,12 +94,12 @@ func bothSides(t *testing.T, steps []qtrace.Step) {
 			}
 		case s.Invocation || s.Call != 0:
 			t.Errorf("a call of actor %s: want the clients' actors", s.Actor)
-		case s.Process != "notes" || (s.Actor != "t1" && s.Actor != "t2"):
+		case s.Process != "notes" || (s.Actor != "notes/t1" && s.Actor != "notes/t2"):
 			t.Errorf("step %s of actor %s at %s: want a tenant's, at the store", s.Action, s.Actor, s.Process)
 		case s.Action == "count" && s.Obs["n"] != nil:
 			probes++
 		case s.Action == "note":
-			if s.Recorder != grist.RecorderID("notes", s.Actor) || s.Thread == "" {
+			if s.Recorder != grist.RecorderID("notes", strings.TrimPrefix(s.Actor, "notes/")) || s.Thread == "" {
 				t.Errorf("commit %v: want it relayed, under %s's recorder, on its thread", s, s.Actor)
 			}
 			commits++
@@ -146,7 +146,7 @@ func TestDo(t *testing.T) {
 	}
 	var calls []qtrace.Step
 	for _, s := range sink.Steps() {
-		if s.Actor == gristsim.ClientsActor("t1") {
+		if s.Actor == gristsim.ClientsActor(a, "t1") {
 			calls = append(calls, s)
 		}
 	}

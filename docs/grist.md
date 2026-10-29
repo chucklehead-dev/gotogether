@@ -1031,8 +1031,10 @@ application gets by being built of grist's blocks, with nothing written.
 
 grist records through `qobs` at the place each effect takes effect (as
 payd's adapters do), never by annotation. **Every step of tenant t has
-actor t and process the store's name**, whatever node or task recorded
-it: commits happen at the store, so the store is the process, and a
+actor `<app>/t` and process the store's name** (the App's; the actor
+was t until GR3 slice 5, which named the App so that two Apps' tenant
+t in one run, a peer's, are two instances), whatever node or task
+recorded it: commits happen at the store, so the store is the process, and a
 node's crash and restart change no step's process. The binding has no
 `restart` action (a process change would be an error, binding.go's
 `Restart`, and none can happen), and each tenant's trace is checked as
@@ -1119,9 +1121,10 @@ retry of a lost or late response inside the one call; checked with
 `qtest.Linearize()`, a duplicate a retry created shows as a later read's
 Mismatch, a call never answered as `Pending` (`qtest.Completes()`).
 Since slice 2 every run records both sides (§0.3): the clients' calls
-under their own actor, `<t>/clients` (`gristsim.ClientsActor`: no tenant
-name holds a slash, `grist.CheckTenant`), the store's steps under t, and
-the two bindings say `actors: ['!*/clients']` and `actors: ['*/clients']`
+under their own actor, `<app>/<t>/clients` (`gristsim.ClientsActor`: no
+App's or tenant's name holds a slash, `grist.New`, `grist.CheckTenant`),
+the store's steps under `<app>/<t>`, and the two bindings say
+`actors: ['<app>/*', '!*/clients']` and `actors: ['<app>/*/clients']`
 (§8.2, item 3), the client side checked by a
 second binding of the same model (`counters.calls.binding.yaml`: no
 positions, no processors' eventual vals) over the same runs
@@ -1692,7 +1695,7 @@ for a miss chance under 5% (payd's discipline):
    `qtest.Reaches("store.counters.commit").Faulted()` so the faults
    happened. The same under `AtClients` with `qtest.Linearize()`. And
    **a key's first answer is final** through the API duplicating and
-   delaying three requests in ten (`rpc.api.request`, `rpc.api.delay`):
+   delaying three requests in ten (`rpc.api.request`, `rpc.api.delay`; `rpc.counters.*` since GR3 slice 5):
    both sides conform (0 of 40 each), where the runtime without its
    markers fails in 40 of 40 runs at the commits and 33 of 40 at the clients, and without refusal markers in 17 of 20 (§0.2).
 3. **The duplicated welcome is the declared guarantee's, seen and

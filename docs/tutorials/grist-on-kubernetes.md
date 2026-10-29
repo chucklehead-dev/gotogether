@@ -158,7 +158,7 @@ counters.counters-0.9fdf99eab086.jsonl
 $ gotogether validate -binding counters.binding.yaml /tmp/pod/steps/*.jsonl
 input /tmp/pod/steps/counters.counters-0.9fdf99eab086.jsonl: native step log
 [...]
-actor t1: 5 steps
+actor counters/t1: 5 steps
   conformance: PASS
   invariant uniqueNames: PASS
   invariant averageAsOfTrigger: PASS

@@ -34,6 +34,10 @@ module shopRules {
     { item: itemAddedItem(prefix[trigger - 1]), qty: itemAddedQty(prefix[trigger - 1]) }
   pure def chargeWarehouseHold(prefix: List[Event], trigger: int): WarehouseHoldRequest =
     { item: itemShippedItem(prefix[trigger - 1]), qty: 1 }
+  // invoice skips nothing, and bills one of the shipped item at billing
+  pure def invoiceSkips(prefix: List[Event], trigger: int): bool = false
+  pure def invoiceBillingBill(prefix: List[Event], trigger: int): BillingBillRequest =
+    { item: itemShippedItem(prefix[trigger - 1]), qty: 1 }
   // the warehouse picks a key once
   pure def warehousePicksAdmits(records: List[WarehousePicksRecord], r: WarehousePicksRecord): bool =
     records.select(p => p.key == r.key).length() == 0

@@ -95,6 +95,8 @@ examples/streams      separate module: outbox publisher + consumers on Kafka (ka
 examples/counters     app: grain's counter example on grist, gristsim; mutants blind (Rejects) and dispatchDirect (Mismatch)
 examples/library      app: a lending library on grist, grown from grist new; book-added versioned (upcaster, the v1 log kept), snapshots
 examples/wallet-grist app: examples/wallet's bank on grist; a ledger at least once, deduplicated by effect key; TRIAL.md
+examples/payouts      app: two grist Apps, payouts calling its peer bank's command (grist.NewPeer, gristsim Config.Peers,
+                      gristtest.Linked); freshKey generated
 examples/payd         app: an unmodified net/http + database/sql payments service, simulated through qhttp and qsql adapters only
 examples/webjobs      app: a web app driven by Bombadil and Playwright (qdriver); the page's requests as invocations
 examples/migrate-payments  app: a legacy handler with tests, logs and spans and no model, brought under one in stages

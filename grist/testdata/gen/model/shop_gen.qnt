@@ -55,4 +55,9 @@ module shopEvents {
   type WarehouseHoldRequest = { item: str, qty: int }
   type WarehouseHoldResponse = { ref: str }
   type WarehouseHoldRecord = { processor: str, trigger: int, key: str, request: WarehouseHoldRequest, result: str, response: WarehouseHoldResponse }
+  // call billing/bill: its request and response, and a step of it (the caller's or the site's: the outcome as result,
+  // the response zero unless it is ok)
+  type BillingBillRequest = { item: str, qty: int }
+  type BillingBillResponse = { unit: bool }
+  type BillingBillRecord = { processor: str, trigger: int, key: str, request: BillingBillRequest, result: str, response: BillingBillResponse }
 }

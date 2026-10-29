@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -180,8 +181,8 @@ func TestRealHTTP(t *testing.T) {
 	steps := tier.Steps()
 	relayed := map[string]int{}
 	for _, s := range steps {
-		if s.Recorder == grist.RecorderID(App.Name, s.Actor) {
-			relayed[s.Actor]++
+		if tenant := strings.TrimPrefix(s.Actor, App.Name+"/"); s.Recorder == grist.RecorderID(App.Name, tenant) {
+			relayed[tenant]++
 		}
 	}
 	if relayed["t1"] == 0 || relayed["t2"] == 0 {
@@ -190,7 +191,7 @@ func TestRealHTTP(t *testing.T) {
 	kept := 0
 	for _, tr := range traces {
 		for _, s := range tr.Steps {
-			if s.Recorder == grist.RecorderID(App.Name, s.Actor) {
+			if s.Recorder == grist.RecorderID(App.Name, strings.TrimPrefix(s.Actor, App.Name+"/")) {
 				kept++
 			}
 		}

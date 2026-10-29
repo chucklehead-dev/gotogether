@@ -65,7 +65,7 @@ func TestRelayRecordsCommitsOnce(t *testing.T) {
 	}{{"ok", 1, 2}, {"name-taken", 1, 3}, {"ok", 2, 4}} {
 		st := traces[0].Steps[i]
 		if st.Outcome != want.outcome || st.Obs["head"] != want.head || st.Order["pos"] != want.pos ||
-			st.Recorder != grist.RecorderID("counters", "t1") || st.Seq != uint64(i+1) || st.Actor != "t1" || st.Process != "counters" {
+			st.Recorder != grist.RecorderID("counters", "t1") || st.Seq != uint64(i+1) || st.Actor != "counters/t1" || st.Process != "counters" {
 			t.Errorf("step %d: %v; want %s at head %d, order.pos %d, seq %d of t1's relayed recorder", i+1, st, want.outcome, want.head, want.pos, i+1)
 		}
 	}

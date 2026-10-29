@@ -290,7 +290,7 @@ run that conforms.
 
 A double grist does not serve may still record its effects with a site:
 `grist.NewSite[T](App, name)` and `Site.Record(ctx, tenant, v)` in its
-handler (actor the tenant, process the App's name); the generator writes
+handler (actor `<app>/<tenant>`, process the App's name); the generator writes
 its list (`<site>Records`) and action, ordered with no commit (an
 eventual val relates it to the log). It is an escape hatch, kept until
 GR7: declare a call instead, which grist records, orders and models.

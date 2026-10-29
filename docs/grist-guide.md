@@ -294,7 +294,8 @@ var Payout = grist.NewProcessor(App, "payout", Retired,
 - Declare the result: `grist.Emits(types...)` or
   `grist.Delivers(guarantee, successType)`. Another result fails the
   trigger. The model's action for the processor is generated from it.
-- An effect's key (`grist.EffectKey(ctx)`) is the same on every try: a
+- An effect's key (`grist.EffectKey(ctx)`,
+  `<app>/<processor>/<tenant>/<trigger>`) is the same on every try: a
   dependency deduplicates by it.
 - A handler or effect error is tried `grist.EffectTries(n)` times
   (default 3), then the trigger is checkpointed with a `grist.failed`
@@ -357,6 +358,33 @@ var Pay = grist.NewCall[PayRequest, PayReceipt](Bank, "pay", grist.Keyed(), gris
   effect and set with `Dep.With(ctx, v)` where the node starts.
   `grist.NewSite[T](App, name)` records a double's own effect, an escape
   hatch no example needs.
+
+**Peers: another grist App.** A dependency that is itself a grist App is
+a peer, and its calls are its commands:
+
+```go
+var Bank = grist.NewPeer(App, bank.App)          // named after the peer
+var BankPay = grist.NewPeerCall(Bank, bank.Pay) // Keyed, the command's refusals, no response
+```
+
+- Each try of `BankPay.Do(ctx, args)` is one command of the peer, its
+  command id the effect's key, in the caller's tenant, as the caller
+  `grist.PeerCaller(App.Name)` (`service:<app>`), which the peer's
+  policy admits (`grist.Authorize(grist.Callers(grist.PeerCaller("payouts")))`).
+  The peer's marker answers every retry with the first answer, so an
+  at-least-once effect pays once. A conflict, a denial or a reused key
+  is no declared refusal: the caller sees an unknown outcome.
+- The transport is grist/client's: `Bank.With(ctx,
+  client.Peer(&client.Client{App: bank.App, URL: bankURL}))` where the
+  node starts (one request per try, never retried; `-dependency` and
+  `ServeDependency` refuse a peer). In a simulation `gristsim.Config.Peers`
+  runs the peer as itself (§6.2).
+- Each App's model judges its own side: the caller's generates only the
+  caller's step `bankPay` (no site, no `Admits`, no served obligation),
+  the peer's judges its commits. `gristtest.Linked(t, App, bank.App,
+  run.Recorded)` relates them by key: every answer the caller saw is the
+  peer's commit of its key, and every commit whose id names the caller
+  is one of its calls. examples/payouts is the pair.
 
 ### 2.9 Authorization and callers
 
@@ -427,7 +455,7 @@ err := c.Do(ctx, env, "add-item", []byte(`{"item":"a","qty":2}`))
 ```
 
 `Do` records the call where the client sees it (actor
-`<tenant>/clients`: invoked before the first request, done with the
+`<app>/<tenant>/clients`: invoked before the first request, done with the
 answer), so the clients' binding judges what callers were told. It
 sends a request that got no answer, a 503 or a 5xx that is not grist's
 again under the same id, with jittered backoff (`RetryDelay` doubling to
@@ -484,10 +512,11 @@ the catalog:
   served), with `<call>Admits` (what a keyed call may do on a retry);
 - `model/grist.qnt`: grist's guarantees (conditions, triggers,
   checkpoints, effects at least and at most once), vendored;
-- `<app>.binding.yaml` (the store's steps: actor the tenant, every
-  commit's head and batch and every query's answer compared with the
-  model's) and `<app>.calls.binding.yaml` (the clients' calls, actor
-  `<tenant>/clients`, judged linearized), with generated `possible:`
+- `<app>.binding.yaml` (the store's steps: actor `<app>/<tenant>`,
+  `actors: ['<app>/*', '!*/clients']`, every commit's head and batch and
+  every query's answer compared with the model's) and
+  `<app>.calls.binding.yaml` (the clients' calls, actor
+  `<app>/<tenant>/clients`, judged linearized), with generated `possible:`
   entries, one per command outcome, query, processor step, call and site;
 - `grist.lock` (§7).
 
@@ -622,12 +651,14 @@ func TestFaithfulAtClients(t *testing.T) {
 | `HTTP` | the API on a simulated network, clients through `grist/client` |
 | `Nodes`, `Cluster` | several nodes; a cluster with a lagging router, drains, a rolling restart (§9.5) |
 | `Doubles`, `Setup` | dependencies' handlers per run; a `NewDep`'s value |
+| `Peers` | the grist Apps the App calls (`grist.NewPeer`), each on its own store, node and API (`rpc.<peer>.*`); judge the peer's side with `System.WithBinding` and relate the two with `gristtest.Linked` |
 | `SnapshotEvery` | decisions made from snapshots and the memo (§8), the cadence for one simulation |
 
 Fault kinds are named as reports print them: `nemesis` (crashes, per
 scheduling step), `store.<app>.commit`, `store.<app>.snapshot`,
-`rpc.api.request`, `rpc.api.delay`, `rpc.api.response` (the HTTP tier),
-`rpc.<dependency>.*`, `grist.<processor>.effect` (a scripted crash before
+`rpc.<app>.request`, `rpc.<app>.delay`, `rpc.<app>.response` (the App's
+API, named after it; a cluster's nodes `rpc.<app>.<node>.*` behind the
+router `route.<app>`), `rpc.<dependency>.*` (a peer's API too), `grist.<processor>.effect` (a scripted crash before
 or after an effect: `qenv.Script`).
 
 Under `-short` an exploration runs `ShortSeeds` and tops up while a kind
@@ -1138,7 +1169,7 @@ go tool gotogether validate -binding inventory.binding.yaml /data/steps/*.jsonl
 
 Merge the clients' recordings (`grist/client`) to judge
 `inventory.calls.binding.yaml` too; without them that binding has no
-verdict ("NO VERDICT: checks the actors */clients").
+verdict ("NO VERDICT: checks the actors inventory/*/clients").
 
 ## 10. Troubleshooting
 
@@ -1167,7 +1198,7 @@ verdict ("NO VERDICT: checks the actors */clients").
 | `do not settle`, naming tasks | work left at the end of a run | a node left down, a dependency that never answers, a trigger no poller reaches |
 | `grist: conflict: the decision's reads changed on every try` (409) | contention past `ConditionTries` | the key's final answer: retry under a new id, or read less (a keyed read model) |
 | `grist: the command's outcome is unknown (an append may have committed): retry it with the same id` (503) | an append's commit was not confirmed | retry with the same id; the marker answers |
-| `NO VERDICT`, `checks the actors */clients` | the calls binding judges clients' recordings | record the clients (`grist/client`) or validate the commits binding alone |
+| `NO VERDICT`, `checks the actors <app>/*/clients` | the calls binding judges clients' recordings | record the clients (`grist/client`) or validate the commits binding alone |
 | `time.Now reads the wall clock in a grist application ...: use the event's Meta.Time` (`lint -sim`, quintsim) | a decision, fold, handler or effect reading the clock, which no model computes and gristsim runs in virtual time | the event's `Meta.Time`; a random value from the command's arguments; a goroutine as a processor (§6.8) |
 | `a grist effect calls (*http.Client).Do directly ...` (quintraw) | a dependency reached past the declared calls: no step, no faults, no model | declare it (`grist.NewCall`, `Uses`) and call `Call.Do`, or `//grist:raw <reason>` (§6.8) |
 | `missing go.sum entry` running `gotogether` | the CLI is not a tool of the app | `go get -tool github.com/chucklehead-dev/gotogether/cmd/gotogether`, then `go tool gotogether` |

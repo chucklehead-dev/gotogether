@@ -100,7 +100,7 @@ func TestGeneratedWitness(t *testing.T) {
 func TestAnswered(t *testing.T) {
 	a := app()
 	step := func(actor, id, outcome string) qtrace.Step {
-		return qtrace.Step{Action: "note", Actor: actor, Outcome: outcome, Args: map[string]any{"id": id}}
+		return qtrace.Step{Action: "note", Actor: a.Name + "/" + actor, Outcome: outcome, Args: map[string]any{"id": id}}
 	}
 	traces := func(steps ...qtrace.Step) []*qtrace.Trace { return []*qtrace.Trace{{Steps: steps}} }
 	if msgs := run(t, func(tb testing.TB) {

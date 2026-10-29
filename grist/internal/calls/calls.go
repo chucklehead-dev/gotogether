@@ -17,9 +17,10 @@ import (
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
-// Actor is the actor of tenant's client-side steps: tenant + "/clients"
-// (no tenant name holds a slash, grist.CheckTenant).
-func Actor(tenant string) string { return tenant + "/clients" }
+// Actor is the actor of tenant's client-side steps in app:
+// <app>/<tenant>/clients (no App or tenant name holds a slash: grist.New,
+// grist.CheckTenant).
+func Actor(app, tenant string) string { return rec.ClientsActor(app, tenant) }
 
 // An Answer is a call's answer as its client saw it.
 type Answer struct {
@@ -65,7 +66,7 @@ func IsQuery(app *grist.App, name string) bool {
 }
 
 // Record records a call of app's command or query name for env, with
-// JSON arguments args, under Actor(env.Tenant) at the app's store
+// JSON arguments args, under Actor(app.Name, env.Tenant) at the app's store
 // (process app.Name): qobs.Invoke before do (its arguments, a command's
 // id), Call.Done with do's answer (a refusal as the outcome, a query's
 // result's fields as observations), nothing more for a pending one. It
@@ -78,7 +79,7 @@ func Record(ctx context.Context, app *grist.App, env grist.Envelope, name string
 	// recorded by its JSON name as the store's step records it. Arguments
 	// that do not decode record none: the server refuses them (400)
 	fields, _ := rec.StepFields(app.ArgsType(name), args, "")
-	kv := append([]any{"actor", Actor(env.Tenant), "process", app.Name}, fields...)
+	kv := append([]any{"actor", Actor(app.Name, env.Tenant), "process", app.Name}, fields...)
 	if !query {
 		kv = append(kv, "id", env.ID)
 	}

@@ -187,7 +187,7 @@ func decodeCause(v, key string) (CallInfo, error) {
 // file, validated with the caller's as two recorders of one run, as
 // gristtest.TierConfig.Serve does). Each record joins the caller's
 // tenant's trace at its cause (the Grist-Cause and Idempotency-Key
-// headers): its actor the tenant, placed after the commit holding its
+// headers): its actor the caller's (<app>/<tenant>), placed after the commit holding its
 // trigger, and never before an earlier record of the key (one
 // ServeCalls orders its records of each key, whichever node sent them:
 // serve a dependency from one). The generated model judges each record's
@@ -253,10 +253,10 @@ func (s *callServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case !slices.ContainsFunc(ci.users, func(p *processorInfo) bool { return p.name == info.Processor }):
 		// its record would name a processor no rule makes the call for
 		err = fmt.Errorf("a call of processor %q, which does not use call %s (grist.Uses): its users are %v", info.Processor, ci.label(), userNames(ci))
-	case info.Key != effectKeyOf(info.Processor, info.Tenant, info.Trigger) && !rewoundKey(info.Key, effectKeyOf(info.Processor, info.Tenant, info.Trigger)):
+	case info.Key != effectKeyOf(info.App, info.Processor, info.Tenant, info.Trigger) && !rewoundKey(info.Key, effectKeyOf(info.App, info.Processor, info.Tenant, info.Trigger)):
 		// a grist caller's key is its effect's: another would record a
 		// second application of the trigger under a key of its own
-		err = fmt.Errorf("Idempotency-Key %q: a call for processor %s's trigger %d in tenant %s carries its effect's key, %s (grist.EffectKey)", info.Key, info.Processor, info.Trigger, info.Tenant, effectKeyOf(info.Processor, info.Tenant, info.Trigger))
+		err = fmt.Errorf("Idempotency-Key %q: a call for processor %s's trigger %d in tenant %s carries its effect's key, %s (grist.EffectKey)", info.Key, info.Processor, info.Trigger, info.Tenant, effectKeyOf(info.App, info.Processor, info.Tenant, info.Trigger))
 	}
 	if err != nil {
 		fail(w, http.StatusBadRequest, "grist: dependency %s: %v", s.d.name, err)

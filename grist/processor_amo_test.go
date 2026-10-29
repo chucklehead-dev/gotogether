@@ -74,7 +74,7 @@ func TestEffectAtMostOnce(t *testing.T) {
 		return nil
 	})
 	log, steps := simulateOn(t, a, added, quiet(1), func(s grist.Store) grist.Store { st = s; return s })
-	if runs["note/t1/1"] != 1 || runs["note/t1/2"] != 1 || runs["note/t1/3"] != 1 {
+	if runs["procs/note/t1/1"] != 1 || runs["procs/note/t1/2"] != 1 || runs["procs/note/t1/3"] != 1 {
 		t.Errorf("effect runs by key %v: want each once, the failing one too", runs)
 	}
 	want := []string{`noted:{"of":1}`, `grist.failed:{"processor":"note","trigger":2}`, `grist.unknown:{"processor":"note","error":"bank 'down'","trigger":3}`}
@@ -130,7 +130,7 @@ func TestEffectAtMostOnceCrashes(t *testing.T) {
 		if crash == "crashAfter" {
 			wantRuns = 1
 		}
-		if runs["note/t1/1"] != wantRuns || runs["note/t1/2"] != 1 || runs["note/t1/3"] != 1 {
+		if runs["procs/note/t1/1"] != wantRuns || runs["procs/note/t1/2"] != 1 || runs["procs/note/t1/3"] != 1 {
 			t.Errorf("%s: effect runs %v: want the first trigger's %d times, the others once", crash, runs, wantRuns)
 		}
 		want := `noted:{"of":2} noted:{"of":3}`
@@ -202,7 +202,7 @@ func TestEffectAtMostOnceLostCheckpoint(t *testing.T) {
 	if !w.done {
 		t.Fatal("no checkpoint append was raced")
 	}
-	if runs["note/t1/1"] != 0 || runs["note/t1/2"] != 1 || runs["note/t1/3"] != 1 {
+	if runs["procs/note/t1/1"] != 0 || runs["procs/note/t1/2"] != 1 || runs["procs/note/t1/3"] != 1 {
 		t.Errorf("effect runs %v: want the raced trigger's skipped (another poller's), the others once", runs)
 	}
 	for _, s := range steps {

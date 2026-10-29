@@ -28,6 +28,7 @@ type Dependency struct {
 	quint string
 	calls []*callInfo
 	key   *depKey
+	peer  *App // the App whose commands its calls are (NewPeer), nil for none
 }
 
 // callInfo is a call's registration, untyped.
@@ -37,6 +38,7 @@ type callInfo struct {
 	req, resp   reflect.Type
 	opts        options // keyed, refuses
 	users       []*processorInfo
+	peer        bool // a peer's command (NewPeerCall): no site, no handler
 }
 
 // label names the call for errors: <dependency>/<call>.
@@ -56,9 +58,10 @@ func NewDependency(app *App, name string) *Dependency {
 		app.problems = append(app.problems, fmt.Sprintf("dependency %q: declared twice: declare each dependency once", name))
 	case err != nil:
 		app.problems = append(app.problems, fmt.Sprintf("dependency %q: %v", name, err))
-	case name == "api":
-		// gristsim's API is a qenv.Service named api: one name, one fault kind
-		app.problems = append(app.problems, fmt.Sprintf("dependency %q: api is the name of the App's own API service (rpc.api.*): rename the dependency", name))
+	case name == app.Name:
+		// gristsim's API is a qenv.Service named after the App: one name,
+		// one fault kind
+		app.problems = append(app.problems, fmt.Sprintf("dependency %q: %s is the name of the App's own API service (rpc.%s.*): rename the dependency", name, name, name))
 	default:
 		d.quint = q
 	}
@@ -275,7 +278,7 @@ func (c *Call[Req, Resp]) Do(ctx context.Context, req Req) (Resp, error) {
 	}
 	base := orderBase(ctx, ec.tenant)
 	info := CallInfo{App: ec.app.Name, Tenant: ec.tenant, Processor: ec.p.name, Trigger: ec.trigger, Head: ec.head, Key: ec.key, Clock: base}
-	kv := append([]any{"actor", ec.tenant, "process", ec.s.Name(), "processor", ec.p.name, "trigger", int64(ec.trigger), "key", ec.key}, reqKV...)
+	kv := append([]any{"actor", rec.Actor(ec.s.Name(), ec.tenant), "process", ec.s.Name(), "processor", ec.p.name, "trigger", int64(ec.trigger), "key", ec.key}, reqKV...)
 	// ordered as the effect step it precedes on the poller's thread: after
 	// the commits through the head, among the processor's steps at the
 	// effect's place
@@ -474,7 +477,7 @@ func (ci *callInfo) handler(f func(ctx context.Context, body []byte) ([]byte, er
 		}
 		reqKV, _ := rec.StepFields(ci.req, body, "")
 		i := hc.info
-		all := append([]any{"actor", i.Tenant, "process", ci.dep.app.Name, "thread", "grist.served/" + i.Key,
+		all := append([]any{"actor", rec.Actor(ci.dep.app.Name, i.Tenant), "process", ci.dep.app.Name, "thread", "grist.served/" + i.Key,
 			"processor", i.Processor, "trigger", int64(i.Trigger), "key", i.Key, "order.pos", sv.clock.at(i.Key, i.Clock+readOrder(i.Head))}, reqKV...)
 		action := ci.quint + "Served"
 		if hc.replayed {
@@ -505,6 +508,9 @@ func (ci *callInfo) handler(f func(ctx context.Context, body []byte) ([]byte, er
 // reference left empty unseen. Give such a dependency handlers that
 // answer as it would (Call.Handler).
 func DefaultHandlers(d *Dependency) Handlers {
+	if err := d.peerCalls("DefaultHandlers"); err != nil {
+		panic(err.Error())
+	}
 	for _, ci := range d.calls {
 		if fs, _ := catalog.ScalarFields(ci.resp); len(fs) > 0 {
 			names := make([]string, len(fs))
@@ -578,6 +584,9 @@ func (l *local) Call(ctx context.Context, c CallInfo, call string, req json.RawM
 // Serves reports whether h has a handler of each call of d, naming the
 // first missing.
 func (h Handlers) Serves(d *Dependency) error {
+	if err := d.peerCalls("its Handlers"); err != nil {
+		return err
+	}
 	for _, c := range d.calls {
 		if !slices.ContainsFunc(h, func(x CallHandler) bool { return x.call == c }) {
 			return fmt.Errorf("no handler of call %s: add it to the dependency's Handlers", c.label())

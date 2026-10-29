@@ -1,6 +1,6 @@
 ---
 name: grist
-description: Build an event-sourced Go application on grist, gotogether's framework checked by its own model without annotations - events, read models, commands conditioned on their reads, idempotency by command id, queries, rules, processors (Emit, Skip, Effect at least or at most once), declared dependencies and calls, deny-by-default authorization, the HTTP API and grist.Main, the stores (memstore, simstore, sqlstore on PostgreSQL or SQLite), gristsim.System explorations, the model's skeleton and both bindings generated from the catalog (`<app> model`), `grist new`, and gristtest's harnesses. Use when starting, writing or changing a grist application, its model or binding, when a gristsim exploration fails, or when a store must keep grist's contract (grist/storetest).
+description: Build an event-sourced Go application on grist, gotogether's framework checked by its own model without annotations - events, read models, commands conditioned on their reads, idempotency by command id, queries, rules, processors (Emit, Skip, Effect at least or at most once), declared dependencies and calls, peers (another grist App called by its commands, gristtest.Linked), deny-by-default authorization, the HTTP API and grist.Main, the stores (memstore, simstore, sqlstore on PostgreSQL or SQLite), gristsim.System explorations, the model's skeleton and both bindings generated from the catalog (`<app> model`), `grist new`, and gristtest's harnesses. Use when starting, writing or changing a grist application, its model or binding, when a gristsim exploration fails, or when a store must keep grist's contract (grist/storetest).
 ---
 
 # grist: an application checked by its model
@@ -14,7 +14,7 @@ the walk-through: read its README's table first.
 
 - A person asking how grist works: [the user guide](https://github.com/chucklehead-dev/gotogether/blob/main/docs/grist-guide.md) (docs/grist-guide.md), block by block, with its troubleshooting table.
 - A new app: `grist new <name>`, then the Steps.
-- Every block's API, rules, dependencies, the generator's layout, explorations: [references/loop.md](references/loop.md).
+- Every block's API, rules, dependencies and peers (another grist App called by its commands: `grist.NewPeer`, `gristsim.Config.Peers`, `gristtest.Linked`), the generator's layout, explorations: [references/loop.md](references/loop.md).
 - The real tier, the HTTP API, the binary, a simulated cluster (`gristsim.Cluster`), PostgreSQL, a store of your own: [references/triage.md](references/triage.md).
 - A failure: the Results, then [references/triage.md](references/triage.md).
 - The generated model, its holes, Quint's reserved names: [references/model.md](references/model.md).
@@ -50,6 +50,7 @@ the walk-through: read its README's table first.
 - [ ] `gotogether lint -sim .` and quintvet's `quintraw` are clean: no clock, rand or `go` in the app's code; effects call declared calls only.
 - [ ] grist.lock is committed; a changed event is a new version with an upcaster, `gristtest.Upcasts` passes.
 - [ ] The clients' side is judged too: `.WithBinding(calls, qtest.Linearize())`.
+- [ ] A peer (`grist.NewPeer`): its side judged by its own binding, the two related by `gristtest.Linked`, `gristtest.PeerMutants` among the mutants.
 
 ## Results
 
@@ -68,7 +69,7 @@ the walk-through: read its README's table first.
 | `X is version N, and this app reads X up to version M`; `catalog -diff` says `readers first` | a release writes what older nodes refuse | [references/versions.md](references/versions.md): `WritesVersion` until the rollout ends |
 | `do not settle`, naming tasks | work left at the end | a node down (restart it), or a missing daemon |
 | `model actions taken N of M (never: ...)` | what no run reached | widen `Send`, `Prologue`, `Gen` |
-| `NO VERDICT`, `checks the actors */clients` on serve's steps | the calls binding judges clients' recordings | record the clients (`grist/client`), or validate the commits binding alone |
+| `NO VERDICT`, `checks the actors <app>/*/clients` on serve's steps | the calls binding judges clients' recordings | record the clients (`grist/client`), or validate the commits binding alone |
 | panic: `"..." alone is a claim over runs with no quantifier` | a scenario or `NoClientErrors` over runs bare | `qtest.Some(scenario)`, `qtest.All(gristtest.NoClientErrors())`; a mutant's client errors `qtest.Some(qtest.Not(gristtest.NoClientErrors()))` |
 | `... in a grist application ...: use the event's Meta.Time` (lint -sim); `a grist effect calls ... directly` (quintraw) | code the model cannot see | [references/loop.md](references/loop.md): `Meta.Time`, a command's arguments, a processor; a declared call (`Call.Do`) |
 | `missing go.sum entry` running `gotogether` | the CLI is not a tool of the app | `go get -tool .../cmd/gotogether`, then `go tool gotogether` |

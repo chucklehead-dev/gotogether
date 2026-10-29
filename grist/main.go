@@ -349,6 +349,8 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 			return &usageError{Msg: fmt.Sprintf("-dependency %q: give NAME=URL", v)}
 		case d == nil:
 			return &usageError{Msg: fmt.Sprintf("-dependency %q: %s has no dependency %q (it has %v)", v, app.Name, name, depNames(app))}
+		case d.peer != nil:
+			return &usageError{Msg: fmt.Sprintf("-dependency %q: %v", v, d.peerCalls("-dependency"))}
 		}
 		// checked here: a URL no request can be made to would leave every
 		// call's outcome unknown (an at-most-once effect's grist.unknown)
@@ -448,6 +450,9 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	}
 	defer stopNode()
 	for _, sd := range cfg.served {
+		if err := sd.d.peerCalls("ServeDependency"); err != nil {
+			return err
+		}
 		if overHTTP[sd.d] != nil {
 			continue // called where -dependency says
 		}

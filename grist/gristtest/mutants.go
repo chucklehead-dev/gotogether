@@ -7,6 +7,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
 
 	"github.com/chucklehead-dev/gotogether/grist"
+	"github.com/chucklehead-dev/gotogether/grist/internal/peerkey"
 	"github.com/chucklehead-dev/gotogether/grist/internal/ruledrop"
 	"github.com/chucklehead-dev/gotogether/qtest"
 )
@@ -21,6 +22,28 @@ func init() {
 	if r, ok := strings.CutPrefix(qtest.Mutant(), dropPrefix); ok {
 		ruledrop.Dropped = r
 	}
+	// and the peers' (PeerMutants): every peer call's try under a new id
+	peerkey.Fresh = qtest.Mutant() == peerkey.Mutant
+}
+
+// PeerMutants are app's generated mutants of its peer calls
+// (grist.NewPeer): freshKey when it makes one, every try of a call sent
+// under a new command id (its key stamped with the try's time, as a
+// client minting a request id per request does) instead of the effect's
+// key, built without an overlay (qtest.Mutants' Generated). The peer's
+// marker then answers no retry: an at-least-once effect retried after a
+// lost answer commits at the peer twice, which an invariant of the
+// peer's model over its log catches, and Links finds the second commit's
+// id naming the caller with no call of it.
+//
+//	qtest.Mutants{Generated: gristtest.PeerMutants(App)}.Run(t)
+func PeerMutants(app *grist.App) []string {
+	for _, d := range app.Catalog().Dependencies {
+		if d.Peer != "" && len(d.Calls) > 0 {
+			return []string{peerkey.Mutant}
+		}
+	}
+	return nil
 }
 
 // DroppedRule says whether this binary is a rule's generated mutant

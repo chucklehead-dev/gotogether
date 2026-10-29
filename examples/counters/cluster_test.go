@@ -53,7 +53,7 @@ func slowBank() gristsim.Doubles {
 // second apart, while each node in turn is sent SIGTERM and drains as
 // the app's binary does (Drain: 5 s of serving, not ready, before its
 // listener closes), the router in front learning of each change up to
-// 3 s late (route.api.lag), at most one node down at once (a
+// 3 s late (route.counters.lag), at most one node down at once (a
 // PodDisruptionBudget of one). The bank is slow (slowBank), so payouts
 // are in flight at the signals. Two nodes, not three: a signal lands on
 // the node running a payout one time in two (with three, one in three,
@@ -66,7 +66,7 @@ var rolling = gristsim.Config{Tenants: []string{"t1"}, Nodes: 2, Clients: 2, Ops
 
 // lagging is the rolling restart's faults: the router's view stale at
 // half its changes, nothing else.
-var lagging = qenv.NoFaults.Set("route.api.lag", 0.5)
+var lagging = qenv.NoFaults.Set("route.counters.lag", 0.5)
 
 // A rolling restart under load, the faithful app: every run conforms
 // and settles; at the clients, every call is answered, linearizes, and
@@ -76,7 +76,7 @@ var lagging = qenv.NoFaults.Set("route.api.lag", 0.5)
 // settle). With the drain's delay off (the noDrainDelay mutant) the
 // router sends tries to a node that closed its listener; with the node's
 // work cancelled at the signal (stopNodeAtSignal) a payout in flight
-// ends unknown (TestMutant). Without the router's lag (route.api.lag
+// ends unknown (TestMutant). Without the router's lag (route.counters.lag
 // off) the delay is needed by nothing: noDrainDelay passes
 // NoClientErrors too.
 func TestRollingRestart(t *testing.T) {
@@ -84,7 +84,7 @@ func TestRollingRestart(t *testing.T) {
 	qtest.RequireQuint(t)
 	n := qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}
 	system(retiring, rolling).WithRates(lagging).Explore(t, n).
-		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("route.api.lag").Faulted(), qtest.Takes("bankPay").Outcome("ok"))
+		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("route.counters.lag").Faulted(), qtest.Takes("bankPay").Outcome("ok"))
 	system(calls, rolling, qtest.Linearize()).WithRates(lagging).Explore(t, n).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Completes()), qtest.All(gristtest.NoClientErrors()))
 	system(terminating, rolling).WithRates(lagging).Explore(t, n).

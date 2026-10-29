@@ -40,8 +40,12 @@ type Catalog struct {
 
 // A CatalogDependency is a registered dependency.
 type CatalogDependency struct {
-	Name  string        `json:"name"`
-	Quint string        `json:"quint"`
+	Name  string `json:"name"`
+	Quint string `json:"quint"`
+	// Peer is the grist App whose commands its calls are (NewPeer), ""
+	// for a dependency that is no peer: a peer's calls have no site in
+	// the caller's model (the peer's commit is the site, in its own).
+	Peer  string        `json:"peer,omitempty"`
 	Calls []CatalogCall `json:"calls"` // in registration order
 }
 

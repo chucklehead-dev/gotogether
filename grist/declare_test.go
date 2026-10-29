@@ -180,8 +180,8 @@ func TestSiteRecords(t *testing.T) {
 		t.Fatalf("%d steps, want 1", len(steps))
 	}
 	s := steps[0]
-	if s.Action != "bankPays" || s.Actor != "t1" || s.Process != "bank-app" || s.Args["key"] != "k" || s.Args["amount"] != int64(3) || s.Args["note"] != nil {
-		t.Errorf("the site's step %+v: want bankPays of t1 at bank-app, key k, amount 3, no note", s)
+	if s.Action != "bankPays" || s.Actor != "bank-app/t1" || s.Process != "bank-app" || s.Args["key"] != "k" || s.Args["amount"] != int64(3) || s.Args["note"] != nil {
+		t.Errorf("the site's step %+v: want bankPays of bank-app/t1 at bank-app, key k, amount 3, no note", s)
 	}
 	if c := a.Catalog().Sites; len(c) != 1 || c[0].Quint != "bankPays" {
 		t.Errorf("the catalog's sites %+v", c)
@@ -262,7 +262,7 @@ func TestUndeclaredRefusalNamesRefuses(t *testing.T) {
 	}
 	m := &binding.Model{Actions: map[string][]binding.Param{"createCounter": {{Name: "counter", Type: "str"}, {Name: "name", Type: "str"},
 		{Name: "id", Type: "str"}, {Name: "caller", Type: "str"}, {Name: "readPos", Type: "int"}, {Name: "reads", Type: "Set[(str, str, str)]"}, {Name: "result", Type: "str"}}}}
-	_, err = b.Plan(m, &qtrace.Trace{Actor: "t1", Steps: []qtrace.Step{*refused}})
+	_, err = b.Plan(m, &qtrace.Trace{Actor: "counters/t1", Steps: []qtrace.Step{*refused}})
 	if err == nil || !strings.Contains(err.Error(), `outcome "full" has no mapping`) || !strings.Contains(err.Error(), "grist.Refuses(...) on its NewCommand") {
 		t.Errorf("the binding's error: %v, want no mapping, naming grist.Refuses", err)
 	}

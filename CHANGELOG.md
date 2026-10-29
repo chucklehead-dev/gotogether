@@ -340,6 +340,22 @@ The first release. What a user meets, by module:
   plugin) reports a grist effect calling `net/http`'s client, a gRPC
   `ClientConn` or `database/sql` directly, `//grist:raw <reason>`
   exempting a line.
+- grist's peer calls (ROADMAP GR3 slice 5; api/grist.txt; breaking):
+  every step's actor names its App (`<app>/<tenant>`, the clients'
+  `<app>/<tenant>/clients`; an App's name holding a slash is refused),
+  so the generated bindings say `actors: ['<app>/*', '!*/clients']` and
+  `['<app>/*/clients']` (regenerate: `<app> model`);
+  `gristsim.ClientsActor(app, tenant)` takes the App, and
+  `gristsim.Actor` is new; gristsim's API service is named after the App
+  (`rpc.<app>.*`, `route.<app>`, a cluster node's `<app>.<node>`, where
+  they were `rpc.api.*`, `route.api`, `api.<node>`: rename Rates keys);
+  every effect key is `<app>/<processor>/<tenant>/<trigger>`. New:
+  `grist.NewPeer`, `grist.NewPeerCall`, `grist.PeerCaller`,
+  `Dependency.Peer`, the catalog's `CatalogDependency.Peer` (a peer's
+  call generated as its caller's side alone), `client.Peer` (the
+  transport), `gristsim.Config.Peers`, `gristtest.Linked`,
+  `gristtest.Links` and `gristtest.PeerMutants` (the generated mutant
+  `freshKey`); examples/payouts.
 - grist's generator warns on what an app forgot (ROADMAP I26): `<app>
   model` and `gristtest.Generated` (which now logs the warnings on every
   run) name an event a block appends that nothing reads (no read model

@@ -7,9 +7,9 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-**As of 2026-10-28.** main at I18's rest (`qtrace.Record`, the knob
-rule; HISTORY "I18's rest") and the published modules' bump to it,
-after I26 (`a6be970`). **Nothing is tagged**: every module is pre-release,
+**As of 2026-10-29.** main at GR3 slice 5 (peer calls; HISTORY "GR3
+slice 5"), the published modules at GR3 slice 4 (`26b8e47`; slice 5
+changed grist alone, which no other published module requires). **Nothing is tagged**: every module is pre-release,
 published modules require each other at pseudo-versions, and breaking
 renames still land (R5 waits for the maintainer).
 
@@ -88,6 +88,7 @@ review" on.
 | I25 | grist's operations basics | fd98f8a |
 | I26 | the generator warns on what an app forgot | a6be970 |
 | GR3 s4 | lints for a grist application's own code (lint -sim over its files, quintraw) | 26b8e47 |
+| GR3 s5 | peer calls: actors naming the App, `grist.NewPeer`, `gristsim.Config.Peers`, `gristtest.Linked`, examples/payouts | HISTORY "GR3 slice 5" |
 | I27, I34 | grist's user guide; ARCHITECTURE.md, example tracks | b382007, c41bd82 |
 | I28-I32 | the first hour: a catch shown, progress, reserved names, reports in words, help | 15cf741, c0eb502, eb1520b, acd5fb1 |
 | I33, I36 | `gotogether init -kind http`, analyzers that fix, JSON Schemas | 9708379, 79c034c, dce024f |
@@ -165,8 +166,8 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | GR3 slices 5-6 (peer calls; spans of declared calls; [grist-instrumentation.md](grist-instrumentation.md) §4) | M each | unblocked (after H4); 5 is GR4's groundwork |
-| 2 | GR4, several services simulated together | L | after H5, H6, I22 (all done) |
+| 1 | GR3 slice 6 (spans of declared calls; [grist-instrumentation.md](grist-instrumentation.md) §4) | M | unblocked; the lowest priority of GR3's (it adds a recorder, not a seam) |
+| 2 | GR4, several services simulated together | L | after H5, H6, I22 and GR3 slice 5 (all done) |
 | 3 | GR5 streams, GR6 gRPC, GR7 controllers | M, M, L | on the published doubles (H7) |
 | 4 | GR8 sagas and timers, GR9 checkout as grist services | M, L | GR9 proves GR4 and GR8 compose |
 | 5 | P9, grist apps explored in-process | L | after GR4 |

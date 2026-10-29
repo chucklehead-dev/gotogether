@@ -13,7 +13,10 @@ import (
 // (<c>Records), the caller action <c>, the site's actions <c>Served (an
 // application) and <c>Replayed (an answer given again from one), a rule
 // hole per (processor, call) and a generated <c>Admits unless the
-// application's rules define one.
+// application's rules define one. A peer's call (NewPeerCall) has the
+// caller's side alone: its site is the peer's commit, judged by the
+// peer's own model, so it has no records, no site actions, no Admits and
+// no served obligation (gristtest.Linked relates the two sides).
 
 // aCall is one declared call as the generator writes it.
 type aCall struct {
@@ -21,6 +24,7 @@ type aCall struct {
 	dep       string
 	req, resp []field
 	users     []CatalogProcessor
+	peer      bool // a peer's command (CatalogDependency.Peer): the caller's side alone
 }
 
 // calls are the catalog's calls, in registration order.
@@ -30,7 +34,7 @@ func (g *gen) calls() []aCall {
 		for _, c := range d.Calls {
 			req, _ := scalarFields(c.Request)
 			resp, _ := scalarFields(c.Response)
-			ac := aCall{CatalogCall: c, dep: d.Name, req: req, resp: resp}
+			ac := aCall{CatalogCall: c, dep: d.Name, req: req, resp: resp, peer: d.Peer != ""}
 			for _, p := range g.c.Processors {
 				if slices.Contains(c.Users, p.Name) {
 					ac.users = append(ac.users, p)
@@ -115,13 +119,21 @@ func (g *gen) callTypes(b *strings.Builder) {
 func (g *gen) callVars() [][2]string {
 	var vs [][2]string
 	for _, c := range g.calls() {
-		vs = append(vs, [2]string{c.Quint + "Calls", "[]"}, [2]string{c.Quint + "Records", "[]"})
+		vs = append(vs, [2]string{c.Quint + "Calls", "[]"})
+		if !c.peer {
+			vs = append(vs, [2]string{c.Quint + "Records", "[]"})
+		}
 	}
 	return vs
 }
 
 func (g *gen) callVarDecls(b *strings.Builder) {
 	for _, c := range g.calls() {
+		if c.peer {
+			fmt.Fprintf(b, "  // the calls of %s, a peer's command, as their callers saw them (Call.Do), in\n  // order; the peer's model judges what it did\n", c.label())
+			fmt.Fprintf(b, "  var %sCalls: List[%sRecord]\n", c.Quint, c.typeName())
+			continue
+		}
 		fmt.Fprintf(b, "  // the calls of %s as their callers saw them (Call.Do), and as the dependency\n  // applied them (its served records), in order\n", c.label())
 		fmt.Fprintf(b, "  var %sCalls: List[%sRecord]\n  var %sRecords: List[%sRecord]\n", c.Quint, c.typeName(), c.Quint, c.typeName())
 	}
@@ -152,7 +164,7 @@ func (g *gen) callActions(b *strings.Builder) {
 		ps, rec := c.callParams()
 		keys := c.Quint + "Keys"
 		fmt.Fprintf(b, "\n  // the keys of %s's steps: (processor, trigger, key)\n  pure def %s(l: List[%sRecord]): List[CallKey] = l.foldl([], (acc, c) => acc.append((c.processor, c.trigger, c.key)))\n", c.label(), keys, t)
-		if !g.defined[c.Quint+"Admits"] {
+		if !c.peer && !g.defined[c.Quint+"Admits"] {
 			body := "true"
 			doc := "applies every call it gets (not Keyed): any record"
 			if c.Keyed {
@@ -201,6 +213,9 @@ func (g *gen) callActions(b *strings.Builder) {
 			c.Quint, ps, t, rec, or(callers), keys, c.Quint)
 		b.WriteString(g.frame("      ", map[string]string{"appended": "[]", c.Quint + "Calls": c.Quint + "Calls.append(rec_)"}))
 		b.WriteString("    }\n  }\n")
+		if c.peer {
+			continue // its site is the peer's commit, in the peer's model
+		}
 		b.WriteString("\n" + comment("  ", fmt.Sprintf("%s as the dependency applied it (its served record, placed at its cause: after the commit holding its trigger): for one of a user's triggers, its request the processor's rule's (as the caller's: a caller crashed during the call leaves the served record the request's only one), as %sAdmits allows given the log through the trigger", c.label(), c.Quint)))
 		fmt.Fprintf(b, "  action %sServed(%s): bool = {\n    val rec_: %sRecord = %s\n    all {\n      %s,\n", c.Quint, ps, t, rec, or(sites))
 		b.WriteString(g.frame("      ", map[string]string{"appended": "[]", c.Quint + "Records": c.Quint + "Records.append(rec_)"}))
@@ -222,8 +237,12 @@ func (g *gen) callSteps() []string {
 		for _, r := range c.Refuses {
 			results = append(results, fmt.Sprintf("%q", r))
 		}
+		actions := []string{c.Quint, c.Quint + "Served", c.Quint + "Replayed"}
+		if c.peer {
+			actions = actions[:1]
+		}
 		for _, p := range c.users {
-			for _, action := range []string{c.Quint, c.Quint + "Served", c.Quint + "Replayed"} {
+			for _, action := range actions {
 				site := action != c.Quint
 				d := newDraws()
 				d.pick("trigger_", "1.to(log.length() + 1)")
@@ -257,6 +276,9 @@ func (g *gen) callBindings(entry func(action, args, expect string)) {
 	for _, c := range g.calls() {
 		args := argTemplates(append(append([]field(nil), c.req...), c.resp...), "result: '{{.outcome}}'")
 		entry(c.Quint, args, "")
+		if c.peer {
+			continue
+		}
 		entry(c.Quint+"Served", args, "")
 		entry(c.Quint+"Replayed", args, "")
 	}

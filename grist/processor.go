@@ -134,9 +134,10 @@ func (r Result) check(processor string) error {
 type effectKey struct{}
 
 // EffectKey is the idempotency key an effect hands its dependency:
-// processor/tenant/trigger, the same on every run of the effect for that
-// trigger, so a dependency that supports keys can make "at least once"
-// "once".
+// app/processor/tenant/trigger, the same on every run of the effect for
+// that trigger, so a dependency that supports keys can make "at least
+// once" "once"; the App's name first, so two Apps' keys never collide at
+// a dependency they share (a peer's markers: NewPeer).
 func EffectKey(ctx context.Context) string { k, _ := ctx.Value(effectKey{}).(string); return k }
 
 // processorInfo is a processor's registration, untyped.
@@ -622,7 +623,7 @@ func (pl *poller) effectContext(ctx context.Context, trigger, head Position, key
 func (pl *poller) markKey() string { return fmt.Sprintf("%p", pl) }
 
 func (pl *poller) key(t Position) string {
-	k := effectKeyOf(pl.p.name, pl.tenant, t)
+	k := effectKeyOf(pl.app.Name, pl.p.name, pl.tenant, t)
 	if n := pl.clocks.keyEpoch(pl.tenant, t); n > 0 {
 		// a position a rewind gave back and the log filled again: another
 		// event's, whose effect must not be answered from the lost one's
@@ -632,10 +633,10 @@ func (pl *poller) key(t Position) string {
 	return k
 }
 
-// effectKeyOf is the effect key of processor's effect for trigger t in
-// tenant (EffectKey): what ServeCalls requires a call's key to be.
-func effectKeyOf(processor, tenant string, t Position) string {
-	return fmt.Sprintf("%s/%s/%d", processor, tenant, t)
+// effectKeyOf is the effect key of app's processor's effect for trigger
+// t in tenant (EffectKey): what ServeCalls requires a call's key to be.
+func effectKeyOf(app, processor, tenant string, t Position) string {
+	return fmt.Sprintf("%s/%s/%s/%d", app, processor, tenant, t)
 }
 
 // commit appends a group's events with the checkpoint moved from cp to

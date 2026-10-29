@@ -22,15 +22,15 @@ import (
 //     refused: the client retries it), quiets, stops its work, flushes its
 //     relay and exits, to be restarted as its next incarnation; one still
 //     draining at Grace is killed (a crash);
-//   - route.api, the router's choice of a node's endpoint, and
-//     route.api.lag (option stale): the router learns of a change of a
+//   - route.<app>, the router's choice of a node's endpoint, and
+//     route.<app>.lag (option stale): the router learns of a change of a
 //     node's readiness EndpointLag late, so a terminating node is still
 //     sent requests, and a restarted one not yet;
 //   - gristsim.rollout, when Rolling: the point where the rolling
 //     restart begins.
 //
-// Each node's API is a qenv.Service of its own, api.<node> (its faults
-// rpc.api.<node>.request, .delay, .response). A client's try that no
+// Each node's API is a qenv.Service of its own, <app>.<node> (its faults
+// rpc.<app>.<node>.request, .delay, .response). A client's try that no
 // server takes (the router's endpoint gone, none in its view, a server
 // shut down) is retried and counted on its call's step:
 // gristtest.NoClientErrors judges them.
@@ -45,7 +45,7 @@ type Cluster struct {
 	// unless set.
 	Drain grist.Drain
 	// EndpointLag is how late the router may learn of a node's change of
-	// readiness (route.api.lag's stale option); 0: never late.
+	// readiness (route.<app>.lag's stale option); 0: never late.
 	EndpointLag time.Duration
 	// Disruptions, if set, lets at most this many nodes terminate at once
 	// (a PodDisruptionBudget's maxUnavailable); crashes are not
@@ -132,12 +132,12 @@ func startCluster(w *workload, st grist.Store, relay *grist.Relay, deps func(con
 		p := s.Process(name, true, start)
 		cl.nodes = append(cl.nodes, p)
 		w.starts[p] = start
-		cl.apis[p] = qenv.NewService(s, "api."+name, p, func(ctx context.Context, req request) (response, error) {
+		cl.apis[p] = qenv.NewService(s, w.app.Name+"."+name, p, func(ctx context.Context, req request) (response, error) {
 			return serve(deps(ctx), w.release(qenv.ProcessOf(ctx)), st, req), nil
 		})
 	}
 	s.Terminations(qenv.Termination{Grace: c.Grace, Budget: c.Disruptions}, cl.nodes...)
-	cl.router = qenv.NewRouter(s, "api", c.EndpointLag, cl.nodes...)
+	cl.router = qenv.NewRouter(s, w.app.Name, c.EndpointLag, cl.nodes...)
 	if c.Rolling {
 		s.Spawn("rollout", func(ctx context.Context) {
 			// a quarter of the pace apart: not only where the clients send

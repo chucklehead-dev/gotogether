@@ -29,17 +29,17 @@ func TestHTTPTier(t *testing.T) {
 	// answers lost at three times the default rate: a lost answer and its
 	// same-key retry is the HTTP tier's point, and at the default a run's
 	// few dozen responses lost none in 3 of 3 runs once its choices moved
-	sys := system(commits, cfg).WithRates(faulty.Set("rpc.api.response", 0.15))
+	sys := system(commits, cfg).WithRates(faulty.Set("rpc.counters.response", 0.15))
 	n := qtest.ExploreConfig{Seeds: 20, ShortSeeds: 3}
 	sys.WithBinding(calls, qtest.Linearize()).Explore(t, n).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()),
-			qtest.Reaches("rpc.api.response").Faulted(), qtest.Reaches("nemesis.crash").Faulted())
+			qtest.Reaches("rpc.counters.response").Faulted(), qtest.Reaches("nemesis.crash").Faulted())
 	if testing.Short() {
 		return
 	}
 	sys.Explore(t, n).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()),
-			qtest.Reaches("rpc.api.response").Faulted(), qtest.Reaches("nemesis.crash").Faulted())
+			qtest.Reaches("rpc.counters.response").Faulted(), qtest.Reaches("nemesis.crash").Faulted())
 }
 
 // Duplicated and late requests over HTTP: a key's first answer is final
@@ -52,11 +52,11 @@ func TestHTTPDuplicateRequests(t *testing.T) {
 		t.Skip("full mode: TestDuplicateRequests checks the markers per push")
 	}
 	qtest.RequireQuint(t)
-	rates := qenv.NoFaults.Set("rpc.api.delay", 0.3).Set("rpc.api.request", 0.3)
+	rates := qenv.NoFaults.Set("rpc.counters.delay", 0.3).Set("rpc.counters.request", 0.3)
 	cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 4, Alphabet: []string{"a", "b"}, HTTP: true,
 		Send: []string{"create-counter", "increment-counter", "show-counter"}}
 	sys := system(commits, cfg).WithRates(rates)
 	n := qtest.ExploreConfig{Seeds: 20, ShortSeeds: 3}
-	sys.Explore(t, n).Expect(t, qtest.Conforms(), qtest.Reaches("rpc.api.request").Faulted())
+	sys.Explore(t, n).Expect(t, qtest.Conforms(), qtest.Reaches("rpc.counters.request").Faulted())
 	sys.WithBinding(calls, qtest.Linearize()).Explore(t, n).Expect(t, qtest.Conforms())
 }

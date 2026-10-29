@@ -305,11 +305,11 @@ func TestClientRetriesOverQHTTP(t *testing.T) {
 	invoked, done, commits := map[string]int{}, map[string]string{}, 0
 	for _, x := range sink.Steps() {
 		switch {
-		case x.Actor == "t1/clients" && x.Invocation:
+		case x.Actor == "names/t1/clients" && x.Invocation:
 			invoked[x.Args["id"].(string)]++
-		case x.Actor == "t1/clients" && x.Call != 0:
+		case x.Actor == "names/t1/clients" && x.Call != 0:
 			done[x.Args["id"].(string)] = x.Outcome
-		case x.Actor == "t1" && x.Action == "name" && x.Outcome == "ok":
+		case x.Actor == "names/t1" && x.Action == "name" && x.Outcome == "ok":
 			commits++
 		}
 	}

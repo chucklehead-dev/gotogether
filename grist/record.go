@@ -3,17 +3,19 @@ package grist
 import (
 	"context"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // record records a step of tenant at store that commits nothing (a
-// query, a reused key, the code's error, an effect): actor the tenant,
-// process the store's name, whatever node or task records it (commits
+// query, a reused key, the code's error, an effect): actor
+// <app>/<tenant> and process the store's name (the App's, as every tier
+// names its store), whatever node or task records it (commits
 // happen at the store, so a node's crash changes no step's process). A
 // commit's step is not recorded here but from its step row (Relay), with
 // the same actor and process.
 func record(ctx context.Context, s Store, tenant, action string, err error, kv ...any) {
-	kv = append([]any{"actor", tenant, "process", s.Name()}, kv...)
+	kv = append([]any{"actor", rec.Actor(s.Name(), tenant), "process", s.Name()}, kv...)
 	shiftOrders(kv, orderBase(ctx, tenant)) // after a rewind, on the tenant's new clock
 	qobs.Record(ctx, action, err, kv...)
 }

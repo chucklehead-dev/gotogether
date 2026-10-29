@@ -2524,6 +2524,82 @@ compares the request field by field with the model's, whose events carry
 no time); the mutant decides by the clock instead. And "files importing
 grist" needed "non-test": an app's tests are the real tier's.
 
+### GR3 slice 5: peer calls
+
+docs/grist-instrumentation.md §4's slice 5, GR4's groundwork: one grist
+App calling another's commands, each side recorded and judged by its
+own model, and a check relating the two.
+- **Actors name the App** (§5, decision 1): every store-side step is
+  `<app>/<tenant>` (the relay's, an effect's, a call's, a site's), every
+  client's `<app>/<tenant>/clients` (`gristsim.ClientsActor(app,
+  tenant)`, `gristsim.Actor`); an App's name holding a slash is a
+  problem `Verify` reports; the generator writes `actors: ['<app>/*',
+  '!*/clients']` and `['<app>/*/clients']`. Every grist example
+  regenerated; counters' recorded sizing steps and qnav's blind run
+  migrated (their actors, keys and site threads renamed, nothing else),
+  qnav's goldens and the grist tape's media rendered again.
+- **Names after the App**: gristsim's API service is the App's name
+  (`rpc.<app>.*`, where it was `rpc.api.*`; a cluster's nodes
+  `<app>.<node>` behind the router `route.<app>`), and a dependency may
+  not take it; every effect key is `<app>/<processor>/<tenant>/<trigger>`
+  (`ServeCalls` checks it so).
+- **Peers**: `grist.NewPeer(app, peer)` (a dependency named after the
+  peer, `Dependency.Peer`) and `grist.NewPeerCall(dep, cmd)` (a
+  `*Call[C, struct{}]`: `Keyed`, the command's refusals; an Internal
+  command, one of another App, or a dependency that is no peer are
+  problems); `grist.PeerCaller(app)` (`service:<app>`); the catalog's
+  `CatalogDependency.Peer`. The generator writes a peer's call as the
+  caller's side alone (its action and `<c>Calls`; no records, site
+  actions, `Admits` or served obligation: shop's billing in the golden
+  model, `TestPeerCallIsTheCallersSide`). `DefaultHandlers`,
+  `Handlers.Serves`, `-dependency` and `ServeDependency` refuse a peer,
+  naming `client.Peer`.
+- **The transport**, grist/client's `client.Peer(c)`: one command per
+  try, the key its id, the caller's tenant, `PeerCaller`; a declared
+  refusal passes through, anything else (a conflict, a denial, a reused
+  key, a 5xx, no answer) is an unknown outcome.
+- **gristsim's `Config.Peers`**: each peer on a simstore of its own
+  (`store.<peer>.*`), the run's tenants, one crashable node named after
+  it serving its API on a qhttp server named after it (`rpc.<peer>.*`),
+  its dependencies by their default doubles; a peer the App calls but
+  Peers lacks, one it does not call, or Doubles for a peer is the run's
+  error (`TestPeerConfigErrors`).
+- **`gristtest.Linked(t, a, b, steps)` and `Links`**: over a run's
+  recorded steps, every call a saw answered (ok or refused) has b's step
+  of its key in the same tenant with that outcome, every b step whose id
+  names a has a's call of the key, no key has two b steps, and a key
+  reused at b is reported (`TestLinks`, each problem and the reversed
+  pair).
+- **freshKey**, a generated mutant (`gristtest.PeerMutants`): each try
+  under the key stamped with the try's time, as a client minting a
+  request id per request does; set by gristtest's init (internal/peerkey)
+  as a dropped rule is. gristsim's `TestPeerFreshKeyUnlinked` finds an
+  unlinked commit in some of 8 runs, `TestPeerPair` none, with retries.
+- **examples/payouts**: the payouts service and its bank, a module of
+  its own. Faithful: 20 of 20 runs conform at each side through the
+  bank's lost and late answers, lost commit answers at both stores and
+  either node's crashes, settle, retry under a key, and are linked.
+  `freshKey`: the bank violates `onePaymentPerPayout` in 4 of 8 runs,
+  the payouts' model conforms in 8 of 8, `Links` finds the bank's
+  unlinked commit. `noDuplicateCheck`: the payouts' model rejects
+  `request` (8 of 8), the bank pays twice (6 of 8), and the sides stay
+  linked: `Linked` says they agree, not that either is right. The
+  bank's invariant is `// grist: violable`: the bank alone pays what a
+  caller asks under a new id, so it holds of the pair, not of the bank's
+  model on its own (`simulate` reaches a violation, as it should).
+
+What the doc had wrong: the peer was declared in grist/client
+(`client.NewPeer(App, "bank", bank.App)`); it is grist's (the catalog
+marks it, the generator reads the mark, and grist cannot import its
+client), named after the peer, and grist/client holds only the
+transport. The peer's tries were to be recorded under its clients'
+actor too: a retry under a used id is no call its clients model takes,
+so they are not. Its example was counters with a bank App, whose bank is
+slices 1, 3 and 6's third party; a new module took it, so no slice's
+acceptance was undone. `freshKey` became a generated mutant: no
+application code chooses a peer call's id. `Linked` takes a test and the
+run's recorded steps.
+
 ### I26: the generator warns on what an app forgot
 
 ROADMAP I26 (the eleventh review's designer: a newcomer added an event

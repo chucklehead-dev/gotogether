@@ -64,6 +64,12 @@ func Catalog(app *grist.App) qtest.Catalog {
 	}
 	for _, d := range c.Dependencies {
 		for _, call := range d.Calls {
+			if d.Peer != "" {
+				// its site is the peer's commit, in the peer's own model
+				out = append(out, qtest.Takes(call.Quint).Outcome("ok").Hint(fmt.Sprintf(
+					"no call of peer %s's %s was answered ok: an effect that uses it must run (its processor's line) and the peer accept it (gristsim Config.Peers; its policy admits grist.PeerCaller(%q))", d.Name, call.Name, app.Name)))
+				continue
+			}
 			out = append(out, qtest.Takes(call.Quint).Outcome("ok").Hint(fmt.Sprintf(
 				"no call of %s/%s was answered ok: an effect that uses it must run (its processor's line) and its double answer (gristsim Config.Doubles)", d.Name, call.Name)),
 				qtest.Takes(call.Quint+"Served").Hint(fmt.Sprintf(

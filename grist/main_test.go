@@ -333,10 +333,10 @@ func TestMainServesDependency(t *testing.T) {
 	}
 	steps := run(nil)
 	calls, served := byAction(steps, "bankPay"), byAction(steps, "bankPayServed")
-	if len(calls) != 1 || calls[0].Outcome != "ok" || calls[0].Args["ref"] != "ref-payer/t1/1" {
+	if len(calls) != 1 || calls[0].Outcome != "ok" || calls[0].Args["ref"] != "ref-payapp/payer/t1/1" {
 		t.Errorf("caller steps %v: want the payment answered with the bank's ref, over HTTP", calls)
 	}
-	if len(served) != 1 || !strings.HasSuffix(served[0].Recorder, "/bank") || served[0].Recorder == calls[0].Recorder || served[0].Actor != "t1" {
+	if len(served) != 1 || !strings.HasSuffix(served[0].Recorder, "/bank") || served[0].Recorder == calls[0].Recorder || served[0].Actor != "payapp/t1" {
 		t.Errorf("served steps %v: want the bank's one payment, in the caller's tenant, under the bank's own recorder (<node>/bank)", served)
 	}
 

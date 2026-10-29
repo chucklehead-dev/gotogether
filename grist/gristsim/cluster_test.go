@@ -42,14 +42,14 @@ func count(log []string, s string) int {
 }
 
 // A rolling restart of three nodes behind a router that learns of each
-// change late (route.api.lag stale at every change): with the drain's
+// change late (route.notes.lag stale at every change): with the drain's
 // delay (5 s on an orchestrator) longer than the router's lag (3 s), every
 // node drains and exits within its grace, is restarted, and no client's
 // try is refused; with no delay (the server shut at the signal) the
 // router sends tries to a node that no longer takes them, in some run;
 // with no lag, nothing is refused even without the delay.
 func TestClusterRollingRestart(t *testing.T) {
-	stale := qenv.NoFaults.Set("route.api.lag", 1)
+	stale := qenv.NoFaults.Set("route.notes.lag", 1)
 	lagged := gristsim.Cluster{Rolling: true, EndpointLag: 3 * time.Second}
 	noDelay := lagged
 	noDelay.Drain.Delay = -1

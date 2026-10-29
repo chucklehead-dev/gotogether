@@ -64,7 +64,10 @@ type App struct {
 }
 
 // New returns an empty App named name, its reads configured by opts
-// (Snapshots, AuditSnapshots, Memo).
+// (Snapshots, AuditSnapshots, Memo). The name starts every actor of its
+// steps (<app>/<tenant>), names its store, its API's simulated service
+// (rpc.<app>.*) and its effects' keys, so it holds no slash (Verify
+// reports one).
 func New(name string, opts ...AppOption) *App {
 	a := &App{Name: name, events: map[string]*eventInfo{}, names: map[string]string{}, quintNames: map[string]string{},
 		commands: map[string]*commandInfo{}, queries: map[string]*queryInfo{},
@@ -73,6 +76,12 @@ func New(name string, opts ...AppOption) *App {
 		if o.apply != nil {
 			o.apply(a)
 		}
+	}
+	if name == "" || strings.ContainsRune(name, '/') {
+		a.problems = append(a.problems, fmt.Sprintf("app %q: an App's name is non-empty and holds no slash, which grist keeps for its actors (<app>/<tenant>): rename it", name))
+	}
+	if err := checkText("app name", name); err != nil {
+		a.problems = append(a.problems, err.Error())
 	}
 	a.events[failedType] = failedInfo()
 	a.events[unknownType] = unknownInfo()

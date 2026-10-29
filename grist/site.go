@@ -57,12 +57,12 @@ func (s *Site[T]) Name() string { return s.info.name }
 
 // Record records v as the site's step of tenant, to ctx's recorder (in
 // a simulation, the run's: a double's handler's context is its
-// service's task's): actor tenant, process the App's name.
+// service's task's): actor <app>/<tenant>, process the App's name.
 func (s *Site[T]) Record(ctx context.Context, tenant string, v T) {
 	body, err := json.Marshal(v)
 	var kv []any
 	if err == nil {
 		kv, err = rec.StepFields(s.info.typ, body, "")
 	}
-	qobs.Record(ctx, s.info.quint, err, append([]any{"actor", tenant, "process", s.app.Name}, kv...)...)
+	qobs.Record(ctx, s.info.quint, err, append([]any{"actor", rec.Actor(s.app.Name, tenant), "process", s.app.Name}, kv...)...)
 }

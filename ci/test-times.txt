@@ -21,6 +21,7 @@ examples/jobqueue 33
 examples/kvstore 61
 examples/lease 35 # 30.4 CPU s on CI (run 442, 8178000 and 54c27fd; 72.2 in run 431, 188 in run 427)
 examples/payd 150
+examples/payouts 40 # 24.7 CPU s on a 4-core machine (2026-10-29: its two mutants' binaries built and explored are most of it)
 examples/quorumkv 128
 examples/raftkv 75 # 72.0 and 72.6 CPU s on CI (runs 459 and 460): its within bindings' passing runs decided by the Go evaluator (7543f3d), quint judging a fifth (f7cd68c)
 examples/retrystorm 51

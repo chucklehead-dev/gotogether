@@ -533,7 +533,7 @@ slices):
 gristsim.Config{Nodes: 3, Cluster: &gristsim.Cluster{
 	Hosts: 2, Zones: 2,             // nodes spread round-robin (nemesis.host.*, nemesis.zone.*)
 	Grace: 45 * time.Second,        // nemesis.terminate.node*: drain as Main does, then the kill
-	EndpointLag: 3 * time.Second,   // every node serves the API behind a router (route.api, route.api.lag)
+	EndpointLag: 3 * time.Second,   // every node serves the API behind a router (route.<app>, route.<app>.lag)
 	Disruptions: 1,                 // a PDB of maxUnavailable 1
 	Rollout: &gristsim.Rollout{To: appV2, MaxSurge: 1},
 	Store: gristsim.Managed{Failover: true, LoseTail: 2, Restore: false},

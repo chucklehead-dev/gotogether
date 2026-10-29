@@ -19,6 +19,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/client"
+	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/grist/sqlstore"
 	"github.com/chucklehead-dev/gotogether/grist/store"
 	"github.com/chucklehead-dev/gotogether/qobs"
@@ -406,7 +407,7 @@ func (s *nodeStore) Append(ctx context.Context, t string, b store.Batch) (store.
 }
 
 // Clients is the context the clients record their calls in (actor
-// <tenant>/clients): give each goroutine its own thread (qobs.Thread).
+// <app>/<tenant>/clients): give each goroutine its own thread (qobs.Thread).
 func (r *Tier) Clients() context.Context { return r.clients }
 
 // Do calls name with args for env through the API (Client.Do), failing
@@ -619,7 +620,10 @@ func Answered(t testing.TB, app *grist.App, traces []*qtrace.Trace) {
 			if id == "" || !commands[s.Action] {
 				continue
 			}
-			tenant, clients := strings.CutSuffix(s.Actor, "/clients")
+			a, tenant, clients, ok := rec.ParseActor(s.Actor)
+			if !ok || a != app.Name {
+				continue // another App's (a peer's), or no grist step
+			}
 			k := key{tenant, id}
 			switch {
 			case clients && s.Outcome == "denied":

@@ -11,7 +11,7 @@ import (
 )
 
 // NoClientErrors: no client saw an error the application could have
-// avoided. Every client call (actor <tenant>/clients) was answered (none
+// avoided. Every client call (actor <app>/<tenant>/clients) was answered (none
 // left pending with its tries spent), none answered an error, and no try
 // of one was refused, no server taking it: an endpoint a router still
 // sent requests to after its pod shut its listener, an empty view, a
@@ -43,7 +43,7 @@ func judgesClients(r *validate.Report) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("%w: the report judges no client's calls (actor <tenant>/clients): judge the run with the clients' binding (System.WithBinding)", qtest.NoVerdict)
+	return fmt.Errorf("%w: the report judges no client's calls (actor <app>/<tenant>/clients): judge the run with the clients' binding (System.WithBinding)", qtest.NoVerdict)
 }
 
 // clientError is r's first client call refused a try, erring or left

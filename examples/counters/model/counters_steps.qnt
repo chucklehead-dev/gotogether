@@ -705,7 +705,7 @@ module countersGen {
 }
 
 // The clients' side (counters.calls.binding.yaml): every call where a client
-// saw it (actor <tenant>/clients), linearized by qtest.Linearize: no
+// saw it (actor <app>/<tenant>/clients), linearized by qtest.Linearize: no
 // positions, no processors, the log the commands' events alone. A key's first
 // answer is final here too; a call the API denied (403) answers nothing.
 module countersCallsGen {

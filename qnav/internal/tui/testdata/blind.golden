@@ -1,5 +1,5 @@
-gotogether-nav  model counters: the state before call 5, which the model rejects  (from actor t1's
-  state after 4 of its 27 steps)
+gotogether-nav  model counters: the state before call 5, which the model rejects  (from actor
+  counters/t1's state after 4 of its 27 steps)
 path: failing step
 
 branches (26)
@@ -44,14 +44,14 @@ the run's next call, which the model rejects
 
 state  (* changed by the last move)
   answered = Set("t1-c1-1")
-── lines 1–28 of 185 (pgup/pgdn scroll)
+── lines 1–28 of 187 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
 ========
 
-gotogether-nav  model counters: the state before call 5, which the model rejects  (from actor t1's
-  state after 4 of its 27 steps)
+gotogether-nav  model counters: the state before call 5, which the model rejects  (from actor
+  counters/t1's state after 4 of its 27 steps)
 path: failing step
 
 branches (26)
@@ -89,13 +89,13 @@ state  (* changed by the last move)
   bankPayCalls = []
   bankPayRecords = []
   checkpoints = Map("average" -> 0, "payout" -> 0, "welcome" -> 0)
-  effects = [("welcome", 1, "welcome/t1/1", true)]
+  effects = [("welcome", 1, "counters/welcome/t1/1", true)]
   log = [{ cause: ("command", "t1-c1-1"), ints: [], strs: ["c", "c", "client1"], tags:
     Set(("counter", "c"), ("name", "c")), typ: "counter-created" }]
-  mailerSendCalls = [{ key: "welcome/t1/1", processor: "welcome", request: { counter: "c", name:
-    "c" }, response: { unit: true }, result: "ok", trigger: 1 }]
-  mailerSendRecords = [{ key: "welcome/t1/1", processor: "welcome", request: { counter: "c",
-── lines 1–38 of 185 (pgup/pgdn scroll)
+  mailerSendCalls = [{ key: "counters/welcome/t1/1", processor: "welcome", request: { counter:
+    "c", name: "c" }, response: { unit: true }, result: "ok", trigger: 1 }]
+  mailerSendRecords = [{ key: "counters/welcome/t1/1", processor: "welcome", request: { counter:
+── lines 1–38 of 187 (pgup/pgdn scroll)
 
 [37m/[m[37mshowCounter[m 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit

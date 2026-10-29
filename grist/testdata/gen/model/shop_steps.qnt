@@ -34,10 +34,13 @@ module shopGen {
   // applied them (its served records), in order
   var warehouseHoldCalls: List[WarehouseHoldRecord]
   var warehouseHoldRecords: List[WarehouseHoldRecord]
+  // the calls of billing/bill, a peer's command, as their callers saw them (Call.Do), in
+  // order; the peer's model judges what it did
+  var billingBillCalls: List[BillingBillRecord]
 
   action init = all {
     log' = [],
-    checkpoints' = Map("ship" -> 0, "notify" -> 0, "charge" -> 0),
+    checkpoints' = Map("ship" -> 0, "notify" -> 0, "charge" -> 0, "invoice" -> 0),
     appended' = [],
     effects' = [],
     answered' = Set(),
@@ -45,6 +48,7 @@ module shopGen {
     warehousePicksRecords' = [],
     warehouseHoldCalls' = [],
     warehouseHoldRecords' = [],
+    billingBillCalls' = [],
   }
 
   // the identities, in the order commands take them, and the effect keys the
@@ -68,6 +72,7 @@ module shopGen {
     warehousePicksRecords' = warehousePicksRecords,
     warehouseHoldCalls' = warehouseHoldCalls,
     warehouseHoldRecords' = warehouseHoldRecords,
+    billingBillCalls' = billingBillCalls,
   }
 
   // a committed refusal: its marker answers id, nothing is appended; it
@@ -90,6 +95,7 @@ module shopGen {
     warehousePicksRecords' = warehousePicksRecords,
     warehouseHoldCalls' = warehouseHoldCalls,
     warehouseHoldRecords' = warehouseHoldRecords,
+    billingBillCalls' = billingBillCalls,
   }
 
   // a processor's handling of trigger, appending b with its checkpoint
@@ -104,6 +110,7 @@ module shopGen {
     warehousePicksRecords' = warehousePicksRecords,
     warehouseHoldCalls' = warehouseHoldCalls,
     warehouseHoldRecords' = warehouseHoldRecords,
+    billingBillCalls' = billingBillCalls,
   }
 
   // an effect step of processor p for trigger, under key (the same on every
@@ -120,6 +127,7 @@ module shopGen {
     warehousePicksRecords' = warehousePicksRecords,
     warehouseHoldCalls' = warehouseHoldCalls,
     warehouseHoldRecords' = warehouseHoldRecords,
+    billingBillCalls' = billingBillCalls,
   }
 
   // the log went backwards (grist.ErrRewound: a failover lost its tail, a
@@ -139,6 +147,7 @@ module shopGen {
     warehousePicksRecords' = warehousePicksRecords,
     warehouseHoldCalls' = warehouseHoldCalls,
     warehouseHoldRecords' = warehouseHoldRecords,
+    billingBillCalls' = billingBillCalls,
   }
 
   // an operator's resume (`<app> resume`): the processors go on from their
@@ -157,6 +166,7 @@ module shopGen {
     warehousePicksRecords' = warehousePicksRecords,
     warehouseHoldCalls' = warehouseHoldCalls.select(c => c.trigger <= checkpoints.get(c.processor)),
     warehouseHoldRecords' = warehouseHoldRecords,
+    billingBillCalls' = billingBillCalls.select(c => c.trigger <= checkpoints.get(c.processor)),
   }
 
   // The rules (grist.NewRule), run on the events an ok decision appends, on
@@ -291,6 +301,7 @@ module shopGen {
     warehousePicksRecords' = warehousePicksRecords,
     warehouseHoldCalls' = warehouseHoldCalls,
     warehouseHoldRecords' = warehouseHoldRecords,
+    billingBillCalls' = billingBillCalls,
   }
 
   // charge skips a trigger its rule says it skips (chargeSkips: the handler's Skip),
@@ -344,8 +355,55 @@ module shopGen {
         warehousePicksRecords' = warehousePicksRecords,
         warehouseHoldCalls' = warehouseHoldCalls,
         warehouseHoldRecords' = warehouseHoldRecords,
+        billingBillCalls' = billingBillCalls,
       },
     }
+  }
+
+  // invoice skips a trigger its rule says it skips (invoiceSkips: the handler's Skip),
+  // its checkpoint alone, no effect step; a handler's Fail is recorded so
+  // too, appending grist.failed, which a skip's empty batch does not match
+  action invoiceSkip(trigger: int): bool = all {
+    trigger > 0,
+    trigger == nextOf(log, checkpoints.get("invoice"), "item-shipped"),
+    invoiceSkips(log.slice(0, trigger), trigger),
+    triesOf(effects, "invoice", trigger) == 0,
+    processes([], "invoice", trigger),
+  }
+
+  // invoice's effect, at least once: any number of tries for its next trigger
+  // before its checkpoint, every one under the trigger's key
+  action invoiceEffect(trigger: int, key: str, ok: bool): bool = all {
+    trigger > 0,
+    trigger == nextOf(log, checkpoints.get("invoice"), "item-shipped"),
+    not(invoiceSkips(log.slice(0, trigger), trigger)),
+    effectStep("invoice", trigger, key, ok),
+  }
+
+  // invoice's checkpoint, only after effect steps: its success after an ok one,
+  // grist.failed after 3 failed ones, whichever the run committed (ok: its
+  // record of which)
+  action invoice(trigger: int, ok: bool): bool = all {
+    trigger > 0,
+    trigger == nextOf(log, checkpoints.get("invoice"), "item-shipped"),
+    atLeastOnceDone(effects, "invoice", trigger, ok, 3),
+    processes(atLeastOnceOutcome("invoice", trigger, ok, []), "invoice", trigger),
+  }
+
+  // invoice is at least once: its outcome commits with its checkpoint, never
+  // alone, so an outcome step of its own is no step of this model
+  action invoiceOutcome(trigger: int, ok: bool): bool = all {
+    false,
+    log' = log,
+    checkpoints' = checkpoints,
+    appended' = [],
+    effects' = effects,
+    answered' = answered,
+    rewound' = rewound,
+    warehousePicksRecords' = warehousePicksRecords,
+    warehouseHoldCalls' = warehouseHoldCalls,
+    warehouseHoldRecords' = warehouseHoldRecords,
+    billingBillCalls' = billingBillCalls,
   }
 
   // the warehouse-picks site's record, made where its effect took place: any number,
@@ -363,6 +421,7 @@ module shopGen {
       warehousePicksRecords' = warehousePicksRecords.append(rec_),
       warehouseHoldCalls' = warehouseHoldCalls,
       warehouseHoldRecords' = warehouseHoldRecords,
+      billingBillCalls' = billingBillCalls,
     }
   }
 
@@ -409,6 +468,7 @@ module shopGen {
       warehousePicksRecords' = warehousePicksRecords,
       warehouseHoldCalls' = warehouseHoldCalls.append(rec_),
       warehouseHoldRecords' = warehouseHoldRecords,
+      billingBillCalls' = billingBillCalls,
     }
   }
 
@@ -443,6 +503,7 @@ module shopGen {
       warehousePicksRecords' = warehousePicksRecords,
       warehouseHoldCalls' = warehouseHoldCalls,
       warehouseHoldRecords' = warehouseHoldRecords.append(rec_),
+      billingBillCalls' = billingBillCalls,
     }
   }
 
@@ -466,6 +527,40 @@ module shopGen {
       warehousePicksRecords' = warehousePicksRecords,
       warehouseHoldCalls' = warehouseHoldCalls,
       warehouseHoldRecords' = warehouseHoldRecords,
+      billingBillCalls' = billingBillCalls,
+    }
+  }
+
+  // the keys of billing/bill's steps: (processor, trigger, key)
+  pure def billingBillKeys(l: List[BillingBillRecord]): List[CallKey] = l.foldl([], (acc, c) => acc.append((c.processor, c.trigger, c.key)))
+
+  // billing/bill as its caller saw it (Call.Do: invoked before the request,
+  // done with the answer, the outcome ok, a declared refusal or unknown):
+  // from an effect of a processor that uses it, for one of its triggers
+  // before the effect step, under the trigger's key (callKeyStable), its
+  // request the processor's rule's
+  action billingBill(processor: str, trigger: int, key: str, item_: str, qty: int, result: str): bool = {
+    val rec_: BillingBillRecord = { processor: processor, trigger: trigger, key: key, request: { item: item_, qty: qty }, result: result, response: { unit: true } }
+    all {
+      or {
+        processor == "invoice" and (if (trigger > 0 and trigger <= log.length()) and {
+          log[trigger - 1].typ == "item-shipped",
+          rec_.request == invoiceBillingBill(log.slice(0, trigger), trigger),
+          not(invoiceSkips(log.slice(0, trigger), trigger)),
+          trigger == nextOf(log, checkpoints.get("invoice"), "item-shipped"),
+        } else false),
+      },
+      callKeyStable(effects, billingBillKeys(billingBillCalls), processor, trigger, key),
+      log' = log,
+      checkpoints' = checkpoints,
+      appended' = [],
+      effects' = effects,
+      answered' = answered,
+      rewound' = rewound,
+      warehousePicksRecords' = warehousePicksRecords,
+      warehouseHoldCalls' = warehouseHoldCalls,
+      warehouseHoldRecords' = warehouseHoldRecords,
+      billingBillCalls' = billingBillCalls.append(rec_),
     }
   }
 
@@ -499,6 +594,19 @@ module shopGen {
   // application states one test-only: atMostOnceOutcomesLogged)
   val chargeEventuallyHandled =
     log.indices().forall(i => log[i].typ == "item-shipped" implies checkpoints.get("charge") >= i + 1)
+
+  // after a settle, invoice (at least once) has handled every item-shipped:
+  // its checkpoint passed it, and it was skipped (invoiceSkips), had an ok
+  // effect step, or failed every try (its grist.failed)
+  val invoiceEventuallyHandled =
+    log.indices().forall(i => log[i].typ == "item-shipped" implies and {
+      checkpoints.get("invoice") >= i + 1,
+      or {
+        invoiceSkips(log.slice(0, i + 1), i + 1),
+        effectsOf(effects, "invoice", i + 1, true) > 0,
+        holds(log, failed("invoice", i + 1)),
+      },
+    })
 
   // after a settle, every call of warehouse/hold (Keyed, used by notify,
   // charge) its caller saw answered, ok or refused, has the dependency's
@@ -567,6 +675,16 @@ module shopGen {
         nondet known_ = Bool.oneOf()
         chargeOutcome(trigger_, ok_, known_, "lost")
       },
+      invoiceSkip(nextOf(log, checkpoints.get("invoice"), "item-shipped")),
+      {
+        nondet key_ = KEYS.oneOf()
+        nondet ok_ = Bool.oneOf()
+        invoiceEffect(nextOf(log, checkpoints.get("invoice"), "item-shipped"), key_, ok_)
+      },
+      {
+        nondet ok_ = Bool.oneOf()
+        invoice(nextOf(log, checkpoints.get("invoice"), "item-shipped"), ok_)
+      },
       {
         nondet key = STRS.oneOf()
         nondet item_ = STRS.oneOf()
@@ -633,12 +751,21 @@ module shopGen {
           warehouseHoldReplayed("charge", trigger_, key_, req_.item, req_.qty, result_, ref)
         }
       },
+      {
+        nondet trigger_ = 1.to(log.length() + 1).oneOf()
+        nondet key_ = KEYS.oneOf()
+        nondet result_ = Set("ok", "no-account", "unknown").oneOf()
+        {
+          val req_: BillingBillRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == "item-shipped") invoiceBillingBill(log.slice(0, trigger_), trigger_) else { item: "", qty: 0 }
+          billingBill("invoice", trigger_, key_, req_.item, req_.qty, result_)
+        }
+      },
     }
   }
 }
 
 // The clients' side (shop.calls.binding.yaml): every call where a client
-// saw it (actor <tenant>/clients), linearized by qtest.Linearize: no
+// saw it (actor <app>/<tenant>/clients), linearized by qtest.Linearize: no
 // positions, no processors, the log the commands' events alone. A key's first
 // answer is final here too; a call the API denied (403) answers nothing.
 module shopCallsGen {

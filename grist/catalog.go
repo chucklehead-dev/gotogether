@@ -111,6 +111,9 @@ func (a *App) Catalog() Catalog {
 	}
 	for _, d := range a.depOrder {
 		cd := CatalogDependency{Name: d.name, Quint: d.quint, Calls: []CatalogCall{}}
+		if d.peer != nil {
+			cd.Peer = d.peer.Name
+		}
 		for _, ci := range d.calls {
 			cc := CatalogCall{Name: ci.name, Quint: ci.quint, Request: ci.req, Response: ci.resp, Keyed: ci.opts.keyed, Refuses: slices.Clone(ci.opts.refuses)}
 			for _, u := range ci.users {

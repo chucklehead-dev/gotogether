@@ -125,7 +125,27 @@ for it. No binding is written by hand.
    vals are marked `// grist: ... real` and leave out the site claims
    (an eventual val over `<c>Records`), stated in simulations instead
    (docs/grist-instrumentation.md §5, decision 4). Do outside an effect, or of a call
-   the processor does not list in `Uses`, is the effect's error. What is
+   the processor does not list in `Uses`, is the effect's error. **A peer**
+   is a dependency that is itself a grist App: `var Bank =
+   grist.NewPeer(App, bank.App)` (named after the peer), `var BankPay =
+   grist.NewPeerCall(Bank, bank.Pay)` (its request the command's
+   arguments, no response, `Keyed`, the command's refusals): each try of
+   `BankPay.Do` is one command of the peer under the effect's key, in the
+   caller's tenant, as the caller `grist.PeerCaller("<app>")`
+   (`service:<app>`, which the peer's `Authorize` admits), so the peer's
+   marker makes an at-least-once effect one command; a conflict or a
+   denial is an unknown outcome to the caller. Attach
+   `client.Peer(&client.Client{App: bank.App, URL: u})` where the node
+   starts; in a simulation `gristsim.Config{Peers: []*grist.App{bank.App}}`
+   runs the peer on its own store, node and API (`rpc.<peer>.*`,
+   `nemesis.crash.<peer>`). The caller's model has the caller's step
+   alone (no site, no `Admits`, no served obligation); judge the peer's
+   side with `sys.WithBinding("bank/bank.binding.yaml")` and relate the
+   two with `gristtest.Linked(t, App, bank.App, run.Recorded)` for each
+   run of an exploration; `qtest.Mutants{Generated:
+   gristtest.PeerMutants(App)}` adds `freshKey` (each try under a new
+   id: the peer's invariant and `Links` catch it, the caller's model
+   cannot). examples/payouts is the pair. What is
    no call stays a typed `grist.NewDep[T](name, fallback)` (T best an
    interface, its fallback a stand-in refusing every call with the fix;
    `Dep.Of(ctx)` in an effect, `Dep.With(ctx, v)` where the node starts:
@@ -182,20 +202,21 @@ for it. No binding is written by hand.
    before borrows), `Doubles` (a declared dependency's handlers, else its
    default double), `Setup` (what is no call: a `grist.NewDep`'s value,
    reached through a processor's ctx; a `NewSite` double records its own
-   effect with `actor` the tenant and `process` the App's name:
+   effect with `actor` `<app>/<tenant>` and `process` the App's name:
    [`references/model.md`](model.md)). Every run records
-   both sides: the store's steps (actor the tenant: commits relayed from
-   the step log) and the clients' calls (`gristsim.ClientsActor`,
-   `<tenant>/clients`: no tenant name holds a slash, `grist.CheckTenant`);
-   the commits binding says `actors: ['!*/clients']`,
-   a client-side one `actors: ['*/clients']`, judged with
+   both sides: the store's steps (actor `<app>/<tenant>`,
+   `gristsim.Actor`: commits relayed from the step log) and the clients'
+   calls (`gristsim.ClientsActor`, `<app>/<tenant>/clients`: no App's or
+   tenant's name holds a slash, `grist.New`, `grist.CheckTenant`); the
+   commits binding says `actors: ['<app>/*', '!*/clients']`, a client-side
+   one `actors: ['<app>/*/clients']`, judged with
    `sys.WithBinding(calls, qtest.Linearize())` over a client-side model
    module.
-   Duplicated and late requests: `rpc.api.request` and `rpc.api.delay`
-   rates. `HTTP: true` serves the node's HTTP API on qhttp and its
-   clients call it with `grist/client` (the API's codes and the
-   network's faults, `rpc.api.response` among them, under the same
-   kinds).
+   Duplicated and late requests: `rpc.<app>.request` and
+   `rpc.<app>.delay` rates (the App's API is named after it). `HTTP:
+   true` serves the node's HTTP API on qhttp and its clients call it with
+   `grist/client` (the API's codes and the network's faults,
+   `rpc.<app>.response` among them, under the same kinds).
    **Claim the runs reached the app**: a faithful test adds
    `gristtest.Catalog(App).Exercised(except...)` (qtest's
    `Catalog.Exercised` over the App's catalog; `Catalog.Take(name)` one

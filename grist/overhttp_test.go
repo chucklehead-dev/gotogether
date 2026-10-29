@@ -102,14 +102,14 @@ func TestCallOverHTTP(t *testing.T) {
 		if c.Outcome != want[n] || tr != posOf[n] {
 			t.Errorf("caller step of amount %d at trigger %d: outcome %q, want %q at the amount's position %d", n, tr, c.Outcome, want[n], posOf[n])
 		}
-		if n == 5 && c.Args["ref"] != fmt.Sprint("ref-payer/t1/", tr) {
+		if n == 5 && c.Args["ref"] != fmt.Sprint("ref-calls/payer/t1/", tr) {
 			t.Errorf("caller step %v: want the bank's ref, decoded from its answer", c)
 		}
 	}
 	for _, s := range served {
 		tr := s.Args["trigger"].(int64)
 		c := byTrigger[tr]
-		if s.Actor != "t1" || s.Process != a.Name || s.Recorder != "bank" || s.Args["key"] != c.Args["key"] || s.Args["processor"] != "payer" || s.Order["pos"] != c.Order["pos"] || s.Args["amount"] != c.Args["amount"] {
+		if s.Actor != "calls/t1" || s.Process != a.Name || s.Recorder != "bank" || s.Args["key"] != c.Args["key"] || s.Args["processor"] != "payer" || s.Order["pos"] != c.Order["pos"] || s.Args["amount"] != c.Args["amount"] {
 			t.Errorf("served step %+v: want the caller's tenant and process, the bank's recorder, the caller's key, processor, request and order.pos (%+v)", s, c)
 		}
 	}
@@ -131,12 +131,12 @@ func TestServeCallsRefuses(t *testing.T) {
 	_, bank, pay := callsApp(grist.AtMostOnce, true)
 	srv, sink := serveBank(t, bank, bankHandlers(pay))
 	ctx := context.Background()
-	info := grist.CallInfo{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 3, Key: "payer/t1/1"}
+	info := grist.CallInfo{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 3, Key: "calls/payer/t1/1"}
 	body, _ := json.Marshal(payReq{Amount: 5})
 	tr := grist.OverHTTP(srv.URL, nil)
 	for i := range 2 {
 		out, err := tr.Call(ctx, info, "pay", body)
-		if err != nil || string(out) != `{"ref":"ref-payer/t1/1"}` {
+		if err != nil || string(out) != `{"ref":"ref-calls/payer/t1/1"}` {
 			t.Fatalf("try %d: %s, %v: want the bank's receipt", i, out, err)
 		}
 	}
@@ -159,10 +159,10 @@ func TestServeCallsRefuses(t *testing.T) {
 	// key that is not the trigger's effect key (its record would be a
 	// second application of trigger 1 under a key of its own)
 	notUser := info
-	notUser.Processor, notUser.Key = "refunder", "refunder/t1/1"
+	notUser.Processor, notUser.Key = "refunder", "calls/refunder/t1/1"
 	_, err = tr.Call(ctx, notUser, "pay", body)
 	unknown("a processor that does not use the call", err)
-	for _, k := range []string{"payer/t1/2", "payer/t2/1", "other-key"} {
+	for _, k := range []string{"calls/payer/t1/2", "calls/payer/t2/1", "other-key"} {
 		forged := info
 		forged.Key = k
 		_, err = tr.Call(ctx, forged, "pay", body)
@@ -273,10 +273,10 @@ func TestServeCallsOrderPerKey(t *testing.T) {
 	body, _ := json.Marshal(payReq{Amount: 5})
 	node1, node2 := grist.OverHTTP(srv.URL, nil), grist.OverHTTP(srv.URL, nil)
 	ctx := context.Background()
-	if _, err := node2.Call(ctx, grist.CallInfo{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 7, Key: "payer/t1/1"}, "pay", body); err != nil {
+	if _, err := node2.Call(ctx, grist.CallInfo{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 7, Key: "calls/payer/t1/1"}, "pay", body); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := node1.Call(ctx, grist.CallInfo{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 4, Key: "payer/t1/1"}, "pay", body); err != nil {
+	if _, err := node1.Call(ctx, grist.CallInfo{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 4, Key: "calls/payer/t1/1"}, "pay", body); err != nil {
 		t.Fatal(err)
 	}
 	served := byAction(sink.Steps(), "bankPayServed")
@@ -310,7 +310,7 @@ func TestServeCallsDefault(t *testing.T) {
 	}, grist.Delivers(grist.AtLeastOnce), grist.Uses(send))
 	srv, sink := serveBank(t, mailer, nil)
 	tr := grist.OverHTTP(srv.URL, nil)
-	info := grist.CallInfo{App: "acks", Tenant: "t1", Processor: "p", Trigger: 1, Head: 1, Key: "p/t1/1"}
+	info := grist.CallInfo{App: "acks", Tenant: "t1", Processor: "p", Trigger: 1, Head: 1, Key: "acks/p/t1/1"}
 	for range 2 {
 		if out, err := tr.Call(context.Background(), info, "send", []byte(`{"amount":1}`)); err != nil || string(out) != "{}" {
 			t.Fatalf("%s, %v: want the acknowledgement", out, err)
@@ -328,7 +328,7 @@ func TestServeCallsDefault(t *testing.T) {
 // paid" of a payment nothing said was not made).
 func TestCallAnswerOfNoRefusal(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Idempotency-Key") == "payer/t1/2" {
+		if r.Header.Get("Idempotency-Key") == "calls/payer/t1/2" {
 			http.Redirect(w, r, "/elsewhere", http.StatusSeeOther)
 			return
 		}

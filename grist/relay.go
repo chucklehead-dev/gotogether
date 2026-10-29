@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/grist/store"
 	"github.com/chucklehead-dev/gotogether/qobs"
 )
@@ -142,7 +143,7 @@ func (r *Relay) tenant(t string) *relayed {
 	p := r.tenants[t]
 	if p == nil {
 		p = &relayed{sink: &qobs.MemorySink{}}
-		p.scratch = qobs.NewRecorder(p.sink, qobs.WithID(RecorderID(r.s.Name(), t)), qobs.WithActor(t), qobs.WithProcess(r.s.Name()))
+		p.scratch = qobs.NewRecorder(p.sink, qobs.WithID(RecorderID(r.s.Name(), t)), qobs.WithActor(rec.Actor(r.s.Name(), t)), qobs.WithProcess(r.s.Name()))
 		r.tenants[t] = p
 	}
 	return p

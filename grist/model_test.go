@@ -22,7 +22,8 @@ import (
 // Unconditioned one without; a rule on the first one's event; a query of a struct and one of a scalar;
 // processors that emit, effect at least once with a success event and at
 // most once without; a site; a dependency's Keyed call with a refusal,
-// used by both effects.
+// used by both effects; a peer's command (billing's bill), called at
+// least once from a third effect.
 type (
 	itemAdded struct {
 		Item string   `json:"item" grist:"tag"`
@@ -72,6 +73,28 @@ var errClosed = grist.Rejection("closed")
 // errNoStock is the warehouse's refusal of a reservation.
 var errNoStock = grist.Rejection("no-stock")
 
+// bill is billing's command's arguments; errNoAccount its refusal.
+type bill struct {
+	Item string `json:"item"`
+	Qty  int    `json:"qty"`
+}
+
+var errNoAccount = grist.Rejection("no-account")
+
+// billingApp is the shop's peer: a grist App whose command bill the
+// shop's invoice processor calls (grist.NewPeerCall).
+func billingApp() (*grist.App, *grist.Command[bill]) {
+	b := grist.New("billing")
+	billed := grist.NewEvent[bill](b, "billed")
+	cmd := grist.NewCommand(b, "bill", func(r *grist.Reads, c bill) ([]grist.Event, error) {
+		if c.Qty <= 0 {
+			return nil, errNoAccount
+		}
+		return []grist.Event{billed.Of(c)}, nil
+	}, grist.Unconditioned("a bill reads nothing"), grist.Refuses(errNoAccount), grist.Authorize(grist.Callers(grist.PeerCaller("shop"))))
+	return b, cmd
+}
+
 func shopApp() *grist.App {
 	a := grist.New("shop")
 	added := grist.NewEvent[itemAdded](a, "item-added")
@@ -117,6 +140,14 @@ func shopApp() *grist.App {
 		}, grist.AtMostOnce)
 	}, grist.Delivers(grist.AtMostOnce), grist.Uses(hold))
 	grist.NewSite[picked](a, "warehouse-picks")
+	billing, billCmd := billingApp()
+	billIt := grist.NewPeerCall(grist.NewPeer(a, billing), billCmd)
+	grist.NewProcessor(a, "invoice", shipped, func(ctx context.Context, r *grist.Reads, e itemShipped, m grist.Meta) grist.Result {
+		return grist.Effect(func(ctx context.Context) error {
+			_, err := billIt.Do(ctx, bill{Item: e.Item, Qty: 1})
+			return err
+		}, grist.AtLeastOnce)
+	}, grist.Delivers(grist.AtLeastOnce), grist.Uses(billIt))
 	return a
 }
 
@@ -213,9 +244,9 @@ func TestCallObligationsFollowSiteClaims(t *testing.T) {
 		t.Fatal(err)
 	}
 	for b, want := range map[string]string{
-		"shop.binding.yaml":      "eventually: [shipEventuallyHandled, notifyEventuallyHandled, chargeEventuallyHandled, warehouseHoldEventuallyServed]",
-		"shop.sim.binding.yaml":  "eventually: [everyHoldAnswerServed, shipEventuallyHandled, notifyEventuallyHandled, chargeEventuallyHandled, warehouseHoldEventuallyServed]",
-		"shop.real.binding.yaml": "eventually: [shipEventuallyHandled, notifyEventuallyHandled, chargeEventuallyHandled]\n",
+		"shop.binding.yaml":      "eventually: [shipEventuallyHandled, notifyEventuallyHandled, chargeEventuallyHandled, invoiceEventuallyHandled, warehouseHoldEventuallyServed]",
+		"shop.sim.binding.yaml":  "eventually: [everyHoldAnswerServed, shipEventuallyHandled, notifyEventuallyHandled, chargeEventuallyHandled, invoiceEventuallyHandled, warehouseHoldEventuallyServed]",
+		"shop.real.binding.yaml": "eventually: [shipEventuallyHandled, notifyEventuallyHandled, chargeEventuallyHandled, invoiceEventuallyHandled]\n",
 	} {
 		if !strings.Contains(string(g.Files[b]), want) {
 			t.Errorf("%s: want %q in it:\n%s", b, want, g.Files[b])
@@ -650,5 +681,29 @@ func TestLockTakesAnAddedField(t *testing.T) {
 	}
 	if _, err := gen.Generate(shelfOf(func(e shelfTagged) int { return e.Copies }), dir); err == nil || !strings.Contains(err.Error(), "changed shape") {
 		t.Errorf("a tag added: %v, want a changed shape", err)
+	}
+}
+
+// A peer's command (grist.NewPeerCall) is generated as its caller's side
+// alone: the caller's action and its ghost of calls, judged by the rule
+// hole like any call, but no served records, no site actions, no Admits
+// and no served obligation, since its site is the peer's commit, judged
+// by the peer's own model (gristtest.Linked relates the two). A third
+// party's call (warehouse/hold) keeps all of them.
+func TestPeerCallIsTheCallersSide(t *testing.T) {
+	g, err := gen.Generate(shopApp(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps, bind := string(g.Files["model/shop_steps.qnt"]), string(g.Files["shop.binding.yaml"])
+	for _, want := range []string{"action billingBill(", "var billingBillCalls:", "invoiceBillingBill(log.slice(0, trigger), trigger)", "action warehouseHoldServed(", "warehouseHoldEventuallyServed"} {
+		if !strings.Contains(steps+bind, want) {
+			t.Errorf("the generated model and binding lack %q", want)
+		}
+	}
+	for _, not := range []string{"billingBillServed", "billingBillReplayed", "billingBillRecords", "billingBillAdmits", "billingBillEventuallyServed"} {
+		if strings.Contains(steps+bind, not) {
+			t.Errorf("the generated model or binding has %q: a peer's call has no site in its caller's model", not)
+		}
 	}
 }

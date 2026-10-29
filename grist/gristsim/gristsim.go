@@ -2,12 +2,13 @@
 // simstore, or the SQL tier's sqlstore over qsql (Config.SQL), at a
 // chosen isolation level, one node or more (Config.Nodes; a crashable process
 // running the App's processors and serving its commands and queries over
-// a lossy qenv.Service, or over its HTTP API on qhttp: Config.HTTP), and a workload of clients sending random
+// a lossy qenv.Service named after the App (rpc.<app>.*), or over its HTTP API on qhttp: Config.HTTP), and a workload of clients sending random
 // commands and queries of the registry to every tenant. Each of the
 // App's declared dependencies (grist.NewDependency) is served as a
 // qenv.Service named after it, from the run's Config.Doubles (else its
 // default double, grist.DefaultHandlers), its requests and answers lost,
-// duplicated and late. Run's signature
+// duplicated and late; each peer it calls (grist.NewPeer) runs beside it
+// as an App of its own (Config.Peers). Run's signature
 // is a qtest.System's Run, and System is that System, so an application
 // is explored, exhausted and shrunk with every claim of qtest:
 //
@@ -33,6 +34,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/grist/client"
 	"github.com/chucklehead-dev/gotogether/grist/internal/calls"
 	"github.com/chucklehead-dev/gotogether/grist/internal/readcfg"
+	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/grist/internal/values"
 	"github.com/chucklehead-dev/gotogether/grist/simstore"
 	"github.com/chucklehead-dev/gotogether/grist/sqlstore"
@@ -43,17 +45,22 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
-// ClientsActor is the actor of tenant's client-side steps: a run records
-// every command and query twice, at the store (actor tenant: commits from
-// the step log, refusals at their commit, queries on return) and where
-// the clients see them (actor tenant + "/clients": qobs.Invoke before the
-// first request and Call.Done with the answer, every retry of a lost or
-// late response inside the one call), so a commits binding (actors:
-// ['!*/clients']) and a clients binding (actors: ['*/clients'], with
-// qtest.Linearize) judge one run (System.WithBinding; docs/grist.md §3.1).
-// No tenant's name holds a slash (grist.CheckTenant), so no tenant is
-// another's clients.
-func ClientsActor(tenant string) string { return calls.Actor(tenant) }
+// ClientsActor is the actor of tenant's client-side steps in app: a run
+// records every command and query twice, at the store (Actor: commits
+// from the step log, refusals at their commit, queries on return) and
+// where the clients see them (<app>/<tenant>/clients: qobs.Invoke before
+// the first request and Call.Done with the answer, every retry of a lost
+// or late response inside the one call), so a commits binding (actors:
+// ['<app>/*', '!*/clients']) and a clients binding (actors:
+// ['<app>/*/clients'], with qtest.Linearize) judge one run
+// (System.WithBinding; docs/grist.md §3.1). No App's or tenant's name
+// holds a slash (grist.New, grist.CheckTenant), so no tenant is another's
+// clients, and two Apps' tenants of one name in a run (a peer's,
+// Config.Peers) are two instances.
+func ClientsActor(app *grist.App, tenant string) string { return calls.Actor(app.Name, tenant) }
+
+// Actor is the actor of tenant's store-side steps in app: <app>/<tenant>.
+func Actor(app *grist.App, tenant string) string { return rec.Actor(app.Name, tenant) }
 
 // Config is a run's shape.
 type Config struct {
@@ -85,12 +92,12 @@ type Config struct {
 	// a 40001 under Snapshot and Serializable) and the same commit faults.
 	SQL bool
 	// HTTP serves the node's commands and queries over its HTTP API
-	// (grist.NewHandler on a qhttp.Server, "api") instead of a
+	// (grist.NewHandler on a qhttp.Server named after the App) instead of a
 	// qenv.Service of requests, the clients calling it through
 	// grist/client over qhttp's Transport: the API's codes, its
 	// Idempotency-Key and its 503s are what the clients see, and the
-	// network's faults are qhttp's (rpc.api.request, rpc.api.delay,
-	// rpc.api.response, the node's crashes). Every command and query the
+	// network's faults are qhttp's (rpc.<app>.request, rpc.<app>.delay,
+	// rpc.<app>.response, the node's crashes). Every command and query the
 	// clients send must declare Authorize (grist denies by default); a
 	// client is its Envelope's caller (CallerHeader).
 	HTTP bool
@@ -180,6 +187,23 @@ type Config struct {
 	// Log, if set, receives the simulation's log (crashes, upgrades:
 	// qenv.Sim.Log), for a failing run's story.
 	Log func(string)
+	// Peers are the grist Apps the App calls (grist.NewPeer), each run
+	// beside it as a service of its own: a simstore on a qenv.Store
+	// named after it (store.<peer>.*, its commit faults with
+	// CommitFaults), the run's Tenants, one crashable node process named
+	// after it (nemesis.crash.<peer>, restarted when it crashes) starting
+	// the peer and serving its HTTP API on a qhttp.Server named after it
+	// (rpc.<peer>.request, .delay, .response), its own dependencies by
+	// their default doubles. The App's calls of it go through grist/client
+	// (client.Peer) over qhttp, waiting DependencyTimeout for an answer,
+	// each try one command under the call's key, as the caller
+	// grist.PeerCaller(<app>). Both Apps record into the run, each under
+	// its own actors (<app>/<tenant>), so the peer's binding judges the
+	// same run (System.WithBinding) and gristtest.Linked relates the two.
+	// A peer of the App's that Peers lacks, or one the App does not call,
+	// is the run's error. A peer is the smallest composition: one node,
+	// no peers of its own, not with From or Cluster (GR4's).
+	Peers []*grist.App
 }
 
 // Managed is a run's store incidents: what a managed PostgreSQL does to
@@ -269,7 +293,7 @@ func (t simTransport) Call(ctx context.Context, c grist.CallInfo, call string, r
 // from's (a rollout's older release, nil for none), each one of app's of
 // its name served by the same Service, so both releases' calls reach one
 // double, any other by its default double.
-func serveDependencies(s *qenv.Sim, app *grist.App, doubles func() Doubles, from *grist.App) (func(context.Context) context.Context, error) {
+func serveDependencies(s *qenv.Sim, app *grist.App, doubles func() Doubles, from *grist.App, peers map[*grist.App]grist.Transport) (func(context.Context) context.Context, error) {
 	deps := app.Dependencies()
 	var ds Doubles
 	if doubles != nil {
@@ -283,6 +307,16 @@ func serveDependencies(s *qenv.Sim, app *grist.App, doubles func() Doubles, from
 	byName := map[string]grist.Transport{}
 	trs := make([]grist.Transport, len(deps))
 	for i, d := range deps {
+		if p := d.Peer(); p != nil {
+			if _, given := ds[d]; given {
+				return nil, fmt.Errorf("gristsim: Config.Doubles has handlers of %s, a peer (grist.NewPeer): a peer is run as itself (Config.Peers), its calls its commands", d.Name())
+			}
+			if trs[i] = peers[p]; trs[i] == nil {
+				return nil, fmt.Errorf("gristsim: %s calls peer %s (grist.NewPeer), which the run does not run: add its App to Config.Peers", app.Name, p.Name)
+			}
+			byName[d.Name()] = trs[i]
+			continue
+		}
 		h, ok := ds[d]
 		if !ok {
 			// none given: the default double, this run's own
@@ -303,6 +337,9 @@ func serveDependencies(s *qenv.Sim, app *grist.App, doubles func() Doubles, from
 		// its default double
 		for _, d := range from.Dependencies() {
 			tr := byName[d.Name()]
+			if tr == nil && d.Peer() != nil {
+				return nil, fmt.Errorf("gristsim: Config.From calls peer %s, which the App does not: a rollout's releases call the same peers", d.Name())
+			}
 			if tr == nil {
 				h, err := defaultDouble(d)
 				if err != nil {
@@ -484,7 +521,11 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 			operate(s, st, relay, m.Resume)
 		}
 	}
-	served, err := serveDependencies(s, app, cfg.Doubles, cfg.From)
+	peers, peerRelays, peerNodes, err := startPeers(s, app, cfg)
+	if err != nil {
+		return err
+	}
+	served, err := serveDependencies(s, app, cfg.Doubles, cfg.From, peers)
 	if err != nil {
 		return err
 	}
@@ -532,7 +573,7 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 	// a supervisor: a node that crashed itself (an effect's crash point)
 	// restarts as one the nemesis crashed does
 	s.OnCrash(func(p *qenv.Process) {
-		if nodes[p] {
+		if nodes[p] || peerNodes[p] {
 			p.Restart()
 		}
 	})
@@ -615,7 +656,81 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 	}
 	// a relay that cannot read a row records none after it: the run's
 	// commits are not all in its trace, and no verdict on it would hold
+	for _, r := range peerRelays {
+		if err := r.Err(); err != nil {
+			return err
+		}
+	}
 	return relay.Err()
+}
+
+// startPeers runs cfg.Peers beside app (Config.Peers), returning each
+// one's transport for app's calls, their relays and their node processes.
+func startPeers(s *qenv.Sim, app *grist.App, cfg Config) (map[*grist.App]grist.Transport, []*grist.Relay, map[*qenv.Process]bool, error) {
+	called := map[*grist.App]bool{}
+	for _, d := range app.Dependencies() {
+		if p := d.Peer(); p != nil {
+			called[p] = true
+		}
+	}
+	trs := map[*grist.App]grist.Transport{}
+	var relays []*grist.Relay
+	procs := map[*qenv.Process]bool{}
+	if len(cfg.Peers) > 0 && (cfg.From != nil || cfg.Cluster != nil) {
+		return nil, nil, nil, errors.New("gristsim: Config.Peers with Config.From or Config.Cluster: a composition's rollouts and clusters are not built yet (GR4)")
+	}
+	for _, p := range cfg.Peers {
+		switch {
+		case p == nil || p == app:
+			return nil, nil, nil, errors.New("gristsim: Config.Peers holds nil or the App itself: give the Apps it calls (grist.NewPeer)")
+		case !called[p]:
+			return nil, nil, nil, fmt.Errorf("gristsim: Config.Peers has %s, which %s does not call: declare it (grist.NewPeer) or leave it out", p.Name, app.Name)
+		case trs[p] != nil:
+			return nil, nil, nil, fmt.Errorf("gristsim: Config.Peers has %s twice", p.Name)
+		}
+		if err := p.Verify(); err != nil {
+			return nil, nil, nil, fmt.Errorf("gristsim: Config.Peers: %w", err)
+		}
+		for _, d := range p.Dependencies() {
+			if d.Peer() != nil {
+				return nil, nil, nil, fmt.Errorf("gristsim: peer %s calls peer %s: a peer's own peers are not built yet (GR4)", p.Name, d.Name())
+			}
+		}
+		db := qenv.NewStore(s, p.Name, cfg.Isolation)
+		st := simstore.New(db)
+		relay, err := grist.NewRelay(st)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		for _, t := range cfg.Tenants {
+			if err := st.CreateTenant(s.Context(), t); err != nil {
+				return nil, nil, nil, err
+			}
+		}
+		db.CommitFaults = cfg.CommitFaults // the run's commits, its tenants made
+		served, err := serveDependencies(s, p, nil, nil, nil)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("gristsim: peer %s: %w", p.Name, err)
+		}
+		h, err := grist.NewHandler(p, st, grist.CallerFromHeader(CallerHeader))
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("gristsim: peer %s: %w", p.Name, err)
+		}
+		var srv *qhttp.Server
+		node := s.Process(p.Name, true, func(ctx context.Context) {
+			if err := p.Start(relay.With(served(ctx)), st, grist.WithRelay(relay)); err != nil {
+				panic(fmt.Sprintf("gristsim: peer %s could not start: %v", p.Name, err))
+			}
+			srv.Handle(ctx, h) // every incarnation listens again
+		})
+		srv = qhttp.NewServer(s, p.Name, node)
+		tr := qhttp.NewTransport(srv)
+		tr.Timeout = DependencyTimeout
+		trs[p] = client.Peer(&client.Client{App: p, URL: srv.URL(), HTTP: &http.Client{Transport: tr}, CallerHeader: CallerHeader})
+		relays = append(relays, relay)
+		procs[node] = true
+	}
+	return trs, relays, procs, nil
 }
 
 // operate is the operator: a while (after) after a rewind stops a
@@ -670,7 +785,7 @@ func (w *workload) startNodes(st grist.Store, relay *grist.Relay, deps func(cont
 		nodes[p], w.starts[p] = true, start
 	}
 	if cfg.HTTP {
-		srv = qhttp.NewServer(s, "api", node)
+		srv = qhttp.NewServer(s, w.app.Name, node)
 		tr := qhttp.NewTransport(srv)
 		tr.Timeout = CallTimeout
 		// a budget every call refills: the workload's calls are judged by a
@@ -682,7 +797,7 @@ func (w *workload) startNodes(st grist.Store, relay *grist.Relay, deps func(cont
 			MaxAttempts: MaxAttempts, RetryDelay: RetryDelay, Budget: &client.Budget{Ratio: MaxAttempts, Max: MaxAttempts}}
 		return
 	}
-	w.api = qenv.NewService(s, "api", node, func(ctx context.Context, req request) (response, error) {
+	w.api = qenv.NewService(s, w.app.Name, node, func(ctx context.Context, req request) (response, error) {
 		return serve(deps(ctx), w.release(qenv.ProcessOf(ctx)), st, req), nil
 	})
 }
@@ -899,7 +1014,7 @@ func (w *workload) call(ctx context.Context, req request) {
 // Do runs the command or query name of app on st for env, in the
 // caller's goroutine (no API between: a real tier's client in process,
 // as examples/counters' TestRealSQLite has), and records the call as a
-// run's clients do: under ClientsActor(env.Tenant), qobs.Invoke before
+// run's clients do: under ClientsActor(app, env.Tenant), qobs.Invoke before
 // the first try and Call.Done with the answer, an unknown outcome or an
 // unavailable store retried under the same id inside the one call (at
 // most MaxAttempts tries, then pending). It returns the answer: nil, a

@@ -1,16 +1,17 @@
 # grist instrumentation (GR3): every seam recorded and simulated by construction
 
 Status: design, 2026-10-27, for docs/ROADMAP.md's GR3. **Slices 1 to
-4 are built** (§4; docs/HISTORY.md (grist §0.12), §0.13 and §0.14 say what
-building the first three changed, HISTORY's "GR3 slice 4" the fourth's,
-and the text below is corrected where they did):
-`grist.NewDependency`, `grist.NewCall`, `Keyed`, `Uses`, `Call.Do`,
+5 are built** (§4; docs/HISTORY.md (grist §0.12), §0.13 and §0.14 say what
+building the first three changed, HISTORY's "GR3 slice 4" and "GR3 slice
+5" the fourth's and fifth's, and the text below is corrected where they
+did): `grist.NewDependency`, `grist.NewCall`, `Keyed`, `Uses`, `Call.Do`,
 `Handlers`, `Local`, `Transport`, `gristsim.Config.Doubles`,
 `grist.DefaultHandlers` (the default double), `grist.OverHTTP`,
-`grist.ServeCalls`, `grist.ServeDependency`, `gristtest.TierConfig.Serve`.
-The rest of the Go below is **proposed API** (`client.NewPeer`, ...),
-written so it parses; every name it takes from an existing toolkit
-package exists today.
+`grist.ServeCalls`, `grist.ServeDependency`, `gristtest.TierConfig.Serve`;
+peers (`grist.NewPeer`, `grist.NewPeerCall`, `client.Peer`,
+`gristsim.Config.Peers`, `gristtest.Linked`) and actors naming the App
+(`<app>/<tenant>`). Slice 6 (spans of declared calls) is designed, not
+built.
 Read docs/grist.md first (§2.6 processors, §3.1 recording, §3.5 seams,
 §0.9-§0.10 the generator); this note builds on it and cites it as "grist
 §x".
@@ -32,7 +33,7 @@ library) at commit 27c7ce9.
 | seam | recorded today | simulated today | who wrote it |
 | --- | --- | --- | --- |
 | the store (appends, markers, checkpoints) | by construction: the step row in the append's transaction, relayed (`grist.Relay`, grist §0.3) | `qenv.Store` / qsql: isolation, commit faults (`store.<app>.commit`) | grist |
-| inbound HTTP (commands, queries) | store side by construction; client side by `grist/client` and gristsim's workload (`internal/calls.Record`, actor `<tenant>/clients`) | qhttp or a `qenv.Service` named `api`: `rpc.api.request`, `.delay`, `.response` | grist |
+| inbound HTTP (commands, queries) | store side by construction; client side by `grist/client` and gristsim's workload (`internal/calls.Record`, actor `<tenant>/clients`; `<app>/<tenant>/clients` since slice 5) | qhttp or a `qenv.Service` named `api`: `rpc.api.request`, `.delay`, `.response` (named after the App since slice 5: `rpc.<app>.*`) | grist |
 | a processor's effect (`grist.Effect`) | the effect step `<p>Effect` (trigger, key, `ok` only: nothing of what f asked or got) | crash points `grist.<p>.effect` (`crashBefore`, `crashAfter`) | grist |
 | what an effect calls (a bank, a mailer, a ledger) | **only if the app wrote a `NewSite` and called `Site.Record` in its double**; never the request as the caller sent it | **only if the app wrapped its double in a `qenv.Service`** | the app |
 | outbound HTTP or gRPC from an effect | no | no, unless the app routes it through a double it wrote | nobody |
@@ -261,7 +262,7 @@ construction. A call `pay` of dependency `bank` is the Quint name
 
 | step | where | actor, process | arguments | observations | order |
 | --- | --- | --- | --- | --- | --- |
-| `bankPay` (the caller's view) | `Call.Do`: `qobs.Invoke` before the request, `Call.Done` with the answer | the tenant, the App's store | the request's fields, `processor`, `trigger`, `key`, then the response's fields (zero without a response) | none; outcome `ok`, a refusal's name or `unknown` | as the effect step: `order.pos` 2·H+1, `order.p.<processor>` 2·T (at least once) or 2·T+1 (at most once), the poller's thread, before the effect step |
+| `bankPay` (the caller's view) | `Call.Do`: `qobs.Invoke` before the request, `Call.Done` with the answer | `<app>/<tenant>` (slice 5; the tenant before), the App's store | the request's fields, `processor`, `trigger`, `key`, then the response's fields (zero without a response) | none; outcome `ok`, a refusal's name or `unknown` | as the effect step: `order.pos` 2·H+1, `order.p.<processor>` 2·T (at least once) or 2·T+1 (at most once), the poller's thread, before the effect step |
 | `bankPayServed` (the site) | where the call is served: `Handlers`' wrapper (`Call.Handler`, served by `grist.Local`: gristsim's doubles), or `grist.ServeCalls` on a real dependency the team owns | the caller's tenant, the App's store | the request's fields, `processor`, `trigger`, `key`, the response's fields | none; outcome as the handler answered | `order.pos` 2·H+1 (H the head the poller read, carried in the cause), or an earlier record of the key's if later, on a thread of its own (the key) |
 | `bankPayReplayed` (the site's answer given again, `grist.Replayed`) | as `bankPayServed` | as `bankPayServed` | as `bankPayServed` | as `bankPayServed` | as `bankPayServed` |
 
@@ -461,11 +462,11 @@ recorder: it records into the request context's, so a service wraps it
 in `qobshttp.Handler(h, rec)` with its own (gristtest's tier does, with
 a step file of its own; `ServeDependency` does, into Main's steps file
 under a recorder of its own). Its records join the caller's tenant's
-trace (actor the tenant, process the App's name, placed at the cause's
+trace (actor `<app>/<tenant>`, process the App's name, placed at the cause's
 2·H+1, one clock per `ServeCalls` whichever node calls), and it refuses,
 400 and unrecorded, a request without its cause or key, of another App,
 of a processor that does not use the call, whose key is not its
-effect's (`processor/tenant/trigger`), or that does not decode; nil
+effect's (`app/processor/tenant/trigger`), or that does not decode; nil
 handlers are the default double, which refuses a call answering fields.
 A request a grist caller did not send for a trigger is then the model's
 rejection at `<c>Served`. It authenticates nobody: the cause is the
@@ -505,54 +506,66 @@ leaves out.)
 
 ### 3.7 Service A calls service B: one seam, both sides
 
-<!-- not built: gristtest.Linked -->
-
 A peer is a dependency that is itself a grist App, and its calls are
-B's commands:
+B's commands (built in slice 5; examples/payouts, a payouts service and
+its bank):
 
 ```go
-// proposed: package grist/client (which imports grist, so peers live here);
-// service counters pays through service bank, both grist Apps
-var BankService = client.NewPeer(App, "bank", bank.App)
+// package payouts: the bank is a grist App of its own (package bank)
+var Bank = grist.NewPeer(App, bank.App)          // a *grist.Dependency named after the peer
 
-var PayCmd = client.NewPeerCall(BankService, bank.Pay) // bank.Pay is a *grist.Command[bank.PayArgs]
+var BankPay = grist.NewPeerCall(Bank, bank.Pay) // a *grist.Call[bank.Payment, struct{}]
 ```
 
-`PayCmd.Do(ctx, bank.PayArgs{...})` is a call as §3.3 has it, whose
-transport is grist/client against B's API (qhttp in a simulation, HTTP
-for real), and whose site is B's own commit:
+`BankPay.Do(ctx, bank.Payment{...})` is a call as §3.3 has it, whose
+transport is grist/client against B's API (`client.Peer(c)`: qhttp in a
+simulation, gristsim's `Config.Peers`; HTTP for real, attached where the
+node starts), sending one command per try with the call's key as its
+command id, in the caller's tenant, as the caller `service:<app>`
+(`grist.PeerCaller`, which B's policy admits by name: GR4's service
+identities). Its site is B's own commit:
 
 - **On A's side**, the caller's step `bankPay` (B's command's arguments,
-  the key, the trigger; the receipt or refusal), in A's tenant's trace,
-  judged by A's model as any call.
+  the key, the trigger; ok, the command's declared refusal, or unknown),
+  in A's tenant's trace, judged by A's model as any call. A peer call is
+  `Keyed`, its refusals the command's (`Refuses`), its response none (a
+  receipt's positions are B's log's, which A's model cannot compute); a
+  conflict, a denial or a key reused is no declared refusal, so A sees
+  an unknown outcome and B's steps say what happened. The generator
+  writes the caller's side alone: no served records, no site actions, no
+  `Admits` and no served obligation (the site is B's commit, in B's
+  model).
 - **On B's side**, nothing new: the request is a command whose id is
   A's call key, so B's marker answers every retry of A's at-least-once
   effect with the first answer (grist §2.4), B's relay records the commit
-  in B's tenant's trace, and B's model judges it as any command. grist's
-  client records the call under B's clients actor too, as every
-  grist/client call does, for B's calls binding.
+  in B's tenant's trace (actor `<b>/<tenant>`), and B's model judges it
+  as any command. B's clients' side is its own clients': the peer's
+  tries are not recorded under `<b>/<tenant>/clients` (each try is one
+  command, and a retry under a used id is no call B's clients model
+  takes: `freshKey(answered, id)`).
 - **The link** is the key: A's call key is B's command id, and B's
   events carry it as their cause (`obs.causes`, ("command", key)). The
-  effect key is `<processor>/<tenant>/<trigger>` today (processor.go's
-  `key`); slice 5 prefixes the App's name for every call
-  (`<app>/<processor>/<tenant>/<trigger>`), so two callers' keys never
-  collide in B's markers, and B's step records `caller` as the
-  service (`service:<app>`), which B's policy admits by name (GR4's
-  service identities).
+  effect key is `<app>/<processor>/<tenant>/<trigger>` for every call
+  (`grist.EffectKey`), so two callers' keys never collide in B's
+  markers.
 
 So A's at-least-once effect becomes exactly once in B's log by B's
 markers, which no part of the pair writes; A's model sees what A asked,
 B's what B did, and a cross-service check relates them by key:
-`gristtest.Linked(run, A, B)` (slice 5), in the manner of
-`gristtest.Answered`: every call A saw answered has B's step of its key
-with the same outcome, every B commit whose id names A has A's call
-(pending included), and no key has two B outcomes. A system model over
-both (Choreo for the protocol, GR4) reads the same records.
+`gristtest.Linked(t, A, B, steps)` (`Links` returns its problems), over
+a run's recorded steps (`qtest.Run.Recorded`, both Apps' in one run):
+every call A saw answered, ok or refused, has B's step of its key in the
+same tenant with the same outcome, every B commit whose id names A
+(`<a>/...`) has A's call of that key (pending included), and no key has
+two B steps. A system model over both (Choreo for the protocol, GR4)
+reads the same records.
 
-What GR4 then needs and GR3 already fixes: B's API server named after B
-(`rpc.bank.*`), not `api`; actors that name the service, so two Apps'
-tenant `t1` are two instances (question 1); and one gristsim run holding
-both Apps, each on its own store, node and process (GR4's first slice).
+What GR4 then needs and GR3 fixes: B's API server named after B
+(`rpc.bank.*`, and every App's own: `rpc.<app>.*`), not `api`; actors
+that name the service, so two Apps' tenant `t1` are two instances
+(decision 1); and one gristsim run holding both Apps, each on its own
+store, node and process (`Config.Peers`, the smallest composition: one
+node a peer, no peers of its own, not with `From` or `Cluster`).
 
 ### 3.8 How GR5-GR7 fit
 
@@ -586,8 +599,6 @@ with `//qenv:ok` exemptions as today. Timers are GR8's.
   party's order says nothing of the tenant's log; the cause does.
 
 ## 4. Slices
-
-<!-- not built: gristtest.Linked -->
 
 Each is one agent's work, reviewed before the next; each acceptance test
 names the mutant it must catch, built as an overlay
@@ -686,19 +697,45 @@ names the mutant it must catch, built as an overlay
    and the doc's "stamping its receipt with `time.Now()`" became a
    decision by the clock, since a stamp would be a field the model cannot
    compute.
-5. **Peer calls.** `NewPeer`, `NewPeerCall` over grist/client, the key
-   qualified by the caller's App, `caller` `service:<app>`, B's API
-   server named after B, actors naming the service (question 1),
-   `gristtest.Linked`; gristsim running a peer App on its own store,
-   node and process (`Config.Peers`: the smallest composition, which
-   GR4 grows). **Example: counters with a `bank` grist App** in its
-   module (`pay`, refused for an unknown account, an invariant "one
-   payout per counter"). **Acceptance**: the mutant `freshKey` (each try
-   of the at-least-once payout under a new command id) is
-   `Some(Violates("onePayoutPerCounter"))` at the bank and fails
-   `Linked`; the faithful pair conforms on both sides through lost
-   answers and node crashes of either. (If the maintainer prefers, this
-   is GR4's first slice instead.)
+5. **Peer calls** (built, 2026-10-29: docs/HISTORY.md, "GR3 slice 5",
+   with what it changed here). `grist.NewPeer`, `grist.NewPeerCall`,
+   `client.Peer` (the transport), the key qualified by the caller's App
+   (`<app>/<processor>/<tenant>/<trigger>`), `caller` `service:<app>`
+   (`grist.PeerCaller`), every App's API server named after it, actors
+   naming the App (decision 1), `gristtest.Linked` and `Links`; gristsim
+   running a peer App on its own store, node and process
+   (`Config.Peers`: the smallest composition, which GR4 grows); the
+   generated mutant `freshKey` (`gristtest.PeerMutants`). **Example:
+   examples/payouts**, a payouts service whose `send` processor pays
+   each requested payout at least once through its peer `bank` (`pay`,
+   refused for an unknown account; the bank's invariant
+   `onePaymentPerPayout`). **Acceptance**, as built: `freshKey` (each
+   try of the at-least-once payment under a new command id) is
+   `Some(Violates("onePaymentPerPayout"))` at the bank (4 of 8 runs) and
+   fails `Links` (a bank commit whose id names payouts, no call's key),
+   while the payouts' own model conforms (8 of 8: each try is under the
+   trigger's key there); the faithful pair conforms on both sides
+   through the bank's lost and late answers, both stores' lost commit
+   answers and either node's crashes (20 of 20 each side), settles,
+   retries some call under its key, and is `Linked` in every run. A
+   second mutant, `noDuplicateCheck` (a payout's id requested twice),
+   shows what `Linked` is not: the payouts' model rejects the request
+   (8 of 8), the bank pays twice (6 of 8 violate
+   `onePaymentPerPayout`), and the two sides still agree. Five
+   corrections: the peer is declared in grist (`grist.NewPeer(App,
+   bank.App)`, named after the peer, no name of its own), not
+   grist/client, which holds only the transport: the catalog marks the
+   dependency a peer, for the generator to write the caller's side
+   alone, and grist cannot import its client; the peer's tries are not
+   recorded under its clients actor (a retry under a used id is no call
+   its clients model takes); the example is a new module, not counters
+   (whose bank is slices 1, 3 and 6's third party, at most once, behind
+   `ServeCalls`) nor wallet-grist (whose ledger double is slice 2's
+   acceptance); `freshKey` is generated, not an overlay (no application
+   code chooses a peer call's id: grist sends the effect key, so the
+   mutant is grist/client's id, switched by gristtest's init as a dropped
+   rule is); and `Linked` takes a test and a run's recorded steps
+   (`Linked(t, A, B, run.Recorded)`).
 6. **Spans of declared calls.** A call's caller step also as an OTel
    span event in the span open in its context (qobs's OTel recording),
    and a generated `<app>.convert.yaml` turning otelhttp client spans of
@@ -713,12 +750,10 @@ names the mutant it must catch, built as an overlay
 
 ## 5. Decisions (the maintainer, 2026-10-27)
 
-<!-- not built: gristtest.Linked -->
-
 The maintainer took the recommendation on all five; each below is now
 the design, and the slices build on it.
 
-1. **Actors that name the service** (decided: yes, in slice 5). Today a store-side step's actor is
+1. **Actors that name the service** (decided: yes; built in slice 5). A store-side step's actor was
    the tenant (grist §3.1); two Apps' tenant `t1` in one run would be one
    instance with two processes, which the binding refuses (no
    `restart`). Decision (as recommended): always `<app>/<tenant>` and

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/grist"
+	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/qmeta"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
@@ -209,7 +210,7 @@ func Measure(app *grist.App, steps []qtrace.Step) (*Measured, error) {
 		samples[b.Name] = append(samples[b.Name], d)
 		if b.Kind != Call {
 			m.Calls++
-			if tenant, _, ok := strings.Cut(s.Actor, "/"); ok {
+			if a, tenant, clients, ok := rec.ParseActor(s.Actor); ok && clients && a == app.Name {
 				m.Tenants[tenant]++
 			}
 			clientSpans = append(clientSpans, span{start, s.Time})

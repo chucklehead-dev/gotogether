@@ -56,12 +56,12 @@ func TestSQLDuplicateRequests(t *testing.T) {
 		t.Skip("full mode: TestDuplicateRequests checks the markers per push")
 	}
 	qtest.RequireQuint(t)
-	rates := qenv.NoFaults.Set("rpc.api.delay", 0.3).Set("rpc.api.request", 0.3)
+	rates := qenv.NoFaults.Set("rpc.counters.delay", 0.3).Set("rpc.counters.request", 0.3)
 	cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 4, Alphabet: []string{"a", "b"}, SQL: true,
 		Send: []string{"create-counter", "increment-counter", "show-counter"}}
 	sys := system(commits, cfg).WithRates(rates)
 	n := qtest.ExploreConfig{Seeds: 20, ShortSeeds: 3}
-	sys.Explore(t, n).Expect(t, qtest.Conforms(), qtest.Reaches("rpc.api.request").Faulted())
+	sys.Explore(t, n).Expect(t, qtest.Conforms(), qtest.Reaches("rpc.counters.request").Faulted())
 	sys.WithBinding(calls, qtest.Linearize()).Explore(t, n).Expect(t, qtest.Conforms())
 }
 
