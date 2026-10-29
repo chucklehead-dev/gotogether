@@ -6920,3 +6920,34 @@ and diagnostic quality. The smallest documentation gaps were clarified.
 It is repository-owned, not independent adoption evidence. Phased workload
 control and order-specific outstanding-obligation diagnostics are stronger
 next candidates than speculative SQL peers, cycles, clusters or rollouts.
+
+
+## Goo consumer trial and GR3 slice 6 design
+
+2026-10-29. The independent modeling effort in casselc/goo extends its
+lifecycle model to two tenants sharing IDs and two immutable evaluation
+generations, calling actual preparation, correction and aggregation APIs.
+Late evidence can improve missing completion or degrade good to unknown;
+selection of one generation, mixed prepared-artifact refusal and changed-scope
+refusal are checked. Five directed scenarios and 12 generated traces (300
+steps, 139 non-idle), nine-step bounded model safety, prefix/settle controls
+and three source mutants pass. Smallest mutant witnesses have 2/6/3 steps.
+Eight observation corruptions are killed; four malformed logs are refused
+before verdict and excluded from the score. No production defect was found
+within the bounds. The isolated consumer module leaves Goo's existing
+dependencies unchanged; dedicated model and existing API-contract CI pass.
+Evidence and reproduction: [casselc/goo#1](https://github.com/casselc/goo/pull/1),
+commit 0659a4b. This was agent-assisted core-library use, not an unaided
+newcomer study or grist adoption.
+
+The maintainer approved recording the trial and specifying the next GR3
+slice. grist-call-spans.md now defines its first increment: native evidence
+through the existing OTel sink/decoder, real HTTP payouts -> bank, with
+local/link/causal parity, lost replies, retries, pending invocations and
+identity-corruption controls. This replaces reduced route/status inference
+as the first slice; generic conversion and counters remain follow-ons.
+Only the design and acceptance criteria are complete; no slice-6 runtime
+or generator implementation is claimed by this entry.
+
+Validation of the design update: internal/docsnippets and skills checks pass;
+no runtime behavior or exported API changed.

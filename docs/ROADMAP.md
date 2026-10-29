@@ -18,8 +18,10 @@ Fix correctness issues that invalidate experimental results, then use a
 bounded GR4 composition to test the abstractions, and an adoption trial
 to expose API friction. Breaking changes are allowed; release policy and
 production hardening are not gates on these experiments. Add adapters
-when an experiment needs them. GR3 slice 6 (spans) is deferred behind
-composition, not a prerequisite for it. R5 remains the maintainer's call.
+when an experiment needs them. GR3 slice 6 (spans) follows the completed
+bounded composition and adoption experiments; its first increment is a lossless real-peer OTel round-trip,
+not generic HTTP inference (docs/grist-call-spans.md). R5 remains the
+maintainer's call.
 
 GR4's first increment is built: acyclic peer graphs, one store/node/API
 per peer, shared peers instantiated once, per-service model judgments
@@ -33,6 +35,14 @@ confirmation at a shared inventory owner, three planted bugs, local and
 combined checks, and a friction report. Its concrete next candidates are
 phased workload control and order-specific obligation diagnostics; broader
 per-service configuration, cycles, clusters and rollouts need adopter evidence.
+The independent Goo lifecycle modeling trial is validated in
+[casselc/goo#1](https://github.com/casselc/goo/pull/1): two tenants and two
+immutable generations, real kernel APIs, three source mutants shrunk to
+2/6/3 operations, and passing consumer and repository CI. It found no
+production defect within its bounds. This agent-assisted trial validates
+the core workflow in an independently maintained library; it does not
+establish unaided onboarding or grist adoption. Next: the bounded GR3
+slice 6 design and acceptance contract in [grist-call-spans.md](grist-call-spans.md).
 The earlier tracks below retain their item identifiers and technical dependencies; their historical release
 recommendations do not override this prerelease order.
 
@@ -1004,7 +1014,10 @@ Then, in order, each item reviewed before the next:
   `grist.NewPeerCall`, `client.Peer`, `gristsim.Config.Peers`,
   `gristtest.Linked`), the generated mutant `freshKey`, and
   examples/payouts (a payouts service and its bank). Slice 6
-  (spans of declared calls) is deferred while GR4 tests composition.
+  (spans of declared calls) is next after the bounded GR4 and Goo trials:
+  [first-increment contract](grist-call-spans.md), proposed, not implemented.
+  Preserve native caller evidence through OTel in payouts -> bank before
+  considering reduced HTTP-span conversion.
   Candidate example apps for the declared calls (not built):
   - *payments*, calling a third-party PSP: `authorize` `Keyed`, at least
     once, refusing `declined`; `capture` at most once, reading the

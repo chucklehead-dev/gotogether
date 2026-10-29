@@ -23,7 +23,12 @@ contrasts. `CheckProtocolOrders` now explores bounded alternative causal
 orderings, distinguishing counterexamples, exhaustive checks and limit
 exhaustion. See [grist-composition.md](grist-composition.md). The maintainer's direction:
 correctness first, then composition and an adoption trial; keep APIs
-flexible. GR3 slice 6 is deferred, and release hardening is not a gate.
+flexible. The agent-assisted Goo trial now validates the core modeling
+workflow in an independently maintained library (not grist adoption):
+[PR and passing CI](https://github.com/casselc/goo/pull/1). Next is the
+[GR3 slice 6 contract](grist-call-spans.md): a lossless OTel round-trip
+for payouts -> bank, proposed and not implemented. Release hardening
+is not a gate.
 
 ## 1. What works now
 
@@ -182,9 +187,9 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Adoption trial on an independently maintained service | S-M | inventory-grist is a repository-owned rehearsal and reference, not external adoption evidence |
+| 1 | GR3 slice 6: lossless declared-call evidence through OTel | S-M | bounded payouts -> bank contract in grist-call-spans.md; design complete, implementation next |
 | 2 | GR4: phased workload control or outstanding-obligation diagnostics when an adopter needs them | S-M | inventory-grist identifies these specific friction points; no demonstrated need for broader per-peer configuration |
-| 3 | GR3 slice 6 (spans of declared calls) | M | deferred until an experiment needs spans; adds a recorder, not a seam |
+| 3 | Further independent adoption, especially grist or unaided onboarding | S-M | Goo validates an agent-assisted core-library workflow; it does not cover these adoption questions |
 | 4 | GR5 streams, GR6 gRPC, GR7 controllers | M, M, L | on the published doubles (H7) |
 | 5 | GR8 sagas and timers, GR9 checkout as grist services | M, L | GR9 proves GR4 and GR8 compose |
 | 6 | P9, grist apps explored in-process | L | after GR4 |
@@ -193,7 +198,7 @@ four, L more; agent-days in practice).
 Also proposed, not built: GR10b (a poller a daemon only while it waits)
 and GR10c (`Settle` naming down processes), both S and qenv-level.
 
-**Recommended next: follow the prerelease experiments above.** R5 is
+**Recommended next: implement the first GR3 slice 6 increment above.** R5 is
 available when the maintainer wants tags; compatibility commitments and
 platform breadth do not precede evidence that the abstractions compose.
 I4's unsupported nondeterministic-replay boundary stays a correctness
