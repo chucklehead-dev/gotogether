@@ -76,3 +76,45 @@ func TestLinks(t *testing.T) {
 		t.Errorf("Linked: %v, want its one problem", msgs)
 	}
 }
+
+// A key and outcome alone do not identify a peer call: a transport may
+// route pay to another command, both models accepting their own records.
+// Links must compare the command even if it too is declared by the caller,
+// and must notice caller-owned ids on commands the caller never declared.
+func TestLinksWrongCommand(t *testing.T) {
+	shop, bank := pair()
+	other := grist.NewCommand(bank, "refund", func(r *grist.Reads, c pay) ([]grist.Event, error) { return nil, nil },
+		grist.Unconditioned("reads nothing"), grist.Authorize(grist.Authenticated))
+	key := "shop/charge/t1/1"
+	steps := []qtrace.Step{
+		{Action: "bankPay", Actor: "shop/t1", Outcome: "ok", Args: map[string]any{"key": key}},
+		{Action: "refund", Actor: "bank/t1", Outcome: "ok", Args: map[string]any{"id": key}},
+	}
+	for _, declared := range []bool{false, true} {
+		if declared {
+			grist.NewPeerCall(shop.Dependencies()[0], other)
+		}
+		problems := strings.Join(gristtest.Links(shop, bank, steps), "\n")
+		if !strings.Contains(problems, "an answer the peer's commit does not give") || !strings.Contains(problems, "never called") {
+			t.Errorf("refund declared %v: %s; want pay's missing answer and refund's uncalled command", declared, problems)
+		}
+	}
+	// Unknown and pending callers make no promise about an answer, but a
+	// peer's commit still has to be of the command that was sent.
+	for _, outcome := range []string{"unknown", ""} {
+		steps[0].Outcome = outcome
+		steps[0].Invocation = outcome == ""
+		if problems := strings.Join(gristtest.Links(shop, bank, steps), "\n"); !strings.Contains(problems, "never called") {
+			t.Errorf("%s caller: %s; want refund's uncalled command", outcome, problems)
+		}
+	}
+	// The command belongs in the match, but must not partition the
+	// peer's idempotency namespace: two commands cannot commit one id.
+	steps[0].Invocation, steps[0].Outcome = false, "ok"
+	steps = append(steps,
+		qtrace.Step{Action: "bankRefund", Actor: "shop/t1", Outcome: "ok", Args: map[string]any{"key": key}},
+		qtrace.Step{Action: "pay", Actor: "bank/t1", Outcome: "ok", Args: map[string]any{"id": key}})
+	if problems := strings.Join(gristtest.Links(shop, bank, steps), "\n"); !strings.Contains(problems, "a key names one outcome") {
+		t.Errorf("two commands committed one id: %s; want a duplicate outcome", problems)
+	}
+}

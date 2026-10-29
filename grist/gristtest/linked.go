@@ -14,8 +14,9 @@ import (
 // Linked checks a run of app a calling its peer b (grist.NewPeer) across
 // the two services, by key (docs/grist-instrumentation.md §3.7): every
 // call a saw answered, ok or refused, has b's step of its key (the
-// command id) in the same tenant, with the same outcome; every step of b
-// whose id names a (<a>/...) has a's call of that key, pending included;
+// command id), of the called command in the same tenant and with the
+// same outcome; every step of b whose id names a (<a>/...) has a's call
+// of that command and key, pending included;
 // and no key has two steps at b. Each model judges its own side (a's
 // binding the calls, b's the commits); neither sees the other's records,
 // which is what Linked relates: a call a saw answered that b never
@@ -53,20 +54,16 @@ func Links(a, b *grist.App, steps []qtrace.Step) []string {
 		return []string{fmt.Sprintf("gristtest.Links: %s declares no peer call of %s (grist.NewPeer, grist.NewPeerCall): give the caller first, then its peer", a.Name, b.Name)}
 	}
 	commandOf := map[string]string{} // b's action -> its command name
-	wanted := map[string]bool{}
-	for _, n := range callOf {
-		wanted[n] = true
-	}
 	for _, c := range b.Catalog().Commands {
-		if wanted[c.Name] {
-			commandOf[c.Quint] = c.Name
-		}
+		// An id naming a on any command must be accounted for, including
+		// a command a did not declare: a transport may route to the wrong one.
+		commandOf[c.Quint] = c.Name
 	}
-	type key struct{ tenant, id string }
+	type key struct{ tenant, id, command string }
 	called := map[key]bool{}       // a's calls, pending included
 	answered := map[key][]string{} // a's answered calls' outcomes, unknown aside
 	var keys []key
-	atPeer := map[key][]string{} // b's steps' outcomes, by tenant and id
+	atPeer := map[key][]string{} // b's outcomes, by tenant, id and command
 	reused := grist.ErrKeyReused.(*grist.Rejected).Name
 	for _, s := range steps {
 		app, tenant, clients, ok := rec.ParseActor(s.Actor)
@@ -76,7 +73,7 @@ func Links(a, b *grist.App, steps []qtrace.Step) []string {
 		switch {
 		case app == a.Name && callOf[s.Action] != "":
 			id, _ := s.Args["key"].(string)
-			k := key{tenant, id}
+			k := key{tenant, id, callOf[s.Action]}
 			if !called[k] {
 				keys = append(keys, k)
 			}
@@ -90,7 +87,7 @@ func Links(a, b *grist.App, steps []qtrace.Step) []string {
 			if !strings.HasPrefix(id, a.Name+"/") {
 				continue // another caller's, or a client's own
 			}
-			k := key{tenant, id}
+			k := key{tenant, id, commandOf[s.Action]}
 			atPeer[k] = append(atPeer[k], outcome(s))
 		}
 	}
@@ -105,24 +102,27 @@ func Links(a, b *grist.App, steps []qtrace.Step) []string {
 				found = found || p == o
 			}
 			if !found {
-				out = append(out, fmt.Sprintf("%s's call %s in tenant %s was answered %s, and %s recorded %v under that id: an answer the peer's commit does not give (a commit missing, or another outcome)", a.Name, k.id, k.tenant, o, b.Name, atPeer[k]))
+				out = append(out, fmt.Sprintf("%s's call %s of %s in tenant %s was answered %s, and %s recorded %v for that command under that id: an answer the peer's commit does not give (a commit missing, another command, or another outcome)", a.Name, k.id, k.command, k.tenant, o, b.Name, atPeer[k]))
 			}
 		}
 	}
+	type identity struct{ tenant, id string }
+	counts := map[identity]int{}
 	for k, os := range atPeer {
 		if !called[k] {
-			out = append(out, fmt.Sprintf("%s committed %s (%s) in tenant %s, an id naming %s, which %s never called with: a command under an id that is no call's key (a client minting a request id per try?)", b.Name, k.id, strings.Join(os, ", "), k.tenant, a.Name, a.Name))
+			out = append(out, fmt.Sprintf("%s committed %s (%s) in tenant %s, an id naming %s, which %s never called with for command %s: a command under an id that is no call's key (a client minting a request id per try, or routing to another command?)", b.Name, k.id, strings.Join(os, ", "), k.tenant, a.Name, a.Name, k.command))
 		}
-		n := 0
 		for _, o := range os {
 			if o == reused {
 				out = append(out, fmt.Sprintf("%s refused %s in tenant %s as %s: %s sent the key with other arguments (a call's request is its rule's for the trigger, the same on every try)", b.Name, k.id, k.tenant, reused, a.Name))
 				continue
 			}
-			n++
+			counts[identity{k.tenant, k.id}]++
 		}
+	}
+	for k, n := range counts {
 		if n > 1 {
-			out = append(out, fmt.Sprintf("%s has %d steps of %s in tenant %s (%s): a key names one outcome", b.Name, n, k.id, k.tenant, strings.Join(os, ", ")))
+			out = append(out, fmt.Sprintf("%s has %d steps of %s in tenant %s: a key names one outcome, across all commands", b.Name, n, k.id, k.tenant))
 		}
 	}
 	sort.Strings(out)
