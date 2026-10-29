@@ -87,6 +87,7 @@ review" on.
 | I24 | grist's reads at scale: the memo, anchored snapshots, metrics, pruning, App options | 3fd4de5 |
 | I25 | grist's operations basics | fd98f8a |
 | I26 | the generator warns on what an app forgot | a6be970 |
+| GR3 s4 | lints for a grist application's own code (lint -sim over its files, quintraw) | 26b8e47 |
 | I27, I34 | grist's user guide; ARCHITECTURE.md, example tracks | b382007, c41bd82 |
 | I28-I32 | the first hour: a catch shown, progress, reserved names, reports in words, help | 15cf741, c0eb502, eb1520b, acd5fb1 |
 | I33, I36 | `gotogether init -kind http`, analyzers that fix, JSON Schemas | 9708379, 79c034c, dce024f |
