@@ -1,7 +1,9 @@
 # GR3 slice 6: declared calls through OTel
 
-Status: proposed implementation contract, 2026-10-29. No runtime or generator
-changes are implemented by this note. This refines and supersedes slice 6 in
+Status: first increment implemented and validated, 2026-10-29, in
+[examples/payouts](../examples/payouts/README.md#declared-calls-through-otel-gr3-slice-6-first-increment).
+Existing runtime and generator APIs sufficed; the implementation is the
+real-HTTP wiring, native export/decode path and executable acceptance checks. This refines and supersedes slice 6 in
 [grist-instrumentation.md](grist-instrumentation.md#4-slices).
 
 ## Why this experiment now
@@ -99,3 +101,22 @@ HTTP spans, generated conversion rules, weaker requestless bindings, collector
 watermarks, new transports, cycles and stream adapters are outside this increment.
 If a later conversion path has less evidence, give it explicit weaker claims;
 never silently treat it as equivalent to native recording.
+
+
+## Result of the first increment
+
+All four faithful cases pass both local models after OTLP decoding. Native
+schema parity and causal projection survive reversed export order. Link checks
+reject tenant/key/command/outcome corruption; protocol projection refuses a
+missing trigger; the binding refuses a missing amount before verdict. Dense
+interior loss exposes an actor-level gap. The generated freshKey mutant remains
+a bank invariant violation and link failure while the caller conforms. The
+retained decoded witness is examples/payouts/testdata/spans/freshKey.jsonl.
+Focused race/repeat checks and the full example suite pass. No public API or
+conversion format was added. No blocking tracing defect was found.
+
+These are finite prefixes and assert no eventual-completion verdict. The pending
+case interrupts a recorder, not a real process; stores are in-memory and no
+collector is deployed. Wire comparison allows nil/empty map allocation and
+integer JSON normalization, in addition to diagnostic source locations.
+Broader conversion and completeness mechanisms remain the follow-ons above.

@@ -19,8 +19,9 @@ bounded GR4 composition to test the abstractions, and an adoption trial
 to expose API friction. Breaking changes are allowed; release policy and
 production hardening are not gates on these experiments. Add adapters
 when an experiment needs them. GR3 slice 6 (spans) follows the completed
-bounded composition and adoption experiments; its first increment is a lossless real-peer OTel round-trip,
-not generic HTTP inference (docs/grist-call-spans.md). R5 remains the
+bounded composition and adoption experiments; its first increment is built:
+a lossless real-peer OTel round-trip, not generic HTTP inference
+(docs/grist-call-spans.md). R5 remains the
 maintainer's call.
 
 GR4's first increment is built: acyclic peer graphs, one store/node/API
@@ -41,8 +42,9 @@ immutable generations, real kernel APIs, three source mutants shrunk to
 2/6/3 operations, and passing consumer and repository CI. It found no
 production defect within its bounds. This agent-assisted trial validates
 the core workflow in an independently maintained library; it does not
-establish unaided onboarding or grist adoption. Next: the bounded GR3
-slice 6 design and acceptance contract in [grist-call-spans.md](grist-call-spans.md).
+establish unaided onboarding or grist adoption. The bounded GR3 slice 6
+experiment is now built in payouts; review its [results and remaining
+limits](grist-call-spans.md#result-of-the-first-increment) before expanding it.
 The earlier tracks below retain their item identifiers and technical dependencies; their historical release
 recommendations do not override this prerelease order.
 
@@ -1014,10 +1016,11 @@ Then, in order, each item reviewed before the next:
   `grist.NewPeerCall`, `client.Peer`, `gristsim.Config.Peers`,
   `gristtest.Linked`), the generated mutant `freshKey`, and
   examples/payouts (a payouts service and its bank). Slice 6
-  (spans of declared calls) is next after the bounded GR4 and Goo trials:
-  [first-increment contract](grist-call-spans.md), proposed, not implemented.
-  Preserve native caller evidence through OTel in payouts -> bank before
-  considering reduced HTTP-span conversion.
+  (spans of declared calls), first increment built after the GR4 and Goo
+  trials: native OTel export/decode in real HTTP payouts -> bank preserves
+  local/link/causal judgments, pending calls and unknown outcomes, with
+  freshKey caught after round-trip. See [acceptance and limits](grist-call-spans.md).
+  Third-party and reduced HTTP-span conversion remain follow-ons.
   Candidate example apps for the declared calls (not built):
   - *payments*, calling a third-party PSP: `authorize` `Keyed`, at least
     once, refusing `declined`; `capture` at most once, reading the

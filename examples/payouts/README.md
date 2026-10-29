@@ -45,3 +45,47 @@ Rates from one full run (2026-10-29); `-short` runs fewer seeds.
 MUTANT=freshKey ./run-demo.sh      # caught at the bank and by Links
 MUTANT=noDuplicateCheck ./run-demo.sh
 ```
+
+
+## Declared calls through OTel (GR3 slice 6, first increment)
+
+`spans_test.go` runs the actual processors and HTTP APIs on loopback with
+in-memory durable stores. Native records go through `qobs.NewOTelSink`,
+OTLP/JSON export and `otelio.ReadSteps`; **decoded records** feed both
+existing service bindings, `gristtest.Linked` and `gristtest.ProtocolSteps`.
+A parallel memory recording is only the full-schema parity oracle. Export
+reordering preserves the semantic records and causal projection. Real HTTP
+client/server spans explicitly propagate trace context; trace parentage is
+not used to invent the business cause.
+
+| Test | Evidence / contrast | Required result |
+|---|---|---|
+| `TestDeclaredCallSpans/success` | two tenants share request/payout ids, one payment per tenant | native/export parity, both models conform, links and causal projection agree |
+| `.../refused` | bank's `unknown-account`, including the processor's declared retries | named refusal remains distinct from unknown; both models conform |
+| `.../lost` | proxy returns 502 after the first payment commits | one unknown caller completion, retry under the same key, one payment per tenant |
+| `.../pending` | caller recorder stops after the bank commits and before its reply | exported invocation stays pending, bank payment remains visible; links and causal projection agree |
+| `TestSpanIdentityCorruption` | tenant, key, trigger, command and outcome changed in actual decoded records | link or causal check rejects; a missing amount refuses validation before verdict; interior sequence loss exposes a gap |
+| `TestSpanMutants` / `TestSpanMutant` | real generated `freshKey` over the lost-reply scenario | exported bank model violates `onePaymentPerPayout`, links fail, caller model conforms |
+
+```sh
+SPANS=1 ./run-demo.sh
+GOTOGETHER_SPANS_OUT=/tmp/payout-spans SPANS=1 MUTANT=freshKey ./run-demo.sh
+# The retained decoded counterexample also works with ordinary validation:
+go run ../../cmd/gotogether validate -binding bank/bank.binding.yaml testdata/spans/freshKey.jsonl
+# Expected: exit 1, onePaymentPerPayout violated.
+```
+
+No new tracing API or generated binding was needed. Wire parity compares
+all native fields except decoder source locations and nil/empty map
+allocation; integer wire representation is normalized through JSON.
+Checkpoints witness processing before capture, and recorder gates seal
+finite prefixes in both representations. No settle is inferred. Exporter
+flushes and quiet intervals do not establish collection completeness:
+losing an entire tail or recorder can remain invisible. This is a real-HTTP
+kernel exercise, not a database, crash-recovery or collector deployment test.
+The pending case stops one recorder's complete tail; it does not kill a process.
+
+Recorded validation (2026-10-29): the full payouts `-short` suite passes
+with CI's 1-in-5 evaluator shadowing; focused faithful/negative cases pass
+under race instrumentation and three repetitions. Recorder/decoder and
+documentation/skill checks pass. See [the slice contract](../../docs/grist-call-spans.md).

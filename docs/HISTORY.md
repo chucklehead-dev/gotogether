@@ -6951,3 +6951,41 @@ or generator implementation is claimed by this entry.
 
 Validation of the design update: internal/docsnippets and skills checks pass;
 no runtime behavior or exported API changed.
+
+
+## GR3 slice 6: lossless native call records through OTel
+
+Built 2026-10-29 in examples/payouts, using existing qobs/otelio APIs.
+Real processors and HTTP APIs on in-memory stores export native records
+through the OTel sink, serialize OTLP/JSON and decode the records for both
+service bindings, Links and ProtocolSteps. Native memory capture is the
+parity oracle only. Reversed export order preserves semantic records and
+causal projection; explicit HTTP client/server context propagation is checked.
+
+Success, named refusal, committed payment with a proxy-lost reply/retry,
+and interrupted recorder with a pending invocation all pass. Two tenants
+share logical request/payout ids. The generated freshKey mutant still
+violates the bank's onePaymentPerPayout and fails Links while the caller
+conforms. Its retained JSONL counterexample reproduces with ordinary CLI
+validation. Tenant/key/command/outcome corruption fails Links; an invalid
+trigger refuses causal projection; missing amount refuses before verdict;
+interior sequence loss exposes a gap. None is mislabeled a completed run.
+The pending case seals a recorder tail, not a process crash; no database
+or collector deployment and no eventual-completion guarantee are claimed.
+
+The full payouts -short suite passes with CI's 1/5 evaluator shadowing.
+Focused cases pass race instrumentation and three repeated runs. qobs,
+otelio, documentation, skills and configuration checks pass; go vet is
+clean for payouts. No runtime API, generator or telemetry format changes
+were required. SPANS=1 on its run-demo.sh reproduces faithful and mutant
+paths; GOTOGETHER_SPANS_OUT saves OTLP and decoded JSONL.
+
+The design PR also exposed two existing CI configuration problems.
+Outside-in publication checks now fetch a PR's pushed head rather than
+its unresolvable temporary merge SHA (ordinary push still uses github.sha).
+Inventory's unchanged suite measured 173.9 CPU seconds on CI and 134.6
+locally at CI's 1/5 shadow rate; the original 70-second budget measured
+with the default 1/50 rate was incomparable. Its budget is recalibrated
+to 180 without reducing seeds, checks or ordering coverage. Payouts
+measures 51.5 CPU seconds including the new span acceptance and remains
+within its existing budget threshold.
