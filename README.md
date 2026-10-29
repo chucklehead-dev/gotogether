@@ -136,7 +136,10 @@ testing, where Quint traces drive the implementation). It adds:
   `go run github.com/chucklehead-dev/gotogether/grist/cmd/grist@latest new <name>`
   writes an app whose tests pass on their first run
   ([the user guide](docs/grist-guide.md); the design note,
-  [docs/grist.md](docs/grist.md); the `grist` skill).
+  [docs/grist.md](docs/grist.md); the `grist` skill). For a system of
+  Apps, `gristtest.ProtocolSteps` projects native commits and peer-call
+  causes into a combined model's history, alongside each App's local
+  checks ([the composition experiment](docs/grist-composition.md)).
 
 ```
                     ┌────────────── one Quint model ──────────────┐

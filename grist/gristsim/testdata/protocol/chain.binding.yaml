@@ -1,0 +1,17 @@
+# The protocol projection is checked in addition to each native App binding.
+actors: ['protocol/*']
+spec: chain.qnt
+module: chain
+outcomes:
+  ok: '"ok"'
+actions:
+  ordersPlace: {}
+  bankPay:
+    args:
+      parentApp: '{{index .obs "protocol.parentApp"}}'
+      parentID: '{{index .obs "protocol.parentID"}}'
+  ledgerPost:
+    args:
+      parentApp: '{{index .obs "protocol.parentApp"}}'
+      parentID: '{{index .obs "protocol.parentID"}}'
+eventually: [allPosted]

@@ -24,8 +24,10 @@ composition, not a prerequisite for it. R5 remains the maintainer's call.
 GR4's first increment is built: acyclic peer graphs, one store/node/API
 per peer, shared peers instantiated once, per-service model judgments
 and an independent end-to-end posting check (docs/grist-composition.md).
-Left for GR4: a combined causal protocol model, per-service configuration,
-cycles, clusters and rollouts. The earlier tracks below retain their
+The next increment adds a combined causal protocol model over the same
+histories (`gristtest.ProtocolSteps`), including missing, duplicate and
+premature-posting contrasts. Left for GR4: order search over concurrent
+extensions, per-service configuration, cycles, clusters and rollouts. The earlier tracks below retain their
 item identifiers and technical dependencies; their historical release
 recommendations do not override this prerelease order.
 
@@ -1035,8 +1037,14 @@ Then, in order, each item reviewed before the next:
   scripted, and freshKey breaks the cross-service checks while every
   local model still conforms. Linked also checks the command identity:
   a key and matching outcome on another command no longer pass.
-  Still open: the combined protocol model, cyclic graphs, per-peer
-  doubles/configuration, SQL peers, clusters, upgrades and remote feeds.
+  The combined protocol model is now built (the second increment):
+  ProtocolSteps projects commands with per-store and peer-trigger causal
+  edges, independent of clocks and arrival order. The chain's model
+  rejects duplicate and premature postings and checks allPosted at
+  settle; local models can conform while each contrast fails it.
+  Still open: every concurrent extension (the projection chooses one),
+  cyclic simulations, per-peer doubles/configuration, SQL peers,
+  clusters, upgrades and remote feeds.
 - **GR5. Stream publishers and consumers (M).** A processor that
   publishes to a stream (Kafka via franz-go, Kinesis, the simulated
   log examples/streams has) with the checkpoint and the publish's

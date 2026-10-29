@@ -143,6 +143,11 @@ for it. No binding is written by hand.
    does not matter. Cycles and colliding service/dependency names are
    errors; per-peer clusters, rollouts and custom doubles are not built.
    See [the composition experiment](../../../docs/grist-composition.md).
+   A combined system model takes `gristtest.ProtocolSteps(run.Recorded,
+   apps...)`: native command commits ordered by each store and peer-call
+   causes, one actor `protocol/<tenant>`, one deterministic extension.
+   Validate that projection as well as each App's original records;
+   never merge independent clocks or infer a cause from an id's spelling.
    The caller's model has the caller's step
    alone (no site, no `Admits`, no served obligation); judge the peer's
    side with `sys.WithBinding("bank/bank.binding.yaml")` and relate the

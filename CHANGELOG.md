@@ -10,6 +10,13 @@ and adds a line here.
 
 The first release. What a user meets, by module:
 
+- grist (GR4 protocol): `gristtest.ProtocolSteps` projects native command
+  commits into one system-model actor per tenant, ordered by each store
+  and by recorded peer-call causes. It rejects incomplete, ambiguous or
+  cyclic evidence before renumbering; independent commands take one
+  deterministic extension. The composition experiment adds a combined
+  Quint model catching missing, duplicate and premature postings.
+
 - grist (GR4's first increment): `gristsim.Config.Peers` supports acyclic
   graphs of direct, transitive and shared peers, each instantiated once.
   Missing peers, cycles and endpoint-name collisions fail with a fix.

@@ -29,6 +29,13 @@ type posting struct {
 // hops, each under its own App's effect key. direct adds orders -> ledger,
 // so the ledger is shared by two callers, not two copies of one service.
 func postingChain(direct bool) (orders, bank, ledger *grist.App) {
+	return postingChainMutant(direct, "")
+}
+
+// missing omits the second hop; premature posts directly from orders,
+// without depending on a committed payment, then suppresses bank's post.
+func postingChainMutant(direct bool, mutant string) (orders, bank, ledger *grist.App) {
+	direct = direct || mutant == "premature"
 	ledger = grist.New("ledger")
 	posted := grist.NewEvent[posting](ledger, "posted")
 	post := grist.NewCommand(ledger, "post", func(r *grist.Reads, c posting) ([]grist.Event, error) {
@@ -42,7 +49,13 @@ func postingChain(direct bool) (orders, bank, ledger *grist.App) {
 	}, grist.Unconditioned("a payment reads nothing"), grist.Appends(paid), grist.Authorize(grist.Callers(grist.PeerCaller("orders"))))
 	ledgerPost := grist.NewPeerCall(grist.NewPeer(bank, ledger), post)
 	grist.NewProcessor(bank, "post", paid, func(ctx context.Context, r *grist.Reads, e posting, m grist.Meta) grist.Result {
-		return grist.Effect(func(ctx context.Context) error { _, err := ledgerPost.Do(ctx, e); return err }, grist.AtLeastOnce)
+		return grist.Effect(func(ctx context.Context) error {
+			if mutant == "missing" || mutant == "premature" {
+				return nil
+			}
+			_, err := ledgerPost.Do(ctx, e)
+			return err
+		}, grist.AtLeastOnce)
 	}, grist.Delivers(grist.AtLeastOnce), grist.Uses(ledgerPost))
 	orders = grist.New("orders")
 	ordered := grist.NewEvent[posting](orders, "ordered")
@@ -89,6 +102,13 @@ func chainBindings(t *testing.T, apps ...*grist.App) []string {
     order: %[3]sOrder(prefix[trigger - 1]), amount: %[3]sAmount(prefix[trigger - 1]),
   }
 `, processor, call, event)
+		}
+		if i == 0 && len(a.Dependencies()) > 1 {
+			rules += `  pure def archiveSkips(prefix: List[Event], trigger: int): bool = false
+  pure def archiveLedgerPost(prefix: List[Event], trigger: int): LedgerPostRequest = {
+    order: orderedOrder(prefix[trigger - 1]), amount: orderedAmount(prefix[trigger - 1]),
+  }
+`
 		}
 		rules += "}\n"
 		model := fmt.Sprintf(`module %[1]s {
@@ -202,6 +222,15 @@ func TestPeerComposition(t *testing.T) {
 				for _, binding := range bindings[1:] {
 					qtest.Validate(t, binding, r.Recorded).Expect(t, qtest.Conforms(), qtest.Settles())
 				}
+				projected, err := gristtest.ProtocolSteps(r.Recorded, orders, bank, ledger)
+				if err != nil {
+					t.Fatal(err)
+				}
+				claim := qtest.Conforms()
+				if scenario.fresh {
+					claim = qtest.Rejects("bankPay")
+				}
+				qtest.Validate(t, "testdata/protocol/chain.binding.yaml", projected).Expect(t, claim)
 				linked := len(gristtest.Links(orders, bank, r.Recorded)) == 0 && len(gristtest.Links(bank, ledger, r.Recorded)) == 0
 				if linked == scenario.fresh || postingBalance(r.Recorded, 1) == scenario.fresh {
 					t.Errorf("freshKey=%v: linked=%v, postings conserved=%v; want both %v", scenario.fresh, linked, postingBalance(r.Recorded, 1), !scenario.fresh)

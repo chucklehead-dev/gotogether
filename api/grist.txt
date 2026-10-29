@@ -555,6 +555,7 @@ func Links(a, b *grist.App, steps []qtrace.Step) []string
 func NewTier(t testing.TB, app *grist.App, cfg TierConfig) *Tier
 func NoClientErrors() qtest.Expectation
 func PeerMutants(app *grist.App) []string
+func ProtocolSteps(steps []qtrace.Step, apps ...*grist.App) ([]qtrace.Step, error)
 func ReadLog(t testing.TB, path string) Log
 func ReadersFirst() qtest.Expectation
 func RuleMutants(app *grist.App) []string

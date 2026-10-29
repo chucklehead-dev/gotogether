@@ -390,7 +390,12 @@ var BankPay = grist.NewPeerCall(Bank, bank.Pay) // Keyed, the command's refusals
   once; each App's model judges the same run's records, and `Linked`
   checks each edge. Cycles, colliding endpoint names and per-peer
   clusters/configuration are outside this first increment; see
-  [the composition experiment](grist-composition.md).
+  [the composition experiment](grist-composition.md). For a combined
+  model, `gristtest.ProtocolSteps(run.Recorded, apps...)` projects native
+  command commits into `protocol/<tenant>` actors with explicit peer-call
+  causal edges. Validate that projection with a system binding and keep
+  judging each App's original records with its own binding. It checks
+  one deterministic extension, not every concurrent ordering.
 
 ### 2.9 Authorization and callers
 

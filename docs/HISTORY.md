@@ -2636,6 +2636,38 @@ pending calls make no promise about answers, but a peer commit must
 still be of the command sent; one id cannot commit twice across
 commands. The new regression fails on the previous checker.
 
+### GR4: a combined protocol model
+
+The second composition increment (2026-10-29): the first experiment's
+local models and end-state Go conservation check are supplemented by an
+independent Quint model, grist/gristsim/testdata/protocol/chain.qnt. It
+requires one payment per accepted order, each posting caused by a
+committed payment with the same payload, no second posting, and
+allPosted only at a recorded settle.
+
+New gristtest.ProtocolSteps validates native reconstruction before
+projecting command commits into protocol/<tenant>. Edges come from
+per-store committed sequence (processor commits remain barriers), and
+a recorded peer call's trigger commit before its peer command commit.
+Pending calls count; key spelling, clock values and relay arrival order
+do not. A trigger inside a multi-event batch refers to the whole
+batch. Unlinked peer commits retain empty parent fields for the model
+to judge; gaps, losses, missing or ambiguous causes, rewinds and causal
+cycles fail before renumbering. Native identity survives JSONL in the
+projection's observations. Independent commits take one deterministic
+extension, not a claim about every concurrent interleaving.
+
+The faithful chain passes under lost replies, lost commit answers and
+crashes after effects. freshKey rejects bankPay. missing completes a
+bank effect without posting: local conformance, eventually allPosted
+violated. premature posts directly from orders and suppresses the
+bank's later post: a bank delay witnesses the posting before payment;
+all local models conform and totals agree, but ledgerPost is rejected
+for its wrong causal phase. A second post with a valid-looking parent
+is rejected too. Unit tests cover reversed input and App order, skewed
+clocks, pending callers, multi-event batches, late delivery, native
+gaps, causal cycles, provenance and a brute-force ordering oracle.
+
 ### I26: the generator warns on what an app forgot
 
 ROADMAP I26 (the eleventh review's designer: a newcomer added an event
