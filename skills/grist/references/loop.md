@@ -146,6 +146,12 @@ for it. No binding is written by hand.
    A combined system model takes `gristtest.ProtocolSteps(run.Recorded,
    apps...)`: native command commits ordered by each store and peer-call
    causes, one actor `protocol/<tenant>`, one deterministic extension.
+   [inventory-grist](../../../examples/inventory-grist/README.md) is a
+   three-service adoption rehearsal with cancellation and a combined model.
+   A processor reads only its trigger prefix: arbitrate a cancellation race
+   in a conditioned command at the owner. Treat a handled business refusal
+   explicitly as an answered effect; return transport/unknown errors for
+   retry. Prologue waits for root command answers, not downstream effects.
    Use `gristtest.CheckProtocolOrders` with a positive limit and a callback
    that judges each ordering as supplied (`validate.Checker.Check`).
    Check errors first, then Counterexample, then Exhaustive; a limit hit

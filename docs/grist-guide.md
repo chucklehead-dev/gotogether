@@ -326,7 +326,11 @@ var Pay = grist.NewCall[PayRequest, PayReceipt](Bank, "pay", grist.Keyed(), gris
   says the dependency applies each key once (the effect's key, sent with
   every try); `grist.Refuses` names its answers that say nothing
   happened (`Do` returns them as `grist.NotApplied` of a
-  `*grist.Rejected`).
+  `*grist.Rejected`). A refusal may be the final business answer: if the
+  processor has handled it, return success from the effect explicitly
+  (for example, `errors.Is` against the specific declared refusals). Returning that refusal
+  as an effect error retries the same final answer. Keep transport and
+  unknown-outcome errors retryable; never turn those into success.
 - The processor declares `grist.Uses(Pay)` beside its `Delivers`, and in
   its effect calls `Pay.Do(ctx, req)`. Do outside an effect, or of a call
   the processor does not list, is the effect's error.
@@ -395,7 +399,19 @@ var BankPay = grist.NewPeerCall(Bank, bank.Pay) // Keyed, the command's refusals
   command commits into `protocol/<tenant>` actors with explicit peer-call
   causal edges. Validate that projection with a system binding and keep
   judging each App's original records with its own binding. It checks
-  one deterministic extension, not every concurrent ordering.
+  one deterministic extension. `gristtest.CheckProtocolOrders` checks
+  bounded alternatives; require exhaustive completion to claim every
+  causal ordering of the history passed.
+
+
+[examples/inventory-grist](../examples/inventory-grist) builds checkout,
+inventory and fulfillment through public APIs. It separates customer
+intents from inventory's durable cancellation/authorization decision.
+Processor reads are pinned at their trigger: decide whether cancellation
+won in a conditioned command at the inventory owner, rather than in a
+processor reading an old reservation. Its generated local models,
+independent protocol, bounded order checks and three bugs are documented
+in its README; TRIAL.md records what remained awkward.
 
 ### 2.9 Authorization and callers
 
@@ -655,7 +671,7 @@ func TestFaithfulAtClients(t *testing.T) {
 | `Tenants`, `Clients`, `Ops` | how many tenants, clients per tenant, operations per client |
 | `Send` | which commands and queries clients send (a name listed twice is sent twice as often) |
 | `Alphabet`, `Ints`, `Gen` | the arguments: strings and integers drawn from these, or a generator per block |
-| `Prologue` | calls made in order, each answered, before any client's first (a member joined before borrows) |
+| `Prologue` | calls made in order, each answered, before any client's first (a member joined before borrows); it does not wait for downstream processors |
 | `Isolation` | the store's level (Serializable, ReadCommitted) |
 | `CommitFaults` | commits of unknown outcome (`store.<app>.commit`) |
 | `SQL` | the app on grist/sqlstore over qsql: the real tier's statements |

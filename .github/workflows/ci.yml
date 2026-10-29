@@ -142,7 +142,7 @@ jobs:
           go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
           go build -o "$RUNNER_TEMP/cputime" ./internal/cputime
           export GOTOGETHER_CPU_TIMES="$RUNNER_TEMP/cpu.txt"
-          for m in bank checkout counters glomers hello jobqueue kvstore lease migrate-payments payouts requeue retrystorm sktrace twophase webjobs; do
+          for m in bank checkout counters glomers hello inventory-grist jobqueue kvstore lease migrate-payments payouts requeue retrystorm sktrace twophase webjobs; do
             echo "::group::examples/$m"
             (cd examples/$m && test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... &&
               GOTOGETHER_EVIDENCE="$RUNNER_TEMP/evidence/$m" go test -exec "$RUNNER_TEMP/cputime" -short -count=1 -timeout 30m -skip '^(TestMutationOf|TestCodeCoverage)' ./...) || exit 1
@@ -205,7 +205,7 @@ jobs:
           # the grist applications' code by type (GR3 slice 4): what
           # escapes a simulation (lint -sim's check, above, by syntax), and
           # an effect calling a dependency past grist's declared calls
-          for m in counters library wallet-grist payouts; do
+          for m in counters library wallet-grist payouts inventory-grist; do
             (cd examples/$m && "$RUNNER_TEMP/quintvet" -quintweave=false -quintaction=false -quintctx=false ./...) || exit 1
           done
       - name: fuzzing the faithful shop (coverage-guided, the model judging every run)

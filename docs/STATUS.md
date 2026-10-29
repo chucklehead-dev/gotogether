@@ -103,6 +103,7 @@ review" on.
 | GR3 s5 | peer calls: actors naming the App, `grist.NewPeer`, `gristsim.Config.Peers`, `gristtest.Linked`, examples/payouts | HISTORY "GR3 slice 5" |
 | GR4 first | acyclic peer graphs, shared peers, three-service conservation experiment; Linked matches command identity | HISTORY "GR4: the first composition experiment" |
 | GR4 protocol | ProtocolSteps and a combined causal model; missing, duplicate and premature posting contrasts | HISTORY "GR4: a combined protocol model" |
+| GR4 inventory trial | three-service public-API rehearsal, three bugs, replay and friction report | examples/inventory-grist/TRIAL.md |
 | GR4 order search | bounded universal causal ordering checks; counterexample identities and explicit exhaustion | HISTORY "GR4: concurrent protocol orderings" |
 | I27, I34 | grist's user guide; ARCHITECTURE.md, example tracks | b382007, c41bd82 |
 | I28-I32 | the first hour: a catch shown, progress, reserved names, reports in words, help | 15cf741, c0eb502, eb1520b, acd5fb1 |
@@ -181,8 +182,8 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | GR4's next experiment: the next per-service control an adopter needs | M-L | combined protocol and bounded universal order search are built; avoid speculative configuration before an adoption trial |
-| 2 | Adoption trial on an independently maintained service | S-M | measure modeling and integration friction before choosing another adapter |
+| 1 | Adoption trial on an independently maintained service | S-M | inventory-grist is a repository-owned rehearsal and reference, not external adoption evidence |
+| 2 | GR4: phased workload control or outstanding-obligation diagnostics when an adopter needs them | S-M | inventory-grist identifies these specific friction points; no demonstrated need for broader per-peer configuration |
 | 3 | GR3 slice 6 (spans of declared calls) | M | deferred until an experiment needs spans; adds a recorder, not a seam |
 | 4 | GR5 streams, GR6 gRPC, GR7 controllers | M, M, L | on the published doubles (H7) |
 | 5 | GR8 sagas and timers, GR9 checkout as grist services | M, L | GR9 proves GR4 and GR8 compose |

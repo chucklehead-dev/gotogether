@@ -295,7 +295,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        example: [bank, checkout, glomers, hello, jobqueue, kvstore, lease, retrystorm, twophase, crossdb, grpcledger, streams, fleetrollout, edgepublish, quorumkv, wallet, payd, counters, wallet-grist, library, payouts, webjobs]
+        example: [bank, checkout, glomers, hello, jobqueue, kvstore, lease, retrystorm, twophase, crossdb, grpcledger, streams, fleetrollout, edgepublish, quorumkv, wallet, payd, counters, wallet-grist, library, payouts, inventory-grist, webjobs]
         include:
           - example: fleetrollout
             seeds: "150"
@@ -314,6 +314,8 @@ jobs:
           - example: library
             seeds: own
           - example: payouts
+            seeds: own
+          - example: inventory-grist
             seeds: own
           - example: webjobs
             seeds: own

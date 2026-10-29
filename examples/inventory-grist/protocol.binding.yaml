@@ -1,0 +1,34 @@
+# Handwritten business protocol binding; each local App binding is generated.
+actors: ['protocol/*']
+spec: model/protocol.qnt
+module: protocol
+outcomes:
+  ok: '"ok"'
+  duplicate: '"duplicate"'
+  unknown-order: '"unknown-order"'
+  cancelled: '"cancelled"'
+  too-late: '"too-late"'
+  full: '"full"'
+  not-held: '"not-held"'
+  conflict: '"conflict"'
+actions:
+  checkoutPlace:
+    args: { result: '{{.outcome}}' }
+  checkoutCancel:
+    args: { result: '{{.outcome}}' }
+  checkoutConfirm:
+    args: { result: '{{.outcome}}' }
+  inventoryReserve:
+    args: { result: '{{.outcome}}', parentApp: '{{index .obs "protocol.parentApp"}}', parentID: '{{index .obs "protocol.parentID"}}' }
+  inventoryCancel:
+    args: { result: '{{.outcome}}', parentApp: '{{index .obs "protocol.parentApp"}}', parentID: '{{index .obs "protocol.parentID"}}' }
+  inventoryAuthorize:
+    args: { result: '{{.outcome}}', parentApp: '{{index .obs "protocol.parentApp"}}', parentID: '{{index .obs "protocol.parentID"}}' }
+  fulfillmentStart:
+    args: { result: '{{.outcome}}', parentApp: '{{index .obs "protocol.parentApp"}}', parentID: '{{index .obs "protocol.parentID"}}' }
+invariants: [withinCapacity, noCancelledShipment]
+eventually: [allIntentsAnswered, allAuthorizedStarted]
+
+simulate:
+  holds: [withinCapacity, noCancelledShipment]
+  verifySteps: 6

@@ -6896,3 +6896,27 @@ processor barriers, and alternative-branch ablation must break the
 oracle and the combined-model contrast. Limits, independent tenants,
 JSONL counterexamples, finite prefixes, cancellation and tool errors
 have direct tests. See [grist-composition.md](grist-composition.md).
+
+## GR4: inventory adoption rehearsal
+
+Built 2026-10-29 after bounded protocol order search. The public-API
+example inventory-grist composes checkout, inventory and fulfillment,
+each with generated local models. An independent business model checks
+one unit per checkout, cancellation tombstones, authorization causes and
+completion at settle. Two competing clients, decisive cancellation-first
+and authorization-first histories, a lost reply and an after-effect crash
+pass their local checks, links and exhaustive bounded protocol searches.
+
+Three planted bugs establish the checks: fresh retry keys allocate twice
+while local capacity still holds; an omitted cancellation leaves a hold
+and violates completion despite local conformance; authorization after
+accepted cancellation produces a shipment and is rejected by both the
+inventory model and protocol. Failing projected histories can be saved
+as JSONL and replayed with ordinary validation.
+
+The rehearsal's TRIAL.md records the ownership decision, refusal handling,
+per-service generation, effect-key scope, workload pacing, ordering bounds
+and diagnostic quality. The smallest documentation gaps were clarified.
+It is repository-owned, not independent adoption evidence. Phased workload
+control and order-specific outstanding-obligation diagnostics are stronger
+next candidates than speculative SQL peers, cycles, clusters or rollouts.

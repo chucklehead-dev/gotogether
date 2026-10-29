@@ -10,6 +10,11 @@ and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Examples: `inventory-grist` rehearses three-service adoption with
+  competing checkouts, cancellation/authorization races, three planted
+  bugs, local and combined models, and replayable protocol histories.
+  Its TRIAL.md records modeling and diagnostic friction.
+
 - grist (GR4 concurrent orderings): `gristtest.CheckProtocolOrders` checks
   bounded alternative causal command orderings, returning the first
   counterexample with native identities or an explicit exhaustive result.

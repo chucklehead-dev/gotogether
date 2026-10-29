@@ -28,7 +28,11 @@ A combined causal protocol model is built over the same
 histories (`gristtest.ProtocolSteps`), including missing, duplicate and
 premature-posting contrasts. Bounded universal order search now checks
 concurrent extensions with explicit exhaustion and counterexample identities.
-Left for GR4: per-service configuration, cycles, clusters and rollouts.
+The inventory-grist adoption rehearsal is built: cancellation and
+confirmation at a shared inventory owner, three planted bugs, local and
+combined checks, and a friction report. Its concrete next candidates are
+phased workload control and order-specific obligation diagnostics; broader
+per-service configuration, cycles, clusters and rollouts need adopter evidence.
 The earlier tracks below retain their item identifiers and technical dependencies; their historical release
 recommendations do not override this prerelease order.
 
