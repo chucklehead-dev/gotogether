@@ -383,8 +383,14 @@ var BankPay = grist.NewPeerCall(Bank, bank.Pay) // Keyed, the command's refusals
   caller's step `bankPay` (no site, no `Admits`, no served obligation),
   the peer's judges its commits. `gristtest.Linked(t, App, bank.App,
   run.Recorded)` relates them by key: every answer the caller saw is the
-  peer's commit of its key, and every commit whose id names the caller
-  is one of its calls. examples/payouts is the pair.
+  peer's commit of its key and command in the same tenant, and every
+  commit whose id names the caller is one of its calls.
+  examples/payouts is the pair. For a graph of services, list every
+  reachable App in `Peers`, including peers of peers. A shared peer runs
+  once; each App's model judges the same run's records, and `Linked`
+  checks each edge. Cycles, colliding endpoint names and per-peer
+  clusters/configuration are outside this first increment; see
+  [the composition experiment](grist-composition.md).
 
 ### 2.9 Authorization and callers
 
@@ -651,7 +657,7 @@ func TestFaithfulAtClients(t *testing.T) {
 | `HTTP` | the API on a simulated network, clients through `grist/client` |
 | `Nodes`, `Cluster` | several nodes; a cluster with a lagging router, drains, a rolling restart (§9.5) |
 | `Doubles`, `Setup` | dependencies' handlers per run; a `NewDep`'s value |
-| `Peers` | the grist Apps the App calls (`grist.NewPeer`), each on its own store, node and API (`rpc.<peer>.*`); judge the peer's side with `System.WithBinding` and relate the two with `gristtest.Linked` |
+| `Peers` | every reachable peer App (`grist.NewPeer`), direct or transitive, in an acyclic graph; shared peers run once on their own store, node and API (`rpc.<peer>.*`); judge each App's side with its binding and relate each edge with `gristtest.Linked` |
 | `SnapshotEvery` | decisions made from snapshots and the memo (§8), the cadence for one simulation |
 
 Fault kinds are named as reports print them: `nemesis` (crashes, per
@@ -1064,6 +1070,7 @@ inventory serve -db sqlite:/data/inventory.db -tenant t1 -steps /data/steps/ -he
 | flag | what it sets |
 |---|---|
 | `-db sqlite:PATH`, `-db postgres:DSN` | the store (grist/sqlstore; the binary imports the driver) |
+| `-db-file PATH` | read the DSN from a file at startup instead of putting it in the process arguments |
 | `-addr HOST:PORT` | where to listen (default 127.0.0.1:8080; in a pod a loopback address is refused) |
 | `-health-addr HOST:PORT` | `/livez`, `/readyz`, `/metrics` on a side port (default :8081 in a pod, else off) |
 | `-grace DURATION` | the orchestrator's kill deadline after SIGTERM, which the drain is budgeted into |
@@ -1083,8 +1090,9 @@ needs: `inventory: node inventory-0, incarnation 3f2a...; drain needs a
 grace of ...; GOMEMLIMIT ...`. With GOMEMLIMIT unset, the runtime's
 memory limit is 90% of the cgroup's.
 
-The database's schema is created at boot (`CREATE TABLE IF NOT EXISTS`);
-the DSN is a flag.
+The database's versioned schema migrations run at boot under the schema
+row's lock; an older binary refuses a newer schema. Give the DSN with
+`-db` or `-db-file` (read at startup, without live pool reopening).
 
 ### 9.2 Identity
 
@@ -1216,6 +1224,10 @@ Designed in [grist.md](grist.md) and
 names are marked `not built` there): periodic tasks and screens (grain's
 slice 3), dispatching a command from a processor in one step, a
 condition narrowed to some reads, Kubernetes manifests and the `kube`
-command, configuration from secrets' files, store failover
-(`ErrRewound`), retention of steps and markers, schema migrations.
-ROADMAP's I24 and I25 are the next for operations.
+command, live configuration and credential reload from secrets' files.
+Failover detection (`ErrRewound`), explicit resume, step export, retention
+and versioned schema migrations are built; the database DSN may be read
+at startup with `-db-file`. Operational follow-ups include durable rewind
+memory, failed-effect administration and pool reopening on credential
+rotation (ROADMAP I25). They are separate from the bounded composition
+experiment.

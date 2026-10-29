@@ -13,14 +13,21 @@ Standing decisions, with the maintainer:
   only OTel and yaml.v3.
 - MIT license.
 
-Order: H1 → H3 → H2 with P5 → P1, P3, P4, P7 → H4 → H5 → H6 (with P8)
-→ H7 → GR10 → P2 → P6 (all done but GR10's slices), then the
-eleventh review's I track: I1-I11 first (most in progress), I12-I18
-before R5, I22 (done, with GR10 slice 4) and GR10 slice 3 before GR4, I23-I25 before a second real grist app, I26-I36 alongside,
-I37-I41 after I13, and I42-I51 each decided before it starts. GR3's
-slices 4-6 after H4 (4 and 5 done), GR4-GR9 after H5, H6 and I22, P9 after GR4; G8-G12
-and the items left from S, X, Y, T and E alongside; R5 when the
-maintainer says (the I track's "For the maintainer").
+Current order (maintainer, 2026-10-29): this is a prerelease library.
+Fix correctness issues that invalidate experimental results, then use a
+bounded GR4 composition to test the abstractions, and an adoption trial
+to expose API friction. Breaking changes are allowed; release policy and
+production hardening are not gates on these experiments. Add adapters
+when an experiment needs them. GR3 slice 6 (spans) is deferred behind
+composition, not a prerequisite for it. R5 remains the maintainer's call.
+
+GR4's first increment is built: acyclic peer graphs, one store/node/API
+per peer, shared peers instantiated once, per-service model judgments
+and an independent end-to-end posting check (docs/grist-composition.md).
+Left for GR4: a combined causal protocol model, per-service configuration,
+cycles, clusters and rollouts. The earlier tracks below retain their
+item identifiers and technical dependencies; their historical release
+recommendations do not override this prerelease order.
 
 ## Eleventh review: integrity before tags (I)
 
@@ -989,8 +996,8 @@ Then, in order, each item reviewed before the next:
   service and the effect keys named after it, peers (`grist.NewPeer`,
   `grist.NewPeerCall`, `client.Peer`, `gristsim.Config.Peers`,
   `gristtest.Linked`), the generated mutant `freshKey`, and
-  examples/payouts (a payouts service and its bank). Next: slice 6
-  (spans of declared calls), then GR4.
+  examples/payouts (a payouts service and its bank). Slice 6
+  (spans of declared calls) is deferred while GR4 tests composition.
   Candidate example apps for the declared calls (not built):
   - *payments*, calling a third-party PSP: `authorize` `Keyed`, at least
     once, refusing `declined`; `capture` at most once, reading the
@@ -1018,7 +1025,18 @@ Then, in order, each item reviewed before the next:
   one peer App beside the App in a run (`gristsim.Config.Peers`: its own
   store, one node, its API on qhttp; no peers of its own, no `From` or
   `Cluster`), and the cross-service check by key (`gristtest.Linked`);
-  GR4 grows that into compositions.
+  The first GR4 increment is built (docs/grist-composition.md): list all
+  reachable Apps in Config.Peers, including transitive and shared peers;
+  APIs wired before dependencies, each service instantiated once;
+  deterministic validation of missing peers, cycles and name collisions.
+  TestPeerComposition judges orders -> bank -> ledger with three models
+  over the same records and checks posting conservation independently;
+  lost answers, lost commit answers and crashes after effects are
+  scripted, and freshKey breaks the cross-service checks while every
+  local model still conforms. Linked also checks the command identity:
+  a key and matching outcome on another command no longer pass.
+  Still open: the combined protocol model, cyclic graphs, per-peer
+  doubles/configuration, SQL peers, clusters, upgrades and remote feeds.
 - **GR5. Stream publishers and consumers (M).** A processor that
   publishes to a stream (Kafka via franz-go, Kinesis, the simulated
   log examples/streams has) with the checkpoint and the publish's

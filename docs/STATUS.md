@@ -7,11 +7,20 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-**As of 2026-10-29.** main at GR3 slice 5 (peer calls; HISTORY "GR3
-slice 5"), the published modules at GR3 slice 4 (`26b8e47`; slice 5
-changed grist alone, which no other published module requires). **Nothing is tagged**: every module is pre-release,
+**As of 2026-10-29.** GR4's first composition experiment is implemented
+(HISTORY "GR4: the first composition experiment") on the GR3 slice 5
+baseline. The published modules' core pins remain at GR3 slice 4
+(`26b8e47`; the later slices changed grist alone, which no other
+published module requires). **Nothing is tagged**: every module is pre-release,
 published modules require each other at pseudo-versions, and breaking
 renames still land (R5 waits for the maintainer).
+
+The first GR4 composition increment is built on that baseline: acyclic
+peer graphs, shared services instantiated once, and a three-service
+experiment with per-service models plus posting conservation. See
+[grist-composition.md](grist-composition.md). The maintainer's direction:
+correctness first, then composition and an adoption trial; keep APIs
+flexible. GR3 slice 6 is deferred, and release hardening is not a gate.
 
 ## 1. What works now
 
@@ -89,6 +98,7 @@ review" on.
 | I26 | the generator warns on what an app forgot | a6be970 |
 | GR3 s4 | lints for a grist application's own code (lint -sim over its files, quintraw) | 26b8e47 |
 | GR3 s5 | peer calls: actors naming the App, `grist.NewPeer`, `gristsim.Config.Peers`, `gristtest.Linked`, examples/payouts | HISTORY "GR3 slice 5" |
+| GR4 first | acyclic peer graphs, shared peers, three-service conservation experiment; Linked matches command identity | HISTORY "GR4: the first composition experiment" |
 | I27, I34 | grist's user guide; ARCHITECTURE.md, example tracks | b382007, c41bd82 |
 | I28-I32 | the first hour: a catch shown, progress, reserved names, reports in words, help | 15cf741, c0eb502, eb1520b, acd5fb1 |
 | I33, I36 | `gotogether init -kind http`, analyzers that fix, JSON Schemas | 9708379, 79c034c, dce024f |
@@ -162,25 +172,26 @@ four, L more; agent-days in practice).
     Background paths); I39's label allocations (for I50); I41's nested
     modules' benchmarks and examples/perf.
 
-## 4. Not started, in recommended order
+## 4. Next experiments, in recommended order
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | GR3 slice 6 (spans of declared calls; [grist-instrumentation.md](grist-instrumentation.md) §4) | M | unblocked; the lowest priority of GR3's (it adds a recorder, not a seam) |
-| 2 | GR4, several services simulated together | L | after H5, H6, I22 and GR3 slice 5 (all done) |
-| 3 | GR5 streams, GR6 gRPC, GR7 controllers | M, M, L | on the published doubles (H7) |
-| 4 | GR8 sagas and timers, GR9 checkout as grist services | M, L | GR9 proves GR4 and GR8 compose |
-| 5 | P9, grist apps explored in-process | L | after GR4 |
-| 6 | I42-I51, the bold ideas: model diff and refinement (M each), graphs further (M each), sleep sets then DPOR (M, L), Elle's rest (S-M each), production capture (M each), a shared report (M), kubesim as envtest (M), no blank page (M-L; `init -kind http` is its first part), Quint off the hot path (L each), small ones (S each: `qtest.NoHotCycle`, typed fault names, `gristtest.StoredLogs`, `qobs.Sometimes`, ghost modules, the model's facts beside the spec) | as listed | each decided by the maintainer before it starts |
+| 1 | GR4's next increment: combined causal protocol model and the next composition limitation an experiment exposes | M-L | acyclic graphs and the three-service experiment are built; correctness checks precede expansion |
+| 2 | Adoption trial on an independently maintained service | S-M | measure modeling and integration friction before choosing another adapter |
+| 3 | GR3 slice 6 (spans of declared calls) | M | deferred until an experiment needs spans; adds a recorder, not a seam |
+| 4 | GR5 streams, GR6 gRPC, GR7 controllers | M, M, L | on the published doubles (H7) |
+| 5 | GR8 sagas and timers, GR9 checkout as grist services | M, L | GR9 proves GR4 and GR8 compose |
+| 6 | P9, grist apps explored in-process | L | after GR4 |
+| 7 | I42-I51, the bold ideas: model diff and refinement (M each), graphs further (M each), sleep sets then DPOR (M, L), Elle's rest (S-M each), production capture (M each), a shared report (M), kubesim as envtest (M), no blank page (M-L; `init -kind http` is its first part), Quint off the hot path (L each), small ones (S each: `qtest.NoHotCycle`, typed fault names, `gristtest.StoredLogs`, `qobs.Sometimes`, ghost modules, the model's facts beside the spec) | as listed | each decided by the maintainer before it starts |
 
 Also proposed, not built: GR10b (a poller a daemon only while it waits)
 and GR10c (`Settle` naming down processes), both S and qenv-level.
 
-**Recommended next: the maintainer's R5.** I1-I10, I12-I14 and I16-I18
-are in: the breaking shapes the tag recommendation lists are settled
-(the step's records in `qtrace.Record`, the knob rule in DESIGN §71, the
-model navigator in validate for v1). Then the list
-above, in order.
+**Recommended next: follow the prerelease experiments above.** R5 is
+available when the maintainer wants tags; compatibility commitments and
+platform breadth do not precede evidence that the abstractions compose.
+I4's unsupported nondeterministic-replay boundary stays a correctness
+constraint, not a reason to build unrelated release machinery.
 
 ## 5. Decisions for the maintainer
 
@@ -223,6 +234,13 @@ or HTTPRoute weights); GR3's five design questions
 (nothing released, crashes per step, the global recorder opt-in, MIT).
 
 ## 6. Known issues and rough edges
+
+- **Generator name shadowing:** a command named `order` with an argument
+  named `order` generates a model-only step whose local draw shadows
+  the action; Quint typecheck fails (`order(order, ...)`, str versus
+  operator). The composition fixture uses `place` instead. Fix the
+  generator's local-name allocation; this is a loud typecheck failure,
+  not a validated counterexample or a reason to loosen a model.
 
 - **I35's list, reported not fixed** (HISTORY "I35: tutorials"): a
   partitioned report's RESULT counts partitions as "actors" and its

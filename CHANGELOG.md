@@ -10,6 +10,12 @@ and adds a line here.
 
 The first release. What a user meets, by module:
 
+- grist (GR4's first increment): `gristsim.Config.Peers` supports acyclic
+  graphs of direct, transitive and shared peers, each instantiated once.
+  Missing peers, cycles and endpoint-name collisions fail with a fix.
+  `gristtest.Linked` checks the called command as well as the key,
+  tenant and outcome, detecting a call routed to another command.
+
 - Tutorials (ROADMAP I35): docs/tutorials/, five guided pages with real
   output. `simulate -graph -out` makes its directory and prints a replay
   command that runs from where you are; `validate -compiled` refused for

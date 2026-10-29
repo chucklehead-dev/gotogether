@@ -200,9 +200,13 @@ type Config struct {
 	// grist.PeerCaller(<app>). Both Apps record into the run, each under
 	// its own actors (<app>/<tenant>), so the peer's binding judges the
 	// same run (System.WithBinding) and gristtest.Linked relates the two.
-	// A peer of the App's that Peers lacks, or one the App does not call,
-	// is the run's error. A peer is the smallest composition: one node,
-	// no peers of its own, not with From or Cluster (GR4's).
+	// List every peer reachable from the App, including a peer's own
+	// peers. Shared peers run once; the list's order does not affect the
+	// topology. A missing, unreachable or repeated App, two Apps of one
+	// name, a cycle, or colliding API/dependency names is the run's error.
+	// This first composition has one node per peer, default doubles, and
+	// no From or Cluster. Each edge is checked by gristtest.Linked; each
+	// App's binding judges its own actors in the same recorded run.
 	Peers []*grist.App
 }
 
@@ -662,75 +666,6 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 		}
 	}
 	return relay.Err()
-}
-
-// startPeers runs cfg.Peers beside app (Config.Peers), returning each
-// one's transport for app's calls, their relays and their node processes.
-func startPeers(s *qenv.Sim, app *grist.App, cfg Config) (map[*grist.App]grist.Transport, []*grist.Relay, map[*qenv.Process]bool, error) {
-	called := map[*grist.App]bool{}
-	for _, d := range app.Dependencies() {
-		if p := d.Peer(); p != nil {
-			called[p] = true
-		}
-	}
-	trs := map[*grist.App]grist.Transport{}
-	var relays []*grist.Relay
-	procs := map[*qenv.Process]bool{}
-	if len(cfg.Peers) > 0 && (cfg.From != nil || cfg.Cluster != nil) {
-		return nil, nil, nil, errors.New("gristsim: Config.Peers with Config.From or Config.Cluster: a composition's rollouts and clusters are not built yet (GR4)")
-	}
-	for _, p := range cfg.Peers {
-		switch {
-		case p == nil || p == app:
-			return nil, nil, nil, errors.New("gristsim: Config.Peers holds nil or the App itself: give the Apps it calls (grist.NewPeer)")
-		case !called[p]:
-			return nil, nil, nil, fmt.Errorf("gristsim: Config.Peers has %s, which %s does not call: declare it (grist.NewPeer) or leave it out", p.Name, app.Name)
-		case trs[p] != nil:
-			return nil, nil, nil, fmt.Errorf("gristsim: Config.Peers has %s twice", p.Name)
-		}
-		if err := p.Verify(); err != nil {
-			return nil, nil, nil, fmt.Errorf("gristsim: Config.Peers: %w", err)
-		}
-		for _, d := range p.Dependencies() {
-			if d.Peer() != nil {
-				return nil, nil, nil, fmt.Errorf("gristsim: peer %s calls peer %s: a peer's own peers are not built yet (GR4)", p.Name, d.Name())
-			}
-		}
-		db := qenv.NewStore(s, p.Name, cfg.Isolation)
-		st := simstore.New(db)
-		relay, err := grist.NewRelay(st)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		for _, t := range cfg.Tenants {
-			if err := st.CreateTenant(s.Context(), t); err != nil {
-				return nil, nil, nil, err
-			}
-		}
-		db.CommitFaults = cfg.CommitFaults // the run's commits, its tenants made
-		served, err := serveDependencies(s, p, nil, nil, nil)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("gristsim: peer %s: %w", p.Name, err)
-		}
-		h, err := grist.NewHandler(p, st, grist.CallerFromHeader(CallerHeader))
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("gristsim: peer %s: %w", p.Name, err)
-		}
-		var srv *qhttp.Server
-		node := s.Process(p.Name, true, func(ctx context.Context) {
-			if err := p.Start(relay.With(served(ctx)), st, grist.WithRelay(relay)); err != nil {
-				panic(fmt.Sprintf("gristsim: peer %s could not start: %v", p.Name, err))
-			}
-			srv.Handle(ctx, h) // every incarnation listens again
-		})
-		srv = qhttp.NewServer(s, p.Name, node)
-		tr := qhttp.NewTransport(srv)
-		tr.Timeout = DependencyTimeout
-		trs[p] = client.Peer(&client.Client{App: p, URL: srv.URL(), HTTP: &http.Client{Transport: tr}, CallerHeader: CallerHeader})
-		relays = append(relays, relay)
-		procs[node] = true
-	}
-	return trs, relays, procs, nil
 }
 
 // operate is the operator: a while (after) after a rewind stops a

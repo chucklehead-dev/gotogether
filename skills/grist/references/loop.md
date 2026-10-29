@@ -138,7 +138,12 @@ for it. No binding is written by hand.
    `client.Peer(&client.Client{App: bank.App, URL: u})` where the node
    starts; in a simulation `gristsim.Config{Peers: []*grist.App{bank.App}}`
    runs the peer on its own store, node and API (`rpc.<peer>.*`,
-   `nemesis.crash.<peer>`). The caller's model has the caller's step
+   `nemesis.crash.<peer>`). For a graph, list all reachable Apps in
+   `Peers`, including peers of peers; shared peers run once, list order
+   does not matter. Cycles and colliding service/dependency names are
+   errors; per-peer clusters, rollouts and custom doubles are not built.
+   See [the composition experiment](../../../docs/grist-composition.md).
+   The caller's model has the caller's step
    alone (no site, no `Admits`, no served obligation); judge the peer's
    side with `sys.WithBinding("bank/bank.binding.yaml")` and relate the
    two with `gristtest.Linked(t, App, bank.App, run.Recorded)` for each

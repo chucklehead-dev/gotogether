@@ -2600,6 +2600,42 @@ acceptance was undone. `freshKey` became a generated mutant: no
 application code chooses a peer call's id. `Linked` takes a test and the
 run's recorded steps.
 
+### GR4: the first composition experiment
+
+The maintainer's direction (2026-10-29): this is a prerelease library;
+correctness issues first, then a narrow composition to test the
+abstractions and an adoption trial. Breaking changes remain acceptable;
+release hardening is not a gate. GR3 slice 6 is deferred behind that
+experiment (docs/grist-composition.md records its bounds).
+
+Config.Peers now lists an acyclic graph of direct, transitive and shared
+Apps. Each peer has one store, relay, crashable node and qhttp API; all
+APIs are wired before dependencies, so a service allocated later is
+callable and a shared peer runs once. Declaration order determines
+setup, independent of the list's order. Missing, repeated, unreachable
+or equally named Apps, cycles and endpoint/process-name collisions
+fail with a fix. Per-peer configuration, SQL peers, clusters, rollouts
+and a combined causal protocol model remain open.
+
+TestPeerComposition builds orders -> bank -> ledger and judges the same
+histories with three local models. Lost replies at both APIs, lost
+commit answers at both peer stores and crashes after both processors'
+effects are scripted and required to have happened. The faithful chain
+conforms, settles, is Linked on both edges and conserves postings (a
+separate Go multiset check, including tenant, order and amount). With
+freshKey under lost replies all three local models still conform, but
+both the links and conservation detect the extra commands.
+TestPeerShared adds orders -> ledger, exercising one ledger shared by
+two callers with either order of Config.Peers.
+
+Before that experiment, TestLinksWrongCommand exposed a correctness
+gap: Linked matched keys and outcomes across different commands. It
+now matches the command too, and examines caller-owned ids on every
+peer command, including one the caller never declared. Unknown and
+pending calls make no promise about answers, but a peer commit must
+still be of the command sent; one id cannot commit twice across
+commands. The new regression fails on the previous checker.
+
 ### I26: the generator warns on what an app forgot
 
 ROADMAP I26 (the eleventh review's designer: a newcomer added an event
