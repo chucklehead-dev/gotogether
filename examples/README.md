@@ -63,7 +63,7 @@ Controllers and providers. requeue first (a controller's requeue loop as a liven
 
 ## grist
 
-Applications on grist, whose model is generated from their catalog (the [grist user guide](../docs/grist-guide.md)). counters first (every feature, and the table of which test catches which mutant), then library (grown from `grist new`, an event versioned, snapshots), then wallet-grist (wallet's bank rebuilt on grist, with a newcomer's friction log), then payouts (two grist Apps, one calling the other's commands), then inventory-grist (three services, cancellation and a combined protocol).
+Applications on grist, whose model is generated from their catalog (the [grist user guide](../docs/grist-guide.md)). counters first (every feature, and the table of which test catches which mutant), then library (grown from `grist new`, an event versioned, snapshots), then wallet-grist (wallet's bank rebuilt on grist, with a newcomer's friction log), then payouts (two grist Apps, one calling the other's commands, also recorded through OTel over real HTTP), then inventory-grist (three services, cancellation and a combined protocol).
 
 | App | What it is | What it shows |
 |---|---|---|

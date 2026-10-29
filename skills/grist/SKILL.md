@@ -19,6 +19,7 @@ the walk-through: read its README's table first.
 - A failure: the Results, then [references/triage.md](references/triage.md).
 - The generated model, its holes, Quint's reserved names: [references/model.md](references/model.md).
 - A command touching several entities: [references/entities.md](references/entities.md).
+- Native declared-call steps through OTel, real-HTTP parity and collection limits: [references/operations.md](references/operations.md).
 - Production (`-db-file`, logs, metrics, migrations, `prune`, `steps -export`), a rewind (`grist.ErrRewound`, `<app> resume`), a failover or restore simulated (`gristsim.Managed`): [references/operations.md](references/operations.md).
 - An event whose shape changes (upcasters, grist.lock, a deployed version's log judged by today's model), a new version in a rolling update (readers first: `grist.WritesVersion`, `<app> catalog -diff deployed.json`, `gristtest.Upgrade`), a read model whose log is long (snapshots, their audit): [references/versions.md](references/versions.md).
 

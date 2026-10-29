@@ -10,8 +10,11 @@ did): `grist.NewDependency`, `grist.NewCall`, `Keyed`, `Uses`, `Call.Do`,
 `grist.ServeCalls`, `grist.ServeDependency`, `gristtest.TierConfig.Serve`;
 peers (`grist.NewPeer`, `grist.NewPeerCall`, `client.Peer`,
 `gristsim.Config.Peers`, `gristtest.Linked`) and actors naming the App
-(`<app>/<tenant>`). Slice 6 (spans of declared calls) is designed, not
-built.
+(`<app>/<tenant>`). Slice 6's first increment is built:
+native OTel export/decode over real HTTP in payouts -> bank. Its
+acceptance and remaining limits are in
+[grist-call-spans.md](grist-call-spans.md): lossless native records through
+OTel in payouts -> bank, before reduced HTTP-span conversion.
 Read docs/grist.md first (§2.6 processors, §3.1 recording, §3.5 seams,
 §0.9-§0.10 the generator); this note builds on it and cites it as "grist
 §x".
@@ -736,17 +739,15 @@ names the mutant it must catch, built as an overlay
    mutant is grist/client's id, switched by gristtest's init as a dropped
    rule is); and `Linked` takes a test and a run's recorded steps
    (`Linked(t, A, B, run.Recorded)`).
-6. **Spans of declared calls.** A call's caller step also as an OTel
-   span event in the span open in its context (qobs's OTel recording),
-   and a generated `<app>.convert.yaml` turning otelhttp client spans of
-   a declared `OverHTTP` call into caller steps (its route and status;
-   the request's fields only if the span carries them), judged by a
-   generated variant binding whose caller actions take no request.
-   **Example: counters** over otelhttp (slice 3's tier). **Acceptance**:
-   slice 3's `payTwice`, recorded only through spans, is
-   `Some(Rejects("bankPay"))` in the spans variant (two calls of one
-   at-most-once key). Lowest priority: it
-   adds a recorder, not a seam.
+6. **Spans of declared calls.** First increment built after the GR4 and Goo
+   trials: a lossless native step round-trip through the existing OTel sink
+   and decoder, over real HTTP in payouts -> bank. It preserves tenant,
+   effect key, trigger, command identity, invocation pairing and business
+   outcome so existing local and causal checks retain their meaning.
+   [Contract and acceptance criteria](grist-call-spans.md). This supersedes
+   the earlier first slice (counters over otelhttp with requestless actions
+   inferred from route/status). Counters' `payTwice` and generic conversion
+   remain possible follow-ons; they are not prerequisites for this increment.
 
 ## 5. Decisions (the maintainer, 2026-10-27)
 

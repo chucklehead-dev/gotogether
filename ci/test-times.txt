@@ -17,7 +17,7 @@ examples/glomers/gcounter 47
 examples/glomers/kafka 51
 examples/glomers/uniqueids 33
 examples/hello 39
-examples/inventory-grist 70 # 53.8 and 58.3 CPU s locally: three-service adoption trial, local/protocol models, bounded orders and three mutants
+examples/inventory-grist 180 # 173.9 CPU s on PR CI, 134.6 locally with CI's GOTOGETHER_EVAL_SAMPLE=1/5; prior 70 used the default 1/50 shadow rate. Three-service local/protocol models, bounded orders and three mutants unchanged.
 examples/jobqueue 33
 examples/kvstore 61
 examples/lease 35 # 30.4 CPU s on CI (run 442, 8178000 and 54c27fd; 72.2 in run 431, 188 in run 427)

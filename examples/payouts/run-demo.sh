@@ -9,7 +9,13 @@
 # through the bank's lost answers and both nodes' crashes.
 set -euo pipefail
 cd "$(dirname "$0")"
-if [ -n "${MUTANT:-}" ]; then
+if [ "${SPANS:-0}" = 1 ]; then
+  case "${MUTANT:-}" in
+    "") run='TestDeclaredCallSpans$|TestSpanIdentityCorruption$' ;;
+    freshKey) run='TestSpanMutants$/^freshKey$' ;;
+    *) echo "SPANS=1 supports MUTANT=freshKey only" >&2; exit 2 ;;
+  esac
+elif [ -n "${MUTANT:-}" ]; then
   [ -d "testdata/mutants/$MUTANT" ] || [ "$MUTANT" = freshKey ] || { echo "unknown MUTANT=$MUTANT (freshKey, or testdata/mutants: $(ls testdata/mutants | tr '\n' ' '))" >&2; exit 2; }
   run="TestMutants\$/^$MUTANT\$"
 else

@@ -6920,3 +6920,72 @@ and diagnostic quality. The smallest documentation gaps were clarified.
 It is repository-owned, not independent adoption evidence. Phased workload
 control and order-specific outstanding-obligation diagnostics are stronger
 next candidates than speculative SQL peers, cycles, clusters or rollouts.
+
+
+## Goo consumer trial and GR3 slice 6 design
+
+2026-10-29. The independent modeling effort in casselc/goo extends its
+lifecycle model to two tenants sharing IDs and two immutable evaluation
+generations, calling actual preparation, correction and aggregation APIs.
+Late evidence can improve missing completion or degrade good to unknown;
+selection of one generation, mixed prepared-artifact refusal and changed-scope
+refusal are checked. Five directed scenarios and 12 generated traces (300
+steps, 139 non-idle), nine-step bounded model safety, prefix/settle controls
+and three source mutants pass. Smallest mutant witnesses have 2/6/3 steps.
+Eight observation corruptions are killed; four malformed logs are refused
+before verdict and excluded from the score. No production defect was found
+within the bounds. The isolated consumer module leaves Goo's existing
+dependencies unchanged; dedicated model and existing API-contract CI pass.
+Evidence and reproduction: [casselc/goo#1](https://github.com/casselc/goo/pull/1),
+commit 0659a4b. This was agent-assisted core-library use, not an unaided
+newcomer study or grist adoption.
+
+The maintainer approved recording the trial and specifying the next GR3
+slice. grist-call-spans.md now defines its first increment: native evidence
+through the existing OTel sink/decoder, real HTTP payouts -> bank, with
+local/link/causal parity, lost replies, retries, pending invocations and
+identity-corruption controls. This replaces reduced route/status inference
+as the first slice; generic conversion and counters remain follow-ons.
+Only the design and acceptance criteria are complete; no slice-6 runtime
+or generator implementation is claimed by this entry.
+
+Validation of the design update: internal/docsnippets and skills checks pass;
+no runtime behavior or exported API changed.
+
+
+## GR3 slice 6: lossless native call records through OTel
+
+Built 2026-10-29 in examples/payouts, using existing qobs/otelio APIs.
+Real processors and HTTP APIs on in-memory stores export native records
+through the OTel sink, serialize OTLP/JSON and decode the records for both
+service bindings, Links and ProtocolSteps. Native memory capture is the
+parity oracle only. Reversed export order preserves semantic records and
+causal projection; explicit HTTP client/server context propagation is checked.
+
+Success, named refusal, committed payment with a proxy-lost reply/retry,
+and interrupted recorder with a pending invocation all pass. Two tenants
+share logical request/payout ids. The generated freshKey mutant still
+violates the bank's onePaymentPerPayout and fails Links while the caller
+conforms. Its retained JSONL counterexample reproduces with ordinary CLI
+validation. Tenant/key/command/outcome corruption fails Links; an invalid
+trigger refuses causal projection; missing amount refuses before verdict;
+interior sequence loss exposes a gap. None is mislabeled a completed run.
+The pending case seals a recorder tail, not a process crash; no database
+or collector deployment and no eventual-completion guarantee are claimed.
+
+The full payouts -short suite passes with CI's 1/5 evaluator shadowing.
+Focused cases pass race instrumentation and three repeated runs. qobs,
+otelio, documentation, skills and configuration checks pass; go vet is
+clean for payouts. No runtime API, generator or telemetry format changes
+were required. SPANS=1 on its run-demo.sh reproduces faithful and mutant
+paths; GOTOGETHER_SPANS_OUT saves OTLP and decoded JSONL.
+
+The design PR also exposed two existing CI configuration problems.
+Outside-in publication checks now fetch a PR's pushed head rather than
+its unresolvable temporary merge SHA (ordinary push still uses github.sha).
+Inventory's unchanged suite measured 173.9 CPU seconds on CI and 134.6
+locally at CI's 1/5 shadow rate; the original 70-second budget measured
+with the default 1/50 rate was incomparable. Its budget is recalibrated
+to 180 without reducing seeds, checks or ordering coverage. Payouts
+measures 51.5 CPU seconds including the new span acceptance and remains
+within its existing budget threshold.

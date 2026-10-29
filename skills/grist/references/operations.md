@@ -61,3 +61,18 @@ cfg.Store = &gristsim.Managed{LoseAfter: 4, Lose: 1, Resume: 5 * time.Second} //
 | the first step after a lost commit rejected (`ledgerPost`, `bankPay`) | a lost commit whose consequence (an effect) happened |
 | an app's val violated at the settle (`postedApplied`) | a dependency holds what the log lost |
 | `Rejects("<p>")` or `Rejects("<call>")` while rewound | a processor ran after a rewind unasked: what `Managed.FailOpen` (the ablation) shows |
+
+
+## Declared-call telemetry
+
+For a real tier that already exports OTel, route the context's recorder to
+`qobs.NewOTelSink`, flush the provider explicitly and decode the exported
+OTLP/JSON with `otelio.ReadSteps`. The existing store-side bindings judge
+these native step events, including invocation pairing, scalar fields and
+order coordinates. Ordinary HTTP span names/statuses do not supply them.
+Retain both services' committed records and caller records for
+`gristtest.Linked` / `gristtest.ProtocolSteps`; a timeout is unknown, while
+an exported invocation with no completion is pending. Never infer settle
+or completeness from span end or exporter flush. See examples/payouts'
+`SPANS=1 ./run-demo.sh` and `GOTOGETHER_SPANS_OUT` for the real HTTP,
+lost-reply, interrupted-recorder and generated-mutant acceptance path.
