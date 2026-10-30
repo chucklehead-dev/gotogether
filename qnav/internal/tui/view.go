@@ -331,6 +331,14 @@ func (m *Model) runScreen(c *entry) screen {
 	var out []string
 	out = append(out, st.section.Render("whole-run judgment · independent of cursor"))
 	out = append(out, strings.Split(strings.TrimSpace(n.Receipt.String()), "\n")...)
+	if n.Profile != nil {
+		out = append(out, "")
+		out = append(out, strings.Split(strings.TrimSpace(n.Profile.String()), "\n")...)
+	}
+	if n.Execution != nil {
+		out = append(out, "")
+		out = append(out, strings.Split(strings.TrimSpace(n.Execution.String()), "\n")...)
+	}
 	steps := n.Steps
 	out = append(out, "", st.section.Render(fmt.Sprintf("steps so far (%d)", len(steps))))
 	const shown = 8

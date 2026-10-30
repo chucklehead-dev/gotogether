@@ -220,6 +220,14 @@ func TestHelloRun(t *testing.T) {
 	}
 	t.Setenv("GOTOGETHER_KEEP", t.TempDir())
 	t.Setenv("GOTOGETHER_MUTANT", "noDedupe")
+	// Effective profiles expose host defaults. Fix this session's policy so
+	// its screen remains comparable across machines and CI evaluator variants.
+	t.Setenv("GOMAXPROCS", "2")
+	t.Setenv("QUINT_BACKEND", "")
+	t.Setenv("GOTOGETHER_EVAL", "go")
+	t.Setenv("GOTOGETHER_EVAL_SAMPLE", "0.02")
+	t.Setenv("GOTOGETHER_CHECK", "")
+	t.Setenv("GOTOGETHER_ALL_FAULTS", "")
 	s, err := session.Start(pkg, "TestMutant#1:seed=1")
 	if err != nil {
 		t.Fatal(err)

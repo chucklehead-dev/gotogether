@@ -48,8 +48,8 @@ originating seed's random choices or fault rates drove the navigated run.
   and all-fault defaults after construction. History-search settings include ordering and pending-effect
   budgets, partition key and clock skew when applicable.
 
-Configuration and outcomes remain distinct. Evidence `runs` counts completed
-runs; search extent records whether enumeration finished or was truncated;
+Configuration and outcomes remain distinct. Evidence `runs` counts execution attempts, with unjudged attempts identified
+separately; search extent records whether enumeration finished or was truncated;
 judge counts record who actually judged passing runs. Check receipts retain
 their actual budgets, conclusions and unjudged obligations. A configured
 limit does not prove that a run reached it.
