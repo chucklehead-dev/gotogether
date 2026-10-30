@@ -62,7 +62,15 @@ module protocol {
   }
   val withinCapacity = s.held.size() <= 2
   val noCancelledShipment = s.cancelled.intersect(s.started).size() == 0
-  val allIntentsAnswered = s.placeIDs.keys().subseteq(s.reserveAnswers) and s.cancelIDs.keys().subseteq(s.cancelAnswers) and s.confirmIDs.keys().subseteq(s.confirmAnswers)
+  val outstandingIntents =
+    s.placeIDs.keys().exclude(s.reserveAnswers).map(id =>
+      {kind: "reservation", subject: s.placeIDs.get(id), intent: id, expected: "modeled inventory reservation answer"})
+    .union(s.cancelIDs.keys().exclude(s.cancelAnswers).map(id =>
+      {kind: "cancellation", subject: s.cancelIDs.get(id), intent: id, expected: "modeled inventory cancellation answer"}))
+    .union(s.confirmIDs.keys().exclude(s.confirmAnswers).map(id =>
+      {kind: "confirmation", subject: s.confirmIDs.get(id), intent: id, expected: "modeled inventory authorization answer"}))
+  /// gotogether: diagnostic outstandingIntents
+  val allIntentsAnswered = outstandingIntents.size() == 0
   val allAuthorizedStarted = s.authorized.keys().map(k => s.authorized.get(k)).subseteq(s.started)
 
   // Finite inputs for model-only safety sampling and bounded verification.

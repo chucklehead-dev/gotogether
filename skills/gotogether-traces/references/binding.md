@@ -81,3 +81,19 @@ In the editor and in CI, the same checks run as analyzers (qanalysis):
   coverage run) lists per action what its code can reach but no run ran,
   and what its steps ran that it cannot reach (callers' and setup code).
 
+
+## Model-authored diagnostic prototype
+
+An optional Quint documentation annotation associates an existing Boolean
+property with a model-authored record-set val:
+`/// gotogether: diagnostic outstandingIntents`. Put it immediately above
+that property; a normal `//` comment is not retained by Quint. Define the
+property from the collection's emptiness to keep one semantic definition.
+No new binding YAML is required, and the binding still selects checks.
+`gotogether lint -binding ...` lists active/inactive associations and
+rejects invalid references/types. Report JSON adds optional structured
+absence detail; navigation detail describes the selected state without a
+verdict. The prototype's fixed record shape, availability limits and
+reproduction are in docs/model-diagnostics-prototype.md. Native evidence
+links remain unresolved; do not infer a leaked resource from an unanswered
+intent alone.

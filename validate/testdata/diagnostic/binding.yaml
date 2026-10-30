@@ -1,0 +1,7 @@
+spec: model.qnt
+module: obligations
+actors: ['tenant-*']
+actions:
+  request: {}
+  answer: {}
+eventually: [complete]

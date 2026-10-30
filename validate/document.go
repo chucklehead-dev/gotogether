@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate/diagnostic"
 )
 
 // A command's report for machines (I20): validate -json and simulate
@@ -176,10 +177,12 @@ type DocRecord struct {
 // A DocAbsence is a step the run was expected to show and does not
 // (Absence).
 type DocAbsence struct {
-	Kind  string `json:"kind"`
-	Name  string `json:"name"`
-	Cause string `json:"cause"`
-	Why   string `json:"why"`
+	// Diagnostic supplies optional model-authored detail, without changing Cause.
+	Diagnostic *diagnostic.Result `json:"diagnostic,omitempty"`
+	Kind       string             `json:"kind"`
+	Name       string             `json:"name"`
+	Cause      string             `json:"cause"`
+	Why        string             `json:"why"`
 }
 
 // A DocPartition is the passing partitions of one actor of a log judged
@@ -295,7 +298,7 @@ func (r *Result) Doc() DocActor {
 		a.Pending = append(a.Pending, recordDoc(&r.Pending[i], -1))
 	}
 	for _, ab := range r.Absent {
-		a.Absent = append(a.Absent, DocAbsence{Kind: ab.Kind, Name: ab.Name, Cause: string(ab.Cause), Why: ab.Why})
+		a.Absent = append(a.Absent, DocAbsence{Kind: ab.Kind, Name: ab.Name, Cause: string(ab.Cause), Why: ab.Why, Diagnostic: ab.Diagnostic})
 	}
 	return a
 }

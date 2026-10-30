@@ -56,6 +56,13 @@ func chunkSize(total, steps, cpus int) int {
 // re-checked one trace at a time.
 func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProcess int) (reports []*Report, errs []error) {
 	reports, errs = make([]*Report, len(runs)), make([]error, len(runs))
+	defer func() {
+		for i, rep := range reports {
+			if errs[i] == nil {
+				c.enrichDiagnostics(rep, runs[i], false)
+			}
+		}
+	}()
 	if len(c.Binding.Hidden) > 0 && c.mode.history == nil || c.compiled != nil {
 		// the evaluator's search, or a compiled model's evaluator, run by
 		// run: no quint batch to share

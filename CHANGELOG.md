@@ -10,6 +10,11 @@ and adds a line here.
 
 The first release. What a user meets, by module:
 
+- Prototype: model-authored diagnostics discovered from Quint documentation
+  annotations, with optional structured absence and navigation details shared
+  by text/JSON/TUI. No new binding YAML or grist runtime behavior. The provisional
+  record shape and scope are documented in docs/model-diagnostics-prototype.md.
+
 - Examples: `inventory-grist` rehearses three-service adoption with
   competing checkouts, cancellation/authorization races, three planted
   bugs, local and combined models, and replayable protocol histories.

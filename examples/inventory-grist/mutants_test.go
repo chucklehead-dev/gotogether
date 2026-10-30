@@ -62,7 +62,25 @@ func TestMutant(t *testing.T) {
 			if count(r.Recorded, "inventory/t1", "reserve", "") != 1 || count(r.Recorded, "inventory/t1", "cancel", "") != 0 {
 				t.Fatal("missing release did not leave a real held unit")
 			}
-			qtest.Validate(t, protocol, saveProjection(t, r.Recorded)).Expect(t, qtest.Violates(validate.EventuallyName("allIntentsAnswered")))
+			judged := qtest.Validate(t, protocol, saveProjection(t, r.Recorded))
+			judged.Expect(t, qtest.Violates(validate.EventuallyName("allIntentsAnswered")))
+			explained := false
+			for _, actor := range judged.Report.Actors {
+				for _, ab := range actor.Absent {
+					d := ab.Diagnostic
+					if ab.Name == validate.EventuallyName("allIntentsAnswered") && d != nil && d.Status == "available" {
+						for _, item := range d.Items {
+							if actor.Actor == "protocol/t1" && item.Kind == "cancellation" && item.Subject == "a" && item.Intent == "t1-c1-1" {
+								explained = true
+							}
+						}
+					}
+				}
+			}
+			if !explained {
+				t.Fatal("missing release did not identify the model's unanswered cancellation intent")
+			}
+
 		}
 	case "freshKey":
 		cfg := config()
