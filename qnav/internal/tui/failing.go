@@ -18,6 +18,10 @@ func Failing(ch *validate.Checker, start validate.NavStart) (ModelNav, string, s
 	start.At = -1
 	whole, rejected := ch.Nav(start)
 	if rejected == nil {
+		// Preserve the existing no-failure path when this model did not opt in.
+		if len(ch.Model.Diagnostics) == 0 {
+			return nil, "", "", errors.New("the model accepts every call of the run: no failing step")
+		}
 		report, err := ch.Check(context.Background(), start.Steps)
 		if err != nil {
 			return nil, "", "", err
