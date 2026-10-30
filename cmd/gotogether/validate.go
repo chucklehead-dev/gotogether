@@ -320,7 +320,8 @@ func (v *validateRun) report(j *cli.Judged, jerr error) (code int, _ error) {
 		} else {
 			fmt.Fprint(v.out, r.Summary())
 		}
-		v.doc.Actors = append(v.doc.Actors, r.Doc())
+		v.doc.AddReport(&validate.Report{Actors: []*validate.Result{r}})
+		fmt.Fprint(v.out, (&validate.Report{Actors: []*validate.Result{r}}).Receipt().String())
 		if j.Finish && r.OK() {
 			v.note(fmt.Sprintf("%s: no verdict (ITF trace) (%s): a finished run can't be judged from an ITF trace, which records no settle: validate the recorded steps", in.Path, finishWhy(j)))
 		}

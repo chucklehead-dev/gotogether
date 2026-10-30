@@ -176,3 +176,10 @@ are separately labeled; inspecting an earlier cursor does not import later
 failure facts. The **g** entry also opens an annotated settled completion failure
 whose transitions all conform. Business selectors are shown with native evidence
 links explicitly unresolved. See [the prototype and reproduction](../docs/model-diagnostics-prototype.md).
+
+
+Run nodes with structured check receipts show a typed verdict and a scrollable
+“What was checked” summary, including ordering-search limits and assumed effects.
+These describe the whole nominal run, independently of the cursor's model state.
+All current run-node producers emit a required receipt. Navigation speaks
+`gotogether.nav/2` only; rebuild test binaries and navigators together.

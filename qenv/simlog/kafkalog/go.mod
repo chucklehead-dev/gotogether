@@ -3,7 +3,7 @@ module github.com/chucklehead-dev/gotogether/qenv/simlog/kafkalog
 go 1.26.1
 
 require (
-	github.com/chucklehead-dev/gotogether v0.0.0-20261030000158-e7ce5f661b62
+	github.com/chucklehead-dev/gotogether v0.0.0-20261030014412-db01d3fd7fe7
 	github.com/twmb/franz-go v1.22.2
 	github.com/twmb/franz-go/pkg/kfake v0.0.0-20261020234411-c06330b92452
 	github.com/twmb/franz-go/pkg/kmsg v1.15.0

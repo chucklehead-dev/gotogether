@@ -187,8 +187,8 @@ func TestNavRefused(t *testing.T) {
 	if err := jsonUnmarshal(b, &n); err != nil {
 		t.Fatal(err)
 	}
-	if n.Verdict != "no step recorded" || !slices.ContainsFunc(n.Notes, func(s string) bool { return strings.Contains(s, "a request to bank refused, nothing listening") }) {
-		t.Errorf("the node: verdict %q, notes %q", n.Verdict, n.Notes)
+	if n.Receipt.Reason != "no step recorded" || !slices.ContainsFunc(n.Notes, func(s string) bool { return strings.Contains(s, "a request to bank refused, nothing listening") }) {
+		t.Errorf("the node: verdict %q, notes %q", n.Receipt.Reason, n.Notes)
 	}
 }
 

@@ -297,15 +297,20 @@ deliberately and say why in the commit and the README.
   it. List the explorations that must run in a file (a test's, `TestX` or
   `TestX/sub`, or one, `TestX#2`, either after its package: its import
   path or the end of it, `examples/hello TestX`; `#` comments) and run
-  `GOTOGETHER_EVIDENCE=ev go test ./... && gotogether evidence -strict
-  -expect checks.txt ev`: a check with no evidence fails, by name.
+  `export GOTOGETHER_SESSION=$(uuidgen) GOTOGETHER_EVIDENCE=ev`, then
+  `go test -count=1 ./... && gotogether evidence -strict -expect checks.txt ev`: a check with no evidence fails, by name.
   Explorations write evidence (Explore, Exhaust, Sweep, Mutate), and
   Validate and Record runs their manifests (`run<N>.json` with their
   files bundled in `run<N>/`, listed as external, named as explorations
   are); a Hegel search cannot be listed. A bundle holds the run's whole
   step log, unsanitized: an uploaded evidence directory publishes it. A test
-  that skips clears what an earlier run of it left; use a fresh
-  directory per run all the same (a renamed test's stays).
+  that skips clears what an earlier run of it left. Use a fresh session ID
+  per suite invocation, shared across all test processes. The evidence command
+  excludes older and unidentified files; `-strict` and `-expect` require
+  a session unless `-history` explicitly requests historical aggregation.
+  Use `-count=1`: cached tests do not write evidence for the new session.
+  Session IDs are caller-supplied labels, not verified timestamps; never reuse
+  one for another invocation. Concurrent invocations need separate directories.
 - **A finished run.** Validate a real environment's logs with
   `gotogether validate -require-finish` (or `complete: true` in the
   binding), and claim `qtest.Finishes()` of a driver's runs: a run cut

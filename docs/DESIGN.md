@@ -3630,7 +3630,12 @@ vanishes, renamed or deleted: a listed test,
 subtest or exploration that wrote no evidence fails the command by name,
 packages matched by import path (the review: a package of another module,
 an example's root package). A test that skips clears its earlier
-evidence, so a reused directory does not vouch for it. CI runs strict
+evidence. Session-scoped aggregation additionally excludes a renamed or deleted
+test's retained evidence: a fresh `GOTOGETHER_SESSION` labels exploration
+JSON and manifests, and `evidence -session ID` filters before aggregation.
+Completeness checks require a session or explicit `-history`; disable Go
+test caching with `-count=1`. IDs must be fresh and shared across processes;
+concurrent invocations still need separate evidence directories. CI runs strict
 but for the examples' unwoven mutation and coverage tests, skipped by
 name; the nightly, whose fresh-seed runs include them, is not.
 
@@ -4923,15 +4928,15 @@ adjusting it is a field per format):
 |---|---|---|
 | `gotogether.steps/1` | step logs (a format record), OTel steps (span or resource attribute) | the current only; none named: the current |
 | `gotogether.requests/1` | qdriver's request log header | the current only |
-| `gotogether.binding/2` | a binding's optional `format:` | the current only; none: the current |
-| `gotogether.convert/1` | a rule file's optional `format:` | the current only; none: the current |
+| `gotogether.binding/2` | a binding's optional `format:` | the current only; unnamed protocols are refused |
+| `gotogether.convert/1` | a rule file's optional `format:` | the current only; unnamed protocols are refused |
 | `gotogether.corpus/1` | qtest's corpus entries | the current only |
 | `gotogether.choices/1` | qenv.EncodeChoices' header (`BytesVersion`) | the current only |
 | `gotogether.run/2` | validate's run manifest | the current only |
 | `gotogether.evidence/2` | qtest's evidence | the current only |
 | `gotogether.model/1` | a compiled model (gotogether compile, §64) | the current only |
 | `gotogether.report/1` | validate's and simulate's `-json` (validate.Document, §68) | the current only |
-| `gotogether.nav/1` | navproto's Session and Node's `protocol` | the current only; none: the current |
+| `gotogether.nav/2` | navproto's Session and Node's `protocol` | the current only; unnamed protocols are refused |
 
 **None named is the current.** A binding with no format key, a log with
 no format record, a session naming no protocol is read as this version's
@@ -4966,7 +4971,7 @@ rewritten when the alias went).
 
 **The navigation protocol.** A test binary is built against the user's
 core, `gotogether nav` and `gotogether-nav` against theirs. The session's
-first line and a one-shot node name `gotogether.nav/1`
+first line and a one-shot node name `gotogether.nav/2`
 (`navproto.Protocol`), and both navigators refuse another with
 `navproto.CheckProtocol`'s fix: install the navigator at the module's
 version, or rebuild the test binary at the navigator's.

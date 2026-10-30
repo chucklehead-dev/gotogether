@@ -88,7 +88,7 @@ func TestDoctorReport(t *testing.T) {
 	if err != nil || code != 1 {
 		t.Errorf("doctor -strict with a skew: %d %v", code, err)
 	}
-	for _, want := range []string{"gotogether.steps/1", "gotogether.binding/2", "gotogether.nav/1", "woven ABI1", "skew:", "the module requires no gotogether"} {
+	for _, want := range []string{"gotogether.steps/1", "gotogether.binding/2", "gotogether.nav/2", "woven ABI1", "skew:", "the module requires no gotogether"} {
 		if !strings.Contains(out.String(), want) && !(want == "the module requires no gotogether" && strings.Contains(out.String(), "not in a module")) {
 			t.Errorf("no %q in:\n%s", want, out.String())
 		}

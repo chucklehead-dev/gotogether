@@ -7,10 +7,22 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-**As of 2026-10-30 (prototype branch).** GR4's first composition experiment is implemented
+Check-receipt first increment (draft PR #3, stacked on #2): validation reports and run
+navigation share structured statuses, ordering-search limits and assumed effects
+through validate/receipt. Whole-run receipts remain independent of cursor state;
+all current navigation producers emit required receipts (nav/2, current only). Grist
+composition aggregation is still separate follow-up work. See [check-receipts.md](check-receipts.md).
+
+Evidence freshness follow-up (included in this branch): `GOTOGETHER_SESSION` labels
+exploration evidence and run manifests. `evidence -session` filters the
+suite before coverage and expectation checks; unscoped completeness checks
+require explicit `-history`. Use a fresh ID and `go test -count=1`.
+
+**As of 2026-10-30 (receipt branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
-`e7ce5f66` so the optional diagnostic types work outside go.work; the
+`db01d3fd` so the shared diagnostic/receipt types and required nav/2
+contract work outside go.work; the
 merged declared-call span increment did not require a core-pin bump. **Nothing is tagged**: every module is pre-release,
 published modules require each other at pseudo-versions, and breaking
 renames still land (R5 waits for the maintainer).

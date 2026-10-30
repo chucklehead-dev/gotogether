@@ -34,7 +34,15 @@ func evidence(args []string) (int, error) {
 	fset := commandFlags("evidence")
 	strict := fset.Bool("strict", false, "exit 1 if a model action, fault point or fault kind is untried by every test")
 	expectFile := fset.String("expect", "", "a file of explorations that must have written evidence, one per line (a test's, TestX or TestX/sub; one exploration, TestX#2; either after its package: its import path or the end of it, examples/hello TestX), # comments (at a line's start or after a space): exit 1 naming each that wrote none. Only explorations write evidence (Explore, Exhaust, Sweep, Mutate, Runs' claims do not)")
+	session := fset.String("session", os.Getenv("GOTOGETHER_SESSION"), "suite invocation ID; only evidence bearing this ID is counted (defaults to GOTOGETHER_SESSION)")
+	history := fset.Bool("history", false, "aggregate historical evidence without claiming current-run completeness")
 	fset.Parse(args)
+	if *history && *session != "" {
+		return 2, fmt.Errorf("evidence: choose -session or -history; unset GOTOGETHER_SESSION for historical aggregation")
+	}
+	if (*strict || *expectFile != "") && *session == "" && !*history {
+		return 2, fmt.Errorf("evidence: completeness checks need -session ID (or GOTOGETHER_SESSION), shared with the test invocation; use a fresh ID and go test -count=1, or -history for historical aggregation")
+	}
 	var expected []string
 	if *expectFile != "" {
 		var err error
@@ -54,6 +62,7 @@ func evidence(args []string) (int, error) {
 		roots = []string{dir}
 	}
 	var es []*suiteEvidence
+	skipped := 0
 	for _, root := range roots {
 		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -76,6 +85,10 @@ func evidence(args []string) (int, error) {
 			} else if e, err = ev.Read(path); err != nil {
 				return err
 			}
+			if *session != "" && e.Session != *session {
+				skipped++
+				return nil
+			}
 			if e.Test == "" {
 				e.Test, _ = filepath.Rel(root, filepath.Dir(path))
 			}
@@ -87,7 +100,15 @@ func evidence(args []string) (int, error) {
 		}
 	}
 	if len(es) == 0 && len(expected) == 0 {
-		return 2, fmt.Errorf("no evidence under %s: run the tests with GOTOGETHER_EVIDENCE=dir", strings.Join(roots, ", "))
+		if *session == "" {
+			return 2, fmt.Errorf("no evidence under %s: run the tests with GOTOGETHER_EVIDENCE=dir", strings.Join(roots, ", "))
+		}
+		return 2, fmt.Errorf("no evidence under %s matching session %q (%d files excluded): run the tests with GOTOGETHER_EVIDENCE=dir and the same fresh GOTOGETHER_SESSION, using go test -count=1", strings.Join(roots, ", "), *session, skipped)
+	}
+	if *session != "" {
+		fmt.Printf("session %q: %d files from other sessions or without identity excluded\n", *session, skipped)
+	} else {
+		fmt.Println("historical evidence: freshness is unknown; this report does not establish current-run completeness")
 	}
 	report, gaps := suiteReport(es)
 	fmt.Print(report)

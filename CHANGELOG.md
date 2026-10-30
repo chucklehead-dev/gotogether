@@ -8,6 +8,16 @@ and adds a line here.
 
 ## Unreleased
 
+- Validation: structured check receipts in report and navigation JSON,
+  shared text summaries, and typed run verdict labels in the TUI. Receipts
+  distinguish inconclusive checks, unperformed completion checks, existential
+  history searches, budget limits and assumed pending effects. Navigation now
+  requires receipts (nav/2, current only) instead of a text verdict.
+
+- Evidence: suite session identity in exploration JSON and run manifests;
+  `evidence -session` excludes stale files, and completeness checks require
+  a session or explicit historical aggregation (`-history`).
+
 The first release. What a user meets, by module:
 
 - Prototype: model-authored diagnostics discovered from Quint documentation

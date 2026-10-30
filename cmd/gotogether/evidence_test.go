@@ -98,6 +98,7 @@ func TestEvidenceFiles(t *testing.T) {
 // test (its explorations and its subtests'), an exploration, or either
 // after its package.
 func TestEvidenceExpect(t *testing.T) {
+	t.Setenv("GOTOGETHER_SESSION", "suite-test")
 	dir := t.TempDir()
 	// as explorations write them: examples/hello is a module of its own,
 	// whose root package is "_"
@@ -106,6 +107,7 @@ func TestEvidenceExpect(t *testing.T) {
 		{Package: "qtest", Import: "github.com/chucklehead-dev/gotogether/qtest", Test: "TestA#2"},
 		{Package: "_", Import: "github.com/chucklehead-dev/gotogether/examples/hello", Test: "TestB/faults#1"},
 	} {
+		e.Session = "suite-test"
 		e.Format, e.Role, e.Runs, e.Conform = qtest.EvidenceFormat, qtest.RoleFaithful, 1, 1
 		d := filepath.Join(dir, e.Package, strings.ReplaceAll(e.Test, "/", "_"))
 		_ = os.MkdirAll(d, 0o755)
@@ -147,5 +149,34 @@ func TestEvidenceExpect(t *testing.T) {
 	_ = os.WriteFile(f, []byte("# nothing\n"), 0o644)
 	if _, err := evidence([]string{"-expect", f, dir}); err == nil || !strings.Contains(err.Error(), "no check in it") {
 		t.Errorf("an empty file: %v", err)
+	}
+}
+
+// A second invocation omits TestOld. Its retained file must not satisfy
+// expectations or contribute coverage, including files predating sessions.
+func TestEvidenceSessionFreshness(t *testing.T) {
+	t.Setenv("GOTOGETHER_SESSION", "current")
+	dir := t.TempDir()
+	for _, x := range []struct{ test, session string }{{"TestOld", "previous"}, {"TestLegacy", ""}, {"TestCurrent", "current"}} {
+		e := &qtest.Evidence{Format: qtest.EvidenceFormat, Role: qtest.RoleFaithful, Session: x.session, Test: x.test, Runs: 1, Conform: 1}
+		if err := e.WriteJSON(filepath.Join(dir, x.test+".json")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	checks := filepath.Join(t.TempDir(), "checks.txt")
+	if err := os.WriteFile(checks, []byte("TestOld\nTestLegacy\nTestCurrent\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out := capture(t, func() (int, error) { return evidence([]string{"-expect", checks, dir}) })
+	if code != 1 || !strings.Contains(out, "wrote no evidence: TestOld, TestLegacy (") || !strings.Contains(out, "suite: 1 explorations, 1 runs") || !strings.Contains(out, "2 files from other sessions or without identity excluded") {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	t.Setenv("GOTOGETHER_SESSION", "")
+	if code, err := evidence([]string{"-expect", checks, dir}); code != 2 || err == nil || !strings.Contains(err.Error(), "fresh ID") {
+		t.Fatalf("unscoped expectations: %d %v", code, err)
+	}
+	code, out = capture(t, func() (int, error) { return evidence([]string{"-history", "-expect", checks, dir}) })
+	if code != 0 || !strings.Contains(out, "historical evidence: freshness is unknown") || !strings.Contains(out, "suite: 3 explorations, 3 runs") {
+		t.Fatalf("history exit %d:\n%s", code, out)
 	}
 }

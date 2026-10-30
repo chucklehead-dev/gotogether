@@ -100,8 +100,8 @@ func TestNavMutantRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(n.Verdict, "rejects apply") {
-		t.Errorf("node %s: %s, want the mutant's rejected apply", n.ID, n.Verdict)
+	if !strings.Contains(n.Receipt.Reason, "rejects apply") {
+		t.Errorf("node %s: %s, want the mutant's rejected apply", n.ID, n.Receipt.Reason)
 	}
 	t.Setenv("GOTOGETHER_MUTANT", "")
 	if _, err := navRun("TestMutant#1:seed=1", pkg, "fail", "", false, false); err == nil || !strings.Contains(err.Error(), "wrote no node") ||

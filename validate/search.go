@@ -13,6 +13,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 // DefaultLinearizeBudget is how many orders a linearization checks per
@@ -46,6 +47,7 @@ type SearchOptions struct {
 // A search is a run's steps as a search ordered them, for Check, and what
 // the search found, for the report (mark).
 type search struct {
+	options SearchOptions
 	// Steps are the order to check: each actor's (or partition's) on one
 	// thread of its own, its pending calls and settle after it.
 	Steps     []qtrace.Step
@@ -232,7 +234,7 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 		return nil, err
 	}
 	lc.mode.byCheck, lc.mode.skew = byCheck, opt.Skew
-	s = &search{again: func() (*search, error) {
+	s = &search{options: opt, again: func() (*search, error) {
 		q := *c
 		q.mode.quintOnly = true
 		return q.search(steps, opt, false)
@@ -460,6 +462,26 @@ func (s *search) mark(rep *Report) {
 		judgeLost(s.binding, a, s.lost[a.Actor])
 		judgeOverlaps(a, s.overlaps[a.Actor])
 		if s.searched {
+			q := &receipt.Search{Goal: "one_conforming_history", BudgetExhausted: s.undecided[a.Actor]}
+			if s.options.Linearize {
+				q.Mode = "linearize"
+				q.OrderBudget = s.options.Budget
+				if q.OrderBudget == 0 {
+					q.OrderBudget = DefaultLinearizeBudget
+				}
+			}
+			if s.options.ResolvePending {
+				if q.Mode != "" {
+					q.Mode = "linearize_resolve_pending"
+				} else {
+					q.Mode = "resolve_pending"
+					q.ResolutionBudget = s.options.ResolveBudget
+					if q.ResolutionBudget == 0 {
+						q.ResolutionBudget = DefaultResolveBudget
+					}
+				}
+			}
+			a.historySearch = q
 			a.Collected = s.collected[a.Actor]
 			judgeAbsent(s.binding, a, s.lost[a.Actor], s.gaps[a.Actor], s.pendingGap(a.Actor), s.recorded[a.Actor])
 		}

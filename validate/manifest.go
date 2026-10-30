@@ -21,6 +21,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/memo"
 	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 // ManifestFormat is the format Manifest.Write writes and ReadManifest
@@ -48,6 +49,11 @@ const ManifestFormat = "gotogether.run/2" // 2: requireFinish, was requireSettle
 type Manifest struct {
 	// Format names this format, ManifestFormat: a reader refuses another.
 	Format string `json:"format"`
+	// Receipt describes the actor judgments recorded in this manifest.
+	Receipt *receipt.Summary `json:"receipt,omitempty"`
+
+	// Session identifies the suite invocation, from GOTOGETHER_SESSION.
+	Session string `json:"session,omitempty"`
 	// Name is what ran: a test's name (qtest), the caller's (validate
 	// -run-info), else the manifest's file name.
 	Name string `json:"name,omitempty"`
@@ -479,6 +485,8 @@ func NewManifest(r RunRecord) (*Manifest, error) {
 	o := r.Search
 	m.Check.Linearize, m.Check.Key, m.Check.Budget, m.Check.ResolvePending = o.Linearize || o.Key != "", o.Key, o.Budget, o.ResolvePending
 	m.Verdict = runVerdictOf(r.Results)
+	summary := (&Report{Actors: r.Results}).Receipt()
+	m.Receipt = &summary
 	if r.Convert != "" {
 		var err error
 		if m.Model.Convert, err = hashed(r.Convert); err != nil {
@@ -503,7 +511,7 @@ func NewManifest(r RunRecord) (*Manifest, error) {
 // (gotogether's version, quint's).
 func emptyManifest(o Options) *Manifest {
 	backend := o.envBackend()
-	return &Manifest{Format: ManifestFormat, Created: time.Now().UTC().Truncate(time.Second),
+	return &Manifest{Session: os.Getenv("GOTOGETHER_SESSION"), Format: ManifestFormat, Created: time.Now().UTC().Truncate(time.Second),
 		Tools: Tools{Gotogether: toolkitVersion(), Quint: quintVersion(o.Quint), Backend: backend}}
 }
 

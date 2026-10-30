@@ -14,6 +14,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate/diagnostic"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 // A command's report for machines (I20): validate -json and simulate
@@ -33,8 +34,10 @@ const ReportFormat = "gotogether.report/1"
 // -json): gotogether.report/1. A field added later is optional; a field
 // changed or removed is a new major.
 type Document struct {
-	Format  string `json:"format"`  // ReportFormat
-	Command string `json:"command"` // "validate", "simulate"
+	// Receipt describes the history judgment, including folded partitions.
+	Receipt *receipt.Summary `json:"receipt,omitempty"`
+	Format  string           `json:"format"`  // ReportFormat
+	Command string           `json:"command"` // "validate", "simulate"
 	// Verdict is "pass", "fail", "no verdict" (every failure has none:
 	// lost or dropped steps, a search's budget) or "error" (the tool
 	// failed: Error says how); Exit the command's exit status.
@@ -75,9 +78,10 @@ type DocInput struct {
 
 // A DocActor is one actor's result (Result) as data.
 type DocActor struct {
-	Actor     string `json:"actor"`
-	Partition string `json:"partition,omitempty"`
-	Steps     int    `json:"steps"`
+	Receipt   *receipt.Actor `json:"receipt,omitempty"`
+	Actor     string         `json:"actor"`
+	Partition string         `json:"partition,omitempty"`
+	Steps     int            `json:"steps"`
 	// Verdict is "pass", "fail" or "no verdict"; Reason why it is not a
 	// pass (Result.Reason).
 	Verdict     string         `json:"verdict"`
@@ -152,24 +156,26 @@ type DocFailure struct {
 // it by (RecordID); Step its place in the replay (1-based; 0 none) and
 // Seq its recorder's number, the model author's indices.
 type DocRecord struct {
-	ID       string         `json:"id"`
-	Step     int            `json:"step,omitempty"`
-	Seq      uint64         `json:"seq"`
-	Recorder string         `json:"recorder,omitempty"`
-	Process  string         `json:"process,omitempty"`
-	Actor    string         `json:"actor,omitempty"`
-	Thread   string         `json:"thread,omitempty"`
-	Time     string         `json:"time,omitempty"`    // RFC 3339, UTC
-	Invoked  string         `json:"invoked,omitempty"` // RFC 3339, UTC
-	Action   string         `json:"action"`
-	Args     map[string]any `json:"args,omitempty"`
-	Obs      map[string]any `json:"obs,omitempty"`
-	Outcome  string         `json:"outcome,omitempty"`
-	Error    string         `json:"error,omitempty"`
-	Source   string         `json:"source,omitempty"` // where it was read
-	Ref      string         `json:"ref,omitempty"`    // the driver's link to its artifact
-	TraceID  string         `json:"traceId,omitempty"`
-	SpanID   string         `json:"spanId,omitempty"`
+	// Ambiguous marks a pending call whose effect is assumed by a search.
+	Ambiguous bool           `json:"ambiguous,omitempty"`
+	ID        string         `json:"id"`
+	Step      int            `json:"step,omitempty"`
+	Seq       uint64         `json:"seq"`
+	Recorder  string         `json:"recorder,omitempty"`
+	Process   string         `json:"process,omitempty"`
+	Actor     string         `json:"actor,omitempty"`
+	Thread    string         `json:"thread,omitempty"`
+	Time      string         `json:"time,omitempty"`    // RFC 3339, UTC
+	Invoked   string         `json:"invoked,omitempty"` // RFC 3339, UTC
+	Action    string         `json:"action"`
+	Args      map[string]any `json:"args,omitempty"`
+	Obs       map[string]any `json:"obs,omitempty"`
+	Outcome   string         `json:"outcome,omitempty"`
+	Error     string         `json:"error,omitempty"`
+	Source    string         `json:"source,omitempty"` // where it was read
+	Ref       string         `json:"ref,omitempty"`    // the driver's link to its artifact
+	TraceID   string         `json:"traceId,omitempty"`
+	SpanID    string         `json:"spanId,omitempty"`
 	// Text is the step as a report prints it.
 	Text string `json:"text"`
 }
@@ -213,6 +219,11 @@ func NewDocument(command string) *Document {
 // AddReport adds rep's issues and actors to d, the passing partitions
 // folded.
 func (d *Document) AddReport(rep *Report) {
+	summary := rep.Receipt()
+	if d.Receipt != nil {
+		summary = mergeReceipts(*d.Receipt, summary)
+	}
+	d.Receipt = &summary
 	for _, i := range rep.Issues {
 		if i.Severity == "info" && i.Kind == "actors" {
 			continue // as Summary: another binding's actors, by its declaration
@@ -254,7 +265,8 @@ func (d *Document) AddReport(rep *Report) {
 
 // Doc is r as data.
 func (r *Result) Doc() DocActor {
-	a := DocActor{Actor: r.Actor, Partition: r.Partition, Steps: r.Steps, Verdict: string(Pass), Reason: r.Reason(),
+	summary := r.Receipt()
+	a := DocActor{Receipt: &summary, Actor: r.Actor, Partition: r.Partition, Steps: r.Steps, Verdict: string(Pass), Reason: r.Reason(),
 		Conformance: string(r.Conforms), Constants: r.Constants, JudgedBy: r.JudgedBy()}
 	switch {
 	case strings.HasPrefix(a.Reason, "no verdict"):
@@ -359,7 +371,7 @@ func (f *Failure) brief() string {
 // recordDoc is step s's record, index its place in the replay (0-based;
 // -1 none).
 func recordDoc(s *qtrace.Step, index int) DocRecord {
-	r := DocRecord{ID: RecordID(s), Seq: s.Seq, Recorder: s.Recorder, Process: s.Process, Actor: s.Actor, Thread: s.Thread,
+	r := DocRecord{Ambiguous: s.Ambiguous, ID: RecordID(s), Seq: s.Seq, Recorder: s.Recorder, Process: s.Process, Actor: s.Actor, Thread: s.Thread,
 		Action: s.Action, Args: s.Args, Obs: s.Obs, Outcome: s.Outcome, Error: s.Error, Source: s.Source, Ref: s.Ref, Text: s.String()}
 	if index >= 0 {
 		r.Step = index + 1

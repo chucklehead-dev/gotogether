@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/validate/navproto"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 
 	"github.com/chucklehead-dev/gotogether/internal/overlay"
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -507,15 +508,15 @@ func (e *engine) navNode(b *navBase, req navproto.Request) (*navproto.Node, erro
 			}
 		}
 	}
-	node.Verdict = "pass"
+	node.Receipt = r.Report.Receipt()
 	switch {
 	case len(r.Steps) == 0:
 		// no step to fail at: what its doubles saw is the lead (a client
 		// refused before its server listened), not a node that reads pass
-		node.Verdict = "no step recorded"
+		node.Receipt.Status = receipt.NotChecked
+		node.Receipt.Reason = "no step recorded"
 		node.Notes = append(node.Notes, r.noSteps())
-	case !r.Report.OK():
-		node.Verdict = r.Report.Reason()
+
 	}
 	if req.Save {
 		if x.corpus == "" {

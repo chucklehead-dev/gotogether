@@ -233,10 +233,12 @@ func names(paths []string) []string {
 // runNodeText is a run node as a person reads it.
 func runNodeText(n *navproto.Node) string {
 	var b strings.Builder
+	b.WriteString("whole-run judgment · independent of cursor\n")
+	b.WriteString(n.Receipt.String())
 	if n.Path != "" { // in words first, the id after
-		fmt.Fprintf(&b, "node %s (%s) of %s: %s\n", n.Path, n.ID, n.Run, n.Verdict)
+		fmt.Fprintf(&b, "node %s (%s) of %s: %s\n", n.Path, n.ID, n.Run, n.Receipt.Status)
 	} else {
-		fmt.Fprintf(&b, "node %s of %s: %s\n", n.ID, n.Run, n.Verdict)
+		fmt.Fprintf(&b, "node %s of %s: %s\n", n.ID, n.Run, n.Receipt.Status)
 	}
 	if n.Folded > 0 {
 		fmt.Fprintf(&b, "  folded %d choices that were no decision\n", n.Folded)

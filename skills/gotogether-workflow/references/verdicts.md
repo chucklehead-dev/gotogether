@@ -299,3 +299,22 @@ With `qtest.ResolvePending()`, an issue `resolve` says what the pending
 calls were taken to have done: info, a resolution conformed, and which (a
 call had no effect, or took effect after step i, before the first settle
 that followed it); warn, none did, the one shown got furthest.
+
+
+## Structured check receipts
+
+Validation JSON includes a `receipt`; each actor also carries its
+receipt, and run-navigation nodes carry the whole nominal run's receipt.
+Read `status` (`pass`, `fail`, `inconclusive`, `not_checked`, `error`)
+and the named checks, not the reason's wording. A pass covers the checks
+performed: an eventual property listed as `not_checked` did not become a
+completion guarantee. `ordering: searched` identifies a search-selected
+candidate; `search.goal: one_conforming_history` is existential, never all
+executions. `budgetExhausted` explains an inconclusive search. `assumedEffects`
+are candidate pending effects, not observations. Other executions are explicitly
+not checked. Model ITF inputs use scope `model_trace`, not collected history.
+
+Run-navigation nodes require receipts (`gotogether.nav/2`, current only). Rebuild
+the test binary and navigator together. The TUI labels whole-run judgments independently of model-cursor states. Grist's local,
+peer-link and combined protocol checks are not automatically aggregated by this
+increment. See docs/check-receipts.md for the implementation scope.

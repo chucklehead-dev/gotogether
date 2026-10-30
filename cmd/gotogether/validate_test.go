@@ -378,6 +378,7 @@ func TestValidateResume(t *testing.T) {
 // gotogether evidence lists the manifest as an external run, which
 // -expect counts.
 func TestValidateManifest(t *testing.T) {
+	t.Setenv("GOTOGETHER_SESSION", "validate-manifest")
 	skip.Quint(t)
 	dir := t.TempDir()
 	log := filepath.Join(dir, "run.jsonl")
@@ -446,6 +447,7 @@ func TestValidateManifest(t *testing.T) {
 // CLI with the test's instance: its constants override the binding's
 // (LIMIT 120 admits a deposit of 110, which LIMIT 100 does not).
 func TestReplayTestManifest(t *testing.T) {
+	t.Setenv("GOTOGETHER_SESSION", "replay-manifest")
 	skip.Quint(t)
 	dir := t.TempDir()
 	t.Setenv("GOTOGETHER_EVIDENCE", dir)
@@ -475,6 +477,10 @@ func TestReplayTestManifest(t *testing.T) {
 	os.WriteFile(checks, []byte("github.com/chucklehead-dev/gotogether/cmd/gotogether "+t.Name()+"\ncmd/gotogether "+t.Name()+"\n"), 0o644)
 	if code, out := capture(t, func() (int, error) { return evidence([]string{"-expect", checks, dir}) }); code != 0 || !strings.Contains(out, "(external: not counted below)") {
 		t.Errorf("evidence -expect: exit %d:\n%s", code, out)
+	}
+	t.Setenv("GOTOGETHER_SESSION", "next-invocation")
+	if code, out := capture(t, func() (int, error) { return evidence([]string{"-expect", checks, dir}) }); code != 1 || !strings.Contains(out, "wrote no evidence") {
+		t.Errorf("old manifests counted: exit %d:\n%s", code, out)
 	}
 }
 

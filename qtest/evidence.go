@@ -23,6 +23,9 @@ import (
 type Evidence struct {
 	// Format names this format, EvidenceFormat: a reader refuses another.
 	Format string `json:"format"`
+	// Session identifies the suite invocation, from GOTOGETHER_SESSION.
+	// Use a fresh ID for each invocation, shared across its test processes.
+	Session string `json:"session,omitempty"`
 	// Role is what the exploration was: "faithful" (the system as it
 	// is), "mutant" (a System.Mutant's, or Mutate's with a mutant on),
 	// "replay" (one run reproduced alone, GOTOGETHER_RUN), "external" (a
@@ -117,12 +120,13 @@ func IsEvidence(path string) bool { return evidence.Is(path) }
 // it.
 func ManifestEvidence(m *validate.Manifest) *Evidence {
 	v := evidence.OfManifest(m)
-	return &Evidence{Format: v.Format, Role: v.Role, Package: v.Package, Import: v.Import, Test: v.Test, Spec: v.Spec, Runs: v.Runs, Conform: v.Conform, FailingBy: v.FailingBy}
+	return &Evidence{Session: v.Session, Format: v.Format, Role: v.Role, Package: v.Package, Import: v.Import, Test: v.Test, Spec: v.Spec, Runs: v.Runs, Conform: v.Conform, FailingBy: v.FailingBy}
 }
 
 // Evidence is the exploration's report.
 func (x *Exploration) Evidence() *Evidence {
 	e := evidenceOf(x.Runs)
+	e.Session = os.Getenv("GOTOGETHER_SESSION")
 	e.Test, e.Spec = x.ref(), x.model
 	e.Format, e.Role, e.Mutant, e.Package, e.Import = EvidenceFormat, x.role(), x.mutation, pkgDir(), importPath()
 	e.Faults = x.faultCoverage()

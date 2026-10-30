@@ -1439,9 +1439,10 @@ left:
   a crash's semantics attach to the shared name (webjobs, raftkv share
   one by necessity). Separate location from incarnation.
 - **Strict mode and evidence (E2).** The nightly is not strict (its
-  fresh-seed runs include the unwoven mutation tests); evidence a
-  renamed test left in a reused directory still counts; Hegel checks
-  write no evidence.
+  fresh-seed runs include the unwoven mutation tests); Hegel checks
+  write no evidence. Session-scoped evidence now excludes retained files
+  from earlier invocations, provided callers use a fresh GOTOGETHER_SESSION
+  and disable test caching (-count=1).
 - **Manifests (E4).** No option sanitizes a manifest itself (sanitize
   the log, then validate it with -manifest).
 - **webjobs (E5).** Bombadil's reproduction diverges on a
