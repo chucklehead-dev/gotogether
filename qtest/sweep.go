@@ -81,12 +81,9 @@ func sweep(t *testing.T, bindingPath string, sw SweepConfig, base exploreSpec, s
 			if sw.Opts != nil {
 				xc.opts = append(append([]Option(nil), xc.opts...), sw.Opts(row)...)
 			}
-			off := row.FaultsOff()
+			xc.without = row.FaultsOff()
 			x := explore(t, bindingPath, xc, func(c qenv.Chooser) error {
 				c = qenv.WithContext(c, qrun.With(qenv.ContextOf(c), rowKey, row))
-				if len(off) > 0 {
-					c = qenv.Without(c, off...)
-				}
 				return scenario(c)
 			})
 			s.Runs[i] = x

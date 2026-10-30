@@ -7,19 +7,25 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Composition follow-up (draft branch): `gristtest.Composition.System` registers
+Run-profile follow-up (current branch): driven explorations resolve execution and
+primary validation policies once, preserve per-row profiles in evidence, and show
+the actual navigation replay policy. Simulator invocations retain their effective
+horizons, caps and reached limits separately. Shared JSON/text/TUI presentation is
+documented in [run-profiles.md](run-profiles.md).
+
+Composition follow-up (merged PR #4): `gristtest.Composition.System` registers
 local model checkers, catalog peer links and an optional universal protocol check
 for every native history, including navigation. `Report.Composition` is canonical;
 normal conformance assertions include applicable checks. Wrong histories, wrong
 service bindings, unknown obligations and order limits cannot silently pass.
 Receipts preserve model-authored diagnostics. See [grist-composition.md](grist-composition.md).
-PRs #2 and #3 are merged; the single current navigation contract is nav/2.
+PRs #2, #3 and #4 are merged; the single current navigation contract is nav/2.
 
 Check-receipt first increment (merged PR #3): validation reports and run
 navigation share structured statuses, ordering-search limits and assumed effects
 through validate/receipt. Whole-run receipts remain independent of cursor state;
 all current navigation producers emit required receipts (nav/2, current only). Grist
-composition aggregation is still separate follow-up work. See [check-receipts.md](check-receipts.md).
+composition aggregation is included by PR #4. See [check-receipts.md](check-receipts.md).
 
 Evidence freshness follow-up (included in this branch): `GOTOGETHER_SESSION` labels
 exploration evidence and run manifests. `evidence -session` filters the

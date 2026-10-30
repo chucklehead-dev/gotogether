@@ -142,7 +142,11 @@ func (c *Checker) runEvaluator() *runEval {
 	}
 	re := &runEval{e: e.replaying(), shadow: mode == "shadow"}
 	if !re.shadow {
-		re.sample = evalSample()
+		if s := c.Options.EvalSample; s != nil {
+			re.sample = sampling{rate: s.Rate, seed: s.Seed}
+		} else {
+			re.sample = evalSample()
+		}
 	}
 	return re
 }

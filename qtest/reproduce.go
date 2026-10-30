@@ -250,7 +250,11 @@ func (x *Exploration) reproduce(r *Run) string {
 		return fmt.Sprintf("go test -run '^%s$' (a fuzz input: the fuzzer saves a new failing one under testdata/fuzz/%s and prints its file; a seed input is the test's f.Add)", strings.ReplaceAll(x.test, "/", "$/^"), strings.SplitN(x.test, "/", 2)[0])
 	}
 	env := ""
-	if allFaults() { // the run's choices are every fault family's
+	all := allFaults()
+	if x.profile != nil {
+		all = x.profile.AllFaults
+	}
+	if all { // the run's choices are every fault family's
 		env = "GOTOGETHER_ALL_FAULTS=1 "
 	}
 	pattern := "^" + strings.ReplaceAll(x.test, "/", "$/^") + "$"

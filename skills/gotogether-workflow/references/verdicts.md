@@ -337,3 +337,9 @@ Manifest primary-binding replay and case drivers that cannot carry registrations
 refuse the operation: reproduce the originating registered System/test instead.
 Composition-only failure shrinking requires a component-aware criterion and is
 explicitly refused by default. No compatibility fallback interprets missing data.
+
+Driven explorations include resolved run profiles and observed simulator limits
+in evidence and navigation JSON. Inspect the effective seed range, fault policy,
+primary validation policy and limits before comparing runs. Custom choosers do
+not imply the System rates were used; navigation uses fixed choices and nominal
+continuation. See [run profiles](../../../docs/run-profiles.md).

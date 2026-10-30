@@ -241,8 +241,12 @@ func New(c Chooser) *Sim {
 	} else if rc, ok := qrun.Current(); ok {
 		base = rc // the run it is created in (qrun.Start, an enclosing simulation)
 	}
+	env, resolved := hooks.SimEnvironmentOf(base)
+	if !resolved {
+		env = hooks.SimEnvironment{AllFaults: os.Getenv("GOTOGETHER_ALL_FAULTS") == "1", Check: os.Getenv("GOTOGETHER_CHECK") == "1"}
+	}
 	s := &Sim{c: c, base: base, names: hooks.FaultNamesOf(base), now: Epoch, start: Epoch, MaxSteps: 100000,
-		Check: os.Getenv("GOTOGETHER_CHECK") == "1", creator: goid(), Hang: 30 * time.Second}
+		Check: env.Check, creator: goid(), Hang: 30 * time.Second}
 	if s.names == nil {
 		// a simulation is a run, whose declarations are its own
 		// (DeclareFaultSite's sites, FaultSites) even outside qtest
@@ -250,7 +254,7 @@ func New(c Chooser) *Sim {
 		s.base = hooks.WithFaultNames(s.base, s.names)
 	}
 	s.net.sim = s
-	if os.Getenv("GOTOGETHER_ALL_FAULTS") == "1" {
+	if env.AllFaults {
 		s.Clocks, s.Stalls, s.allFaults = allFaultsClocks, allFaultsStalls, true
 	}
 	own(s.creator, s, nil)
@@ -1099,7 +1103,10 @@ var ErrMaxSteps = errors.New("qenv: too many scheduling steps (livelock?)")
 // quiet. On the native runtime Run(d) sleeps d of real time.
 // A panic in a task is re-raised here, with its own value (PanicStack has
 // the task's stack).
-func (s *Sim) Run(d time.Duration) error {
+func (s *Sim) Run(d time.Duration) (err error) {
+	if finish := hooks.ObserveSimulation(s.base, s, hooks.Simulation{Native: s.nat != nil, Horizon: d, MaxSteps: s.MaxSteps, Hang: s.Hang, StepsBefore: s.steps}); finish != nil {
+		defer func() { finish(s.steps, errors.Is(err, ErrMaxSteps), s.hung != nil) }()
+	}
 	s.stallsFixed()
 	if s.clocksSet != nil {
 		s.clocksFor() // Clocks changed after the first process: panics

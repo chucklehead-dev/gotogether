@@ -1,5 +1,9 @@
 # Check receipts
 
+[Effective run profiles](run-profiles.md) describe the configuration that
+produced driven histories. Receipts describe what was checked afterward;
+the TUI and JSON carry both without treating configuration as a verdict.
+
 A validation result now carries a structured receipt describing its actual
 checks. Text, report JSON and run-navigation JSON/TUI render the same data.
 All current run-navigation producers emit a required receipt, and consumers use

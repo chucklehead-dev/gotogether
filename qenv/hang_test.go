@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
@@ -15,7 +16,8 @@ import (
 // ended at go test's timeout naming nothing. The watchdog panics naming
 // the task, what blocks it and its stack, and Close still returns.
 func TestHangNamesTheBlockedTask(t *testing.T) {
-	s := qenv.New(qenv.Nominal{})
+	collector := &hooks.Simulations{}
+	s := qenv.New(qenv.WithContext(qenv.Nominal{}, hooks.WithSimulations(context.Background(), collector)))
 	if s.Hang != 30*time.Second {
 		t.Fatalf("New's Hang is %v, want 30s", s.Hang)
 	}
@@ -27,6 +29,9 @@ func TestHangNamesTheBlockedTask(t *testing.T) {
 	})
 	s.Spawn("other", func(ctx context.Context) { qenv.Yield(ctx) })
 	msg := runPanics(t, s)
+	if calls := collector.Calls(); len(calls) != 1 || !calls[0].WatchdogReached || calls[0].StepLimitReached {
+		t.Errorf("watchdog observation: %+v", calls)
+	}
 	for _, want := range []string{"task blocker ran 100ms of wall time without reaching a seam", "SetMaxOpenConns", "Sim.Hang", "blockOnChannel", "chan receive"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("the panic does not say %q:\n%s", want, msg)

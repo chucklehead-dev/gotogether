@@ -13,6 +13,7 @@ import (
 
 	ev "github.com/chucklehead-dev/gotogether/internal/evidence"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/runprofile"
 )
 
 // suiteEvidence is what the evidence command reads of an exploration's
@@ -206,6 +207,9 @@ func suiteReport(es []*suiteEvidence) (string, int) {
 			name = e.Package + " " + e.Test // two packages' tests may share a name
 		}
 		fmt.Fprintf(&b, "%s: %d runs, %d conform", name, e.Runs, e.Conform)
+		if e.Unjudged > 0 {
+			fmt.Fprintf(&b, ", %d unjudged", e.Unjudged)
+		}
 		for _, r := range slices.Sorted(maps.Keys(e.FailingBy)) {
 			fmt.Fprintf(&b, ", %d %s", e.FailingBy[r], r)
 		}
@@ -226,6 +230,17 @@ func suiteReport(es []*suiteEvidence) (string, int) {
 			fmt.Fprintf(&b, " (%s: not counted below)", e.Role)
 		}
 		b.WriteString("\n")
+		for _, run := range slices.Sorted(maps.Keys(e.RunErrors)) {
+			fmt.Fprintf(&b, "  execution error %s: %s\n", run, e.RunErrors[run])
+		}
+		for _, p := range e.Profiles {
+			b.WriteString(p.String())
+			b.WriteByte('\n')
+		}
+		if len(e.Executions) > 0 {
+			b.WriteString(runprofile.ExecutionsString(e.Executions))
+			b.WriteByte('\n')
+		}
 	}
 	fmt.Fprintf(&b, "suite: %d explorations, %d runs\n", len(es), runs)
 	gaps := 0
@@ -237,6 +252,7 @@ func suiteReport(es []*suiteEvidence) (string, int) {
 	for _, e := range all {
 		if e.Role == ev.RoleFaithful {
 			es = append(es, e)
+			gaps += e.Unjudged
 		}
 	}
 	// model actions, by model: taken by some test, else never

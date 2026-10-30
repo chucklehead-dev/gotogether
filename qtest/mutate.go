@@ -9,10 +9,13 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qmut"
+	"github.com/chucklehead-dev/gotogether/validate/runprofile"
 )
 
 // A MutationReport is what exploring the woven mutants found.
 type MutationReport struct {
+	profiles   []runprofile.Profile
+	executions []runprofile.Execution
 	// Unreached are mutants whose code no run of the baseline reached:
 	// coverage's business, not the model's.
 	Unreached []qmut.Mutant
@@ -43,7 +46,26 @@ func (r *MutationReport) Evidence() *Evidence {
 		e = r.Baseline.Evidence()
 	}
 	e.Mutants = r
+	for _, p := range r.profiles {
+		e.Profiles = append(e.Profiles, p.Clone())
+	}
+	for _, execution := range r.executions {
+		e.Executions = append(e.Executions, execution.Clone())
+	}
 	return e
+}
+
+// retainExecution keeps configuration and observed limits of mutant runs.
+// Coverage and conformance counts in aggregate evidence remain the baseline's.
+func (r *MutationReport) retainExecution(x *Exploration) {
+	if x.profile != nil {
+		r.profiles = append(r.profiles, x.profile.Clone())
+	}
+	for _, run := range x.Runs {
+		if run != nil && len(run.simulations) > 0 {
+			r.executions = append(r.executions, (runprofile.Execution{Run: x.ref() + ":" + run.ID(), Simulations: run.simulations}).Clone())
+		}
+	}
 }
 
 // markOf is a mutant's mark by function, change and code.
@@ -221,6 +243,7 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig) *MutationReport {
 			}
 			return nil
 		})
+		rep.retainExecution(x)
 		// killed: a run broke, or the model rejects one, or none recorded a
 		// step where the baseline's did; undecided: no run failed, and some
 		// have no verdict (a search out of budget), which once counted as a

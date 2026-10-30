@@ -14,6 +14,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/validate"
 	"github.com/chucklehead-dev/gotogether/validate/receipt"
+	"github.com/chucklehead-dev/gotogether/validate/runprofile"
 )
 
 // Evidence is what an exploration, a sweep or a mutation run shows, in one
@@ -24,6 +25,11 @@ import (
 type Evidence struct {
 	// Format names this format, EvidenceFormat: a reader refuses another.
 	Format string `json:"format"`
+	// Profiles retain each constituent exploration's effective execution policy.
+	// Sweep rows have their own profiles rather than an invented aggregate policy.
+	Profiles []runprofile.Profile `json:"profiles,omitempty"`
+	// Executions retain observed simulator limits, keyed by native run identity.
+	Executions []runprofile.Execution `json:"executions,omitempty"`
 	// Compositions retain registered per-history composition judgments.
 	Compositions []receipt.Composition `json:"compositions,omitempty"`
 	// Session identifies the suite invocation, from GOTOGETHER_SESSION.
@@ -53,6 +59,10 @@ type Evidence struct {
 	Spec    string `json:"spec,omitempty"`
 	Runs    int    `json:"runs"`
 	Conform int    `json:"conform"`
+	// Unjudged counts runs execution errors prevented the model from judging.
+	Unjudged int `json:"unjudged,omitempty"`
+	// RunErrors names execution failures by native run identity, not model defects.
+	RunErrors map[string]string `json:"runErrors,omitempty"`
 	// FailingBy counts the failing runs by reason: "violates I", "rejects a
 	// (step the model cannot take)", "mismatch after a", "issue".
 	FailingBy map[string]int `json:"failing"`
@@ -129,7 +139,13 @@ func ManifestEvidence(m *validate.Manifest) *Evidence {
 // Evidence is the exploration's report.
 func (x *Exploration) Evidence() *Evidence {
 	e := evidenceOf(x.Runs)
+	if x.profile != nil {
+		e.Profiles = append(e.Profiles, x.profile.Clone())
+	}
 	for _, r := range x.Runs {
+		if r != nil && len(r.simulations) > 0 {
+			e.Executions = append(e.Executions, (runprofile.Execution{Run: x.ref() + ":" + r.ID(), Simulations: r.simulations}).Clone())
+		}
 		if r != nil && r.Report != nil && r.Report.Composition != nil {
 			c := *r.Report.Composition
 			c.Run = x.ref() + ":" + r.ID()
@@ -166,6 +182,17 @@ func (s *SweepResult) Evidence() *Evidence {
 		}
 	}
 	e := all.Evidence()
+	e.Executions = nil
+	e.Compositions = nil
+	for _, x := range s.Runs {
+		if x == nil {
+			continue
+		}
+		child := x.Evidence()
+		e.Profiles = append(e.Profiles, child.Profiles...)
+		e.Executions = append(e.Executions, child.Executions...)
+		e.Compositions = append(e.Compositions, child.Compositions...)
+	}
 	e.Rows = len(s.Rows)
 	return e
 }
@@ -219,6 +246,14 @@ func reason(rep *validate.Report) string {
 
 func (e *Evidence) String() string {
 	var b strings.Builder
+	for _, p := range e.Profiles {
+		b.WriteString(p.String())
+		b.WriteByte('\n')
+	}
+	if len(e.Executions) > 0 {
+		b.WriteString(runprofile.ExecutionsString(e.Executions))
+		b.WriteByte('\n')
+	}
 	fmt.Fprintf(&b, "evidence: %d runs", e.Runs)
 	if e.Rows > 0 {
 		fmt.Fprintf(&b, ", %d rows", e.Rows)
@@ -237,6 +272,9 @@ func (e *Evidence) String() string {
 		fmt.Fprintf(&b, "\n  pct       depth %d, Steps %d: void, runs took up to %d scheduling steps (set Steps to it)", p.Depth, p.Steps, p.MaxSteps)
 	}
 	fmt.Fprintf(&b, "\n  verdicts  %d conform", e.Conform)
+	if e.Unjudged > 0 {
+		fmt.Fprintf(&b, ", %d unjudged", e.Unjudged)
+	}
 	if j := e.Judges; j != nil {
 		fmt.Fprintf(&b, " (%d by the Go evaluator alone, %d of its passes confirmed by quint)", j.Evaluator, j.Confirmed)
 	}
@@ -245,6 +283,9 @@ func (e *Evidence) String() string {
 		fmt.Fprintf(&b, " · %d %s", e.FailingBy[r], r)
 	}
 	b.WriteByte('\n')
+	for _, run := range slices.Sorted(maps.Keys(e.RunErrors)) {
+		fmt.Fprintf(&b, "  execution error %s: %s\n", run, e.RunErrors[run])
+	}
 	for _, v := range e.Vacuous {
 		fmt.Fprintf(&b, "  vacuity   %s\n", v)
 	}

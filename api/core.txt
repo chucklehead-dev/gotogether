@@ -871,7 +871,7 @@ type Sim struct
     method (*Sim) PanicStack() string
     method (*Sim) Process(name string, crashable bool, start func(ctx context.Context)) *Process
     method (*Sim) ResumeFaults()
-    method (*Sim) Run(d time.Duration) error
+    method (*Sim) Run(d time.Duration) (err error)
     method (*Sim) Settle(d time.Duration) error
     method (*Sim) SettleCore(d time.Duration, core ...*Process) error
     method (*Sim) Spawn(name string, fn func(ctx context.Context))
@@ -1785,6 +1785,8 @@ type Claim interface
     String() string
 type Evidence struct
     field Format string `json:"format"`
+    field Profiles []runprofile.Profile `json:"profiles,omitempty"`
+    field Executions []runprofile.Execution `json:"executions,omitempty"`
     field Compositions []receipt.Composition `json:"compositions,omitempty"`
     field Session string `json:"session,omitempty"`
     field Role string `json:"role"`
@@ -1795,6 +1797,8 @@ type Evidence struct
     field Spec string `json:"spec,omitempty"`
     field Runs int `json:"runs"`
     field Conform int `json:"conform"`
+    field Unjudged int `json:"unjudged,omitempty"`
+    field RunErrors map[string]string `json:"runErrors,omitempty"`
     field FailingBy map[string]int `json:"failing"`
     field Faults *qenv.Coverage `json:"faults,omitempty"`
     field Model *ModelCoverage `json:"model,omitempty"`
@@ -2414,6 +2418,9 @@ type Edge struct
     field Action string `json:"action"`
     field Args []NamedValue `json:"args,omitempty"`
     field Picks []NamedValue `json:"picks,omitempty"`
+type EvaluationSampling struct
+    field Rate float64
+    field Seed string
 type Explanation struct
     field Action string `json:"action"`
     field Conditions []Condition `json:"conditions,omitempty"`
@@ -2537,7 +2544,9 @@ type Options struct
     field NoITF bool
     field VerdictsOnly bool
     field Eval string
+    field EvalSample *EvaluationSampling
     field NoEnvBackend bool
+    method (Options) ResolveEnvironment() (Options, error)
 type Report struct
     field Composition *receipt.Composition
     field Issues []qtrace.Issue
@@ -2923,6 +2932,8 @@ type NamedValue struct
     field Name string `json:"name"`
     field Value string `json:"value"`
 type Node struct
+    field Profile *runprofile.Profile `json:"profile,omitempty"`
+    field Execution *runprofile.Execution `json:"execution,omitempty"`
     field Receipt receipt.Summary `json:"receipt"`
     field Diagnostics []diagnostic.Result `json:"diagnostics,omitempty"`
     field Protocol string `json:"protocol"`
@@ -3034,6 +3045,75 @@ type Summary struct
     field Actors []Actor `json:"actors"`
     method (Summary) History() History
     method (Summary) String() string
+
+== github.com/chucklehead-dev/gotogether/validate/runprofile
+func ExecutionsString(executions []Execution) string
+type Execution struct
+    field Run string `json:"run"`
+    field Simulations []Simulation `json:"simulations"`
+    method (Execution) Clone() Execution
+    method (Execution) String() string
+type Exhaust struct
+    field Delays int `json:"delays"`
+    field Faults int `json:"faults"`
+    field Without []string `json:"without"`
+    field MaxRuns int `json:"maxRuns"`
+    field Partial bool `json:"partial"`
+type Profile struct
+    field ID string `json:"id"`
+    field Mutant string `json:"mutant,omitempty"`
+    field Mode string `json:"mode"`
+    field Parallel int `json:"parallel"`
+    field Chooser string `json:"chooser"`
+    field Without []string `json:"without,omitempty"`
+    field Seeds *Seeds `json:"seeds,omitempty"`
+    field Rates *Rates `json:"rates,omitempty"`
+    field Validation Validation `json:"validation"`
+    field Exhaust *Exhaust `json:"exhaust,omitempty"`
+    field Replay string `json:"replay,omitempty"`
+    field Corpus string `json:"corpus,omitempty"`
+    field AllFaults bool `json:"allFaults"`
+    field Check bool `json:"check"`
+    method (Profile) Clone() Profile
+    method (Profile) String() string
+type Rates struct
+    field Default float64 `json:"default"`
+    field Kinds map[string]float64 `json:"kinds"`
+type Scheduler struct
+    field MaxSteps int `json:"maxSteps"`
+    field Hang string `json:"hang"`
+    field StepsBefore int `json:"stepsBefore"`
+    field StepsAfter int `json:"stepsAfter"`
+    field StepLimitReached bool `json:"stepLimitReached"`
+    field WatchdogReached bool `json:"watchdogReached"`
+type Search struct
+    field Linearize bool `json:"linearize"`
+    field Key string `json:"key,omitempty"`
+    field OrderBudget int `json:"orderBudget,omitempty"`
+    field ResolvePending bool `json:"resolvePending"`
+    field ResolveBudget int `json:"resolveBudget,omitempty"`
+    field ClockSkew string `json:"clockSkew"`
+type Seeds struct
+    field Count int `json:"count"`
+    field Offset uint64 `json:"offset"`
+    field Short bool `json:"short"`
+    field TopUpTo int `json:"topUpTo,omitempty"`
+    field Steer int `json:"steer"`
+type Simulation struct
+    field Simulation int `json:"simulation"`
+    field Runtime string `json:"runtime"`
+    field Horizon string `json:"horizon"`
+    field Scheduler *Scheduler `json:"scheduler,omitempty"`
+type Validation struct
+    field Binding string `json:"binding"`
+    field Constants map[string]string `json:"constants,omitempty"`
+    field Invariants []string `json:"invariants"`
+    field ConfirmationRate float64 `json:"confirmationRate"`
+    field ConfirmationSeed string `json:"confirmationSeed,omitempty"`
+    field Quint string `json:"quint"`
+    field Backend string `json:"backend"`
+    field Eval string `json:"eval"`
+    field Search *Search `json:"search,omitempty"`
 
 == github.com/chucklehead-dev/gotogether/woven
 const ABI1 = 1
