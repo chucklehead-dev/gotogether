@@ -463,9 +463,16 @@ func TestMainModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"wrote " + filepath.Join(dir, "model", "shop.qnt"), "wrote " + filepath.Join(dir, "model", "shop_rules.qnt"), "model/shop_gen.qnt", "model/shop_steps.qnt", "shop.binding.yaml", "shop.calls.binding.yaml"} {
+	for _, want := range []string{"wrote " + filepath.Join(dir, "model", "shop.qnt"), "wrote " + filepath.Join(dir, "model", "shop_rules.qnt")} {
 		if !strings.Contains(out, want) {
 			t.Errorf("model -init's output %q lacks %q", out, want)
+		}
+	}
+	// The first model command already generated these artifacts. Initialization
+	// must retain them, without claiming unchanged files were written again.
+	for _, path := range []string{"model/shop_gen.qnt", "model/shop_steps.qnt", "shop.binding.yaml", "shop.calls.binding.yaml"} {
+		if _, err := os.Stat(filepath.Join(dir, path)); err != nil {
+			t.Errorf("generated %s missing after initialization: %v", path, err)
 		}
 	}
 	if _, err := model("-check"); err != nil {
@@ -567,9 +574,10 @@ func TestGenerateWarnsOfChangedInputs(t *testing.T) {
 		t.Errorf("a type dropped: warnings %v", g.Warnings)
 	}
 	var out bytes.Buffer
-	// the command prints them before it fails on the missing rules
+	// The aggregate report retains review warnings after applying mechanical
+	// changes, even when handwritten rules still prevent readiness.
 	_ = grist.MainArgs(context.Background(), tally(false, true), []string{"model", "-dir", dir}, &out, io.Discard)
-	if !strings.Contains(out.String(), "tally model: warning: countEvents no longer folds removed") {
+	if !strings.Contains(out.String(), "warning [model.inputs_changed]") || !strings.Contains(out.String(), "countEvents no longer folds removed") {
 		t.Errorf("the model command's output %q names no warning", out.String())
 	}
 }

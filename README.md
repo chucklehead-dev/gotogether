@@ -133,6 +133,8 @@ testing, where Quint traces drive the implementation). It adds:
   from the app's catalog (`<app> model`), so the app writes only its rules
   and invariants in Quint, and `gristsim.System` explores it under
   crashes, lost answers and isolation levels like any other system.
+  `<app> model -check` reports model-maintenance problems together without writing;
+  `model -json` emits the same read-only [preflight](docs/grist-model-preflight.md) for agents.
   `go run github.com/chucklehead-dev/gotogether/grist/cmd/grist@latest new <name>`
   writes an app whose tests pass on their first run
   ([the user guide](docs/grist-guide.md); the design note,

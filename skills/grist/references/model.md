@@ -297,6 +297,13 @@ GR7: declare a call instead, which grist records, orders and models.
 
 ## Check it alone
 
+`go run ./cmd/<app> model -check` collects all maintenance findings without
+writing. `model -json` is the same read-only check, with one structured report
+on stdout even on failure. Inspect `ok`, `canGenerate`, findings and blocked
+checks; no Quint typecheck runs here. Generation fixes only the mechanical plan
+and still reports manual work. Review warnings survive generation. See
+[model preflight](../../../docs/grist-model-preflight.md).
+
 `gotogether simulate -binding <app>.binding.yaml` runs the model's own
 `step` against the binding's `simulate:` invariants before any Go runs;
 `gristtest.Generated(t, App)` (a `TestGenerated`) fails when the

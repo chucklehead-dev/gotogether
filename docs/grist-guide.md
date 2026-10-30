@@ -513,7 +513,9 @@ other:
 | `catalog` | the catalog as JSON |
 | `catalog -diff deployed.json` | compares with the deployed release's catalog: `safe` (exit 0), `readers first` (exit 3), `breaking` (exit 4), each change with its fix (§7.3) |
 | `verify` | `App.Verify` and `App.CheckUpcasters`, as the node does at boot |
-| `model [-dir DIR] [-check] [-init]` | generates the model's skeleton, the bindings and grist.lock; `-check` writes nothing and fails on a difference (CI); `-init` writes a first `_rules.qnt` and `.qnt` where there are none |
+| `model [-dir DIR] [-init]` | applies the safe generated-file plan for the model, bindings and grist.lock, then reports remaining handwritten work; `-init` creates absent handwritten starter files |
+| `model [-dir DIR] -check [-json]` | inspects without writing; reports stale files, lock changes, missing definitions/imports and review findings together; nonzero exit for error findings or blocked checks |
+| `model [-dir DIR] -json` | the same read-only check as one JSON report on stdout, including on a failed check; incompatible with `-init` |
 | `serve -db DB [flags]` | the HTTP API and the node (§9) |
 | `sizing [flags]` | runs `<app>-sizing`, the app's sizing binary (`gristload.Main`), found beside the binary or on PATH, so the app's binary links none of the load tooling (§9.6) |
 
@@ -549,12 +551,25 @@ the catalog:
 
 You write two files. **`model/<app>_rules.qnt`** holds the holes the
 skeleton calls. Add a `remove-item` command (refusing `short`) with a new
-event `item-removed` folded by `stock`, and the generator says:
+event `item-removed` folded by `stock`. Run `model -check` first; an excerpt
+of its aggregate report looks like:
 
+```text
+inventory model preflight: needs attention (catalog, generation and source inspection; no Quint typecheck)
+  error [model.generated_stale] inventory.binding.yaml: generated file differs from what the application catalog generates
+    fix: regenerate with `inventory model` and commit the generated change
+  error [model.definition_missing] model/inventory_rules.qnt (removeItemNeeds): the handwritten Rules module does not define removeItemNeeds, which the generated skeleton calls [source scan; not semantic proof]
+    fix: define removeItemNeeds in module inventoryRules; for instance: pure def removeItemNeeds(c: RemoveItemArgs, result: str): Set[Read] = Set()
+  warning [model.inputs_changed] model/inventory_rules.qnt: stockEvents folds item-removed now, which it did not when model/inventory_gen.qnt was generated: every fold over it in model/inventory_rules.qnt must handle the new type (a foldl's else branch skips it silently)
+    fix: review and update the handwritten model for the changed catalog inputs
 ```
-inventory model: warning: stockEvents folds item-removed now, which it did not when model/inventory_gen.qnt was generated: every fold over it in model/inventory_rules.qnt must handle the new type (a foldl's else branch skips it silently)
-inventory model: warning: read model stock folds otherwise than when grist.lock was written (its fingerprint changed: ...) ...
-inventory model: model/inventory_rules.qnt does not define removeItemOutcome, removeItemEvents, removeItemNeeds, which the skeleton calls; in module inventoryRules, for instance:
+
+The same report names `removeItemOutcome` and `removeItemEvents`, any other
+stale artifacts, and the lock review. Each missing-definition finding includes
+a starting definition. Write the command's actual rules in `inventoryRules`,
+using these shapes:
+
+```quint
   // remove-item's rule: the outcome its decision reaches on log ("ok" or
   // "short")
   pure def removeItemOutcome(log: List[Event], c: RemoveItemArgs): str = "ok"
@@ -602,12 +617,16 @@ It samples the model, checks the invariants, and reaches each generated
 `possible:` entry or fails: a model whose rules can never refuse `full`
 fails here, before a test could pass vacuously.
 
-When a block changes, regenerate, and read every warning: the first
-above says `stock`'s Quint fold must now subtract removals, which no
-check would notice otherwise (removals would never lower the model's
-stock, and the app's and the model's would agree only while no run
-removed anything). An event appended and folded by no read model gets
-no warning: check that its read models fold it.
+When a block changes, inspect the aggregate findings, regenerate the
+mechanical files, and review the handwritten model. The input-change finding
+above points to `stock`'s Quint fold: if removals should lower stock, the fold
+must model that. Generation retains this finding in its result after updating
+the comparison baseline; rewriting files is not acknowledgment of model review.
+Source scans may also suggest an unread event or missing test wiring. Treat
+those as review prompts with their stated search scope, rather than proof
+that no indirect reader or test exists. Preflight runs no Quint typecheck;
+the model checks and simulation assertions still judge semantic behavior.
+See [the preflight workflow](grist-model-preflight.md).
 
 ## 6. Testing
 
@@ -631,10 +650,12 @@ func TestGenerated(t *testing.T) {
 }
 ```
 
-It fails when the checked-in generated files are not what the catalog
-generates now, naming each and the fix (`go run ./cmd/<app> model`, or
-`GRIST_UPDATE=1 go test -run '^TestGenerated$'`), or when a hole is
-missing.
+It shares the model command's nonwriting preflight and reports stale files,
+lock changes, missing definitions/imports and review findings together.
+`go run ./cmd/<app> model` or `GRIST_UPDATE=1 go test -v -run '^TestGenerated$'`
+applies the safe mechanical plan, then checks again. Unresolved handwritten
+work still fails; `-v` shows review logs even when the update succeeds. Neither operation overwrites
+the app's handwritten rules or invariants.
 
 ### 6.2 Explorations
 
@@ -1204,19 +1225,19 @@ verdict ("NO VERDICT: checks the actors inventory/*/clients").
 
 | You see | It means | Do |
 |---|---|---|
-| `inventory model: model/inventory_rules.qnt does not define X, which the skeleton calls` | a new block's hole | paste the stub into `model/<app>_rules.qnt`, then write the rule |
-| `XEvents folds T now, which it did not when ... was generated` | a fold's inputs changed | handle T in every fold over XEvents (a foldl's else skips it silently) |
-| `generated files differ from what the inventory App's catalog generates` | a block changed without regenerating | `go run ./cmd/<app> model`, commit |
-| `... (grist.lock is stale: read model R's fingerprint changed ...; X version 2 is new)` | the lock, the record of what has been stored, is not the catalog's | `go run ./cmd/<app> model`, commit grist.lock with the change |
-| `warning: event item-removed is appended by command remove-item and read by nothing ... (stock folds events tagged item too: should it fold this one?)` | no read model folds it, no processor handles it, the model reads it nowhere: its events change no decision | fold it (`grist.On(Removed, ...)` in that read model, and in its fold in `model/<app>_rules.qnt`), unless it is a record no decision reads |
-| `event X is appended by no block ... and read by nothing ...: it can never be written or matter` (an error) | dead: every command declares `Appends` and none names it | declare the block that appends it, or remove it |
-| `warning: rule R has a generated mutant ... that no test runs` | nothing shows a run reaching the rule's refusal | `qtest.Mutants{Generated: gristtest.RuleMutants(App)}` and a `gristtest.DroppedRule(App)` case in TestMutant (§6) |
-| `warning: command C (Var) is taken by no acceptance scenario` | the tests write scenarios, none invokes C | a `gristtest.Scenario` with `Var.With(...)`, claimed `qtest.Possible` and run |
-| `event X version N changed shape since grist.lock was written (fields [...], then [...])` | a stored version's struct changed | keep the old struct as `XVN`, add version N+1 with an upcaster (§7.2); if never deployed, delete its lock entry |
-| `the upcaster from version N ignores F` | an old field reaches no later version | copy it, or `.Drops("F")` on purpose |
+| `model.definition_missing` naming X | the handwritten Rules module lacks a definition called by the skeleton | use the finding's starting definition in `model/<app>_rules.qnt`, then write the actual rule |
+| `model.inputs_changed`: XEvents folds T now | the catalog changed the inputs to a handwritten fold | review every fold over XEvents and handle T according to the model (a foldl's else may skip it silently) |
+| `model.generated_stale` or `model.generated_obsolete` | a generated artifact differs or a generated binding variant is no longer declared | inspect the complete report with `model -check` or `model -json`, then run `go run ./cmd/<app> model` and commit the generated changes |
+| `model.generated_stale` at grist.lock, with lock-change details | the stored-schema record differs from the current catalog | review the schema changes, then run `go run ./cmd/<app> model` and commit grist.lock with the change |
+| `model.possible_omission` describing an unread event | catalog/source inspection found no reader in the locations it searched; this is not semantic proof of irrelevance | review whether it should be folded (`grist.On(Removed, ...)` and the Quint fold) or is intentionally a record no decision reads |
+| `model.catalog_unused` describing event X | the catalog declares no producer and the source scan finds no reader | check the declaration and model intent; declare its producer or remove an unused registration |
+| `model.possible_omission` describing rule-mutant wiring | the package-source scan did not find the expected mutant harness calls; indirect wiring may exist | inspect the named search and tests; add `qtest.Mutants{Generated: gristtest.RuleMutants(App)}` and a `gristtest.DroppedRule(App)` case where appropriate (§6) |
+| `model.possible_omission` describing acceptance-scenario wiring | the source scan did not find C among recognized scenario arguments; it may miss indirect construction | inspect the named test wiring; add a `gristtest.Scenario` using `Var.With(...)`, claimed `qtest.Possible` and run, where needed |
+| `model.lock_invalid`: event X version N changed shape | a stored version's struct changed | keep the old struct as `XVN`, add version N+1 with an upcaster (§7.2); if never deployed, delete its lock entry |
+| `model.upcaster_invalid`: the upcaster from version N ignores F | an old field reaches no later version | copy it, or `.Drops("F")` on purpose |
 | `... an upcaster keeps every tag (key and value), and a tag that must change is a new event type` | the upcast changed a tag | keep it; a new tag is a new event type |
 | `X is version N, and this app reads X up to version M: a newer version of the app appended it` | a node older than the event | finish the rollout; next time ship readers first (`grist.WritesVersion`, §7.3) |
-| `read model R folds otherwise than when grist.lock was written` | its fingerprint changed at the same version | expected after a fold change; bump the version if its meaning changed |
+| `model.lock_review`: read model R folds otherwise than when grist.lock was written | its fingerprint changed at the same version | expected after a fold change; bump the version if its meaning changed |
 | `its stored snapshot plus the events after it gives ...; a fold from the start gives ...` | a snapshot of another fold, or taken at the wrong position | a fold changed without a new fingerprint: bump the read model's version |
 | `cannot be served: [...] declare neither Authorize nor Internal` | an open block | `grist.Authorize(...)` or `grist.Internal()` on each |
 | `record <id> is not a transition of the model` with `reject <command>` (`Rejects`) | a commit the model forbids | `the model expects:` is the model's answer to that command (its outcome, what it would append); then the decision, its rule, its condition (`Unconditioned`?), a read the needs say it must cover |

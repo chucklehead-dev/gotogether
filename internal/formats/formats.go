@@ -83,6 +83,10 @@ var (
 	// removed one is a new major.
 	Report = Format{Thing: "report", Major: 1, What: "a command's machine-readable report (validate -json, simulate -json)",
 		Older: "run the command again with this version"}
+	// ModelPreflight is grist's read-only catalog and model-source inspection.
+	ModelPreflight = Format{Thing: "model-preflight", Major: 1, What: "grist model preflight (model -check -json)",
+		Older:   "run the app's model -check -json again with this version",
+		Upgrade: "upgrade gotogether/grist in the application and rebuild its binary"}
 	// Nav is the run navigation protocol between a test binary
 	// (GOTOGETHER_NAV=serve) and gotogether-nav: a session's first line
 	// names it.
@@ -93,7 +97,7 @@ var (
 
 // All is every format, for doctor and the docs.
 func All() []Format {
-	return []Format{Steps, Requests, Binding, Convert, Corpus, Choices, Manifest, Evidence, Model, Report, Nav}
+	return []Format{Steps, Requests, Binding, Convert, Corpus, Choices, Manifest, Evidence, Model, Report, ModelPreflight, Nav}
 }
 
 // Name is the format's name at the major this build writes.
