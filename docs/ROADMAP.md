@@ -34,8 +34,10 @@ concurrent extensions with explicit exhaustion and counterexample identities.
 The inventory-grist adoption rehearsal is built: cancellation and
 confirmation at a shared inventory owner, three planted bugs, local and
 combined checks, and a friction report. Its concrete next candidates are
-phased workload control and order-specific obligation diagnostics; broader
-per-service configuration, cycles, clusters and rollouts need adopter evidence.
+order-specific obligation diagnostics; named prerequisite phases are now built
+with required outcomes, real query observations and explicit fault policy
+(docs/grist-workload-phases.md). Broader per-service configuration, cycles,
+clusters and rollouts need adopter evidence.
 The independent Goo lifecycle modeling trial is validated in
 [casselc/goo#1](https://github.com/casselc/goo/pull/1): two tenants and two
 immutable generations, real kernel APIs, three source mutants shrunk to
@@ -977,7 +979,7 @@ Then, in order, each item reviewed before the next:
   generated (their bindings no longer hand-written); reviewed (§0.10).
   GR2b (§0.11): `gristtest.Exercised` (every block of the catalog taken,
   each command by each outcome; the summary's "never" list apart from
-  grist's helpers), `Takes` by outcome, `gristsim.Config.Prologue`, a
+  grist's helpers), `Takes` by outcome, `gristsim.Config.Phases`, a
   Delivers processor's Skip in its generated model, a refusal undeclared
   naming `grist.Refuses`. A site record ordered after the commit that
   triggered it: built in GR3 (docs/grist-instrumentation.md §3.3, slices 1-2).

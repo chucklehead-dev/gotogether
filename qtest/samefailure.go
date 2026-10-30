@@ -24,7 +24,12 @@ import (
 // With registered composition checks this preserves the primary actor failure
 // only. A composition-only non-pass is refused: reproduce the registered System;
 // shrinking it requires a component-aware criterion.
+// A workload prerequisite failure is also refused: establish setup before
+// shrinking the model failure the workload was intended to reach.
 func SameFailure(r *Run) Expectation {
+	if r != nil && workloadNotReached(r.Err) {
+		panic("qtest.SameFailure: workload prerequisites were not reached; establish setup before shrinking a model failure")
+	}
 	var rep *validate.Report
 	if r != nil {
 		rep = r.Report

@@ -242,17 +242,21 @@ func TestWelcomeDuplicate(t *testing.T) {
 var retirements = gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 8, Alphabet: []string{"a"},
 	Send: []string{"create-counter", "retire-counter"}}
 
-// paying is retirements after a prologue creating and retiring counter
+// paying is retirements after a required phase creating and retiring counter
 // a: every run pays at least once, so a claim about the payment holds in
 // every run, at one seed.
 var paying = func() gristsim.Config {
 	cfg := retirements
-	cfg.Prologue = []gristsim.Call{{Name: "create-counter", Args: CreateCounter{Counter: "a", Name: "a"}}, {Name: "retire-counter", Args: RetireCounter{Counter: "a"}}}
+	// Payout faults are part of this scenario, including faults occurring
+	// before the retirement's answer reaches its client. Keep them configured
+	// while requiring both command outcomes under the same phase caller.
+	cfg.Phases = []gristsim.Phase{{Name: "create and retire payout", Faults: gristsim.FaultsConfigured,
+		Calls: []gristsim.Call{{Name: "create-counter", Args: CreateCounter{Counter: "a", Name: "a"}}, {Name: "retire-counter", Args: RetireCounter{Counter: "a"}}}}}
 	return cfg
 }()
 
-// payOnce is paying's prologue alone (its client only creates): the run's
-// one payment is the prologue's retirement's, so a script's fault on the
+// payOnce is paying's preparation alone (its client only creates): the run's
+// one payment is that phase's retirement's, so a script's fault on the
 // bank's call lands on it.
 var payOnce = func() gristsim.Config {
 	cfg := paying

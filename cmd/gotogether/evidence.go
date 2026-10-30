@@ -230,6 +230,10 @@ func suiteReport(es []*suiteEvidence) (string, int) {
 			fmt.Fprintf(&b, " (%s: not counted below)", e.Role)
 		}
 		b.WriteString("\n")
+		if phases := runprofile.PhasesString(e.Executions); phases != "" {
+			b.WriteString(phases)
+			b.WriteByte('\n')
+		}
 		for _, run := range slices.Sorted(maps.Keys(e.RunErrors)) {
 			fmt.Fprintf(&b, "  execution error %s: %s\n", run, e.RunErrors[run])
 		}

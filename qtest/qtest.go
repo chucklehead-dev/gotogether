@@ -272,6 +272,8 @@ type origin struct {
 // value for is zero (Record makes no choices; an exploration writes no
 // step log).
 type Run struct {
+	// Phases are observed workload prerequisites, independent of model verdicts.
+	Phases      []runprofile.Phase
 	simulations []runprofile.Simulation // actual Sim.Run limits, in invocation order
 	assessment  *receipt.Composition    // captured before the primary report is judged
 	origin      origin                  // where the run came from, in its exploration

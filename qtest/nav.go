@@ -14,7 +14,6 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/validate/navproto"
 	"github.com/chucklehead-dev/gotogether/validate/receipt"
-	"github.com/chucklehead-dev/gotogether/validate/runprofile"
 
 	"github.com/chucklehead-dev/gotogether/internal/overlay"
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -469,8 +468,8 @@ func (e *engine) navNode(b *navBase, req navproto.Request) (*navproto.Node, erro
 		p.Replay = node.Run + " node=" + node.ID
 		node.Profile = &p
 	}
-	if len(r.simulations) > 0 {
-		execution := (runprofile.Execution{Run: node.Run, Simulations: r.simulations}).Clone()
+	if len(r.simulations) > 0 || len(r.Phases) > 0 {
+		execution := r.execution(node.Run)
 		node.Execution = &execution
 	}
 	if b.entropy {

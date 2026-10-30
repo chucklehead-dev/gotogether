@@ -5,8 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/chucklehead-dev/gotogether/validate/runprofile"
 )
 
 // failedEvidence retains execution facts when a failure stopped the exploration
@@ -29,8 +27,8 @@ func (x *Exploration) failedEvidence(origins []origin) *Evidence {
 		} else {
 			e.RunErrors[name] = "not judged: exploration stopped before model validation; see test diagnostics"
 		}
-		if len(r.simulations) > 0 {
-			e.Executions = append(e.Executions, (runprofile.Execution{Run: name, Simulations: r.simulations}).Clone())
+		if len(r.simulations) > 0 || len(r.Phases) > 0 {
+			e.Executions = append(e.Executions, r.execution(name))
 		}
 	}
 	return e

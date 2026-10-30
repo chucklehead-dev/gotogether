@@ -143,8 +143,8 @@ func (x *Exploration) Evidence() *Evidence {
 		e.Profiles = append(e.Profiles, x.profile.Clone())
 	}
 	for _, r := range x.Runs {
-		if r != nil && len(r.simulations) > 0 {
-			e.Executions = append(e.Executions, (runprofile.Execution{Run: x.ref() + ":" + r.ID(), Simulations: r.simulations}).Clone())
+		if r != nil && (len(r.simulations) > 0 || len(r.Phases) > 0) {
+			e.Executions = append(e.Executions, r.execution(x.ref()+":"+r.ID()))
 		}
 		if r != nil && r.Report != nil && r.Report.Composition != nil {
 			c := *r.Report.Composition
@@ -246,6 +246,10 @@ func reason(rep *validate.Report) string {
 
 func (e *Evidence) String() string {
 	var b strings.Builder
+	if phases := runprofile.PhasesString(e.Executions); phases != "" {
+		b.WriteString(phases)
+		b.WriteByte('\n')
+	}
 	for _, p := range e.Profiles {
 		b.WriteString(p.String())
 		b.WriteByte('\n')

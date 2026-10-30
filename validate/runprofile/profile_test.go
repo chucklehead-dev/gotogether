@@ -25,6 +25,17 @@ func TestProfileTextRetainsPoliciesAndDistinguishesReplay(t *testing.T) {
 	}
 }
 
+func TestProfileDoesNotCallUnresolvedModelInvariantsEmpty(t *testing.T) {
+	p := Profile{Validation: Validation{Binding: "model.yaml"}}
+	if text := p.String(); !strings.Contains(text, "invariants: not resolved") || strings.Contains(text, "invariants: none") {
+		t.Fatalf("unloaded model reported empty checks: %s", text)
+	}
+	p.Validation.Invariants = []string{}
+	if text := p.String(); !strings.Contains(text, "invariants: none") {
+		t.Fatalf("resolved empty selection lost: %s", text)
+	}
+}
+
 func TestProfileTextRetainsSearchExclusionsWithoutMutatingPlan(t *testing.T) {
 	excluded := []string{"store.z", "rpc.a"}
 	p := Profile{Mode: "exhaustive", Exhaust: &Exhaust{Delays: 2, Faults: 1, MaxRuns: 20, Partial: true, Without: excluded}, Validation: Validation{Search: &Search{Linearize: true, OrderBudget: 7, ResolvePending: true, ResolveBudget: 11, Key: "account", ClockSkew: "2ms"}}}

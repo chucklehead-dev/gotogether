@@ -151,7 +151,9 @@ for it. No binding is written by hand.
    A processor reads only its trigger prefix: arbitrate a cancellation race
    in a conditioned command at the owner. Treat a handled business refusal
    explicitly as an answered effect; return transport/unknown errors for
-   retry. Prologue waits for root command answers, not downstream effects.
+   retry. Use named prerequisite phases to require actual call outcomes and bounded
+   query observations before starting later work; select each phase's fault policy
+   explicitly. See [workload phases](../../../docs/grist-workload-phases.md).
    Use `gristtest.CheckProtocolOrders` with a positive limit and a callback
    that judges each ordering as supplied (`validate.Checker.Check`).
    Check errors first, then Counterexample, then Exhaustive; a limit hit
@@ -219,10 +221,8 @@ for it. No binding is written by hand.
    `store.<app>.commit`'s rate to reach commit faults in few seeds), `Tenants` and `Alphabet` (one tenant and two
    letters for contention), `CommitFaults`, `Check`, `Send` (each op drawn
    uniformly from the list: a name listed twice is sent about twice as
-   often), `Prologue` (`[]gristsim.Call{{Name: "join", Args: Join{...}}}`:
-   calls made in order, each answered, before any client's first: the
-   state a block that needs others first depends on, a member joined
-   before borrows), `Doubles` (a declared dependency's handlers, else its
+   often), `Phases` (named calls with required outcomes and bounded query-result
+   observations before random clients, with an explicit fault policy per phase), `Doubles` (a declared dependency's handlers, else its
    default double), `Setup` (what is no call: a `grist.NewDep`'s value,
    reached through a processor's ctx; a `NewSite` double records its own
    effect with `actor` `<app>/<tenant>` and `process` the App's name:

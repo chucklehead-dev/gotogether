@@ -24,6 +24,8 @@ actions:
     args: { result: '{{.outcome}}' }
   reserve:
     args: { result: '{{.outcome}}' }
+  allocation:
+    expect: 'allocationAnswer(log, { order: {{.order}}, caller: {{.caller}} }) == { units: {{.obs.units}}, status: {{.obs.status}} }'
 
 invariants: []
 
@@ -48,3 +50,4 @@ simulate:
       when: 'nextID(answered) != Set() and STRS.exists(order => STRS.exists(caller => reserveOutcome(log, { order: order, caller: caller }) == "too-late"))'
     - name: reserve.full
       when: 'nextID(answered) != Set() and STRS.exists(order => STRS.exists(caller => reserveOutcome(log, { order: order, caller: caller }) == "full"))'
+    - allocation

@@ -65,7 +65,7 @@ by its input bytes and does not claim a seeded sample.
 
 The profile describes configuration owned by the driver. A separate
 `execution` on a navigation node, and per-run `executions` in evidence, retain
-observed `qenv.Sim.Run` invocations. Each invocation records the requested
+observed `qenv.Sim.Run` and `RunUntil` invocations, with their operation kinds. Each invocation records the requested
 virtual-time horizon and runtime. Deterministic runtimes also record the
 effective scheduler step cap, wall-clock watchdog, cumulative steps before and
 after the call, and whether the step cap or watchdog was reached. Native runtimes omit
@@ -83,3 +83,7 @@ The shared data and text live in `validate/runprofile`, independent of the
 simulation engine and judgment machinery. The authoring configuration remains
 the System and workflow configuration; callers do not need to maintain a
 second profile by hand.
+
+Execution records also carry named workload prerequisites, with call outcomes,
+query observations and deadlines. These remain independent from model judgments;
+see [workload phases](grist-workload-phases.md).

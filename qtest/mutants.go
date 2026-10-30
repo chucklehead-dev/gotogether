@@ -160,6 +160,9 @@ func (m Mutants) Overlay(t testing.TB, name string) string {
 // navigate line names the mutant (GOTOGETHER_MUTANT=<name> gotogether
 // nav ..., with GOTOGETHER_MUTANT_PACKAGE=<Package> when it is not
 // "."), which the navigator builds with its overlay.
+// A child test must pass its stated expected-catch assertion. A workload
+// prerequisite failure exits the child unsuccessfully and fails this harness;
+// it is not accepted as evidence that the mutant was caught.
 func (m Mutants) Run(t *testing.T) {
 	t.Helper()
 	if Mutant() != "" {

@@ -118,16 +118,17 @@ func peerGraph(app *grist.App, cfg Config) ([]*grist.App, error) {
 // startPeers wires every API before attaching dependencies, so an App
 // may call a peer allocated later and several Apps reach one shared
 // store/node/API. No task runs until Run starts the simulation.
-func startPeers(s *qenv.Sim, app *grist.App, cfg Config) (map[*grist.App]grist.Transport, []*grist.Relay, map[*qenv.Process]bool, error) {
+func startPeers(s *qenv.Sim, app *grist.App, cfg Config) (map[*grist.App]grist.Transport, map[*grist.App]*client.Client, []*grist.Relay, map[*qenv.Process]bool, error) {
 	apps, err := peerGraph(app, cfg)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	type peer struct {
 		app    *grist.App
 		served func(context.Context) context.Context
 	}
 	trs := map[*grist.App]grist.Transport{}
+	clients := map[*grist.App]*client.Client{}
 	var relays []*grist.Relay
 	procs := map[*qenv.Process]bool{}
 	var peers []*peer
@@ -136,17 +137,17 @@ func startPeers(s *qenv.Sim, app *grist.App, cfg Config) (map[*grist.App]grist.T
 		st := simstore.New(db)
 		relay, err := grist.NewRelay(st)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		for _, t := range cfg.Tenants {
 			if err := st.CreateTenant(s.Context(), t); err != nil {
-				return nil, nil, nil, err
+				return nil, nil, nil, nil, err
 			}
 		}
 		db.CommitFaults = cfg.CommitFaults
 		h, err := grist.NewHandler(a, st, grist.CallerFromHeader(CallerHeader))
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("gristsim: peer %s: %w", a.Name, err)
+			return nil, nil, nil, nil, fmt.Errorf("gristsim: peer %s: %w", a.Name, err)
 		}
 		p := &peer{app: a}
 		var srv *qhttp.Server
@@ -159,7 +160,8 @@ func startPeers(s *qenv.Sim, app *grist.App, cfg Config) (map[*grist.App]grist.T
 		srv = qhttp.NewServer(s, a.Name, node)
 		tr := qhttp.NewTransport(srv)
 		tr.Timeout = DependencyTimeout
-		trs[a] = client.Peer(&client.Client{App: a, URL: srv.URL(), HTTP: &http.Client{Transport: tr}, CallerHeader: CallerHeader})
+		clients[a] = &client.Client{App: a, URL: srv.URL(), HTTP: &http.Client{Transport: tr}, CallerHeader: CallerHeader, MaxAttempts: MaxAttempts, RetryDelay: RetryDelay, Budget: &client.Budget{Ratio: MaxAttempts, Max: MaxAttempts}}
+		trs[a] = client.Peer(clients[a])
 		peers = append(peers, p)
 		relays = append(relays, relay)
 		procs[node] = true
@@ -167,8 +169,8 @@ func startPeers(s *qenv.Sim, app *grist.App, cfg Config) (map[*grist.App]grist.T
 	for _, p := range peers {
 		p.served, err = serveDependencies(s, p.app, nil, nil, trs)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("gristsim: peer %s: %w", p.app.Name, err)
+			return nil, nil, nil, nil, fmt.Errorf("gristsim: peer %s: %w", p.app.Name, err)
 		}
 	}
-	return trs, relays, procs, nil
+	return trs, clients, relays, procs, nil
 }

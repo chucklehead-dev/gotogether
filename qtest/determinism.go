@@ -2,6 +2,7 @@ package qtest
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 
 	"github.com/chucklehead-dev/gotogether/internal/stepdiff"
@@ -31,7 +32,23 @@ func sameRun(a, b *Run) string {
 	if a.Unsettled != b.Unsettled {
 		return fmt.Sprintf("settling: %q, then %q", a.Unsettled, b.Unsettled)
 	}
-	return stepdiff.Diff(a.Steps, b.Steps)
+	if diff := stepdiff.Diff(a.Steps, b.Steps); diff != "" {
+		return diff
+	}
+	if len(a.Phases) != len(b.Phases) {
+		return "workload prerequisites: the declared phase count changed"
+	}
+	for i := range a.Phases {
+		x, xerr := json.Marshal(a.Phases[i])
+		y, yerr := json.Marshal(b.Phases[i])
+		if xerr != nil || yerr != nil {
+			return fmt.Sprintf("workload phase %d: invalid observation JSON (%v, %v)", i, xerr, yerr)
+		}
+		if !bytes.Equal(x, y) {
+			return fmt.Sprintf("workload phase %d (%s): declared prerequisites or observed results changed", i, a.Phases[i].Name)
+		}
+	}
+	return ""
 }
 
 // checkDeterminism runs seed again and fails t, naming the first

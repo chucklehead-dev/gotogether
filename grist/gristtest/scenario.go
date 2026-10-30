@@ -31,7 +31,7 @@ func Scenario(name string, steps ...grist.Invocation) qtest.Expectation {
 		for j, p := range inv.Params {
 			k = k.With(p, inv.Values[j])
 		}
-		takes[i] = k.Hint(fmt.Sprintf("send %s after the steps before it (gristsim Config.Prologue for a fixed start, Config.Gen for its arguments)", inv))
+		takes[i] = k.Hint(fmt.Sprintf("send %s after the steps before it (gristsim Config.Phases for required setup outcomes and query observations, Config.Gen for its arguments)", inv))
 	}
 	return qtest.NamedScenario(name, takes...)
 }

@@ -17,6 +17,20 @@ still holds: its reusable API allows additional allocations under a new
 command id, while checkout buys exactly one unit. Stable effect keys
 are therefore part of the checkout business contract.
 
+## Observable workload prerequisites
+
+The preparation phase requires successful checkout placements, then polls the
+inventory service's `allocation` query until both orders are actually held.
+Customer cancellation/confirmation begins only afterward. The query has an
+independent local-model answer, so readiness does not read private Go state or
+stand in for the model. Generated arguments contain no completion sleeps.
+
+The phase explicitly disables new setup faults and has a bounded virtual-time
+deadline; the subsequent workload uses its configured faults. The separate
+delayed-reservation contrast keeps its scripted fault active and deliberately
+cancels before waiting for a held allocation. Neither observation path settles
+or heals the system. See [workload phases](../../docs/grist-workload-phases.md).
+
 ## Run it
 
 From this directory, with Go and Quint installed:
@@ -36,7 +50,7 @@ mutant names exit 2. Run all tests with `go test -short -v ./...`.
 | `TestGenerated` | three App catalogs | all local bindings, skeletons and locks are current |
 | `TestProtocolCorrelation` | edit one projected payload to name another existing order | rejects the first allocation whose payload differs from its originating intent |
 | `TestModels` | models alone | placing then cancelling is possible; a third allocation is refused full |
-| `TestFaithful` | two clients, two placed orders, cancel/confirm intents | local conformance, peer links, settles, and every causal protocol ordering under the explicit limit |
+| `TestFaithful` | named reservation phase observes both held allocations before two clients send cancel/confirm intents | real peer query prerequisites, local conformance, peer links, settles, and every causal protocol ordering under the explicit limit |
 | `TestDecisionRaces` | cancellation first; authorization first | cancellation then authorization refused not-held, or one shipment then cancellation refused too-late |
 | `TestLostReservationReply` | a scripted lost inventory response | the retry occurs, the stable key allocates one unit, all models conform |
 | `TestCapacity` | three checkout intents as a boundary probe | two allocations succeed and a third is refused full |

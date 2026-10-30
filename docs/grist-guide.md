@@ -692,7 +692,7 @@ func TestFaithfulAtClients(t *testing.T) {
 | `Tenants`, `Clients`, `Ops` | how many tenants, clients per tenant, operations per client |
 | `Send` | which commands and queries clients send (a name listed twice is sent twice as often) |
 | `Alphabet`, `Ints`, `Gen` | the arguments: strings and integers drawn from these, or a generator per block |
-| `Prologue` | calls made in order, each answered, before any client's first (a member joined before borrows); it does not wait for downstream processors |
+| `Phases` | named prerequisites before random clients: require call outcomes and actual query results within a virtual-time bound; each phase explicitly selects configured or disabled faults ([workload phases](grist-workload-phases.md)) |
 | `Isolation` | the store's level (Serializable, ReadCommitted) |
 | `CommitFaults` | commits of unknown outcome (`store.<app>.commit`) |
 | `SQL` | the app on grist/sqlstore over qsql: the real tier's statements |
@@ -723,7 +723,7 @@ taken in some run: each command ok and refused by each declared refusal
 and checkpoint, each call and site. A miss names how to reach it:
 
 ```
-addItem with outcome full (0 of 3 runs): no add-item was refused full by its rules (capacity): send it where its decision says ok and a rule refuses what it appends (Config.Gen's arguments, the state Config.Prologue leaves), or except "addItem.full" with the reason
+addItem with outcome full (0 of 3 runs): no add-item was refused full by its rules (capacity): send it where its decision says ok and a rule refuses what it appends (Config.Gen's arguments, the state Config.Phases leaves), or except "addItem.full" with the reason
 ```
 
 `except` names a block (`"receipts"`), a command's outcome
@@ -1244,7 +1244,7 @@ verdict ("NO VERDICT: checks the actors inventory/*/clients").
 | the failing `record:` line: `counters/counters-0/fc95… (node counters-0, incarnation fc95…)` or `grist/counters/t1` | who recorded the step: a node's API (its pod and start), or the relay of the store's commits for tenant t1 (no pod: the store does not say which node committed) | the pod's logs at the record's time; for a commit, the command's id in its arguments |
 | `validate -json`, `-report junit=F` / `sarif=F` | the same report as data (`gotogether.report/1`) and for CI | route alerts on `verdict` and `reason`; `brief` is the line for the page |
 | `show a mismatch after <block>` (`Mismatch`) | head, batch or answer differ from the model's | a raw append, a fold disagreeing with its def, a query answering otherwise |
-| `X with outcome Y (0 of N runs): no X committed: send it where its rule says ok (gristsim Config.Prologue ..., Config.Gen ..., a name listed twice in Config.Send ...)` | the workload never reached it | widen `Send`, `Prologue`, `Gen`, or except it with the reason |
+| `X with outcome Y (0 of N runs): no X committed: send it where its rule says ok (gristsim Config.Phases ..., Config.Gen ..., a name listed twice in Config.Send ...)` | the workload never reached it | widen `Send`, `Phases`, `Gen`, or except it with the reason |
 | `do not settle`, naming tasks | work left at the end of a run | a node left down, a dependency that never answers, a trigger no poller reaches |
 | `grist: conflict: the decision's reads changed on every try` (409) | contention past `ConditionTries` | the key's final answer: retry under a new id, or read less (a keyed read model) |
 | `grist: the command's outcome is unknown (an append may have committed): retry it with the same id` (503) | an append's commit was not confirmed | retry with the same id; the marker answers |

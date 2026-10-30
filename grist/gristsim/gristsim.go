@@ -77,14 +77,9 @@ type Config struct {
 	// uniformly from the list, so a name listed twice is sent about twice
 	// as often.
 	Send []string
-	// Prologue are calls made in order, each answered (or left pending
-	// after MaxAttempts tries) before the next, before any client sends
-	// its first: the state the workload's random operations need (a member
-	// joined, a book catalogued), which random sends of a command that
-	// needs earlier ones mostly refuse. Its calls are recorded as every
-	// client's are (caller "prologue", ids <tenant>-prologue-<k>) and go
-	// through the same faults; the clients wait for it.
-	Prologue []Call
+	// Phases establish named, bounded prerequisites before random clients start.
+	// Each phase declares its fault policy and required call/query observations.
+	Phases []Phase
 	// SQL runs the app on grist/sqlstore over qsql (qsql.Open on the run's
 	// qenv.Store) instead of simstore: the statements the real tier runs
 	// on PostgreSQL and SQLite, interleaved statement by statement at
@@ -378,14 +373,20 @@ func serviceOf(s *qenv.Sim, name string, h grist.Handlers) *qenv.Service[callReq
 	})
 }
 
-// A Call is one call of a Prologue: a command or query by name, with its
-// arguments (a value of its arguments' type, or their JSON as a
-// json.RawMessage or []byte; nil draws them as the workload does: Gen, else
-// generated), to Tenant ("": each tenant, in Config.Tenants' order).
+// Call is a phase's command or query. App is nil for the root application,
+// otherwise one of Config.Peers' actual Apps. Empty Tenant expands the call to
+// every configured tenant in order. Args is its arguments' value or JSON; nil
+// draws arguments once from the workload generator. Expect defaults to "ok";
+// any other required outcome must be a declared or framework refusal.
 type Call struct {
+	App    *grist.App
 	Tenant string
+	// Caller is the business principal (default "phase"), independent of the
+	// phase's display name. Set it explicitly when a scenario needs other users.
+	Caller string
 	Name   string
 	Args   any
+	Expect string
 }
 
 // request is a client's request to the node.
@@ -453,6 +454,10 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 		return err
 	}
 	cfg = defaults(cfg)
+	phases, err := planPhases(app, cfg)
+	if err != nil {
+		return err
+	}
 	if from := cfg.From; from != nil {
 		if err := from.Verify(); err != nil {
 			return fmt.Errorf("gristsim: Config.From: %w", err)
@@ -525,7 +530,7 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 			operate(s, st, relay, m.Resume)
 		}
 	}
-	peers, peerRelays, peerNodes, err := startPeers(s, app, cfg)
+	peers, peerClients, peerRelays, peerNodes, err := startPeers(s, app, cfg)
 	if err != nil {
 		return err
 	}
@@ -558,7 +563,7 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 		}
 		handler = h
 	}
-	w := &workload{app: app, cfg: cfg, s: s, rolled: map[*qenv.Process]bool{}, starts: map[*qenv.Process]func(context.Context){}}
+	w := &workload{app: app, cfg: cfg, s: s, peerClients: peerClients, rolled: map[*qenv.Process]bool{}, starts: map[*qenv.Process]func(context.Context){}}
 	nodes := map[*qenv.Process]bool{}
 	if cfg.Cluster != nil {
 		w.cluster = startCluster(w, st, relay, deps)
@@ -591,25 +596,12 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 			names = slices.DeleteFunc(names, func(n string) bool { return !slices.Contains(olds, n) })
 		}
 	}
-	// the prologue, if any, before every client's first call
-	prologue, err := w.prologue()
-	if err != nil {
+	if err := w.runPhases(phases); err != nil {
 		return err
-	}
-	done := len(prologue) == 0
-	if !done {
-		s.Spawn("prologue", func(ctx context.Context) {
-			ctx = qobs.Thread(ctx)
-			for _, req := range prologue {
-				w.call(ctx, req)
-			}
-			done = true
-		})
 	}
 	for i := 1; i <= cfg.Clients; i++ {
 		s.Spawn(fmt.Sprintf("client%d", i), func(ctx context.Context) {
 			ctx = qobs.Thread(ctx)
-			qenv.Wait(ctx, func() bool { return done })
 			for op := 1; op <= cfg.Ops; op++ {
 				if w.cluster != nil && op > 1 {
 					qenv.Sleep(ctx, w.cluster.c.Pace) // a cluster's calls span its drains
@@ -807,7 +799,8 @@ type workload struct {
 	s   *qenv.Sim
 	api *qenv.Service[request, response]
 	// http is the HTTP tier's client (Config.HTTP), api nil
-	http *client.Client
+	http        *client.Client
+	peerClients map[*grist.App]*client.Client
 	// cluster is a Cluster's nodes and router (Config.Cluster), api nil
 	cluster *cluster
 	// rolled are the nodes a rollout (Config.From) has upgraded, or is
@@ -825,57 +818,16 @@ func (w *workload) release(p *qenv.Process) *grist.App {
 	return w.cfg.From
 }
 
-// prologue are the Prologue's requests, in order, each call to each of
-// its tenants: an unknown name, an unknown tenant or arguments that do
-// not encode are the Config's error.
-func (w *workload) prologue() ([]request, error) {
-	var out []request
-	known := map[string]bool{}
-	for _, n := range append(w.app.Commands(), w.app.Queries()...) {
-		known[n] = true
-	}
-	for k, c := range w.cfg.Prologue {
-		if !known[c.Name] {
-			return nil, fmt.Errorf("gristsim: Config.Prologue[%d]: %q is no command or query of %s (its blocks: %v)", k, c.Name, w.app.Name, append(w.app.Commands(), w.app.Queries()...))
-		}
-		tenants := w.cfg.Tenants
-		if c.Tenant != "" {
-			if !slices.Contains(tenants, c.Tenant) {
-				return nil, fmt.Errorf("gristsim: Config.Prologue[%d]: tenant %q is not one of Config.Tenants %v", k, c.Tenant, tenants)
-			}
-			tenants = []string{c.Tenant}
-		}
-		for _, t := range tenants {
-			var args json.RawMessage
-			switch a := c.Args.(type) {
-			case nil:
-				args = w.gen(c.Name)
-			case json.RawMessage:
-				args = a
-			case []byte:
-				args = a
-			default:
-				b, err := json.Marshal(a)
-				if err != nil {
-					return nil, fmt.Errorf("gristsim: Config.Prologue[%d] (%s): its arguments: %w", k, c.Name, err)
-				}
-				args = b
-			}
-			out = append(out, request{Query: isQuery(w.app, c.Name), Name: c.Name, Args: args,
-				Env: grist.Envelope{ID: fmt.Sprintf("%s-prologue-%d", t, k+1), Tenant: t, Caller: "prologue"}})
-		}
-	}
-	return out, nil
-}
-
 // gen draws name's arguments through the run's Chooser.
-func (w *workload) gen(name string) json.RawMessage {
+func (w *workload) gen(name string) json.RawMessage { return w.genFor(w.app, name) }
+
+func (w *workload) genFor(app *grist.App, name string) json.RawMessage {
 	pick := func(n int) int { return w.s.Choose("gristsim.arg", n) }
 	var v any
-	if g := w.cfg.Gen[name]; g != nil {
+	if g := w.cfg.Gen[name]; g != nil && app == w.app {
 		v = g(pick)
 	} else {
-		v = Gen(w.app.ArgsType(name), w.cfg.Alphabet, w.cfg.Ints, pick)
+		v = Gen(app.ArgsType(name), w.cfg.Alphabet, w.cfg.Ints, pick)
 	}
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -913,14 +865,25 @@ func (w *workload) all(typ reflect.Type) []json.RawMessage {
 // call sends req until it is answered (at most MaxAttempts tries, the
 // same id each time: a lost or late answer, or one saying the outcome is
 // unknown, is sent again), recording it as a client's call.
-func (w *workload) call(ctx context.Context, req request) {
+func (w *workload) callApp(ctx context.Context, app *grist.App, req request) calls.Answer {
+	if app == w.app {
+		return w.call(ctx, req)
+	}
+	c := w.peerClients[app]
+	if c == nil {
+		return calls.Answer{Err: "phase targets an App whose peer client is not deployed"}
+	}
+	a, _ := calls.Capture(ctx, func(ctx context.Context) error { return c.Do(ctx, req.Env, req.Name, req.Args) })
+	return a
+}
+
+func (w *workload) call(ctx context.Context, req request) calls.Answer {
 	if w.http != nil {
-		w.http.Do(ctx, req.Env, req.Name, req.Args) // it records the call as below, retrying under the same key
-		return
+		a, _ := calls.Capture(ctx, func(ctx context.Context) error { return w.http.Do(ctx, req.Env, req.Name, req.Args) })
+		return a
 	}
 	if w.cluster != nil {
-		w.record(ctx, req, func() response { return w.cluster.send(ctx, req) })
-		return
+		return w.record(ctx, req, func() response { return w.cluster.send(ctx, req) })
 	}
 	older := 0
 	send := func() (response, bool) {
@@ -936,7 +899,7 @@ func (w *workload) call(ctx context.Context, req request) {
 		}
 		return response{}, false
 	}
-	w.record(ctx, req, func() response {
+	return w.record(ctx, req, func() response {
 		resp, ok := send()
 		if !ok {
 			resp = response{Err: "unanswered"}
@@ -983,8 +946,8 @@ func Do(ctx context.Context, app *grist.App, st grist.Store, env grist.Envelope,
 
 // record records req as a client's call: invoked before, done with the
 // answer do gives (pending if none came).
-func (w *workload) record(ctx context.Context, req request, do func() response) {
-	calls.Record(ctx, w.app, req.Env, req.Name, req.Args, func() calls.Answer { return answerOf(do()) })
+func (w *workload) record(ctx context.Context, req request, do func() response) calls.Answer {
+	return calls.Record(ctx, w.app, req.Env, req.Name, req.Args, func() calls.Answer { return answerOf(do()) })
 }
 
 // answerOf is a response as its client saw it: a Retry or an unanswered

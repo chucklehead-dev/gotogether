@@ -155,40 +155,40 @@ func TestDo(t *testing.T) {
 	}
 }
 
-// A Prologue's calls are made in order, each to each tenant (or the one
+// A phase's calls are made in order, each to each tenant (or the one
 // it names), before any client's first call: every client's invocation
-// comes after the last prologue call's completion, in the recording.
-func TestPrologue(t *testing.T) {
+// comes after the last phase call's completion, in the recording.
+func TestPhaseCallOrdering(t *testing.T) {
 	for _, cfg := range []gristsim.Config{{}, {HTTP: true}} {
-		cfg.Prologue = []gristsim.Call{{Name: "note", Args: Note{Key: "p"}}, {Tenant: "t2", Name: "note", Args: []byte(`{"topic":"q"}`)}, {Name: "count", Args: nil}}
+		cfg.Phases = []gristsim.Phase{{Name: "prepare", Faults: gristsim.FaultsDisabled, Calls: []gristsim.Call{{Name: "note", Args: Note{Key: "p"}}, {Tenant: "t2", Name: "note", Args: []byte(`{"topic":"q"}`)}, {Name: "count", Args: nil}}}}
 		var order []string
-		lastPrologue, firstClient := -1, -1
+		lastPhase, firstClient := -1, -1
 		for i, s := range run(t, cfg) {
 			if !s.Invocation && s.Call == 0 {
 				continue
 			}
 			id, _ := s.Args["id"].(string)
 			switch {
-			case s.Invocation && strings.Contains(id, "-prologue-") && s.Action == "note":
+			case s.Invocation && strings.Contains(id, "-phase-1-") && s.Action == "note":
 				order = append(order, id+":"+fmtAny(s.Args["topic"]))
-			case s.Args["caller"] == "prologue" || strings.Contains(id, "-prologue-"):
+			case s.Args["caller"] == "phase" || strings.Contains(id, "-phase-1-"):
 			case s.Invocation && firstClient < 0 && !strings.HasPrefix(fmtAny(s.Args["caller"]), "probe"):
 				firstClient = i
 			}
-			if s.Args["caller"] == "prologue" && !s.Invocation {
-				lastPrologue = i
+			if s.Args["caller"] == "phase" && !s.Invocation {
+				lastPhase = i
 			}
 		}
-		if want := []string{"t1-prologue-1:p", "t2-prologue-1:p", "t2-prologue-2:q"}; !reflect.DeepEqual(order, want) {
-			t.Errorf("HTTP %v: the prologue's notes %v, want %v (in order, each to each tenant but the one naming t2)", cfg.HTTP, order, want)
+		if want := []string{"t1-phase-1-call_outcome-1:p", "t2-phase-1-call_outcome-1:p", "t2-phase-1-call_outcome-2:q"}; !reflect.DeepEqual(order, want) {
+			t.Errorf("HTTP %v: the phase's notes %v, want %v (in order, each to each tenant but the one naming t2)", cfg.HTTP, order, want)
 		}
-		if lastPrologue < 0 || firstClient < 0 || firstClient < lastPrologue {
-			t.Errorf("HTTP %v: the prologue's last completion at %d, the clients' first call at %d: want the clients after it", cfg.HTTP, lastPrologue, firstClient)
+		if lastPhase < 0 || firstClient < 0 || firstClient < lastPhase {
+			t.Errorf("HTTP %v: the phase's last completion at %d, the clients' first call at %d: want the clients after it", cfg.HTTP, lastPhase, firstClient)
 		}
 	}
-	err := gristsim.Run(qenv.NewSeeded(1), app(), gristsim.Config{Prologue: []gristsim.Call{{Name: "nope"}}})
+	err := gristsim.Run(qenv.NewSeeded(1), app(), gristsim.Config{Phases: []gristsim.Phase{{Name: "bad", Faults: gristsim.FaultsConfigured, Calls: []gristsim.Call{{Name: "nope"}}}}})
 	if err == nil || !strings.Contains(err.Error(), `"nope" is no command or query`) {
-		t.Errorf("an unknown name in the prologue: %v, want the Config's error naming it", err)
+		t.Errorf("an unknown name in the phase: %v, want the Config's error naming it", err)
 	}
 }
 

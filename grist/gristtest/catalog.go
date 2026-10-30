@@ -35,11 +35,11 @@ func Catalog(app *grist.App) qtest.Catalog {
 	var out []qtest.Take
 	for _, cmd := range c.Commands {
 		out = append(out, qtest.Takes(cmd.Quint).Outcome("ok").Hint(fmt.Sprintf(
-			"no %s committed: send it where its rule says ok (gristsim Config.Prologue for the calls it needs first, Config.Gen for its arguments, a name listed twice in Config.Send to send it twice as often)", cmd.Name)))
+			"no %s committed: send it where its rule says ok (gristsim Config.Phases for the calls it needs first, Config.Gen for its arguments, a name listed twice in Config.Send to send it twice as often)", cmd.Name)))
 		for _, r := range cmd.Refuses {
-			hint := fmt.Sprintf("no %s was refused %s: send it where its rule refuses it so (Config.Gen's arguments, the state Config.Prologue leaves), or except %q with the reason", cmd.Name, r, cmd.Quint+"."+r)
+			hint := fmt.Sprintf("no %s was refused %s: send it where its rule refuses it so (Config.Gen's arguments, the state Config.Phases leaves), or except %q with the reason", cmd.Name, r, cmd.Quint+"."+r)
 			if rules := refusing(c, cmd, r); len(rules) > 0 {
-				hint = fmt.Sprintf("no %s was refused %s by its rules (%s): send it where its decision says ok and a rule refuses what it appends (Config.Gen's arguments, the state Config.Prologue leaves), or except %q with the reason", cmd.Name, r, strings.Join(rules, ", "), cmd.Quint+"."+r)
+				hint = fmt.Sprintf("no %s was refused %s by its rules (%s): send it where its decision says ok and a rule refuses what it appends (Config.Gen's arguments, the state Config.Phases leaves), or except %q with the reason", cmd.Name, r, strings.Join(rules, ", "), cmd.Quint+"."+r)
 			}
 			out = append(out, qtest.Takes(cmd.Quint).Outcome(r).Hint(hint))
 		}

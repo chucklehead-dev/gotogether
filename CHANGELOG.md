@@ -8,6 +8,15 @@ and adds a line here.
 
 ## Unreleased
 
+- grist: named `Config.Phases` replace `Prologue`. Required outcomes and real
+  query observations gate later work within true virtual-time deadlines, with
+  explicit fault policy and stable caller identity. Shared JSON/TUI execution
+  records distinguish unmet prerequisites from model verdicts; setup failures
+  refuse mutant-kill and model-failure shrink classification. Inventory uses an
+  independent allocation query model instead of pacing sleeps.
+- qenv: `RunUntil` stops at driver completion without settling; `PauseFaults`
+  suppresses future fault injection without healing existing partitions.
+
 - grist: one nonwriting model preflight shared by `model -check`, read-only
   `model -json` and `gristtest.Generated`. Aggregate artifact drift, schema-lock
   changes, missing handwritten definitions/imports and scoped review findings.

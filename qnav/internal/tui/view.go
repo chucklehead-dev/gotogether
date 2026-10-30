@@ -294,14 +294,29 @@ func (m *Model) runScreen(c *entry) screen {
 	st := m.st
 	var sc screen
 	status := n.Receipt.Status
+	hasPhases := n.Execution != nil && len(n.Execution.Phases) > 0
+	unreachedPhase := ""
+	if hasPhases {
+		for _, phase := range n.Execution.Phases {
+			if phase.Status != "completed" {
+				unreachedPhase = strings.Join(strings.Fields(phase.Name), " ")
+				if unreachedPhase == "" {
+					unreachedPhase = "unnamed phase"
+				}
+				break
+			}
+		}
+	}
 	label := string(status)
-	if n.Receipt.Reason != "" {
+	if n.Receipt.Reason != "" && !hasPhases {
 		label += " · " + n.Receipt.Reason
 	}
 	verdict := st.changed.Render(label)
 	switch status {
 	case receipt.Pass:
-		verdict = st.pass.Render(label)
+		if unreachedPhase == "" {
+			verdict = st.pass.Render(label)
+		}
 	case receipt.Fail, receipt.Error:
 		verdict = st.fail.Render(label)
 	}
@@ -314,7 +329,16 @@ func (m *Model) runScreen(c *entry) screen {
 	if n.Folded > 0 {
 		at += fmt.Sprintf(", %d folded", n.Folded)
 	}
-	sc.head = append(sc.head, st.section.Render("verdict ")+verdict+st.faint.Render("  (the run this node makes, nominal after it; "+at+")"))
+	judgment := st.section.Render("verdict ") + verdict
+	if hasPhases {
+		judgment = st.section.Render("model ") + verdict
+		if unreachedPhase != "" {
+			judgment += st.changed.Render(" · workload not reached: " + unreachedPhase)
+		} else {
+			judgment += st.faint.Render(" · prerequisites reached")
+		}
+	}
+	sc.head = append(sc.head, judgment+st.faint.Render("  (the run this node makes, nominal after it; "+at+")"))
 	if ch := n.Choice; ch != nil {
 		sc.branches = append(sc.branches, "", st.section.Render(fmt.Sprintf("next choice: %s (%d options)", ch.Kind, ch.N)))
 		sc.branches = append(sc.branches, m.branchLines(c, max(3, m.h/4), func(i int) string {
@@ -331,6 +355,10 @@ func (m *Model) runScreen(c *entry) screen {
 	var out []string
 	out = append(out, st.section.Render("whole-run judgment · independent of cursor"))
 	out = append(out, strings.Split(strings.TrimSpace(n.Receipt.String()), "\n")...)
+	if n.Execution != nil && len(n.Execution.Phases) > 0 {
+		out = append(out, "")
+		out = append(out, strings.Split(strings.TrimSpace(n.Execution.PhasesString()), "\n")...)
+	}
 	steps := n.Steps
 	out = append(out, "", st.section.Render(fmt.Sprintf("steps so far (%d)", len(steps))))
 	const shown = 8

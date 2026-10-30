@@ -83,6 +83,7 @@ func TestSkillLinksResolve(t *testing.T) {
 // a report format it no longer prints) would send agents to it.
 func TestSkillsAvoidDeprecated(t *testing.T) {
 	deprecated := []struct{ text, instead string }{
+		{"Config.Prologue", "Config.Phases with required outcomes and bounded observations"},
 		{"navproto.Node.Verdict", "navproto.Node.Receipt.Status and Receipt.Reason"},
 		{"qtest.Check(", "qtest.Validate(...).Expect"},
 		{"validate.Simulate", "model.Simulate (validate/model)"},
