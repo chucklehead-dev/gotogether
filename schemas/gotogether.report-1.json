@@ -680,6 +680,72 @@
                 },
                 "type": "array"
               },
+              "diagnostics": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "actor": {
+                      "type": "string"
+                    },
+                    "cause": {
+                      "type": "string"
+                    },
+                    "evidence": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expected": {
+                            "type": "string"
+                          },
+                          "intent": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "subject": {
+                            "type": "string"
+                          }
+                        },
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "type": "array"
+                    },
+                    "omitted": {
+                      "type": "integer"
+                    },
+                    "projection": {
+                      "type": "string"
+                    },
+                    "property": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "type": "array"
+              },
               "judgedBy": {
                 "type": "string"
               },
@@ -939,6 +1005,72 @@
                 },
                 "type": "array"
               },
+              "diagnostics": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "actor": {
+                      "type": "string"
+                    },
+                    "cause": {
+                      "type": "string"
+                    },
+                    "evidence": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expected": {
+                            "type": "string"
+                          },
+                          "intent": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "subject": {
+                            "type": "string"
+                          }
+                        },
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "type": "array"
+                    },
+                    "omitted": {
+                      "type": "integer"
+                    },
+                    "projection": {
+                      "type": "string"
+                    },
+                    "property": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "type": "array"
+              },
               "judgedBy": {
                 "type": "string"
               },
@@ -988,6 +1120,747 @@
             ]
           },
           "type": "array"
+        },
+        "composition": {
+          "additionalProperties": false,
+          "properties": {
+            "error": {
+              "type": "string"
+            },
+            "history": {
+              "type": "string"
+            },
+            "local": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "applicable": {
+                    "type": "boolean"
+                  },
+                  "binding": {
+                    "type": "string"
+                  },
+                  "judgment": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actors": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "actor": {
+                              "type": "string"
+                            },
+                            "assumedEffects": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "action": {
+                                    "type": "string"
+                                  },
+                                  "args": {
+                                    "additionalProperties": {
+                                      "type": [
+                                        "string",
+                                        "number",
+                                        "boolean",
+                                        "null"
+                                      ]
+                                    },
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "candidateRecord": {
+                                    "type": "string"
+                                  },
+                                  "position": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
+                              "type": "array"
+                            },
+                            "checks": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "type": "string"
+                                  }
+                                },
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
+                              "type": "array"
+                            },
+                            "diagnostics": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "actor": {
+                                    "type": "string"
+                                  },
+                                  "cause": {
+                                    "type": "string"
+                                  },
+                                  "evidence": {
+                                    "type": "string"
+                                  },
+                                  "items": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "expected": {
+                                          "type": "string"
+                                        },
+                                        "intent": {
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "type": "string"
+                                        },
+                                        "subject": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "type": [
+                                        "object",
+                                        "null"
+                                      ]
+                                    },
+                                    "type": "array"
+                                  },
+                                  "omitted": {
+                                    "type": "integer"
+                                  },
+                                  "projection": {
+                                    "type": "string"
+                                  },
+                                  "property": {
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "scope": {
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "type": "string"
+                                  },
+                                  "total": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
+                              "type": "array"
+                            },
+                            "judgedBy": {
+                              "type": "string"
+                            },
+                            "ordering": {
+                              "type": "string"
+                            },
+                            "partition": {
+                              "type": "string"
+                            },
+                            "reason": {
+                              "type": "string"
+                            },
+                            "scope": {
+                              "type": "string"
+                            },
+                            "search": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "budgetExhausted": {
+                                  "type": "boolean"
+                                },
+                                "goal": {
+                                  "type": "string"
+                                },
+                                "mode": {
+                                  "type": "string"
+                                },
+                                "orderBudget": {
+                                  "type": "integer"
+                                },
+                                "resolutionBudget": {
+                                  "type": "integer"
+                                }
+                              },
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          },
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "type": "array"
+                      },
+                      "otherExecutions": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      }
+                    },
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "target": {
+                    "type": "string"
+                  }
+                },
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "type": "array"
+            },
+            "peers": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "applicable": {
+                    "type": "boolean"
+                  },
+                  "binding": {
+                    "type": "string"
+                  },
+                  "judgment": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actors": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "actor": {
+                              "type": "string"
+                            },
+                            "assumedEffects": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "action": {
+                                    "type": "string"
+                                  },
+                                  "args": {
+                                    "additionalProperties": {
+                                      "type": [
+                                        "string",
+                                        "number",
+                                        "boolean",
+                                        "null"
+                                      ]
+                                    },
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "candidateRecord": {
+                                    "type": "string"
+                                  },
+                                  "position": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
+                              "type": "array"
+                            },
+                            "checks": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "type": "string"
+                                  }
+                                },
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
+                              "type": "array"
+                            },
+                            "diagnostics": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "actor": {
+                                    "type": "string"
+                                  },
+                                  "cause": {
+                                    "type": "string"
+                                  },
+                                  "evidence": {
+                                    "type": "string"
+                                  },
+                                  "items": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "expected": {
+                                          "type": "string"
+                                        },
+                                        "intent": {
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "type": "string"
+                                        },
+                                        "subject": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "type": [
+                                        "object",
+                                        "null"
+                                      ]
+                                    },
+                                    "type": "array"
+                                  },
+                                  "omitted": {
+                                    "type": "integer"
+                                  },
+                                  "projection": {
+                                    "type": "string"
+                                  },
+                                  "property": {
+                                    "type": "string"
+                                  },
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "scope": {
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "type": "string"
+                                  },
+                                  "total": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
+                              "type": "array"
+                            },
+                            "judgedBy": {
+                              "type": "string"
+                            },
+                            "ordering": {
+                              "type": "string"
+                            },
+                            "partition": {
+                              "type": "string"
+                            },
+                            "reason": {
+                              "type": "string"
+                            },
+                            "scope": {
+                              "type": "string"
+                            },
+                            "search": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "budgetExhausted": {
+                                  "type": "boolean"
+                                },
+                                "goal": {
+                                  "type": "string"
+                                },
+                                "mode": {
+                                  "type": "string"
+                                },
+                                "orderBudget": {
+                                  "type": "integer"
+                                },
+                                "resolutionBudget": {
+                                  "type": "integer"
+                                }
+                              },
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "status": {
+                              "type": "string"
+                            }
+                          },
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "type": "array"
+                      },
+                      "otherExecutions": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      }
+                    },
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "target": {
+                    "type": "string"
+                  }
+                },
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "type": "array"
+            },
+            "protocol": {
+              "additionalProperties": false,
+              "properties": {
+                "applicable": {
+                  "type": "boolean"
+                },
+                "binding": {
+                  "type": "string"
+                },
+                "checked": {
+                  "type": "integer"
+                },
+                "configured": {
+                  "type": "boolean"
+                },
+                "counterexample": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "type": "string"
+                      },
+                      "actor": {
+                        "type": "string"
+                      },
+                      "id": {
+                        "type": "string"
+                      }
+                    },
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "type": "array"
+                },
+                "exhaustive": {
+                  "type": "boolean"
+                },
+                "judgment": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "actors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "actor": {
+                            "type": "string"
+                          },
+                          "assumedEffects": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "action": {
+                                  "type": "string"
+                                },
+                                "args": {
+                                  "additionalProperties": {
+                                    "type": [
+                                      "string",
+                                      "number",
+                                      "boolean",
+                                      "null"
+                                    ]
+                                  },
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
+                                },
+                                "candidateRecord": {
+                                  "type": "string"
+                                },
+                                "position": {
+                                  "type": "integer"
+                                }
+                              },
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "type": "array"
+                          },
+                          "checks": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "reason": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "type": "string"
+                                }
+                              },
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "type": "array"
+                          },
+                          "diagnostics": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "actor": {
+                                  "type": "string"
+                                },
+                                "cause": {
+                                  "type": "string"
+                                },
+                                "evidence": {
+                                  "type": "string"
+                                },
+                                "items": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "expected": {
+                                        "type": "string"
+                                      },
+                                      "intent": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "type": "string"
+                                      },
+                                      "subject": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "type": "array"
+                                },
+                                "omitted": {
+                                  "type": "integer"
+                                },
+                                "projection": {
+                                  "type": "string"
+                                },
+                                "property": {
+                                  "type": "string"
+                                },
+                                "reason": {
+                                  "type": "string"
+                                },
+                                "scope": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "type": "string"
+                                },
+                                "total": {
+                                  "type": "integer"
+                                }
+                              },
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "type": "array"
+                          },
+                          "judgedBy": {
+                            "type": "string"
+                          },
+                          "ordering": {
+                            "type": "string"
+                          },
+                          "partition": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "scope": {
+                            "type": "string"
+                          },
+                          "search": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "budgetExhausted": {
+                                "type": "boolean"
+                              },
+                              "goal": {
+                                "type": "string"
+                              },
+                              "mode": {
+                                "type": "string"
+                              },
+                              "orderBudget": {
+                                "type": "integer"
+                              },
+                              "resolutionBudget": {
+                                "type": "integer"
+                              }
+                            },
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "type": "array"
+                    },
+                    "otherExecutions": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    }
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "limit": {
+                  "type": "integer"
+                },
+                "quantifier": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "target": {
+                  "type": "string"
+                }
+              },
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "run": {
+              "type": "string"
+            }
+          },
+          "type": [
+            "object",
+            "null"
+          ]
         },
         "otherExecutions": {
           "type": "string"

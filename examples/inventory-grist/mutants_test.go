@@ -1,6 +1,7 @@
 package checkout
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 func saveProjection(t *testing.T, native []qtrace.Step) []qtrace.Step {
@@ -44,6 +46,61 @@ func saveProjection(t *testing.T, native []qtrace.Step) []qtrace.Step {
 	}
 	return steps
 }
+
+// The local-only assertion in TestMutant must still pass: this defect is
+// exposed by the system model. Its explanation must also survive composition
+// assessment and the same JSON representation consumed by tools and the TUI.
+func assertMissingReleaseComposition(t *testing.T, checks gristtest.Composition, native []qtrace.Step) {
+	t.Helper()
+	assessed, err := checks.Assess(t.Context(), native)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(assessed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var composition receipt.Composition
+	if err := json.Unmarshal(raw, &composition); err != nil {
+		t.Fatal(err)
+	}
+	if len(composition.Local) != 3 || len(composition.Peers) != 2 {
+		t.Fatalf("composition omitted a local model or peer edge: %+v", composition)
+	}
+	for _, rows := range [][]receipt.Component{composition.Local, composition.Peers} {
+		for _, row := range rows {
+			if row.Status != receipt.Pass && !(row.Status == receipt.NotChecked && !row.Applicable) {
+				t.Fatalf("missing release was incorrectly blamed on a local model or peer link: %+v", row)
+			}
+		}
+	}
+	if composition.Protocol.Status != receipt.Fail || len(composition.Protocol.Counterexample) == 0 || composition.Protocol.Judgment == nil {
+		t.Fatalf("composition lost the system-model counterexample: %+v", composition.Protocol)
+	}
+	for _, actor := range composition.Protocol.Judgment.Actors {
+		for _, d := range actor.Diagnostics {
+			if d.Property != "allIntentsAnswered" {
+				continue
+			}
+			if d.Actor != "protocol/t1" || d.Cause != "defect" {
+				t.Fatalf("composition changed the diagnostic scope or cause: %+v", d)
+			}
+			if d.Status == "unavailable" && os.Getenv("QUINT_BACKEND") == "typescript" && d.Reason != "" {
+				return // This backend has no exact state from a failing-test ITF.
+			}
+			if d.Status != "available" {
+				t.Fatalf("composition lost diagnostic availability: %+v", d)
+			}
+			for _, item := range d.Items {
+				if item.Kind == "cancellation" && item.Subject == "a" && item.Intent == "t1-c1-1" {
+					return
+				}
+			}
+		}
+	}
+	t.Fatal("composition JSON lost the model-authored unanswered cancellation intent")
+}
+
 func TestMutant(t *testing.T) {
 	mutant := qtest.Mutant()
 	if mutant == "" {
@@ -57,6 +114,7 @@ func TestMutant(t *testing.T) {
 		cfg.Send = []string{"cancel"}
 		e := gristsim.System(commits, App, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 1, Chooser: quiet})
 		e.Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
+		checks := compositionChecks(t)
 		for _, r := range e.Runs {
 			localChecks(t, r.Recorded, true)
 			if count(r.Recorded, "inventory/t1", "reserve", "") != 1 || count(r.Recorded, "inventory/t1", "cancel", "") != 0 {
@@ -80,7 +138,7 @@ func TestMutant(t *testing.T) {
 			if !explained {
 				t.Fatal("missing release did not identify the model's unanswered cancellation intent")
 			}
-
+			assertMissingReleaseComposition(t, checks, r.Recorded)
 		}
 	case "freshKey":
 		cfg := config()

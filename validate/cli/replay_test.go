@@ -11,6 +11,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 // accountRun writes a step log of the account (a deposit of 5 observing
@@ -112,5 +113,12 @@ func TestReplayIgnoresQuintBackend(t *testing.T) {
 	}
 	if !r.Same || len(r.Notes) == 0 || !strings.Contains(strings.Join(r.Notes, "\n"), "QUINT_BACKEND=no-such-backend ignored") {
 		t.Errorf("replay %s, notes %q", r.Got.Verdict, r.Notes)
+	}
+}
+
+func TestReplayRefusesToDropCompositionChecks(t *testing.T) {
+	m := &validate.Manifest{Receipt: &receipt.Summary{Composition: &receipt.Composition{}}}
+	if _, err := Replay(t.Context(), m, validate.Options{}); err == nil || !strings.Contains(err.Error(), "originating registered System/test") {
+		t.Fatalf("composition replay: %v", err)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 // Shown is whether a rerun showed the failure a shrink keeps.
@@ -50,21 +51,37 @@ type Keep interface {
 // failure is judged by (an undecided actor, a lost tail, a gap, an
 // invariant of a conforming actor left unjudged, which may have failed
 // first) has no verdict for it: Undecided, never a pass.
+//
+// A composition-only non-pass has no primary actor fingerprint and is refused.
+// With both primary and composition checks, this criterion preserves the primary
+// actor failure only; it does not fingerprint or preserve composition failures.
 func SameFailure(rep *validate.Report) Keep {
 	var want []string
 	if rep != nil {
 		want = firstFailures(rep)
 	}
-	return sameFailure{want}
+	if rep != nil && rep.Composition != nil && len(want) == 0 {
+		if status, _ := rep.Composition.Problem(); status != receipt.Pass {
+			panic("qshrink.SameFailure: composition-only failure: reproduce the registered System; shrinking requires a component-aware criterion")
+		}
+	}
+	return sameFailure{want: want, primaryOnly: rep != nil && rep.Composition != nil}
 }
 
-type sameFailure struct{ want []string }
+type sameFailure struct {
+	want        []string
+	primaryOnly bool
+}
 
 func (s sameFailure) String() string {
 	if len(s.want) == 0 {
 		return "the same failure as a run that does not fail"
 	}
-	return "the same failure (" + strings.Join(s.want, "; ") + ")"
+	scope := "the same failure"
+	if s.primaryOnly {
+		scope = "the same primary actor failure"
+	}
+	return scope + " (" + strings.Join(s.want, "; ") + ")"
 }
 
 // Shows reports whether rep fails as the run SameFailure was given.
@@ -95,6 +112,11 @@ func (s sameFailure) Why(rep *validate.Report) string {
 	var got []string
 	if rep != nil {
 		got = firstFailures(rep)
+	}
+	if len(got) == 0 && rep != nil && rep.Composition != nil {
+		if status, _ := rep.Composition.Problem(); status != receipt.Pass {
+			return "only a composition non-pass is present; this criterion preserves a primary actor failure"
+		}
 	}
 	if len(got) == 0 {
 		return "it fails nowhere"
@@ -138,15 +160,23 @@ func unjudgedActor(a *validate.Result) bool {
 			first, failed = at(f), true
 		}
 	}
-	if a.Conforms == validate.Fail {
+	if a.Conforms == validate.Fail && (a.Failure == nil || a.Failure.Kind != "error") {
 		stand(a.Failure)
 	}
 	for _, inv := range a.Invariants {
-		if inv.Verdict == validate.Fail {
+		if inv.Verdict == validate.Fail && (inv.Failure == nil || inv.Failure.Kind != "error") {
 			stand(inv.Failure)
 		}
 	}
 	if !failed {
+		if a.Conforms == validate.Fail && a.Failure != nil && a.Failure.Kind == "error" {
+			return true
+		}
+		for _, i := range a.Invariants {
+			if i.Verdict == validate.Fail && i.Failure != nil && i.Failure.Kind == "error" {
+				return true
+			}
+		}
 		if a.Conforms == validate.NotEvaluated || len(a.Lost) > 0 || len(a.Gaps) > 0 {
 			return true
 		}
@@ -157,11 +187,18 @@ func unjudgedActor(a *validate.Result) bool {
 		}
 		return false
 	}
+	if a.Conforms == validate.Fail && a.Failure != nil && a.Failure.Kind == "error" && at(a.Failure) < first {
+		return true
+	}
 	if a.Conforms == validate.NotEvaluated && at(a.Failure) < first {
 		return true
 	}
 	for _, inv := range a.Invariants {
 		switch {
+		case inv.Verdict == validate.Fail && inv.Failure != nil && inv.Failure.Kind == "error":
+			if at(inv.Failure) < first {
+				return true
+			}
 		case inv.Verdict != validate.NotEvaluated:
 		case inv.Failure != nil && at(inv.Failure) < first:
 			return true
@@ -187,7 +224,7 @@ func firstFailures(rep *validate.Report) []string {
 				first, at = f, i
 			}
 		}
-		if f := a.Failure; f != nil && a.Conforms == validate.Fail {
+		if f := a.Failure; f != nil && f.Kind != "error" && a.Conforms == validate.Fail {
 			name := f.Kind + " " + failedAction(f)
 			if f.Kind == "state" {
 				if m := mismatched(f); m != "" {
@@ -198,7 +235,7 @@ func firstFailures(rep *validate.Report) []string {
 		}
 		for i := range a.Invariants {
 			inv := &a.Invariants[i]
-			if inv.Verdict != validate.Fail {
+			if inv.Verdict != validate.Fail || inv.Failure != nil && inv.Failure.Kind == "error" {
 				continue
 			}
 			kind := "invariant"

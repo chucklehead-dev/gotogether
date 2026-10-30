@@ -1785,6 +1785,7 @@ type Claim interface
     String() string
 type Evidence struct
     field Format string `json:"format"`
+    field Compositions []receipt.Composition `json:"compositions,omitempty"`
     field Session string `json:"session,omitempty"`
     field Role string `json:"role"`
     field Mutant string `json:"mutant,omitempty"`
@@ -1963,6 +1964,7 @@ type SweepResult struct
     field Runs []*Exploration
     method (*SweepResult) Evidence() *Evidence
 type System struct
+    field Assess func(context.Context, []qtrace.Step) (receipt.Composition, error)
     field Binding string
     field Opts []Option
     field Rates qenv.Rates
@@ -2537,6 +2539,7 @@ type Options struct
     field Eval string
     field NoEnvBackend bool
 type Report struct
+    field Composition *receipt.Composition
     field Issues []qtrace.Issue
     field Actors []*Result
     field Unsettled string
@@ -2606,6 +2609,7 @@ type RunModel struct
     field Constants map[string]string `json:"constants,omitempty"`
     field Invariants []string `json:"invariants"`
 type RunRecord struct
+    field Composition *receipt.Composition
     field Options Options
     field Binding *binding.Binding
     field Check RunCheck
@@ -2959,6 +2963,7 @@ const Inconclusive Status = "inconclusive"
 const NotChecked Status = "not_checked"
 const Pass Status = "pass"
 type Actor struct
+    field Diagnostics []diagnostic.Result `json:"diagnostics,omitempty"`
     field JudgedBy string `json:"judgedBy"`
     field Partition string `json:"partition,omitempty"`
     field Scope string `json:"scope"`
@@ -2974,11 +2979,45 @@ type Check struct
     field Name string `json:"name"`
     field Status Status `json:"status"`
     field Reason string `json:"reason,omitempty"`
+type Component struct
+    field Target string `json:"target"`
+    field Binding string `json:"binding,omitempty"`
+    field Status Status `json:"status"`
+    field Reason string `json:"reason,omitempty"`
+    field Applicable bool `json:"applicable"`
+    field Judgment *History `json:"judgment,omitempty"`
+type Composition struct
+    field History string `json:"history"`
+    field Run string `json:"run,omitempty"`
+    field Error string `json:"error,omitempty"`
+    field Local []Component `json:"local"`
+    field Peers []Component `json:"peers"`
+    field Protocol Protocol `json:"protocol"`
+    method (Composition) Problem() (Status, string)
+    method (Composition) String() string
 type Effect struct
     field CandidateRecord string `json:"candidateRecord"`
     field Position int `json:"position"`
     field Action string `json:"action"`
     field Args map[string]any `json:"args,omitempty"`
+type History struct
+    field Status Status `json:"status"`
+    field Reason string `json:"reason,omitempty"`
+    field Scope string `json:"scope"`
+    field OtherExecutions Status `json:"otherExecutions"`
+    field Actors []Actor `json:"actors"`
+type Protocol struct
+    embed Component
+    field Configured bool `json:"configured"`
+    field Quantifier string `json:"quantifier"`
+    field Checked int `json:"checked"`
+    field Limit int `json:"limit"`
+    field Exhaustive bool `json:"exhaustive"`
+    field Counterexample []Record `json:"counterexample,omitempty"`
+type Record struct
+    field ID string `json:"id"`
+    field Actor string `json:"actor"`
+    field Action string `json:"action"`
 type Search struct
     field Mode string `json:"mode"`
     field Goal string `json:"goal"`
@@ -2987,11 +3026,13 @@ type Search struct
     field ResolutionBudget int `json:"resolutionBudget,omitempty"`
 type Status string
 type Summary struct
+    field Composition *Composition `json:"composition,omitempty"`
     field Status Status `json:"status"`
     field Reason string `json:"reason,omitempty"`
     field Scope string `json:"scope"`
     field OtherExecutions Status `json:"otherExecutions"`
     field Actors []Actor `json:"actors"`
+    method (Summary) History() History
     method (Summary) String() string
 
 == github.com/chucklehead-dev/gotogether/woven

@@ -29,6 +29,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 // An Exploration is many seeded runs of a simulated scenario, checked
@@ -631,6 +632,9 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 		}
 	}
 	for _, r := range x.Runs {
+		if r.assessment != nil {
+			r.assessment.Run = x.ref() + ":" + r.ID()
+		}
 		r.Recorded, r.searched = r.Steps, len(r.Steps) > 0 && (c.Linearize || c.resolvePending)
 	}
 	if os.Getenv("GOTOGETHER_KEEP") != "" && x.dir != "" {
@@ -1183,7 +1187,13 @@ func (x *Exploration) summary(universal bool) string {
 	if x.vacuity != nil && len(x.vacuity.found) > 0 {
 		line += fmt.Sprintf("; %d invariants held vacuously", len(x.vacuity.found))
 	}
-	return line + x.boundWords(universal)
+	var compositions []receipt.Composition
+	for _, r := range x.Runs {
+		if r != nil && r.Report != nil && r.Report.Composition != nil {
+			compositions = append(compositions, *r.Report.Composition)
+		}
+	}
+	return line + x.boundWords(universal) + compositionSummary(compositions)
 }
 
 // rejectedFirst is the action every run's first step was rejected at,

@@ -17,6 +17,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/convert"
 	"github.com/chucklehead-dev/gotogether/schemas"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 // docs are the doc comments of a package's struct fields, by type and
@@ -107,6 +108,13 @@ func (g *generator) schema(t reflect.Type) map[string]any {
 			tag := f.Tag.Get(key)
 			name, _, _ := strings.Cut(tag, ",")
 			if name == "-" || !f.IsExported() {
+				continue
+			}
+			if f.Anonymous && name == "" && key == "json" {
+				embedded := g.schema(f.Type)
+				for name, property := range embedded["properties"].(map[string]any) {
+					props[name] = property
+				}
 				continue
 			}
 			if name == "" {
@@ -378,5 +386,18 @@ func TestReportValidates(t *testing.T) {
 	d.Verdict = "maybe"
 	if ps, _ := schemas.Check(schemas.Report(), d.JSON()); len(ps) != 1 {
 		t.Errorf("a verdict outside the enum: %v", ps)
+	}
+}
+
+// JSON's embedded protocol component is flat, and model judgments do not
+// recursively contain composition results. Validate the emitted shape itself.
+func TestCompositionReportValidates(t *testing.T) {
+	report := &validate.Report{Actors: []*validate.Result{{Actor: "shop/t1", Conforms: validate.Pass}}, Composition: &receipt.Composition{History: "sha256:history", Peers: []receipt.Component{}, Local: []receipt.Component{{Target: "shop", Status: receipt.Pass, Applicable: true, Judgment: &receipt.History{Status: receipt.Pass, Scope: "collected_history", OtherExecutions: receipt.NotChecked, Actors: []receipt.Actor{}}}}, Protocol: receipt.Protocol{Component: receipt.Component{Target: "protocol", Status: receipt.Pass, Applicable: true}, Configured: true, Quantifier: "all_causal_orders", Checked: 2, Limit: 4, Exhaustive: true}}}
+	d := validate.NewDocument("validate")
+	d.Verdict = "pass"
+	d.AddReport(report)
+	problems, err := schemas.Check(schemas.Report(), d.JSON())
+	if err != nil || len(problems) != 0 {
+		t.Fatalf("composition schema: %v %v\n%s", err, problems, d.JSON())
 	}
 }

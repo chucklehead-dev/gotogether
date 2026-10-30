@@ -226,7 +226,22 @@ type Artifact struct {
 // Verdict is the report's verdict, its actors' together: the first
 // failing actor's reason and failing step, else the first with no
 // verdict's (Result.Reason, Unfinished included), else a pass.
-func (r *Report) Verdict() RunVerdict { return runVerdictOf(r.Actors) }
+func (r *Report) Verdict() RunVerdict {
+	v := runVerdictOf(r.Actors)
+	if r.Composition != nil {
+		status, reason := r.Composition.Problem()
+		if v.Verdict != Fail && status != receipt.Pass {
+			if status == receipt.Fail || status == receipt.Error {
+				v.Verdict = Fail
+			} else {
+				v.Verdict = NotEvaluated
+			}
+			v.Reason = "composition: " + reason
+			v.Failing = nil
+		}
+	}
+	return v
+}
 
 // runVerdictOf is the verdict of results, an actor's or ITF trace's each.
 func runVerdictOf(results []*Result) RunVerdict {
@@ -436,6 +451,8 @@ func (v RunVerdict) String() string {
 // was judged, its results, and the files its verdict depends on, each
 // hashed as the manifest is made.
 type RunRecord struct {
+	// Composition contains additional checks registered for the same history.
+	Composition *receipt.Composition
 	// Options are the tools the run was judged with: quint's version and
 	// the backend go in the manifest.
 	Options Options
@@ -484,8 +501,9 @@ func NewManifest(r RunRecord) (*Manifest, error) {
 	m.Check = r.Check
 	o := r.Search
 	m.Check.Linearize, m.Check.Key, m.Check.Budget, m.Check.ResolvePending = o.Linearize || o.Key != "", o.Key, o.Budget, o.ResolvePending
-	m.Verdict = runVerdictOf(r.Results)
-	summary := (&Report{Actors: r.Results}).Receipt()
+	report := &Report{Actors: r.Results, Composition: r.Composition}
+	m.Verdict = report.Verdict()
+	summary := report.Receipt()
 	m.Receipt = &summary
 	if r.Convert != "" {
 		var err error

@@ -1,6 +1,9 @@
 package qtest
 
 import (
+	"context"
+	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 	"slices"
 	"testing"
 
@@ -22,6 +25,12 @@ import (
 //	}}
 //	sys.Explore(t, qtest.ExploreConfig{Seeds: 100}).Expect(t, qtest.Conforms())
 type System struct {
+	// Assess checks additional composition obligations on each captured native
+	// history, including replay/navigation. Registered applicable checks participate
+	// in normal Conforms/Run.OK judgments. It must not mutate steps or simulate again.
+	// The returned History is "sha256:" plus the hex SHA256 of json.Marshal(steps);
+	// mismatches fail.
+	Assess func(context.Context, []qtrace.Step) (receipt.Composition, error)
 	// Binding is the path of the binding file, relative to the test's
 	// package directory (where go test runs).
 	Binding string
@@ -85,6 +94,9 @@ func (s System) FaultRates() qenv.Rates {
 
 func (s System) opts(more ...Option) []Option {
 	out := append(append([]Option(nil), s.Opts...), more...)
+	if s.Assess != nil {
+		out = append(out, func(c *settings) { c.assess = s.Assess })
+	}
 	if s.Mutant != "" {
 		out = append(out, func(c *settings) { c.mutant = s.Mutant })
 	}

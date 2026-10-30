@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Check-receipt first increment (draft PR #3, stacked on #2): validation reports and run
+Composition follow-up (working branch): `gristtest.Composition.System` registers
+local model checkers, catalog peer links and an optional universal protocol check
+for every native history, including navigation. `Report.Composition` is canonical;
+normal conformance assertions include applicable checks. Wrong histories, wrong
+service bindings, unknown obligations and order limits cannot silently pass.
+Receipts preserve model-authored diagnostics. See [grist-composition.md](grist-composition.md).
+PRs #2 and #3 are merged; the single current navigation contract is nav/2.
+
+Check-receipt first increment (merged PR #3): validation reports and run
 navigation share structured statuses, ordering-search limits and assumed effects
 through validate/receipt. Whole-run receipts remain independent of cursor state;
 all current navigation producers emit required receipts (nav/2, current only). Grist
@@ -18,7 +26,7 @@ exploration evidence and run manifests. `evidence -session` filters the
 suite before coverage and expectation checks; unscoped completeness checks
 require explicit `-history`. Use a fresh ID and `go test -count=1`.
 
-**As of 2026-10-30 (receipt branch).** GR4's first composition experiment is implemented
+**As of 2026-10-30 (composition branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
 `db01d3fd` so the shared diagnostic/receipt types and required nav/2
