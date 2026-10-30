@@ -858,6 +858,7 @@ type Service[Req, Resp any] struct
 type Signal struct
     method (*Signal) Notify()
     method (*Signal) Wait(ctx context.Context, d time.Duration) bool
+    method (*Signal) WaitIdle(ctx context.Context, d time.Duration) bool
 type Sim struct
     field MaxSteps int
     field Log func(string)

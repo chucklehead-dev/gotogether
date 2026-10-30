@@ -7082,3 +7082,43 @@ per-peer configuration, cycles/clusters, DPOR, new platform facades and release
 machinery until an adopter or measured bottleneck justifies them. I12's shared
 Quint limiter remains concrete infrastructure debt, not a reason to weaken model
 checks or CPU budgets.
+
+
+## Scoped completion and HTTP/SQLite rehearsal, 2026-10-30
+
+GR10b uses the existing task idle state, adding Signal.WaitIdle with the same
+notification/deadline contract as Signal.Wait. No new activity registry or worker
+lifecycle DSL was needed. Grist's tenant watcher, relay and poller now use idle
+waits only after successful no-work reads. Errors, callbacks, backoffs, handler
+dependencies and operator-paused rewind work remain active. Simlog's sender
+follows the same pattern. An ErrStuck at gristsim's workload horizon still gets
+the normal final recovery settle; persistent work is typed Unsettled, not a
+harness failure or an invented settled model defect.
+
+Tests cover slow successful work, short bounds, dependency hangs, failed
+readiness reads, polling SQL stores, idle-to-busy transitions and native signal
+wait generations. A final review reproduced false settlement when newly
+available work was held behind a process pause: signal idle now clears at
+enqueue, and predicate-idle accounting checks current readiness without making
+it sticky. Empty paused workers and readiness consumed by another worker stay
+idle. Ablation fails with the old lifetime daemon behavior. Model
+obligation coverage is retained using real committed work without deployed
+processors: the runtime is genuinely quiet, so missing business consequences
+still fail the generated eventual checks.
+
+A fresh agent conducted an instruction-isolated internal rehearsal using only
+an ordinary copied HTTP/SQL service, public docs/API documentation, and a pinned
+published toolkit outside the workspace. Its independent model/binding were
+frozen before the parent supplied a planted double-debit source contrast.
+Actual HTTP/SQLite observations caught balance80 against model90; manifest
+replay retained the same mismatch, and real workload reruns reduced three
+actions to one. Incomplete prefixes and missing observations had distinct
+statuses and were excluded from defect evidence. The portable script enforces
+both exit codes and structured verdicts, and was tested after relocation.
+
+The scope is one account/key/amount with a controlled delayed processor, not
+independent-maintainer adoption or a discovered production defect. No new
+adapter was required. Friction centered on dependency/doc setup, scaffold
+property classification and the shrink driver's empty action contract. The
+record and frozen artifacts are in internal/adoptiontest/http-sql; the next
+capability increment remains I4's bounded pinned-witness replay.

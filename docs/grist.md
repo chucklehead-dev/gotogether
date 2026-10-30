@@ -1320,11 +1320,12 @@ wallet-grist's `allPosted`, `grist new`'s `everyAdditionTallied`. One
 that says more stays: library's `everyBorrowReceipted` (the mailer's ok
 record of every borrow), counters' `everyPaymentAnswerServed` (the
 served record equal to the caller's, field for field) and the test-only
-exactly-once vals. A processor whose handler never returns (its poller
-waiting as it waits for appends, a daemon, so the run settles) violates
-its obligation, and a dependency answering a Keyed call it never
-applied violates the call's (gristsim's `TestObligations`); nothing
-else in the model says a trigger must be handled. A name of an
+exactly-once vals. A processor whose handler never returns remains active:
+its run is Unsettled, without an eventual completion verdict. A genuinely quiet
+runtime with unhandled committed work (no processors deployed) violates its
+processor obligations. A dependency answering a Keyed call it never applied
+violates the call's obligation after the worker finishes (gristsim's
+`TestObligations`). A name of an
 obligation defined by the rules (`model/<app>_rules.qnt`, which the steps
 module imports) is the generator's error too: quint would refuse it in
 the generated file. examples/wallet-grist's `ledgerAcksUnposted` is the
@@ -1337,13 +1338,12 @@ checkpoint over the model's reachable states (its checkpoint and skip
 actions already require the outcome), so what they add is liveness: a
 processor that stops short of a trigger. A handler's `Fail` in a
 `Delivers` processor is a Mismatch of its skip (above), so the
-at-least-once `grist.failed` is an effect's that failed every try. A
-poller is a daemon whether it waits for appends or holds a trigger, so
-a settle does not wait for work in hand: its duration must cover it
-(gristsim's minute, against the backoff's 320 ms cap and
-`DependencyTimeout`'s second; an effect whose tries outlast it would be
-judged mid-retry; ROADMAP's GR10b would mark a poller a daemon only
-while it waits on the store). A node left down for good outside
+at-least-once `grist.failed` is an effect's that failed every try. Pollers,
+relays and tenant watchers use scoped idle waits only after successful no-work
+reads. Handlers, dependencies, retries, callbacks, failed readiness reads and
+operator-resume pauses remain active. A settle shorter than that work returns
+Unsettled and writes no settle marker; an adequate bound permits recovery.
+A node left down for good outside
 `SettleCore`'s core has its triggers judged by a plain `Settle`, which
 names no down process (ROADMAP's GR10c). A variant judges a call's
 obligation only where one of its own vals reads the call's served
@@ -1405,8 +1405,8 @@ named action of its node (`choreo::step_with`, the twophase gotcha).
 grist's runtime is written against qenv's seams, and `gotogether lint
 -sim` holds grist's packages to it, as `TestCoreStaysInTheSimulation`
 holds the core. Pollers, the effect worker and the scheduler are tasks
-(`qenv.Go`) waiting with `qenv.Sleep` and `qenv.Wait` on the store's
-signal, marked `qenv.Daemon`; a node is a `qenv.Process`
+(`qenv.Go`), with `qenv.Sleep`/`qenv.Wait` while active and
+`Signal.WaitIdle` only at confirmed no-work boundaries; a node is a `qenv.Process`
 (`Sim.Process(name, true, start)`), restarted from its checkpoints; the
 store's isolation, commit faults and lost answers are the qenv.Store's
 or qsql's; an effect's dependencies are `qenv.Service`s or HTTP clients
@@ -1431,7 +1431,7 @@ eventual vals are judged:
 
 the clients finish; **schedulers stop** (periodic tasks would append
 forever, and no settle would find the system quiet); `Sim.Settle`
-(processors, daemons on the signal, drain to the head; faults stay off
+(processors drain to the head, then wait idle on the signal; faults stay off
 from here); probes run every read model through its queries; and
 **`Sim.Settle` again**, so the run's last record is a settle. A step
 after a settle voids it, on its recorder or on any other later in time

@@ -805,6 +805,18 @@ Code under test reaches the environment only through seams: `qenv.DB` and
 and `qenv.Sleep`. Outside a simulation these fall through to real
 goroutines and time. Production puts real clients behind the interfaces.
 
+Workers distinguish empty-feed waits from work in hand. `Signal.WaitIdle(ctx, d)`
+uses the same notification/deadline semantics as `Wait`, but exempts only that
+confirmed no-work wait from stuck/settlement checks. A decided notification/deadline clears the exemption before the task runs again,
+including when a process pause holds it. Predicate waits count as active while
+ready, without consuming readiness or permanently changing the idle flag.
+Predicate-based doubles use `WaitIdle` similarly. Handler execution, delivery
+callbacks, failed readiness reads, retry backoffs and operator-paused obligations
+stay active. `Daemon` remains a lifetime exemption for passive infrastructure;
+it is not a worker-loop default. An exhausted settle bound yields `Unsettled`
+and writes no completion marker. A genuinely quiet history can still violate a
+model's business completion obligation; runtime idleness does not prove it.
+
 ### 10.4 Recording and checking
 
 Steps are recorded where effects happen:
