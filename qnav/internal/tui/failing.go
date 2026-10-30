@@ -92,3 +92,11 @@ func (n terminalDiagnosticNav) attach(node *validate.Node, err error) (*validate
 	copy.Diagnostics = append(slices.Clone(node.Diagnostics), n.details...)
 	return &copy, nil
 }
+
+// Record preserves captured-record inspection through the terminal overlay.
+func (n terminalDiagnosticNav) Record(ref diagnostic.RecordRef) (*diagnostic.RecordDetail, error) {
+	if nav, ok := n.ModelNav.(recordNav); ok {
+		return nav.Record(ref)
+	}
+	return nil, fmt.Errorf("this navigator cannot retrieve captured records")
+}

@@ -44,6 +44,10 @@ type Navigator struct {
 	from string
 	// path is the start's own path: the run's calls that reached it
 	path []string
+	// diagnosticPlan contains only observed calls before the starting state.
+	diagnosticPlan *binding.Plan
+	// records are the supplied capture, independent of counterfactual branches.
+	records []qtrace.Step
 }
 
 // A Node is a state of the model the navigator reached: its id (the path
@@ -98,7 +102,7 @@ func (c *Checker) Nav(start NavStart) (*Navigator, error) {
 	if _, ok := e.em.Actions["step"]; !ok {
 		return nil, fmt.Errorf("nav: %s has no step action: the navigator's branches are step's transitions", c.Binding.Module)
 	}
-	n := &Navigator{c: c, e: e, from: "init"}
+	n := &Navigator{c: c, e: e, from: "init", records: slices.Clone(start.Steps)}
 	if start.Steps == nil {
 		if len(e.em.Consts) > 0 {
 			return nil, fmt.Errorf("nav: the binding computes constants from a run's steps (%s): open a run (-run), whose steps give them", strings.Join(slices.Sorted(maps.Keys(e.em.Consts)), ", "))
@@ -181,6 +185,9 @@ func (c *Checker) Nav(start NavStart) (*Navigator, error) {
 		n.path = append(n.path, call.Quint)
 	}
 	n.start = s
+	prefix := *plan
+	prefix.Calls = slices.Clone(plan.Calls[:at])
+	n.diagnosticPlan = &prefix
 	n.from = fmt.Sprintf("actor %s's state after %d of its %d steps", nameOf(tr.Actor), at, len(plan.Calls))
 	return n, nil
 }
@@ -397,7 +404,7 @@ func (n *Navigator) edges(s qeval.State) ([]Edge, []qeval.Transition, error) {
 func (n *Navigator) node(s, prev qeval.State, taken []string) (*Node, error) {
 	m := n.e.m
 	out := &Node{ID: strings.Join(taken, ","), Start: n.from, Path: append(slices.Clone(n.path), taken...), Branches: []Edge{}}
-	out.Diagnostics = n.diagnosticValues(s)
+	out.Diagnostics = n.diagnosticValues(s, len(taken) > 0)
 	for _, v := range m.Vars {
 		out.State = append(out.State, NamedValue{Name: m.Display(v), Value: qeval.String(s[v])})
 		if prev != nil && qeval.Compare(s[v], prev[v]) != 0 {

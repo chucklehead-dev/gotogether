@@ -7,7 +7,13 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Workload-phase follow-up (current branch): gristsim named prerequisites require
+Diagnostic-evidence follow-up (current branch): explicit binding selectors link
+model-authored outstanding intents to captured and native identities, preserving
+missing/ambiguous results in JSON. The TUI opens a scoped evidence list and exact
+captured-record inspector without moving the cursor or changing judgments. See
+[model-diagnostics-prototype.md](model-diagnostics-prototype.md#exact-evidence-links).
+
+Workload-phase follow-up (merged PR #7): gristsim named prerequisites require
 actual call outcomes and bounded query observations before later work. They
 replace unchecked prologues and inventory pacing sleeps. Failed preparation is
 unjudged workload evidence, never a model counterexample or mutant kill. JSON
@@ -32,7 +38,7 @@ for every native history, including navigation. `Report.Composition` is canonica
 normal conformance assertions include applicable checks. Wrong histories, wrong
 service bindings, unknown obligations and order limits cannot silently pass.
 Receipts preserve model-authored diagnostics. See [grist-composition.md](grist-composition.md).
-PRs #2, #3, #4, #5 and #6 are merged; the single current navigation contract is nav/2.
+PRs #2, #3, #4, #5, #6 and #7 are merged; the single current navigation contract is nav/2.
 
 Check-receipt first increment (merged PR #3): validation reports and run
 navigation share structured statuses, ordering-search limits and assumed effects
@@ -45,10 +51,11 @@ exploration evidence and run manifests. `evidence -session` filters the
 suite before coverage and expectation checks; unscoped completeness checks
 require explicit `-history`. Use a fresh ID and `go test -count=1`.
 
-**As of 2026-10-30 (workload-phase branch).** GR4's first composition experiment is implemented
+**As of 2026-10-30 (diagnostic-evidence branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
-`10f42111` so workload phases, shared preflight-format metadata, run profiles, composition and nav/2
+`50b59b7c` so diagnostic evidence, workload phases, shared preflight-format metadata,
+run profiles, composition and nav/2
 contract work outside go.work; the
 merged declared-call span increment did not require a core-pin bump. **Nothing is tagged**: every module is pre-release,
 published modules require each other at pseudo-versions, and breaking
@@ -74,8 +81,9 @@ A [model-authored diagnostics prototype](model-diagnostics-prototype.md)
 now explores the inventory trial's unanswered-intent reporting friction.
 It uses Quint documentation annotations, without an extra binding mapping,
 and shares optional structured data across text/JSON/navigation/TUI. This
-is provisional work for review; native evidence links and editor source
-ranges are not implemented. It does not change grist runtime behavior.
+is provisional work; explicit evidence selectors now link captured and native
+identities in JSON/CLI/TUI. Editor source ranges and broader checked-history
+coverage remain open. It does not change grist runtime behavior.
 
 ## 1. What works now
 
@@ -234,22 +242,26 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Review the bounded GR3 span trial before expanding it | S | first increment built; third-party and reduced HTTP conversion need concrete evidence requirements |
-| 2 | GR4: phased workload control or outstanding-obligation diagnostics when an adopter needs them | S-M | inventory-grist identifies these specific friction points; no demonstrated need for broader per-peer configuration |
-| 3 | Further independent adoption, especially grist or unaided onboarding | S-M | Goo validates an agent-assisted core-library workflow; it does not cover these adoption questions |
-| 4 | GR5 streams, GR6 gRPC, GR7 controllers | M, M, L | on the published doubles (H7) |
-| 5 | GR8 sagas and timers, GR9 checkout as grist services | M, L | GR9 proves GR4 and GR8 compose |
-| 6 | P9, grist apps explored in-process | L | after GR4 |
-| 7 | I42-I51, the bold ideas: model diff and refinement (M each), graphs further (M each), sleep sets then DPOR (M, L), Elle's rest (S-M each), production capture (M each), a shared report (M), kubesim as envtest (M), no blank page (M-L; `init -kind http` is its first part), Quint off the hot path (L each), small ones (S each: `qtest.NoHotCycle`, typed fault names, `gristtest.StoredLogs`, `qobs.Sometimes`, ghost modules, the model's facts beside the spec) | as listed | each decided by the maintainer before it starts |
+| 1 | Core completion accounting (GR10b), bounded to idle versus active workers | S | apply the eligibility/completion/judgment separation to background work; verify plain qenv plus another async consumer |
+| 2 | Cold-start non-grist adoption rehearsal | S-M | different driver/evidence shape; installed tools and public docs, actual observations, prefix/completion/loss controls; internal rehearsal is not independent-maintainer adoption |
+| 3 | I4 finite pinned-witness replay | M | extend core model support without resampling internal choices; retain refusal outside supported bounds |
+| 4 | Typed core lint findings and executable onboarding | S-M | generalize preflight's structured findings/performed checks across CLI, editors and agents; smoke-check one workflow in each track |
+| 5 | Component-aware shrinking | S-M | preserve the same component/obligation, refusing exhaustion, unchecked evidence and unreached prerequisites; include a non-inventory system |
+| 6 | One adopter-driven capability (outbound streams or library starter are candidates) | M | use concrete trial blockers before expanding adapters or domain APIs |
 
-Also proposed, not built: GR10b (a poller a daemon only while it waits)
-and GR10c (`Settle` naming down processes), both S and qenv-level.
+Do not start all six at once. The recommended next implementation is the bounded
+completion-accounting slice, with the non-grist rehearsal as its independent
+workflow check. Verification/product reviewers favored I4 next; the runtime
+review identified the existing daemon/settlement classification boundary as a
+smaller correctness step to take first. Further inventory/diagnostic expansion,
+cycles, clusters and new platform facades wait for evidence. GR10c down-process
+settlement has separate semantics and stays separate from GR10b.
 
-**Recommended next: review the first GR3 slice 6 increment and its follow-ons.** R5 is
-available when the maintainer wants tags; compatibility commitments and
-platform breadth do not precede evidence that the abstractions compose.
-I4's unsupported nondeterministic-replay boundary stays a correctness
-constraint, not a reason to build unrelated release machinery.
+The span round-trip and inventory trials retain explicit limits; they do not
+establish generic third-party HTTP inference or unaided onboarding. R5 is
+available when the maintainer wants tags; no compatibility commitment is needed
+for these prerelease iterations. The review and lessons are recorded in
+[HISTORY](HISTORY.md#breadth-and-core-lessons-review-2026-10-30).
 
 ## 5. Decisions for the maintainer
 

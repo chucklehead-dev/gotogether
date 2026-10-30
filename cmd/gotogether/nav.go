@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/validate/diagnostic"
 	"github.com/chucklehead-dev/gotogether/validate/navproto"
 
 	"github.com/chucklehead-dev/gotogether/input"
@@ -29,7 +31,7 @@ import (
 func nav(out io.Writer, args []string) (int, error) {
 	fset := commandFlags("nav")
 	bind := fset.String("binding", "", "the binding whose model to navigate (from init, or with -run a step log: the state after its first -at calls)")
-	run := fset.String("run", "", "a recorded run's step log (with -binding), or an exploration's run as a failing run's report names it ('TestX#2:seed=17', run in its package)")
+	run := fset.String("run", "", "a recorded run's step log (with -binding, or -record to inspect a capture), or an exploration's run as a failing run's report names it ('TestX#2:seed=17', run in its package)")
 	at := fset.String("at", "", "where to open: with a step log, how many of the actor's calls to take (default all); with an exploration's run, a node's id (<schedule>@<k>, @<k> the run's own first k choices), start, or fail (the last choice before the failing step)")
 	actor := fset.String("actor", "", "with a step log: the actor to navigate (default the only one)")
 	follow := fset.String("follow", "", "a path from the node: a model's transitions as its branches' take names them, comma-separated (admit(\"a\"),release(\"a\"); #n the n-th branch); a run's options (1,0,2)")
@@ -37,11 +39,32 @@ func nav(out io.Writer, args []string) (int, error) {
 	pkg := fset.String("pkg", ".", "with an exploration's run: the test's package (go test runs in it)")
 	save := fset.Bool("save", false, "with an exploration's run: save the node's run to the exploration's corpus (ExploreConfig.Corpus)")
 	fold := fset.Bool("fold", false, "fold the node's linear stretch: a model's single branches taken until a node of several; a run's choices that are no decision (nominal where the base run's are) passed to its next")
-	asJSON := fset.Bool("json", false, "print the node as one JSON object (the agents' form)")
+	asJSON := fset.Bool("json", false, "print the node or captured record as one JSON object (the agents' form)")
+	recordJSON := fset.String("record", "", "inspect an exact captured record: paste its JSON reference (actor, recorder, seq) from diagnostic evidence; requires -run, does not move a cursor")
 	text := fset.Bool("text", false, "print the node as text even on a terminal, where gotogether-nav (the interactive navigator) otherwise opens it")
 	quint := fset.String("quint", "quint", "quint binary")
 	fset.Parse(args)
-	if !*asJSON && !*text && isTerminal(out) {
+	var record *diagnostic.RecordRef
+	recordSet := false
+	fset.Visit(func(flag *flag.Flag) {
+		if flag.Name == "record" {
+			recordSet = true
+		}
+	})
+	if recordSet {
+		ref, err := diagnostic.ParseRecordRef(*recordJSON)
+		if err != nil {
+			return 2, fmt.Errorf("nav -record: %w", err)
+		}
+		record = &ref
+		if *follow != "" || *take != "" || *fold || *save {
+			return 2, fmt.Errorf("nav -record: inspect a captured record without changing a cursor; drop -follow, -take, -fold and -save")
+		}
+		if *run == "" {
+			return 2, fmt.Errorf("nav -record: add -run steps.jsonl or an exploration's run")
+		}
+	}
+	if record == nil && !*asJSON && !*text && isTerminal(out) {
 		if code, ran, err := navTUI(args); ran {
 			return code, err
 		}
@@ -57,11 +80,34 @@ func nav(out io.Writer, args []string) (int, error) {
 		if *bind != "" || *actor != "" {
 			return 2, fmt.Errorf("nav -run %s: an exploration's run is the test's, judged by its binding: drop -binding and -actor", *run)
 		}
-		node, err := navRun(*run, *pkg, *at, path, *save, *fold)
+		node, err := navRunRecord(*run, *pkg, *at, path, *save, *fold, record)
 		if err != nil {
 			return 2, err
 		}
+		if record != nil {
+			if node.Record == nil {
+				return 2, fmt.Errorf("nav -record: the test binary returned no captured record; rebuild it with record inspection support")
+			}
+			return printNode(out, node.Record, *asJSON, recordText(node.Record))
+		}
 		return printNode(out, node, *asJSON, runNodeText(node))
+	}
+	if record != nil {
+		if *at != "" {
+			return 2, fmt.Errorf("nav -record: a file record is selected by its exact identity; drop -at")
+		}
+		if *actor != "" && *actor != record.Actor {
+			return 2, fmt.Errorf("nav -record: -actor %q differs from record actor %q; use the exact record actor", *actor, record.Actor)
+		}
+		file, err := input.Read(*run, input.Unknown)
+		if err != nil {
+			return 2, err
+		}
+		detail, err := diagnostic.LookupRecord(file.Steps, *record)
+		if err != nil {
+			return 2, err
+		}
+		return printNode(out, detail, *asJSON, recordText(detail))
 	}
 	if *bind == "" {
 		return 2, fmt.Errorf("nav: give -binding (a model), with -run a step log, or -run an exploration's run ('TestX#2:seed=17')")
@@ -164,10 +210,48 @@ func printNode(out io.Writer, node any, asJSON bool, text string) (int, error) {
 	return 0, nil
 }
 
+func recordText(r *diagnostic.RecordDetail) string {
+	var b strings.Builder
+	b.WriteString("captured record · no model judgment or cursor move\n")
+	fmt.Fprintf(&b, "actor %q · recorder %q · seq %d\naction: %s\n", r.Reference.Actor, r.Reference.Recorder, r.Reference.Seq, r.Action)
+	if r.Outcome != "" {
+		fmt.Fprintf(&b, "outcome: %s\n", r.Outcome)
+	}
+	if r.Error != "" {
+		fmt.Fprintf(&b, "error: %s\n", r.Error)
+	}
+	if r.Invocation {
+		b.WriteString("invocation: true (not a completed answer)\n")
+	}
+	if r.Call != 0 {
+		fmt.Fprintf(&b, "call: %d\n", r.Call)
+	}
+	for _, value := range []struct{ name, text string }{{"process", r.Process}, {"thread", r.Thread}, {"invoked", r.Invoked}, {"time", r.Time}, {"source", r.Source}, {"artifact", r.Ref}} {
+		if value.text != "" {
+			fmt.Fprintf(&b, "%s: %s\n", value.name, value.text)
+		}
+	}
+	for _, value := range []struct {
+		name string
+		raw  json.RawMessage
+	}{{"arguments", r.Arguments}, {"observations", r.Observations}} {
+		var pretty bytes.Buffer
+		if json.Indent(&pretty, value.raw, "", "  ") != nil {
+			pretty.Write(value.raw)
+		}
+		fmt.Fprintf(&b, "%s: %s\n", value.name, pretty.String())
+	}
+	return b.String()
+}
+
 // navRun has the test binary of ref's test navigate it: go test in pkg
 // with GOTOGETHER_RUN naming the run and GOTOGETHER_NAV the node, built
 // with the overlay of the mutant GOTOGETHER_MUTANT names.
 func navRun(ref, pkg, at, follow string, save, fold bool) (*navproto.Node, error) {
+	return navRunRecord(ref, pkg, at, follow, save, fold, nil)
+}
+
+func navRunRecord(ref, pkg, at, follow string, save, fold bool, record *diagnostic.RecordRef) (*navproto.Node, error) {
 	i := strings.LastIndex(ref[:strings.LastIndex(ref, ":")], "#")
 	test := ref[:i]
 	dir, err := os.MkdirTemp("", "gotogether-nav-")
@@ -191,6 +275,15 @@ func navRun(ref, pkg, at, follow string, save, fold bool) (*navproto.Node, error
 	cmd := exec.Command("go", append(args, "-run", pattern, ".")...)
 	cmd.Dir = pkg
 	cmd.Env = append(os.Environ(), "GOTOGETHER_RUN="+ref, "GOTOGETHER_NAV="+at, "GOTOGETHER_NAV_FOLLOW="+follow, "GOTOGETHER_NAV_OUT="+outFile)
+	recordData := ""
+	if record != nil {
+		b, err := json.Marshal(record)
+		if err != nil {
+			return nil, err
+		}
+		recordData = string(b)
+	}
+	cmd.Env = append(cmd.Env, "GOTOGETHER_NAV_RECORD="+recordData)
 	if save {
 		cmd.Env = append(cmd.Env, "GOTOGETHER_NAV_SAVE=1")
 	}

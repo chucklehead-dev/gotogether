@@ -57,14 +57,13 @@ mutant names exit 2. Run all tests with `go test -short -v ./...`.
 | `TestCancellationOvertakesReserve` | one delayed reserve request | cancellation writes a tombstone before the reserve arrives; the late allocation is refused cancelled |
 | `TestReservationCrash` | crash after reserve effect, before checkpoint | the repeated effect still allocates one unit |
 | `TestMutants` | freshKey | one lost response causes two physical allocations; local models conform, Links detects the new key and the business model rejects inventoryReserve |
-| `TestMutants` | missingRelease | a cancellation is checkpointed without its call; local models and links pass, but eventually allIntentsAnswered fails and a unit remains held |
+| `TestMutants` | missingRelease | a cancellation is checkpointed without its call; local models and links pass, but eventually allIntentsAnswered fails, a unit remains held, and diagnostics link the unanswered intent to its captured cancellation commit |
 | `TestInventoryMutants` | authorizeCancelled | a shipment starts after accepted cancellation; inventory rejects authorize and the protocol rejects inventoryAuthorize |
 
 The faithful short run checks four seeded competing-client histories;
 `TestDecisionRaces` fixes the workload order while retaining the seeded
-simulation schedule. Customers pause in virtual time before deciding;
-tests assert the actual durable outcomes rather than relying on the pause
-as evidence. `TestFaithful` compiles the explicitly selected service and
+simulation schedule. Named phases require actual allocation observations
+before the decisions; tests assert durable outcomes at those boundaries. `TestFaithful` compiles the explicitly selected service and
 protocol checkers once, wraps its `qtest.System` with
 `gristtest.Composition.System`, and explores normally. `qtest.Conforms()` includes these
 composition checks; no second assertion or simulator run is needed. The same
@@ -86,8 +85,12 @@ go tool gotogether validate -binding protocol.binding.yaml /tmp/inventory-trial/
 ```
 
 The validation command fails as expected: the recorded settle owes an
-inventory cancellation answer. The JSONL retains `protocol.recorder` and
-`protocol.seq` for the original commit identities. Repeat with either
+inventory cancellation answer. The diagnostic links its exact intent and order
+to the captured checkout cancellation, including the original actor, recorder
+and sequence. These are explicit selectors in the handwritten protocol binding;
+they identify relevant evidence, not a root cause. The JSONL retains
+`protocol.actor`, `protocol.recorder` and `protocol.seq`, so the same original
+identity survives saving and replay. Repeat with either
 other mutant to save its failing protocol history.
 
 The local bindings are generated, never handwritten. The independent

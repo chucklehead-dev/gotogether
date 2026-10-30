@@ -7030,3 +7030,55 @@ failing-test ITF. The runtime already preserved the failure and reported the
 explanation unavailable; tests now assert that boundary explicitly, retaining
 exact-item assertions on Rust. Cache immutability checks compare full original
 payloads under either capability. Focused prototype suites pass on both backends.
+
+
+## Breadth and core lessons review, 2026-10-30
+
+Six agents reviewed architecture, product breadth, usability/tooling,
+verification, runtime/features and adoption after PRs #2–#8. The shared conclusion
+was to close the initial inventory/diagnostics learning cycle and rotate the
+roadmap. The portfolio already contains HTTP/SQL, browser/request-log, gRPC,
+streams, distributed protocols, controllers and load tests; more facades are not
+proof of a more usable core.
+
+Two immediate integration issues were found in PR8: reconstruction and inspection
+had different duplicate-record equality rules, and binding-driven trace pruning
+could discard provenance read only by evidence-origin templates. The corrections
+share canonical record equivalence and retain binding consumer dependencies, with
+cross-reader and transformed-trace tests. These are core lessons, not additional
+inventory features.
+
+Recommendations differed in order. Architecture/verification/product emphasized
+I4's finite pinned-witness replay and component-aware failure shrinking. Runtime
+identified the existing lifetime-daemon settlement classification boundary and
+recommended GR10b first. Usability recommended typed core lint findings and
+performed/blocked check records instead of parsing prose. Adoption recommended a
+fresh-agent HTTP/SQL or externally driven trial using installed modules and public
+docs. The recommended sequence in STATUS starts with the smaller completion
+accounting slice plus the different adoption rehearsal, then pinned replay.
+Outbound streams are a possible feature slice after the adopter demonstrates a
+missing seam, not an authorization for a broad adapter catalog.
+
+Lessons to carry forward:
+
+- Establish scenario eligibility, completion scope, model judgment, search
+  completeness and explanatory evidence independently; no unsupported or
+  inconclusive result earns a mutation kill or shrink reproduction.
+- Share identity, equivalence and field-dependency semantics across recording,
+  transformations, validation, inspection and exports. Test the round trip, not
+  only each producer in isolation.
+- Keep domain facts in adapters/models. Require a second workload before turning
+  grist-specific convenience APIs into core abstractions.
+- Test bounded truth-boundary matrices across ordinary validation, navigation,
+  mutation and shrinking; retain explicit unavailable/missing/ambiguous cases.
+- Treat repository-owned blind rehearsals, agent-assisted external trials and
+  independent-maintainer adoption as different evidence. Goo's lifecycle kernel
+  does not establish asynchronous delivery or telemetry completeness.
+- Reconcile current roadmap prose when an experiment closes; move historical
+  decisions here rather than layering contradictory current-state summaries.
+
+Deferred: richer inventory selectors, broader diagnostic-history support,
+per-peer configuration, cycles/clusters, DPOR, new platform facades and release
+machinery until an adopter or measured bottleneck justifies them. I12's shared
+Quint limiter remains concrete infrastructure debt, not a reason to weaken model
+checks or CPU budgets.

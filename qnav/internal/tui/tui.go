@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/validate/diagnostic"
 	"github.com/chucklehead-dev/gotogether/validate/navproto"
 
 	"charm.land/bubbles/v2/help"
@@ -68,6 +69,10 @@ type entry struct {
 	title string
 	m     *validate.Node
 	r     *navproto.Node
+	// Evidence entries inspect captured records without moving either cursor.
+	evidence   *evidenceList
+	record     *diagnostic.RecordDetail
+	recordKind string
 	// why is the recorded call the model rejects from a model's node
 	why    string
 	cursor int
@@ -312,15 +317,29 @@ func (m *Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case key.Matches(msg, k.Take):
 		return m, m.take()
+	case key.Matches(msg, k.Evidence):
+		return m, m.openEvidence()
 	case key.Matches(msg, k.Fold):
+		if c.evidence != nil || c.record != nil {
+			m.status = "captured evidence has no model branches to fold"
+			return m, nil
+		}
 		m.busy = true
 		if c.r != nil {
 			return m, m.runCmd("fold", navproto.Request{Node: c.r.ID, Fold: true})
 		}
 		return m, modelCmd("fold", c.nav, c.title, c.path, true)
 	case key.Matches(msg, k.Fail):
+		if c.evidence != nil || c.record != nil {
+			m.status = "back returns to the unchanged navigation cursor"
+			return m, nil
+		}
 		return m, m.fail()
 	case key.Matches(msg, k.Save):
+		if c.evidence != nil || c.record != nil {
+			m.status = "back returns to the run to save"
+			return m, nil
+		}
 		if c.r == nil {
 			m.status = "a model's node has no run to save; its path: -follow '" + strings.Join(c.path, ",") + "'"
 			return m, nil
@@ -358,6 +377,11 @@ func (m *Model) branches() []branch {
 	var out []branch
 	switch {
 	case c == nil:
+	case c.evidence != nil:
+		for i, e := range c.evidence.items {
+			out = append(out, branch{i, e.label})
+		}
+	case c.record != nil:
 	case c.m != nil:
 		for i, e := range c.m.Branches {
 			out = append(out, branch{i, e.Take})
@@ -389,12 +413,19 @@ func (m *Model) visible() []branch {
 // take takes the branch under the cursor.
 func (m *Model) take() tea.Cmd {
 	c := m.cur()
+	if c.record != nil {
+		m.status = "captured record; back returns to the evidence list"
+		return nil
+	}
 	vis := m.visible()
 	if c.cursor >= len(vis) {
 		m.status = "no branch to take here"
 		return nil
 	}
 	b := vis[c.cursor]
+	if c.evidence != nil {
+		return m.inspectEvidence(c.evidence, c.evidence.items[b.i])
+	}
 	m.busy = true
 	if c.r != nil {
 		br := c.r.Branches[b.i]

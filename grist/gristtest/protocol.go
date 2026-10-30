@@ -33,7 +33,7 @@ import (
 // this checks that extension, not every interleaving of concurrent work.
 // Use CheckProtocolOrders to check bounded alternatives as well.
 // Original recorder/seq and source survive in each projected step's Source.
-// protocol.recorder and protocol.seq observations keep that identity when
+// protocol.actor, protocol.recorder and protocol.seq observations keep that identity when
 // a projected stream is written to a file and read back.
 // The projected stream has fresh dense seqs; native gaps, losses, rewinds,
 // ambiguous causes and cycles are refused before that renumbering. A settle
@@ -270,6 +270,7 @@ func protocolSteps(steps []qtrace.Step, apps []*grist.App, graph *protocolGraph)
 		s.Args, s.Obs = maps.Clone(s.Args), maps.Clone(s.Obs)
 		s.Obs["protocol.service"], s.Obs["protocol.position"] = n.app, n.head
 		s.Obs["protocol.recorder"], s.Obs["protocol.seq"] = n.s.Recorder, strconv.FormatUint(n.s.Seq, 10)
+		s.Obs["protocol.actor"] = n.s.Actor
 		s.Obs["protocol.parentApp"], s.Obs["protocol.parentID"] = "", ""
 		s.Obs["protocol.parentPosition"], s.Obs["protocol.trigger"] = int64(0), n.trigger
 		if n.parent != nil {

@@ -8,6 +8,13 @@ and adds a line here.
 
 ## Unreleased
 
+- Diagnostic evidence: binding-authored exact selectors link outstanding intents
+  to captured and native record identities. JSON retains missing and ambiguous
+  matches; the TUI offers scoped evidence lists and captured-record inspection
+  without moving the model cursor or changing a verdict. Trace reconstruction
+  and inspection share `qtrace.SameRecord`; binding-driven sanitization retains
+  evidence-origin fields, including conservative dynamic-map dependencies.
+
 - grist: named `Config.Phases` replace `Prologue`. Required outcomes and real
   query observations gate later work within true virtual-time deadlines, with
   explicit fault policy and stable caller identity. Shared JSON/TUI execution

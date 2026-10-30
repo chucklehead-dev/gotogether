@@ -49,7 +49,7 @@ func newStyles(noColor bool) styles {
 
 // keyMap is the navigator's keys, as help shows them.
 type keyMap struct {
-	Up, Down, Take, Back, Fold, Fail, Save, Filter, Scroll, ScrollUp, Help, Quit key.Binding
+	Up, Down, Take, Back, Fold, Fail, Save, Evidence, Filter, Scroll, ScrollUp, Help, Quit key.Binding
 }
 
 func keys() keyMap {
@@ -61,6 +61,7 @@ func keys() keyMap {
 		Fold:     key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "fold")),
 		Fail:     key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "failing step")),
 		Save:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "save")),
+		Evidence: key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "evidence")),
 		Filter:   key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
 		Scroll:   key.NewBinding(key.WithKeys("pgdown", "space", "ctrl+d"), key.WithHelp("pgdn", "scroll down")),
 		ScrollUp: key.NewBinding(key.WithKeys("pgup", "ctrl+u"), key.WithHelp("pgup", "scroll up")),
@@ -71,12 +72,16 @@ func keys() keyMap {
 
 // ShortHelp implements help.KeyMap.
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Take, k.Back, k.Fold, k.Fail, k.Save, k.Filter, k.Help, k.Quit}
+	out := []key.Binding{k.Take, k.Back, k.Fold, k.Fail, k.Save}
+	if k.Evidence.Enabled() {
+		out = append(out, k.Evidence)
+	}
+	return append(out, k.Filter, k.Help, k.Quit)
 }
 
 // FullHelp implements help.KeyMap.
 func (k keyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{{k.Up, k.Down, k.Take, k.Back}, {k.Fold, k.Fail, k.Save}, {k.Scroll, k.ScrollUp}, {k.Filter, k.Help, k.Quit}}
+	return [][]key.Binding{{k.Up, k.Down, k.Take, k.Back}, {k.Fold, k.Fail, k.Save, k.Evidence}, {k.Scroll, k.ScrollUp}, {k.Filter, k.Help, k.Quit}}
 }
 
 // A screen is a node's lines: its head (what it is and where), its
@@ -94,6 +99,10 @@ func (m *Model) Render() string {
 	switch {
 	case c == nil:
 		sc.head = []string{m.st.title.Render("gotogether-nav") + "  " + m.st.faint.Render(m.c.Title), "", "loading…"}
+	case c.evidence != nil:
+		sc = m.evidenceScreen(c)
+	case c.record != nil:
+		sc = m.recordScreen(c)
 	case c.r != nil:
 		sc = m.runScreen(c)
 	default:
@@ -109,7 +118,15 @@ func (m *Model) Render() string {
 	case m.status != "":
 		foot = append(foot, m.st.status.Render(m.status))
 	}
-	foot = append(foot, m.help.View(m.keys))
+	helpKeys := m.keys
+	helpKeys.Evidence.SetEnabled(c != nil && c.evidence == nil && c.record == nil && len(evidenceGroups(c)) > 0)
+	if c != nil && (c.evidence != nil || c.record != nil) {
+		helpKeys.Take.SetHelp("enter", "inspect")
+		helpKeys.Fold.SetEnabled(false)
+		helpKeys.Fail.SetEnabled(false)
+		helpKeys.Save.SetEnabled(false)
+	}
+	foot = append(foot, m.help.View(helpKeys))
 	var footLines []string
 	for _, f := range foot {
 		footLines = append(footLines, strings.Split(f, "\n")...)

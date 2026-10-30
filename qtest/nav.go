@@ -19,6 +19,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/diagnostic"
 )
 
 // The run navigator (P5). A node is a prefix of a run's choices: a
@@ -249,6 +250,13 @@ func (e *engine) navigate(sources []source) {
 		return
 	}
 	req := navproto.Request{Node: os.Getenv("GOTOGETHER_NAV"), Fold: os.Getenv("GOTOGETHER_NAV_FOLD") == "1", Save: os.Getenv("GOTOGETHER_NAV_SAVE") == "1"}
+	if value := os.Getenv("GOTOGETHER_NAV_RECORD"); value != "" {
+		ref, err := diagnostic.ParseRecordRef(value)
+		if err != nil {
+			t.Fatalf("gotogether: GOTOGETHER_NAV_RECORD: %v", err)
+		}
+		req.Record = &ref
+	}
 	for p := range strings.SplitSeq(os.Getenv("GOTOGETHER_NAV_FOLLOW"), ",") {
 		if p = strings.TrimSpace(p); p == "" {
 			continue
@@ -446,6 +454,9 @@ func (e *engine) spec(b *navBase, req navproto.Request) (nodeSpec, error) {
 // navNode is the node req names from the base: its replay, stopped (for
 // what the node shows) at its choice, judged whole.
 func (e *engine) navNode(b *navBase, req navproto.Request) (*navproto.Node, error) {
+	if req.Record != nil && (req.Save || req.Fold || req.Take != nil || len(req.Follow) != 0) {
+		return nil, fmt.Errorf("record inspection: request a node and record identity without follow, take, fold or save")
+	}
 	t, x := e.t, e.x
 	spec, err := e.spec(b, req)
 	if err != nil {
@@ -542,6 +553,13 @@ func (e *engine) navNode(b *navBase, req navproto.Request) (*navproto.Node, erro
 		node.Receipt.Reason = "no step recorded"
 		node.Notes = append(node.Notes, r.noSteps())
 
+	}
+	if req.Record != nil {
+		detail, err := diagnostic.LookupRecord(r.Recorded, *req.Record)
+		if err != nil {
+			return nil, err
+		}
+		node.Record = detail
 	}
 	if req.Save {
 		if x.corpus == "" {
