@@ -86,7 +86,7 @@ var (
 	// Nav is the run navigation protocol between a test binary
 	// (GOTOGETHER_NAV=serve) and gotogether-nav: a session's first line
 	// names it.
-	Nav = Format{Thing: "nav", Major: 1, What: "run navigation protocol (GOTOGETHER_NAV=serve, gotogether-nav)",
+	Nav = Format{Thing: "nav", Major: 2, What: "run navigation protocol (GOTOGETHER_NAV=serve, gotogether-nav)",
 		Older:   "rebuild the test binary at the navigator's gotogether version",
 		Upgrade: "install the navigator at the module's gotogether version (go install github.com/chucklehead-dev/gotogether/cmd/gotogether@<version> for gotogether nav, github.com/chucklehead-dev/gotogether/qnav/cmd/gotogether-nav@<version> for the interactive one; gotogether doctor names the versions)"}
 )

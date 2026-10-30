@@ -2304,6 +2304,7 @@ type DocAbsence struct
     field Cause string `json:"cause"`
     field Why string `json:"why"`
 type DocActor struct
+    field Receipt *receipt.Actor `json:"receipt,omitempty"`
     field Actor string `json:"actor"`
     field Partition string `json:"partition,omitempty"`
     field Steps int `json:"steps"`
@@ -2358,6 +2359,7 @@ type DocPartition struct
     field Of int `json:"of"`
     field Steps int `json:"steps"`
 type DocRecord struct
+    field Ambiguous bool `json:"ambiguous,omitempty"`
     field ID string `json:"id"`
     field Step int `json:"step,omitempty"`
     field Seq uint64 `json:"seq"`
@@ -2378,6 +2380,7 @@ type DocRecord struct
     field SpanID string `json:"spanId,omitempty"`
     field Text string `json:"text"`
 type Document struct
+    field Receipt *receipt.Summary `json:"receipt,omitempty"`
     field Format string `json:"format"`
     field Command string `json:"command"`
     field Verdict string `json:"verdict"`
@@ -2487,6 +2490,7 @@ type Loss struct
     field Before time.Time `json:"before,omitzero"`
 type Manifest struct
     field Format string `json:"format"`
+    field Receipt *receipt.Summary `json:"receipt,omitempty"`
     field Session string `json:"session,omitempty"`
     field Name string `json:"name,omitempty"`
     field Package string `json:"package,omitempty"`
@@ -2541,6 +2545,7 @@ type Report struct
     method (*Report) HistorySVG(recorded, judged []qtrace.Step) []byte
     method (*Report) OK() bool
     method (*Report) Reason() string
+    method (*Report) Receipt() receipt.Summary
     method (*Report) Summary() string
     method (*Report) VerboseSummary() string
     method (*Report) Verdict() RunVerdict
@@ -2571,6 +2576,7 @@ type Result struct
     method (*Result) OK() bool
     method (*Result) PendingCause(p qtrace.Step) Cause
     method (*Result) Reason() string
+    method (*Result) Receipt() receipt.Actor
     method (*Result) Summary() string
     method (*Result) VerboseSummary() string
 type RunCheck struct
@@ -2893,7 +2899,7 @@ type Verdict struct
     field Replayed string
 
 == github.com/chucklehead-dev/gotogether/validate/navproto
-const Protocol = "gotogether.nav/1"
+const Protocol = "gotogether.nav/2"
 func CheckProtocol(p string) error
 type ActorState struct
     field Diagnostics []diagnostic.Result `json:"diagnostics,omitempty"`
@@ -2913,8 +2919,9 @@ type NamedValue struct
     field Name string `json:"name"`
     field Value string `json:"value"`
 type Node struct
+    field Receipt receipt.Summary `json:"receipt"`
     field Diagnostics []diagnostic.Result `json:"diagnostics,omitempty"`
-    field Protocol string `json:"protocol,omitempty"`
+    field Protocol string `json:"protocol"`
     field Run string `json:"run"`
     field ID string `json:"id"`
     field Schedule string `json:"schedule"`
@@ -2926,7 +2933,6 @@ type Node struct
     field Tasks []string `json:"tasks,omitempty"`
     field Elapsed string `json:"elapsed,omitempty"`
     field Model []ActorState `json:"model,omitempty"`
-    field Verdict string `json:"verdict"`
     field Folded int `json:"folded,omitempty"`
     field Saved string `json:"saved,omitempty"`
     field Notes []string `json:"notes,omitempty"`
@@ -2941,10 +2947,52 @@ type Response struct
     field Node *Node `json:"node,omitempty"`
     field Error string `json:"error,omitempty"`
 type Session struct
-    field Protocol string `json:"protocol,omitempty"`
+    field Protocol string `json:"protocol"`
     field Run string `json:"run"`
     field Choices int `json:"choices"`
     field Notes []string `json:"notes,omitempty"`
+
+== github.com/chucklehead-dev/gotogether/validate/receipt
+const Error Status = "error"
+const Fail Status = "fail"
+const Inconclusive Status = "inconclusive"
+const NotChecked Status = "not_checked"
+const Pass Status = "pass"
+type Actor struct
+    field JudgedBy string `json:"judgedBy"`
+    field Partition string `json:"partition,omitempty"`
+    field Scope string `json:"scope"`
+    field Actor string `json:"actor"`
+    field Status Status `json:"status"`
+    field Reason string `json:"reason,omitempty"`
+    field Ordering string `json:"ordering"`
+    field Search *Search `json:"search,omitempty"`
+    field AssumedEffects []Effect `json:"assumedEffects,omitempty"`
+    field Checks []Check `json:"checks"`
+type Check struct
+    field Kind string `json:"kind"`
+    field Name string `json:"name"`
+    field Status Status `json:"status"`
+    field Reason string `json:"reason,omitempty"`
+type Effect struct
+    field CandidateRecord string `json:"candidateRecord"`
+    field Position int `json:"position"`
+    field Action string `json:"action"`
+    field Args map[string]any `json:"args,omitempty"`
+type Search struct
+    field Mode string `json:"mode"`
+    field Goal string `json:"goal"`
+    field BudgetExhausted bool `json:"budgetExhausted"`
+    field OrderBudget int `json:"orderBudget,omitempty"`
+    field ResolutionBudget int `json:"resolutionBudget,omitempty"`
+type Status string
+type Summary struct
+    field Status Status `json:"status"`
+    field Reason string `json:"reason,omitempty"`
+    field Scope string `json:"scope"`
+    field OtherExecutions Status `json:"otherExecutions"`
+    field Actors []Actor `json:"actors"`
+    method (Summary) String() string
 
 == github.com/chucklehead-dev/gotogether/woven
 const ABI1 = 1

@@ -7,7 +7,13 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Evidence freshness follow-up (local branch): `GOTOGETHER_SESSION` labels
+Check-receipt first increment (working branch): validation reports and run
+navigation share structured statuses, ordering-search limits and assumed effects
+through validate/receipt. Whole-run receipts remain independent of cursor state;
+all current navigation producers emit required receipts (nav/2, current only). Grist
+composition aggregation is still separate follow-up work. See [check-receipts.md](check-receipts.md).
+
+Evidence freshness follow-up (included in this branch): `GOTOGETHER_SESSION` labels
 exploration evidence and run manifests. `evidence -session` filters the
 suite before coverage and expectation checks; unscoped completeness checks
 require explicit `-history`. Use a fresh ID and `go test -count=1`.

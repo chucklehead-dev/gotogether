@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/validate/navproto"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -264,9 +265,9 @@ func TestRunDiff(t *testing.T) {
 		return []navproto.ActorState{{Actor: "default", State: []navproto.NamedValue{{Name: "applied", Value: "Set(1)"}, {Name: "count", Value: count}}}}
 	}
 	run := fakeRun{
-		"@0": {Run: "TestX#1:seed=1", ID: "@0", Verdict: "pass", Model: state("1"), Choice: &navproto.Choice{Kind: "sched.task", N: 2, Options: []string{"a", "b"}},
+		"@0": {Run: "TestX#1:seed=1", ID: "@0", Receipt: receipt.Summary{Status: receipt.Pass, Scope: "collected_history", OtherExecutions: receipt.NotChecked}, Model: state("1"), Choice: &navproto.Choice{Kind: "sched.task", N: 2, Options: []string{"a", "b"}},
 			Branches: []navproto.Branch{{Option: 0, Name: "a", Child: "@1"}, {Option: 1, Name: "b", Child: "0:1@1"}}},
-		"@1": {Run: "TestX#1:seed=1", ID: "@1", Verdict: "pass", Model: state("2")},
+		"@1": {Run: "TestX#1:seed=1", ID: "@1", Receipt: receipt.Summary{Status: receipt.Pass, Scope: "collected_history", OtherExecutions: receipt.NotChecked}, Model: state("2")},
 	}
 	d := drive(t, Config{Title: "TestX#1:seed=1", Run: run})
 	first := d.screen()

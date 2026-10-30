@@ -187,6 +187,10 @@
                     "actor": {
                       "type": "string"
                     },
+                    "ambiguous": {
+                      "description": "Ambiguous marks a pending call whose effect is assumed by a search.",
+                      "type": "boolean"
+                    },
                     "args": {
                       "additionalProperties": {
                         "type": [
@@ -518,6 +522,10 @@
                 "actor": {
                   "type": "string"
                 },
+                "ambiguous": {
+                  "description": "Ambiguous marks a pending call whose effect is assumed by a search.",
+                  "type": "boolean"
+                },
                 "args": {
                   "additionalProperties": {
                     "type": [
@@ -606,6 +614,119 @@
           },
           "reason": {
             "type": "string"
+          },
+          "receipt": {
+            "additionalProperties": false,
+            "properties": {
+              "actor": {
+                "type": "string"
+              },
+              "assumedEffects": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": {
+                      "type": "string"
+                    },
+                    "args": {
+                      "additionalProperties": {
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean",
+                          "null"
+                        ]
+                      },
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "candidateRecord": {
+                      "type": "string"
+                    },
+                    "position": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "type": "array"
+              },
+              "checks": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    }
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "type": "array"
+              },
+              "judgedBy": {
+                "type": "string"
+              },
+              "ordering": {
+                "type": "string"
+              },
+              "partition": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "scope": {
+                "type": "string"
+              },
+              "search": {
+                "additionalProperties": false,
+                "properties": {
+                  "budgetExhausted": {
+                    "type": "boolean"
+                  },
+                  "goal": {
+                    "type": "string"
+                  },
+                  "mode": {
+                    "type": "string"
+                  },
+                  "orderBudget": {
+                    "type": "integer"
+                  },
+                  "resolutionBudget": {
+                    "type": "integer"
+                  }
+                },
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "status": {
+                "type": "string"
+              }
+            },
+            "type": [
+              "object",
+              "null"
+            ]
           },
           "steps": {
             "type": "integer"
@@ -747,6 +868,144 @@
     "reason": {
       "description": "Reason is the first failure's, in the claims' words (\"violates refundsWithinCapture\", \"rejects void\"); Result the result line's text after its verdict.",
       "type": "string"
+    },
+    "receipt": {
+      "additionalProperties": false,
+      "description": "Receipt describes the history judgment, including folded partitions.",
+      "properties": {
+        "actors": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "actor": {
+                "type": "string"
+              },
+              "assumedEffects": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": {
+                      "type": "string"
+                    },
+                    "args": {
+                      "additionalProperties": {
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean",
+                          "null"
+                        ]
+                      },
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "candidateRecord": {
+                      "type": "string"
+                    },
+                    "position": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "type": "array"
+              },
+              "checks": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    }
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "type": "array"
+              },
+              "judgedBy": {
+                "type": "string"
+              },
+              "ordering": {
+                "type": "string"
+              },
+              "partition": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "scope": {
+                "type": "string"
+              },
+              "search": {
+                "additionalProperties": false,
+                "properties": {
+                  "budgetExhausted": {
+                    "type": "boolean"
+                  },
+                  "goal": {
+                    "type": "string"
+                  },
+                  "mode": {
+                    "type": "string"
+                  },
+                  "orderBudget": {
+                    "type": "integer"
+                  },
+                  "resolutionBudget": {
+                    "type": "integer"
+                  }
+                },
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "status": {
+                "type": "string"
+              }
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "type": "array"
+        },
+        "otherExecutions": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "type": [
+        "object",
+        "null"
+      ]
     },
     "result": {
       "type": "string"

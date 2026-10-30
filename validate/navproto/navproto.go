@@ -9,6 +9,7 @@ package navproto
 import (
 	"fmt"
 	"github.com/chucklehead-dev/gotogether/validate/diagnostic"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 
 	"github.com/chucklehead-dev/gotogether/internal/formats"
 )
@@ -24,11 +25,13 @@ type NamedValue struct {
 // here so that the CLI and gotogether-nav, which a test package does not
 // build, read it): ID is "<schedule>@<k>", the choices before k fixed.
 type Node struct {
+	// Receipt describes the whole nominal run, independently of Model cursor states.
+	Receipt receipt.Summary `json:"receipt"`
 	// Diagnostics describe the nominal whole run at its judgment boundary, not Model.
 	Diagnostics []diagnostic.Result `json:"diagnostics,omitempty"`
 	// Protocol is the navigation protocol of the binary that wrote the
-	// node (Protocol; "": none named, read as the current)
-	Protocol string `json:"protocol,omitempty"`
+	// node (Protocol)
+	Protocol string `json:"protocol"`
 	Run      string `json:"run"`
 	ID       string `json:"id"`
 	Schedule string `json:"schedule"`
@@ -49,9 +52,6 @@ type Node struct {
 	// replay of its plan), or why there is none (a step the model
 	// rejects: the explanation)
 	Model []ActorState `json:"model,omitempty"`
-	// Verdict is the whole run the node makes (nominal after it):
-	// "pass", or its report's reason
-	Verdict string `json:"verdict"`
 	// Folded is how many choices the node advanced through to reach At,
 	// asked to fold (Request.Fold): choices that were no decision
 	Folded int `json:"folded,omitempty"`
@@ -93,16 +93,12 @@ type ActorState struct {
 // binary (GOTOGETHER_NAV) and a navigator (gotogether nav,
 // gotogether-nav), each built against its own version of gotogether. A
 // session's first line and a node name it.
-const Protocol = "gotogether.nav/1"
+const Protocol = "gotogether.nav/2"
 
 // CheckProtocol refuses a protocol a session or node names that this
 // version does not speak, with the fix (a later one: upgrade the
-// navigator; an earlier one: rebuild the test binary). "" names none and
-// is read as the current one.
+// navigator; an earlier one: rebuild the test binary). An absent protocol is an error.
 func CheckProtocol(p string) error {
-	if p == "" {
-		return nil
-	}
 	if _, err := formats.Nav.Check(p); err != nil {
 		return fmt.Errorf("the test binary's navigation protocol: %w", err)
 	}
@@ -137,10 +133,9 @@ type Response struct {
 // its base run made (but entropy); Notes say what to know of every node
 // (the base run drew entropy, or did not replay).
 type Session struct {
-	// Protocol is the session's navigation protocol (Protocol; "":
-	// none named, read as the current): a navigator refuses one it does
+	// Protocol is the session's navigation protocol (Protocol): a navigator refuses one it does
 	// not speak (CheckProtocol)
-	Protocol string   `json:"protocol,omitempty"`
+	Protocol string   `json:"protocol"`
 	Run      string   `json:"run"`
 	Choices  int      `json:"choices"`
 	Notes    []string `json:"notes,omitempty"`

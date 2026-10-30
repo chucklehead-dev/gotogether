@@ -207,7 +207,7 @@ this build reads.
 | `gotogether.run/2` | a validated run's manifest (`validate -manifest`) | the current only: written anew by every run |
 | `gotogether.evidence/2` | an exploration's evidence (`GOTOGETHER_EVIDENCE`) | the current only |
 | `gotogether.model/1` | a compiled model (`gotogether compile`) | the current only |
-| `gotogether.nav/1` | the run navigation protocol between a test binary and gotogether-nav | the current only |
+| `gotogether.nav/2` | the run navigation protocol between a test binary and gotogether-nav | the current only |
 
 Beside them, two ABIs: `woven.ABI1`, which qweave's generated code
 references by name (a skew fails to compile, naming it), and grist's

@@ -57,14 +57,14 @@ func TestNavRun(t *testing.T) {
 		if len(n.Branches) != 2 || n.Branches[0].Child != "@1" || n.Branches[1].Child != "0:1@1" || n.Branches[1].Name != "withdrawer" {
 			t.Errorf("its branches: %+v", n.Branches)
 		}
-		if n.Verdict != "pass" || len(n.Steps) != 0 || len(n.Tasks) != 2 {
+		if n.Receipt.Status != "pass" || len(n.Steps) != 0 || len(n.Tasks) != 2 {
 			t.Errorf("the nominal run from it: %+v", n)
 		}
 	})
 	t.Run("branch", func(t *testing.T) {
 		n := navAt(t, "TestNavRun/branch#1:schedule=", "start", "1")
 		again := navAt(t, "TestNavRun/branch#2:schedule=", "0:1@1", "")
-		if n.ID != "0:1@1" || n.Verdict != "rejects withdraw" {
+		if n.ID != "0:1@1" || n.Receipt.Reason != "rejects withdraw" {
 			t.Fatalf("the withdrawer first: %+v", n)
 		}
 		n.Run, again.Run = "", "" // the explorations' refs differ
@@ -84,7 +84,7 @@ func TestNavRun(t *testing.T) {
 		}
 		// its nominal child passes: the delay is the failure
 		c := navAt(t, "TestNavRun/fail#2:schedule=0:1", "fail", "0")
-		if c.Verdict != "pass" || len(c.Model) != 1 || len(c.Model[0].State) == 0 {
+		if c.Receipt.Status != "pass" || len(c.Model) != 1 || len(c.Model[0].State) == 0 {
 			t.Errorf("its nominal branch: %+v", c)
 		}
 	})
@@ -176,7 +176,7 @@ func TestNavServe(t *testing.T) {
 		t.Errorf("a bad request: %+v", rs[5])
 	}
 	end := rs[6].Node
-	if end == nil || end.ID != "0:2@3" || end.Folded != 2 || end.Choice != nil || len(end.Steps) != 4 || end.Verdict != "pass" {
+	if end == nil || end.ID != "0:2@3" || end.Folded != 2 || end.Choice != nil || len(end.Steps) != 4 || end.Receipt.Status != "pass" {
 		t.Errorf("off the base path a fold runs to the end: %+v", rs[6])
 	}
 	if n := rs[7].Node; n == nil || n.ID != "@0" || n.Folded != 0 {

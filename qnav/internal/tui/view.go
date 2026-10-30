@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/validate/navproto"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -292,9 +293,17 @@ func (m *Model) runScreen(c *entry) screen {
 	n := c.r
 	st := m.st
 	var sc screen
-	verdict := st.pass.Render(n.Verdict)
-	if n.Verdict != "pass" {
-		verdict = st.fail.Render(n.Verdict)
+	status := n.Receipt.Status
+	label := string(status)
+	if n.Receipt.Reason != "" {
+		label += " · " + n.Receipt.Reason
+	}
+	verdict := st.changed.Render(label)
+	switch status {
+	case receipt.Pass:
+		verdict = st.pass.Render(label)
+	case receipt.Fail, receipt.Error:
+		verdict = st.fail.Render(label)
 	}
 	sc.head = []string{st.title.Render("gotogether-nav") + "  " + n.Run + "  " + st.faint.Render("node "+n.ID)}
 	sc.head = append(sc.head, st.faint.Render("path: ")+m.crumbs())
@@ -320,6 +329,8 @@ func (m *Model) runScreen(c *entry) screen {
 		sc.branches = append(sc.branches, "", st.faint.Render("the run made no more choices: its end"))
 	}
 	var out []string
+	out = append(out, st.section.Render("whole-run judgment · independent of cursor"))
+	out = append(out, strings.Split(strings.TrimSpace(n.Receipt.String()), "\n")...)
 	steps := n.Steps
 	out = append(out, "", st.section.Render(fmt.Sprintf("steps so far (%d)", len(steps))))
 	const shown = 8

@@ -158,7 +158,7 @@ func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, e
 		actor = "itf"
 	}
 	base := "replay_" + sanitize(actor)
-	res := &Result{Actor: actor}
+	res := &Result{Actor: actor, inputScope: "model_trace"}
 	return res, evaluate(ctx, ms, [][]binding.Call{calls}, []*binding.Call{start}, base, o, []*Result{res}, nil)[0]
 }
 

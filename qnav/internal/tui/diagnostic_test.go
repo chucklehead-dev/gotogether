@@ -9,6 +9,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/validate"
 	"github.com/chucklehead-dev/gotogether/validate/diagnostic"
 	"github.com/chucklehead-dev/gotogether/validate/navproto"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 func TestTerminalDiagnosticEntry(t *testing.T) {
@@ -59,7 +60,7 @@ func TestRunDiagnosticScopes(t *testing.T) {
 	cursor.Cause = ""
 	model := New(Config{NoColor: true})
 	model.w, model.h = 100, 60
-	screen := model.runScreen(&entry{r: &navproto.Node{Run: "sample", ID: "0@1", Verdict: "eventually complete failed", Diagnostics: []diagnostic.Result{result}, Model: []navproto.ActorState{{Actor: "tenant-a", Diagnostics: []diagnostic.Result{cursor}}}}})
+	screen := model.runScreen(&entry{r: &navproto.Node{Run: "sample", ID: "0@1", Receipt: receipt.Summary{Status: receipt.Fail, Reason: "eventually complete failed", Scope: "collected_history", OtherExecutions: receipt.NotChecked}, Diagnostics: []diagnostic.Result{result}, Model: []navproto.ActorState{{Actor: "tenant-a", Diagnostics: []diagnostic.Result{cursor}}}}})
 	text := strings.Join(screen.detail, "\n")
 	if !strings.Contains(text, "whole-run diagnostics · independent of cursor") || !strings.Contains(text, "diagnostics · cursor state, no verdict") {
 		t.Fatalf("scopes not labeled:\n%s", text)

@@ -269,6 +269,7 @@ func (r *Report) summary(verbose bool) string {
 		}
 		s += sum
 	}
+	s += r.Receipt().String()
 	return s
 }
 

@@ -26,6 +26,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/replay"
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 // Options configures a validation run.
@@ -80,7 +81,9 @@ const (
 
 // Result is the outcome of validating one actor's trace.
 type Result struct {
-	Actor string
+	historySearch *receipt.Search
+	inputScope    string
+	Actor         string
 	// Partition is the entity the result judges, "<argument>=<value>"
 	// (Actor is "<actor> <argument>=<value>"), when the binding partitions
 	// the log by an argument (binding.Partition); "" else.
