@@ -33,7 +33,7 @@ func Failing(ch *validate.Checker, start validate.NavStart) (ModelNav, string, s
 				}
 			}
 			if len(details) > 0 {
-				return terminalDiagnosticNav{whole, details}, "terminal state · failed completion property", actor.Summary(), nil
+				return terminalDiagnosticNav{whole, details}, "terminal state · failed completion property", "The recorded history conforms; " + actor.Reason() + ".", nil
 			}
 		}
 		return nil, "", "", errors.New("the model accepts every call of the run: no failing step")

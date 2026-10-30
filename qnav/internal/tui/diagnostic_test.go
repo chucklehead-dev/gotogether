@@ -33,6 +33,9 @@ func TestTerminalDiagnosticEntry(t *testing.T) {
 	d := drive(t, Config{Title: "recorded history", Model: initial, Failing: func() (ModelNav, string, string, error) { return nav, title, why, nil }})
 	d.keys("g")
 	screen := d.m.View().Content
+	if strings.Contains(screen, "which the model rejects") || !strings.Contains(screen, "completion failure · fixed checked history") {
+		t.Fatalf("completion failure described as a rejected call:\n%s", screen)
+	}
 	for _, want := range []string{"terminal diagnostics", "shared-order", "c1", "at recorded settle", "selected model state; no verdict"} {
 		if !strings.Contains(screen, want) {
 			t.Fatalf("missing %q:\n%s", want, screen)
