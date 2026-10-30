@@ -13,16 +13,26 @@ Standing decisions, with the maintainer:
   only OTel and yaml.v3.
 - MIT license.
 
-Current order (maintainer, 2026-10-29): this is a prerelease library.
-Fix correctness issues that invalidate experimental results, then use a
-bounded GR4 composition to test the abstractions, and an adoption trial
-to expose API friction. Breaking changes are allowed; release policy and
-production hardening are not gates on these experiments. Add adapters
-when an experiment needs them. GR3 slice 6 (spans) follows the completed
-bounded composition and adoption experiments; its first increment is built:
-a lossless real-peer OTel round-trip, not generic HTTP inference
-(docs/grist-call-spans.md). R5 remains the
-maintainer's call.
+Current order (reviewed 2026-10-30): this is a prerelease library.
+Correctness and usable core contracts come before release machinery. The bounded
+composition, Goo lifecycle, declared-call span, workload-phase and diagnostic
+experiments have answered their initial questions; rotate away from inventory
+and further diagnostic breadth. Breaking changes are allowed, without parallel
+legacy formats.
+
+Recommended next is a small completion-accounting slice (GR10b): distinguish idle
+background workers from workers holding work, tested in plain qenv and a second
+asynchronous consumer. This is a known daemon/settlement classification boundary,
+not a newly demonstrated silent pass. Alongside it, run one cold-start non-grist
+HTTP/SQL or externally driven adoption rehearsal with prefix/completion/loss
+controls. Then advance I4's finite pinned-witness replay, which expands supported
+models across trace validation and simulation. Keep unsupported choices explicit.
+
+Typed core lint findings (including performed/blocked checks) and component-aware
+shrinking are concrete follow-ups. Select the next adapter or starter from the
+adoption results; outbound streams are a candidate, not a committed catalog-wide
+expansion. Do not start all these tracks at once. Tags remain the maintainer's
+call. See HISTORY's "Breadth and core lessons review, 2026-10-30" for tradeoffs.
 
 GR4's first increment is built: acyclic peer graphs, one store/node/API
 per peer, shared peers instantiated once, per-service model judgments
@@ -33,8 +43,8 @@ premature-posting contrasts. Bounded universal order search now checks
 concurrent extensions with explicit exhaustion and counterexample identities.
 The inventory-grist adoption rehearsal is built: cancellation and
 confirmation at a shared inventory owner, three planted bugs, local and
-combined checks, and a friction report. Its concrete next candidates are
-order-specific obligation diagnostics; named prerequisite phases are now built
+combined checks, and a friction report. Order-specific obligation diagnostics and exact evidence links are built;
+named prerequisite phases are also built
 with required outcomes, real query observations and explicit fault policy
 (docs/grist-workload-phases.md). Broader per-service configuration, cycles,
 clusters and rollouts need adopter evidence.
@@ -51,8 +61,9 @@ A provisional [model-authored diagnostics experiment](model-diagnostics-prototyp
 is in progress: typed Quint documentation annotations associate a checked
 property with its outstanding-intent value, without another YAML mapping.
 The inventory missingRelease witness feeds structured text/JSON/TUI details.
-Native evidence resolution and developer-editor integration remain open;
-no grist application-runtime behavior is added.
+Explicit binding selectors now resolve captured/native identities in JSON, CLI
+and TUI without changing judgments. Developer-editor integration and broader
+checked-history diagnostics remain open, but are not the next expansion.
 The earlier tracks below retain their item identifiers and technical dependencies; their historical release
 recommendations do not override this prerelease order.
 

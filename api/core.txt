@@ -2065,6 +2065,7 @@ func MutateOps(ops ...string) MutationOption
 func Mutations(steps []Step, opts ...MutationOption) []StepMutant
 func ReadJSONL(r io.Reader) ([]Step, error)
 func Reconstruct(steps []Step) ([]*Trace, []Issue)
+func SameRecord(a, b *Step) bool
 func SpanSource(spanID, traceID string) string
 func UncorruptedFields(steps []Step) []string
 func WriteJSONL(w io.Writer, steps []Step) error

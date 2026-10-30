@@ -104,7 +104,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 			k := rk{s.Recorder, s.Seq}
 			if j, ok := seen[k]; ok {
 				first := &steps[j]
-				if sameRecord(first, s) {
+				if SameRecord(first, s) {
 					issues = append(issues, Issue{"info", "duplicate", fmt.Sprintf("recorder %s seq %d seen twice; kept the first", s.Recorder, s.Seq)})
 					continue
 				}
@@ -444,10 +444,15 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	return out, issues
 }
 
-// sameRecord reports whether a and b are one record twice: equal in
-// everything written with it (Source, where it was read, aside: one span
-// exported twice, one line in two overlapping logs).
-func sameRecord(a, b *Step) bool {
+// SameRecord reports whether two captured records are equivalent. Display
+// provenance (Source) is ignored, timestamps compare by instant, and nil and
+// empty argument, observation and order maps are equivalent. Other fields,
+// including the written artifact reference (Ref), must agree. Two nil records
+// are equivalent; a nil record and a non-nil record are not.
+func SameRecord(a, b *Step) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
 	x, y := *a, *b
 	x.Source, y.Source = "", ""
 	if !x.Time.Equal(y.Time) || !x.Invoked.Equal(y.Invoked) || !x.LostBefore.Equal(y.LostBefore) || !x.CompleteThrough.Equal(y.CompleteThrough) {

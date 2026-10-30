@@ -3,9 +3,54 @@ package diagnostic
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
+
+// Inspection must apply the same duplicate policy as trace reconstruction:
+// ingestion representation differences cannot turn a valid copy into a conflict.
+func TestLookupRecordMatchesReconstructionEquivalence(t *testing.T) {
+	instant := time.Date(2026, 10, 30, 12, 0, 0, 123, time.UTC)
+	a := qtrace.Step{Actor: "a", Recorder: "r", Seq: 1, Action: "observe", Source: "first.jsonl:2", Time: instant, Invoked: instant.Add(-time.Second)}
+	ref := RecordRef{Actor: a.Actor, Recorder: a.Recorder, Seq: a.Seq}
+	for _, tc := range []struct {
+		name   string
+		change func(*qtrace.Step)
+	}{
+		{"empty arguments", func(s *qtrace.Step) { s.Args = map[string]any{} }},
+		{"empty observations", func(s *qtrace.Step) { s.Obs = map[string]any{} }},
+		{"empty order", func(s *qtrace.Step) { s.Order = map[string]int64{} }},
+		{"same instants", func(s *qtrace.Step) {
+			s.Time = s.Time.In(time.FixedZone("east", 3600))
+			s.Invoked = s.Invoked.In(time.FixedZone("west", -3600))
+		}},
+		{"display provenance", func(s *qtrace.Step) { s.Source = "second.jsonl:9" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b := a
+			tc.change(&b)
+			steps := []qtrace.Step{a, b}
+			traces, issues := qtrace.Reconstruct(steps)
+			if len(traces) != 1 || len(traces[0].Steps) != 1 || len(traces[0].Issues) != 0 || len(issues) != 1 || issues[0].Severity != "info" {
+				t.Fatalf("reconstruction rejected duplicate export: traces %+v issues %+v", traces, issues)
+			}
+			detail, err := LookupRecord(steps, ref)
+			if err != nil || detail.Source != a.Source || detail.Reference.Seq != a.Seq {
+				t.Fatalf("inspection disagreed with reconstruction: %+v %v", detail, err)
+			}
+		})
+	}
+	b := a
+	b.Outcome = "conflicting"
+	traces, _ := qtrace.Reconstruct([]qtrace.Step{a, b})
+	if len(traces) != 1 || len(traces[0].Issues) != 1 || traces[0].Issues[0].Severity != "error" {
+		t.Fatal("reconstruction did not flag conflicting capture")
+	}
+	if _, err := LookupRecord([]qtrace.Step{a, b}, ref); err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("inspection accepted conflicting capture: %v", err)
+	}
+}
 
 func TestParseRecordRef(t *testing.T) {
 	ref, err := ParseRecordRef(`{"actor":"a","recorder":"r","seq":18446744073709551615}`)

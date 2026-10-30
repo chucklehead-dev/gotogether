@@ -1011,12 +1011,34 @@ func fieldNamed(data any, s string) string {
 }
 
 // UsedFields lists, for each action of the model, the step fields the
-// binding reads: its templates' and its parameters' defaults. What a log
-// needs to keep to be checked (qtrace.Filter.Keep).
+// binding reads: its action and evidence-origin templates and its parameters'
+// defaults. Dynamic map access retains that map with args.* or obs.* markers
+// (qtrace.Filter.Keep), rather than silently discarding unknown dependencies.
 func (b *Binding) UsedFields(m *Model) map[string][]string {
 	out := map[string][]string{}
 	for name, ps := range m.Actions {
-		out[name] = b.Actions[name].Fields(ps...)
+		set := map[string]bool{}
+		a := b.Actions[name]
+		for _, src := range a.Args {
+			collectKeptFields(src, false, set)
+		}
+		for _, p := range ps {
+			if _, ok := a.Args[p.Name]; !ok {
+				collectKeptFields(p.DefaultTemplate(), false, set)
+			}
+		}
+		collectKeptFields(a.Expect, false, set)
+		for _, kinds := range b.DiagnosticEvidence {
+			for _, rule := range kinds {
+				if rule.Action != name || rule.Origin == nil {
+					continue
+				}
+				for _, src := range []string{rule.Origin.Actor, rule.Origin.Recorder, rule.Origin.Seq} {
+					collectKeptFields(src, true, set)
+				}
+			}
+		}
+		out[name] = slices.Sorted(maps.Keys(set))
 	}
 	return out
 }

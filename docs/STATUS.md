@@ -81,8 +81,9 @@ A [model-authored diagnostics prototype](model-diagnostics-prototype.md)
 now explores the inventory trial's unanswered-intent reporting friction.
 It uses Quint documentation annotations, without an extra binding mapping,
 and shares optional structured data across text/JSON/navigation/TUI. This
-is provisional work for review; native evidence links and editor source
-ranges are not implemented. It does not change grist runtime behavior.
+is provisional work; explicit evidence selectors now link captured and native
+identities in JSON/CLI/TUI. Editor source ranges and broader checked-history
+coverage remain open. It does not change grist runtime behavior.
 
 ## 1. What works now
 
@@ -241,22 +242,26 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Review the bounded GR3 span trial before expanding it | S | first increment built; third-party and reduced HTTP conversion need concrete evidence requirements |
-| 2 | GR4: validate phased workloads and navigable obligation evidence with an independent adopter | S-M | named prerequisites and explicit evidence selectors are built; let adoption identify further workload needs |
-| 3 | Further independent adoption, especially grist or unaided onboarding | S-M | Goo validates an agent-assisted core-library workflow; it does not cover these adoption questions |
-| 4 | GR5 streams, GR6 gRPC, GR7 controllers | M, M, L | on the published doubles (H7) |
-| 5 | GR8 sagas and timers, GR9 checkout as grist services | M, L | GR9 proves GR4 and GR8 compose |
-| 6 | P9, grist apps explored in-process | L | after GR4 |
-| 7 | I42-I51, the bold ideas: model diff and refinement (M each), graphs further (M each), sleep sets then DPOR (M, L), Elle's rest (S-M each), production capture (M each), a shared report (M), kubesim as envtest (M), no blank page (M-L; `init -kind http` is its first part), Quint off the hot path (L each), small ones (S each: `qtest.NoHotCycle`, typed fault names, `gristtest.StoredLogs`, `qobs.Sometimes`, ghost modules, the model's facts beside the spec) | as listed | each decided by the maintainer before it starts |
+| 1 | Core completion accounting (GR10b), bounded to idle versus active workers | S | apply the eligibility/completion/judgment separation to background work; verify plain qenv plus another async consumer |
+| 2 | Cold-start non-grist adoption rehearsal | S-M | different driver/evidence shape; installed tools and public docs, actual observations, prefix/completion/loss controls; internal rehearsal is not independent-maintainer adoption |
+| 3 | I4 finite pinned-witness replay | M | extend core model support without resampling internal choices; retain refusal outside supported bounds |
+| 4 | Typed core lint findings and executable onboarding | S-M | generalize preflight's structured findings/performed checks across CLI, editors and agents; smoke-check one workflow in each track |
+| 5 | Component-aware shrinking | S-M | preserve the same component/obligation, refusing exhaustion, unchecked evidence and unreached prerequisites; include a non-inventory system |
+| 6 | One adopter-driven capability (outbound streams or library starter are candidates) | M | use concrete trial blockers before expanding adapters or domain APIs |
 
-Also proposed, not built: GR10b (a poller a daemon only while it waits)
-and GR10c (`Settle` naming down processes), both S and qenv-level.
+Do not start all six at once. The recommended next implementation is the bounded
+completion-accounting slice, with the non-grist rehearsal as its independent
+workflow check. Verification/product reviewers favored I4 next; the runtime
+review identified the existing daemon/settlement classification boundary as a
+smaller correctness step to take first. Further inventory/diagnostic expansion,
+cycles, clusters and new platform facades wait for evidence. GR10c down-process
+settlement has separate semantics and stays separate from GR10b.
 
-**Recommended next: review the first GR3 slice 6 increment and its follow-ons.** R5 is
-available when the maintainer wants tags; compatibility commitments and
-platform breadth do not precede evidence that the abstractions compose.
-I4's unsupported nondeterministic-replay boundary stays a correctness
-constraint, not a reason to build unrelated release machinery.
+The span round-trip and inventory trials retain explicit limits; they do not
+establish generic third-party HTTP inference or unaided onboarding. R5 is
+available when the maintainer wants tags; no compatibility commitment is needed
+for these prerelease iterations. The review and lessons are recorded in
+[HISTORY](HISTORY.md#breadth-and-core-lessons-review-2026-10-30).
 
 ## 5. Decisions for the maintainer
 

@@ -30,6 +30,8 @@ type Filter struct {
 	// the ones the binding reads); every other argument and observation,
 	// and the error text, is dropped. Steps of actions it does not list
 	// keep only their identity.
+	// An args.* or obs.* entry keeps that action's whole corresponding map,
+	// for binding templates whose dynamic dependencies cannot be narrowed.
 	Keep map[string][]string
 	// KeepRefs keeps steps' refs (Step.Ref) when the filter sanitizes
 	// (Pseudonymize or Keep set), which drops them otherwise: a ref is
@@ -102,7 +104,11 @@ func (f Filter) Apply(steps []Step) []Step {
 			c := map[string]any{}
 			for k, v := range m {
 				name := prefix + k
-				if keep != nil && !keep[name] {
+				wildcard := "args.*"
+				if prefix == "obs." {
+					wildcard = "obs.*"
+				}
+				if keep != nil && !keep[name] && !keep[wildcard] {
 					continue
 				}
 				if str, ok := v.(string); ok && pseud[name] {

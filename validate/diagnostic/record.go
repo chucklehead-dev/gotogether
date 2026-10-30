@@ -1,7 +1,6 @@
 package diagnostic
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -56,23 +55,16 @@ func LookupRecord(steps []qtrace.Step, ref RecordRef) (*RecordDetail, error) {
 		return nil, fmt.Errorf("record lookup: supply actor, recorder and a nonzero sequence")
 	}
 	var found *qtrace.Step
-	var encoded []byte
 	for i := range steps {
 		s := &steps[i]
 		if s.Actor != ref.Actor || s.Recorder != ref.Recorder || s.Seq != ref.Seq {
 			continue
 		}
-		copy := *s
-		copy.Source = ""
-		b, err := json.Marshal(copy)
-		if err != nil {
-			return nil, fmt.Errorf("record lookup: encode captured record: %w", err)
-		}
-		if found != nil && !bytes.Equal(b, encoded) {
+		if found != nil && !qtrace.SameRecord(found, s) {
 			return nil, fmt.Errorf("record lookup: ambiguous identity %s %s seq %d: capture contains conflicting records", ref.Actor, ref.Recorder, ref.Seq)
 		}
 		if found == nil {
-			found, encoded = s, b
+			found = s
 		}
 	}
 	if found == nil {

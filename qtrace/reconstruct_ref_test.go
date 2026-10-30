@@ -36,7 +36,7 @@ func reconstructRef(steps []Step) ([]*Trace, []Issue) {
 			k := rk{s.Recorder, s.Seq}
 			if i, ok := seen[k]; ok {
 				first := &uniq[i]
-				if sameRecord(first, &s) {
+				if SameRecord(first, &s) {
 					issues = append(issues, Issue{"info", "duplicate", fmt.Sprintf("recorder %s seq %d seen twice; kept the first", s.Recorder, s.Seq)})
 					continue
 				}
