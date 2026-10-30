@@ -9,7 +9,8 @@ Evidence JSON carries `profiles`, identified by exploration `id`. A sweep or
 mutation report retains its children's profiles: different rows or mutants
 must not acquire one misleading aggregate configuration. Run-navigation JSON
 carries the selected run's `profile`. The TUI shows the same profile text in
-its scrollable run details, after the whole-run judgment. Moving the cursor
+its scrollable run details, after the steps, model diagnostics and tasks so
+that failures stay visible first. Page down to inspect configuration. Moving the cursor
 does not change the configuration that produced the run.
 
 Navigation uses its own effective policy: the selected choice prefix is fixed,

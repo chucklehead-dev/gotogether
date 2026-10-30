@@ -27,8 +27,8 @@ func TestRunProfileIsWholeRunConfigurationInScrollableDetail(t *testing.T) {
 	detail := strings.Join(screen.detail, "\n")
 	profileText := strings.TrimSpace(p.String())
 	profileAt := strings.Index(detail, profileText)
-	if profileAt < 0 || profileAt < strings.Index(detail, "whole-run judgment") || profileAt > strings.Index(detail, "steps so far") {
-		t.Fatalf("profile must appear between judgment and cursor steps:\n%s", detail)
+	if profileAt < 0 || profileAt < strings.Index(detail, "whole-run judgment") || profileAt < strings.Index(detail, "model (checkout)") {
+		t.Fatalf("profile must follow judgment and cursor diagnostics:\n%s", detail)
 	}
 	if strings.Contains(strings.Join(screen.head, "\n"), profileText) {
 		t.Fatal("profile expanded the fixed navigation header")
