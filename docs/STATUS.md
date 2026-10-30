@@ -7,7 +7,13 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Workload-phase follow-up (current branch): gristsim named prerequisites require
+Diagnostic-evidence follow-up (current branch): explicit binding selectors link
+model-authored outstanding intents to captured and native identities, preserving
+missing/ambiguous results in JSON. The TUI opens a scoped evidence list and exact
+captured-record inspector without moving the cursor or changing judgments. See
+[model-diagnostics-prototype.md](model-diagnostics-prototype.md#exact-evidence-links).
+
+Workload-phase follow-up (merged PR #7): gristsim named prerequisites require
 actual call outcomes and bounded query observations before later work. They
 replace unchecked prologues and inventory pacing sleeps. Failed preparation is
 unjudged workload evidence, never a model counterexample or mutant kill. JSON
@@ -32,7 +38,7 @@ for every native history, including navigation. `Report.Composition` is canonica
 normal conformance assertions include applicable checks. Wrong histories, wrong
 service bindings, unknown obligations and order limits cannot silently pass.
 Receipts preserve model-authored diagnostics. See [grist-composition.md](grist-composition.md).
-PRs #2, #3, #4, #5 and #6 are merged; the single current navigation contract is nav/2.
+PRs #2, #3, #4, #5, #6 and #7 are merged; the single current navigation contract is nav/2.
 
 Check-receipt first increment (merged PR #3): validation reports and run
 navigation share structured statuses, ordering-search limits and assumed effects
@@ -45,7 +51,7 @@ exploration evidence and run manifests. `evidence -session` filters the
 suite before coverage and expectation checks; unscoped completeness checks
 require explicit `-history`. Use a fresh ID and `go test -count=1`.
 
-**As of 2026-10-30 (workload-phase branch).** GR4's first composition experiment is implemented
+**As of 2026-10-30 (diagnostic-evidence branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
 `10f42111` so workload phases, shared preflight-format metadata, run profiles, composition and nav/2
@@ -235,7 +241,7 @@ four, L more; agent-days in practice).
 | # | Item | Size | Why here |
 |---|---|---|---|
 | 1 | Review the bounded GR3 span trial before expanding it | S | first increment built; third-party and reduced HTTP conversion need concrete evidence requirements |
-| 2 | GR4: phased workload control or outstanding-obligation diagnostics when an adopter needs them | S-M | inventory-grist identifies these specific friction points; no demonstrated need for broader per-peer configuration |
+| 2 | GR4: validate phased workloads and navigable obligation evidence with an independent adopter | S-M | named prerequisites and explicit evidence selectors are built; let adoption identify further workload needs |
 | 3 | Further independent adoption, especially grist or unaided onboarding | S-M | Goo validates an agent-assisted core-library workflow; it does not cover these adoption questions |
 | 4 | GR5 streams, GR6 gRPC, GR7 controllers | M, M, L | on the published doubles (H7) |
 | 5 | GR8 sagas and timers, GR9 checkout as grist services | M, L | GR9 proves GR4 and GR8 compose |

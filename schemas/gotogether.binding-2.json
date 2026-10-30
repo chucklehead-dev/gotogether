@@ -79,6 +79,58 @@
       "description": "Defs is Quint text added to the generated module (helpers for templates).",
       "type": "string"
     },
+    "diagnosticEvidence": {
+      "additionalProperties": {
+        "additionalProperties": {
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string"
+            },
+            "match": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "origin": {
+              "additionalProperties": false,
+              "properties": {
+                "actor": {
+                  "type": "string"
+                },
+                "recorder": {
+                  "type": "string"
+                },
+                "seq": {
+                  "type": "string"
+                }
+              },
+              "type": [
+                "object",
+                "null"
+              ]
+            }
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "description": "DiagnosticEvidence relates model diagnostic items to observed model calls.",
+      "type": [
+        "object",
+        "null"
+      ]
+    },
     "eventually": {
       "description": "Eventually are vals of the model that must hold when the run ends (no work pending: `outbox.size() == 0`): liveness obligations, checked in the last observed state only, and only of a trace that recorded its system settled (a settle record: qenv's Sim.Settle, or qobs.Settled), where pending work is a failure to finish rather than a run cut short. Every check honours it: explorations, Record, Validate, qhegel and the CLI.",
       "items": {

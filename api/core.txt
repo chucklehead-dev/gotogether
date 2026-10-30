@@ -27,6 +27,7 @@ type Annotation struct
     field Action string
     field Keys map[string]string
 type Binding struct
+    field DiagnosticEvidence map[string]map[string]EvidenceRule `yaml:"diagnosticEvidence,omitempty"`
     field Format string `yaml:"format,omitempty"`
     field Spec string `yaml:"spec"`
     field Module string `yaml:"module"`
@@ -94,6 +95,15 @@ type EvalModule struct
     field Vals map[string]string
     field Possible map[string]string
     field Diagnostics map[string]string
+type EvidenceOrigin struct
+    field Actor string `yaml:"actor"`
+    field Recorder string `yaml:"recorder"`
+    field Seq string `yaml:"seq"`
+    method (*EvidenceOrigin) Render(src string, s *qtrace.Step) (string, error)
+type EvidenceRule struct
+    field Action string `yaml:"action"`
+    field Match map[string]string `yaml:"match"`
+    field Origin *EvidenceOrigin `yaml:"origin,omitempty"`
 type ITFMeta struct
     field Spec string `json:"spec"`
     field Module string `json:"module"`
@@ -2528,6 +2538,7 @@ type NavStart struct
 type Navigator struct
     method (*Navigator) Fold(path ...string) (*Node, error)
     method (*Navigator) Node(path ...string) (*Node, error)
+    method (*Navigator) Record(ref diagnostic.RecordRef) (*diagnostic.RecordDetail, error)
 type Node struct
     field Diagnostics []diagnostic.Result `json:"diagnostics,omitempty"`
     field ID string `json:"id"`
@@ -2732,11 +2743,45 @@ type Replayed struct
     field Notes []string
 
 == github.com/chucklehead-dev/gotogether/validate/diagnostic
+func LookupRecord(steps []qtrace.Step, ref RecordRef) (*RecordDetail, error)
+func ParseRecordRef(data string) (RecordRef, error)
+type Evidence struct
+    field Status string `json:"status"`
+    field Reason string `json:"reason,omitempty"`
+    field Matches []Match `json:"matches,omitempty"`
+    field Total int `json:"total"`
+    field Omitted int `json:"omitted,omitempty"`
 type Item struct
     field Kind string `json:"kind"`
     field Subject string `json:"subject"`
     field Intent string `json:"intent"`
     field Expected string `json:"expected"`
+    field Evidence Evidence `json:"evidence"`
+type Match struct
+    field Actor string `json:"actor"`
+    field At int `json:"at"`
+    field Record RecordRef `json:"record"`
+    field Origin RecordRef `json:"origin"`
+type RecordDetail struct
+    field Reference RecordRef `json:"reference"`
+    field Action string `json:"action"`
+    field Outcome string `json:"outcome,omitempty"`
+    field Error string `json:"error,omitempty"`
+    field Source string `json:"source,omitempty"`
+    field Process string `json:"process,omitempty"`
+    field Thread string `json:"thread,omitempty"`
+    field Arguments json.RawMessage `json:"arguments"`
+    field Observations json.RawMessage `json:"observations"`
+    field Invoked string `json:"invoked,omitempty"`
+    field Time string `json:"time,omitempty"`
+    field Call uint64 `json:"call,omitempty"`
+    field Invocation bool `json:"invocation"`
+    field Ref string `json:"ref,omitempty"`
+type RecordRef struct
+    field Actor string `json:"actor"`
+    field Recorder string `json:"recorder"`
+    field Seq uint64 `json:"seq"`
+    field Source string `json:"source,omitempty"`
 type Result struct
     field Actor string `json:"actor,omitempty"`
     field Property string `json:"property"`
@@ -2935,6 +2980,7 @@ type NamedValue struct
     field Name string `json:"name"`
     field Value string `json:"value"`
 type Node struct
+    field Record *diagnostic.RecordDetail `json:"record,omitempty"`
     field Profile *runprofile.Profile `json:"profile,omitempty"`
     field Execution *runprofile.Execution `json:"execution,omitempty"`
     field Receipt receipt.Summary `json:"receipt"`
@@ -2955,6 +3001,7 @@ type Node struct
     field Saved string `json:"saved,omitempty"`
     field Notes []string `json:"notes,omitempty"`
 type Request struct
+    field Record *diagnostic.RecordRef `json:"record,omitempty"`
     field Node string `json:"node,omitempty"`
     field Follow []int `json:"follow,omitempty"`
     field Take *int `json:"take,omitempty"`

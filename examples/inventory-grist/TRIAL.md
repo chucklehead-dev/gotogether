@@ -62,7 +62,11 @@ the business rules and protocol remain application-owned.
   test additionally confirms a real unit remains held. The model
   now retains the model-authored order-specific cancellation obligation,
   including the order and exact intent identity when the backend provides its
-  failure state; an unavailable exact state remains explicit.
+  failure state; an unavailable exact state remains explicit. Binding-authored
+  selectors resolve that intent to the captured checkout cancellation and its
+  original native actor/recorder/sequence. The evidence reference survives JSON
+  composition output and a saved protocol JSONL replay; it does not claim that
+  this originating command is the root cause of the missing answer.
 - **authorizeCancelled:** inventory's own sequence shows cancel before
   authorize, followed by a fulfillment start. The local failure says
   expected not-held but received ok; the protocol rejects the same durable
@@ -78,7 +82,8 @@ are useful for diagnosis but verbose for a first-time app author.
 Prefer an independently maintained adoption trial, using this workflow as
 a reference. The rehearsal now uses named prerequisites and an actual inventory
 query instead of pacing sleeps; model-authored order/intent diagnostics also
-survive composition output. Further workload APIs should follow concrete
-adopter needs rather than introducing another authoring workflow. There is no
+survive composition output and resolve to captured originating commits. Further
+workload APIs should follow concrete adopter needs rather than introducing
+another authoring workflow. There is no
 evidence here that cyclic graphs, per-peer clusters or rollouts should come
 first.

@@ -29,6 +29,32 @@ actions:
 invariants: [withinCapacity, noCancelledShipment]
 eventually: [allIntentsAnswered, allAuthorizedStarted]
 
+# These selectors link model-authored intents to captured commits. They do not
+# infer a cause or change the business protocol's judgment.
+diagnosticEvidence:
+  outstandingIntents:
+    reservation:
+      action: checkoutPlace
+      match: {id: intent, order: subject}
+      origin:
+        actor: '{{index .obs "protocol.actor"}}'
+        recorder: '{{index .obs "protocol.recorder"}}'
+        seq: '{{index .obs "protocol.seq"}}'
+    cancellation:
+      action: checkoutCancel
+      match: {id: intent, order: subject}
+      origin:
+        actor: '{{index .obs "protocol.actor"}}'
+        recorder: '{{index .obs "protocol.recorder"}}'
+        seq: '{{index .obs "protocol.seq"}}'
+    confirmation:
+      action: checkoutConfirm
+      match: {id: intent, order: subject}
+      origin:
+        actor: '{{index .obs "protocol.actor"}}'
+        recorder: '{{index .obs "protocol.recorder"}}'
+        seq: '{{index .obs "protocol.seq"}}'
+
 simulate:
   holds: [withinCapacity, noCancelledShipment]
   verifySteps: 6

@@ -1077,6 +1077,11 @@ Then, in order, each item reviewed before the next:
   exhaustive completion establishes that every ordering passed. A
   two-order simulation exposes a model whose canonical extension passes
   but another fails; the business protocol passes every extension.
+  Named workload prerequisites now establish required outcomes and bounded query
+  observations before later work. Model-authored outstanding intents can resolve
+  through explicit binding selectors to captured/native identities, with scoped
+  JSON and TUI record inspection. See [diagnostics](model-diagnostics-prototype.md)
+  and [phases](grist-workload-phases.md).
   Still open: reducing the cost of large concurrent searches, cyclic
   simulations, per-peer doubles/configuration, SQL peers,
   clusters, upgrades and remote feeds.

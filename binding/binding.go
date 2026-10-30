@@ -34,6 +34,9 @@ import (
 
 // Binding is the parsed binding file.
 type Binding struct {
+	// DiagnosticEvidence relates model diagnostic items to observed model calls.
+	DiagnosticEvidence map[string]map[string]EvidenceRule `yaml:"diagnosticEvidence,omitempty"`
+
 	// Format, if set, names the binding format the file is written in
 	// (FormatName): a binding of another major is refused with the fix
 	// (upgrade gotogether for a later one, rewrite an earlier one), not
@@ -284,6 +287,9 @@ func Load(path string) (*Binding, error) {
 	if bd.Spec == "" || bd.Module == "" {
 		return nil, fmt.Errorf("%s: spec and module are required", path)
 	}
+	if err := bd.checkEvidence(nil); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	if err := bd.checkActors(); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
@@ -457,6 +463,9 @@ func (b *Binding) SpecPath() string {
 // write: quint's own error was a bare chdir failure. Load does not
 // check, since a binding is read (a manifest's) whose model is gone.
 func (b *Binding) CheckSpec() error {
+	if err := b.checkEvidence(nil); err != nil {
+		return err
+	}
 	resolved := b.SpecPath()
 	if _, err := os.Stat(resolved); err == nil || !errors.Is(err, fs.ErrNotExist) {
 		return nil
@@ -518,6 +527,9 @@ func (b *Binding) LintChoices(m *Model) []string {
 
 func (b *Binding) Lint(m *Model) []string {
 	var errs []string
+	if err := b.checkEvidence(m); err != nil {
+		errs = append(errs, err.Error())
+	}
 	for _, name := range slices.Sorted(maps.Keys(b.Actions)) {
 		a := b.Actions[name]
 		ps, ok := m.Actions[name]

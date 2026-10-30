@@ -1,6 +1,7 @@
 package checkout
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/diagnostic"
 	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
@@ -93,12 +95,55 @@ func assertMissingReleaseComposition(t *testing.T, checks gristtest.Composition,
 			}
 			for _, item := range d.Items {
 				if item.Kind == "cancellation" && item.Subject == "a" && item.Intent == "t1-c1-1" {
+					steps, err := gristtest.ProtocolSteps(native, App, inventory.App, fulfillment.App)
+					if err != nil {
+						t.Fatal(err)
+					}
+					assertCancellationEvidence(t, item, native, steps)
 					return
 				}
 			}
 		}
 	}
 	t.Fatal("composition JSON lost the model-authored unanswered cancellation intent")
+}
+
+// The diagnostic must identify the actual accepted cancellation commit, not an
+// arbitrary record sharing its order name or a fabricated missing peer call.
+func assertCancellationEvidence(t *testing.T, item diagnostic.Item, native, projected []qtrace.Step) {
+	t.Helper()
+	if item.Evidence.Status != "resolved" || len(item.Evidence.Matches) != 1 {
+		t.Fatalf("cancellation evidence was not uniquely resolved: %+v", item.Evidence)
+	}
+	match := item.Evidence.Matches[0]
+	if match.Actor != "protocol/t1" || match.At <= 0 {
+		t.Fatalf("evidence lost its checked actor or replay position: %+v", match)
+	}
+	var origin, captured *qtrace.Step
+	for i := range native {
+		s := &native[i]
+		if s.Actor == "checkout/t1" && s.Recorder == grist.RecorderID("checkout", "t1") && s.Action == "cancel" && s.Args["id"] == item.Intent && s.Args["order"] == item.Subject {
+			if origin != nil {
+				t.Fatal("fixture has multiple originating cancellation commits")
+			}
+			origin = s
+		}
+	}
+	for i := range projected {
+		s := &projected[i]
+		if s.Actor == "protocol/t1" && s.Action == "checkoutCancel" && s.Args["id"] == item.Intent && s.Args["order"] == item.Subject {
+			captured = s
+		}
+	}
+	if origin == nil || captured == nil {
+		t.Fatalf("fixture lost native or projected cancellation: native=%+v projected=%+v", origin, captured)
+	}
+	if match.Record.Actor != captured.Actor || match.Record.Recorder != captured.Recorder || match.Record.Seq != captured.Seq {
+		t.Fatalf("evidence did not identify the captured projected cancellation: got %+v, want %s %s seq %d", match.Record, captured.Actor, captured.Recorder, captured.Seq)
+	}
+	if match.Origin.Actor != origin.Actor || match.Origin.Recorder != origin.Recorder || match.Origin.Seq != origin.Seq {
+		t.Fatalf("evidence lost the exact original commit identity: got %+v, want %s %s seq %d", match.Origin, origin.Actor, origin.Recorder, origin.Seq)
+	}
 }
 
 func TestMutant(t *testing.T) {
@@ -120,23 +165,37 @@ func TestMutant(t *testing.T) {
 			if count(r.Recorded, "inventory/t1", "reserve", "") != 1 || count(r.Recorded, "inventory/t1", "cancel", "") != 0 {
 				t.Fatal("missing release did not leave a real held unit")
 			}
-			judged := qtest.Validate(t, protocol, saveProjection(t, r.Recorded))
-			judged.Expect(t, qtest.Violates(validate.EventuallyName("allIntentsAnswered")))
-			explained := false
-			for _, actor := range judged.Report.Actors {
-				for _, ab := range actor.Absent {
-					d := ab.Diagnostic
-					if ab.Name == validate.EventuallyName("allIntentsAnswered") && d != nil && d.Status == "available" {
-						for _, item := range d.Items {
-							if actor.Actor == "protocol/t1" && item.Kind == "cancellation" && item.Subject == "a" && item.Intent == "t1-c1-1" {
-								explained = true
+			projected := saveProjection(t, r.Recorded)
+			// Replay persisted evidence too: Source becomes a JSONL line, but the
+			// explicit native identity remains in protocol.actor/recorder/seq.
+			var encoded bytes.Buffer
+			if err := qtrace.WriteJSONL(&encoded, projected); err != nil {
+				t.Fatal(err)
+			}
+			roundtrip, err := qtrace.ReadJSONL(&encoded)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, history := range [][]qtrace.Step{projected, roundtrip} {
+				judged := qtest.Validate(t, protocol, history)
+				judged.Expect(t, qtest.Violates(validate.EventuallyName("allIntentsAnswered")))
+				explained := false
+				for _, actor := range judged.Report.Actors {
+					for _, ab := range actor.Absent {
+						d := ab.Diagnostic
+						if ab.Name == validate.EventuallyName("allIntentsAnswered") && d != nil && d.Status == "available" {
+							for _, item := range d.Items {
+								if actor.Actor == "protocol/t1" && item.Kind == "cancellation" && item.Subject == "a" && item.Intent == "t1-c1-1" {
+									assertCancellationEvidence(t, item, r.Recorded, history)
+									explained = true
+								}
 							}
 						}
 					}
 				}
-			}
-			if !explained {
-				t.Fatal("missing release did not identify the model's unanswered cancellation intent")
+				if !explained {
+					t.Fatal("missing release did not identify the model's unanswered cancellation intent")
+				}
 			}
 			assertMissingReleaseComposition(t, checks, r.Recorded)
 		}

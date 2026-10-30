@@ -26,6 +26,8 @@ type NamedValue struct {
 // here so that the CLI and gotogether-nav, which a test package does not
 // build, read it): ID is "<schedule>@<k>", the choices before k fixed.
 type Node struct {
+	// Record is an exact capture inspection, independent of cursor and judgment.
+	Record *diagnostic.RecordDetail `json:"record,omitempty"`
 	// Profile describes this node's replay policy, independent of model cursor state.
 	Profile *runprofile.Profile `json:"profile,omitempty"`
 	// Execution describes simulator invocations in this node's whole nominal run.
@@ -118,11 +120,13 @@ func CheckProtocol(p string) error {
 // the base run's are too) to the next that is; Save keeps its run in the
 // exploration's corpus.
 type Request struct {
-	Node   string `json:"node,omitempty"`
-	Follow []int  `json:"follow,omitempty"`
-	Take   *int   `json:"take,omitempty"`
-	Fold   bool   `json:"fold,omitempty"`
-	Save   bool   `json:"save,omitempty"`
+	// Record inspects this captured identity in the requested nominal run.
+	Record *diagnostic.RecordRef `json:"record,omitempty"`
+	Node   string                `json:"node,omitempty"`
+	Follow []int                 `json:"follow,omitempty"`
+	Take   *int                  `json:"take,omitempty"`
+	Fold   bool                  `json:"fold,omitempty"`
+	Save   bool                  `json:"save,omitempty"`
 }
 
 // A Response is a session's line: first its Session, before any

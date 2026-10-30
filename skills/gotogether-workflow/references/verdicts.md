@@ -343,3 +343,15 @@ in evidence and navigation JSON. Inspect the effective seed range, fault policy,
 primary validation policy and limits before comparing runs. Custom choosers do
 not imply the System rates were used; navigation uses fixed choices and nominal
 continuation. See [run profiles](../../../docs/run-profiles.md).
+
+
+For model-authored outstanding-intent diagnostics, inspect each item's evidence
+status before treating it as a record link. `resolved` identifies one matching
+observed call, not a root cause; `ambiguous` retains candidates and `missing` does
+not invent one. In the TUI press `e`, then Enter to inspect the captured record;
+projected and native captures are distinct choices. For agent inspection use
+`gotogether nav -run <capture-or-run-ref> -record '<RecordRef JSON>' -json`.
+Match rules belong in the
+binding's `diagnosticEvidence`, with explicit model-action string-argument
+selectors. Counterfactual model branches have no captured evidence. See
+[diagnostic evidence](../../../docs/model-diagnostics-prototype.md#exact-evidence-links).

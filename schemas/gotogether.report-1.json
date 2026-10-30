@@ -33,6 +33,87 @@
                       "items": {
                         "additionalProperties": false,
                         "properties": {
+                          "evidence": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "matches": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "actor": {
+                                      "type": "string"
+                                    },
+                                    "at": {
+                                      "type": "integer"
+                                    },
+                                    "origin": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "actor": {
+                                          "type": "string"
+                                        },
+                                        "recorder": {
+                                          "type": "string"
+                                        },
+                                        "seq": {
+                                          "type": "integer"
+                                        },
+                                        "source": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "type": [
+                                        "object",
+                                        "null"
+                                      ]
+                                    },
+                                    "record": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "actor": {
+                                          "type": "string"
+                                        },
+                                        "recorder": {
+                                          "type": "string"
+                                        },
+                                        "seq": {
+                                          "type": "integer"
+                                        },
+                                        "source": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "type": [
+                                        "object",
+                                        "null"
+                                      ]
+                                    }
+                                  },
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
+                                },
+                                "type": "array"
+                              },
+                              "omitted": {
+                                "type": "integer"
+                              },
+                              "reason": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "total": {
+                                "type": "integer"
+                              }
+                            },
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
                           "expected": {
                             "type": "string"
                           },
@@ -697,6 +778,87 @@
                       "items": {
                         "additionalProperties": false,
                         "properties": {
+                          "evidence": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "matches": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "actor": {
+                                      "type": "string"
+                                    },
+                                    "at": {
+                                      "type": "integer"
+                                    },
+                                    "origin": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "actor": {
+                                          "type": "string"
+                                        },
+                                        "recorder": {
+                                          "type": "string"
+                                        },
+                                        "seq": {
+                                          "type": "integer"
+                                        },
+                                        "source": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "type": [
+                                        "object",
+                                        "null"
+                                      ]
+                                    },
+                                    "record": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "actor": {
+                                          "type": "string"
+                                        },
+                                        "recorder": {
+                                          "type": "string"
+                                        },
+                                        "seq": {
+                                          "type": "integer"
+                                        },
+                                        "source": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "type": [
+                                        "object",
+                                        "null"
+                                      ]
+                                    }
+                                  },
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
+                                },
+                                "type": "array"
+                              },
+                              "omitted": {
+                                "type": "integer"
+                              },
+                              "reason": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "total": {
+                                "type": "integer"
+                              }
+                            },
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
                           "expected": {
                             "type": "string"
                           },
@@ -1022,6 +1184,87 @@
                       "items": {
                         "additionalProperties": false,
                         "properties": {
+                          "evidence": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "matches": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "actor": {
+                                      "type": "string"
+                                    },
+                                    "at": {
+                                      "type": "integer"
+                                    },
+                                    "origin": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "actor": {
+                                          "type": "string"
+                                        },
+                                        "recorder": {
+                                          "type": "string"
+                                        },
+                                        "seq": {
+                                          "type": "integer"
+                                        },
+                                        "source": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "type": [
+                                        "object",
+                                        "null"
+                                      ]
+                                    },
+                                    "record": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "actor": {
+                                          "type": "string"
+                                        },
+                                        "recorder": {
+                                          "type": "string"
+                                        },
+                                        "seq": {
+                                          "type": "integer"
+                                        },
+                                        "source": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "type": [
+                                        "object",
+                                        "null"
+                                      ]
+                                    }
+                                  },
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
+                                },
+                                "type": "array"
+                              },
+                              "omitted": {
+                                "type": "integer"
+                              },
+                              "reason": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "total": {
+                                "type": "integer"
+                              }
+                            },
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
                           "expected": {
                             "type": "string"
                           },
@@ -1226,6 +1469,87 @@
                                     "items": {
                                       "additionalProperties": false,
                                       "properties": {
+                                        "evidence": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "matches": {
+                                              "items": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "actor": {
+                                                    "type": "string"
+                                                  },
+                                                  "at": {
+                                                    "type": "integer"
+                                                  },
+                                                  "origin": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "actor": {
+                                                        "type": "string"
+                                                      },
+                                                      "recorder": {
+                                                        "type": "string"
+                                                      },
+                                                      "seq": {
+                                                        "type": "integer"
+                                                      },
+                                                      "source": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "type": [
+                                                      "object",
+                                                      "null"
+                                                    ]
+                                                  },
+                                                  "record": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "actor": {
+                                                        "type": "string"
+                                                      },
+                                                      "recorder": {
+                                                        "type": "string"
+                                                      },
+                                                      "seq": {
+                                                        "type": "integer"
+                                                      },
+                                                      "source": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "type": [
+                                                      "object",
+                                                      "null"
+                                                    ]
+                                                  }
+                                                },
+                                                "type": [
+                                                  "object",
+                                                  "null"
+                                                ]
+                                              },
+                                              "type": "array"
+                                            },
+                                            "omitted": {
+                                              "type": "integer"
+                                            },
+                                            "reason": {
+                                              "type": "string"
+                                            },
+                                            "status": {
+                                              "type": "string"
+                                            },
+                                            "total": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "type": [
+                                            "object",
+                                            "null"
+                                          ]
+                                        },
                                         "expected": {
                                           "type": "string"
                                         },
@@ -1456,6 +1780,87 @@
                                     "items": {
                                       "additionalProperties": false,
                                       "properties": {
+                                        "evidence": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "matches": {
+                                              "items": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "actor": {
+                                                    "type": "string"
+                                                  },
+                                                  "at": {
+                                                    "type": "integer"
+                                                  },
+                                                  "origin": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "actor": {
+                                                        "type": "string"
+                                                      },
+                                                      "recorder": {
+                                                        "type": "string"
+                                                      },
+                                                      "seq": {
+                                                        "type": "integer"
+                                                      },
+                                                      "source": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "type": [
+                                                      "object",
+                                                      "null"
+                                                    ]
+                                                  },
+                                                  "record": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "actor": {
+                                                        "type": "string"
+                                                      },
+                                                      "recorder": {
+                                                        "type": "string"
+                                                      },
+                                                      "seq": {
+                                                        "type": "integer"
+                                                      },
+                                                      "source": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "type": [
+                                                      "object",
+                                                      "null"
+                                                    ]
+                                                  }
+                                                },
+                                                "type": [
+                                                  "object",
+                                                  "null"
+                                                ]
+                                              },
+                                              "type": "array"
+                                            },
+                                            "omitted": {
+                                              "type": "integer"
+                                            },
+                                            "reason": {
+                                              "type": "string"
+                                            },
+                                            "status": {
+                                              "type": "string"
+                                            },
+                                            "total": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "type": [
+                                            "object",
+                                            "null"
+                                          ]
+                                        },
                                         "expected": {
                                           "type": "string"
                                         },
@@ -1715,6 +2120,87 @@
                                   "items": {
                                     "additionalProperties": false,
                                     "properties": {
+                                      "evidence": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "matches": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "actor": {
+                                                  "type": "string"
+                                                },
+                                                "at": {
+                                                  "type": "integer"
+                                                },
+                                                "origin": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "actor": {
+                                                      "type": "string"
+                                                    },
+                                                    "recorder": {
+                                                      "type": "string"
+                                                    },
+                                                    "seq": {
+                                                      "type": "integer"
+                                                    },
+                                                    "source": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "type": [
+                                                    "object",
+                                                    "null"
+                                                  ]
+                                                },
+                                                "record": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "actor": {
+                                                      "type": "string"
+                                                    },
+                                                    "recorder": {
+                                                      "type": "string"
+                                                    },
+                                                    "seq": {
+                                                      "type": "integer"
+                                                    },
+                                                    "source": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "type": [
+                                                    "object",
+                                                    "null"
+                                                  ]
+                                                }
+                                              },
+                                              "type": [
+                                                "object",
+                                                "null"
+                                              ]
+                                            },
+                                            "type": "array"
+                                          },
+                                          "omitted": {
+                                            "type": "integer"
+                                          },
+                                          "reason": {
+                                            "type": "string"
+                                          },
+                                          "status": {
+                                            "type": "string"
+                                          },
+                                          "total": {
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "type": [
+                                          "object",
+                                          "null"
+                                        ]
+                                      },
                                       "expected": {
                                         "type": "string"
                                       },

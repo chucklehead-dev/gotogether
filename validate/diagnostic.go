@@ -148,6 +148,7 @@ func (c *Checker) enrichDiagnostics(rep *Report, steps []qtrace.Step, searched b
 			}
 			detail = c.diagnosticValue(e, consts, state, property, "settled_checked_history")
 			detail.Actor, detail.Cause = r.Actor, string(ab.Cause)
+			c.resolveDiagnosticEvidence(&detail, plan)
 			if detail.Status == "available" && detail.Total == 0 {
 				detail.Status = "unavailable"
 				detail.Reason = "projection returned no items for a failed property"
@@ -156,7 +157,7 @@ func (c *Checker) enrichDiagnostics(rep *Report, steps []qtrace.Step, searched b
 	}
 }
 
-func (n *Navigator) diagnosticValues(state qeval.State) []diagnostic.Result {
+func (n *Navigator) diagnosticValues(state qeval.State, speculative bool) []diagnostic.Result {
 	var out []diagnostic.Result
 	for _, property := range slices.Sorted(maps.Keys(n.c.Model.Diagnostics)) {
 		if !slices.Contains(n.c.Binding.Invariants, property) && !slices.Contains(n.c.Binding.Eventually, property) {
@@ -164,6 +165,18 @@ func (n *Navigator) diagnosticValues(state qeval.State) []diagnostic.Result {
 		}
 		detail := n.c.diagnosticValue(n.e, n.consts, state, property, "navigated_state_no_verdict")
 		detail.Actor = n.actor
+		plan := n.diagnosticPlan
+		if speculative {
+			plan = nil
+		}
+		n.c.resolveDiagnosticEvidence(&detail, plan)
+		if speculative {
+			for i := range detail.Items {
+				if detail.Items[i].Evidence.Status == "unavailable" {
+					detail.Items[i].Evidence.Reason = "counterfactual model state has no observed call history"
+				}
+			}
+		}
 		out = append(out, detail)
 	}
 	return out
