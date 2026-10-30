@@ -1,7 +1,7 @@
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
-github.com/chucklehead-dev/gotogether v0.0.0-20261030154421-10f421118da6 h1:2LSnWEEXpQFnIHbliv3NUh9RNqEuS0UnJ1anr4Knh+I=
-github.com/chucklehead-dev/gotogether v0.0.0-20261030154421-10f421118da6/go.mod h1:kZ6XGpgMaZWrMgym3rpruW/ZJC8aHY2RqEnbkQDO+q8=
+github.com/chucklehead-dev/gotogether v0.0.0-20261030210309-0d14cff10461 h1:lTcvZgOJiuNFlLqpNhJxCP2nH/CKDWNjMYQiEJ4jkNs=
+github.com/chucklehead-dev/gotogether v0.0.0-20261030210309-0d14cff10461/go.mod h1:kZ6XGpgMaZWrMgym3rpruW/ZJC8aHY2RqEnbkQDO+q8=
 github.com/ebitengine/purego v0.12.0-alpha.1.0.20261015130536-d456b1bb95e8 h1:l5iZODQBpef/JRTKyr32A+0uzYmtNhglAg42fFgK3+0=
 github.com/ebitengine/purego v0.12.0-alpha.1.0.20261015130536-d456b1bb95e8/go.mod h1:DCHPP08djqhNSoTfImcnHYQRZmd0qhakvrozqaEYhGQ=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
