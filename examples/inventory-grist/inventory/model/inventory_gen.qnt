@@ -44,6 +44,8 @@ module inventoryEvents {
   type AuthorizeArgs = { order: str, caller: str }
   type CancelArgs = { order: str, caller: str }
   type ReserveArgs = { order: str, caller: str }
+  type AllocationArgs = { order: str, caller: str }
+  type AllocationResult = { units: int, status: str }
   // call fulfillment/start: its request and response, and a step of it (the caller's or the site's: the outcome as result,
   // the response zero unless it is ok)
   type FulfillmentStartRequest = { order: str }

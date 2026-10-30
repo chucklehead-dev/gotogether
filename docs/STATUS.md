@@ -7,7 +7,14 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Model-preflight follow-up (current branch): grist model checks and the generated
+Workload-phase follow-up (current branch): gristsim named prerequisites require
+actual call outcomes and bounded query observations before later work. They
+replace unchecked prologues and inventory pacing sleeps. Failed preparation is
+unjudged workload evidence, never a model counterexample or mutant kill. JSON
+and navigation/TUI retain phase policy, timings and last observations. See
+[grist-workload-phases.md](grist-workload-phases.md).
+
+Model-preflight follow-up (merged PR #6): grist model checks and the generated
 witness share one nonwriting, structured catalog/source inspection. Mechanical
 changes and handwritten work stay distinct; generated updates retain review
 findings. JSON is read-only and discloses blocked checks and unperformed Quint
@@ -25,7 +32,7 @@ for every native history, including navigation. `Report.Composition` is canonica
 normal conformance assertions include applicable checks. Wrong histories, wrong
 service bindings, unknown obligations and order limits cannot silently pass.
 Receipts preserve model-authored diagnostics. See [grist-composition.md](grist-composition.md).
-PRs #2, #3, #4 and #5 are merged; the single current navigation contract is nav/2.
+PRs #2, #3, #4, #5 and #6 are merged; the single current navigation contract is nav/2.
 
 Check-receipt first increment (merged PR #3): validation reports and run
 navigation share structured statuses, ordering-search limits and assumed effects
@@ -38,10 +45,10 @@ exploration evidence and run manifests. `evidence -session` filters the
 suite before coverage and expectation checks; unscoped completeness checks
 require explicit `-history`. Use a fresh ID and `go test -count=1`.
 
-**As of 2026-10-30 (model-preflight branch).** GR4's first composition experiment is implemented
+**As of 2026-10-30 (workload-phase branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
-`759e8c2d` so shared preflight-format metadata, run profiles, composition and nav/2
+`10f42111` so workload phases, shared preflight-format metadata, run profiles, composition and nav/2
 contract work outside go.work; the
 merged declared-call span increment did not require a core-pin bump. **Nothing is tagged**: every module is pre-release,
 published modules require each other at pseudo-versions, and breaking

@@ -869,9 +869,11 @@ type Sim struct
     method (*Sim) Now() time.Time
     method (*Sim) OnCrash(h func(*Process))
     method (*Sim) PanicStack() string
+    method (*Sim) PauseFaults()
     method (*Sim) Process(name string, crashable bool, start func(ctx context.Context)) *Process
     method (*Sim) ResumeFaults()
-    method (*Sim) Run(d time.Duration) (err error)
+    method (*Sim) Run(d time.Duration) error
+    method (*Sim) RunUntil(d time.Duration, done func() bool) (bool, error)
     method (*Sim) Settle(d time.Duration) error
     method (*Sim) SettleCore(d time.Duration, core ...*Process) error
     method (*Sim) Spawn(name string, fn func(ctx context.Context))
@@ -1893,6 +1895,7 @@ type RefutesClaim struct
     method (RefutesClaim) String() string
 type Resetter = qshrink.Resetter
 type Run struct
+    field Phases []runprofile.Phase
     field Steps []qtrace.Step
     field Recorded []qtrace.Step
     field Choices []qenv.Choice
@@ -3048,10 +3051,13 @@ type Summary struct
 
 == github.com/chucklehead-dev/gotogether/validate/runprofile
 func ExecutionsString(executions []Execution) string
+func PhasesString(executions []Execution) string
 type Execution struct
     field Run string `json:"run"`
     field Simulations []Simulation `json:"simulations"`
+    field Phases []Phase `json:"phases,omitempty"`
     method (Execution) Clone() Execution
+    method (Execution) PhasesString() string
     method (Execution) String() string
 type Exhaust struct
     field Delays int `json:"delays"`
@@ -3059,6 +3065,17 @@ type Exhaust struct
     field Without []string `json:"without"`
     field MaxRuns int `json:"maxRuns"`
     field Partial bool `json:"partial"`
+type Phase struct
+    field Name string `json:"name"`
+    field Status string `json:"status"`
+    field Faults string `json:"faults"`
+    field Timeout string `json:"timeout"`
+    field Started string `json:"started,omitempty"`
+    field Deadline string `json:"deadline,omitempty"`
+    field Finished string `json:"finished,omitempty"`
+    field Reason string `json:"reason,omitempty"`
+    field Requirements []Requirement `json:"requirements"`
+    method (Phase) Clone() Phase
 type Profile struct
     field ID string `json:"id"`
     field Mutant string `json:"mutant,omitempty"`
@@ -3079,6 +3096,25 @@ type Profile struct
 type Rates struct
     field Default float64 `json:"default"`
     field Kinds map[string]float64 `json:"kinds"`
+type Requirement struct
+    field Caller string `json:"caller,omitempty"`
+    field Name string `json:"name"`
+    field Kind string `json:"kind"`
+    field App string `json:"app"`
+    field Tenant string `json:"tenant"`
+    field Action string `json:"action"`
+    field RequestID string `json:"requestId,omitempty"`
+    field InFlight bool `json:"inFlight"`
+    field AttemptOutcome string `json:"attemptOutcome,omitempty"`
+    field ObservedRequestID string `json:"observedRequestId,omitempty"`
+    field Status string `json:"status"`
+    field ExpectedOutcome string `json:"expectedOutcome,omitempty"`
+    field ObservedOutcome string `json:"observedOutcome,omitempty"`
+    field Reason string `json:"reason,omitempty"`
+    field Arguments json.RawMessage `json:"arguments,omitempty"`
+    field Expected json.RawMessage `json:"expected,omitempty"`
+    field Observed json.RawMessage `json:"observed,omitempty"`
+    field Attempts int `json:"attempts"`
 type Scheduler struct
     field MaxSteps int `json:"maxSteps"`
     field Hang string `json:"hang"`
@@ -3100,6 +3136,7 @@ type Seeds struct
     field TopUpTo int `json:"topUpTo,omitempty"`
     field Steer int `json:"steer"`
 type Simulation struct
+    field Operation string `json:"operation"`
     field Simulation int `json:"simulation"`
     field Runtime string `json:"runtime"`
     field Horizon string `json:"horizon"`

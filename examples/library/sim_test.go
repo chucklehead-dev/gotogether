@@ -43,7 +43,7 @@ var gen = map[string]func(pick func(int) int) any{
 	"member-loans": func(p func(int) int) any { return MemberLoans{Member: of(p, "a", "b", "c")} },
 }
 
-// opened is the library as a prologue leaves it before the clients start:
+// opened is the library that the named preparation phase requires before clients start:
 // a and b members, one copy each of x and y, and an addition refused as
 // invalid. A borrow needs a join and an
 // addition before it, which random sends mostly lacked (the first
@@ -51,12 +51,12 @@ var gen = map[string]func(pick func(int) int) any{
 var opened = []gristsim.Call{
 	{Name: "join", Args: Join{Member: "a"}}, {Name: "join", Args: Join{Member: "b"}},
 	{Name: "add-book", Args: AddBook{Book: "x", Copies: 1}}, {Name: "add-book", Args: AddBook{Book: "y", Copies: 1}},
-	{Name: "add-book", Args: AddBook{Book: "z", Copies: 0}}, // refused: invalid, which random sends seldom are
+	{Name: "add-book", Args: AddBook{Book: "z", Copies: 0}, Expect: "invalid"}, // require the intended refusal too
 }
 
 // contended is one tenant, three clients of five operations each after the
 // opening, borrows weighted two to one (a name listed twice in Send).
-var contended = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 5, CommitFaults: true, Gen: gen, Prologue: opened,
+var contended = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 5, CommitFaults: true, Gen: gen, Phases: []gristsim.Phase{{Name: "open library", Faults: gristsim.FaultsDisabled, Calls: opened}},
 	Send: []string{"join", "add-book", "borrow", "borrow", "return-book", "member-loans"}}
 
 // TestFaithful: through commit faults, node crashes, a lossy API and a
@@ -108,15 +108,15 @@ func TestScarce(t *testing.T) {
 }
 
 // greedy is one member borrowing from three books of three copies each
-// (joined and catalogued by a prologue), at ReadCommitted, no faults:
+// (joined and catalogued by an observed preparation phase), at ReadCommitted, no faults:
 // three clients race for the member's last loans, nine borrows for three.
 // The staleLimit and drop-loan-limit mutants' shape. (With the join and the additions among
 // the random sends, no run of the first version reached the limit at all:
 // Takes(...).Outcome("limit") said so.)
 var greedy = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 3, Isolation: qenv.ReadCommitted,
 	Send: []string{"borrow"},
-	Prologue: []gristsim.Call{{Name: "join", Args: Join{Member: "a"}},
-		{Name: "add-book", Args: AddBook{Book: "x", Copies: 3}}, {Name: "add-book", Args: AddBook{Book: "y", Copies: 3}}, {Name: "add-book", Args: AddBook{Book: "z", Copies: 3}}},
+	Phases: []gristsim.Phase{{Name: "prepare loan contention", Faults: gristsim.FaultsDisabled, Calls: []gristsim.Call{{Name: "join", Args: Join{Member: "a"}},
+		{Name: "add-book", Args: AddBook{Book: "x", Copies: 3}}, {Name: "add-book", Args: AddBook{Book: "y", Copies: 3}}, {Name: "add-book", Args: AddBook{Book: "z", Copies: 3}}}}},
 	Gen: map[string]func(pick func(int) int) any{
 		"borrow": func(p func(int) int) any { return Borrow{Member: "a", Book: of(p, "x", "y", "z")} },
 	}}
@@ -163,12 +163,12 @@ func TestAReturnPossible(t *testing.T) {
 	qtest.Model(t, commits).Expect(t, qtest.Possible(aReturn))
 }
 
-// limit is the scenario as a workload: its first six calls a prologue,
+// limit is the scenario as a workload: its first six calls a required preparation phase,
 // then one client asking for the fourth loan.
 var limit = gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 1, Send: []string{"borrow"},
-	Prologue: []gristsim.Call{{Name: "join", Args: Join{Member: "a"}},
+	Phases: []gristsim.Phase{{Name: "reach loan limit", Faults: gristsim.FaultsDisabled, Calls: []gristsim.Call{{Name: "join", Args: Join{Member: "a"}},
 		{Name: "add-book", Args: AddBook{Book: "a", Copies: 3}}, {Name: "add-book", Args: AddBook{Book: "b", Copies: 1}},
-		{Name: "borrow", Args: Borrow{Member: "a", Book: "a"}}, {Name: "borrow", Args: Borrow{Member: "a", Book: "a"}}, {Name: "borrow", Args: Borrow{Member: "a", Book: "a"}}},
+		{Name: "borrow", Args: Borrow{Member: "a", Book: "a"}}, {Name: "borrow", Args: Borrow{Member: "a", Book: "a"}}, {Name: "borrow", Args: Borrow{Member: "a", Book: "a"}}}}},
 	Gen: map[string]func(pick func(int) int) any{"borrow": func(func(int) int) any { return Borrow{Member: "a", Book: "b"} }}}
 
 // TestAtTheLimit: every run of the workload follows the scenario, and
@@ -188,13 +188,13 @@ func crashAfterMail(seed uint64) qenv.Chooser {
 		Faults: []qenv.Scripted{{Kind: "grist.receipts.effect", Name: "crashAfter"}}}
 }
 
-// lending is a and b borrowing x and y after a prologue that joins them
+// lending is a and b borrowing x and y after a required phase that joins them
 // and adds two copies of each, no other faults: every run borrows.
 var lending = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 3, Send: []string{"borrow"},
-	Prologue: []gristsim.Call{
+	Phases: []gristsim.Phase{{Name: "prepare loans", Faults: gristsim.FaultsDisabled, Calls: []gristsim.Call{
 		{Name: "join", Args: Join{Member: "a"}}, {Name: "join", Args: Join{Member: "b"}},
 		{Name: "add-book", Args: AddBook{Book: "x", Copies: 2}}, {Name: "add-book", Args: AddBook{Book: "y", Copies: 2}},
-	},
+	}}},
 	Gen: map[string]func(pick func(int) int) any{
 		"borrow": func(p func(int) int) any { return Borrow{Member: of(p, "a", "b"), Book: of(p, "x", "y")} },
 	}}

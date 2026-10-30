@@ -69,7 +69,7 @@ the walk-through: read its README's table first.
 | `event X version N changed shape since grist.lock was written` | a stored version's struct changed | [references/versions.md](references/versions.md): a new version, an upcaster |
 | `X is version N, and this app reads X up to version M`; `catalog -diff` says `readers first` | a release writes what older nodes refuse | [references/versions.md](references/versions.md): `WritesVersion` until the rollout ends |
 | `do not settle`, naming tasks | work left at the end | a node down (restart it), or a missing daemon |
-| `model actions taken N of M (never: ...)` | what no run reached | widen `Send`, `Prologue`, `Gen` |
+| `model actions taken N of M (never: ...)` | what no run reached | widen `Send`, `Phases`, `Gen` |
 | `NO VERDICT`, `checks the actors <app>/*/clients` on serve's steps | the calls binding judges clients' recordings | record the clients (`grist/client`), or validate the commits binding alone |
 | panic: `"..." alone is a claim over runs with no quantifier` | a scenario or `NoClientErrors` over runs bare | `qtest.Some(scenario)`, `qtest.All(gristtest.NoClientErrors())`; a mutant's client errors `qtest.Some(qtest.Not(gristtest.NoClientErrors()))` |
 | `... in a grist application ...: use the event's Meta.Time` (lint -sim); `a grist effect calls ... directly` (quintraw) | code the model cannot see | [references/loop.md](references/loop.md): `Meta.Time`, a command's arguments, a processor; a declared call (`Call.Do`) |

@@ -11,11 +11,16 @@ import (
 type Execution struct {
 	Run         string       `json:"run"`
 	Simulations []Simulation `json:"simulations"`
+	Phases      []Phase      `json:"phases,omitempty"`
 }
 
 // Clone returns an independent snapshot, including each scheduler observation.
 func (e Execution) Clone() Execution {
 	copy := e
+	copy.Phases = make([]Phase, len(e.Phases))
+	for i, p := range e.Phases {
+		copy.Phases[i] = p.Clone()
+	}
 	copy.Simulations = make([]Simulation, len(e.Simulations))
 	for i, call := range e.Simulations {
 		copy.Simulations[i] = call
@@ -45,6 +50,7 @@ func ExecutionsString(executions []Execution) string {
 // within the driven run, starting at 1. Horizon is the duration requested of
 // this call, not elapsed time or an assertion of quiescence.
 type Simulation struct {
+	Operation  string     `json:"operation"`
 	Simulation int        `json:"simulation"`
 	Runtime    string     `json:"runtime"`
 	Horizon    string     `json:"horizon"`

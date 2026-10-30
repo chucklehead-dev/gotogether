@@ -1103,8 +1103,33 @@ var ErrMaxSteps = errors.New("qenv: too many scheduling steps (livelock?)")
 // quiet. On the native runtime Run(d) sleeps d of real time.
 // A panic in a task is re-raised here, with its own value (PanicStack has
 // the task's stack).
-func (s *Sim) Run(d time.Duration) (err error) {
-	if finish := hooks.ObserveSimulation(s.base, s, hooks.Simulation{Native: s.nat != nil, Horizon: d, MaxSteps: s.MaxSteps, Hang: s.Hang, StepsBefore: s.steps}); finish != nil {
+func (s *Sim) Run(d time.Duration) error { return s.run(d, nil) }
+
+// RunUntil schedules for at most d of true virtual time, stopping at the first
+// scheduling boundary where done is true. It preserves scheduling and fault
+// policy and emits no settle record. done must be a nonblocking, read-only
+// driver-completion predicate; it is not a model assertion. The boolean says
+// whether the predicate was reached. Scheduler limits and task errors remain
+// errors. The native runtime cannot provide these scheduling boundaries.
+func (s *Sim) RunUntil(d time.Duration, done func() bool) (bool, error) {
+	if done == nil || d < 0 {
+		return false, errors.New("qenv: RunUntil needs a completion predicate and a nonnegative virtual-time bound")
+	}
+	if s.nat != nil {
+		return false, errors.New("qenv: RunUntil requires the deterministic scheduler; the native runtime cannot bound driver completion at scheduling boundaries")
+	}
+	if err := s.run(d, done); err != nil {
+		return false, err
+	}
+	return done(), nil
+}
+
+func (s *Sim) run(d time.Duration, done func() bool) (err error) {
+	operation := "run"
+	if done != nil {
+		operation = "until"
+	}
+	if finish := hooks.ObserveSimulation(s.base, s, hooks.Simulation{Operation: operation, Native: s.nat != nil, Horizon: d, MaxSteps: s.MaxSteps, Hang: s.Hang, StepsBefore: s.steps}); finish != nil {
 		defer func() { finish(s.steps, errors.Is(err, ErrMaxSteps), s.hung != nil) }()
 	}
 	s.stallsFixed()
@@ -1117,6 +1142,9 @@ func (s *Sim) Run(d time.Duration) (err error) {
 	defer s.watch()()
 	horizon := s.now.Add(d)
 	for {
+		if done != nil && done() {
+			return nil
+		}
 		if s.steps >= s.MaxSteps {
 			return ErrMaxSteps
 		}
@@ -1192,6 +1220,12 @@ func (s *Sim) Run(d time.Duration) (err error) {
 // through the doubles) runs on the settled system. ResumeFaults starts a
 // faulty phase again.
 func (s *Sim) Settle(d time.Duration) error { return s.settle(d, nil) }
+
+// PauseFaults disables subsequent fault choices and nemeses without healing
+// existing partitions, changing the scheduler or claiming quiescence. Use
+// ResumeFaults to restore configured fault choices. Unlike Settle, it records
+// no completion boundary; outstanding work remains outstanding.
+func (s *Sim) PauseFaults() { s.faultsOff = true }
 
 // ResumeFaults turns faults back on after a Settle or SettleCore: a run of
 // phases (faults, a settle and a probe, faults again) is faulty in each.

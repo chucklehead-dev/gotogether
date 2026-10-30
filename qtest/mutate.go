@@ -1,6 +1,7 @@
 package qtest
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -62,8 +63,8 @@ func (r *MutationReport) retainExecution(x *Exploration) {
 		r.profiles = append(r.profiles, x.profile.Clone())
 	}
 	for _, run := range x.Runs {
-		if run != nil && len(run.simulations) > 0 {
-			r.executions = append(r.executions, (runprofile.Execution{Run: x.ref() + ":" + run.ID(), Simulations: run.simulations}).Clone())
+		if run != nil && (len(run.simulations) > 0 || len(run.Phases) > 0) {
+			r.executions = append(r.executions, run.execution(x.ref()+":"+run.ID()))
 		}
 	}
 }
@@ -207,6 +208,9 @@ func (r *MutationReport) String() string {
 // (qtest.Takes("done").InAtLeast(0.9): a step whose absence no single
 // run's model check can see). Verdicts are shared across the
 // explorations: most mutants' runs repeat the baseline's steps.
+// A workload prerequisite that was not reached refuses the mutation assessment:
+// its history is unjudged, not a counterexample or a mutant kill. Establish the
+// prerequisite reliably before assessing the mutant's behavior.
 //
 //	sys.Mutate(t, cfg).Expect(t, qtest.PerMutant(done), qtest.NoSurvivors(marks...))
 func (s System) Mutate(t testing.TB, cfg ExploreConfig) *MutationReport {
@@ -232,17 +236,7 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig) *MutationReport {
 		mcfg.baseline = base.ref() // the baseline's regressions are the mutants' too
 		mut := m.String()
 		mcfg.opts = append(append([]Option(nil), mcfg.opts...), func(c *settings) { c.mutant = mut }) // its evidence names it
-		x := explore(t, s.Binding, mcfg, func(c qenv.Chooser) (err error) {
-			defer func() {
-				if r := recover(); r != nil {
-					broke.Store(true) // a run the mutant crashed: killed
-				}
-			}()
-			if s.Run(qenv.WithContext(c, qmut.WithMutant(qenv.ContextOf(c), m.ID))) != nil {
-				broke.Store(true)
-			}
-			return nil
-		})
+		x := explore(t, s.Binding, mcfg, mutantScenario(s.Run, m.ID, &broke))
 		rep.retainExecution(x)
 		// killed: a run broke, or the model rejects one, or none recorded a
 		// step where the baseline's did; undecided: no run failed, and some
@@ -259,6 +253,39 @@ func (s System) Mutate(t testing.TB, cfg ExploreConfig) *MutationReport {
 		}
 	}
 	return rep
+}
+
+// mutantScenario preserves ordinary application errors/panics as kills, while
+// refusing to assess behavior whose workload prerequisite never held. Keeping
+// the marker on the returned error lets the normal execution-failure path emit
+// unjudged evidence instead of manufacturing a model verdict.
+func mutantScenario(run func(qenv.Chooser) error, id int, broke *atomic.Bool) func(qenv.Chooser) error {
+	return func(c qenv.Chooser) (err error) {
+		refuse := func(cause error) error {
+			return fmt.Errorf("gotogether: mutant %d not assessed: workload prerequisite was not reached; establish the prerequisite before assessing mutation behavior: %w", id, cause)
+		}
+		defer func() {
+			if p := recover(); p != nil {
+				if cause, ok := p.(error); ok && workloadNotReached(cause) {
+					err = refuse(cause)
+					return
+				}
+				broke.Store(true)
+			}
+		}()
+		if cause := run(qenv.WithContext(c, qmut.WithMutant(qenv.ContextOf(c), id))); cause != nil {
+			if workloadNotReached(cause) {
+				return refuse(cause)
+			}
+			broke.Store(true)
+		}
+		return nil
+	}
+}
+
+func workloadNotReached(err error) bool {
+	var missing interface{ WorkloadNotReached() bool }
+	return errors.As(err, &missing) && missing.WorkloadNotReached()
 }
 
 // decidedFailing reports whether a run failed with a verdict: not OK,

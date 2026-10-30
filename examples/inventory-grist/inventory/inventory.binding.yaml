@@ -28,6 +28,8 @@ actions:
   reserve:
     args: { result: '{{.outcome}}' }
     expect: 'log.length() == {{.obs.head}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
+  allocation:
+    expect: 'allocationAnswer(log, { order: {{.order}}, caller: {{.caller}} }) == { units: {{.obs.units}}, status: {{.obs.status}} }'
   shipEffect: {}
   ship:
     expect: 'log.length() == {{.obs.head}} and checkpoints.get("ship") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
@@ -64,6 +66,7 @@ simulate:
       when: 'nextID(answered) != Set() and STRS.exists(order => STRS.exists(caller => reserveOutcome(log, { order: order, caller: caller }) == "too-late"))'
     - name: reserve.full
       when: 'nextID(answered) != Set() and STRS.exists(order => STRS.exists(caller => reserveOutcome(log, { order: order, caller: caller }) == "full"))'
+    - allocation
     - shipEffect
     - ship
     - fulfillmentStart

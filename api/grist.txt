@@ -490,6 +490,8 @@ const CallTimeout = 2 * time.Second
 const CallerHeader = "X-Gristsim-Caller"
 const DefaultGrace = 45 * time.Second
 const DependencyTimeout = time.Second
+const FaultsConfigured FaultPolicy = "configured"
+const FaultsDisabled FaultPolicy = "disabled"
 const MaxAttempts = 50
 const RetryDelay = 100 * time.Millisecond
 const Upgraded = "upgraded"
@@ -500,9 +502,12 @@ func Gen(typ reflect.Type, alphabet []string, ints []int, pick func(n int) int) 
 func Run(c qenv.Chooser, app *grist.App, cfg Config) error
 func System(binding string, app *grist.App, cfg Config) qtest.System
 type Call struct
+    field App *grist.App
     field Tenant string
+    field Caller string
     field Name string
     field Args any
+    field Expect string
 type Cluster struct
     field Grace time.Duration
     field Drain grist.Drain
@@ -516,7 +521,7 @@ type Config struct
     field Clients int
     field Ops int
     field Send []string
-    field Prologue []Call
+    field Phases []Phase
     field SQL bool
     field HTTP bool
     field Nodes int
@@ -535,6 +540,7 @@ type Config struct
     field Log func(string)
     field Peers []*grist.App
 type Doubles map[*grist.Dependency]grist.Handlers
+type FaultPolicy string
 type Managed struct
     field Failover *qenv.Failover
     field Restore bool
@@ -543,6 +549,24 @@ type Managed struct
     field Lose int
     field Resume time.Duration
     field FailOpen bool
+type Observation struct
+    field Call Call
+    field Result any
+    field Poll time.Duration
+type Phase struct
+    field Name string
+    field Timeout time.Duration
+    field Faults FaultPolicy
+    field Calls []Call
+    field Await []Observation
+type PhaseError struct
+    field Phase string
+    field Requirement string
+    field Reason string
+    field Cause error
+    method (*PhaseError) Error() string
+    method (*PhaseError) Unwrap() error
+    method (*PhaseError) WorkloadNotReached() bool
 
 == github.com/chucklehead-dev/gotogether/grist/gristtest
 func Answered(t testing.TB, app *grist.App, traces []*qtrace.Trace)

@@ -206,6 +206,10 @@ module inventoryGen {
     }
   }
 
+  // allocation: reads through readPos, changes nothing; its answer is allocationAnswer's
+  // at its position (the binding's expect)
+  action allocation(order: str, readPos: int): bool = readsThrough(readPos)
+
   // ship skips a trigger its rule says it skips (shipSkips: the handler's Skip),
   // its checkpoint alone, no effect step; a handler's Fail is recorded so
   // too, appending grist.failed, which a skip's empty batch does not match
@@ -333,6 +337,10 @@ module inventoryGen {
           reserve(order, id, caller, log.length(), triplesOf(reserveNeeds(args_, result_)), result_)
         }
       },
+      {
+        nondet order = STRS.oneOf()
+        allocation(order, log.length())
+      },
       shipSkip(nextOf(log, checkpoints.get("ship"), "authorized")),
       {
         nondet key_ = KEYS.oneOf()
@@ -420,6 +428,9 @@ module inventoryCallsGen {
     }
   }
 
+  // allocation changes nothing; its answer is allocationAnswer's where it linearizes
+  action allocation(order: str): bool = all { log' = log, answered' = answered }
+
   action step = {
     any {
       {
@@ -439,6 +450,10 @@ module inventoryCallsGen {
         nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
         reserve(order, id, caller, reserveOutcome(log, { order: order, caller: caller }))
+      },
+      {
+        nondet order = STRS.oneOf()
+        allocation(order)
       },
       all { log' = log, answered' = answered },
     }

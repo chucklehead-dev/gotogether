@@ -39,7 +39,7 @@ the business rules and protocol remain application-owned.
 | Processor reads stop at their trigger; they cannot decide whether a subsequent cancellation won | Put authorization in a conditioned inventory command, invoked by a separate confirm intent | Ownership and the cancellation boundary must be decided before writing processors. Added an example and guide note. |
 | An accepted checkout cancel is only an intent; inventory might already have authorized fulfillment | Distinguish accepted inventory cancellation from too-late; preserve refusal outcomes in native records | A feedback cycle is unnecessary for this contract. A customer-facing final status/receipt would require a further design; this trial does not claim one. |
 | A business refusal returned as an effect error keeps retrying a final answer | Explicitly consume declared Rejected answers while returning transport errors | Added guidance; do not swallow unknown outcomes. |
-| gristsim Prologue waits for command answers, not downstream work | Pace customer decisions in virtual time and assert the durable outcomes; fix operation selection with a small chooser wrapper | A documented phased-workload hook may be a useful next improvement. No speculative per-peer configuration was needed. |
+| An accepted placement does not prove that asynchronous inventory reservation completed | A named reservation phase now requires placement outcomes and observes inventory's allocation query before customers decide | Bounded virtual-time prerequisites replace completion sleeps; fault policy is explicit, and a failed setup cannot count as exercised later work. |
 | Every service needs generation in its own model directory | Three tiny binaries, three generated-file checks, one module; peer URLs attached at the binaries | Some orchestration boilerplate, but no need for a new deployment abstraction yet. |
 | One call uses its processor's stable effect key | Separate reserve/cancel/confirm processors | Do not sequentially call different commands of the same peer under one effect key: markers are scoped to the App, not the command. |
 | Generic Takes coverage and scenario expectations are different types | Wrap one-step scenarios when claiming Some over runs | The compiler catches the mistake, but expectation vocabulary adds learning cost. |
@@ -59,8 +59,10 @@ the business rules and protocol remain application-owned.
 - **missingRelease:** the processor and local models finish normally,
   and links agree on every call that exists. At the recorded settle,
   allIntentsAnswered is false. This identifies an unanswered intent; the
-  test additionally confirms a real unit remains held. The model does not
-  yet print an order-specific outstanding-obligation explanation.
+  test additionally confirms a real unit remains held. The model
+  now retains the model-authored order-specific cancellation obligation,
+  including the order and exact intent identity when the backend provides its
+  failure state; an unavailable exact state remains explicit.
 - **authorizeCancelled:** inventory's own sequence shows cancel before
   authorize, followed by a fulfillment start. The local failure says
   expected not-held but received ok; the protocol rejects the same durable
@@ -74,8 +76,9 @@ are useful for diagnosis but verbose for a first-time app author.
 ## What to do next
 
 Prefer an independently maintained adoption trial, using this workflow as
-a reference. If improving the library first, investigate **phased workload
-control** and **order-specific outstanding-obligation diagnostics**. These
-are concrete friction from this trial. There is no evidence here that
-SQL peers, cyclic graphs, cluster configuration, rollouts or span support
-should come first. Keep the APIs flexible while those needs are tested.
+a reference. The rehearsal now uses named prerequisites and an actual inventory
+query instead of pacing sleeps; model-authored order/intent diagnostics also
+survive composition output. Further workload APIs should follow concrete
+adopter needs rather than introducing another authoring workflow. There is no
+evidence here that cyclic graphs, per-peer clusters or rollouts should come
+first.

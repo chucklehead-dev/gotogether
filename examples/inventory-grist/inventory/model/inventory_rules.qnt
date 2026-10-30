@@ -11,6 +11,13 @@ module inventoryRules {
       s.put(k, 1 + (if (s.keys().contains(k)) s.get(k) else 0)) })
   pure def used(log: List[Event]): int = { val s = stock(log)
     s.keys().fold(0, (n,k) => n + s.get(k)) }
+  // Model the public query from this order's event history, independently of
+  // the Go read model. Authorization keeps its units; cancellation clears them.
+  pure def allocationAnswer(log: List[Event], q: AllocationArgs): AllocationResult = {
+    units: allocationsEvents(log,q.order).foldl(0, (n,e) =>
+      if (e.typ == "reserved") n + 1 else if (e.typ == "cancelled") 0 else n),
+    status: status(log,q.order)
+  }
   pure def reserveOutcome(log: List[Event], c: ReserveArgs): str =
     if (status(log,c.order) == "cancelled") "cancelled"
     else if (status(log,c.order) == "authorized") "too-late"

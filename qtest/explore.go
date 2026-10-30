@@ -21,6 +21,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/internal/confidence"
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
+	"github.com/chucklehead-dev/gotogether/internal/workload"
 
 	"github.com/chucklehead-dev/gotogether/internal/formats"
 	"github.com/chucklehead-dev/gotogether/qcover"
@@ -441,6 +442,8 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	ctx := context.Background()
 	simulations := &hooks.Simulations{}
 	ctx = hooks.WithSimulations(ctx, simulations)
+	phases := &workload.Collector{}
+	ctx = workload.With(ctx, phases)
 	if c.simEnvironment != nil {
 		ctx = hooks.WithSimEnvironment(ctx, *c.simEnvironment)
 	}
@@ -497,6 +500,7 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	}
 	recorded := mem.Steps()
 	run := &Run{Steps: recorded, Recorded: recorded, Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr, Unsettled: unsettled, faults: faults, notes: notes.Lines(), simulations: simulationCalls(simulations.Calls())}
+	run.Phases = phases.Phases()
 	if sc, ok := qenv.As[*qenv.Script](ch); ok {
 		run.Unscripted, run.scripted, run.misnamed = sc.Remaining(), true, sc.Misnamed()
 	}
@@ -569,6 +573,9 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 			continue
 		}
 		if r.Err != nil {
+			if len(r.Phases) > 0 {
+				t.Log(r.execution(x.ref() + ":" + r.ID()).PhasesString())
+			}
 			if x.profile != nil {
 				t.Log(x.profile.String())
 			}

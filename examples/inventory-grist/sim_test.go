@@ -2,6 +2,7 @@ package checkout
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -22,9 +23,27 @@ const protocol = "protocol.binding.yaml"
 
 func config() gristsim.Config {
 	return gristsim.Config{Tenants: []string{"t1"}, Clients: 2, Ops: 1, Send: []string{"cancel", "confirm"}, Alphabet: []string{"a", "b"},
-		Prologue: []gristsim.Call{{Name: "place", Args: Order{Order: "a"}}, {Name: "place", Args: Order{Order: "b"}}},
-		Peers:    []*grist.App{inventory.App, fulfillment.App}, Check: true}
+		Phases: []gristsim.Phase{reservationPhase("a", "b")},
+		Peers:  []*grist.App{inventory.App, fulfillment.App}, Check: true}
 }
+
+// reservationPhase requires both accepted placement and the inventory owner's
+// observed hold before a customer decision can exercise cancellation/confirmation.
+func reservationPhase(orders ...string) gristsim.Phase {
+	p := gristsim.Phase{Name: "reserve inventory", Timeout: 10 * time.Second, Faults: gristsim.FaultsDisabled}
+	for _, order := range orders {
+		p.Calls = append(p.Calls, gristsim.Call{Name: "place", Args: Order{Order: order}})
+		p.Await = append(p.Await, gristsim.Observation{Call: gristsim.Call{App: inventory.App, Name: "allocation", Args: Order{Order: order}}, Result: inventory.Allocation{Units: 1, Status: "held"}})
+	}
+	return p
+}
+
+func decisionPhase(name, command, status string) gristsim.Phase {
+	return gristsim.Phase{Name: name, Timeout: 10 * time.Second, Faults: gristsim.FaultsDisabled,
+		Calls: []gristsim.Call{{Name: command, Args: Order{Order: "a"}}},
+		Await: []gristsim.Observation{{Call: gristsim.Call{App: inventory.App, Name: "allocation", Args: Order{Order: "a"}}, Result: inventory.Allocation{Units: 1, Status: status}}}}
+}
+
 func localChecks(t *testing.T, steps []qtrace.Step, inventoryOK bool) {
 	t.Helper()
 	qtest.Validate(t, commits, steps).Expect(t, qtest.Conforms(), qtest.Settles())
@@ -100,14 +119,11 @@ func compositionChecks(t *testing.T) gristtest.Composition {
 func TestFaithful(t *testing.T) {
 	qtest.RequireQuint(t)
 	cfg := config()
-	// Give the reservation phase time to run before customers decide. This
-	// is workload pacing in virtual time, not an application timer.
+	// Readiness is observed through inventory's public query, without healing
+	// faults or pacing generated arguments with an assumed completion delay.
 	cfg.Gen = map[string]func(func(int) int) any{}
 	for _, name := range cfg.Send {
-		cfg.Gen[name] = func(pick func(int) int) any {
-			qenv.Sleep(context.Background(), time.Second)
-			return Order{Order: []string{"a", "b"}[pick(2)]}
-		}
+		cfg.Gen[name] = func(pick func(int) int) any { return Order{Order: []string{"a", "b"}[pick(2)]} }
 	}
 	checks := compositionChecks(t)
 	sys := checks.System(gristsim.System(commits, App, cfg).WithRates(qenv.NoFaults))
@@ -116,6 +132,7 @@ func TestFaithful(t *testing.T) {
 	// exhaustive protocol search. Navigation reevaluates the same assessor.
 	e.Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Some(qtest.Scenario(qtest.Takes("cancel").Outcome("ok"))), qtest.Some(qtest.Scenario(qtest.Takes("confirm").Outcome("ok"))))
 	for _, r := range e.Runs {
+		assertHeldPrerequisites(t, r)
 		composition := r.Report.Composition
 		if composition == nil || len(composition.Local) != 3 || len(composition.Peers) != 2 {
 			t.Fatalf("composition omitted a service or declared peer edge: %+v", composition)
@@ -125,6 +142,51 @@ func TestFaithful(t *testing.T) {
 		}
 		t.Logf("%s", composition.String())
 	}
+}
+
+// The successful prerequisite is an actual read through inventory's public
+// API. Its phase receipt and native query record must agree before any random
+// customer intent starts; the independent inventory model checks its answer.
+func assertHeldPrerequisites(t *testing.T, r *qtest.Run) {
+	t.Helper()
+	observed := 0
+	for _, p := range r.Phases {
+		if p.Name != "reserve inventory" {
+			continue
+		}
+		if p.Status != "completed" || p.Faults != string(gristsim.FaultsDisabled) {
+			t.Fatalf("reservation prerequisites did not complete: %+v", p)
+		}
+		for _, req := range p.Requirements {
+			if req.App != "inventory" || req.Action != "allocation" {
+				continue
+			}
+			var got inventory.Allocation
+			if err := json.Unmarshal(req.Observed, &got); err != nil || req.Status != "satisfied" || req.Attempts < 1 || got != (inventory.Allocation{Units: 1, Status: "held"}) {
+				t.Fatalf("phase did not retain the actual held allocation: %+v (decoded %+v, %v)", req, got, err)
+			}
+			observed++
+		}
+	}
+	if observed != 2 {
+		t.Fatalf("wanted one held observation for each prepared order, got %d", observed)
+	}
+	held := map[string]bool{}
+	for _, s := range r.Recorded {
+		if s.Actor == "inventory/t1" && s.Action == "allocation" && s.Obs["status"] == "held" {
+			if order, ok := s.Args["order"].(string); ok {
+				held[order] = true
+			}
+		}
+		caller, _ := s.Args["caller"].(string)
+		if s.Invocation && s.Actor == "checkout/t1/clients" && strings.HasPrefix(caller, "client") && (s.Action == "cancel" || s.Action == "confirm") {
+			if !held["a"] || !held["b"] {
+				t.Fatal("customer decision ran before inventory's observed holds")
+			}
+			return
+		}
+	}
+	t.Fatal("fixture recorded no customer cancellation or confirmation")
 }
 
 // phases selects a fixed workload, leaving the simulation schedule seeded.
@@ -147,21 +209,22 @@ func quiet(seed uint64) qenv.Chooser {
 	b.Rates = qenv.NoFaults
 	return &phases{Chooser: b}
 }
-func paced(pick func(int) int) any {
-	qenv.Sleep(context.Background(), time.Second)
-	return Order{Order: "a"}
-}
 func decisionConfig(cancelFirst bool) gristsim.Config {
 	cfg := config()
-	cfg.Clients = 1
-	cfg.Ops = 2
-	cfg.Prologue = []gristsim.Call{{Name: "place", Args: Order{Order: "a"}}}
-	cfg.Send = []string{"confirm", "cancel"}
-	cfg.Gen = map[string]func(func(int) int) any{"confirm": paced, "cancel": paced}
+	cfg.Clients, cfg.Ops = 1, 1
+	cfg.Phases = []gristsim.Phase{reservationPhase("a")}
+	cfg.Gen = map[string]func(func(int) int) any{
+		"confirm": func(func(int) int) any { return Order{Order: "a"} },
+		"cancel":  func(func(int) int) any { return Order{Order: "a"} },
+	}
 	if cancelFirst {
-		cfg.Prologue = append(cfg.Prologue, gristsim.Call{Name: "cancel", Args: Order{Order: "a"}})
+		p := decisionPhase("cancel held allocation", "cancel", "cancelled")
+		p.Await[0].Result = inventory.Allocation{Status: "cancelled"}
+		cfg.Phases = append(cfg.Phases, p)
 		cfg.Send = []string{"confirm"}
-		cfg.Ops = 1
+	} else {
+		cfg.Phases = append(cfg.Phases, decisionPhase("authorize held allocation", "confirm", "authorized"))
+		cfg.Send = []string{"cancel"}
 	}
 	return cfg
 }
@@ -207,7 +270,7 @@ func TestDecisionRaces(t *testing.T) {
 func TestReservationCrash(t *testing.T) {
 	qtest.RequireQuint(t)
 	cfg := config()
-	cfg.Prologue = nil
+	cfg.Phases = nil
 	cfg.Send = []string{"place"}
 	cfg.Clients = 1
 	cfg.Ops = 1
@@ -234,7 +297,7 @@ func TestCapacity(t *testing.T) {
 	cfg.Ops = 1
 	cfg.Send = []string{"place"}
 	cfg.Alphabet = []string{"a"}
-	cfg.Prologue = append(cfg.Prologue, gristsim.Call{Name: "place", Args: Order{Order: "c"}})
+	cfg.Phases[0].Calls = append(cfg.Phases[0].Calls, gristsim.Call{Name: "place", Args: Order{Order: "c"}})
 	e := gristsim.System(commits, App, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 1, Chooser: quiet})
 	e.Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
 	for _, r := range e.Runs {
@@ -249,7 +312,13 @@ func TestCapacity(t *testing.T) {
 }
 func TestCancellationOvertakesReserve(t *testing.T) {
 	qtest.RequireQuint(t)
-	e := gristsim.System(commits, App, decisionConfig(true)).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 1, Chooser: func(seed uint64) qenv.Chooser {
+	cfg := decisionConfig(true)
+	// This contrast intentionally cancels before observing a reservation. Keep
+	// the scripted delayed request active: an observation must not heal it.
+	cfg.Phases = []gristsim.Phase{{Name: "cancel before delayed reservation", Timeout: 10 * time.Second, Faults: gristsim.FaultsConfigured,
+		Calls: []gristsim.Call{{Name: "place", Args: Order{Order: "a"}}, {Name: "cancel", Args: Order{Order: "a"}}},
+		Await: []gristsim.Observation{{Call: gristsim.Call{App: inventory.App, Name: "allocation", Args: Order{Order: "a"}}, Result: inventory.Allocation{Status: "cancelled"}}}}}
+	e := gristsim.System(commits, App, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 1, Chooser: func(seed uint64) qenv.Chooser {
 		return &qenv.Script{Base: quiet(seed), Faults: []qenv.Scripted{{Kind: "rpc.inventory.delay", Name: "slow"}}}
 	}})
 	e.Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("rpc.inventory.delay").Faulted())

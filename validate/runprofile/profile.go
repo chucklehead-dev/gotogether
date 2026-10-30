@@ -154,7 +154,9 @@ func (p Profile) String() string {
 		}
 		invariants := slices.Clone(p.Validation.Invariants)
 		slices.Sort(invariants)
-		if len(invariants) == 0 {
+		if p.Validation.Invariants == nil {
+			b.WriteString("\n    invariants: not resolved (model not loaded)")
+		} else if len(invariants) == 0 {
 			b.WriteString("\n    invariants: none")
 		} else {
 			fmt.Fprintf(&b, "\n    invariants: %s", strings.Join(invariants, ", "))

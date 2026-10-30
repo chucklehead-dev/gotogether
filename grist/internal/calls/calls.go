@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
 
@@ -45,6 +46,30 @@ type Answer struct {
 	// call's step records it as its field OlderField when there were any
 	// (gristtest.ReadersFirst).
 	Older int
+}
+
+type captureKey struct{}
+type capture struct {
+	mu     sync.Mutex
+	answer Answer
+	seen   bool
+}
+
+// Capture observes the answer recorded by a client's existing call path. It
+// sends no request and records no extra model step; the outer call's final
+// answer supersedes any nested call that shares its context.
+func Capture(ctx context.Context, do func(context.Context) error) (Answer, error) {
+	c := &capture{}
+	err := do(context.WithValue(ctx, captureKey{}, c))
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.seen {
+		if err == nil {
+			err = errors.New("client returned without recording its call")
+		}
+		return Answer{Err: err.Error()}, err
+	}
+	return c.answer, err
 }
 
 // RefusedField is a client call's step field counting its refused tries
@@ -102,12 +127,19 @@ func Record(ctx context.Context, app *grist.App, env grist.Envelope, name string
 	case query:
 		obs, err := rec.StepFields(app.ResultType(name), a.Result, "obs.")
 		if err != nil {
-			call.Done(fmt.Errorf("grist: query %s: its result: %w", name, err), refused...)
+			a.Err = fmt.Sprintf("grist: query %s: its result: %v", name, err)
+			call.Done(errors.New(a.Err), refused...)
 			break
 		}
 		call.Done(nil, append(obs, refused...)...)
 	default:
 		call.Done(nil, refused...)
+	}
+	if c, ok := ctx.Value(captureKey{}).(*capture); ok {
+		c.mu.Lock()
+		c.answer, c.seen = a, true
+		c.answer.Result = append(json.RawMessage(nil), a.Result...)
+		c.mu.Unlock()
 	}
 	return a
 }

@@ -9,6 +9,7 @@ import (
 // Simulation records the effective policy at one Sim.Run call. Scheduler
 // counters and limits apply only when Native is false.
 type Simulation struct {
+	Operation               string
 	ID                      int
 	Native                  bool
 	Horizon                 time.Duration

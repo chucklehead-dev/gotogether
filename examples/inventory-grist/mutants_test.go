@@ -110,7 +110,7 @@ func TestMutant(t *testing.T) {
 	switch mutant {
 	case "missingRelease":
 		cfg := decisionConfig(true)
-		cfg.Prologue = cfg.Prologue[:1]
+		cfg.Phases = cfg.Phases[:1]
 		cfg.Send = []string{"cancel"}
 		e := gristsim.System(commits, App, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 1, Chooser: quiet})
 		e.Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
@@ -142,7 +142,7 @@ func TestMutant(t *testing.T) {
 		}
 	case "freshKey":
 		cfg := config()
-		cfg.Prologue = nil
+		cfg.Phases = nil
 		cfg.Send = []string{"place"}
 		cfg.Clients = 1
 		cfg.Ops = 1
@@ -199,7 +199,7 @@ func TestInventoryMutants(t *testing.T) {
 func TestLostReservationReply(t *testing.T) {
 	qtest.RequireQuint(t)
 	cfg := config()
-	cfg.Prologue = nil
+	cfg.Phases = nil
 	cfg.Send = []string{"place"}
 	cfg.Clients = 1
 	cfg.Ops = 1
