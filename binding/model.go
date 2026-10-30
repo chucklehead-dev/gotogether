@@ -28,6 +28,9 @@ type Model struct {
 	Module  string
 	Actions map[string][]Param
 	Vals    map[string]bool
+	// Diagnostics associates Boolean properties with model-authored record-set vals,
+	// discovered from /// gotogether: diagnostic <val> documentation.
+	Diagnostics map[string]string
 	// Antecedents are the boolean vals of the form `A implies B`, with A
 	// as Quint text: where A never holds, the val holds vacuously.
 	Antecedents map[string]string
@@ -371,6 +374,7 @@ type tcDecl struct {
 	Kind      string          `json:"kind"`
 	Name      string          `json:"name"`
 	Qualifier string          `json:"qualifier"`
+	Doc       string          `json:"doc"`
 	Expr      *tcExpr         `json:"expr"`
 	RawExpr   json.RawMessage `json:"-"`
 	Type      json.RawMessage `json:"typeAnnotation"`
@@ -558,6 +562,9 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 					}
 				}
 			}
+		}
+		if err := m.discoverDiagnostics(visible, tc); err != nil {
+			return nil, err
 		}
 		return m, nil
 	}

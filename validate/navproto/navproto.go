@@ -8,6 +8,7 @@ package navproto
 
 import (
 	"fmt"
+	"github.com/chucklehead-dev/gotogether/validate/diagnostic"
 
 	"github.com/chucklehead-dev/gotogether/internal/formats"
 )
@@ -23,6 +24,8 @@ type NamedValue struct {
 // here so that the CLI and gotogether-nav, which a test package does not
 // build, read it): ID is "<schedule>@<k>", the choices before k fixed.
 type Node struct {
+	// Diagnostics describe the nominal whole run at its judgment boundary, not Model.
+	Diagnostics []diagnostic.Result `json:"diagnostics,omitempty"`
 	// Protocol is the navigation protocol of the binary that wrote the
 	// node (Protocol; "": none named, read as the current)
 	Protocol string `json:"protocol,omitempty"`
@@ -78,9 +81,11 @@ type Branch struct {
 // An ActorState is an actor's model state at a run node: its variables,
 // or why the evaluator has none (Error).
 type ActorState struct {
-	Actor string       `json:"actor"`
-	State []NamedValue `json:"state,omitempty"`
-	Error string       `json:"error,omitempty"`
+	// Diagnostics describe this cursor state only and assert no verdict.
+	Diagnostics []diagnostic.Result `json:"diagnostics,omitempty"`
+	Actor       string              `json:"actor"`
+	State       []NamedValue        `json:"state,omitempty"`
+	Error       string              `json:"error,omitempty"`
 }
 
 // Protocol is the run navigation protocol this version speaks: the

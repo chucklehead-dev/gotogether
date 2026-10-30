@@ -16,6 +16,70 @@
                 "cause": {
                   "type": "string"
                 },
+                "diagnostic": {
+                  "additionalProperties": false,
+                  "description": "Diagnostic supplies optional model-authored detail, without changing Cause.",
+                  "properties": {
+                    "actor": {
+                      "type": "string"
+                    },
+                    "cause": {
+                      "type": "string"
+                    },
+                    "evidence": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expected": {
+                            "type": "string"
+                          },
+                          "intent": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "subject": {
+                            "type": "string"
+                          }
+                        },
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "type": "array"
+                    },
+                    "omitted": {
+                      "type": "integer"
+                    },
+                    "projection": {
+                      "type": "string"
+                    },
+                    "property": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
                 "kind": {
                   "type": "string"
                 },

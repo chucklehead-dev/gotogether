@@ -93,6 +93,7 @@ type EvalModule struct
     field Eventually map[string]string
     field Vals map[string]string
     field Possible map[string]string
+    field Diagnostics map[string]string
 type ITFMeta struct
     field Spec string `json:"spec"`
     field Module string `json:"module"`
@@ -105,6 +106,7 @@ type Model struct
     field Module string
     field Actions map[string][]Param
     field Vals map[string]bool
+    field Diagnostics map[string]string
     field Antecedents map[string]string
     field Vars []string
     field Consts map[string]string
@@ -2231,6 +2233,7 @@ func SplitPath(s string) []string
 func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error)
 type Absence struct
     field Actor string
+    field Diagnostic *diagnostic.Result
     field Kind string
     field Name string
     field Cause Cause
@@ -2294,6 +2297,7 @@ type Disabled struct
     field Action string `json:"action"`
     field Why *Explanation `json:"why,omitempty"`
 type DocAbsence struct
+    field Diagnostic *diagnostic.Result `json:"diagnostic,omitempty"`
     field Kind string `json:"kind"`
     field Name string `json:"name"`
     field Cause string `json:"cause"`
@@ -2507,6 +2511,7 @@ type Navigator struct
     method (*Navigator) Fold(path ...string) (*Node, error)
     method (*Navigator) Node(path ...string) (*Node, error)
 type Node struct
+    field Diagnostics []diagnostic.Result `json:"diagnostics,omitempty"`
     field ID string `json:"id"`
     field Start string `json:"start"`
     field Path []string `json:"path"`
@@ -2702,6 +2707,26 @@ type Replayed struct
     field Warnings []string
     field Notes []string
 
+== github.com/chucklehead-dev/gotogether/validate/diagnostic
+type Item struct
+    field Kind string `json:"kind"`
+    field Subject string `json:"subject"`
+    field Intent string `json:"intent"`
+    field Expected string `json:"expected"`
+type Result struct
+    field Actor string `json:"actor,omitempty"`
+    field Property string `json:"property"`
+    field Projection string `json:"projection"`
+    field Scope string `json:"scope"`
+    field Cause string `json:"cause,omitempty"`
+    field Status string `json:"status"`
+    field Reason string `json:"reason,omitempty"`
+    field Items []Item `json:"items,omitempty"`
+    field Total int `json:"total"`
+    field Omitted int `json:"omitted,omitempty"`
+    field Evidence string `json:"evidence"`
+    method (Result) String() string
+
 == github.com/chucklehead-dev/gotogether/validate/model
 const DefaultSearchStates = 100000
 func For(c *validate.Checker) *Analyzer
@@ -2869,6 +2894,7 @@ type Verdict struct
 const Protocol = "gotogether.nav/1"
 func CheckProtocol(p string) error
 type ActorState struct
+    field Diagnostics []diagnostic.Result `json:"diagnostics,omitempty"`
     field Actor string `json:"actor"`
     field State []NamedValue `json:"state,omitempty"`
     field Error string `json:"error,omitempty"`
@@ -2885,6 +2911,7 @@ type NamedValue struct
     field Name string `json:"name"`
     field Value string `json:"value"`
 type Node struct
+    field Diagnostics []diagnostic.Result `json:"diagnostics,omitempty"`
     field Protocol string `json:"protocol,omitempty"`
     field Run string `json:"run"`
     field ID string `json:"id"`

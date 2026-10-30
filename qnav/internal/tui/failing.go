@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"github.com/chucklehead-dev/gotogether/validate/diagnostic"
+	"slices"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -13,8 +16,26 @@ import (
 // (the navigator's own explanation, without its first line's advice).
 func Failing(ch *validate.Checker, start validate.NavStart) (ModelNav, string, string, error) {
 	start.At = -1
-	_, rejected := ch.Nav(start)
+	whole, rejected := ch.Nav(start)
 	if rejected == nil {
+		report, err := ch.Check(context.Background(), start.Steps)
+		if err != nil {
+			return nil, "", "", err
+		}
+		for _, actor := range report.Actors {
+			if start.Actor != "" && start.Actor != actor.Actor {
+				continue
+			}
+			var details []diagnostic.Result
+			for _, ab := range actor.Absent {
+				if ab.Cause == validate.Defect && ab.Diagnostic != nil {
+					details = append(details, *ab.Diagnostic)
+				}
+			}
+			if len(details) > 0 {
+				return terminalDiagnosticNav{whole, details}, "terminal state · failed completion property", actor.Summary(), nil
+			}
+		}
 		return nil, "", "", errors.New("the model accepts every call of the run: no failing step")
 	}
 	var last *validate.Navigator
@@ -42,4 +63,28 @@ func tidyWhy(s string) string {
 		}
 	}
 	return s
+}
+
+// A terminal diagnostic stays labeled as fixed-history evidence when the user
+// explores other model branches from the failure boundary.
+type terminalDiagnosticNav struct {
+	ModelNav
+	details []diagnostic.Result
+}
+
+func (n terminalDiagnosticNav) Node(path ...string) (*validate.Node, error) {
+	node, err := n.ModelNav.Node(path...)
+	return n.attach(node, err)
+}
+func (n terminalDiagnosticNav) Fold(path ...string) (*validate.Node, error) {
+	node, err := n.ModelNav.Fold(path...)
+	return n.attach(node, err)
+}
+func (n terminalDiagnosticNav) attach(node *validate.Node, err error) (*validate.Node, error) {
+	if err != nil {
+		return nil, err
+	}
+	copy := *node
+	copy.Diagnostics = append(slices.Clone(node.Diagnostics), n.details...)
+	return &copy, nil
 }

@@ -500,6 +500,13 @@ func (e *engine) navNode(b *navBase, req navproto.Request) (*navproto.Node, erro
 	}
 	node.Model = actorStates(b.cc, nc.before)
 	judge(t, b.cc, b.inst, e.c.searchOptions(), []*Run{r}, func(*Run) string { return "the node's run " + node.ID })
+	for _, actor := range r.Report.Actors {
+		for _, ab := range actor.Absent {
+			if ab.Diagnostic != nil {
+				node.Diagnostics = append(node.Diagnostics, *ab.Diagnostic)
+			}
+		}
+	}
 	node.Verdict = "pass"
 	switch {
 	case len(r.Steps) == 0:
@@ -569,6 +576,7 @@ func actorStates(cc *validate.Checker, steps []qtrace.Step) []navproto.ActorStat
 		if err == nil {
 			var nd *validate.Node
 			if nd, err = n.Node(); err == nil {
+				as.Diagnostics = nd.Diagnostics
 				for _, v := range nd.State {
 					as.State = append(as.State, navproto.NamedValue{Name: v.Name, Value: v.Value})
 				}

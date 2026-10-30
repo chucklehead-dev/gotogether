@@ -36,6 +36,8 @@ type EvalModule struct {
 	// Possible are the predicates PossibleModule was given, each the name
 	// of the module's val that reads it
 	Possible map[string]string
+	// Diagnostics retains each annotated property's diagnostic val in the IR.
+	Diagnostics map[string]string
 }
 
 // evalPrefix names what the module adds, apart from the model's names.
@@ -139,6 +141,12 @@ func (b *Binding) evalModule(m *Model, qntPath string, preds []string) (*EvalMod
 			fmt.Fprintf(&w, "  val %s = %s\n", name, p)
 			em.Possible[p] = name
 		}
+	}
+	em.Diagnostics = map[string]string{}
+	for _, property := range slices.Sorted(maps.Keys(m.Diagnostics)) {
+		name := evalPrefix + "diagnostic_" + property
+		fmt.Fprintf(&w, "  val %s = %s\n", name, m.Diagnostics[property])
+		em.Diagnostics[property] = name
 	}
 	fmt.Fprintf(&w, "  action %s = init\n", em.Init)
 	// each action through a definition of the module's own: quint keeps

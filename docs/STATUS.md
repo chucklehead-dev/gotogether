@@ -31,6 +31,13 @@ OTel round-trip over real HTTP for payouts -> bank, including lost replies,
 pending invocations and the generated freshKey mutant. Release hardening
 is not a gate.
 
+A [model-authored diagnostics prototype](model-diagnostics-prototype.md)
+now explores the inventory trial's unanswered-intent reporting friction.
+It uses Quint documentation annotations, without an extra binding mapping,
+and shares optional structured data across text/JSON/navigation/TUI. This
+is provisional work for review; native evidence links and editor source
+ranges are not implemented. It does not change grist runtime behavior.
+
 ## 1. What works now
 
 The toolkit checks Go code against Quint models; [README](../README.md)

@@ -281,6 +281,15 @@ func reconstruct(b *binding.Binding, steps []qtrace.Step) ([]*qtrace.Trace, []qt
 // Check reconstructs per-actor traces from steps (in any order, from any
 // number of recorders) and validates each.
 func (c *Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, error) {
+	report, err := c.check(ctx, steps)
+	if err == nil {
+		c.enrichDiagnostics(report, steps, false)
+	}
+	return report, err
+}
+
+func (c *Checker) check(ctx context.Context, steps []qtrace.Step) (*Report, error) {
+
 	if c.compiled != nil {
 		return c.checkCompiled(ctx, steps)
 	}

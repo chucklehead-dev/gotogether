@@ -10,6 +10,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/qeval"
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate/diagnostic"
 )
 
 // The model navigator (P5): a binding's model, state by state, with the
@@ -38,6 +39,7 @@ type Navigator struct {
 	e      *evaluator
 	consts map[string]qeval.Value
 	start  qeval.State
+	actor  string
 	// from says where the start is, as a node shows it
 	from string
 	// path is the start's own path: the run's calls that reached it
@@ -48,14 +50,16 @@ type Navigator struct {
 // from the start, as -follow takes it), how it was reached, its state,
 // its invariants' values there, its branches and its disabled actions.
 type Node struct {
-	ID         string       `json:"id"`
-	Start      string       `json:"start"`
-	Path       []string     `json:"path"`
-	State      []NamedValue `json:"state"`
-	Changed    []string     `json:"changed,omitempty"`
-	Invariants []NamedValue `json:"invariants,omitempty"`
-	Branches   []Edge       `json:"branches"`
-	Disabled   []Disabled   `json:"disabled,omitempty"`
+	// Diagnostics describe this navigated state only; they assert no verdict.
+	Diagnostics []diagnostic.Result `json:"diagnostics,omitempty"`
+	ID          string              `json:"id"`
+	Start       string              `json:"start"`
+	Path        []string            `json:"path"`
+	State       []NamedValue        `json:"state"`
+	Changed     []string            `json:"changed,omitempty"`
+	Invariants  []NamedValue        `json:"invariants,omitempty"`
+	Branches    []Edge              `json:"branches"`
+	Disabled    []Disabled          `json:"disabled,omitempty"`
 	// Folded is how many transitions Fold took past its path (the node's
 	// Changed are then against the state it folded from)
 	Folded int `json:"folded,omitempty"`
@@ -135,6 +139,7 @@ func (c *Checker) Nav(start NavStart) (*Navigator, error) {
 	if tr == nil {
 		return nil, fmt.Errorf("nav: the run's actors the binding checks are %v: name one (-actor)", actors)
 	}
+	n.actor = tr.Actor
 	whole := tr
 	if w := wholes[tr]; w != nil {
 		whole = w
@@ -392,6 +397,7 @@ func (n *Navigator) edges(s qeval.State) ([]Edge, []qeval.Transition, error) {
 func (n *Navigator) node(s, prev qeval.State, taken []string) (*Node, error) {
 	m := n.e.m
 	out := &Node{ID: strings.Join(taken, ","), Start: n.from, Path: append(slices.Clone(n.path), taken...), Branches: []Edge{}}
+	out.Diagnostics = n.diagnosticValues(s)
 	for _, v := range m.Vars {
 		out.State = append(out.State, NamedValue{Name: m.Display(v), Value: qeval.String(s[v])})
 		if prev != nil && qeval.Compare(s[v], prev[v]) != 0 {
@@ -467,6 +473,9 @@ func (nd *Node) String() string {
 		if d.Why != nil {
 			b.WriteString(d.Why.String("    "))
 		}
+	}
+	for _, d := range nd.Diagnostics {
+		fmt.Fprintf(&b, "\ndiagnostic: %s\n", d.String())
 	}
 	return b.String()
 }

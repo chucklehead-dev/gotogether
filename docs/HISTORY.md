@@ -6989,3 +6989,38 @@ with the default 1/50 rate was incomparable. Its budget is recalibrated
 to 180 without reducing seeds, checks or ordering coverage. Payouts
 measures 51.5 CPU seconds including the new span acceptance and remains
 within its existing budget threshold.
+
+## Model-authored diagnostics: annotation prototype
+
+2026-10-30, provisional experiment after usability, design and architecture
+review. The preferred workflow keeps outstanding-intent semantics in the
+independent Quint model: a normal state val yields structured records, the
+Boolean property checks collection emptiness, and `/// gotogether: diagnostic
+<val>` documentation associates them. Quint preserves the annotation in typed
+IR, so discovery requires neither another YAML mapping nor a source scanner.
+Binding selection still decides which properties are checked. Typed metadata
+validation and lint discovery expose malformed/unknown/wrong-shape associations.
+
+The inventory missingRelease mutant produces the same failed eventual property,
+now with actor protocol/t1, subject a and cancellation intent t1-c1-1. Optional
+text/JSON absence details use the exact failed replay state after existing
+absence classification. Go/Quint, Check/Batch/Judge, compiled metadata and real
+cached-search finalization have focused tests. Search/hidden/partitioned/resumed
+or unavailable-state paths retain an explicit unavailable explanation without
+changing verdicts. Prefix/lost-evidence causes remain uncollected/dropped.
+
+Navigation reads the exact cursor state without asserting a verdict; whole-run
+results are separate. The TUI's g entry can open a conforming history's failed
+completion property. Shared typed rendering retains actor, scope and unresolved
+native-evidence status. Review caught and corrected a prefix labeled settled,
+hidden actor identity, a JSON-only evidence limitation, and inherited Boolean
+type masking a local override. Counts and field lengths are bounded; identities
+are never silently shortened.
+
+The full inventory short suite at CI's shadow rate, binding and TUI suites,
+focused core/TUI race checks, schema/API/documentation/skill checks, and the real
+mutant/CLI replay pass locally. This is a prototype for review, with provisional
+record fields. Native evidence/source links, richer source-aware lint/editor
+integration and broader history support are not complete. No grist runtime or
+new LSP is introduced. docs/model-diagnostics-prototype.md records reproduction
+and scope; optional report/nav fields keep their existing format majors.

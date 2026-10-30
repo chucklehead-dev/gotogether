@@ -358,6 +358,10 @@ func lint(args []string) (int, error) {
 			}
 			errs = append(errs, e)
 		}
+		for _, property := range slices.Sorted(maps.Keys(m.Diagnostics)) {
+			active := slices.Contains(b.Invariants, property) || slices.Contains(b.Eventually, property)
+			fmt.Printf("diagnostic %s.%s -> %s (active=%v; Set[record])\n", m.Module, property, m.Diagnostics[property], active)
+		}
 		bound = append(bound, binding.Bound{Binding: b, Model: m})
 	}
 	var warns, choices []string

@@ -166,3 +166,13 @@ Charm's teatest has no released v2, so the tests call Update directly.
 
 Versions: bubbletea v2.1.0, lipgloss v2.0.6, bubbles v2.2.1
 (`charm.land/...`, released at least two weeks before they were chosen).
+
+
+## Model-authored diagnostic prototype
+
+With an annotated model, the navigator shows structured outstanding-intent
+items at its current state, explicitly without a verdict. Whole-run diagnostics
+are separately labeled; inspecting an earlier cursor does not import later
+failure facts. The **g** entry also opens an annotated settled completion failure
+whose transitions all conform. Business selectors are shown with native evidence
+links explicitly unresolved. See [the prototype and reproduction](../docs/model-diagnostics-prototype.md).

@@ -165,6 +165,7 @@ func (c *Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt Sear
 		if j != nil {
 			j.Report = j.Report.clone()
 			searches[i].mark(j.Report)
+			c.enrichDiagnostics(j.Report, j.Steps, searching)
 		}
 	}
 	return js, errs

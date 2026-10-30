@@ -45,6 +45,12 @@ the core workflow in an independently maintained library; it does not
 establish unaided onboarding or grist adoption. The bounded GR3 slice 6
 experiment is now built in payouts; review its [results and remaining
 limits](grist-call-spans.md#result-of-the-first-increment) before expanding it.
+A provisional [model-authored diagnostics experiment](model-diagnostics-prototype.md)
+is in progress: typed Quint documentation annotations associate a checked
+property with its outstanding-intent value, without another YAML mapping.
+The inventory missingRelease witness feeds structured text/JSON/TUI details.
+Native evidence resolution and developer-editor integration remain open;
+no grist application-runtime behavior is added.
 The earlier tracks below retain their item identifiers and technical dependencies; their historical release
 recommendations do not override this prerelease order.
 

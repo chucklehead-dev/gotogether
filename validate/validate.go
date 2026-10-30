@@ -909,6 +909,11 @@ func (r *Result) summary(verbose bool) string {
 		fmt.Fprintf(&b, "  absent:\n")
 		for _, a := range r.Absent {
 			fmt.Fprintf(&b, "    %s: %s: %s\n", a.Name, a.Cause.label(), a.Why)
+			if a.Diagnostic != nil {
+				for _, line := range strings.Split(a.Diagnostic.String(), "\n") {
+					fmt.Fprintf(&b, "      %s\n", line)
+				}
+			}
 		}
 	}
 	if !r.OK() && len(r.Constants) > 0 {

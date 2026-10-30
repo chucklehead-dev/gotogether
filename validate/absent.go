@@ -7,6 +7,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate/diagnostic"
 )
 
 // A Cause is why a step a run was expected to show is absent from it
@@ -52,6 +53,8 @@ func (c Cause) label() string {
 // settle and a run that ended first, Uncollected; else it is a Defect.
 type Absence struct {
 	Actor string
+	// Diagnostic is optional model-authored detail, supplemental to Cause.
+	Diagnostic *diagnostic.Result
 	// Kind is "within" (a bounded response not met in time, or not
 	// judged), "eventually" (an eventual val not judged, or false at the
 	// settle) or "pending" (a call never completed).

@@ -255,6 +255,16 @@ func (m *Model) modelScreen(c *entry) screen {
 			out = append(out, "  "+v.Name+" = "+val)
 		}
 	}
+	for _, d := range n.Diagnostics {
+		label := "model diagnostics · navigated state, no verdict"
+		if d.Scope == "settled_checked_history" {
+			label = "terminal diagnostics · fixed checked history"
+		}
+		out = append(out, "", st.section.Render(label))
+		for _, line := range strings.Split(d.String(), "\n") {
+			out = append(out, "  "+line)
+		}
+	}
 	if len(n.Disabled) > 0 {
 		out = append(out, "", st.section.Render("disabled"))
 		for _, d := range n.Disabled {
@@ -312,6 +322,14 @@ func (m *Model) runScreen(c *entry) screen {
 	for _, s := range steps {
 		out = append(out, "  "+s)
 	}
+	if len(n.Diagnostics) > 0 {
+		out = append(out, "", st.section.Render("whole-run diagnostics · independent of cursor"))
+		for _, d := range n.Diagnostics {
+			for _, line := range strings.Split(d.String(), "\n") {
+				out = append(out, "  "+line)
+			}
+		}
+	}
 	var parent *navproto.Node
 	if len(m.stack) > 1 {
 		parent = m.stack[len(m.stack)-2].r
@@ -336,6 +354,14 @@ func (m *Model) runScreen(c *entry) screen {
 					for _, v := range p.State {
 						before[v.Name] = v.Value
 					}
+				}
+			}
+		}
+		if len(a.Diagnostics) > 0 {
+			out = append(out, st.faint.Render("  diagnostics · cursor state, no verdict"))
+			for _, d := range a.Diagnostics {
+				for _, line := range strings.Split(d.String(), "\n") {
+					out = append(out, "  "+line)
 				}
 			}
 		}
