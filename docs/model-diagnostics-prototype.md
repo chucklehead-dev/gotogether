@@ -95,7 +95,10 @@ not an assertion that all work completed.
 Items are deterministically ordered, capped at 32 with total/omitted counts.
 Returned string fields over 512 bytes refuse the explanation rather than truncate
 identity. These are provisional output limits, not a general model-evaluation
-resource budget. Compiled models retain discovered associations and the projection
+resource budget. The TypeScript backend does not emit failing-test ITF, so report details are
+explicitly unavailable there; the failure verdict remains intact and exact-state
+navigation remains available. Rust-backed reports carry the item details.
+Compiled models retain discovered associations and the projection
 bridge for navigation; report enrichment still requires an exact failure state.
 
 ## Validation and remaining work

@@ -44,7 +44,16 @@ func checkDiagnosticReport(t *testing.T, r *Report, available bool) {
 			t.Fatalf("missing scoped metadata: %+v", d)
 		}
 		if available {
-			if ab.Cause != Defect || d.Status != "available" || d.Total != 2 || len(d.Items) != 2 || d.Items[0].Intent != "c1" || d.Items[1].Intent != "c2" {
+			if ab.Cause != Defect {
+				t.Fatalf("changed completion verdict: %s", actor.Summary())
+			}
+			if os.Getenv("QUINT_BACKEND") == "typescript" {
+				// This backend does not emit failing-test ITF. The prototype
+				// must report missing exact state, not independently replay one.
+				if d.Status != "unavailable" || d.Reason != "exact judged model state is unavailable" {
+					t.Fatalf("TypeScript state availability: %+v", d)
+				}
+			} else if d.Status != "available" || d.Total != 2 || len(d.Items) != 2 || d.Items[0].Intent != "c1" || d.Items[1].Intent != "c2" {
 				t.Fatalf("wrong details: %+v (%s)", d, actor.Summary())
 			}
 		} else if ab.Cause != Uncollected || d.Status != "unavailable" || d.Scope != "checked_history_no_completion_verdict" {
@@ -127,15 +136,18 @@ func TestDiagnosticUnavailablePreservesVerdict(t *testing.T) {
 	}
 	// An ambiguous/search context may inspect the same failure, but must not
 	// carry the pre-search explanatory data forward as an established answer.
+	before, _ := json.Marshal(base.Actors)
 	copy := base.clone()
 	c.enrichDiagnostics(copy, steps, true)
 	for i, a := range copy.Actors {
 		if a.Absent[0].Diagnostic.Status != "unavailable" || a.Absent[0].Cause != Defect || a.Reason() != base.Actors[i].Reason() {
 			t.Fatal("diagnostic changed search verdict")
 		}
-		if base.Actors[i].Absent[0].Diagnostic.Status != "available" {
-			t.Fatal("enrichment mutated a cached report")
-		}
+
+	}
+	after, _ := json.Marshal(base.Actors)
+	if string(after) != string(before) {
+		t.Fatal("enrichment mutated a cached report")
 	}
 	// Supplying a real gap downgrades the original absence; details cannot
 	// promote it back to a defect, regardless of the projection's value.
@@ -176,6 +188,7 @@ func TestDiagnosticSearchCacheBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	before, _ := json.Marshal(cached.Actors)
 	calls := 0
 	judgments, errs := c.JudgeBatch(t.Context(), [][]qtrace.Step{steps}, SearchOptions{ResolvePending: true}, func(_ context.Context, runs [][]qtrace.Step) ([]*Report, []error) {
 		calls++
@@ -192,9 +205,13 @@ func TestDiagnosticSearchCacheBoundary(t *testing.T) {
 		if d == nil || d.Status != "unavailable" || !strings.Contains(d.Reason, "searched") {
 			t.Fatalf("pre-search explanation survived: %+v", d)
 		}
-		if actor.Reason() != cached.Actors[i].Reason() || cached.Actors[i].Absent[0].Diagnostic.Status != "available" {
+		if actor.Reason() != cached.Actors[i].Reason() {
 			t.Fatal("cached verdict/details mutated")
 		}
+	}
+	after, _ := json.Marshal(cached.Actors)
+	if string(after) != string(before) {
+		t.Fatal("search mutated cached report details")
 	}
 }
 

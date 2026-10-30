@@ -7024,3 +7024,9 @@ record fields. Native evidence/source links, richer source-aware lint/editor
 integration and broader history support are not complete. No grist runtime or
 new LSP is introduced. docs/model-diagnostics-prototype.md records reproduction
 and scope; optional report/nav fields keep their existing format majors.
+
+Hosted backend coverage caught a test assumption: TypeScript does not emit
+failing-test ITF. The runtime already preserved the failure and reported the
+explanation unavailable; tests now assert that boundary explicitly, retaining
+exact-item assertions on Rust. Cache immutability checks compare full original
+payloads under either capability. Focused prototype suites pass on both backends.
