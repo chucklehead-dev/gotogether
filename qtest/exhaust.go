@@ -2,13 +2,13 @@ package qtest
 
 import (
 	"fmt"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/validate/runprofile"
 )
 
 // A Bound limits an exhaustive search (System.Exhaust) to the runs that
@@ -132,12 +132,9 @@ func (f *forcing) Err() error {
 // cuts short fails the test unless the bound is Partial.
 func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 	t.Helper()
-	if b.MaxRuns <= 0 {
-		b.MaxRuns = 1000
-	}
-	if b.Parallel <= 0 {
-		b.Parallel = runtime.GOMAXPROCS(0)
-	}
+	var err error
+	b, err = resolveBound(b)
+	failConfiguration(t, err)
 	off := qenv.Rates{Kinds: map[string]float64{}}
 	for _, k := range b.Without {
 		off = off.Set(k, 1)
@@ -145,12 +142,18 @@ func (s System) Exhaust(t testing.TB, b Bound) *Exploration {
 	e := begin(t, s.Binding, s.opts(), s.Run, b.Parallel)
 	x := e.x
 	x.search = &search{bound: b}
+	x.profile.Mode, x.profile.Chooser = "exhaustive", "bounded-schedules"
+	x.profile.Exhaust = &runprofile.Exhaust{Delays: b.Delays, Faults: b.Faults, Without: append([]string{}, b.Without...), MaxRuns: b.MaxRuns, Partial: b.Partial}
 	src := &scheduleSource{b: b, off: off, search: x.search}
 	if spec, ok := runSpecFor(t, x.ref()); ok {
 		if spec.kind != "schedule" {
 			t.Fatalf("gotogether: GOTOGETHER_RUN names a %s, but %s is an exhaustive search: want :schedule=<choices>", spec.kind, x.ref())
 		}
 		x.alone = &spec
+		x.profile.Replay = spec.kind + "=" + spec.value
+		x.profile.Mode, x.profile.Chooser = "replay", "forced-schedule"
+		x.profile.Exhaust = nil
+		x.profile.Without = nil
 		ds, err := parseSchedule(spec.value)
 		if err != nil {
 			t.Fatalf("gotogether: %v", err)

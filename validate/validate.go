@@ -51,6 +51,10 @@ type Options struct {
 	// GOTOGETHER_EVAL's, else "go". An option, so tests of each run in
 	// parallel.
 	Eval string
+	// EvalSample is the deterministic confirmation policy for Go-evaluator
+	// passes. Nil uses GOTOGETHER_EVAL_SAMPLE (default 1/50). Plans using
+	// unconfirmed evaluator operations raise a nonzero rate to at least 1/5.
+	EvalSample *EvaluationSampling
 	// detailBackend, if set, replays the runs that failed (the detail
 	// phase): a chunk's TypeScript backend writes no ITF for a failing
 	// test, so the model's state at the failure is Rust's to report

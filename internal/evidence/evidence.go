@@ -14,6 +14,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/internal/formats"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/runprofile"
 )
 
 // Format is the format qtest.Evidence.WriteJSON writes and Read reads.
@@ -33,17 +34,21 @@ const (
 // View is what the evidence command reads of an exploration's evidence:
 // the fields of qtest.Evidence's JSON it reports on.
 type View struct {
-	Session   string         `json:"session,omitempty"`
-	Format    string         `json:"format"`
-	Role      string         `json:"role"`
-	Package   string         `json:"package,omitempty"`
-	Import    string         `json:"import,omitempty"`
-	Test      string         `json:"test,omitempty"`
-	Spec      string         `json:"spec,omitempty"`
-	Runs      int            `json:"runs"`
-	Conform   int            `json:"conform"`
-	FailingBy map[string]int `json:"failing"`
-	Faults    *struct {
+	Profiles   []runprofile.Profile   `json:"profiles,omitempty"`
+	Executions []runprofile.Execution `json:"executions,omitempty"`
+	Session    string                 `json:"session,omitempty"`
+	Format     string                 `json:"format"`
+	Role       string                 `json:"role"`
+	Package    string                 `json:"package,omitempty"`
+	Import     string                 `json:"import,omitempty"`
+	Test       string                 `json:"test,omitempty"`
+	Spec       string                 `json:"spec,omitempty"`
+	Runs       int                    `json:"runs"`
+	Conform    int                    `json:"conform"`
+	Unjudged   int                    `json:"unjudged,omitempty"`
+	RunErrors  map[string]string      `json:"runErrors,omitempty"`
+	FailingBy  map[string]int         `json:"failing"`
+	Faults     *struct {
 		Points []struct {
 			Kind     string   `json:"kind"`
 			Sites    []string `json:"sites,omitempty"`

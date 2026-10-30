@@ -11,7 +11,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
 	"runtime/debug"
 	"slices"
 	"sort"
@@ -30,12 +29,14 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
 	"github.com/chucklehead-dev/gotogether/validate/receipt"
+	"github.com/chucklehead-dev/gotogether/validate/runprofile"
 )
 
 // An Exploration is many seeded runs of a simulated scenario, checked
 // against the model in bulk.
 type Exploration struct {
-	Runs []*Run
+	profile *runprofile.Profile
+	Runs    []*Run
 	// Cached counts the runs judged from an earlier verdict on the same
 	// steps against the same instance (this exploration's, or any before
 	// it in the test binary), without running quint.
@@ -155,9 +156,10 @@ type ExploreConfig struct {
 // the user's ExploreConfig, and what only a method sets.
 type exploreSpec struct {
 	ExploreConfig
-	opts  []Option   // the System's, and a sweep row's (System.Opts configures)
-	rates qenv.Rates // the System's Rates
-	fuzz  bool       // System.Fuzz: the run is the fuzz input's
+	without []string   // fault kinds forced nominal by the workflow (a sweep row)
+	opts    []Option   // the System's, and a sweep row's (System.Opts configures)
+	rates   qenv.Rates // the System's Rates
+	fuzz    bool       // System.Fuzz: the run is the fuzz input's
 	// baseline is the exploration whose corpus entries these runs replay
 	// (a mutant's: its baseline's), else "": with it a replay that diverges
 	// is the mutant's doing, not a stale entry, and runs that recorded
@@ -279,45 +281,25 @@ func empty(runs []*Run) bool {
 // a run that fails to run (rather than to conform) fails t, naming its seed.
 func explore(t testing.TB, bindingPath string, cfg exploreSpec, scenario func(c qenv.Chooser) error) *Exploration {
 	t.Helper()
-	full := cfg.Seeds // the seeds a short exploration may top up to (topUpSource)
-	if cfg.ShortSeeds > 0 && testing.Short() {
-		cfg.Seeds = cfg.ShortSeeds
-	} else {
-		full = 0
-	}
-	if cfg.Seeds == 0 {
-		cfg.Seeds = 50
-	}
-	if cfg.rates.Default == 0 && cfg.rates.Kinds == nil {
-		cfg.rates = qenv.DefaultRates
-	}
-	if cfg.Parallel <= 0 {
-		cfg.Parallel = runtime.GOMAXPROCS(0)
+	resolved, err := resolveExplore(cfg, testing.Short())
+	failConfiguration(t, err)
+	cfg = resolved.cfg
+	full := resolved.full
+	if len(cfg.without) > 0 {
+		original := scenario
+		scenario = func(c qenv.Chooser) error { return original(qenv.Without(c, cfg.without...)) }
 	}
 	e := begin(t, bindingPath, cfg.opts, scenario, cfg.Parallel)
 	x := e.x
 	x.corpus, x.fuzz, x.mutant = corpusDir(t, cfg.ExploreConfig), cfg.fuzz, cfg.baseline != ""
-	// a nightly run widens the sample: GOTOGETHER_SEEDS=n runs n seeds,
-	// GOTOGETHER_SEED_OFFSET=k starts them after k (fresh seeds each night);
-	// a failure's report names its run, which GOTOGETHER_RUN runs alone
-	n, offset := cfg.Seeds, uint64(0)
-	if v, err := envUint("GOTOGETHER_SEEDS"); err != nil {
-		t.Fatalf("gotogether: %v", err)
-	} else if v > 0 && cfg.Chooser == nil {
-		n = int(v)
-	}
-	if v, err := envUint("GOTOGETHER_SEED_OFFSET"); err != nil {
-		t.Fatalf("gotogether: %v", err)
-	} else if cfg.Chooser == nil {
-		offset = v
-	}
-	seeds := make([]uint64, n)
-	for i := range seeds {
-		seeds[i] = offset + uint64(i+1)
-	}
+	n, offset := resolved.count, resolved.offset
+	resolved.profile(x)
+	var seeds []uint64
 	spec, alone := runSpecFor(t, x.ref())
 	if alone {
 		x.alone = &spec
+		x.profile.Replay = spec.kind + "=" + spec.value
+		x.profile.Seeds = nil
 		switch spec.kind {
 		case "seed":
 			n, _ := strconv.ParseUint(spec.value, 10, 64)
@@ -326,9 +308,17 @@ func explore(t testing.TB, bindingPath string, cfg exploreSpec, scenario func(c 
 			}
 			seeds = []uint64{n}
 		case "corpus", "choices":
+			x.profile.Rates = nil
+			x.profile.Chooser = "replay"
 			seeds = nil
 		default:
 			t.Fatalf("gotogether: GOTOGETHER_RUN names a %s, but %s explores seeds: want :seed=<n>, :corpus=<file> or :choices=<file>", spec.kind, x.ref())
+		}
+	}
+	if !alone {
+		seeds = make([]uint64, n)
+		for i := range seeds {
+			seeds[i] = offset + uint64(i+1)
 		}
 	}
 	seeded := func(seed uint64) qenv.Chooser { s := qenv.NewSeeded(seed); s.Rates = cfg.rates; return s }
@@ -337,7 +327,7 @@ func explore(t testing.TB, bindingPath string, cfg exploreSpec, scenario func(c 
 		chooser = cfg.Chooser
 	}
 	sources := []source{&seedSource{seeds: seeds, chooser: chooser, replayed: cfg.Chooser != nil, once: cfg.fuzz}}
-	if _, set := os.LookupEnv("GOTOGETHER_SEEDS"); full > n && !set && !alone && cfg.Chooser == nil && !cfg.fuzz {
+	if full > n && !resolved.envSeeds && !alone && cfg.Chooser == nil && !cfg.fuzz {
 		if kinds := setKinds(cfg.rates); len(kinds) > 0 {
 			sources = append(sources, &topUpSource{from: offset + uint64(n) + 1, to: offset + uint64(full), batch: cfg.Parallel, kinds: kinds, chooser: seeded})
 		}
@@ -449,6 +439,11 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	}
 	var sink qobs.Sink = mem
 	ctx := context.Background()
+	simulations := &hooks.Simulations{}
+	ctx = hooks.WithSimulations(ctx, simulations)
+	if c.simEnvironment != nil {
+		ctx = hooks.WithSimEnvironment(ctx, *c.simEnvironment)
+	}
 	var code *qcover.Counts
 	if woven { // the code is woven with qweave -cover: count it by step
 		code = qcover.NewCounts()
@@ -501,7 +496,7 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 		faults.Add("nemesis." + n)
 	}
 	recorded := mem.Steps()
-	run := &Run{Steps: recorded, Recorded: recorded, Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr, Unsettled: unsettled, faults: faults, notes: notes.Lines()}
+	run := &Run{Steps: recorded, Recorded: recorded, Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr, Unsettled: unsettled, faults: faults, notes: notes.Lines(), simulations: simulationCalls(simulations.Calls())}
 	if sc, ok := qenv.As[*qenv.Script](ch); ok {
 		run.Unscripted, run.scripted, run.misnamed = sc.Remaining(), true, sc.Misnamed()
 	}
@@ -574,6 +569,12 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 			continue
 		}
 		if r.Err != nil {
+			if x.profile != nil {
+				t.Log(x.profile.String())
+			}
+			if len(r.simulations) > 0 {
+				t.Log((runprofile.Execution{Run: x.ref() + ":" + r.ID(), Simulations: r.simulations}).String())
+			}
 			if p, ok := errors.AsType[*RunPanic](r.Err); ok { // a self-check's finding, or a bug: keep the run
 				where := "the scenario's stack"
 				if p.InTask {
@@ -605,6 +606,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 	if t.Failed() {
 		// a scenario failed t (t.Fatal from a run's goroutine ends only
 		// that run)
+		x.writeEvidence(t, x.failedEvidence(origins))
 		t.FailNow()
 	}
 	if empty(x.Runs) && x.mutant {
@@ -624,6 +626,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 	o.Dir, o.NoITF = filepath.Join(x.dir, "quint"), true
 	cc, inst, constants := instanceChecker(t, bindingPath, o, c)
 	x.constants, x.checker = constants, cc
+	setValidationInstance(x.profile, cc, constants)
 	x.model = cc.Binding.SpecPath() + ":" + cc.Binding.Module
 	if cc.Model != nil {
 		x.actions, x.steps = map[string]bool{}, stepActions(cc.Model, cc.Binding)
@@ -657,18 +660,8 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 	// own directory; each test's are cleared at its first exploration
 	// (nextExploration), so a rerun with fewer explorations leaves none
 	// stale
-	if dir := evidenceDir(x.test); dir != "" {
-		err := os.MkdirAll(dir, 0o755)
-		if err == nil {
-			err = x.Evidence().WriteJSON(filepath.Join(dir, fmt.Sprintf("x%d.json", x.id)))
-		}
-		if err != nil {
-			t.Logf("gotogether: evidence: %v", err)
-		}
-	} else if os.Getenv("GOTOGETHER_KEEP") != "" {
-		if err := x.Evidence().WriteJSON(filepath.Join(x.dir, "evidence.json")); err != nil {
-			t.Logf("gotogether: evidence.json: %v", err)
-		}
+	if evidenceDir(x.test) != "" || os.Getenv("GOTOGETHER_KEEP") != "" {
+		x.writeEvidence(t, x.Evidence())
 	}
 }
 

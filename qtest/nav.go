@@ -14,6 +14,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/validate/navproto"
 	"github.com/chucklehead-dev/gotogether/validate/receipt"
+	"github.com/chucklehead-dev/gotogether/validate/runprofile"
 
 	"github.com/chucklehead-dev/gotogether/internal/overlay"
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -294,7 +295,9 @@ type navBase struct {
 func (e *engine) navBase(r0 *Run) *navBase {
 	b := &navBase{r0: r0}
 	b.ds, b.cs, b.entropy = baseSchedule(r0)
-	b.cc, b.inst, _ = e.checker()
+	var constants map[string]string
+	b.cc, b.inst, constants = e.checker()
+	setValidationInstance(e.x.profile, b.cc, constants)
 	return b
 }
 
@@ -459,6 +462,17 @@ func (e *engine) navNode(b *navBase, req navproto.Request) (*navproto.Node, erro
 	r.origin = origin{kind: "schedule", value: schedule(spec.ds)}
 	node := &navproto.Node{Protocol: navproto.Protocol, Run: x.ref() + ":" + b.r0.ID(), ID: spec.id(), Schedule: schedule(spec.ds), At: spec.at, Folded: nc.folded, Branches: []navproto.Branch{}, Steps: []string{},
 		Path: pathWords(nc.path)}
+	if x.profile != nil {
+		p := x.profile.Clone()
+		p.Mode, p.Chooser, p.Parallel = "navigation", "navigation", 1
+		p.Seeds, p.Rates, p.Exhaust = nil, nil, nil
+		p.Replay = node.Run + " node=" + node.ID
+		node.Profile = &p
+	}
+	if len(r.simulations) > 0 {
+		execution := (runprofile.Execution{Run: node.Run, Simulations: r.simulations}).Clone()
+		node.Execution = &execution
+	}
 	if b.entropy {
 		node.Notes = append(node.Notes, entropyNote)
 	}

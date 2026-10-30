@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/chucklehead-dev/gotogether/validate/diagnostic"
 	"github.com/chucklehead-dev/gotogether/validate/receipt"
+	"github.com/chucklehead-dev/gotogether/validate/runprofile"
 
 	"github.com/chucklehead-dev/gotogether/internal/formats"
 )
@@ -25,6 +26,10 @@ type NamedValue struct {
 // here so that the CLI and gotogether-nav, which a test package does not
 // build, read it): ID is "<schedule>@<k>", the choices before k fixed.
 type Node struct {
+	// Profile describes this node's replay policy, independent of model cursor state.
+	Profile *runprofile.Profile `json:"profile,omitempty"`
+	// Execution describes simulator invocations in this node's whole nominal run.
+	Execution *runprofile.Execution `json:"execution,omitempty"`
 	// Receipt describes the whole nominal run, independently of Model cursor states.
 	Receipt receipt.Summary `json:"receipt"`
 	// Diagnostics describe the nominal whole run at its judgment boundary, not Model.

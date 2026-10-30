@@ -2,6 +2,7 @@ package qtest
 
 import (
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -83,6 +84,8 @@ func (c settings) checker(t testing.TB, bindingPath string) *validate.Checker {
 func (s System) Judge(t testing.TB, ch qenv.Chooser) *Run {
 	t.Helper()
 	c := config(t, s.opts())
+	failConfiguration(t, resolveValidation(&c))
+	c.simEnvironment = &hooks.SimEnvironment{AllFaults: allFaults(), Check: os.Getenv("GOTOGETHER_CHECK") == "1"}
 	c.refuse(t, "System.Judge", exploreIgnores)
 	release := hooks.Strict()
 	mark, _ := hooks.Escaped(0)

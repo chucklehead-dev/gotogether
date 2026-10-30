@@ -398,6 +398,14 @@ func (m *Model) runScreen(c *entry) screen {
 			out = append(out, "  "+t)
 		}
 	}
+	if n.Profile != nil {
+		out = append(out, "")
+		out = append(out, strings.Split(strings.TrimSpace(n.Profile.String()), "\n")...)
+	}
+	if n.Execution != nil {
+		out = append(out, "")
+		out = append(out, strings.Split(strings.TrimSpace(n.Execution.String()), "\n")...)
+	}
 	if n.Saved != "" {
 		out = append(out, "", "saved to the corpus: "+n.Saved)
 	}

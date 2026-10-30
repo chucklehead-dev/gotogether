@@ -1,6 +1,8 @@
 package qtest
 
 import (
+	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
@@ -49,7 +51,7 @@ func TestSweepFaultKinds(t *testing.T) {
 		qobs.Record(s.Context(), "deposit", nil, "amount", 10, "obs.balance", balance)
 		return nil
 	}}
-	sys.WithRates(qenv.Rates{Default: 1}).Sweep(t, SweepConfig{Factors: []qsweep.Factor{qsweep.FaultKind("test.sweep")},
+	result := sys.WithRates(qenv.Rates{Default: 1}).Sweep(t, SweepConfig{Factors: []qsweep.Factor{qsweep.FaultKind("test.sweep"), qsweep.Ints("limit", 20, 30).Constant("LIMIT")},
 		Explore: ExploreConfig{Seeds: 3},
 		Expect: func(row qsweep.Row) []Claim {
 			if row.On("test.sweep") {
@@ -57,4 +59,17 @@ func TestSweepFaultKinds(t *testing.T) {
 			}
 			return []Claim{Conforms()}
 		}})
+	for i, x := range result.Runs {
+		p := x.Evidence().Profiles[0]
+		off := result.Rows[i].FaultsOff()
+		if !slices.Equal(p.Without, off) {
+			t.Fatalf("row %s excludes %v, profile says %v", result.Rows[i], off, p.Without)
+		}
+		if p.Validation.Constants["LIMIT"] != strconv.Itoa(result.Rows[i].Int("limit")) || !slices.Equal(p.Validation.Invariants, []string{"nonNegative", "underLimit"}) {
+			t.Fatalf("wrong model instance: %+v", p.Validation)
+		}
+	}
+	if len(result.Evidence().Profiles) != len(result.Rows) {
+		t.Fatal("aggregate lost row profiles")
+	}
 }

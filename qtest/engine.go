@@ -15,6 +15,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/qcover"
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/validate/runprofile"
 )
 
 // An engine runs one exploration, whichever method asked for it
@@ -67,9 +68,13 @@ type source interface {
 func begin(t testing.TB, binding string, opts []Option, scenario func(qenv.Chooser) error, parallel int) *engine {
 	t.Helper()
 	c := config(t, opts)
+	failConfiguration(t, resolveValidation(&c))
+	c.simEnvironment = &hooks.SimEnvironment{AllFaults: allFaults(), Check: os.Getenv("GOTOGETHER_CHECK") == "1"}
 	c.refuse(t, "an exploration (Explore, Exhaust, Sweep, Mutate, Fuzz, FollowTraces)", exploreIgnores)
 	x := &Exploration{test: t.Name(), id: nextExploration(t), tempDir: c.tempDir, mutation: c.mutant}
 	x.dir = exploreDir(t, c.Dir, x.id)
+	x.profile = &runprofile.Profile{ID: x.ref(), Mutant: c.mutant, Mode: "driven", Chooser: "custom", Parallel: parallel, Validation: validationProfile(c), AllFaults: c.simEnvironment.AllFaults, Check: c.simEnvironment.Check}
+	x.profile.Validation.Binding = binding
 	return &engine{t: t, c: c, binding: binding, scenario: scenario, parallel: parallel, woven: len(qcover.Blocks()) > 0, x: x}
 }
 
@@ -199,17 +204,23 @@ type topUpSource struct {
 	batch    int
 	kinds    []string // the Rates' keys set apart from DefaultRates
 	chooser  func(seed uint64) qenv.Chooser
+	done     bool
 }
 
 func (s *topUpSource) next(runs []*Run) []planned {
-	if s.from > s.to || !unfaultedKind(runs, s.kinds) {
+	if s.done || s.from > s.to || !unfaultedKind(runs, s.kinds) {
 		return nil
 	}
 	var out []planned
-	for ; s.from <= s.to && len(out) < max(s.batch, 1); s.from++ {
+	for !s.done && s.from <= s.to && len(out) < max(s.batch, 1) {
 		seed := s.from
 		out = append(out, planned{origin: origin{kind: "seed", seed: seed}, chooser: func() qenv.Chooser { return s.chooser(seed) },
 			again: func(*Run) qenv.Chooser { return s.chooser(seed) }})
+		if s.from == s.to {
+			s.done = true
+		} else {
+			s.from++
+		}
 	}
 	return out
 }

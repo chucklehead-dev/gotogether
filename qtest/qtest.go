@@ -48,17 +48,19 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
 	"github.com/chucklehead-dev/gotogether/validate/receipt"
+	"github.com/chucklehead-dev/gotogether/validate/runprofile"
 )
 
 // settings are what the Options set, for every workflow (Record, Validate,
 // a System's).
 type settings struct {
-	assess      func(context.Context, []qtrace.Step) (receipt.Composition, error)
-	Options     validate.Options // quint binary, backend (default $QUINT_BACKEND, else rust)
-	Dir         string           // artifacts; default $GOTOGETHER_KEEP/<test> or t.TempDir()
-	tempDir     bool             // Dir is t.TempDir(), removed when the test ends
-	Recorder    []qobs.Option    // e.g. qobs.WithActor("acct-1")
-	SkipIfEmpty bool             // skip (not fail) when nothing was recorded, e.g. an unwoven build
+	simEnvironment *hooks.SimEnvironment
+	assess         func(context.Context, []qtrace.Step) (receipt.Composition, error)
+	Options        validate.Options // quint binary, backend (default $QUINT_BACKEND, else rust)
+	Dir            string           // artifacts; default $GOTOGETHER_KEEP/<test> or t.TempDir()
+	tempDir        bool             // Dir is t.TempDir(), removed when the test ends
+	Recorder       []qobs.Option    // e.g. qobs.WithActor("acct-1")
+	SkipIfEmpty    bool             // skip (not fail) when nothing was recorded, e.g. an unwoven build
 	// Constants override the binding's (validate.Checker.WithConstants).
 	Constants map[string]string
 	// Invariants, if set, replace the binding's list
@@ -270,8 +272,9 @@ type origin struct {
 // value for is zero (Record makes no choices; an exploration writes no
 // step log).
 type Run struct {
-	assessment *receipt.Composition // captured before the primary report is judged
-	origin     origin               // where the run came from, in its exploration
+	simulations []runprofile.Simulation // actual Sim.Run limits, in invocation order
+	assessment  *receipt.Composition    // captured before the primary report is judged
+	origin      origin                  // where the run came from, in its exploration
 	// searched: a search ordered Steps (Recorded is what the run recorded)
 	searched bool
 	// Steps are the steps judged: as recorded, or the order a search

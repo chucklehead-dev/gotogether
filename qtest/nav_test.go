@@ -67,7 +67,18 @@ func TestNavRun(t *testing.T) {
 		if n.ID != "0:1@1" || n.Receipt.Reason != "rejects withdraw" {
 			t.Fatalf("the withdrawer first: %+v", n)
 		}
-		n.Run, again.Run = "", "" // the explorations' refs differ
+		for _, node := range []*navproto.Node{n, again} {
+			if node.Profile == nil || node.Profile.Chooser != "navigation" || node.Profile.Rates != nil || node.Profile.Seeds != nil || node.Profile.Exhaust != nil || node.Profile.Parallel != 1 {
+				t.Fatalf("node claims a sampling policy it does not execute: %+v", node.Profile)
+			}
+			if node.Execution == nil || node.Execution.Run != node.Run {
+				t.Fatal("observed limits lost the run identity")
+			}
+			node.Profile.ID = ""
+			node.Profile.Replay = strings.ReplaceAll(node.Profile.Replay, node.Run, "run")
+			node.Execution.Run = ""
+			node.Run = "" // exploration identities differ; the effective policies must agree
+		}
 		a, _ := jsonMarshal(n)
 		b, _ := jsonMarshal(again)
 		if string(a) != string(b) {

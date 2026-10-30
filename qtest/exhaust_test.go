@@ -86,11 +86,17 @@ func TestExhaust(t *testing.T) {
 	bad := x.Failing()[0]
 	// the test's third exploration, run alone as a report names it
 	t.Setenv("GOTOGETHER_RUN", t.Name()+"#3:schedule="+bad.origin.value)
-	again := sys.Exhaust(t, Bound{Delays: 1})
+	again := sys.Exhaust(t, Bound{MaxRuns: 1, Without: []string{"nemesis"}})
 	log := &logTB{TB: t}
 	again.Expect(log, All(Rejects("withdraw")), Some(Conforms()))
 	if len(again.Runs) != 1 || again.Runs[0].origin.value != bad.origin.value {
 		t.Errorf("GOTOGETHER_RUN schedule=%s ran %d runs", bad.origin.value, len(again.Runs))
+	}
+	// The explicit delayed schedule is replayed even though these generation
+	// bounds would not enumerate it. The profile describes the forced replay.
+	p := again.Evidence().Profiles[0]
+	if p.Mode != "replay" || p.Chooser != "forced-schedule" || p.Exhaust != nil || len(p.Without) != 0 {
+		t.Fatalf("replay claimed search policy: %+v", p)
 	}
 	// one run is not a search: claims about other runs are not judged,
 	// and the evidence claims no complete search

@@ -14,6 +14,12 @@ Set Theme "Catppuccin Mocha"
 Set TypingSpeed 35ms
 Set Framerate 12
 Env GOTOGETHER_CORPUS "/tmp/gotogether-nav-tape-corpus"
+Env GOMAXPROCS "2"
+Env QUINT_BACKEND ""
+Env GOTOGETHER_EVAL "go"
+Env GOTOGETHER_EVAL_SAMPLE "0.02"
+Env GOTOGETHER_CHECK ""
+Env GOTOGETHER_ALL_FAULTS ""
 
 # the terminal's size pinned in rows and columns: the browser's font
 # metrics (its fonts, its version) decide how many rows a height in

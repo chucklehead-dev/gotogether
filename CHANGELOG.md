@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- Run profiles: resolve exploration and primary validation policy before execution;
+  retain effective seeds, short-mode top-ups, rates, backend/evaluator policy and
+  search bounds in evidence and navigation. Record actual simulator horizons,
+  scheduler caps and watchdog exhaustion separately. JSON, text and TUI share
+  the same data. Invalid counts and policies fail before scenarios run.
+
 - grist: register one `gristtest.Composition` over explicit local checkers and
   an optional protocol checker. Every captured history is judged in the same
   local models, catalog-derived peer relations and bounded universal causal
