@@ -54,7 +54,7 @@ require explicit `-history`. Use a fresh ID and `go test -count=1`.
 **As of 2026-10-30 (diagnostic-evidence branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
-`0d14cff1` so diagnostic evidence, workload phases, shared preflight-format metadata,
+`50b59b7c` so diagnostic evidence, workload phases, shared preflight-format metadata,
 run profiles, composition and nav/2
 contract work outside go.work; the
 merged declared-call span increment did not require a core-pin bump. **Nothing is tagged**: every module is pre-release,
