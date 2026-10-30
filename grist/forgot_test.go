@@ -157,7 +157,7 @@ func TestGenerateNamesAStaleLock(t *testing.T) {
 	g.Write(dir)
 	usage := func(msg string) error { return errors.New(msg) }
 	err = gen.Command(stock(true, false, false), []string{"-dir", dir, "-check"}, io.Discard, usage)
-	if err == nil || !strings.Contains(err.Error(), "grist.lock is stale: read model stock's fingerprint changed (its snapshots refold)") {
+	if err == nil || !strings.Contains(err.Error(), "model.generated_stale] grist.lock") || !strings.Contains(err.Error(), "read model stock's fingerprint changed (its snapshots refold)") {
 		t.Errorf("-check with the fold changed: %v, want the stale lock named", err)
 	}
 }

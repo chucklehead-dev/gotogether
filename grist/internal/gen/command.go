@@ -1,108 +1,142 @@
 package gen
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
-	"strings"
 )
 
-// Command is an app's binary's model command (grist.Main's): Generate's
-// files written under -dir (default .), or with -check compared with
-// those there (an error naming each that differs); -init writes
-// Starter's files where there are none. It lists the holes the app's
-// model has not filled. usage makes the error of a command line it
-// cannot take.
+// PreflightError means Command already rendered a failing maintenance report.
+// Error retains its full detail for programmatic MainArgs callers; Main need
+// only return a nonzero exit status, without printing the same report twice.
+type PreflightError struct {
+	Report *Preflight
+	Cause  error
+}
+
+func (e *PreflightError) Error() string {
+	s := e.Report.String()
+	if e.Cause != nil {
+		s += "\nmodel maintenance failed: " + e.Cause.Error()
+	}
+	return s
+}
+
+// Command runs the app's model maintenance workflow. Check and JSON modes are
+// nonwriting inspections. Ordinary generation applies only a safe mechanical
+// plan; init additionally creates missing handwritten starter files, never
+// overwriting one. All paths share the same preflight findings and readiness.
 func Command(app App, args []string, stdout io.Writer, usage func(msg string) error) error {
-	c := app.Catalog()
-	fs := flag.NewFlagSet(c.Name+" model", flag.ContinueOnError)
+	name := app.Catalog().Name
+	fs := flag.NewFlagSet(name+" model", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	dir := fs.String("dir", ".", "")
 	check := fs.Bool("check", false, "")
-	starter := fs.Bool("init", false, "")
+	jsonOutput := fs.Bool("json", false, "")
+	init := fs.Bool("init", false, "")
 	if err := fs.Parse(args); err != nil || fs.NArg() > 0 {
-		return usage(fmt.Sprintf("usage: %s model [-dir DIR] [-check] [-init]", c.Name))
+		return usage(fmt.Sprintf("usage: %s model [-dir DIR] [-check] [-json] [-init]; -json implies a nonwriting check", name))
 	}
-	own := filepath.Join(*dir, modelFile(c.Name))
-	rules := filepath.Join(*dir, rulesFile(c.Name))
-	if *starter && !*check {
-		// an old layout's model is moved by hand, never stubbed beside
-		if b, err := readOwn(*dir, modelFile(c.Name)); err != nil {
-			return err
-		} else if err := oldLayout(c.Name, mustQuint(c.Name), b); err != nil {
-			return err
+	if *init && (*check || *jsonOutput) {
+		return usage("model -init writes starter files and cannot be combined with the read-only -check or -json modes")
+	}
+	preflight := Inspect(app, *dir)
+	if *check || *jsonOutput {
+		return renderPreflight(stdout, preflight, *jsonOutput, nil)
+	}
+	if !preflight.CanGenerate() {
+		return renderPreflight(stdout, preflight, false, nil)
+	}
+	if *init {
+		created, err := initializeModel(app, preflight.dir)
+		for _, rel := range created {
+			if _, writeErr := fmt.Fprintf(stdout, "wrote %s (starter only: write and validate the application's rules and invariants)\n", filepath.Join(*dir, rel)); writeErr != nil {
+				return writeErr
+			}
 		}
-		files, err := Starter(app)
+		before := preflight
+		preflight = Inspect(app, *dir)
+		preflight.RetainWarnings(before)
 		if err != nil {
+			return renderPreflight(stdout, preflight, false, err)
+		}
+		if !preflight.CanGenerate() {
+			return renderPreflight(stdout, preflight, false, nil)
+		}
+	}
+	changes := append([]Change(nil), preflight.Changes...)
+	post, err := preflight.Apply()
+	if err == nil && len(changes) > 0 {
+		for _, c := range changes {
+			if _, writeErr := fmt.Fprintf(stdout, "%s generated %s\n", c.Operation, c.Path); writeErr != nil {
+				return writeErr
+			}
+		}
+	}
+	return renderPreflight(stdout, post, false, err)
+}
+
+func renderPreflight(stdout io.Writer, report *Preflight, asJSON bool, cause error) error {
+	if asJSON {
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(report); err != nil {
 			return err
 		}
-		for _, rel := range []string{rulesFile(c.Name), modelFile(c.Name)} {
-			path := filepath.Join(*dir, rel)
-			if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-				continue
-			}
-			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-				return err
-			}
-			if err := os.WriteFile(path, files[rel], 0o644); err != nil {
-				return err
-			}
-			if rel == rulesFile(c.Name) {
-				fmt.Fprintf(stdout, "wrote %s (every hole stubbed: write the rules)\n", path)
-			} else {
-				fmt.Fprintf(stdout, "wrote %s (no invariant yet: write them)\n", path)
-			}
-		}
-	}
-	if u, ok := app.(interface{ CheckUpcasters() error }); ok {
-		// an upcaster dropping a field would leave the model judging old
-		// logs that lost it: said here, where the lock is written
-		if err := u.CheckUpcasters(); err != nil {
+	} else {
+		if _, err := fmt.Fprintln(stdout, report.String()); err != nil {
 			return err
 		}
-	}
-	g, err := Generate(app, *dir)
-	if err != nil {
-		return err
-	}
-	for _, w := range g.Warnings {
-		fmt.Fprintf(stdout, "%s model: warning: %s\n", c.Name, w)
-	}
-	if *check {
-		if d := g.Diff(*dir); len(d) > 0 {
-			lock := ""
-			if slices.Contains(d, LockFile) && len(g.Lock) > 0 {
-				lock = fmt.Sprintf("; %s is stale: %s", LockFile, strings.Join(g.Lock, "; "))
-			}
-			return fmt.Errorf("%s model: %s differ from what the catalog generates%s: regenerate with `%s model` and commit them", c.Name, strings.Join(d, ", "), lock, c.Name)
-		}
-	} else if err := g.Write(*dir); err != nil {
-		return err
-	}
-	if _, err := os.Stat(rules); errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("%s model: there is no %s, the app's rules (every hole of the skeleton): `%s model -init` writes one with every hole stubbed", c.Name, rules, c.Name)
-	}
-	if _, err := os.Stat(own); errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("%s model: there is no %s, the app's invariants (the modules its bindings name): `%s model -init` writes one with none yet", c.Name, own, c.Name)
-	}
-	if len(g.Missing) > 0 {
-		var b strings.Builder
-		for _, h := range g.Holes {
-			if slices.Contains(g.Missing, h.Name) {
-				fmt.Fprintf(&b, "\n%s  %s", comment("  ", h.Doc), h.Stub)
+		if cause != nil {
+			if _, err := fmt.Fprintf(stdout, "model maintenance failed: %v\n", cause); err != nil {
+				return err
 			}
 		}
-		return fmt.Errorf("%s model: %s does not define %s, which the skeleton calls; in module %sRules, for instance:%s",
-			c.Name, rules, strings.Join(g.Missing, ", "), mustQuint(c.Name), b.String())
 	}
-	if !*check {
-		fmt.Fprintf(stdout, "wrote %s under %s\n", strings.Join(g.paths(), ", "), *dir)
+	if cause != nil || !report.OK() {
+		return &PreflightError{Report: report, Cause: cause}
 	}
 	return nil
+}
+
+func initializeModel(app App, dir string) ([]string, error) {
+	files, err := Starter(app)
+	if err != nil {
+		return nil, err
+	}
+	name := app.Catalog().Name
+	var created []string
+	for _, rel := range []string{rulesFile(name), modelFile(name)} {
+		if err := safeTarget(dir, rel); err != nil {
+			return created, err
+		}
+	}
+	for _, rel := range []string{rulesFile(name), modelFile(name)} {
+		path := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return created, err
+		}
+		// Exclusive creation makes absence a condition of the write itself.
+		// A handwritten file appearing since preflight is never overwritten.
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return created, err
+		}
+		_, writeErr := f.Write(files[rel])
+		closeErr := f.Close()
+		if writeErr != nil || closeErr != nil {
+			return created, fmt.Errorf("created %s but its starter may be incomplete: %w; inspect the file before retrying", path, errors.Join(writeErr, closeErr))
+		}
+		created = append(created, rel)
+	}
+	return created, nil
 }
 
 func mustQuint(name string) string { q, _ := QuintName(name); return q }

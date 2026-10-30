@@ -7,7 +7,13 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Run-profile follow-up (current branch): driven explorations resolve execution and
+Model-preflight follow-up (current branch): grist model checks and the generated
+witness share one nonwriting, structured catalog/source inspection. Mechanical
+changes and handwritten work stay distinct; generated updates retain review
+findings. JSON is read-only and discloses blocked checks and unperformed Quint
+typechecking. See [grist-model-preflight.md](grist-model-preflight.md).
+
+Run-profile follow-up (merged PR #5): driven explorations resolve execution and
 primary validation policies once, preserve per-row profiles in evidence, and show
 the actual navigation replay policy. Simulator invocations retain their effective
 horizons, caps and reached limits separately. Shared JSON/text/TUI presentation is
@@ -19,7 +25,7 @@ for every native history, including navigation. `Report.Composition` is canonica
 normal conformance assertions include applicable checks. Wrong histories, wrong
 service bindings, unknown obligations and order limits cannot silently pass.
 Receipts preserve model-authored diagnostics. See [grist-composition.md](grist-composition.md).
-PRs #2, #3 and #4 are merged; the single current navigation contract is nav/2.
+PRs #2, #3, #4 and #5 are merged; the single current navigation contract is nav/2.
 
 Check-receipt first increment (merged PR #3): validation reports and run
 navigation share structured statuses, ordering-search limits and assumed effects

@@ -39,7 +39,8 @@ import (
 //	verify     App.Verify and App.CheckUpcasters
 //	model      the model's skeleton and bindings, generated from the App's catalog
 //	           (docs/grist.md §3.2), written under -dir (default .), or with -check
-//	           compared with those there (an error naming each that differs);
+//	           checked without writing, with all maintenance findings together;
+//	           -json emits the same read-only preflight as one JSON report;
 //	           -init writes the app's first model/<app>_rules.qnt (every hole
 //	           stubbed) and model/<app>.qnt (no invariant yet)
 //	           where there are none.
@@ -91,6 +92,7 @@ func Main(app *App, opts ...ServeOption) {
 	err := mainArgs(ctx, app, os.Args[1:], os.Stdout, os.Stderr, opts...)
 	stop()
 	var usage *usageError
+	var modelReport *gen.PreflightError
 	var status exitStatus
 	switch {
 	case errors.As(err, &status):
@@ -98,6 +100,9 @@ func Main(app *App, opts ...ServeOption) {
 	case errors.As(err, &usage):
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
+	case errors.As(err, &modelReport):
+		// The model command already emitted its complete text or JSON report.
+		os.Exit(1)
 	case err != nil:
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -121,8 +126,9 @@ const mainUsage = `commands:
       -diff DEPLOYED                   compare it with the deployed release's (its catalog's JSON): safe, readers first
                                        or breaking, each change with its fix; exit status 0, 3 (readers first) or 4 (breaking)
   verify                      check the registry (App.Verify), as the node does at boot, and every upcaster (App.CheckUpcasters)
-  model [-dir DIR] [-check] [-init]   write the model's skeleton and the bindings under DIR (default .)
-      -check                           write nothing: fail if a generated file differs (CI's diff)
+  model [-dir DIR] [-check] [-json] [-init]   apply generated model changes under DIR (default .)
+      -check                           write nothing: report stale files, missing model rules, layout errors and review findings together
+      -json                            emit one structured preflight report; implies nonwriting -check
       -init                            also write the app's first model/<app>_rules.qnt and model/<app>.qnt where there are none
   sizing [flags]              run <app>-sizing (gristload.Main: deploy/sizing.yaml from the app's steps), a binary of its own
   serve -db DB [flags]        serve the App's HTTP API (NewHandler) and run its node (App.Start) on DB

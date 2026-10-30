@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- grist: one nonwriting model preflight shared by `model -check`, read-only
+  `model -json` and `gristtest.Generated`. Aggregate artifact drift, schema-lock
+  changes, missing handwritten definitions/imports and scoped review findings.
+  Generation applies a fresh mechanical plan, safely removes obsolete generated
+  bindings, and retains model-review warnings after baseline changes.
+
 - Run profiles: resolve exploration and primary validation policy before execution;
   retain effective seeds, short-mode top-ups, rates, backend/evaluator policy and
   search bounds in evidence and navigation. Record actual simulator horizons,

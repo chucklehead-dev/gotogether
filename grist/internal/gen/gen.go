@@ -184,93 +184,17 @@ func modelFile(app string) string { return "model/" + app + ".qnt" }
 // naming it (the layout before the rules had a file of their own was
 // one: Generate says how to move them).
 func Generate(app App, dir string) (Generated, error) {
-	if err := app.Verify(); err != nil {
-		return Generated{}, err
-	}
-	c := app.Catalog()
-	g, err := newGen(c)
-	if err != nil {
-		return Generated{}, err
-	}
-	own, err := readOwn(dir, modelFile(c.Name))
-	if err != nil {
-		return Generated{}, err
-	}
-	if err := oldLayout(c.Name, g.aq, own); err != nil {
-		return Generated{}, err
-	}
-	rules, err := readOwn(dir, rulesFile(c.Name))
-	if err != nil {
-		return Generated{}, err
-	}
-	g.defined = definedIn(rules, g.aq+"Rules")
-	g.bodies = bodiesIn(own, g.aq)
-	for n, b := range bodiesIn(rules, g.aq+"Rules") {
-		g.bodies[n] = b
-	}
-	events, steps := g.eventsFile(), g.stepsFile()
-	if len(g.clashes) > 0 {
-		return Generated{}, fmt.Errorf("grist model: %s:\n  %s", c.Name, strings.Join(g.clashes, "\n  "))
-	}
-	marks, err := parseMarks(own, g.aq)
-	if err != nil {
-		return Generated{}, fmt.Errorf("grist model: %s: %w", modelFile(c.Name), err)
-	}
-	if _, err := parseMarks(rules, g.aq); err != nil {
-		return Generated{}, fmt.Errorf("grist model: %s: %w", rulesFile(c.Name), err)
-	}
-	if m, r := g.ownClashes(own); len(m) > 0 {
-		return Generated{}, fmt.Errorf("grist model: %s defines %s, which the generated %s defines now (an obligation the catalog implies, judged by the bindings): delete the app's own, or rename it if it says more",
-			modelFile(c.Name), strings.Join(m, ", "), stepsFile(c.Name))
-	} else if len(r) > 0 {
-		return Generated{}, fmt.Errorf("grist model: %s defines %s, which the generated %s defines (an obligation the catalog implies) and imports the rules beside: rename the rules' def",
-			rulesFile(c.Name), strings.Join(r, ", "), stepsFile(c.Name))
-	}
-	out := Generated{Files: map[string][]byte{
-		"model/grist.qnt":              Library,
-		genFile(c.Name):                events,
-		stepsFile(c.Name):              steps,
-		c.Name + ".binding.yaml":       g.binding("default", marks),
-		c.Name + ".calls.binding.yaml": g.binding("calls", marks),
-	}, Holes: g.holes}
-	for _, v := range marks.variants() {
-		out.Files[c.Name+"."+v+".binding.yaml"] = g.binding(v, marks)
-	}
-	for _, h := range g.holes {
-		if !g.defined[h.Name] {
-			out.Missing = append(out.Missing, h.Name)
+	p := Inspect(app, dir)
+	if !p.CanGenerate() {
+		var messages []string
+		for _, f := range p.Findings {
+			if f.blocking {
+				messages = append(messages, f.Message)
+			}
 		}
+		return Generated{}, fmt.Errorf("%s", strings.Join(messages, "\n"))
 	}
-	if prev, err := readOwn(dir, genFile(c.Name)); err != nil {
-		return Generated{}, err
-	} else if prev != nil {
-		out.Warnings = inputsChanged(c.Name, prev, events)
-	}
-	prevLock, err := readOwn(dir, LockFile)
-	if err != nil {
-		return Generated{}, err
-	}
-	lock, errs, warnings := lockOf(c, prevLock)
-	if len(errs) > 0 {
-		return Generated{}, fmt.Errorf("grist model: %s:\n  %s", c.Name, strings.Join(errs, "\n  "))
-	}
-	out.Files[LockFile] = lock
-	out.Warnings = append(out.Warnings, warnings...)
-	if !bytes.Equal(prevLock, lock) {
-		out.Lock = lockChanges(prevLock, lock)
-	}
-	ws, errs := forgotten(c, dir, own, rules)
-	if len(errs) > 0 {
-		return Generated{}, fmt.Errorf("grist model: %s:\n  %s", c.Name, strings.Join(errs, "\n  "))
-	}
-	out.Warnings = append(out.Warnings, ws...)
-	if cycle, err := importCycle(dir, out.Files); err != nil {
-		return Generated{}, err
-	} else if cycle != nil {
-		return Generated{}, fmt.Errorf("grist model: %s import each other in a cycle (%s), which quint's REPL refuses (QNT101: Multiple modules conflict on the same name): each file imports only the ones below it in the model's layout, docs/grist.md §3.2 (the app's rules import grist and the events, never the steps or the invariants)",
-			strings.Join(sortedUnique(cycle), ", "), strings.Join(cycle, " -> "))
-	}
-	return out, nil
+	return *p.generated, nil
 }
 
 // readOwn reads one of the application's model files under dir: nil if

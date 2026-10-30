@@ -1189,16 +1189,23 @@ binary's `model` command, it writes no stubs of actions but leaves the
 rules as holes of the app's own module, and the event encoding stays
 slice 1's record, `batchIs` comparing it.)
 
+**Model preflight** collects the generated-file plan, lock differences,
+missing handwritten definitions and imports, and model-review warnings in one
+nonwriting inspection. The app binary's `model -check`, its `model -json` output,
+and `gristtest.Generated` share that result. Generation applies only mechanical
+changes and retains unresolved handwritten work and review warnings. See
+[the model preflight workflow](grist-model-preflight.md).
+
 **What regenerating cannot see** is the app's own rules: a fold over a
 read model's selection still typechecks when the read model starts
 folding a new event type (its `else` branch skips the type silently), and
 a rule reading an event still typechecks when the event gains a field.
 So the generator compares the events file it is about to write with the
-one already there and warns (`<app> model: warning: ...`; in
-`gristtest.Generated`'s failure, and logged when `GRIST_UPDATE=1`
-regenerates) of each read model folding a type it did not, or no longer
-folding one, and of each event whose fields changed, with the read
-models folding it.
+one already there and includes advisory findings for each read model
+folding a type it did not, or no longer folding one, and each event
+whose fields changed, with the read models folding it. The preflight
+retains these findings when generation updates the comparison baseline;
+`gristtest.Generated` logs them when no blocking findings remain.
 
 **The model's files** import each other one way only, each the ones
 below it, since quint's REPL refuses a file that a file it imports
