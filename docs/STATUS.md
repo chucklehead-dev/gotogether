@@ -7,11 +7,11 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-**As of 2026-10-29.** GR4's first composition experiment is implemented
+**As of 2026-10-30 (prototype branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
-baseline. The published modules' core pins remain at GR3 slice 4
-(`26b8e47`; the later slices changed grist alone, which no other
-published module requires). **Nothing is tagged**: every module is pre-release,
+baseline. This prototype branch aligns published modules' core pins at
+`e7ce5f66` so the optional diagnostic types work outside go.work; the
+merged declared-call span increment did not require a core-pin bump. **Nothing is tagged**: every module is pre-release,
 published modules require each other at pseudo-versions, and breaking
 renames still land (R5 waits for the maintainer).
 

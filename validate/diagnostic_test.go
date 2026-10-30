@@ -145,15 +145,23 @@ func TestDiagnosticUnavailablePreservesVerdict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	found := false
 	for _, a := range r.Actors {
 		if a.Actor == "tenant-a" {
 			for _, ab := range a.Absent {
-				if ab.Kind == "eventually" && ab.Diagnostic != nil && (ab.Cause == Defect || ab.Diagnostic.Status != "unavailable") {
-					t.Fatalf("gap overclaimed: %+v", ab)
+				if ab.Kind == "eventually" {
+					found = true
+					if ab.Cause != Dropped || ab.Diagnostic == nil || ab.Diagnostic.Status != "unavailable" {
+						t.Fatalf("gap overclaimed or explanation omitted: %+v", ab)
+					}
 				}
 			}
 		}
 	}
+	if !found {
+		t.Fatal("gapped actor lost its absence classification")
+	}
+
 }
 
 func TestDiagnosticSearchCacheBoundary(t *testing.T) {
