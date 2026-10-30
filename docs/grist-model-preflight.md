@@ -84,9 +84,10 @@ gristtest.Generated(t, App)
 
 An ordinary witness run writes nothing. A single failure includes all known
 blocking findings rather than hiding a missing rule behind the first stale
-binding. `GRIST_UPDATE=1 go test -run '^TestGenerated$'` applies the same mechanical
+binding. `GRIST_UPDATE=1 go test -v -run '^TestGenerated$'` applies the same mechanical
 plan as the model command, then checks again. Unresolved handwritten work still
-fails, and review warnings remain visible in the test output.
+fails, and review warnings remain in the test log. Use `-v` (or `go test -json`)
+to see review logs from a successful update.
 
 The preflight is produced from the catalog and files already used by generation.
 There is no additional authoring configuration, binding association file or

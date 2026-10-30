@@ -38,10 +38,10 @@ exploration evidence and run manifests. `evidence -session` filters the
 suite before coverage and expectation checks; unscoped completeness checks
 require explicit `-history`. Use a fresh ID and `go test -count=1`.
 
-**As of 2026-10-30 (run-profile branch).** GR4's first composition experiment is implemented
+**As of 2026-10-30 (model-preflight branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
-`76319179` so shared run-profile types, registered composition and the nav/2
+`759e8c2d` so shared preflight-format metadata, run profiles, composition and nav/2
 contract work outside go.work; the
 merged declared-call span increment did not require a core-pin bump. **Nothing is tagged**: every module is pre-release,
 published modules require each other at pseudo-versions, and breaking
