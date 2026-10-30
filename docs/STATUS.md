@@ -7,7 +7,7 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Composition follow-up (working branch): `gristtest.Composition.System` registers
+Composition follow-up (draft branch): `gristtest.Composition.System` registers
 local model checkers, catalog peer links and an optional universal protocol check
 for every native history, including navigation. `Report.Composition` is canonical;
 normal conformance assertions include applicable checks. Wrong histories, wrong
@@ -29,7 +29,7 @@ require explicit `-history`. Use a fresh ID and `go test -count=1`.
 **As of 2026-10-30 (composition branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
-`db01d3fd` so the shared diagnostic/receipt types and required nav/2
+`9bf8ab9d` so registered composition types and the required nav/2
 contract work outside go.work; the
 merged declared-call span increment did not require a core-pin bump. **Nothing is tagged**: every module is pre-release,
 published modules require each other at pseudo-versions, and breaking
