@@ -16,6 +16,7 @@ func TestEvidenceDir(t *testing.T) {
 	RequireQuint(t)
 	dir := t.TempDir()
 	t.Setenv("GOTOGETHER_EVIDENCE", dir)
+	t.Setenv("GOTOGETHER_SESSION", "suite-dir-test")
 	sys := System{Binding: "../validate/testdata/account.yaml", Run: race}
 	nominal := ExploreConfig{Seeds: 1, Chooser: func(uint64) qenv.Chooser { return qenv.Nominal{} }}
 	sys.Explore(t, nominal)
@@ -25,7 +26,7 @@ func TestEvidenceDir(t *testing.T) {
 	os.Unsetenv("GOTOGETHER_RUN") // t.Setenv restores it at the end
 	for n, role := range map[string]string{"x1.json": RoleFaithful, "x2.json": RoleMutant, "x3.json": RoleReplay} {
 		e, err := ReadEvidence(filepath.Join(dir, pkgDir(), t.Name(), n)) // pkgDir: qtest, the package
-		if err != nil || e.Role != role || e.Format != EvidenceFormat || e.Import != "github.com/chucklehead-dev/gotogether/qtest" {
+		if err != nil || e.Session != "suite-dir-test" || e.Role != role || e.Format != EvidenceFormat || e.Import != "github.com/chucklehead-dev/gotogether/qtest" {
 			t.Errorf("%s: %+v %v, want role %s", n, e, err, role)
 		}
 	}

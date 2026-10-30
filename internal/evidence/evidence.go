@@ -33,6 +33,7 @@ const (
 // View is what the evidence command reads of an exploration's evidence:
 // the fields of qtest.Evidence's JSON it reports on.
 type View struct {
+	Session   string         `json:"session,omitempty"`
 	Format    string         `json:"format"`
 	Role      string         `json:"role"`
 	Package   string         `json:"package,omitempty"`
@@ -142,7 +143,7 @@ func Is(path string) bool {
 // OfManifest is a run's manifest as evidence's view (RoleExternal): one
 // run, its verdict, its test (or the manifest's name) and package.
 func OfManifest(m *validate.Manifest) *View {
-	e := &View{Format: Format, Role: RoleExternal, Package: m.Package, Import: m.Import, Test: m.Name, Runs: 1, FailingBy: map[string]int{}}
+	e := &View{Session: m.Session, Format: Format, Role: RoleExternal, Package: m.Package, Import: m.Import, Test: m.Name, Runs: 1, FailingBy: map[string]int{}}
 	if m.Model.Spec != nil {
 		e.Spec = m.Model.Spec.Path + ":" + m.Model.Module
 	}

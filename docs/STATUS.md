@@ -7,6 +7,11 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
+Evidence freshness follow-up (local branch): `GOTOGETHER_SESSION` labels
+exploration evidence and run manifests. `evidence -session` filters the
+suite before coverage and expectation checks; unscoped completeness checks
+require explicit `-history`. Use a fresh ID and `go test -count=1`.
+
 **As of 2026-10-30 (prototype branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at

@@ -8,6 +8,10 @@ and adds a line here.
 
 ## Unreleased
 
+- Evidence: suite session identity in exploration JSON and run manifests;
+  `evidence -session` excludes stale files, and completeness checks require
+  a session or explicit historical aggregation (`-history`).
+
 The first release. What a user meets, by module:
 
 - Prototype: model-authored diagnostics discovered from Quint documentation

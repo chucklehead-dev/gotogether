@@ -3630,7 +3630,12 @@ vanishes, renamed or deleted: a listed test,
 subtest or exploration that wrote no evidence fails the command by name,
 packages matched by import path (the review: a package of another module,
 an example's root package). A test that skips clears its earlier
-evidence, so a reused directory does not vouch for it. CI runs strict
+evidence. Session-scoped aggregation additionally excludes a renamed or deleted
+test's retained evidence: a fresh `GOTOGETHER_SESSION` labels exploration
+JSON and manifests, and `evidence -session ID` filters before aggregation.
+Completeness checks require a session or explicit `-history`; disable Go
+test caching with `-count=1`. IDs must be fresh and shared across processes;
+concurrent invocations still need separate evidence directories. CI runs strict
 but for the examples' unwoven mutation and coverage tests, skipped by
 name; the nightly, whose fresh-seed runs include them, is not.
 

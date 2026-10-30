@@ -145,7 +145,7 @@ jobs:
           for m in bank checkout counters glomers hello inventory-grist jobqueue kvstore lease migrate-payments payouts requeue retrystorm sktrace twophase webjobs; do
             echo "::group::examples/$m"
             (cd examples/$m && test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... &&
-              GOTOGETHER_EVIDENCE="$RUNNER_TEMP/evidence/$m" go test -exec "$RUNNER_TEMP/cputime" -short -count=1 -timeout 30m -skip '^(TestMutationOf|TestCodeCoverage)' ./...) || exit 1
+              GOTOGETHER_SESSION="$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" GOTOGETHER_EVIDENCE="$RUNNER_TEMP/evidence/$m" go test -exec "$RUNNER_TEMP/cputime" -short -count=1 -timeout 30m -skip '^(TestMutationOf|TestCodeCoverage)' ./...) || exit 1
             echo "::endgroup::"
           done
           # a package costing twice the CPU seconds it did (ci/test-times.txt) fails
@@ -153,7 +153,7 @@ jobs:
           ci/time-budget.sh < "$RUNNER_TEMP/cpu.txt"
           # what no faithful exploration of the example tried fails: an action, a fault point, a kind
           for m in hello checkout; do
-            "$RUNNER_TEMP/gotogether" evidence -strict "$RUNNER_TEMP/evidence/$m" || exit 1
+            "$RUNNER_TEMP/gotogether" evidence -session "$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" -strict "$RUNNER_TEMP/evidence/$m" || exit 1
           done
       - name: the store's histories against its isolation levels (GOTOGETHER_CHECK)
         if: matrix.part == 'examples'

@@ -36,7 +36,8 @@ gotogether cover -covdir run1,run2 -sim evidence/_/TestFaithful/x1.json
 ## What no test of the suite tried
 
 Each exploration's Evidence says what its own runs left out; a suite's
-tests may cover each other. Run them with `GOTOGETHER_EVIDENCE=dir`
+tests may cover each other. Export a fresh `GOTOGETHER_SESSION=$(uuidgen)`
+for each suite invocation, then run `GOTOGETHER_EVIDENCE=dir go test -count=1 ./...`
 (each exploration writes `dir/<package>/<test>/x<N>.json`, its format and role in
 it; a test's first exploration clears what earlier runs left), then
 
@@ -45,6 +46,11 @@ gotogether evidence dir            # each exploration's verdicts, then the gaps
 gotogether evidence -strict dir    # exit 1 on a gap (for CI)
 gotogether evidence -expect checks.txt dir   # exit 1 naming a listed test or exploration that wrote none
 ```
+
+Keep the session variable set for the evidence command. Files with another
+session or no session are excluded. Use `-history` with the variable unset
+to aggregate historical evidence; it cannot establish current-run completeness.
+Never reuse a session ID; concurrent invocations need separate directories.
 
 The gaps count faithful explorations only: one of a `System` whose
 `Mutant` names its bug (a config's mutation), Mutate's mutant runs and

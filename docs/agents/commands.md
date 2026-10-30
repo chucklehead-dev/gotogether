@@ -119,6 +119,12 @@ AGENTS.md has the general requirements.
   to stdout (or `GOTOGETHER_NAV_OUT`) until the input ends; run the
   compiled test binary (`go test -c`), not `go test`, which hides a
   passing test's output.
+  Set `GOTOGETHER_SESSION` to a fresh invocation ID shared by all test
+  processes, run tests with `-count=1`, and pass the same ID to
+  `gotogether evidence -session ID` (or retain the environment variable).
+  `-strict` and `-expect` require a session or explicit `-history`;
+  historical reports do not establish current-run completeness. Reused IDs
+  cannot establish freshness; concurrent invocations need separate directories.
   `GOTOGETHER_EVIDENCE=dir` writes each exploration's evidence
   (`gotogether.evidence/2`, with its role: faithful, mutant, replay) as
   dir/<package>/<test>/x<N>.json (the package as its directory in its

@@ -1785,6 +1785,7 @@ type Claim interface
     String() string
 type Evidence struct
     field Format string `json:"format"`
+    field Session string `json:"session,omitempty"`
     field Role string `json:"role"`
     field Mutant string `json:"mutant,omitempty"`
     field Package string `json:"package,omitempty"`
@@ -2486,6 +2487,7 @@ type Loss struct
     field Before time.Time `json:"before,omitzero"`
 type Manifest struct
     field Format string `json:"format"`
+    field Session string `json:"session,omitempty"`
     field Name string `json:"name,omitempty"`
     field Package string `json:"package,omitempty"`
     field Import string `json:"import,omitempty"`
