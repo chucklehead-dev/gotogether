@@ -1,0 +1,21 @@
+format: gotogether.binding/2
+spec: model/payments.qnt
+module: payments
+actions:
+  begin:
+    expect: 'phase == {{.obs.phase}} and balance == {{.obs.balance}} and debits == {{.obs.debits}} and captures == {{.obs.captures}}'
+  finish:
+    expect: 'phase == {{.obs.phase}} and balance == {{.obs.balance}} and debits == {{.obs.debits}} and captures == {{.obs.captures}} and {{.obs.code}} == 201'
+  replay:
+    expect: 'phase == {{.obs.phase}} and balance == {{.obs.balance}} and debits == {{.obs.debits}} and captures == {{.obs.captures}} and {{.obs.code}} == 201 and {{.obs.replayed}}'
+  conflict:
+    expect: 'phase == {{.obs.phase}} and balance == {{.obs.balance}} and debits == {{.obs.debits}} and captures == {{.obs.captures}} and {{.obs.code}} == 409'
+invariants: [once, conserved]
+eventually: [completed]
+simulate:
+  holds: [once, conserved, completed]
+  terminal: completed
+  unfair: [replay, conflict]
+  possible:
+    - name: delayed and mismatched
+      steps: [begin, conflict, finish, replay]

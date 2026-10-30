@@ -386,8 +386,9 @@ func (r *Relay) export(ctx context.Context, t string, after int64) error {
 	return r.flush(ctx, t)
 }
 
-// run relays tenant t until ctx is done: a daemon waiting on the step
-// log. A row it cannot read stops it (Err); a transient error backs off.
+// run relays tenant t until ctx is done. Waiting for a new step is idle;
+// flushing rows and retrying errors remain work for simulation completion.
+// A row it cannot read stops it (Err); a transient error backs off.
 func (r *Relay) run(ctx context.Context, t string) {
 	tries := 0
 	for ctx.Err() == nil {

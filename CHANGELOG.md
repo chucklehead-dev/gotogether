@@ -8,6 +8,17 @@ and adds a line here.
 
 ## Unreleased
 
+- qenv: `Signal.WaitIdle(ctx, d)` exempts a confirmed no-work wait, ending
+  the exemption at notification/timeout. Grist workers and simlog senders no
+  longer hide handlers, callbacks, retry backoffs or paused work behind a
+  lifetime daemon mark. Unfinished work returns `Unsettled` without a settle
+  marker; generated business obligations still judge genuinely quiet histories.
+  Ready/notified workers also remain active while a process pause prevents them
+  from running, without making predicate readiness sticky.
+- Adoption: a frozen, non-grist HTTP/SQLite rehearsal catches and replays a
+  planted source contrast, minimizes real rerun actions and distinguishes
+  incomplete or malformed evidence, using a pinned published toolkit.
+
 - Diagnostic evidence: binding-authored exact selectors link outstanding intents
   to captured and native record identities. JSON retains missing and ambiguous
   matches; the TUI offers scoped evidence lists and captured-record inspection

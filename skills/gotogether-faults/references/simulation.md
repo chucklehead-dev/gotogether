@@ -35,10 +35,12 @@ return s.Settle(60 * time.Second) // faults off, tasks in turn, until quiet; rec
 - **Stuck runs:** `Run` returns `qenv.ErrStuck`, naming the tasks, and
   `Settle` a `*qenv.Unsettled` (its `Stuck`), when a task waits with
   nothing left to wake it (a lost message, a
-  missed Notify). Return the error from your `Run`; a task that may wait
-  forever by design (a server loop, a controller's or a relay's polling
-  loop) calls `qenv.Daemon(ctx)`, and a double's own receive waits with
-  `qenv.WaitIdle`. `Settle` also returns a `*qenv.Unsettled` when its
+  missed Notify). Return the error from your `Run`. A passive infrastructure
+  task may use `qenv.Daemon(ctx)`, which exempts its entire lifetime. A worker
+  instead uses `qenv.WaitIdle` or `Signal.WaitIdle(ctx, d)` only where it has
+  no work. Notification or timeout ends that exemption: handlers, callbacks,
+  dependencies and retries remain active. Do not use an idle wait after a
+  failed readiness read or while paused with unfinished obligations. `Settle` also returns a `*qenv.Unsettled` when its
   time runs out with a task that is no daemon still at work or waiting (a
   retry loop that never ends, a wait a daemon's timer hid); in an
   exploration that is no error but an outcome: such a run does not

@@ -348,7 +348,7 @@ func (s *Store) WaitTenants(ctx context.Context, n int) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		s.db.Changed().Wait(ctx, 0)
+		s.db.Changed().WaitIdle(ctx, 0)
 	}
 	return nil
 }
@@ -377,7 +377,7 @@ func (s *Store) wait(ctx context.Context, key string, must bool, done func(any) 
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		s.db.Changed().Wait(ctx, 0) // every commit's, this Store's or another's over the same qenv.Store
+		s.db.Changed().WaitIdle(ctx, 0) // every commit's, this Store's or another's over the same qenv.Store
 	}
 }
 

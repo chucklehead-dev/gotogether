@@ -20,13 +20,15 @@ experiments have answered their initial questions; rotate away from inventory
 and further diagnostic breadth. Breaking changes are allowed, without parallel
 legacy formats.
 
-Recommended next is a small completion-accounting slice (GR10b): distinguish idle
+The bounded completion-accounting slice (GR10b) is built: distinguish idle
 background workers from workers holding work, tested in plain qenv and a second
 asynchronous consumer. This is a known daemon/settlement classification boundary,
-not a newly demonstrated silent pass. Alongside it, run one cold-start non-grist
-HTTP/SQL or externally driven adoption rehearsal with prefix/completion/loss
-controls. Then advance I4's finite pinned-witness replay, which expands supported
-models across trace validation and simulation. Keep unsupported choices explicit.
+not a newly demonstrated silent pass. Alongside it, a cold-start non-grist
+HTTP/SQLite rehearsal now exercises actual observations, a frozen model/source
+contrast, replay and real workload shrinking, with prefix and missing-evidence
+controls. See [the rehearsal](../internal/adoptiontest/http-sql/README.md). Next
+advance I4's finite pinned-witness replay, which expands supported models across
+trace validation and simulation. Keep unsupported choices explicit.
 
 Typed core lint findings (including performed/blocked checks) and component-aware
 shrinking are concrete follow-ups. Select the next adapter or starter from the
@@ -1157,21 +1159,19 @@ Then, in order, each item reviewed before the next:
   app binary links client-go; sizing enters manifests only with
   `-sizing`; the canary an Argo Rollouts Job analysis or HTTPRoute
   weights, no controller of ours.
-- **GR10b. A poller a daemon only while it waits on the store (S,
-  qenv-level).** From P7's review, proposed, not built. A processor's
-  poller calls `qenv.Daemon` once, for its whole life, so a settle
-  treats it as quiet whether it waits for appends or holds a trigger
-  mid-backoff or mid-call: a settle shorter than the work in hand
-  (gristsim's minute against the backoff's 320 ms cap and a call's
-  second; an effect whose tries outlast it) judges the obligations
-  mid-retry and reads a correct app as violating `<p>EventuallyHandled`,
-  and a handler that hangs reads as a violation where it is work never
-  finished. Marking the poller a daemon only while it waits on the store
-  (a daemon mark qenv lets a task take and drop, or a wait that is a
-  daemon's while it lasts) makes the settle wait for work in hand, and a
-  hung handler reads `Unsettled` naming its task, which
-  `qtest.Settles()` judges. Any daemon that holds work between waits
-  needs the same distinction, so the mark is qenv's, not grist's.
+- **GR10b. Scoped no-work waits (S, qenv-level). Built.**
+  `Signal.WaitIdle(ctx, d)` has the notification/deadline semantics of Wait,
+  with the existing idle exemption limited to that wait. Grist watchers,
+  relays and pollers no longer exempt their whole lifetime; successful empty
+  feed reads can wait idle, while handlers, failed readiness reads, retries,
+  backoffs and operator pauses stay active. Simlog senders similarly keep
+  buffered work and delivery callbacks active. Short bounds return Unsettled
+  naming the worker without a settle marker; adequate bounds allow completion.
+  Genuine settled business-obligation failures remain model defects, covered
+  by an actual committed command with no processors deployed. Tests span
+  plain qenv, grist's simulated/SQL stores and simlog, including native signal
+  semantics and old-behavior ablation. This closes the daemon/settlement
+  classification gap without a separate worker lifecycle DSL.
 - **GR10c. `Settle` naming down processes (S, qenv-level).** From P7's
   review, proposed, not built. qenv counts no task of a down process as
   pending, so a plain `Settle` (not `SettleCore`, which faults outside

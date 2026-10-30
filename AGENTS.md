@@ -345,12 +345,13 @@ working there:
   must then be safe to call concurrently.
 - `Sim.Run` returns `ErrStuck` (naming the tasks) when nothing can run, no
   deadline is set and a task still waits, so a stalled run is not
-  mistaken for a quiet one. A task that may wait forever (a server's
-  loop, a sender waiting for records) calls `qenv.Daemon(ctx)`; a
-  double's receive uses `qenv.WaitIdle`. The native runtime runs in real
+  mistaken for a quiet one. A passive infrastructure loop may call `qenv.Daemon(ctx)`, which
+  exempts its entire lifetime. A worker uses `qenv.WaitIdle` or
+  `Signal.WaitIdle(ctx, d)` only at confirmed no-work waits; handlers,
+  retries and backoffs stay active. The native runtime runs in real
   time and cannot tell. `Settle` returns a `*Unsettled` (`ErrUnsettled`)
   when its time runs out with such a task at work or waiting, polling
-  loops included: mark them Daemon. qtest judges it, not fails it
+  loops included. Do not hide unfinished work with Daemon. qtest judges it, not fails it
   (`Run.Unsettled`, a report not OK, `qtest.Settles()`).
   A settle takes runnable tasks in turn (fair), not choice 0;
   `SettleCore` goes on faulting outside its core (a double's fault

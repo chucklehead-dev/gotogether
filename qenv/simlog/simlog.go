@@ -266,9 +266,10 @@ func (p *Producer) Flush(ctx context.Context) {
 // in order; those that failed are retried, still in order.
 func (p *Producer) send(ctx context.Context) {
 	sim := p.log.sim
-	qenv.Daemon(ctx) // the producer's sender waits for records forever
 	for {
-		qenv.Wait(ctx, func() bool { return p.outstanding > 0 })
+		// Only waiting for another record is idle. Buffered sends, retry
+		// backoffs and delivery callbacks remain work Settle must account for.
+		qenv.WaitIdle(ctx, func() bool { return p.outstanding > 0 })
 		parts := make([]int, 0, len(p.unsent))
 		for part, q := range p.unsent {
 			if len(q) > 0 {

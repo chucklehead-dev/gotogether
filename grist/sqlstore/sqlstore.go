@@ -799,7 +799,11 @@ func (s *Store) wait(ctx context.Context, done func() (bool, error)) error {
 			qenv.Sleep(ctx, 10*time.Millisecond) // a transient error: read again soon, not at once
 			continue
 		}
-		signal.Wait(ctx, poll)
+		if err == nil {
+			signal.WaitIdle(ctx, poll) // the successful read established no new work
+		} else {
+			signal.Wait(ctx, poll) // an unsuccessful read cannot establish quiescence
+		}
 	}
 }
 

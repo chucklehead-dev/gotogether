@@ -29,9 +29,11 @@ an agent reads off a failing run.
 - `Relay.Err()` (gristsim.Run returns it): a step row the relay cannot
   read (`"v"` another grist's: upgrade the node) stopped its tenant, or
   a read keeps failing.
-- A run that does not settle names its tasks: a poller is a daemon; a
-  client waiting means the node is down (gristsim restarts it from an
-  `OnCrash` hook).
+- A run that does not settle names active tasks. Inspect a handler, dependency,
+  retry/backoff or operator pause; use an adequate bound for expected work.
+  Only successful no-work waits are idle. Do not add a lifetime daemon mark to
+  hide a worker. A waiting client can mean its node is down; gristsim restarts
+  nodes from an `OnCrash` hook.
 - A store of your own implements `store.Store`, `store.StepLog` (package
   grist/store: each commit's step written in its transaction and timed
   under the tenant's lock, `StepRow.Time` from `store.StepTime`; `Steps`,

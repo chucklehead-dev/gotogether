@@ -571,6 +571,7 @@ func (t *task) wait(ready func() bool, deadline time.Time) {
 func (s *Sim) enqueue(t *task) {
 	if t.waiting {
 		t.waiting = false
+		t.idle = false // notification/deadline ends the wait before a stalled task runs
 		t.gen++
 	}
 	if s.nat != nil {
@@ -723,6 +724,19 @@ type waiter struct {
 // interval is the caller's clock's. It reports whether Notify woke it.
 // Outside a simulation it waits in real time or until ctx is done.
 func (g *Signal) Wait(ctx context.Context, d time.Duration) bool {
+	return g.wait(ctx, d, false)
+}
+
+// WaitIdle is Wait at a confirmed no-work boundary, such as a worker waiting
+// for new records. Only this wait is exempt from stuck and settlement checks;
+// handling work after notification or timeout is active again. Its duration and
+// notification result have the same meaning as Wait. Outside a simulation it
+// waits in real time or until ctx is done.
+func (g *Signal) WaitIdle(ctx context.Context, d time.Duration) bool {
+	return g.wait(ctx, d, true)
+}
+
+func (g *Signal) wait(ctx context.Context, d time.Duration, idle bool) bool {
 	t := taskOf(ctx)
 	if t == nil {
 		var deadline time.Time
@@ -736,6 +750,7 @@ func (g *Signal) Wait(ctx context.Context, d time.Duration) bool {
 		deadline = t.sim.Now().Add(max(d, 0))
 	}
 	g.waiters = append(g.waiters, waiter{t, t.gen})
+	t.idle = idle
 	t.wait(nil, deadline)
 	return t.notified
 }
@@ -1048,10 +1063,11 @@ func (s *Sim) nemesisOf(name string, procs []*Process, enabled func() bool, do f
 // error lists the waiting tasks (Sim.Tasks).
 var ErrStuck = errors.New("qenv: stuck")
 
-// Daemon marks the calling task as one whose waits may last forever (a
-// server's accept loop, a worker waiting for work): Run does not report
-// it as stuck. Outside a simulation it does nothing. The doubles' own
-// receives (Queue.Receive) need no mark.
+// Daemon exempts the task's entire lifetime from stuck and settlement checks.
+// Use it for passive infrastructure loops. A worker that handles accepted work
+// should instead use WaitIdle or Signal.WaitIdle only while it has no work;
+// its handlers and retries must remain active. Outside a simulation it does
+// nothing. The doubles' own receives (Queue.Receive) need no mark.
 func Daemon(ctx context.Context) {
 	if t := taskOf(ctx); t != nil {
 		t.daemon = true
@@ -1153,7 +1169,7 @@ func (s *Sim) run(d time.Duration, done func() bool) (err error) {
 			next, ok := s.nextDeadline()
 			if !ok {
 				if st := s.stuck(); st != "" {
-					return fmt.Errorf("%w at %v: no task can run and no deadline is set; the tasks waiting (a missed Notify, a lost message, a lock never released; mark a task that may wait forever with qenv.Daemon):\n%s", ErrStuck, s.now.Sub(s.start), st)
+					return fmt.Errorf("%w at %v: no task can run and no deadline is set; the tasks waiting (a missed Notify, a lost message, a lock never released; use WaitIdle only at a confirmed no-work wait):\n%s", ErrStuck, s.now.Sub(s.start), st)
 				}
 			}
 			if !ok || next.After(horizon) {
@@ -1304,8 +1320,8 @@ func (u *Unsettled) Error() string {
 	if u.Stuck != nil {
 		return fmt.Sprintf("qenv: not settled: %v", u.Stuck)
 	}
-	return fmt.Sprintf("qenv: not settled after %v: tasks still at work or waiting (mark one that may wait forever with qenv.Daemon; "+
-		"a longer settle, or a fix, for one that should have finished):\n  %s", u.After, strings.Join(u.Tasks, "\n  "))
+	return fmt.Sprintf("qenv: not settled after %v: tasks still at work or waiting (finish the work or allow a longer settle; "+
+		"use WaitIdle only where no work is held):\n  %s", u.After, strings.Join(u.Tasks, "\n  "))
 }
 
 // Is reports whether target is ErrUnsettled.
@@ -1317,7 +1333,12 @@ func (s *Sim) pending() []string {
 	var out []string
 	self := taskOf(nil) // a task settling the simulation is not its pending work
 	for _, t := range s.tasks {
-		if t == self || t.done || t.killed || t.daemon || t.idle || t.proc != nil && (t.proc.down || s.core != nil && !s.core[t.proc]) {
+		if t == self || t.done || t.killed || t.daemon || t.proc != nil && (t.proc.down || s.core != nil && !s.core[t.proc]) {
+			continue
+		}
+		// An idle predicate that became ready is work even while its process
+		// is paused and cannot take its next scheduling turn yet.
+		if t.idle && t.waiting && (t.ready == nil || !t.ready()) {
 			continue
 		}
 		state := "runnable"

@@ -199,7 +199,7 @@ func EffectFaults(processor string) qenv.FaultKind {
 
 // Start starts the App's node on s: for every tenant, the relay that
 // records every commit's step from s's step log (Relay; s must be a
-// store.StepLog) and one poller per processor (each a daemon waiting on
+// store.StepLog) and one poller per processor (idle only while waiting on
 // the tenant's appends), and a watcher that starts both for every tenant
 // created later (s must be a store.TenantFeed: the watcher waits on
 // WaitTenants). Every one is a task (qenv.Go: of the caller's process in
@@ -270,7 +270,6 @@ func (a *App) Start(ctx context.Context, s Store, opts ...StartOption) error {
 		n.start(ctx, t)
 	}
 	qenv.Go(ctx, "grist.tenants", func(ctx context.Context) {
-		qenv.Daemon(ctx)
 		n.watch(ctx, feed)
 	})
 	return nil
@@ -330,7 +329,6 @@ func (n *node) start(ctx context.Context, t string) {
 	}
 	r := n.relay
 	qenv.Go(ctx, "grist.relay."+t, func(ctx context.Context) {
-		qenv.Daemon(ctx)
 		r.run(ctx, t)
 	})
 	for _, p := range n.app.processors {
@@ -341,7 +339,6 @@ func (n *node) start(ctx context.Context, t string) {
 		n.list = append(n.list, pl)
 		n.mu.Unlock()
 		qenv.Go(ctx, "grist."+p.name+"."+t, func(ctx context.Context) {
-			qenv.Daemon(ctx)
 			defer n.pollers.Add(-1) // stopped (its context ended): no work in hand, for idle
 			pl.run(qobs.Thread(ctx))
 		})
@@ -425,7 +422,9 @@ func (pl *poller) run(ctx context.Context) {
 	for ctx.Err() == nil {
 		if pl.clocks.stopped(pl.tenant) != nil {
 			// a rewind (ErrRewound): fail closed for effects until an
-			// operator resumes the tenant, idle meanwhile; then on a thread
+			// operator resumes the tenant. Drain bookkeeping counts this wait,
+			// but simulation completion cannot assume its triggers are handled.
+			// Then on a thread
 			// of its own, the steps after the resume not ordered after the
 			// old history's by the thread
 			pl.waiting.Add(1)

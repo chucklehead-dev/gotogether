@@ -518,8 +518,9 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 		if k := m.LoseAfter; k > 0 {
 			lose, from := max(m.Lose, 1), db.Commits()
 			s.Spawn("incident", func(ctx context.Context) {
-				qenv.Daemon(ctx)
-				qenv.Wait(ctx, func() bool { return db.Commits() >= from+k })
+				// An unmet fault trigger is not application work. Once eligible,
+				// the incident runs as an ordinary active task.
+				qenv.WaitIdle(ctx, func() bool { return db.Commits() >= from+k })
 				db.FailOver(min(lose, db.Commits()-from), 0) // the run's commits only: its tenants stay
 			})
 		}
@@ -614,7 +615,9 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 			}
 		})
 	}
-	if err := s.Run(cfg.Horizon); err != nil {
+	// A stalled worker still gets the normal fault-free recovery attempt.
+	// Settle classifies persistent work as Unsettled without a settle marker.
+	if err := s.Run(cfg.Horizon); err != nil && !errors.Is(err, qenv.ErrStuck) {
 		return err
 	}
 	if cfg.From != nil {
@@ -667,10 +670,9 @@ func operate(s *qenv.Sim, st grist.Store, relay *grist.Relay, after time.Duratio
 	var rewound qenv.Signal
 	relay.OnRewind(func(*grist.RewoundError) { rewound.Notify() })
 	s.Spawn("operator", func(ctx context.Context) {
-		qenv.Daemon(ctx)
 		for ctx.Err() == nil {
 			if len(relay.Rewound()) == 0 {
-				rewound.Wait(ctx, 0)
+				rewound.WaitIdle(ctx, 0)
 				continue
 			}
 			qenv.Sleep(ctx, after)
