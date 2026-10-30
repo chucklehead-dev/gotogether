@@ -318,3 +318,22 @@ Run-navigation nodes require receipts (`gotogether.nav/2`, current only). Rebuil
 the test binary and navigator together. The TUI labels whole-run judgments independently of model-cursor states. Grist's local,
 peer-link and combined protocol checks are not automatically aggregated by this
 increment. See docs/check-receipts.md for the implementation scope.
+
+
+## Registered composition checks
+
+For grist, build explicit `gristtest.Composition` registrations and call
+`plan.System(sys)` before exploring. Normal `qtest.Conforms()` and `Run.OK()`
+include applicable registered checks; do not run peers again under separate
+bindings and merge results merely because seeds match. `Report.Composition`
+and evidence JSON retain the native-history digest and per-component verdicts.
+No recorded service work or peer call is `not_checked`, never invented success.
+A configured named obligation with no verdict is inconclusive, never a protocol
+counterexample or a mutant kill. Universal protocol enumeration must finish to
+pass; it proves only the supplied collected history within its causal evidence.
+
+Navigation reruns the registrations; model cursor state remains separate.
+Manifest primary-binding replay and case drivers that cannot carry registrations
+refuse the operation: reproduce the originating registered System/test instead.
+Composition-only failure shrinking requires a component-aware criterion and is
+explicitly refused by default. No compatibility fallback interprets missing data.

@@ -8,8 +8,8 @@ import (
 // Receipt describes what this report checked. It describes the whole judged
 // history, never a model-navigation cursor or other executions.
 func (r *Report) Receipt() receipt.Summary {
-	v := r.Verdict()
-	s := receipt.Summary{Status: receiptStatus(v.Verdict), Reason: v.Reason, Scope: "collected_history", OtherExecutions: receipt.NotChecked, Actors: []receipt.Actor{}}
+	v := runVerdictOf(r.Actors)
+	s := receipt.Summary{Composition: r.Composition, Status: receiptStatus(v.Verdict), Reason: v.Reason, Scope: "collected_history", OtherExecutions: receipt.NotChecked, Actors: []receipt.Actor{}}
 	if len(r.Actors) == 0 {
 		s.Status = receipt.NotChecked
 	}
@@ -37,6 +37,17 @@ func (r *Report) Receipt() receipt.Summary {
 			}
 		}
 	}
+	if r.Composition != nil {
+		status, reason := r.Composition.Problem()
+		rank := map[receipt.Status]int{receipt.Pass: 0, receipt.NotChecked: 1, receipt.Inconclusive: 2, receipt.Error: 3, receipt.Fail: 4}
+		if status == receipt.NotChecked {
+			status = receipt.Inconclusive
+		}
+		if rank[status] > rank[s.Status] {
+			s.Status, s.Reason = status, "composition: "+reason
+		}
+	}
+
 	return s
 }
 
@@ -84,6 +95,9 @@ func (r *Result) Receipt() receipt.Actor {
 	}
 	// An unsettled history can omit eventual properties from Invariants.
 	for _, ab := range r.Absent {
+		if ab.Diagnostic != nil {
+			a.Diagnostics = append(a.Diagnostics, *ab.Diagnostic)
+		}
 		if ab.Kind != "eventually" {
 			continue
 		}

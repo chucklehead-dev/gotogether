@@ -51,6 +51,9 @@ func CheckCases(t testing.TB, workflow, bindingPath string, opts ...Option) Case
 func (s System) CheckCases(t testing.TB, workflow string) CaseCheck {
 	t.Helper()
 	c := config(t, s.opts())
+	if c.assess != nil {
+		t.Fatalf("%s: composition assessments require System.Judge or an exploration; this case driver cannot carry the composition result", workflow)
+	}
 	c.refuse(t, workflow, exploreIgnores)
 	return CaseCheck{Checker: c.checker(t, s.Binding), Recorder: c.Recorder, Global: c.Global, SkipIfEmpty: c.SkipIfEmpty}
 }
@@ -97,6 +100,7 @@ func (s System) Judge(t testing.TB, ch qenv.Chooser) *Run {
 	o := c.Options
 	o.Dir, o.NoITF = filepath.Join(c.Dir, "judge", "quint"), true
 	cc, inst, _ := instanceChecker(t, s.Binding, o, c)
+	assessHistory(t.Context(), c, r)
 	judge(t, cc, inst, validate.SearchOptions{}, []*Run{r}, func(*Run) string { return "the run judged" })
 	return r
 }

@@ -575,6 +575,14 @@ type Capturing struct
     method (*Capturing) Steps(ctx context.Context, t string, after int64, limit int) ([]store.StepRow, error)
     method (*Capturing) WaitSteps(ctx context.Context, t string, after int64) error
     method (*Capturing) WaitTenants(ctx context.Context, n int) error
+type Composition struct
+    field Models []LocalModel
+    field Protocol *ProtocolModel
+    method (Composition) Assess(ctx context.Context, steps []qtrace.Step) (out receipt.Composition, err error)
+    method (Composition) System(sys qtest.System) qtest.System
+type LocalModel struct
+    field App *grist.App
+    field Checker *validate.Checker
 type Log struct
     field Batches []LoggedBatch
     method (Log) Restore(ctx context.Context, st grist.Store) error
@@ -585,6 +593,9 @@ type LoggedBatch struct
 type Node struct
     field Relay *grist.Relay
     method (*Node) Kill()
+type ProtocolModel struct
+    field Checker *validate.Checker
+    field Limit int
 type ProtocolSearch struct
     field Checked int
     field Exhaustive bool

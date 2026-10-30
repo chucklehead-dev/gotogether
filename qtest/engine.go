@@ -74,7 +74,11 @@ func begin(t testing.TB, binding string, opts []Option, scenario func(qenv.Choos
 }
 
 // one runs the scenario once on ch.
-func (e *engine) one(ch qenv.Chooser) *Run { return runOne(e.c, e.woven, ch, e.scenario) }
+func (e *engine) one(ch qenv.Chooser) *Run {
+	r := runOne(e.c, e.woven, ch, e.scenario)
+	assessHistory(e.t.Context(), e.c, r)
+	return r
+}
 
 // run runs the sources' runs, in order and e.parallel at a time, and puts
 // them through the stages. Runs are written by index, so their order is

@@ -4,6 +4,7 @@ package receipt
 
 import (
 	"fmt"
+	"github.com/chucklehead-dev/gotogether/validate/diagnostic"
 	"maps"
 	"slices"
 	"strings"
@@ -54,14 +55,16 @@ type Effect struct {
 
 // Actor describes a history checked against one model instance or partition.
 type Actor struct {
-	JudgedBy  string  `json:"judgedBy"`
-	Partition string  `json:"partition,omitempty"`
-	Scope     string  `json:"scope"` // "collected_history" or "model_trace"
-	Actor     string  `json:"actor"`
-	Status    Status  `json:"status"`
-	Reason    string  `json:"reason,omitempty"`
-	Ordering  string  `json:"ordering"` // "reconstructed", "searched", "model_trace"
-	Search    *Search `json:"search,omitempty"`
+	// Diagnostics retain model-authored detail from the judged history.
+	Diagnostics []diagnostic.Result `json:"diagnostics,omitempty"`
+	JudgedBy    string              `json:"judgedBy"`
+	Partition   string              `json:"partition,omitempty"`
+	Scope       string              `json:"scope"` // "collected_history" or "model_trace"
+	Actor       string              `json:"actor"`
+	Status      Status              `json:"status"`
+	Reason      string              `json:"reason,omitempty"`
+	Ordering    string              `json:"ordering"` // "reconstructed", "searched", "model_trace"
+	Search      *Search             `json:"search,omitempty"`
 	// AssumedEffects identify pending calls placed in the checked candidate.
 	// They are model assumptions, not evidence that the calls took effect.
 	AssumedEffects []Effect `json:"assumedEffects,omitempty"`
@@ -71,11 +74,33 @@ type Actor struct {
 // Summary describes the whole judged history, independently of a navigation
 // cursor. OtherExecutions is always NotChecked for history validation.
 type Summary struct {
+	// Composition is the registered assessment of this same collected history.
+	Composition     *Composition `json:"composition,omitempty"`
+	Status          Status       `json:"status"`
+	Reason          string       `json:"reason,omitempty"`
+	Scope           string       `json:"scope"` // "collected_history", "model_trace", or "mixed_inputs"
+	OtherExecutions Status       `json:"otherExecutions"`
+	Actors          []Actor      `json:"actors"`
+}
+
+// History is one model's judgment on one history. It cannot contain a
+// composition recursively: component model checks and the aggregate have
+// different scopes, so their data shapes express that distinction.
+type History struct {
 	Status          Status  `json:"status"`
 	Reason          string  `json:"reason,omitempty"`
 	Scope           string  `json:"scope"` // "collected_history", "model_trace", or "mixed_inputs"
 	OtherExecutions Status  `json:"otherExecutions"`
 	Actors          []Actor `json:"actors"`
+}
+
+// History projects an uncomposed model judgment. A combined assessment must
+// use its component Judgments rather than relabeling an aggregate as one model.
+func (s Summary) History() History {
+	if s.Composition != nil {
+		panic("receipt: cannot relabel a composed assessment as one model judgment; use its component Judgments")
+	}
+	return History{Status: s.Status, Reason: s.Reason, Scope: s.Scope, OtherExecutions: s.OtherExecutions, Actors: s.Actors}
 }
 
 // String renders the same scope and assumptions exposed as JSON.
@@ -154,6 +179,10 @@ func (s Summary) String() string {
 			fmt.Fprintf(&b, "    assumed effect: %s at candidate %s (not observed)\n", effect.Action, effect.CandidateRecord)
 		}
 	}
-	b.WriteString("  limit: other executions were not checked\n")
+	if s.Composition != nil {
+		b.WriteString(s.Composition.String())
+	} else {
+		b.WriteString("  limit: other executions were not checked\n")
+	}
 	return b.String()
 }

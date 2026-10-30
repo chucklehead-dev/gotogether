@@ -508,7 +508,19 @@ func (e *engine) navNode(b *navBase, req navproto.Request) (*navproto.Node, erro
 			}
 		}
 	}
+	if r.Report.Composition != nil {
+		r.Report.Composition.Run = node.Run
+	}
 	node.Receipt = r.Report.Receipt()
+	if r.Report.Composition != nil && !r.Report.OK() {
+		primaryPass := true
+		for _, a := range r.Report.Actors {
+			primaryPass = primaryPass && a.OK()
+		}
+		if primaryPass {
+			node.Notes = append(node.Notes, "the primary-model steps conform; inspect the whole-run composition checks. There is no rejected primary-model step; the failing node opens the last simulation choice")
+		}
+	}
 	switch {
 	case len(r.Steps) == 0:
 		// no step to fail at: what its doubles saw is the lead (a client

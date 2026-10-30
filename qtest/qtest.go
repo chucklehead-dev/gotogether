@@ -47,11 +47,13 @@ import (
 	"github.com/chucklehead-dev/gotogether/qrun"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 // settings are what the Options set, for every workflow (Record, Validate,
 // a System's).
 type settings struct {
+	assess      func(context.Context, []qtrace.Step) (receipt.Composition, error)
 	Options     validate.Options // quint binary, backend (default $QUINT_BACKEND, else rust)
 	Dir         string           // artifacts; default $GOTOGETHER_KEEP/<test> or t.TempDir()
 	tempDir     bool             // Dir is t.TempDir(), removed when the test ends
@@ -268,7 +270,8 @@ type origin struct {
 // value for is zero (Record makes no choices; an exploration writes no
 // step log).
 type Run struct {
-	origin origin // where the run came from, in its exploration
+	assessment *receipt.Composition // captured before the primary report is judged
+	origin     origin               // where the run came from, in its exploration
 	// searched: a search ordered Steps (Recorded is what the run recorded)
 	searched bool
 	// Steps are the steps judged: as recorded, or the order a search
@@ -353,6 +356,7 @@ func (r *Run) adjust(cc *validate.Checker) {
 		return
 	}
 	rep := *r.Report
+	rep.Composition = r.assessment
 	rep.Unsettled = r.Unsettled
 	if r.Unsettled != "" && cc != nil {
 		rep.Actors = make([]*validate.Result, len(r.Report.Actors))

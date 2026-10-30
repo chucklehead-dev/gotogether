@@ -20,6 +20,10 @@ import (
 // tail, a gap, an invariant of a conforming actor left unjudged, which
 // may have failed first) has no verdict for it: not reproduced, never a
 // pass.
+//
+// With registered composition checks this preserves the primary actor failure
+// only. A composition-only non-pass is refused: reproduce the registered System;
+// shrinking it requires a component-aware criterion.
 func SameFailure(r *Run) Expectation {
 	var rep *validate.Report
 	if r != nil {

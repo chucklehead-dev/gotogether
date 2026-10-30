@@ -13,6 +13,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qcover"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 // Evidence is what an exploration, a sweep or a mutation run shows, in one
@@ -23,6 +24,8 @@ import (
 type Evidence struct {
 	// Format names this format, EvidenceFormat: a reader refuses another.
 	Format string `json:"format"`
+	// Compositions retain registered per-history composition judgments.
+	Compositions []receipt.Composition `json:"compositions,omitempty"`
 	// Session identifies the suite invocation, from GOTOGETHER_SESSION.
 	// Use a fresh ID for each invocation, shared across its test processes.
 	Session string `json:"session,omitempty"`
@@ -126,6 +129,13 @@ func ManifestEvidence(m *validate.Manifest) *Evidence {
 // Evidence is the exploration's report.
 func (x *Exploration) Evidence() *Evidence {
 	e := evidenceOf(x.Runs)
+	for _, r := range x.Runs {
+		if r != nil && r.Report != nil && r.Report.Composition != nil {
+			c := *r.Report.Composition
+			c.Run = x.ref() + ":" + r.ID()
+			e.Compositions = append(e.Compositions, c)
+		}
+	}
 	e.Session = os.Getenv("GOTOGETHER_SESSION")
 	e.Test, e.Spec = x.ref(), x.model
 	e.Format, e.Role, e.Mutant, e.Package, e.Import = EvidenceFormat, x.role(), x.mutation, pkgDir(), importPath()
@@ -183,6 +193,11 @@ func evidenceOf(runs []*Run) *Evidence {
 
 // reason names why a run failed, by its first failing actor.
 func reason(rep *validate.Report) string {
+	if rep.Composition != nil {
+		if status, why := rep.Composition.Problem(); status != receipt.Pass {
+			return "composition: " + why
+		}
+	}
 	for _, a := range rep.Actors {
 		if r := a.Reason(); r != "" {
 			return r
@@ -274,6 +289,7 @@ func (e *Evidence) String() string {
 		fmt.Fprintf(&b, "  mutants   %d reached, %d killed (%.0f%%), %d survive, %d unreached, %d undecided\n",
 			len(m.Killed)+len(m.Survived), len(m.Killed), 100*m.Score(), len(m.Survived), len(m.Unreached), len(m.Undecided))
 	}
+	b.WriteString(compositionSummary(e.Compositions))
 	return b.String()
 }
 

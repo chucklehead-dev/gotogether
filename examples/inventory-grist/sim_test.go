@@ -72,6 +72,29 @@ func protocolCheck(t *testing.T, steps []qtrace.Step, limit int) gristtest.Proto
 	return result
 }
 
+// compositionChecks compiles each explicitly selected model once. Every
+// assessment judges the same native history; it never reruns a peer separately.
+func compositionChecks(t *testing.T) gristtest.Composition {
+	t.Helper()
+	checker := func(binding string) *validate.Checker {
+		t.Helper()
+		c, err := validate.NewChecker(binding, validate.Options{Dir: t.TempDir()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { c.Close() })
+		return c
+	}
+	return gristtest.Composition{
+		Models: []gristtest.LocalModel{
+			{App: App, Checker: checker(commits)},
+			{App: inventory.App, Checker: checker("inventory/inventory.binding.yaml")},
+			{App: fulfillment.App, Checker: checker("fulfillment/fulfillment.binding.yaml")},
+		},
+		Protocol: &gristtest.ProtocolModel{Checker: checker(protocol), Limit: 256},
+	}
+}
+
 // TestFaithful uses public gristsim configuration, generated local bindings,
 // peer links, and an independently written business protocol.
 func TestFaithful(t *testing.T) {
@@ -86,14 +109,21 @@ func TestFaithful(t *testing.T) {
 			return Order{Order: []string{"a", "b"}[pick(2)]}
 		}
 	}
-	e := gristsim.System(commits, App, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 8, ShortSeeds: 4})
+	checks := compositionChecks(t)
+	sys := checks.System(gristsim.System(commits, App, cfg).WithRates(qenv.NoFaults))
+	e := sys.Explore(t, qtest.ExploreConfig{Seeds: 8, ShortSeeds: 4})
+	// Conforms includes the registered composition checks, including an
+	// exhaustive protocol search. Navigation reevaluates the same assessor.
 	e.Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Some(qtest.Scenario(qtest.Takes("cancel").Outcome("ok"))), qtest.Some(qtest.Scenario(qtest.Takes("confirm").Outcome("ok"))))
 	for _, r := range e.Runs {
-		localChecks(t, r.Recorded, true)
-		result := protocolCheck(t, r.Recorded, 256)
-		if !result.Exhaustive {
-			t.Fatalf("ordering limit exhausted after %d checks; trial cannot claim all orders passed", result.Checked)
+		composition := r.Report.Composition
+		if composition == nil || len(composition.Local) != 3 || len(composition.Peers) != 2 {
+			t.Fatalf("composition omitted a service or declared peer edge: %+v", composition)
 		}
+		if !composition.Protocol.Configured || composition.Protocol.Quantifier != "all_causal_orders" || !composition.Protocol.Exhaustive || composition.Protocol.Checked == 0 || composition.Protocol.Limit != 256 {
+			t.Fatalf("protocol receipt lacks the completed bounded search: %+v", composition.Protocol)
+		}
+		t.Logf("%s", composition.String())
 	}
 }
 

@@ -50,9 +50,19 @@ The faithful short run checks four seeded competing-client histories;
 `TestDecisionRaces` fixes the workload order while retaining the seeded
 simulation schedule. Customers pause in virtual time before deciding;
 tests assert the actual durable outcomes rather than relying on the pause
-as evidence. `CheckProtocolOrders` requires exhaustive completion;
-hitting the limit fails the trial as inconclusive. This is a bounded
-experiment over recorded histories, not a proof for every execution.
+as evidence. `TestFaithful` compiles the explicitly selected service and
+protocol checkers once, wraps its `qtest.System` with
+`gristtest.Composition.System`, and explores normally. `qtest.Conforms()` includes these
+composition checks; no second assertion or simulator run is needed. The same
+assessor runs when navigating a different simulation branch.
+
+Each run's `Report.Composition` and its JSON/TUI receipt show all three local
+models, both declared peer links, and the protocol search separately. A service
+with no recorded work or an unused peer edge remains visible as not checked;
+peer agreement alone cannot establish the business protocol. Every local model
+judges the same native history. The protocol check requires exhaustive
+completion for a pass; hitting its stated ordering limit is inconclusive.
+This is a bounded experiment over recorded histories, not a proof for every execution.
 
 ## Save and replay a failure
 

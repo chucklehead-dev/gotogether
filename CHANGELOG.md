@@ -8,6 +8,13 @@ and adds a line here.
 
 ## Unreleased
 
+- grist: register one `gristtest.Composition` over explicit local checkers and
+  an optional protocol checker. Every captured history is judged in the same
+  local models, catalog-derived peer relations and bounded universal causal
+  orders, including navigation reruns. Ordinary conformance assertions include
+  applicable registered checks; unjudged configured obligations are inconclusive.
+  Receipts retain model-authored diagnostics across text, JSON and the TUI.
+
 - Validation: structured check receipts in report and navigation JSON,
   shared text summaries, and typed run verdict labels in the TUI. Receipts
   distinguish inconclusive checks, unperformed completion checks, existential

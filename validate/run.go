@@ -16,6 +16,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/memo"
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 // Checker validates steps against one binding. Create it once (it typechecks
@@ -196,8 +197,10 @@ func (c *Checker) WithConstants(constants map[string]string) (*Checker, error) {
 // Report is the result of Check: global reconstruction issues and one
 // Result per actor.
 type Report struct {
-	Issues []qtrace.Issue
-	Actors []*Result
+	// Composition contains registered checks on the same native history.
+	Composition *receipt.Composition
+	Issues      []qtrace.Issue
+	Actors      []*Result
 	// Unsettled, if set, is why the run's system did not settle when the
 	// run had it settle (qenv.Settle): a run that never reached quiescence
 	// is not OK, whatever its steps. Set by the caller that ran it (qtest).
@@ -209,6 +212,11 @@ type Report struct {
 func (r *Report) OK() bool {
 	if r.Unsettled != "" {
 		return false
+	}
+	if r.Composition != nil {
+		if status, _ := r.Composition.Problem(); status != receipt.Pass {
+			return false
+		}
 	}
 	for _, a := range r.Actors {
 		if !a.OK() {

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 // Driver names what drove the run Validate or Record checks (an external
@@ -51,10 +52,12 @@ func (r *Run) Manifest() (*validate.Manifest, error) {
 // manifest is the run's manifest with log, its steps, as its input.
 func (r *Run) manifest(log string) (*validate.Manifest, error) {
 	var results []*validate.Result
+	var composition *receipt.Composition
 	if r.Report != nil {
 		results = r.Report.Actors
+		composition = r.Report.Composition
 	}
-	m, err := validate.NewManifest(validate.RunRecord{Options: r.checker.Options, Binding: r.checker.Binding, Search: r.search, Results: results,
+	m, err := validate.NewManifest(validate.RunRecord{Composition: composition, Options: r.checker.Options, Binding: r.checker.Binding, Search: r.search, Results: results,
 		Inputs: []validate.RunInput{{Path: log, Format: "steps", Steps: r.Recorded}}, Artifacts: r.artifacts})
 	if err != nil {
 		return nil, err

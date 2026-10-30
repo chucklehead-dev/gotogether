@@ -12,6 +12,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/nearest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 // RequireQuint skips the test when the quint CLI is not installed, and
@@ -92,21 +93,33 @@ func (e Expectation) String() string { return e.desc }
 func (e Expectation) Holds(r *Run) bool { return r.Report != nil && e.value(r.Report) == yes }
 
 // Conforms: every actor's run is a behaviour of the model and satisfies
-// its invariants. A run with no verdict (validate.Report.Verdict's
+// its invariants, with applicable registered composition checks also passing.
+// A run with no verdict (validate.Report.Verdict's
 // NotEvaluated: a search out of its budget, a lost tail, dropped steps)
 // neither meets nor misses it: All(Conforms()) fails of it as
 // unjudged, not as a run that does not conform.
 func Conforms() Expectation {
 	conforms := func(r *validate.Report) tri {
-		switch {
-		case r.OK():
+		if r.OK() {
 			return yes
-		case r.Unsettled == "" && len(r.Actors) > 0 && r.Verdict().Verdict == validate.NotEvaluated:
+		}
+		// A real counterexample is conclusive even when another registered check
+		// cannot be judged. Tool failures and exhausted bounds are not counterexamples.
+		if decidedFail(r) {
+			return no
+		}
+		if r.Composition != nil {
+			status, _ := r.Composition.Problem()
+			if status != receipt.Pass {
+				return unknown
+			}
+		}
+		if r.Unsettled == "" && len(r.Actors) > 0 && (r.Verdict().Verdict == validate.NotEvaluated || undecided(r)) {
 			return unknown
 		}
 		return no
 	}
-	return Expectation{desc: "conformance, with every invariant holding", check: func(r *validate.Report) bool { return r.OK() }, every: true, alone: true, tri: conforms}
+	return Expectation{desc: "conformance, with every invariant holding", check: func(r *validate.Report) bool { return r.OK() }, every: true, alone: true, tri: conforms, undecided: true}
 }
 
 // Settles: the system settled, whatever its steps: the run recorded a
@@ -688,7 +701,18 @@ func invariantUnknown(invariants []string, r *validate.Report) bool {
 // something holds of it.
 func undecided(r *validate.Report) bool {
 	for _, a := range r.Actors {
-		if a.Conforms == validate.NotEvaluated {
+		if a.Conforms == validate.NotEvaluated || a.Conforms == validate.Fail && a.Failure != nil && a.Failure.Kind == "error" {
+			return true
+		}
+		for _, i := range a.Invariants {
+			if i.Verdict == validate.Fail && i.Failure != nil && i.Failure.Kind == "error" {
+				return true
+			}
+		}
+	}
+	if r.Composition != nil {
+		status, _ := r.Composition.Problem()
+		if status == receipt.Error || status == receipt.NotChecked || status == receipt.Inconclusive {
 			return true
 		}
 	}
@@ -700,14 +724,18 @@ func undecided(r *validate.Report) bool {
 // "mismatch", "violates"), whatever another actor or check has none of.
 func decidedFail(r *validate.Report) bool {
 	for _, a := range r.Actors {
-		if a.Conforms == validate.Fail {
+		if a.Conforms == validate.Fail && (a.Failure == nil || a.Failure.Kind != "error") {
 			return true
 		}
 		for _, inv := range a.Invariants {
-			if inv.Verdict == validate.Fail {
+			if inv.Verdict == validate.Fail && (inv.Failure == nil || inv.Failure.Kind != "error") {
 				return true
 			}
 		}
+	}
+	if r.Composition != nil {
+		status, _ := r.Composition.Problem()
+		return status == receipt.Fail
 	}
 	return false
 }

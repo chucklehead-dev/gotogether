@@ -4,7 +4,8 @@ Built 2026-10-29. This is a prerelease experiment in whether declared
 calls compose. It extends GR3 slice 5's pair; it does not finish GR4's
 deployment platform. The combined Quint protocol
 model uses `gristtest.ProtocolSteps` and bounded `CheckProtocolOrders`
-search; runtime and wire formats stay unchanged.
+search. Registered composition checks now report their local, peer-link and
+protocol judgments together, without changing the services' runtime behavior.
 
 An App still declares another App with `grist.NewPeer`, and its command
 with `grist.NewPeerCall`. In a simulation, `gristsim.Config.Peers` lists
@@ -24,6 +25,91 @@ and CommitFaults; each has one node and default doubles for non-peer
 dependencies. Peers use simstore even if SQL selects qsql for the root.
 No new configuration abstraction is introduced before this experiment
 shows which per-service controls are needed.
+
+## Register checks once
+
+`gristtest.Composition` registers an explicit App-to-Checker table and an
+optional system protocol checker with a positive ordering limit. Compile the
+checkers once with `validate.NewChecker`, choosing their bindings, model
+instances and evaluator options explicitly. Keep them open for the system's
+lifetime and close them with `t.Cleanup`, as the
+[inventory example](../examples/inventory-grist/sim_test.go) does. No filename
+convention discovers a binding, and neither generation nor handwritten source
+is treated as evidence that a model is independent of the implementation.
+
+```go
+checks := gristtest.Composition{
+    Models: []gristtest.LocalModel{
+        {App: orders, Checker: ordersModel},
+        {App: bank, Checker: bankModel},
+        {App: ledger, Checker: ledgerModel},
+    },
+    Protocol: &gristtest.ProtocolModel{Checker: protocolModel, Limit: 256},
+}
+sys := checks.System(gristsim.System("orders.binding.yaml", orders, cfg))
+runs := sys.Explore(t, qtest.ExploreConfig{Seeds: 8})
+runs.Expect(t, qtest.Conforms())
+```
+
+`Composition.System` installs the assessor on that system. Its local checkers,
+declared peer links and protocol checker all judge each run's same native
+`Recorded` history. They do not run separate simulations and combine results
+from matching seeds. The history's SHA256 identity and run reference accompany
+the result.
+
+The canonical result is `validate.Report.Composition`. Its applicable checks
+participate in normal `Report.OK`, `qtest.Run.OK` and `qtest.Conforms()` results;
+there is no additional composition assertion or manual per-run checking loop.
+The registered assessor also runs for histories generated during navigation,
+so the whole-run composition shown in the TUI describes the branch actually
+run. Moving the model cursor alone does not change that judgment.
+
+The registration is used by Explore, Exhaust, Sweep, Mutate, Fuzz,
+FollowTraces, `System.Judge`, and navigation. `System.CheckCases` explicitly
+rejects a system with an assessor: that driver does not yet support composition
+assessment and must not silently drop it.
+
+## Interpret the composition receipt
+
+Text, JSON, run manifests and the TUI expose the same three groups separately:
+
+| Group | Scope |
+| --- | --- |
+| Local models | Each registered App's native actors, judged by its selected binding. A client-side binding is a configuration error. |
+| Peer agreement | Each declared edge's recorded calls, command keys, tenants and peer outcomes. Agreement does not establish the business protocol. |
+| System protocol | A separately registered model checked under every causal ordering allowed by this history, within the explicit limit. |
+
+A local service with no recorded native work, or a peer edge with neither a recorded
+call nor a caller-owned peer commit, remains visible as `not_checked` and
+inapplicable. These inactive rows do not fail an otherwise checked run. A
+registered local binding that selects no actor despite existing native work,
+or selects another App, is an error rather than an inactive row.
+Missing native records make a relevant link inconclusive rather than inventing
+a missing-call defect.
+
+A configured check must establish its named obligations. An unjudged
+invariant or completion property makes the composition inconclusive even when
+ordinary history conformance passes. In particular, an eventual property with
+no recorded settle is not silently accepted. A protocol limit reached without
+a counterexample is also inconclusive. Evaluator errors remain errors; an
+inconclusive candidate is never presented as a protocol counterexample.
+
+The protocol's `quantifier` is `all_causal_orders`. Only `Exhaustive=true`
+means every ordering of every tenant passed; `Checked` counts candidates with
+definitive verdicts. A false verdict identifies a counterexample, while an
+unperformed or inconclusive check cannot supply one. A protocol omitted from
+the registration is visibly `not_checked`, with no protocol guarantee.
+
+This universal check differs from an existential linearization search, whose
+`goal: one_conforming_history` seeks one acceptable serialization. Neither
+proves behavior outside the collected history. Local or link success must not
+be rendered as a universal protocol pass.
+
+A receipt records what ran; it is not a serialized execution plan. Manifest
+replay refuses manifests containing composition assessments rather than
+replaying only the primary binding. Rerun the originating test or registered
+system to reproduce all of its checks. There is one current output contract,
+with no fallback that invents missing composition checks.
 
 ## What is checked
 
@@ -135,21 +221,13 @@ adapter, not a new format or a general-purpose actor merge.
 
 ## Concurrent orderings
 
-`gristtest.CheckProtocolOrders` checks alternative command orderings from
-that same native evidence. Give it a positive ordering limit and a check
-that judges each candidate as supplied, for example a reusable
-`validate.Checker` for the combined binding:
-
-```go
-search, err := gristtest.CheckProtocolOrders(ctx, recorded, 256,
-    func(ctx context.Context, order []qtrace.Step) (bool, error) {
-        report, err := checker.Check(ctx, order)
-        if err != nil {
-            return false, err
-        }
-        return report.OK(), nil
-    }, orders, bank, ledger)
-```
+`gristtest.CheckProtocolOrders` is the lower-level enumeration primitive used
+by the registered protocol assessment. It checks alternative command orderings
+from that same native evidence. Its Boolean callback must judge each candidate
+as supplied, without existential reordering. The registered composition runner
+uses the checker directly and preserves inconclusive and error results before
+returning a Boolean verdict to the enumerator. Converting every false
+`report.OK()` into a counterexample would lose that distinction.
 
 Check `err` first: invalid evidence, cancellation and evaluator failures
 are errors, never model counterexamples. Then interpret the result:

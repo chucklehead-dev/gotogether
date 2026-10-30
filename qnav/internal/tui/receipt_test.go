@@ -31,3 +31,17 @@ func TestRunReceiptCategoriesAndCursorScope(t *testing.T) {
 		})
 	}
 }
+
+func TestCompositionReceiptUsesWholeRunScope(t *testing.T) {
+	c := &receipt.Composition{History: "sha256:history", Local: []receipt.Component{{Target: "checkout", Status: receipt.Pass, Applicable: true}, {Target: "fulfillment", Status: receipt.NotChecked, Reason: "no recorded work"}}, Peers: []receipt.Component{{Target: "checkout → inventory", Status: receipt.Fail, Applicable: true, Reason: "commit missing"}}, Protocol: receipt.Protocol{Component: receipt.Component{Target: "business protocol", Status: receipt.Inconclusive, Applicable: true, Reason: "ordering limit reached"}, Configured: true, Quantifier: "all_causal_orders", Checked: 3, Limit: 3}}
+	n := &navproto.Node{Run: "seed=1", Receipt: receipt.Summary{Status: receipt.Fail, Scope: "collected_history", OtherExecutions: receipt.NotChecked, Composition: c}, Model: []navproto.ActorState{{Actor: "checkout/t1", State: []navproto.NamedValue{{Name: "balance", Value: "0"}}}}}
+	m := New(Config{NoColor: true})
+	m.w, m.h = 100, 60
+	screen := m.runScreen(&entry{r: n})
+	text := strings.Join(screen.detail, "\n")
+	for _, want := range []string{"whole-run judgment · independent of cursor", "local model fulfillment: not checked", "peer agreement checkout → inventory: fail", "system protocol business protocol: inconclusive", "3 checked; limit 3; exhaustive=false"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q:\n%s", want, text)
+		}
+	}
+}

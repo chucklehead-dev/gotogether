@@ -38,6 +38,9 @@ type Replayed struct {
 // is replayed on it whatever QUINT_BACKEND says. Read m with
 // validate.ReadManifest: its paths are resolved against its directory.
 func Replay(ctx context.Context, m *validate.Manifest, o validate.Options) (*Replayed, error) {
+	if m.Receipt != nil && m.Receipt.Composition != nil {
+		return nil, fmt.Errorf("composition receipt is evidence, not an executable registration plan: rerun the originating registered System/test; primary-binding replay cannot reproduce its local, peer and protocol checks")
+	}
 	warns, err := m.Verify()
 	if err != nil {
 		return nil, err
