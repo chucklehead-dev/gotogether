@@ -15,7 +15,7 @@ from the report; static inspection does not establish trace conformance. The
 [executable walkthrough](lint-onboarding.md) covers planted mistakes, corrections
 and blocked/operational controls.
 
-Finite-choice follow-up (PR #10): I4's first bounded slice searches whole
+Finite-choice follow-up (merged PR #10): I4's first bounded slice searches whole
 ordinary complete traces and confirms a selected original-action witness with
 Quint. JSON and TUI receipts distinguish exhaustive Go search from selected-path
 confirmation; unsupported scopes and exhausted bounds give no verdict. See
@@ -60,7 +60,7 @@ for every native history, including navigation. `Report.Composition` is canonica
 normal conformance assertions include applicable checks. Wrong histories, wrong
 service bindings, unknown obligations and order limits cannot silently pass.
 Receipts preserve model-authored diagnostics. See [grist-composition.md](grist-composition.md).
-PRs #2, #3, #4, #5, #6, #7, #8 and #9 are merged; the single current navigation contract is nav/2.
+PRs #2, #3, #4, #5, #6, #7, #8, #9 and #10 are merged; the single current navigation contract is nav/2.
 
 Check-receipt first increment (merged PR #3): validation reports and run
 navigation share structured statuses, ordering-search limits and assumed effects
@@ -158,7 +158,7 @@ review" on.
 | I1 | a fixed upcaster refolds (fingerprint) | 3b20911 |
 | I2 | sound set folds in the evaluator | 4bdec87 |
 | I3 | `-graph` cross-checked against quint | 1471d77 |
-| I4 (first bounded slice) | finite whole-path search, original-action pinned replay and explicit scope/evidence | current branch; lint 3c92cd5 |
+| I4 (first bounded slice) | finite whole-path search, original-action pinned replay and explicit scope/evidence | PR #10; f7194d8d |
 | I5 | ResolvePending keeps invariants if a placement can | fe01988 |
 | I6 | qhistory ignores an Unknown transaction's completion | 5cc4785 |
 | I7 | cross-recorder real time named in the verdict, a skew setting | 1b80ee0 |
@@ -269,7 +269,7 @@ four, L more; agent-days in practice).
 | 3 | Further lint/editor/onboarding breadth, only from adopter blockers | S-M | the canonical report and executable lint walkthrough are built; select integration work from observed friction |
 
 Do not start all tracks at once. Worker completion and the bounded HTTP/SQLite
-rehearsal are merged in PR #9; the first finite I4 slice is implemented in
+rehearsal are merged in PR #9; the first finite I4 slice is merged in
 PR #10. The first structured core lint report and executable lint walkthrough
 are implemented on this branch. Broader onboarding across tracks and editor
 integration still need an adoption case. Further inventory/diagnostic expansion,
