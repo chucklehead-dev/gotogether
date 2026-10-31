@@ -22,7 +22,6 @@ for line in (source / 'FREEZE.sha256').read_text().splitlines():
     (target / name).parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source / name, target / name)
 shutil.copyfile(source / 'FREEZE.sha256', target / 'FREEZE.sha256')
-shutil.copytree(source / 'cmd', target / 'cmd')
 shutil.copytree(source / 'contrast', target / 'contrast', ignore=shutil.ignore_patterns('__pycache__'))
 PY
 cd "$project"
@@ -55,7 +54,7 @@ run_go 0 faithful
 faithful="$project/evidence/faithful/TestConforms/steps.jsonl"
 report graph 0 graph '' simulate -binding reader.binding.yaml -graph -states 100000 -depth 0
 report faithful 0 faithful "$faithful" validate -binding reader.binding.yaml -dir "$project/check-faithful" -manifest "$project/faithful.json" "$faithful"
-go run ./cmd/bundle faithful.json "$work/relocated/faithful"
+gotogether bundle -out "$work/relocated/faithful" faithful.json
 cp "$faithful" "$work/relocated/faithful/steps.jsonl"
 # Never edit GOMODCACHE: Go 1.27 refuses overlays there. A temporary exact
 # production-package copy is selected only by an alternate contrast modfile.
@@ -87,7 +86,7 @@ go mod edit -modfile=contrast/contrast.mod -replace="github.com/casselc/goo=$pro
 run_go 1 contrast -modfile=contrast/contrast.mod -overlay contrast/overlay.json
 contrast="$project/evidence/contrast/TestConforms/steps.jsonl"
 report contrast 1 contrast "$contrast" validate -binding reader.binding.yaml -dir "$project/check-contrast" -manifest "$project/contrast.json" "$contrast"
-go run ./cmd/bundle contrast.json "$work/relocated/contrast"
+gotogether bundle -out "$work/relocated/contrast" contrast.json
 cp "$contrast" "$work/relocated/contrast/steps.jsonl"
 python3 - "$faithful" "$project/missing.jsonl" <<'PY'
 import json, sys
@@ -113,7 +112,7 @@ test ! -e "$project"
 for mode in faithful contrast; do
   expected=0
   if [ "$mode" = contrast ]; then expected=1; fi
-  report "$mode" "$expected" "$mode-relocated" "$work/relocated/$mode/steps.jsonl" validate -replay "$work/relocated/$mode/manifest.json" -dir "$work/replay-$mode"
+  report "$mode" "$expected" "$mode-relocated" "$work/relocated/$mode/steps.jsonl" validate -replay "$work/relocated/$mode/run.json" -dir "$work/replay-$mode"
 done
 (cd "$work/project-hidden" && sha256sum -c FREEZE.sha256)
 printf 'Goo Read rehearsal passed; fresh evidence: %s\n' "$work"
