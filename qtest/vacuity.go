@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -80,11 +81,19 @@ func (x *Exploration) vacuityVerdict() claimVerdict {
 	return claimVerdict{ok: true}
 }
 
-func (x *Exploration) findVacuous() vacuityResult {
+func (x *Exploration) findVacuous() (result vacuityResult) {
 	ch := x.checker
 	if ch == nil || ch.Model == nil {
 		return vacuityResult{err: fmt.Errorf("the exploration has no model to evaluate antecedents with")}
 	}
+	if err := ch.VerifySource(); err != nil {
+		return vacuityResult{err: err}
+	}
+	defer func() {
+		if err := ch.VerifySource(); err != nil {
+			result.found, result.err = nil, err
+		}
+	}()
 	ante := map[string]string{}
 	for _, inv := range ch.Binding.Invariants {
 		if a, ok := ch.Binding.Antecedents[inv]; ok {
@@ -95,6 +104,9 @@ func (x *Exploration) findVacuous() vacuityResult {
 	}
 	if len(ante) == 0 {
 		return vacuityResult{}
+	}
+	if ch.Compiled() != nil {
+		return vacuityResult{antecedent: len(ante), err: fmt.Errorf("antecedent witness probes: %w; validate with source to evaluate derived predicates", validate.ErrNeedsQuint)}
 	}
 	invs := slices.Sorted(maps.Keys(ante))
 	// the runs where each invariant passed
@@ -128,9 +140,19 @@ func (x *Exploration) findVacuous() vacuityResult {
 	for _, inv := range invs {
 		b.Invariants = append(b.Invariants, "gotogetherNot_"+inv)
 	}
-	wc := *ch
-	wc.Binding = &b
+	// This is a derived diagnostic probe, not the loaded source judgment.
+	// Keep its generated predicates out of the original checker and source
+	// provenance; only the witness booleans below escape this scope. The original
+	// source inventory is guarded before and after every exit from this function.
+	wc := validate.Checker{Binding: &b, Model: ch.Model, Options: ch.Options}
 	wc.Options.NoITF = true
+	dir, err := os.MkdirTemp("", "gotogether-vacuity-")
+	if err != nil {
+		return vacuityResult{antecedent: len(invs), err: err}
+	}
+	defer os.RemoveAll(dir)
+	defer wc.Close()
+	wc.Options.Dir = dir
 	witnessed := map[string]bool{}
 	todo := map[int]bool{}
 	for _, inv := range invs {

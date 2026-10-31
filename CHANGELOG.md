@@ -17,6 +17,9 @@ and adds a line here.
   the captured evidence. External Quint still requires stable files; boundary
   checks do not provide an atomic filesystem snapshot. File imports in binding
   or ITF definition strings must move into model files so they can be captured.
+  Vacuity checks keep derived diagnostic predicates separate from recorded
+  judgments and guard original sources around the probe; compiled-only probes
+  report that source evaluation is required.
 
 - Compiled validation now records, bundles and replays evaluator-only manifests
   without Quint/Node probes or fallback. The single current manifest format is

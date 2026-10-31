@@ -125,10 +125,11 @@ func TestSnapshotStart(t *testing.T) {
 		t.Errorf("a pending call before the snapshot: %v\n%s", err, j.Report.Summary())
 	}
 	// the same steps from init: the lost prefix an error, another verdict
-	b := *c.Binding
-	b.Snapshot = ""
-	fromInit := *c
-	fromInit.Binding = &b
+	fromInit, err := checkerFixtureVariant(t, "testdata/snapshot.yaml", map[string]any{"snapshot": nil})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fromInit.Close()
 	if c.Key(pass) == fromInit.Key(pass) {
 		t.Errorf("the key does not say the trace starts from the snapshot")
 	}

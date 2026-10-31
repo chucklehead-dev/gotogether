@@ -82,10 +82,11 @@ func TestResumeLostPrefix(t *testing.T) {
 		}
 	}
 	// without the resume: from init, the lost prefix an error
-	b := *c.Binding
-	b.Resume = ""
-	fromInit := *c
-	fromInit.Binding = &b
+	fromInit, err := checkerFixtureVariant(t, "testdata/resume.yaml", map[string]any{"resume": nil})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fromInit.Close()
 	explained := lostHead([2]int64{5, 8}, [2]int64{-2, 6})
 	rep, err := fromInit.Check(ctx, explained)
 	if err != nil {

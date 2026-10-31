@@ -60,6 +60,7 @@ var (
 		"Resume":      {"resume"},
 	}
 	otherFields = map[string]string{
+		"sha256":             "private fingerprint of parsed source bytes; capture provenance, not a model verdict",
 		"DiagnosticEvidence": "optional captured-record references for explanations; matching never changes a verdict",
 		"Spec":               "the model's file", "Module": "the model's module", "Constants": "the instance", "Intern": "naming",
 		"Outcomes": "templates' values", "Restart": "an inferred step, judged as conformance", "Defs": "templates' helpers",

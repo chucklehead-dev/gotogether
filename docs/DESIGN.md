@@ -5976,3 +5976,11 @@ move them into model files. Typed ITF inference retains a `SourceGuard` through
 decoding and validation, preventing schema and judgment from using different
 observed source inventories. Initial and checker binding loads must agree.
 No manifest format change or compatibility path is needed.
+
+
+Vacuity witness probes generate temporary predicates, so they use an explicit
+internal diagnostic checker rather than modifying a loaded source checker.
+Only witness booleans escape; the original source inventory is checked before
+and after the entire probe, including early returns. Derived reports are not
+attributed to the original binding or recorded. Compiled-only checks cannot
+compile these extra predicates and return `ErrNeedsQuint` without a tool probe.

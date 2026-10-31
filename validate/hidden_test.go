@@ -54,10 +54,11 @@ func TestHiddenActions(t *testing.T) {
 		// once said Fail
 		{"two hops, depth one", 1, []qtrace.Step{gossipStep(1, "a", 1, nil), gossipStep(2, "c", 0, []int{1})}, NotEvaluated},
 	} {
-		cc := *c
-		b := *c.Binding
-		b.HiddenDepth = x.depth
-		cc.Binding = &b
+		cc, err := checkerFixtureVariant(t, "testdata/gossip.yaml", map[string]any{"hiddenDepth": x.depth})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer cc.Close()
 		rep, err := cc.Check(context.Background(), x.steps)
 		if err != nil {
 			t.Fatalf("%s: %v", x.name, err)
@@ -153,10 +154,11 @@ func TestHiddenDepthCutIsNoVerdict(t *testing.T) {
 	if a := rep.Actors[0]; a.Conforms != NotEvaluated || !strings.Contains(fmt.Sprint(a.Issues), "raise hiddenDepth") {
 		t.Errorf("fire past the depth: %s", rep.Summary())
 	}
-	cc := *c
-	b := *c.Binding
-	b.HiddenDepth = 5
-	cc.Binding = &b
+	cc, err := checkerFixtureVariant(t, "testdata/ticks.yaml", map[string]any{"hiddenDepth": 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cc.Close()
 	if rep, err := cc.Check(context.Background(), fire); err != nil || rep.Actors[0].Conforms != Pass {
 		t.Errorf("fire within the depth: %v %v", err, rep)
 	}
@@ -171,10 +173,6 @@ func TestHiddenAgainstBruteForce(t *testing.T) {
 	skip.Quint(t)
 	if testing.Short() {
 		t.Skip("checks 60 histories with the evaluator's search")
-	}
-	c, err := NewChecker("testdata/gossip.yaml", Options{Dir: t.TempDir()})
-	if err != nil {
-		t.Fatal(err)
 	}
 	rng := rand.New(rand.NewPCG(13, 14))
 	nodes := []string{"a", "b", "c"}
@@ -199,10 +197,11 @@ func TestHiddenAgainstBruteForce(t *testing.T) {
 			}
 		}
 		depth := 1 + rng.IntN(2)
-		cc := *c
-		b := *c.Binding
-		b.HiddenDepth = depth
-		cc.Binding = &b
+		cc, err := checkerFixtureVariant(t, "testdata/gossip.yaml", map[string]any{"hiddenDepth": depth})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer cc.Close()
 		rep, err := cc.Check(context.Background(), steps)
 		if err != nil {
 			t.Fatal(err)
