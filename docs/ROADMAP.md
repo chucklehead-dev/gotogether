@@ -722,9 +722,10 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   slot-resolved environments (5-10x on top of I39); a WASM playground
   on the Go evaluator.
 - **I51. Small, each S.** `qtest.NoHotCycle()` over unsettled runs;
-  generated constants for a package's fault names; `gristtest.StoredLogs`
-  (every kept production log through today's upcasters, folds and
-  model); `qobs.Sometimes(name)`, the code's twin of `possible:`; a
+  generated constants for a package's fault names; `gristtest.StoredLogs` is
+  implemented for retained committed prefixes: current event/upcast and row
+  integrity, fold/snapshot consistency, and model checks without executing effects
+  (no historical timestamps/snapshots or inferred settle); `qobs.Sometimes(name)`, the code's twin of `possible:`; a
   library of ghost-variable modules; the model's facts (holds, terminal,
   fairness, possibles) beside the spec rather than in each binding.
 

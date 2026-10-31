@@ -859,6 +859,37 @@ client got has its store-side step (`gristtest.Answered`).
 - `gristtest.Upgrade(t, binding, deployed.App, App, cfg)`: a rolling
   update from the deployed release (§7.3).
 
+Keep captured `gristtest.Log` files as a regression corpus:
+
+```go
+func TestRetainedHistories(t *testing.T) {
+	qtest.RequireQuint(t)
+	gristtest.StoredLogs(t, App, gristtest.StoredLogsConfig{
+		Files: []string{"testdata/logs/v1.jsonl"}, Binding: commits,
+	})
+}
+```
+
+Each fixture gets a fresh in-memory store. The helper checks every stored event,
+its version/upcasts and tags, and that the committed step observations describe
+those events. It then audits today's fold/snapshot round trips and validates the
+relayed committed prefix against today's binding. No node starts, no command is
+re-executed, and no processor/effect runs; pending effects can remain pending.
+
+The returned `StoredLogResult` values include the file hash, counts, typed stage
+statuses and a native model document. Failures fail the test while later fixtures
+continue. Model failure, setup error, and no verdict remain distinct. Use
+`Options.Dir` to retain model artifacts beyond the test's temporary directories.
+
+`Log` does not capture historical snapshots or original step-row timestamps.
+The audit checks current fold/snapshot consistency (at up to 200 positions per
+read model/key), not unchanged business meaning. No settle is inferred, so
+liveness remains unchecked; bindings requiring completion or `within` timing
+are refused. Empty/missing rows, filtered actors and skipped outcomes cannot
+give a partial fixture a pass. The hash identifies the supplied bytes; it cannot
+detect a whole valid tail omitted before capture. `TestStoredVersionOneLog` in
+examples/library exercises the saved older events without mailing receipts.
+
 ### 6.8 Lints: what the model cannot see
 
 An application's code runs under gristsim in virtual time, and the model

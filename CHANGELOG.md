@@ -8,6 +8,13 @@ and adds a line here.
 
 ## Unreleased
 
+- `gristtest.StoredLogs` checks retained committed-batch fixtures against
+  today's app and commit-side model in fresh stores, without starting processors
+  or effects. It returns typed per-stage evidence and the native model report.
+  `App.CheckStoredBatch` checks every event and verifies its recorded event
+  observations, including old and rolling-write versions. Missing evidence,
+  unsupported timing/completion claims, and tool errors cannot become passes.
+
 - Ordinary trace validation now supports finite nondeterministic initialization.
   It budgets distinct initial states, preserves initial invariant history through
   later observations, and confirms the selected original initializer with Quint.

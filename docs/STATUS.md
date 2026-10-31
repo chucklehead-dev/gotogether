@@ -1,13 +1,22 @@
 # Status: where the work stands, and how to pick it up
 
-<!-- not built: qtest.NoHotCycle qobs.Sometimes gristtest.StoredLogs -->
+<!-- not built: qtest.NoHotCycle qobs.Sometimes -->
 
 For anyone (a person or an agent) resuming this repository cold. Five
 minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Finite-initialization follow-up (current branch): ordinary complete traces can
+Stored-history follow-up (current branch): `gristtest.StoredLogs` restores each
+retained fixture fresh, validates every event and its recorded observations,
+audits current fold/snapshot consistency, and checks the committed prefix against
+today's model. It never starts processors/effects or invents settle. Per-stage
+statuses, fixture hashes and native model documents distinguish failures, errors
+and no verdict. Historical snapshots and original row timestamps were not captured;
+completion/within bindings are refused. The real library v1 fixture passes with
+pending receipts left pending. See grist-guide §6.7.
+
+Finite-initialization follow-up (PR #21): ordinary complete traces can
 start from several legal finite model states. Search budgets distinct roots,
 keeps each root's initial invariant history, and confirms the selected original
 initializer with Quint. Shared receipts retain separate initialization evidence
@@ -172,7 +181,7 @@ exploration evidence and run manifests. `evidence -session` filters the
 suite before coverage and expectation checks; unscoped completeness checks
 require explicit `-history`. Use a fresh ID and `go test -count=1`.
 
-**As of 2026-10-31 (finite-initialization branch).** GR4's first composition experiment is implemented
+**As of 2026-10-31 (stored-log-regressions branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
 `ff1a24e2` so finite initialization witnesses and their published report schema, complete calibration trajectories, checked recovery aggregation, interrupted lock waits, SQL cancellation, snapshot-checkpoint validation/navigation, scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
@@ -367,8 +376,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I51: retained application-history regression workflow | S-M | reuse current upcasters, folds, snapshots and model checks; replay must not execute effects or turn missing step evidence into a pass |
-| 2 | I19: interacting-entity validation benchmark and soundness prototype | M | profile a nonpartitionable workload before choosing an incremental invariant design; compare with full evaluation |
+| 1 | I19: interacting-entity validation benchmark and soundness prototype | M | profile a nonpartitionable workload before choosing an incremental invariant design; compare with full evaluation |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
 Do not start all tracks at once. Worker completion and the bounded HTTP/SQLite

@@ -49,7 +49,7 @@ the walk-through: read its README's table first.
 - [ ] The generated files are committed and `TestGenerated` passes.
 - [ ] The generator printed no warning left unread (a fold's inputs changed).
 - [ ] `gotogether lint -sim .` and quintvet's `quintraw` are clean: no clock, rand or `go` in the app's code; effects call declared calls only.
-- [ ] grist.lock is committed; a changed event is a new version with an upcaster, `gristtest.Upcasts` passes.
+- [ ] grist.lock is committed; event changes have upcasters, `gristtest.Upcasts` passes, and retained fixtures run through `gristtest.StoredLogs`.
 - [ ] The clients' side is judged too: `.WithBinding(calls, qtest.Linearize())`.
 - [ ] A peer (`grist.NewPeer`): its side judged by its own binding, the two related by `gristtest.Linked`, `gristtest.PeerMutants` among the mutants.
 
