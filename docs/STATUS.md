@@ -18,7 +18,7 @@ composition, completion, settlement and JSON/TUI verdicts stay unchanged. Real
 paused/invariant-failure/rejection/reconstruction controls and an ablation cover
 the distinction. No validator or output format changes are needed.
 
-Stored-outcome inspection follow-up (PR #31): both native Failed/Unknown
+Stored-outcome inspection follow-up (merged PR #31): both native Failed/Unknown
 bodies now require captured TriggerID, and checkpoint telemetry exposes it too.
 App.InspectOutcomes and `<app> outcomes [-json]` share bounded typed pages, original
 provenance, raw retained/missing/replaced observations and explicit limitations.
