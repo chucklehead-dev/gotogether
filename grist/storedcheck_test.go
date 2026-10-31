@@ -74,7 +74,7 @@ func TestCheckStoredBatchSupportsStoredAndRenderedVersions(t *testing.T) {
 	}
 	// During a rolling update, a writer can store the old event while its
 	// step observations already use the newest model shape.
-	b.Step = encodeRow([]rowStep{newRowStep("add", 1, a.batchObs(b.Events, "command", "id")...)})
+	b.Step = encodeRow([]rowStep{newRowStep("add", 1, storedBatchObs(t, a, b.Events, "command", "id")...)})
 	if err := a.CheckStoredBatch(b); err != nil {
 		t.Fatal("new writer rendering old stored version:", err)
 	}
@@ -89,7 +89,7 @@ func TestCheckStoredBatchSupportsStoredAndRenderedVersions(t *testing.T) {
 	}
 	// Processor causes use their registered name, not the stored prefix.
 	b.Cause = "processor:emit"
-	b.Step = encodeRow([]rowStep{newRowStep("emit", 1, a.batchObs(b.Events, "processor", "emit")...)})
+	b.Step = encodeRow([]rowStep{newRowStep("emit", 1, storedBatchObs(t, a, b.Events, "processor", "emit")...)})
 	if err := a.CheckStoredBatch(b); err != nil {
 		t.Fatal("processor event:", err)
 	}
@@ -263,8 +263,8 @@ func TestCheckStoredBatchChecksEachStepSliceAndResume(t *testing.T) {
 	a, b := storedCheckFixture(t)
 	b.Events = append(b.Events, b.Events[0].Clone())
 	b.Step = encodeRow([]rowStep{
-		newRowStep("add", 1, a.batchObs(b.Events[:1], "command", "id")...),
-		newRowStep("add", 1, a.batchObs(b.Events[1:], "command", "id")...),
+		newRowStep("add", 1, storedBatchObs(t, a, b.Events[:1], "command", "id")...),
+		newRowStep("add", 1, storedBatchObs(t, a, b.Events[1:], "command", "id")...),
 	})
 	if err := a.CheckStoredBatch(b); err != nil {
 		t.Fatal(err)
@@ -340,4 +340,13 @@ func TestCheckStoredBatchRejectsUnsignedOverflowInIntermediateShape(t *testing.T
 	if err := a.CheckStoredBatch(b); err == nil || !strings.Contains(err.Error(), "version 2 scalar observations") || !strings.Contains(err.Error(), "int64") {
 		t.Fatalf("overflowing intermediate version was hidden by a representable final value: %v", err)
 	}
+}
+
+func storedBatchObs(t *testing.T, a *App, events []Event, kind, name string) []any {
+	t.Helper()
+	obs, err := a.batchObs(events, kind, name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return obs
 }

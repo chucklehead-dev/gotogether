@@ -106,6 +106,10 @@ func NewRelay(s Store) (*Relay, error) {
 // read); a relay that records a rolling update from its first step, its
 // older release's nodes starting first (gristsim's Config.From), renders
 // as the newer release from the start.
+// Known source and upcast scalar shapes are checked even for current-version
+// and already-rendered rows. Invalid data stops the row without recording it;
+// an opaque mixed row requiring re-rendering needs a release reading all its
+// types and versions. CheckStoredBatch provides the full retained-row audit.
 func (r *Relay) RenderAs(a *App) { r.app.Store(a) }
 
 // A StartOption configures App.Start (WithRelay). The zero StartOption
@@ -521,67 +525,60 @@ func numbers(v any) any {
 	return v
 }
 
-// upcastRow re-renders the events of steps (one row's) that were stored
-// at an older version than the App's newest: their observations
-// (obs.strs, obs.ints) are recomputed from their upcast bodies, so a log
-// appended by an older version of the app is judged by the model of
-// today's, which knows only the newest shapes (docs/grist.md §2.1). A
-// row with no event of a type that has versions reads nothing; one with
-// such events reads them back (the row holds their observations, not
-// their bodies). An event of a newer version than the App knows is left
-// as it was recorded.
+// upcastRow validates known event shapes before recording a row, and renders
+// older observations for today's model. Unknown/newer shapes stay opaque to a
+// rolling reader. A mixed row needing rendering cannot safely split aggregate
+// scalar lists, so it fails rather than dropping unknown observations.
 func (a *App) upcastRow(ctx context.Context, s Store, t string, steps []relayStep) error {
 	for i := range steps {
 		st := &steps[i]
-		types := kvStrings(st.kv, "obs.events")
-		if st.events == 0 || len(types) != st.events || !a.versioned(types) || a.renderedNewest(types, kvInts(st.kv, renderedKey)) {
+		if st.events == 0 {
 			continue
+		}
+		types := kvStrings(st.kv, "obs.events")
+		if st.events < 0 || len(types) != st.events {
+			return &rowError{fmt.Errorf("grist: tenant %s's step at %d has invalid event observations", t, st.head)}
 		}
 		evs, _, err := s.Read(ctx, t, Selector{Types: uniq(types), After: st.head - Position(st.events)}, st.head)
 		if err != nil {
-			return err // transient: the relay retries the row
+			return err
 		}
 		if len(evs) != st.events {
 			return &rowError{fmt.Errorf("grist: tenant %s's step at %d has %d events, and the store %d of their types through it", t, st.head, st.events, len(evs))}
 		}
-		older := false
-		for _, e := range evs {
-			if info := a.events[e.Type]; info != nil && storedVersion(e.Version) < info.version {
-				older = true
-			}
-		}
-		if !older {
-			continue
-		}
+		older, opaque := false, false
 		strs, ints := []string{}, []int64{}
 		for _, e := range evs {
 			info := a.events[e.Type]
-			if info == nil {
+			if info == nil || storedVersion(e.Version) > info.version {
+				opaque = true
 				continue
 			}
-			body := e.Body
-			if storedVersion(e.Version) < info.version {
-				if body, err = info.currentBody(e.Event); err != nil {
-					return &rowError{fmt.Errorf("grist: tenant %s's event %d: %w", t, e.Pos, err)}
-				}
+			older = older || storedVersion(e.Version) < info.version
+			v, typ, _, err := info.storedValue(e.Event, info.version)
+			if err != nil {
+				return &rowError{fmt.Errorf("grist: tenant %s's event %d: %w", t, e.Pos, err)}
 			}
-			ss, n := scalars(info.typ, body)
-			strs, ints = append(strs, ss...), append(ints, n...)
+			body, err := json.Marshal(v.Interface())
+			if err != nil {
+				return &rowError{err}
+			}
+			ss, ns, err := scalars(typ, body)
+			if err != nil {
+				return &rowError{fmt.Errorf("grist: tenant %s's event %d observations: %w", t, e.Pos, err)}
+			}
+			strs, ints = append(strs, ss...), append(ints, ns...)
+		}
+		if !older || a.renderedNewest(types, kvInts(st.kv, renderedKey)) {
+			continue
+		}
+		if opaque {
+			return &rowError{fmt.Errorf("grist: tenant %s's step at %d needs re-rendering but includes unknown or newer event shapes: use a release that reads every event type and version in this row", t, st.head)}
 		}
 		setKV(st.kv, "obs.strs", strs)
 		setKV(st.kv, "obs.ints", ints)
 	}
 	return nil
-}
-
-// versioned reports whether one of types has an older version.
-func (a *App) versioned(types []string) bool {
-	for _, t := range types {
-		if info := a.events[t]; info != nil && info.version > 1 {
-			return true
-		}
-	}
-	return false
 }
 
 // kvStrings is the list of strings at key in kv (a decoded row's pairs).
@@ -601,14 +598,13 @@ func kvStrings(kv []any, key string) []string {
 }
 
 // renderedKey is a row step's record of the version each of its events'
-// observations were rendered in (batchObs): the relay re-reads a row's
-// events only when the app reads a newer version of one than that, a
-// row an older release committed, and drops the key before recording.
+// observations were rendered in (batchObs). The relay validates known event
+// shapes on every row and uses this marker to avoid re-rendering observations
+// already produced by this release or a newer one. It drops the key before recording.
 const renderedKey = "grist.rendered"
 
 // renderedNewest reports whether a row's events of types were rendered
-// in versions (renderedKey's) at least a's newest: no re-rendering, and
-// no read, needed. A row without the key (an older grist's) is not.
+// in versions (renderedKey's) at least a's newest: no re-rendering needed. A row without the key (an older grist's) is not.
 func (a *App) renderedNewest(types []string, versions []int64) bool {
 	if len(versions) != len(types) {
 		return false

@@ -70,16 +70,20 @@ const (
 // Skip, Effect or Fail. The zero Result is invalid: the trigger fails
 // (grist.failed), naming the fix.
 type Result struct {
-	kind      resultKind
-	events    []Event
-	effect    func(ctx context.Context) error
-	guarantee Guarantee
-	onSuccess *Event
-	err       error
+	kind       resultKind
+	events     []Event
+	effect     func(ctx context.Context) error
+	guarantee  Guarantee
+	onSuccess  *Event
+	successObs []any // frozen observations prepared before invoking the effect
+	err        error
 	// blocked says err is a rule's refusal of the result's appends
 	// (poller.blocked): recorded with the trigger's step, so the run's
 	// report names the rule
 	blocked bool
+	// invalidEvidence is a representation fault, kept on the failed trigger's
+	// row rather than reducing it to a domain outcome or losing its diagnostic.
+	invalidEvidence bool
 }
 
 // Emit appends events with the processor's checkpoint, in one
@@ -95,10 +99,17 @@ func Skip() Result { return Result{kind: emitResult} }
 // naming it, so a poison event stops nothing and is visible.
 func Fail(err error) Result { return Result{kind: failResult, err: err} }
 
+func invalidEmission(err error) Result {
+	return Result{kind: failResult, err: err, invalidEvidence: true}
+}
+
 // An EffectOption configures an Effect.
 type EffectOption func(*Result)
 
 // OnSuccess appends e with the checkpoint once the effect succeeded.
+// Its versions, scalar observations and rules are checked before the effect
+// runs. Invalid evidence fails handling without invoking the dependency; valid
+// event bodies, tags and observations are frozen before that invocation.
 func OnSuccess(e Event) EffectOption { return func(r *Result) { r.onSuccess = &e } }
 
 // Effect runs f outside the log, with the guarantee g
@@ -478,8 +489,9 @@ func (pl *poller) run(ctx context.Context) {
 type pending struct {
 	trigger Position
 	events  []Event
+	obs     []any // precomputed for a frozen success outcome
 	skip    bool
-	err     string // the step's error text: a rule's refusal (Result.blocked)
+	err     string // representation or rule fault, retained in the step
 }
 
 // handle handles evs (triggers after checkpoint cp, read with the head
@@ -516,7 +528,7 @@ func (pl *poller) handle(ctx context.Context, cp, head Position, evs []Stored) {
 			continue
 		case failResult:
 			p := pending{trigger: e.Pos, events: []Event{failedEvent(pl.p.name, e.Pos)}, skip: delivers}
-			if res.blocked {
+			if res.blocked || res.invalidEvidence {
 				p.err = res.err.Error()
 			}
 			group = append(group, p)
@@ -559,15 +571,23 @@ func (pl *poller) decide(ctx context.Context, e Stored) (Result, bool) {
 		} else if err := pl.p.opts.shape.conforms(pl.p.name, res); err != nil {
 			res = Fail(err)
 		}
-		for _, ev := range res.events {
-			if pl.app.events[ev.Type] == nil {
-				res = Fail(fmt.Errorf("grist: processor %s emits %q, which is not registered on %s: register it (NewEvent)", pl.p.name, ev.Type, pl.app.Name))
-			}
-		}
 		if err := checkEvents("processor "+pl.p.name, res.events); err != nil {
-			res = Fail(err)
-		} else if err := pl.app.written("processor "+pl.p.name, res.events); err != nil {
-			res = Fail(err)
+			res = invalidEmission(err)
+		} else if err := pl.app.checkEventObservations("processor "+pl.p.name, res.events); err != nil {
+			res = invalidEmission(err)
+		}
+		if res.kind == effectResult && res.onSuccess != nil {
+			// Validate and freeze the newest candidate before rules or effects.
+			outcome := *res.onSuccess
+			outcome.Body = slices.Clone(outcome.Body)
+			outcome.Tags = slices.Clone(outcome.Tags)
+			if err := checkEvents("processor "+pl.p.name, []Event{outcome}); err != nil {
+				res = invalidEmission(err)
+			} else if err := pl.app.checkEventObservations("processor "+pl.p.name, []Event{outcome}); err != nil {
+				res = invalidEmission(err)
+			} else {
+				res.onSuccess = &outcome
+			}
 		}
 		if err := pl.blocked(r, res); r.err != nil {
 			pl.pause(ctx)
@@ -575,6 +595,23 @@ func (pl *poller) decide(ctx context.Context, e Stored) (Result, bool) {
 		} else if err != nil {
 			res = Fail(err)
 			res.blocked = true
+		}
+		// Rules judge the newest candidate; only afterward may a rollout
+		// convert it to the version on disk. Prepare success observations now,
+		// so no user upcaster or decoder runs after an external side effect.
+		if res.kind == emitResult {
+			if err := pl.app.written("processor "+pl.p.name, res.events); err != nil {
+				res = invalidEmission(err)
+			}
+		} else if res.kind == effectResult && res.onSuccess != nil {
+			events := []Event{*res.onSuccess}
+			if err := pl.app.written("processor "+pl.p.name, events); err != nil {
+				res = invalidEmission(err)
+			} else if obs, err := pl.app.batchObs(events, "processor", pl.p.name); err != nil {
+				res = invalidEmission(err)
+			} else {
+				res.onSuccess, res.successObs = &events[0], obs
+			}
 		}
 		if res.kind != failResult || try >= pl.p.opts.effectTries {
 			return res, true
@@ -661,7 +698,11 @@ func (pl *poller) commitAt(ctx context.Context, cp Position, group []pending, sl
 	// with its own events: the relay gives each the head after them
 	steps := make([]rowStep, 0, len(group))
 	for _, g := range group {
-		st := pl.step(g.trigger, g.events, slot, g.skip, kv...)
+		st, err := pl.step(g.trigger, g.events, g.obs, slot, g.skip, kv...)
+		if err != nil {
+			pl.pause(ctx)
+			return 0, false
+		}
 		st.Error = g.err
 		steps = append(steps, st)
 	}
@@ -717,14 +758,21 @@ func (pl *poller) commitAt(ctx context.Context, cp Position, group []pending, sl
 // at-most-once effect step (2·trigger+1). A checkpoint and an effect may
 // share a head, and are recorded on two threads (the relay's and the
 // poller's).
-func (pl *poller) step(trigger Position, events []Event, slot int64, skip bool, extra ...any) rowStep {
-	kv := append(append([]any{"trigger", int64(trigger)}, extra...), pl.app.batchObs(events, "processor", pl.p.name)...)
+func (pl *poller) step(trigger Position, events []Event, obs []any, slot int64, skip bool, extra ...any) (rowStep, error) {
+	if obs == nil {
+		var err error
+		obs, err = pl.app.batchObs(events, "processor", pl.p.name)
+		if err != nil {
+			return rowStep{}, err
+		}
+	}
+	kv := append(append([]any{"trigger", int64(trigger)}, extra...), obs...)
 	kv = append(kv, "obs.checkpoint", int64(trigger), "order.p."+pl.p.quint, 2*int64(trigger)+slot)
 	action := pl.p.quint
 	if skip {
 		action += "Skip"
 	}
-	return newRowStep(action, len(events), kv...)
+	return newRowStep(action, len(events), kv...), nil
 }
 
 // effect runs an Effect for trigger e (checkpoint cp before it, head
@@ -767,15 +815,18 @@ func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res R
 		}
 		backoff(ctx, try)
 	}
-	for _, ev := range outcome {
-		if pl.app.events[ev.Type] == nil || checkEvents("processor "+pl.p.name, outcome) != nil || pl.app.written("processor "+pl.p.name, outcome) != nil {
-			outcome, ok = []Event{failedEvent(pl.p.name, e.Pos)}, false // an unregistered or unstorable outcome event: the code's fault
-		}
-	}
+	// OnSuccess was validated, converted to the written version and frozen
+	// before the dependency ran. Reclassifying an effect here because its
+	// evidence changed would falsely say a successful dependency did not act.
+
 	// the checkpoint's step records which outcome it commits: under at
 	// least once, a run that had an ok effect and then failed every try
 	// (a crash between) commits grist.failed, and the model admits either
-	return pl.commit(ctx, cp, []pending{{trigger: e.Pos, events: outcome}}, "ok", ok)
+	var obs []any
+	if ok {
+		obs = res.successObs
+	}
+	return pl.commit(ctx, cp, []pending{{trigger: e.Pos, events: outcome, obs: obs}}, "ok", ok)
 }
 
 // atMostOnce runs an at-most-once Effect for trigger e (checkpoint cp
@@ -820,11 +871,9 @@ func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Res
 	case res.onSuccess != nil:
 		outcome = []Event{*res.onSuccess}
 	}
-	if len(outcome) > 0 && (pl.app.events[outcome[0].Type] == nil || checkEvents("processor "+pl.p.name, outcome) != nil || pl.app.written("processor "+pl.p.name, outcome) != nil) {
-		// the code's fault: the effect succeeded (or failed known), but its
-		// outcome event cannot be stored
-		outcome, err = []Event{failedEvent(pl.p.name, e.Pos)}, NotApplied(errors.New("an unregistered or unstorable outcome event"))
-	}
+	// The success outcome is the frozen, prepared event from decide. In
+	// particular, no later evidence error is a NotApplied dependency result.
+
 	if len(outcome) == 0 {
 		return head, true
 	}
@@ -832,8 +881,16 @@ func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Res
 	if !known {
 		text = modelText(err.Error())
 	}
-	step := newRowStep(pl.p.quint+"Outcome", len(outcome), append([]any{"trigger", int64(e.Pos), "key", key, "ok", err == nil, "known", known, "error", text},
-		pl.app.batchObs(outcome, "processor", pl.p.name)...)...)
+	obs := res.successObs
+	if err != nil || res.onSuccess == nil {
+		var projectionErr error
+		obs, projectionErr = pl.app.batchObs(outcome, "processor", pl.p.name)
+		if projectionErr != nil {
+			record(ctx, pl.s, pl.tenant, pl.p.quint+"Outcome", projectionErr, "trigger", int64(e.Pos), "key", key)
+			return head, true // retain the diagnostic; never claim NotApplied
+		}
+	}
+	step := newRowStep(pl.p.quint+"Outcome", len(outcome), append([]any{"trigger", int64(e.Pos), "key", key, "ok", err == nil, "known", known, "error", text}, obs...)...)
 	b := store.Batch{Events: outcome, Marker: &store.Marker{ID: reservedID + key, Hash: "outcome"},
 		Time: qenv.Now(ctx).UnixMilli(), Cause: "processor:" + pl.p.name, Step: encodeRow([]rowStep{step})}
 	// the outcome outlives the node's stop: f ran, and an outcome not

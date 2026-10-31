@@ -12,6 +12,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/sqlstore"
 	"github.com/chucklehead-dev/gotogether/grist/store"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // readCounted is a store that counts the events its reads return.
@@ -53,7 +54,16 @@ func TestReadCost(t *testing.T) {
 			}
 			return &readCounted{Store: st}
 		}
-		ctx := context.Background()
+		// These real queries record steps too. Keep them in this test's
+		// recorder so parallel strict simulations never see orphaned steps.
+		sink := &qobs.MemorySink{}
+		recorder := qobs.NewRecorder(sink)
+		t.Cleanup(func() {
+			if err := recorder.Close(); err != nil {
+				t.Error(err)
+			}
+		})
+		ctx := qobs.WithRecorder(t.Context(), recorder)
 		st := open()
 		st.CreateTenant(ctx, "t1")
 		if _, err := st.Append(ctx, "t1", store.Batch{Events: []grist.Event{Created.Of(CounterCreated{Counter: "c", Name: "c", Owner: "u"})}, Time: 1, Cause: "history"}); err != nil {
@@ -93,6 +103,15 @@ func TestReadCost(t *testing.T) {
 		if offN < int64(n) || coldN > 2*grist.DefaultSnapshotEvery+2 || memoN > 3 {
 			t.Errorf("%d increments: %d read without (want all), %d from the snapshot (want at most %d), %d from the memo (want c's last increment and its creation)",
 				n, offN, coldN, 2*grist.DefaultSnapshotEvery+2, memoN)
+		}
+		steps := sink.Steps()
+		if len(steps) != 4 {
+			t.Fatalf("read-cost queries recorded %d steps, want all four in this test's recorder", len(steps))
+		}
+		for _, step := range steps {
+			if step.Action != "showCounter" {
+				t.Errorf("read-cost query recorded action %s, want showCounter", step.Action)
+			}
 		}
 	}
 }

@@ -78,16 +78,17 @@ remain unchanged. There is no incremental speedup claim or new user option.
 
 ## Next decision
 
-An evidence-integrity check during this work reproduced an earlier Grist gap:
+An evidence-integrity check during this work reproduced a Grist gap:
 a zero-argument command emitting an event with a `uint64` field set to
 `MaxUint64` passes app verification and commits successfully, then relays
 `obs.ints=[-1]` while its stored JSON contains 18446744073709551615. The stored-log
-checker rejects this evidence, but `batchObs` and relay upcasting still call
-unchecked `scalars`. Prioritize one checked projection path for new events and
-relay rendering: reject unrepresentable new evidence before append and surface
-invalid retained/upcast evidence as a data error. Cover command and processor
-emits and upcasts at the signed-integer boundary. This is not fixed by these
-benchmarks and should land before the performance work below.
+checker rejected this evidence, while `batchObs` and relay upcasting called
+unchecked `scalars`. The follow-up now shares checked projection across new
+events, relay rendering and the retained checker, with signed-integer boundary,
+upcast, rule-ordering and effect-aliasing controls. It prepares success evidence
+before effects run. See [the contract](grist-guide.md#2-the-blocks).
+These benchmarks do not change runtime semantics; the correctness follow-up
+precedes the performance work below.
 
 Full invariant evaluation dominates this fixture, but map copying still grows
 with account count. First evaluate whether reducing measured per-entry evaluator

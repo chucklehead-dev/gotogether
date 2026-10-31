@@ -32,12 +32,13 @@ the at-least-once effect pays once: nothing in either App deduplicates.
 
 ## What each test catches
 
-Rates from one full run (2026-10-29); `-short` runs fewer seeds.
+The broad exploration uses the workload below; the lost-reply control and generated `freshKey` contrast script the required fault explicitly. `-short` runs fewer scheduler seeds.
 
 | test | mutant | configuration | verdict |
 |---|---|---|---|
 | `TestFaithful` | none | one tenant, two clients requesting payouts `a`, `b`, `z` into accounts `a`, `b`, `z` of 0 to 2 cents; the bank's requests and answers lost, duplicated and late (`rpc.bank.*` at 1 in 5), either node crashing (`nemesis.crash.node`, `nemesis.crash.bank`), both stores losing commits' answers | `Conforms` and `All(Settles)` at the payouts and at the bank (20 of 20 each), every block of each catalog exercised, some call retried under its key, and every run `Linked`: each answer the payouts saw is the bank's commit of its key, each bank commit a call's |
-| `TestMutant` (`freshKey`) | `freshKey`, generated (`gristtest.PeerMutants`): each try of `pay` under a new command id, as a client minting a request id per request does | as `TestFaithful` | the bank pays a payout twice after a lost answer: `Some(Violates("onePaymentPerPayout"))` (4 of 8); `Links` finds a bank commit whose id names payouts and no call has; the payouts' own model conforms (8 of 8: each try is under the trigger's key there) |
+| `TestLostBankReply` | none | one valid payout, first bank response scripted lost after commit, all other faults off | both models conform and settle; every run retries under the same key and remains `Linked` |
+| `TestMutant` (`freshKey`) | `freshKey`, generated (`gristtest.PeerMutants`): each try of `pay` under a new command id, as a client minting a request id per request does | the same scripted lost-reply case as `TestLostBankReply` | every run violates `onePaymentPerPayout`, and every run has a bank commit unlinked from the caller's key; the payouts' own model still conforms and settles |
 | `TestMutant` (`noDuplicateCheck`) | `noDuplicateCheck`: `request` takes a payout's id twice | as `TestFaithful`, no faults | the payouts' model rejects the second request, `Some(Rejects("request"))` (8 of 8); the bank pays the payout twice, `Some(Violates("onePaymentPerPayout"))` (6 of 8); and the sides are linked in every run: `Linked` says the two services agree, not that either is right |
 
 ```sh

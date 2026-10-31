@@ -1,7 +1,6 @@
 package grist
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -58,11 +57,13 @@ func NewRule[E any](app *App, name string, on *EventType[E], check func(r *Reads
 		app.problems = append(app.problems, fmt.Sprintf("rule %q declares no refusal: give the rejections it returns (grist.Refuses), so its commands' models have the outcome", name))
 	}
 	info.check = func(r *Reads, e Event) error {
-		var v E
-		if err := json.Unmarshal(e.Body, &v); err != nil {
+		// Rules always judge the registered newest shape, including a raw
+		// older candidate accepted through the event's version chain.
+		v, _, _, err := on.info.storedValue(e, on.info.version)
+		if err != nil {
 			return fmt.Errorf("grist: rule %s: event %s: %w", name, e.Type, err)
 		}
-		return check(r, v)
+		return check(r, v.Interface().(E))
 	}
 	app.rules = append(app.rules, info)
 	return &Rule[E]{info: info}

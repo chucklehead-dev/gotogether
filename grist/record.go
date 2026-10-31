@@ -2,6 +2,8 @@ package grist
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/qobs"
@@ -27,7 +29,10 @@ func record(ctx context.Context, s Store, tenant, action string, err error, kv .
 // (kind, name) pair: ("command", the command id) or ("processor", the
 // processor's name), what the store stamps as the id or
 // "processor:<name>".
-func (a *App) batchObs(events []Event, causeKind, causeName string) []any {
+func (a *App) batchObs(events []Event, causeKind, causeName string) ([]any, error) {
+	if len(events) == 0 {
+		return emptyBatchObs(), nil
+	}
 	types, strs, ints, causes := []string{}, []string{}, []int64{}, [][]string{}
 	rendered := []int64{}
 	for _, e := range events {
@@ -38,26 +43,30 @@ func (a *App) batchObs(events []Event, causeKind, causeName string) []any {
 		if a != nil {
 			info = a.events[e.Type]
 		}
-		if info != nil {
-			body := e.Body
-			if storedVersion(e.Version) < info.version {
-				// written as an older version (WritesVersion): recorded in the
-				// newest's shape, the model's, as the relay renders it
-				if b, err := info.currentBody(e); err == nil {
-					body = b
-				}
-			}
-			s, n := scalars(info.typ, body)
-			strs, ints = append(strs, s...), append(ints, n...)
-			rendered[len(rendered)-1] = int64(info.version)
+		if info == nil {
+			return nil, fmt.Errorf("grist: event %s is not registered for scalar observations", e.Type)
 		}
+		v, typ, _, err := info.storedValue(e, info.version)
+		if err != nil {
+			return nil, fmt.Errorf("grist: event %s observations: %w", e.Type, err)
+		}
+		body, err := json.Marshal(v.Interface())
+		if err != nil {
+			return nil, err
+		}
+		ss, ns, err := scalars(typ, body)
+		if err != nil {
+			return nil, fmt.Errorf("grist: event %s observations: %w", e.Type, err)
+		}
+		strs, ints = append(strs, ss...), append(ints, ns...)
+		rendered[len(rendered)-1] = int64(info.version)
 	}
 	kv := []any{"obs.events", types, "obs.strs", strs, "obs.ints", ints, "obs.causes", causes}
 	if len(events) > 0 {
 		// a commit's row: the relay reads it (renderedKey), never a step
 		kv = append(kv, renderedKey, rendered)
 	}
-	return kv
+	return kv, nil
 }
 
 // commitOrder is a commit step's place on the tenant's domain clock
@@ -90,4 +99,9 @@ func triples(qs []Selector) [][]string {
 		}
 	}
 	return out
+}
+
+// emptyBatchObs is an observation of no appended events; it needs no projection.
+func emptyBatchObs() []any {
+	return []any{"obs.events", []string{}, "obs.strs", []string{}, "obs.ints", []int64{}, "obs.causes", [][]string{}}
 }

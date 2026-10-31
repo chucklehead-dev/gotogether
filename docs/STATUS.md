@@ -7,7 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Interacting-validation baseline (current branch): separate transition, tracking,
+Event-projection follow-up (current branch): commands, processor emits and effect
+success events validate source, stored and intermediate upcast scalar shapes.
+Success events and observations are prepared before external effects. Invalid
+new evidence cannot commit; represented known retained shapes are checked even
+on already-rendered relay rows. Application/data faults retain their diagnostic
+instead of becoming wrapped observations, domain refusals or false NotApplied
+claims. Processor rules inspect the newest shape before storage conversion.
+See grist-guide §2 and the projection boundary tests.
+
+Interacting-validation baseline (merged PR #23): separate transition, tracking,
 invariant and whole-validator benchmarks now measure histories with transfers.
 A test-only written-entry cache agrees with full evaluation on 1,360 bounded
 prefixes; destination and cross-entry controls demonstrate unsafe shortcuts.
@@ -383,8 +392,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Grist: checked event scalar projection before append and relay | S | reproduced an internally emitted MaxUint64 committing successfully and relaying as obs.ints=[-1]; retained-log guards do not protect normal recording |
-| 2 | I19: reduce measured evaluator allocation costs, then reassess incremental invariants | M | interacting baseline identifies per-entry binding allocations and map copying; preserve full evaluation semantics before adding dependency inference |
+| 1 | I19: reduce measured evaluator allocation costs, then reassess incremental invariants | M | interacting baseline identifies per-entry binding allocations and map copying; preserve full evaluation semantics before adding dependency inference |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
 Do not start all tracks at once. Worker completion and the bounded HTTP/SQLite

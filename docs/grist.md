@@ -1144,6 +1144,21 @@ or `AtClients`, one side a run) is gone.
 
 ### 3.2 The model and its binding
 
+**Event evidence is checked before use.** Recording, relay rendering and retained
+batch checks share scalar projection and registered version decoding. Every
+represented source, intermediate upcast and stored shape must decode and fit the
+model's int64 range. Invalid new evidence is an application fault before append;
+invalid known retained shapes are relay data errors, including already-rendered
+rows. This is not a replacement for `CheckStoredBatch`'s full row audit. A mixed
+row requiring re-rendering is refused if opaque newer/unknown event shapes make
+its aggregate observations impossible to reconstruct exactly.
+
+Rules see checked newest event values, before storage conversion. Processor
+success events and their scalar observations are validated and frozen before
+calling the dependency; an effect cannot mutate its success evidence or be
+reclassified as NotApplied by a later projection failure. Processor projection
+fault text is kept in the failed trigger's step for normal report output.
+
 **The model's state is one tenant's log**: `var log: List[Event]` and
 `var checkpoints: str -> int`, each tenant's trace its own instance.
 Read models are defs over the log (`counterNames(log)`), not variables:

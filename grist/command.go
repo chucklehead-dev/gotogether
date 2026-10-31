@@ -213,7 +213,7 @@ func (c *Command[C]) execute(ctx context.Context, s Store, env Envelope, args C)
 	onReturn := func(r *Reads, outcome error, kv ...any) {
 		all := append(append(fields(r), kv...), "order.pos", readOrder(r.pos))
 		all = append(all, "obs.head", int64(r.pos))
-		record(withBase(ctx, env.Tenant, r.base), s, env.Tenant, c.info.quint, outcome, append(all, c.app.batchObs(nil, "command", env.ID)...)...)
+		record(withBase(ctx, env.Tenant, r.base), s, env.Tenant, c.info.quint, outcome, append(all, emptyBatchObs()...)...)
 	}
 	answer := func(m store.Marker) (Receipt, error) {
 		if m.Hash != hash {
@@ -276,6 +276,9 @@ func (c *Command[C]) execute(ctx context.Context, s Store, env Envelope, args C)
 					derr = checkEvents("command "+c.info.name, events)
 				}
 				if derr == nil {
+					derr = c.app.checkEventObservations("command "+c.info.name, events)
+				}
+				if derr == nil {
 					derr = c.app.checkAppends("command "+c.info.name, o.appends, events)
 				}
 				var rej *Rejected
@@ -325,7 +328,12 @@ func (c *Command[C]) execute(ctx context.Context, s Store, env Envelope, args C)
 		// the step is the batch's row, recorded from the store's step log
 		// once committed (Relay): no hook, so a node that dies between the
 		// commit and its record loses no step
-		step := newRowStep(c.info.quint, len(events), append(kv, c.app.batchObs(events, "command", env.ID)...)...)
+		obs, err := c.app.batchObs(events, "command", env.ID)
+		if err != nil {
+			onReturn(r, err)
+			return Receipt{}, false, err
+		}
+		step := newRowStep(c.info.quint, len(events), append(kv, obs...)...)
 		if o.refuses == nil && outcome != "" && outcome != conflictOutcome && !byRule {
 			// a refusal of a command that declares none: still a refusal
 			// (remembered, answered), but its binding has no outcome for it,
