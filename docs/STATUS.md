@@ -458,7 +458,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I25: read-only stored failure/unknown-outcome inspection | S–M | use existing `grist.failed`/`grist.unknown` records and trigger lookup to make blocked work visible without unsafe automatic redrive; rewind identity is now a stored-event property |
+| 1 | I25: read-only stored failure/unknown-outcome inspection | S–M | first persist the original trigger ID in both native outcome bodies (currently processor + position only), then expose retained/missing/replaced identity without inferring it from the current occupant or enabling automatic redrive |
 | 2 | Reassess a broader core/product blocker after inspection | S–M | review independent usage friction and recent evidence before expanding Grist administration; atomic stale-history guards require a concrete store contract and test witness |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |

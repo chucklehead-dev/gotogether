@@ -457,7 +457,10 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   emits transactional hints; `sqlstore/pgnotify.Serve()` owns a dedicated
   reconnecting listener through Main's drain, with polling retained; (2)
   read-only inspection of stored `grist.failed`/`grist.unknown` outcomes and their
-  immutable trigger identities first; redrive requires an explicit safety contract;
+  immutable trigger identities first. Both native bodies currently carry only a
+  trigger position: persist the original trigger ID before claiming retained,
+  missing or replaced provenance; never infer it from the current occupant.
+  Redrive requires an explicit safety contract;
   (3) `resume -from P` (checkpoints moved past triggers an operator
   decided were handled, a model step `gristSkipped`); (4) durable rewind detection across entirely restarted nodes; effect-key
   identity is now solved separately by immutable stored-event IDs, with retained
