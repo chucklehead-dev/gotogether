@@ -256,7 +256,7 @@ func (s *Store) wait(ctx context.Context, t string, done func(*tenant) bool) err
 		}
 		ch := s.changed
 		s.mu.Unlock()
-		select {
+		select { //qenv:ok memstore is a real-time unit-test store; simulations use grist/simstore
 		case <-ch:
 		case <-ctx.Done():
 			return ctx.Err()
