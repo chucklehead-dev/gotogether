@@ -99,12 +99,13 @@ type Options struct {
 
 // Store is a store.Store and store.StepLog over a database/sql database.
 type Store struct {
-	db      *sql.DB
-	d       Dialect
-	o       Options
-	wakeMu  sync.Mutex
-	wakeCh  chan struct{} // closed and replaced on every local or external commit hint
-	commits atomic.Uint64 // the COMMITs tried: a waiter that read before one does not sleep through it
+	readOnly bool // OpenReadOnly refuses every mutation before sending SQL
+	db       *sql.DB
+	d        Dialect
+	o        Options
+	wakeMu   sync.Mutex
+	wakeCh   chan struct{} // closed and replaced on every local or external commit hint
+	commits  atomic.Uint64 // the COMMITs tried: a waiter that read before one does not sleep through it
 	// sim is the qenv.Store a qsql database runs on (qsql.StoreOf), nil on
 	// a real one: its signal and version stand for wakeCh and commits,
 	// so a waiter wakes at any client's commit, another Store's over the
@@ -132,8 +133,23 @@ var schema = []string{
 // the database or its driver does not offer is Open's error, naming the
 // fix, rather than every append's transient one.
 func Open(ctx context.Context, db *sql.DB, d Dialect, o Options) (*Store, error) {
+	return open(ctx, db, d, o, false)
+}
+
+// OpenReadOnly opens an existing store at the current SchemaVersion without
+// initializing or migrating it. It sends only reads, needs no write privileges,
+// and rejects every mutating Store operation. The caller owns db and must open
+// SQLite with mode=ro to prevent its driver creating a missing database file.
+func OpenReadOnly(ctx context.Context, db *sql.DB, d Dialect, o Options) (*Store, error) {
+	return open(ctx, db, d, o, true)
+}
+
+func open(ctx context.Context, db *sql.DB, d Dialect, o Options, readOnly bool) (*Store, error) {
 	if d.name == "" {
 		return nil, errors.New("sqlstore: the zero Dialect: use sqlstore.Postgres, sqlstore.SQLite or sqlstore.QSQL")
+	}
+	if readOnly && o.PostgresNotify {
+		return nil, errors.New("sqlstore: OpenReadOnly cannot enable PostgresNotify: disable write notifications")
 	}
 	if o.PostgresNotify && d.name != Postgres.name {
 		return nil, errors.New("sqlstore: Options.PostgresNotify requires sqlstore.Postgres: disable it for SQLite or QSQL")
@@ -161,15 +177,26 @@ func Open(ctx context.Context, db *sql.DB, d Dialect, o Options) (*Store, error)
 	if o.IdleTimeout == 0 {
 		o.IdleTimeout = time.Minute
 	}
-	if d.pragmas {
+	if d.pragmas && !readOnly {
 		if err := checkSQLite(ctx, db); err != nil {
 			return nil, err
 		}
 	}
-	if err := migrate(ctx, db); err != nil {
+	if readOnly {
+		var version int64
+		if err := db.QueryRowContext(ctx, "SELECT version FROM grist_schema WHERE id = $1", 1).Scan(&version); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				err = store.Permanent(err)
+			}
+			return nil, fmt.Errorf("sqlstore: OpenReadOnly requires an existing current schema: %w", classify(err))
+		}
+		if version != SchemaVersion {
+			return nil, store.Permanent(fmt.Errorf("sqlstore: OpenReadOnly found schema version %d, need %d: inspect it with a matching binary; this reader never initializes or migrates data", version, SchemaVersion))
+		}
+	} else if err := migrate(ctx, db); err != nil {
 		return nil, err
 	}
-	s := &Store{db: db, d: d, o: o, sim: qsql.StoreOf(db)}
+	s := &Store{db: db, d: d, o: o, sim: qsql.StoreOf(db), readOnly: readOnly}
 	// one transaction at the level, as every append begins one: a level
 	// the driver refuses (pgx's "unsupported isolation", no SQLSTATE) would
 	// otherwise read as transient, and every append would retry it forever
@@ -178,7 +205,7 @@ func Open(ctx context.Context, db *sql.DB, d Dialect, o Options) (*Store, error)
 		// would be a promise nothing keeps
 		return nil, fmt.Errorf("sqlstore: Options.Isolation %s on SQLite, whose one writer makes every transaction serializable: leave it unset (or sql.LevelSerializable)", o.Isolation)
 	}
-	tx, err := s.begin(ctx, false)
+	tx, err := s.begin(ctx, readOnly)
 	var nc *store.NotCommittedError
 	if errors.As(err, &nc) {
 		err = nc.Err
@@ -193,9 +220,22 @@ func Open(ctx context.Context, db *sql.DB, d Dialect, o Options) (*Store, error)
 // Name implements store.Store.
 func (s *Store) Name() string { return s.o.Name }
 
-// begin starts a transaction at the store's level, with the dialect's
-// settings.
+// mutable refuses writes through a read-only store before sending SQL.
+func (s *Store) mutable() error {
+	if s.readOnly {
+		return store.Permanent(errors.New("sqlstore: this store was opened read-only: use a writer explicitly to mutate it"))
+	}
+	return nil
+}
+
+// begin starts a transaction at the store's level, with the dialect's settings.
 func (s *Store) begin(ctx context.Context, readOnly bool) (*sql.Tx, error) {
+	if !readOnly {
+		if err := s.mutable(); err != nil {
+			return nil, err
+		}
+	}
+
 	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: s.o.Isolation, ReadOnly: readOnly})
 	if err != nil {
 		return nil, store.NotCommitted(classify(err))
@@ -226,6 +266,9 @@ func indexKey(typ string, tags []store.TagPair) string {
 
 // CreateTenant implements store.Store.
 func (s *Store) CreateTenant(ctx context.Context, t string) error {
+	if err := s.mutable(); err != nil {
+		return err
+	}
 	const insert = `INSERT INTO grist_heads (tenant, head, steps) VALUES ($1, 0, 0) ON CONFLICT (tenant) DO NOTHING`
 	if !s.o.PostgresNotify {
 		_, err := s.db.ExecContext(ctx, insert, t)
@@ -495,8 +538,42 @@ func (s *Store) Read(ctx context.Context, t string, q store.Selector, at store.P
 	return append(out, evs...), at, nil
 }
 
+// ReadEvent implements store.Store. The primary-key lookup does not depend
+// on an app catalog or the event-type index.
+func (s *Store) ReadEvent(ctx context.Context, t string, position store.Position) (store.Stored, bool, error) {
+	if position <= 0 {
+		return store.Stored{}, false, store.Permanent(fmt.Errorf("grist: ReadEvent position %d must be positive: give an event position starting at 1", position))
+	}
+	tx, err := s.begin(ctx, true)
+	if err != nil {
+		return store.Stored{}, false, err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, "SELECT pos, event_id, type, version, at_ms, cause, tags, body FROM grist_events WHERE tenant = $1 AND pos = $2", t, int64(position))
+	if err != nil {
+		return store.Stored{}, false, classify(err)
+	}
+	if rows.Next() {
+		e, err := scanEvent(rows, t)
+		rows.Close()
+		return e, err == nil, err
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return store.Stored{}, false, classify(err)
+	}
+	if _, err := head(ctx, tx, t); err != nil {
+		return store.Stored{}, false, err
+	}
+	return store.Stored{}, false, nil
+}
+
 // Append implements store.Store.
 func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Position, error) {
+	if err := s.mutable(); err != nil {
+		return 0, err
+	}
 	if err := b.CheckRetainedIDs(); err != nil {
 		return 0, err
 	}
@@ -914,6 +991,9 @@ func waitNative(ctx context.Context, ticket <-chan struct{}, poll time.Duration)
 // PutSnapshot implements store.SnapshotStore: one row per (tenant, read
 // model, key, fingerprint), the last put's.
 func (s *Store) PutSnapshot(ctx context.Context, t string, snap store.Snapshot) error {
+	if err := s.mutable(); err != nil {
+		return err
+	}
 	if _, err := head(ctx, s.db, t); err != nil {
 		return err
 	}
@@ -927,6 +1007,9 @@ func (s *Store) PutSnapshot(ctx context.Context, t string, snap store.Snapshot) 
 // its primary key's prefix, each one pruned deleted by its whole key (the
 // statements every dialect and qsql take).
 func (s *Store) PruneSnapshots(ctx context.Context, t, name, key, keep string, before store.Position) (int, error) {
+	if err := s.mutable(); err != nil {
+		return 0, err
+	}
 	if _, err := head(ctx, s.db, t); err != nil {
 		return 0, err
 	}

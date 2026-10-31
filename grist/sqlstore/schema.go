@@ -142,6 +142,9 @@ type Pruned struct {
 // where a whole history is wanted. Events, the index, checkpoints and
 // snapshots are never pruned.
 func (s *Store) Prune(ctx context.Context, r Retention) (Pruned, error) {
+	if err := s.mutable(); err != nil {
+		return Pruned{}, err
+	}
 	var out Pruned
 	ts, err := s.Tenants(ctx)
 	if err != nil {

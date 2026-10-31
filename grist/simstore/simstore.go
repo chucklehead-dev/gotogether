@@ -32,6 +32,7 @@ package simstore
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"sort"
 	"strings"
@@ -179,6 +180,23 @@ func (s *Store) Read(ctx context.Context, t string, q store.Selector, at store.P
 		out = out[:q.Limit]
 	}
 	return out, at, nil
+}
+
+// ReadEvent implements store.Store.
+func (s *Store) ReadEvent(ctx context.Context, t string, position store.Position) (store.Stored, bool, error) {
+	if position <= 0 {
+		return store.Stored{}, false, store.Permanent(fmt.Errorf("grist: ReadEvent position %d must be positive: give an event position starting at 1", position))
+	}
+	tx := s.db.Begin(ctx)
+	defer tx.Rollback()
+	if _, ok := head(tx, t); !ok {
+		return store.Stored{}, false, store.ErrUnknownTenant
+	}
+	v, ok := tx.Get(eventKey(t, position))
+	if !ok {
+		return store.Stored{}, false, nil
+	}
+	return v.(store.Stored).Clone(), true, nil
 }
 
 // Append implements store.Store.

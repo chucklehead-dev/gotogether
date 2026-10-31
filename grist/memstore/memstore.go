@@ -7,6 +7,7 @@ package memstore
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"sort"
 	"sync"
@@ -83,6 +84,23 @@ func (s *Store) Read(_ context.Context, t string, q store.Selector, at store.Pos
 		at = head
 	}
 	return store.Select(tn.log, q, at), at, nil
+}
+
+// ReadEvent implements store.Store.
+func (s *Store) ReadEvent(_ context.Context, t string, position store.Position) (store.Stored, bool, error) {
+	if position <= 0 {
+		return store.Stored{}, false, store.Permanent(fmt.Errorf("grist: ReadEvent position %d must be positive: give an event position starting at 1", position))
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tn := s.tenants[t]
+	if tn == nil {
+		return store.Stored{}, false, store.ErrUnknownTenant
+	}
+	if position > store.Position(len(tn.log)) {
+		return store.Stored{}, false, nil
+	}
+	return tn.log[position-1].Clone(), true, nil
 }
 
 // Append implements store.Store. The marker, the checkpoint and the

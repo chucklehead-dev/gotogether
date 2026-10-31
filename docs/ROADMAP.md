@@ -451,16 +451,28 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   processor reading behind the head still refolds from the start when
   the only snapshot is later than its trigger (the memo does not help
   it either: its state is past the trigger).
+- **Scoped captured-transition conformance (S–M; next core usability slice).**
+  Counters' paused incident (`examples/counters/incident_test.go`) manually reads
+  actor Conforms because the tenant cannot settle before operator action;
+  requeue's `stormCycle` (`examples/requeue/requeue_test.go`) repeats the pattern.
+  Add a narrow expectation for observed transition conformance, keeping
+  `qtest.Conforms()` and native report verdicts unchanged. Do not claim settlement,
+  eventual properties, invariant or composition success from this predicate.
+  Missing, empty, ambiguous or otherwise unjudged evidence stays unknown; preserve
+  reconstruction/tool errors. Replace both manual checks and cover valid paused
+  prefixes, illegal transitions, invariant failures with unchanged report verdict,
+  empty captures and missing evidence. This is separate from further Grist admin.
 - **I25. grist's operations basics (M; GR10 slice 3 moved up). Done**
   (docs/HISTORY.md (I25 and GR10 slice 3; grist §0.18)). Left, each
   concrete: (1) `LISTEN/NOTIFY` is built: `Options.PostgresNotify`
   emits transactional hints; `sqlstore/pgnotify.Serve()` owns a dedicated
   reconnecting listener through Main's drain, with polling retained; (2)
-  read-only inspection of stored `grist.failed`/`grist.unknown` outcomes and their
-  immutable trigger identities first. Both native bodies currently carry only a
-  trigger position: persist the original trigger ID before claiming retained,
-  missing or replaced provenance; never infer it from the current occupant.
-  Redrive requires an explicit safety contract;
+  read-only stored-outcome inspection is built (`App.InspectOutcomes`, `outcomes
+  [-json]`): native Failed/Unknown carry original TriggerID, and raw exact-position
+  lookups distinguish retained/missing/replaced without guessing from a catalog.
+  The SQL reader never initializes/migrates or mutates. Independent observations
+  are not snapshots, and absent records are not reconciliation proof. Left:
+  redrive requires an explicit safety contract;
   (3) `resume -from P` (checkpoints moved past triggers an operator
   decided were handled, a model step `gristSkipped`); (4) durable rewind detection across entirely restarted nodes; effect-key
   identity is now solved separately by immutable stored-event IDs, with retained

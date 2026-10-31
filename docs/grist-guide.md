@@ -1300,6 +1300,53 @@ Merge the clients' recordings (`grist/client`) to judge
 `inventory.calls.binding.yaml` too; without them that binding has no
 verdict ("NO VERDICT: checks the actors inventory/*/clients").
 
+### 9.8 Inspecting stored failed and unknown outcomes
+
+```sh
+inventory outcomes -db-file /secrets/dsn -tenant t1 -limit 100
+inventory outcomes -db-file /secrets/dsn -tenant t1 -processor send-notice -after 42 -json
+```
+
+`App.InspectOutcomes` supplies the same typed `OutcomeInspection` as the CLI's
+JSON through the narrow `OutcomeReader` interface. Pages default to 100 records,
+with a maximum of 1000; `hasMore` and `nextAfter` give the next outcome position.
+`after` applies to outcomes, so an older original trigger remains inspectable.
+The command accepts an existing current-schema database only: it neither creates
+nor migrates a schema, and SQLite opens with `mode=ro`. A PostgreSQL reader may
+use SELECT-only credentials. It invokes no handlers or effects and never redrives
+work or resumes a tenant.
+
+Each record keeps its own immutable outcome ID separate from the original
+`trigger.id` and position. The original ID is mandatory in both `Failed` and
+`Unknown`; it comes from the captured event, never a lookup of today's occupant.
+`trigger.status` is `retained` when the raw position lookup found that ID,
+`replaced` when it found a different ID (with its observed ID/type), or `missing`
+when it found no event. `Store.ReadEvent` reads any stored type, so an unfamiliar
+replacement cannot be mistaken for an empty position. Removed processors remain
+visible with `processorKnown: false`. `effectKey` is derived under the inspecting
+App; it is not proof that an external call ran or a dependency deduplicates.
+
+The JSON's `coverage`, `observation` and `limitations` retain the same boundaries
+as the text output. Outcome pages and trigger lookups are independent reads,
+including cached lookups for repeated positions within a page. `readThrough`
+belongs to the outcome-page read; it is not a snapshot or durable history token.
+A restore may change the log between observations or pages: restart inspection
+from the beginning after reconciling a changed history.
+
+Only `grist.unknown` has stored error text; `grist.failed` has none. Failed also
+covers handler failures and exhausted at-least-once attempts, so it does not
+universally mean an external effect was not applied or that retry is safe.
+An empty page proves neither completion nor reconciliation: success, a pending
+callback, a process crash, lost history, or a retired late completion can leave
+no stored failure. Inspect dependency records and native steps as well. Native
+checkpoint, effect and call records expose `triggerId` for agent JSON and the
+navigator's captured evidence. The generated model still keeps framework IDs
+opaque; it does not prove identity generation or provenance integrity.
+
+The single prerelease outcome shape requires the original trigger ID. Old
+position-only or malformed outcomes are refused; do not backfill an ID from the
+current event at that position.
+
 ## 10. Troubleshooting
 
 | You see | It means | Do |
@@ -1349,6 +1396,6 @@ command, live configuration and credential reload from secrets' files.
 Failover detection (`ErrRewound`), explicit resume, step export, retention
 and versioned schema migrations are built; the database DSN may be read
 at startup with `-db-file`. Operational follow-ups include durable rewind
-memory, failed-effect administration and pool reopening on credential
+memory, safe failed-effect redrive and pool reopening on credential
 rotation (ROADMAP I25). They are separate from the bounded composition
 experiment.

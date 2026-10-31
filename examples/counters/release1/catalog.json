@@ -12,11 +12,15 @@
           },
           "trigger": {
             "type": "integer"
+          },
+          "triggerId": {
+            "type": "string"
           }
         },
         "required": [
           "processor",
-          "trigger"
+          "trigger",
+          "triggerId"
         ],
         "type": "object"
       },
@@ -38,12 +42,16 @@
           },
           "trigger": {
             "type": "integer"
+          },
+          "triggerId": {
+            "type": "string"
           }
         },
         "required": [
           "processor",
           "error",
-          "trigger"
+          "trigger",
+          "triggerId"
         ],
         "type": "object"
       },

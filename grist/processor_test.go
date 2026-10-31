@@ -198,7 +198,7 @@ func TestEffectAtLeastOnce(t *testing.T) {
 			outcomes = append(outcomes, e.Type+":"+string(e.Body))
 		}
 	}
-	want := []string{`grist.failed:{"processor":"note","trigger":1}`, `noted:{"of":2}`, `noted:{"of":3}`}
+	want := []string{fmt.Sprintf(`grist.failed:{"processor":"note","trigger":1,"triggerId":%q}`, triggerIDAt(log, 1)), `noted:{"of":2}`, `noted:{"of":3}`}
 	if len(outcomes) != 3 || outcomes[0] != want[0] || outcomes[1] != want[1] || outcomes[2] != want[2] {
 		t.Errorf("outcome events %v, want %v", outcomes, want)
 	}
@@ -258,18 +258,30 @@ func TestHandlerFailure(t *testing.T) {
 		}
 		return grist.Skip()
 	})
-	log, _ := simulate(t, a, added, qenv.NewSeeded(1))
+	log, steps := simulate(t, a, added, qenv.NewSeeded(1))
 	if calls[2] != effectTries || calls[1] != 1 || calls[3] != 1 {
 		t.Errorf("handler calls by trigger %v: want %d for the poison one, one for the others", calls, effectTries)
 	}
 	failed := 0
 	for _, e := range log {
-		if e.Type == "grist.failed" && string(e.Body) == `{"processor":"flop","trigger":2}` {
+		if e.Type == "grist.failed" && string(e.Body) == fmt.Sprintf(`{"processor":"flop","trigger":2,"triggerId":%q}`, triggerIDAt(log, 2)) {
 			failed++
 		}
 	}
 	if failed != 1 {
 		t.Errorf("%d grist.failed events for flop's trigger 2, want 1", failed)
+	}
+	checkpoint := false
+	for _, step := range steps {
+		if step.Action == "flop" && step.Args["trigger"] == int64(2) {
+			checkpoint = true
+			if step.Args["triggerId"] != triggerIDAt(log, 2) {
+				t.Errorf("handler failure checkpoint lost original identity: %+v", step.Args)
+			}
+		}
+	}
+	if !checkpoint {
+		t.Error("handler failure checkpoint was not recorded")
 	}
 }
 

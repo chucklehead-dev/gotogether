@@ -145,9 +145,8 @@ func (q Selector) String() string {
 // per tenant, conditions and markers checked under the tenant's lock.
 // It is grist's own interface (no aggregates: a condition is a set of
 // selectors through a position). Every implementation passes
-// grist/storetest's contract suite. Methods added later are optional
-// interfaces (StepLog), found by a type assertion, so a store written
-// against this one keeps compiling; a node (grist.App.Start) needs a
+// grist/storetest's contract suite. Additional capabilities have separate
+// interfaces (StepLog, SnapshotStore). A node (grist.App.Start) needs a
 // StepLog, since it records commits from it.
 type Store interface {
 	// Name is the store's name: the process of every step recorded at it
@@ -163,6 +162,12 @@ type Store interface {
 	// q.Limit (0: all), and the position read through (at, or the head).
 	// The events are the reader's own copies (Stored.Clone).
 	Read(ctx context.Context, tenant string, q Selector, at Position) ([]Stored, Position, error)
+	// ReadEvent returns the raw event at exactly position, regardless of type,
+	// or false when that position has no event. The event is the reader's own
+	// copy (Stored.Clone). It returns ErrUnknownTenant
+	// for a missing tenant and a permanent error for position <= 0. This is
+	// one position's observation, not a snapshot shared with other reads.
+	ReadEvent(ctx context.Context, tenant string, position Position) (Stored, bool, error)
 	// Append commits the batch at the tenant's next positions if its
 	// condition holds, its marker is new and its checkpoint is as
 	// expected, assigning each new event a fresh immutable ID (RetainedIDs

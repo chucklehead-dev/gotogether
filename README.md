@@ -179,6 +179,8 @@ testing, where Quint traces drive the implementation). It adds:
   and bounded query observations before random clients start.
   `<app> model -check` reports model-maintenance problems together without writing;
   `model -json` emits the same read-only [preflight](docs/grist-model-preflight.md) for agents.
+  `<app> outcomes -tenant T -db DB [-json]` inspects stored failed/unknown
+  outcomes and original trigger identities without initializing or changing the database.
   `go run github.com/chucklehead-dev/gotogether/grist/cmd/grist@latest new <name>`
   writes an app whose tests pass on their first run
   ([the user guide](docs/grist-guide.md); the design note,
