@@ -1,9 +1,14 @@
 package binding_test
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+
 	"slices"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
@@ -13,12 +18,26 @@ import (
 
 func TestUsedFieldsPreservesEvidenceThroughSanitizing(t *testing.T) {
 	skip.Quint(t)
-	c, err := validate.NewChecker("../validate/testdata/diagnostic/binding.yaml", validate.Options{Dir: t.TempDir()})
+	b, err := binding.Load("../validate/testdata/diagnostic/binding.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.Spec = b.SpecPath()
+	b.DiagnosticEvidence = map[string]map[string]binding.EvidenceRule{"outstanding": {"cancellation": {Action: "request", Match: map[string]string{"id": "intent"}, Origin: &binding.EvidenceOrigin{Actor: `{{index .obs "native.actor"}}`, Recorder: `{{index .obs "native.recorder"}}`, Seq: `{{index .args "nativeSeq"}}`}}}}
+	raw, err := yaml.Marshal(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "binding.yaml")
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := validate.NewChecker(path, validate.Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer c.Close()
-	c.Binding.DiagnosticEvidence = map[string]map[string]binding.EvidenceRule{"outstanding": {"cancellation": {Action: "request", Match: map[string]string{"id": "intent"}, Origin: &binding.EvidenceOrigin{Actor: `{{index .obs "native.actor"}}`, Recorder: `{{index .obs "native.recorder"}}`, Seq: `{{index .args "nativeSeq"}}`}}}}
+
 	steps := []qtrace.Step{{Actor: "tenant-a", Recorder: "projection", Seq: 1, Process: "p", Action: "request", Args: map[string]any{"id": "c1", "nativeSeq": "71", "private": "remove"}, Obs: map[string]any{"native.actor": "backend/a", "native.recorder": "backend-r", "private": "remove"}}, {Actor: "tenant-a", Recorder: "projection", Seq: 2, Process: "p", Record: qtrace.Record{Settled: true}}}
 	filtered := qtrace.Filter{Keep: c.Binding.UsedFields(c.Model)}.Apply(steps)
 	if _, ok := filtered[0].Args["private"]; ok {
