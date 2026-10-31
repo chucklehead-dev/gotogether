@@ -206,8 +206,9 @@ func Check(level Level, txns []Txn) (*Report, error) {
 		rep.Anomalies = append(rep.Anomalies, Anomaly{Kind: kind, Txns: ids, Msg: fmt.Sprintf(format, a...), Forbidden: forbidden(level, kind)})
 	}
 	byID := map[int]*Txn{}
-	writer := map[wkey]int{}   // a value's appender
-	lastOwn := map[wkey]bool{} // a transaction's last append to the key
+	writer := map[wkey]int{}       // a value's appender
+	appended := map[string][]int{} // every append, including values no read observed
+	lastOwn := map[wkey]bool{}     // a transaction's last append to the key
 	for i := range txns {
 		t := &txns[i]
 		if t.ID == 0 {
@@ -226,6 +227,7 @@ func Check(level Level, txns []Txn) (*Report, error) {
 					return nil, fmt.Errorf("qhistory: value %d appended to %s by transactions %d and %d: values must be unique per key", o.Value, o.Key, w, t.ID)
 				}
 				writer[k] = t.ID
+				appended[o.Key] = append(appended[o.Key], o.Value)
 				last[o.Key] = o.Value
 			case Read:
 			default:
@@ -356,6 +358,23 @@ func Check(level Level, txns []Txn) (*Report, error) {
 		if bad {
 			continue // no order to take edges from
 		}
+		// A committed append absent from every external read belongs after
+		// each read in any serial explanation. Its position relative to other
+		// unseen appends is unknown: add the forced anti-dependencies, never
+		// invent a ww order among them. Otherwise an entirely unobserved write
+		// disappears from the graph, hiding stale reads and write skew.
+		present := map[int]bool{}
+		for _, v := range order {
+			present[v] = true
+		}
+		tail := map[int]bool{}
+		for _, v := range appended[key] {
+			w := writer[wkey{key, v}]
+			if !present[v] && committed(w) {
+				tail[w] = true
+			}
+		}
+		tailWriters := slices.Sorted(maps.Keys(tail))
 		for i := 1; i < len(order); i++ {
 			link(writer[wkey{key, order[i-1]}], writer[wkey{key, order[i]}], "ww", key)
 		}
@@ -370,6 +389,11 @@ func Check(level Level, txns []Txn) (*Report, error) {
 			}
 			if len(r.list) < len(order) {
 				link(r.txn, writer[wkey{key, order[len(r.list)]}], "rw", key)
+			}
+			for _, w := range tailWriters {
+				if r.txn != w { // its own appends were removed from the external read
+					link(r.txn, w, "rw", key)
+				}
 			}
 		}
 	}

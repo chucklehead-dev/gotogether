@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- Database history checks retain dependencies from reads to known committed
+  appends that no external read observed. Strict stale reads and write-skew
+  histories can no longer pass merely because the writes never appeared in a
+  later read. Unknown outcomes remain conditional on evidence of commitment;
+  no ordering is invented among unseen writers.
+
 - Trace snapshots after the first record are checked against the whole replayed
   state instead of skipped. A differing checkpoint is a conformance mismatch at
   its own record; it never resets model state. The first snapshot still supplies

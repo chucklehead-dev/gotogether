@@ -2910,6 +2910,21 @@ naming the cycle. Every `Queue` checks after each operation that no
 message is lost, none is delivered after its acknowledgement, and an
 Ordered queue's first deliveries are in order.
 
+**Unobserved list appends (I45).** The clients' list-append checker must retain
+known committed writes even when no external read observed their values. For
+each key, committed writers absent from the maximal observed prefix are unseen
+tail writers. Each whole-list read precedes each such writer in every serial
+explanation, so it contributes an rw edge (excluding its own transaction).
+Their mutual ww order is unknown and is not invented. This detects write skew
+without requiring a final observer transaction, and strict stale reads when a
+known committed writer completed before the reader began. An unobserved Unknown
+transaction remains excluded; externally demonstrated commitment admits it,
+while its timeout still supplies no completion edge. No read of a key cannot
+prove a write was lost. Strict checking needs supplied common-clock timestamps;
+the generic recorder does not synthesize them. A bounded independent oracle
+checks 2–3 transaction histories by executing every serial order and comparing
+actual list reads, rather than rebuilding the dependency graph.
+
 **Clocks (X6, Y4).** A process has two clocks, as a Go program does: the
 wall clock (`qenv.Now`: skewed per process, jumping by nemesis, drifting)
 and the monotonic one (`qenv.Mono`, `Since`, `WaitFor`: drift only),

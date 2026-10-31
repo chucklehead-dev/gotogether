@@ -36,9 +36,17 @@ if err != nil || !rep.OK() {
   another was invoked (`Txn.Invoked`, `Completed`). An Unknown one's
   `Completed` is ignored (Elle's `:info`): it may have committed after
   its client gave up, so recording the timeout is safe.
+- Known committed appends remain in dependency analysis even when no external
+  read observed them. A whole-list read omitting such an append must precede
+  its writer in any serial explanation. With known real-time precedence the
+  opposite way, this exposes a stale read; across keys it can expose write skew.
+  No read after an append is not itself evidence of loss. Unseen writers are
+  not assigned an arbitrary order, and an unobserved Unknown remains excluded.
+- Strict real-time conclusions require supplied invocation/completion times
+  from a common clock. `qhistory.Record` does not populate those times.
 - Few keys and short transactions make conflicts, and anomalies show.
-  The checker is linear in the history plus a cycle search per
-  strongly connected component: thousands of transactions are cheap.
+  Cost includes inferred dependency edges and cycle searches; many readers and
+  unseen writers, or strict real-time ordering, can produce quadratic edge counts.
 - qenv's `Store` checks its own commits against its level under
   `GOTOGETHER_CHECK=1` (it knows its versions); qhistory is for
   databases that do not tell.
