@@ -44,7 +44,14 @@ func TestSizedFromTheChain(t *testing.T) {
 	// recovering, backoff alone staying degraded (TestStormAfterSpike's
 	// spike). Its limits are not the chain's (the chain's rates and times
 	// are its own, DESIGN §11.3): the claim is the order
-	budget, backoff := Recoveries(Policies[2], 9, Spike, 6), Recoveries(Policies[1], 9, Spike, 6)
+	budget, err := Recoveries(Policies[2], 9, Spike, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backoff, err := Recoveries(Policies[1], 9, Spike, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Logf("simulated at 9/s after %v: budget %d of 6 recover, backoff alone %d of 6", Spike, budget, backoff)
 	if budget < 4 || backoff > 2 {
 		t.Fatalf("simulated at 9/s: budget %d of 6, backoff %d of 6: want most and few", budget, backoff)

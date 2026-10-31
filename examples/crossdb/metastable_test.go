@@ -15,7 +15,7 @@ import (
 // minute, ten minutes into the run (the closed loop's steady state).
 var Dip = qload.Trigger{Start: 10 * time.Minute, Slowdown: 3, Duration: time.Minute}
 
-func recoveries(r Requeue, tr qload.Trigger, n int) int {
+func recoveries(r Requeue, tr qload.Trigger, n int) (int, error) {
 	return qload.Count(qload.OfSimulation(DefaultControlPlane(r).Config(), 0, 5*time.Minute), tr, n)
 }
 
@@ -31,7 +31,10 @@ func TestControlPlaneRecovers(t *testing.T) {
 	t.Parallel()
 	const n = 4
 	for _, r := range Requeues {
-		got := recoveries(r, Dip, n)
+		got, err := recoveries(r, Dip, n)
+		if err != nil {
+			t.Fatalf("%s recovery assessment: %v", r.Name, err)
+		}
 		c := qmeta.New(DefaultControlPlane(r).Params())
 		h := c.HittingTimes(func(s qmeta.State) bool { return s.U <= 10 })
 		pred := h[c.Index(qmeta.State{U: 100, V: 30})]

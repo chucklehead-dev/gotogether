@@ -262,7 +262,10 @@ func TestFindTrigger(t *testing.T) {
 	}
 	space := qload.TriggerSpace{MaxExtraRate: 15, MaxDuration: 300 * time.Second, Seeds: 3}
 	for _, base := range []float64{8, 9, 9.5} {
-		ok, _ := qload.Mostly(qload.OfSimulation(sim(base), base, 300*time.Second), qload.Trigger{}, 5)
+		ok, _, err := qload.Mostly(qload.OfSimulation(sim(base), base, 300*time.Second), qload.Trigger{}, 5)
+		if err != nil {
+			t.Fatalf("%.1f req/s recovery assessment: %v", base, err)
+		}
 		t.Logf("%.1f req/s, no trigger: recovers in most runs: %v", base, ok)
 	}
 	t0 := time.Now() //qenv:ok times the search, outside any simulation

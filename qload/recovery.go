@@ -216,7 +216,16 @@ func OfSimulation(cfg SimConfig, base float64, within time.Duration) Target {
 // Runs runs the trigger with seeds 1..n, in parallel, and returns the
 // runs in seed order. sys must be safe to call concurrently: a qenv
 // simulation is, if it records through its own context (qenv.WithContext).
-func Runs(sys Target, tr Trigger, n int) []Recovery {
+// n must be positive and sys nonnil. If any run cannot be judged, all runs
+// are retained and the error wraps the lowest-seeded run's Recovery.Err.
+// An unjudged run is neither recovery nor evidence of degradation.
+func Runs(sys Target, tr Trigger, n int) ([]Recovery, error) {
+	if n <= 0 {
+		return nil, fmt.Errorf("qload: seeds must be positive, got %d: request at least one recovery run", n)
+	}
+	if sys == nil {
+		return nil, fmt.Errorf("qload: nil Target: supply a recovery experiment or simulation")
+	}
 	rs := make([]Recovery, n)
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
@@ -229,28 +238,43 @@ func Runs(sys Target, tr Trigger, n int) []Recovery {
 		}()
 	}
 	wg.Wait()
-	return rs
+	for i, r := range rs {
+		if r.Err != nil {
+			return rs, fmt.Errorf("qload: seed %d could not be judged: %w", i+1, r.Err)
+		}
+	}
+	return rs, nil
 }
 
-// Count is how many of seeds 1..n recover from the trigger.
-func Count(sys Target, tr Trigger, n int) int {
+// Count is how many of seeds 1..n recover from the trigger. It returns an
+// error and no count if the batch is invalid or any run cannot be judged
+// (Runs): an unjudged run must not count as degradation.
+func Count(sys Target, tr Trigger, n int) (int, error) {
+	rs, err := Runs(sys, tr, n)
+	if err != nil {
+		return 0, err
+	}
 	ok := 0
-	for _, r := range Runs(sys, tr, n) {
+	for _, r := range rs {
 		if r.Recovered {
 			ok++
 		}
 	}
-	return ok
+	return ok, nil
 }
 
 // Mostly reports whether at least half of seeds 1..n recover from the
 // trigger (a tie counts as recovering: Search looks for triggers that
-// mostly fail), with the lowest-seeded run that did not (if any). A run
-// that could not be judged (Recovery.Err) did not recover: the returned
-// run then carries its error.
-func Mostly(sys Target, tr Trigger, n int) (bool, Recovery) {
+// mostly fail), with the lowest-seeded run that did not (if any). It returns
+// an error and no counterexample if the batch is invalid or any run cannot
+// be judged (Runs), even when the valid runs already form a majority.
+func Mostly(sys Target, tr Trigger, n int) (bool, Recovery, error) {
+	rs, err := Runs(sys, tr, n)
+	if err != nil {
+		return false, Recovery{}, err
+	}
 	stuck, first := 0, Recovery{}
-	for _, r := range Runs(sys, tr, n) {
+	for _, r := range rs {
 		if !r.Recovered {
 			if stuck == 0 {
 				first = r
@@ -258,5 +282,5 @@ func Mostly(sys Target, tr Trigger, n int) (bool, Recovery) {
 			stuck++
 		}
 	}
-	return 2*stuck <= n, first
+	return 2*stuck <= n, first, nil
 }

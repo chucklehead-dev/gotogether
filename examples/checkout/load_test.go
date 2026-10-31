@@ -17,7 +17,7 @@ import (
 // dip is the trigger: the provider serves three times slower for a minute.
 var dip = qload.Trigger{Slowdown: 3, Duration: time.Minute}
 
-func recoveries(cfg checkout.LoadConfig, tr qload.Trigger, n int) int {
+func recoveries(cfg checkout.LoadConfig, tr qload.Trigger, n int) (int, error) {
 	return qload.Count(cfg.System(5*time.Minute), tr, n)
 }
 
@@ -42,7 +42,11 @@ func TestConsumersBeyondCapacityCollapse(t *testing.T) {
 		runs = 1
 	}
 	for _, c := range []struct{ consumers, maxBacklog, minBacklog int }{{4, 100, 0}, {6, 1 << 30, 200}} {
-		for i, r := range qload.Runs(consumers(c.consumers).System(5*time.Minute), qload.Trigger{}, runs) {
+		rs, err := qload.Runs(consumers(c.consumers).System(5*time.Minute), qload.Trigger{}, runs)
+		if err != nil {
+			t.Fatalf("%d consumers recovery assessment: %v", c.consumers, err)
+		}
+		for i, r := range rs {
 			backlog := r.Series.Last("backlog")
 			t.Logf("%d consumers, seed %d: %d payment events in the backlog after %v", c.consumers, i+1, backlog, r.Series.Points[len(r.Series.Points)-1].T)
 			if backlog > c.maxBacklog || backlog < c.minBacklog {
@@ -81,7 +85,10 @@ func TestMitigations(t *testing.T) {
 	for _, c := range cases {
 		cfg := consumers(8)
 		c.cfg(&cfg)
-		got := recoveries(cfg, dip, 3)
+		got, err := recoveries(cfg, dip, 3)
+		if err != nil {
+			t.Fatalf("%s recovery assessment: %v", c.name, err)
+		}
 		t.Logf("%-30s %d/3 runs recover after %v", c.name, got, dip)
 		if got < c.atLeast || got > c.atMost {
 			t.Errorf("%s: %d of 3 runs recover; want %d to %d", c.name, got, c.atLeast, c.atMost)

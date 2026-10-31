@@ -15,7 +15,7 @@ import (
 // timeout is the per-try timeout at the tenant hop under the
 // recommended retries (qmeta.TimeoutFor), calibrated on simulated
 // trajectories with λ held when Load.Calibrate.
-func (z *sizer) timeout(h hop, svc qmeta.Service) {
+func (z *sizer) timeout(h hop, svc qmeta.Service) error {
 	l := z.load
 	p := z.params(h, z.rec, l.Timeout)
 	var data []qmeta.Trajectory
@@ -47,7 +47,10 @@ func (z *sizer) timeout(h hop, svc qmeta.Service) {
 			pr(qmeta.RecoveryAfter(half, z.burst(h.lambda), z.healthy(half), l.Within.Seconds())))
 	}
 	if t.Value > 0 && l.Seeds > 0 {
-		n := z.confirm(h, z.rec, value)
+		n, err := z.confirm(h, z.rec, value)
+		if err != nil {
+			return err
+		}
 		tool += fmt.Sprintf(" + qload (%d of %d seeds recover at it)", n, l.Seeds)
 	}
 	caveat := "the chain's service is exponential: "
@@ -66,6 +69,7 @@ func (z *sizer) timeout(h hop, svc qmeta.Service) {
 		Formula: "the shortest timeout at or above p99.9 of service plus p99.9 of the wait at λ (and, for regular service, the burst's backlog drain) whose recovery is at least " + fmt.Sprint(l.Prob),
 		Tool:    tool, Margin: margin, Caveat: caveat,
 	})
+	return nil
 }
 
 // secs is s seconds as a duration's text.

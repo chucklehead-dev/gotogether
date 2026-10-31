@@ -384,31 +384,46 @@ func (z *sizer) trigger(lambda float64) qload.Trigger {
 
 // confirm runs the declared burst against h under r in simulation:
 // how many of the seeds recover.
-func (z *sizer) confirm(h hop, r retry, t time.Duration) int {
-	return qload.Count(qload.OfSimulation(z.sim(h, r, t), h.lambda, z.load.Within), z.trigger(h.lambda), z.load.Seeds)
+func (z *sizer) confirm(h hop, r retry, t time.Duration) (int, error) {
+	n, err := qload.Count(qload.OfSimulation(z.sim(h, r, t), h.lambda, z.load.Within), z.trigger(h.lambda), z.load.Seeds)
+	if err != nil {
+		return 0, fmt.Errorf("gristload: confirming %s under %s at timeout %v: %w", h.name, r, t, err)
+	}
+	return n, nil
 }
 
 // margin is the smallest burst factor (to 0.1, up to 4 × the declared)
 // whose burst most seeds of h under r do not recover from, 0 if none.
-func (z *sizer) margin(h hop, r retry, t time.Duration) float64 {
+func (z *sizer) margin(h hop, r retry, t time.Duration) (float64, error) {
 	sys := qload.OfSimulation(z.sim(h, r, t), h.lambda, z.load.Within)
-	breaks := func(f float64) bool {
-		ok, _ := qload.Mostly(sys, qload.Trigger{Start: qload.Window, Duration: z.load.Burst.For, ExtraRate: h.lambda * (f - 1)}, z.load.Seeds)
-		return !ok
+	breaks := func(f float64) (bool, error) {
+		ok, _, err := qload.Mostly(sys, qload.Trigger{Start: qload.Window, Duration: z.load.Burst.For, ExtraRate: h.lambda * (f - 1)}, z.load.Seeds)
+		if err != nil {
+			return false, fmt.Errorf("gristload: finding %s's recovery margin under %s at timeout %v, burst %.3gx%v: %w", h.name, r, t, f, z.load.Burst.For, err)
+		}
+		return !ok, nil
 	}
 	lo, hi := z.load.Burst.Factor, 4*z.load.Burst.Factor
-	if !breaks(hi) {
-		return 0
+	failed, err := breaks(hi)
+	if err != nil {
+		return 0, err
+	}
+	if !failed {
+		return 0, nil
 	}
 	for hi-lo > 0.1 {
 		mid := (lo + hi) / 2
-		if breaks(mid) {
+		failed, err := breaks(mid)
+		if err != nil {
+			return 0, err
+		}
+		if failed {
 			hi = mid
 		} else {
 			lo = mid
 		}
 	}
-	return hi
+	return hi, nil
 }
 
 // Report sizes app's deployment for load from the steps of a run of it
@@ -421,7 +436,9 @@ func (z *sizer) margin(h hop, r retry, t time.Duration) float64 {
 // force over Load.Seeds seeds and finds the recommended one's margin;
 // the pool, the grace, CPU and memory are arithmetic on the
 // measurements. It takes seconds to a minute: a chain per setting, a
-// few simulations per confirmation.
+// few simulations per confirmation. An unjudged requested confirmation or
+// margin run returns an error and no sizing, rather than counting as a
+// degraded seed. Negative Load.Seeds explicitly skips simulation.
 func Report(app *grist.App, steps []qtrace.Step, load Load) (*Sizing, error) {
 	m, err := Measure(app, steps)
 	if err != nil {
@@ -451,8 +468,12 @@ func Report(app *grist.App, steps []qtrace.Step, load Load) (*Sizing, error) {
 	}
 	tenant := hop{name: "tenant " + m.Hot, lambda: load.Rate * load.HotShare * share(Command), svc: cmds, workers: 1, mu: cmds.Mu()}
 	out.z, out.tenant = z, tenant
-	z.retries(tenant, cmds)
-	z.timeout(tenant, cmds)
+	if err := z.retries(tenant, cmds); err != nil {
+		return nil, err
+	}
+	if err := z.timeout(tenant, cmds); err != nil {
+		return nil, err
+	}
 	z.replicas(qrys, share(Query))
 	z.tenantLimit(tenant)
 	z.processors()
@@ -474,7 +495,7 @@ type tried struct {
 // command path's bottleneck: one tenant's commits one at a time),
 // recommends the most tries that recover, and confirms it and the one in
 // force in simulation.
-func (z *sizer) retries(h hop, svc qmeta.Service) {
+func (z *sizer) retries(h hop, svc qmeta.Service) error {
 	l := z.load
 	inForce := retry{gateway: l.Gateway.Commands, c: l.Client}
 	var all []tried
@@ -502,10 +523,18 @@ func (z *sizer) retries(h hop, svc qmeta.Service) {
 	if l.Seeds > 0 {
 		for i := range all {
 			if all[i].r.gateway == rec.gateway || all[i].r.gateway == inForce.gateway || all[i].r.gateway == rec.gateway+1 {
-				all[i].seeds = z.confirm(h, all[i].r, l.Timeout)
+				n, err := z.confirm(h, all[i].r, l.Timeout)
+				if err != nil {
+					return err
+				}
+				all[i].seeds = n
 			}
 		}
-		if f := z.margin(h, rec, l.Timeout); f > 0 {
+		f, err := z.margin(h, rec, l.Timeout)
+		if err != nil {
+			return err
+		}
+		if f > 0 {
 			margin = fmt.Sprintf("its smallest failing burst %.1fx%v (+%.0f/s at the tenant), from %d seeds each", f, l.Burst.For, h.lambda*(f-1), l.Seeds)
 		} else {
 			margin = fmt.Sprintf("no burst up to %.0fx%v breaks it (%d seeds each)", 4*l.Burst.Factor, l.Burst.For, l.Seeds)
@@ -552,6 +581,7 @@ func (z *sizer) retries(h hop, svc qmeta.Service) {
 	for _, tr := range all {
 		z.out.Retries = append(z.out.Retries, Ranked{Gateway: tr.r.gateway, Attempts: attempts(tr.r.c), Chain: tr.chain, Seeds: tr.seeds})
 	}
+	return nil
 }
 
 func first(a, _ float64) float64 { return a }
