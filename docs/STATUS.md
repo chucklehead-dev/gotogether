@@ -13,7 +13,9 @@ still establishes a lost-head log's initial state; later ones cannot reset the
 model or erase earlier failures. A disagreement is a conformance mismatch at
 the snapshot's own record, retained in JSON and navigation. This closes the
 S11 checkpoint gap without expanding inventory, lint or onboarding work.
-See DESIGN §50 and the trace skill's partial-log guidance.
+Imported state must be captured completely through the model's exports;
+stateful qualified imports, instances and unresolved scopes are refused for
+checkpoints. See DESIGN §50 and the trace skill's partial-log guidance.
 
 Library-adaptation follow-up (merged PR #14): the published library starter was
 adapted to Goo's real strict `subjectfacts.Read` boundary with 16 fixed YAML
@@ -119,7 +121,7 @@ require explicit `-history`. Use a fresh ID and `go test -count=1`.
 **As of 2026-10-31 (snapshot-checkpoints branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
-`f3f723db` so snapshot-checkpoint validation/navigation, scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
+`2afc4109` so snapshot-checkpoint validation/navigation, scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
 run profiles, finite-choice witness evidence, structured lint emitters, component shrink identities, composition and nav/2
 contract work outside go.work; the
 merged declared-call span increment did not require a core-pin bump. The

@@ -7,7 +7,7 @@ require (
 	charm.land/bubbletea/v2 v2.1.0
 	charm.land/lipgloss/v2 v2.0.6
 	github.com/charmbracelet/x/ansi v0.11.9
-	github.com/chucklehead-dev/gotogether v0.0.0-20261031031807-f3f723dbcfaf
+	github.com/chucklehead-dev/gotogether v0.0.0-20261031033417-2afc4109807f
 )
 
 require (
