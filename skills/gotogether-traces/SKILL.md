@@ -29,7 +29,9 @@ and whether the invariants hold.
    by `rec.Close()`.
 3. `gotogether scaffold -spec ... -module ...`; add only `expect`,
    `outcomes`, `restart`, `constants`, `invariants`.
-4. `gotogether lint -binding b.yaml -src ./pkg`.
+4. `gotogether lint -binding b.yaml -src ./pkg`. For agent/editor evidence add
+   `-json`: inspect findings and requested-check statuses, including blocked
+   checks. A clean static lint report does not establish trace conformance.
 5. `qtest.Record(t, "b.yaml", scenario).Expect(t, qtest.Conforms())`, or
    `gotogether validate -binding b.yaml run.jsonl`.
 6. `qtest.MutateSteps` once the binding is written.

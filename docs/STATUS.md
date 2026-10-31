@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Finite-choice follow-up (current branch): I4's first bounded slice searches whole
+Structured-lint follow-up (current branch): text and JSON share one
+`gotogether.lint/1` report with typed rule-site findings, native source positions,
+fixes, inventories and requested checks marked pass/fail/blocked. Independent
+checks survive another target's failure. Completeness and exit status are derived
+from the report; static inspection does not establish trace conformance. The
+[executable walkthrough](lint-onboarding.md) covers planted mistakes, corrections
+and blocked/operational controls.
+
+Finite-choice follow-up (PR #10): I4's first bounded slice searches whole
 ordinary complete traces and confirms a selected original-action witness with
 Quint. JSON and TUI receipts distinguish exhaustive Go search from selected-path
 confirmation; unsupported scopes and exhausted bounds give no verdict. See
@@ -65,7 +73,7 @@ exploration evidence and run manifests. `evidence -session` filters the
 suite before coverage and expectation checks; unscoped completeness checks
 require explicit `-history`. Use a fresh ID and `go test -count=1`.
 
-**As of 2026-10-31 (pinned-model-witness branch).** GR4's first composition experiment is implemented
+**As of 2026-10-31 (structured-lint branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
 `bd9f977e` so scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
@@ -256,14 +264,15 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Typed core lint findings and executable onboarding | S-M | generalize preflight's structured findings/performed checks across CLI, editors and agents; smoke-check one workflow in each track |
-| 2 | Component-aware shrinking | S-M | preserve the same component/obligation, refusing exhaustion, unchecked evidence and unreached prerequisites; include a non-inventory system |
-| 3 | One adopter-driven capability (outbound streams or library starter are candidates) | M | the HTTP/SQLite rehearsal exposed no missing adapter; use concrete next-trial blockers before adding a facade |
+| 1 | Component-aware shrinking | S-M | preserve the same component/obligation, refusing exhaustion, unchecked evidence and unreached prerequisites; include a non-inventory system |
+| 2 | One adopter-driven capability (outbound streams or library starter are candidates) | M | the HTTP/SQLite rehearsal exposed no missing adapter; use concrete next-trial blockers before adding a facade |
+| 3 | Further lint/editor/onboarding breadth, only from adopter blockers | S-M | the canonical report and executable lint walkthrough are built; select integration work from observed friction |
 
 Do not start all tracks at once. Worker completion and the bounded HTTP/SQLite
-rehearsal are merged in PR #9; the first finite I4 slice is implemented on this
-branch. The recommended next implementation is typed core lint findings and
-executable onboarding across tracks. Further inventory/diagnostic expansion,
+rehearsal are merged in PR #9; the first finite I4 slice is implemented in
+PR #10. The first structured core lint report and executable lint walkthrough
+are implemented on this branch. Broader onboarding across tracks and editor
+integration still need an adoption case. Further inventory/diagnostic expansion,
 cycles, clusters and new platform facades wait for evidence. GR10c down-process
 settlement has separate semantics and stays separate from GR10b.
 

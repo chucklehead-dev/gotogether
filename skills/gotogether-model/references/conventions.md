@@ -9,6 +9,14 @@ code (`connect`), Hegel-driven Go runs are judged by the model
 (`qhegel`), and recorded production telemetry is replayed through it
 (`validate`). The model must follow a few conventions for all three.
 
+Before judging recorded runs, inspect the binding and its recording sites with
+`gotogether lint -binding app.binding.yaml -src ./pkg -json`. The current
+`gotogether.lint/1` report retains requested checks, blocked reasons, source
+locations where known and actionable fixes. `complete` means the selected checks
+ran, not that they passed. Binding lint checks metadata/templates; the CLI's Go
+scan is syntactic. Use trace validation to establish conformance for a recorded
+run. See [the executable walkthrough](../../../docs/lint-onboarding.md).
+
 ## Conventions (check every one)
 
 1. **Name every action the implementation performs.** `step` must be an

@@ -254,7 +254,6 @@ func TestBindingSpecNotFound(t *testing.T) {
 	}
 	resolved := filepath.Join(dir, "sub", "model", "stock.qnt")
 	for name, run := range map[string]func() (int, error){
-		"lint":     func() (int, error) { return lint([]string{"-binding", "sub/b.yaml"}) },
 		"simulate": func() (int, error) { return simulate([]string{"-binding", "sub/b.yaml"}) },
 		"validate": func() (int, error) {
 			code, _, err := validated([]string{"-binding", "sub/b.yaml", "run.jsonl"})
@@ -267,6 +266,13 @@ func TestBindingSpecNotFound(t *testing.T) {
 			if code != 2 || err == nil || !strings.Contains(err.Error(), want) {
 				t.Errorf("%s: exit %d, %v: want %q", name, code, err, want)
 			}
+		}
+	}
+	// Lint retains operational errors in its report so JSON remains usable.
+	code, output := lintOut(t, "-binding", "sub/b.yaml")
+	for _, want := range []string{"spec model/stock.qnt resolves to " + resolved + ", which does not exist", "write spec: ../model/stock.qnt"} {
+		if code != 2 || !strings.Contains(output, want) {
+			t.Errorf("lint: exit %d: want %q in %s", code, want, output)
 		}
 	}
 	// what the model cache and every other caller of LoadModel see

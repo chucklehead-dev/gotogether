@@ -235,6 +235,17 @@ yaml-language-server: $schema=<URL>`, the URLs in package `schemas`),
 and `gotogether lint` checks a binding against it (every problem at its
 line) before loading it, rule files with `-convert`.
 
+
+`gotogether lint -json` emits one `gotogether.lint/1` report for the same
+inspection as text output: actionable findings, source locations where known,
+fixes, inspected inventories, and each requested check as `pass`, `fail` or
+`blocked`. Independent targets still run when another target fails. Exit codes
+are 0 for clean performed checks, 1 for authored findings, and 2 for unavailable
+inputs/tools or an invalid request. `complete` means every requested check ran;
+it does not mean the findings passed. The CLI's Go scans are syntactic; binding
+checks inspect model metadata and templates. Neither establishes trace
+conformance. See [the executable lint walkthrough](docs/lint-onboarding.md).
+
 Go: 1.26.x. The core needs 1.26.1 (hegel-go's minimum); the gosim fork
 translates one release's standard library, 1.26's, and says so under
 another. Until the first tags, `@latest` is the newest commit.
@@ -732,7 +743,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `qnemesis` | a real deployment's nemesis: `Nemesis` (`Run` a `Schedule`, `Stop` settles), `Process` and `Container` targets (kill, restart by incarnation, pause), `Toxiproxy` links (cut, heal, latency, loss), `Random` (Jepsen's) and `FromScript` schedules, faults recorded as model steps (`Recording`), a journal whose `Script` re-makes them in qenv |
 | `qsweep` | covering arrays: `Cover`, `Missing`, `Sequences`, `Factor.Constant` |
 | `qrun` | a run's state (`Key[T]`), from the context or the goroutine's run |
-| `qlint` | the simulation and weaving lints (`gotogether lint -sim`, `-weave`) |
+| `qlint` | shared structured lint inspection (`Inspect`), performed/blocked checks and actionable findings; simulation and weaving rules |
 | `input` | reads a trace input (`Read`): OTLP/JSON, a step log, a driver's request log or ITF, detected by content |
 | `qdriver` | an external driver's request log (protocol `gotogether.requests/1`, JSONL a driver writes itself): `Read`, `ReadFile`, `New`, `Log.Steps` (each request an invocation record, completed only by its own response; steps a driver saw; its times, refs and correlation ids), `Log.Warnings`, `Log.Write`, `Sniff`; Playwright's adapter is [adapters/playwright](adapters/playwright) |
 | `qdriver/bombadil` | Bombadil's `trace.jsonl` with a page that logs its requests, as a request log (`Log`, `LogFile`; its steps for `qtest.Validate`): `Options` (the spec's extract, its custom actions in `Clicks`, the log's `Fields`, the display as `Show` steps), `States` (experimental) for a mapping of your own |

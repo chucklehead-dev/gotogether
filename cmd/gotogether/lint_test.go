@@ -79,11 +79,12 @@ func TestLintInternalChoice(t *testing.T) {
 		t.Fatalf("exit %d, %v:\n%s", code, err, out)
 	}
 	for _, want := range []string{
-		"warning: action flipit makes a choice of its own (any {} of 4 branches)",
+		"action flipit makes a choice of its own (any {} of 4 branches)",
 		"expose the choice as a parameter of flipit",
 		"supported finite choices use bounded search and original-action pinned replay",
 		"unsupported shapes or exhaustion give an explicit no verdict",
-		"1 choose inside; finite choices use bounded search and pinned replay",
+		"[binding.action.internal_choice]",
+		"trace conformance and application behavior were not checked",
 	} {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("output lacks %q:\n%s", want, out)

@@ -22,11 +22,14 @@ const qobsPath = "github.com/chucklehead-dev/gotogether/qobs"
 // RecordCall is an explicit qobs.Record or Recorder.Record call (or their
 // Invoke) whose action is a string literal, found in Go source.
 type RecordCall struct {
-	Pos    string        // file:line
-	At     token.Pos     // Pos in the file set the file was parsed with
-	Call   *ast.CallExpr // the call
-	Func   string        // the enclosing function ("" at package level)
-	Action string
+	// Path, Line and Column are captured directly from the source file set.
+	Path         string
+	Line, Column int
+	Pos          string        // file:line
+	At           token.Pos     // Pos in the file set the file was parsed with
+	Call         *ast.CallExpr // the call
+	Func         string        // the enclosing function ("" at package level)
+	Action       string
 	// Method is set for x.Record(...) on a value, taken for a
 	// *qobs.Recorder by its name and arguments alone (no types): a caller
 	// with types confirms it.
@@ -105,8 +108,9 @@ func RecordsOf(fset *token.FileSet, f *ast.File) []RecordCall {
 			if isIdent && id.Name != pkg && imported[id.Name] {
 				return true
 			}
+			pos := fset.Position(lit.Pos())
 			out = append(out, RecordCall{
-				Pos: fset.Position(lit.Pos()).String(), At: lit.Pos(), Call: call,
+				Path: pos.Filename, Line: pos.Line, Column: pos.Column, Pos: pos.String(), At: lit.Pos(), Call: call,
 				Func: fn, Action: action, Method: !isIdent || id.Name != pkg,
 			})
 			return true
@@ -139,16 +143,20 @@ func importName(path string) string {
 // LintRecords checks literal Record actions against the model: each names
 // one of its actions.
 func LintRecords(m *Model, recs []RecordCall) []string {
-	var errs []string
+	return lintMessages(lintRecordFindings(m, recs))
+}
+
+func lintRecordFindings(m *Model, recs []RecordCall) []LintFinding {
+	var errs []LintFinding
 	for _, r := range recs {
 		if _, ok := m.Actions[r.Action]; ok {
 			continue
 		}
 		in := ""
 		if r.Func != "" {
-			in = " " + r.Func + ":"
+			in = r.Func + ": "
 		}
-		errs = append(errs, fmt.Sprintf("%s:%s Record(ctx, %q, ...): %s", r.Pos, in, r.Action, m.notAnAction(r.Action)))
+		errs = append(errs, sourceFinding("source.action.unknown", "error", fmt.Sprintf("%sRecord(ctx, %q, ...): %s", in, r.Action, m.notAnAction(r.Action)), r.Path, r.Line, r.Column, r.Action, "Use an action declared by the model.", r.Pos))
 	}
 	return errs
 }
@@ -181,7 +189,11 @@ func recordedFields(r RecordCall) []string {
 // (item_) and not mapped: the parameter would read a field item_ no
 // step records. The fix is the mapping.
 func (b *Binding) lintReservedFields(m *Model, recs []RecordCall) []string {
-	var errs []string
+	return lintMessages(b.lintReservedFindings(m, recs))
+}
+
+func (b *Binding) lintReservedFindings(m *Model, recs []RecordCall) []LintFinding {
+	var errs []LintFinding
 	for _, r := range recs {
 		ps, ok := m.Actions[r.Action]
 		if !ok {
@@ -195,8 +207,8 @@ func (b *Binding) lintReservedFields(m *Model, recs []RecordCall) []string {
 			if !slices.ContainsFunc(ps, func(q Param) bool { return q.Name == p }) || b.Actions[r.Action].Args[p] != "" {
 				continue
 			}
-			errs = append(errs, fmt.Sprintf("%s: Record(ctx, %q, ...) records the field %s, a Quint built-in's name, which the model's parameter cannot take: its %s reads a field %s by default, which no step records: map it in the binding (actions: %s: args: %s: '{{.%s}}')",
-				r.Pos, r.Action, f, p, p, r.Action, p, f))
+			errs = append(errs, sourceFinding("source.parameter.reserved", "error", fmt.Sprintf("Record(ctx, %q, ...) records the field %s, a Quint built-in's name, which the model's parameter cannot take: its %s reads a field %s by default, which no step records: map it in the binding (actions: %s: args: %s: '{{.%s}}')",
+				r.Action, f, p, p, r.Action, p, f), r.Path, r.Line, r.Column, r.Action, "Map the renamed Quint parameter to the recorded field in the binding.", r.Pos))
 		}
 	}
 	return errs
@@ -206,22 +218,7 @@ func (b *Binding) lintReservedFields(m *Model, recs []RecordCall) []string {
 // actions (LintRecords) together, so a bound action that one of them
 // emits is not reported as emitted by neither.
 func (b *Binding) LintSource(m *Model, anns []Annotation, recs []RecordCall) (errs, warns []string) {
-	errs, _ = b.lintAnnotations(m, anns)
-	errs = append(errs, LintRecords(m, recs)...)
-	errs = append(errs, b.lintReservedFields(m, recs)...)
-	emitted := map[string]bool{}
-	for _, a := range anns {
-		emitted[a.Action] = true
-	}
-	for _, r := range recs {
-		emitted[r.Action] = true
-	}
-	for _, name := range slices.Sorted(maps.Keys(b.Actions)) {
-		if !emitted[name] {
-			warns = append(warns, fmt.Sprintf("action %s is bound but neither a //quint:action nor a literal qobs.Record emits it (an action recorded through a constant or a variable is not seen)", name))
-		}
-	}
-	return errs, warns
+	return splitLintMessages(LintSourceFindings([]Bound{{Binding: b, Model: m}}, anns, recs))
 }
 
 // A Bound is a binding with its model, one of the several a source tree
@@ -238,19 +235,29 @@ type Bound struct {
 // only when none has it; a bound action is warned of when nothing in the
 // tree emits it. With one binding it is LintSource.
 func LintSources(bs []Bound, anns []Annotation, recs []RecordCall) (errs, warns []string) {
-	if len(bs) == 1 {
-		return bs[0].Binding.LintSource(bs[0].Model, anns, recs)
+	return splitLintMessages(LintSourceFindings(bs, anns, recs))
+}
+
+// LintSourceFindings checks all source sites against the union of bound models.
+// Source locations come from scanner positions; no message text is parsed.
+func LintSourceFindings(bs []Bound, anns []Annotation, recs []RecordCall) []LintFinding {
+	var out []LintFinding
+	if len(bs) == 0 {
+		return []LintFinding{{Code: "source.binding.missing", Severity: "error", Message: "source checks require at least one binding", Fix: "Supply a binding and its model for source checks.", Confidence: "model_metadata"}}
 	}
 	owners := func(action string) []Bound {
-		var out []Bound
+		var os []Bound
 		for _, b := range bs {
 			if _, ok := b.Model.Actions[action]; ok {
-				out = append(out, b)
+				os = append(os, b)
 			}
 		}
-		return out
+		return os
 	}
 	none := func(action string) string {
+		if len(bs) == 1 {
+			return bs[0].Model.notAnAction(action)
+		}
 		var mods []string
 		for _, b := range bs {
 			mods = append(mods, b.Model.Module)
@@ -262,38 +269,44 @@ func LintSources(bs []Bound, anns []Annotation, recs []RecordCall) (errs, warns 
 		emitted[a.Action] = true
 		os := owners(a.Action)
 		if a.Action != "" && len(os) == 0 {
-			errs = append(errs, fmt.Sprintf("%s: %s: %s", a.Pos, a.Func, none(a.Action)))
+			out = append(out, sourceFinding("source.action.unknown", "error", fmt.Sprintf("%s: %s", a.Func, none(a.Action)), a.Path, a.Line, a.Column, a.Action, "Use an action declared by one of the bound models.", a.Pos))
 			continue
 		}
-		if len(os) == 0 { // no action: the first binding says so
+		if len(os) == 0 {
 			os = bs[:1]
 		}
 		for _, o := range os {
-			e, _ := o.Binding.lintAnnotations(o.Model, []Annotation{a})
-			errs = append(errs, e...)
+			fs, _ := o.Binding.lintAnnotationFindings(o.Model, []Annotation{a})
+			out = append(out, fs...)
 		}
 	}
 	for _, r := range recs {
 		emitted[r.Action] = true
-		for _, o := range owners(r.Action) {
-			errs = append(errs, o.Binding.lintReservedFields(o.Model, []RecordCall{r})...)
+		os := owners(r.Action)
+		for _, o := range os {
+			out = append(out, o.Binding.lintReservedFindings(o.Model, []RecordCall{r})...)
 		}
-		if len(owners(r.Action)) == 0 {
+		if len(os) == 0 {
 			in := ""
 			if r.Func != "" {
-				in = " " + r.Func + ":"
+				in = r.Func + ": "
 			}
-			errs = append(errs, fmt.Sprintf("%s:%s Record(ctx, %q, ...): %s", r.Pos, in, r.Action, none(r.Action)))
+			out = append(out, sourceFinding("source.action.unknown", "error", fmt.Sprintf("%sRecord(ctx, %q, ...): %s", in, r.Action, none(r.Action)), r.Path, r.Line, r.Column, r.Action, "Use an action declared by one of the bound models.", r.Pos))
 		}
 	}
 	for _, b := range bs {
 		for _, name := range slices.Sorted(maps.Keys(b.Binding.Actions)) {
-			if !emitted[name] {
-				warns = append(warns, fmt.Sprintf("%s: action %s is bound but neither a //quint:action nor a literal qobs.Record emits it (an action recorded through a constant or a variable is not seen)", b.Model.Module, name))
+			if emitted[name] {
+				continue
 			}
+			msg := fmt.Sprintf("action %s is bound but neither a //quint:action nor a literal qobs.Record emits it (an action recorded through a constant or a variable is not seen)", name)
+			if len(bs) > 1 {
+				msg = b.Model.Module + ": " + msg
+			}
+			out = append(out, LintFinding{Code: "source.action.unemitted", Severity: "warning", Message: msg, Symbol: name, Fix: "Add a recording site, remove the unused binding, or verify a dynamic action name manually.", Confidence: "syntax"})
 		}
 	}
-	return errs, warns
+	return out
 }
 
 // stepActions are m's actions a step may name: not init or step (the

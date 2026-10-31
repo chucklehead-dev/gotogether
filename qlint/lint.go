@@ -1,8 +1,7 @@
-// Package qlint finds code that escapes a qenv simulation or its weaving
-// (gotogether lint -sim, -weave; the analyzers of the qanalysis module wrap
-// SimFile and WovenFile). It is apart from qenv so that gosim, which
-// translates everything a simulated package imports, does not translate
-// go/ast and go/parser with it.
+// Package qlint inspects bindings, recording sites, and simulation integration.
+// Inspect produces one structured report for CLI, editor, and agent consumers;
+// SimFile and WovenFile also serve the qanalysis analyzers. It is apart from
+// qenv so gosim does not translate go/ast and go/parser with simulated code.
 package qlint
 
 import (
@@ -20,6 +19,8 @@ import (
 
 // A Finding is code in a simulation that escapes it.
 type Finding struct {
+	// Code identifies the rule independently of its message or source spelling.
+	Code string
 	Pos  string // file:line:col
 	What string
 	Fix  string
@@ -195,10 +196,10 @@ func simFile(fset *token.FileSet, f *ast.File, info *types.Info, all bool) []Fin
 		}
 	}
 	var out []Finding
-	add := func(n ast.Node, what, fix string) {
+	add := func(n ast.Node, code, what, fix string) {
 		pos := fset.Position(n.Pos())
 		if !exempt[pos.Line] {
-			out = append(out, Finding{Pos: fmt.Sprintf("%s:%d:%d", pos.Filename, pos.Line, pos.Column), What: what, Fix: fix,
+			out = append(out, Finding{Code: code, Pos: fmt.Sprintf("%s:%d:%d", pos.Filename, pos.Line, pos.Column), What: what, Fix: fix,
 				At: n.Pos(), file: pos.Filename, line: pos.Line, col: pos.Column})
 		}
 	}
@@ -264,6 +265,12 @@ func simFile(fset *token.FileSet, f *ast.File, info *types.Info, all bool) []Fin
 		}
 		return "", ""
 	}
+	escapeCode := func(path string) string {
+		if path == "time" {
+			return "simulation.wall_clock"
+		}
+		return "simulation.random"
+	}
 	// called are the call expressions' functions, and selectors' names:
 	// what is left of a flagged function's uses are its values
 	called, selName := map[ast.Expr]bool{}, map[*ast.Ident]bool{}
@@ -283,7 +290,7 @@ func simFile(fset *token.FileSet, f *ast.File, info *types.Info, all bool) []Fin
 				// the functions known by name are values
 				if p, name, ok := funcOf(e); ok && (info != nil || p == "time" || randFuncs[p+"."+name]) {
 					if what, fix := escapes(p, name); what != "" {
-						add(n, p+"."+name+" used as a value: a call of it "+strings.TrimPrefix(what, p+"."+name+" "),
+						add(n, escapeCode(p), p+"."+name+" used as a value: a call of it "+strings.TrimPrefix(what, p+"."+name+" "),
 							fix+" (in a func that calls it, where a function value is wanted)")
 					}
 				}
@@ -292,11 +299,11 @@ func simFile(fset *token.FileSet, f *ast.File, info *types.Info, all bool) []Fin
 		switch n := n.(type) {
 		case *ast.GoStmt:
 			if app {
-				add(n, "goroutine started with `go` in a grist application: its work is no block's, recorded nowhere and outside a simulation",
+				add(n, "simulation.goroutine", "goroutine started with `go` in a grist application: its work is no block's, recorded nowhere and outside a simulation",
 					"make it a processor (grist.NewProcessor) on the event that starts it, or start it with qenv.Go(ctx, name, fn)")
 				break
 			}
-			add(n, "goroutine started with `go`, outside the simulation", "start it with qenv.Go(ctx, name, fn)")
+			add(n, "simulation.goroutine", "goroutine started with `go`, outside the simulation", "start it with qenv.Go(ctx, name, fn)")
 		case *ast.SelectStmt:
 			cases := 0
 			for _, c := range n.Body.List {
@@ -305,19 +312,19 @@ func simFile(fset *token.FileSet, f *ast.File, info *types.Info, all bool) []Fin
 				}
 			}
 			if cases >= 2 {
-				add(n, fmt.Sprintf("select with %d cases: when several are ready Go picks one at random, which no run replays", cases),
+				add(n, "simulation.select", fmt.Sprintf("select with %d cases: when several are ready Go picks one at random, which no run replays", cases),
 					"wait for one thing at a time (qenv.Wait, a qenv.Signal), or mark it //qenv:ok if at most one case can be ready at once")
 			}
 		case *ast.CallExpr:
 			if p, name, ok := funcOf(ast.Unparen(n.Fun)); ok {
 				if what, fix := escapes(p, name); what != "" {
-					add(n, what, fix)
+					add(n, escapeCode(p), what, fix)
 				}
 			}
 			if fn, ok := sel(n.Fun, "github.com/chucklehead-dev/gotogether/qobs"); ok && (fn == "Record" || fn == "Invoke") && len(n.Args) > 0 {
 				if c, ok := n.Args[0].(*ast.CallExpr); ok {
 					if bg, ok := sel(c.Fun, "context"); ok && (bg == "Background" || bg == "TODO") {
-						add(n, "step recorded with context."+bg+"()", "record through the task's context, or Sim.Context() outside tasks")
+						add(n, "simulation.context", "step recorded with context."+bg+"()", "record through the task's context, or Sim.Context() outside tasks")
 					}
 				}
 			}
@@ -386,9 +393,9 @@ func WovenFile(fset *token.FileSet, f *ast.File) []Finding {
 		}
 	}
 	var out []Finding
-	add := func(n ast.Node, what, fix string) {
+	add := func(n ast.Node, code, what, fix string) {
 		pos := fset.Position(n.Pos())
-		out = append(out, Finding{Pos: fmt.Sprintf("%s:%d:%d", pos.Filename, pos.Line, pos.Column), What: what, Fix: fix,
+		out = append(out, Finding{Code: code, Pos: fmt.Sprintf("%s:%d:%d", pos.Filename, pos.Line, pos.Column), What: what, Fix: fix,
 			At: n.Pos(), file: pos.Filename, line: pos.Line, col: pos.Column})
 	}
 	called := map[ast.Expr]bool{}
@@ -429,18 +436,18 @@ func WovenFile(fset *token.FileSet, f *ast.File) []Finding {
 		switch n := n.(type) {
 		case *ast.Field:
 			if t, ok := embedsSync(n.Type); ok && len(n.Names) == 0 && marked[fset.Position(n.Pos()).Line] != "//qenv:ok" {
-				add(n, "embedded sync."+t+": calls promoted through the struct are not woven (weaving matches the receiver's type)",
+				add(n, "weave.embedded_sync", "embedded sync."+t+": calls promoted through the struct are not woven (weaving matches the receiver's type)",
 					"name the field (mu sync."+t+") and call it through the name")
 			}
 		case *ast.GoStmt:
 			line := fset.Position(n.Pos()).Line
 			if marked[line-1] != "//qenv:go" && marked[line] != "//qenv:ok" {
-				add(n, "go statement not marked //qenv:go: its goroutine runs outside the simulation",
+				add(n, "weave.goroutine", "go statement not marked //qenv:go: its goroutine runs outside the simulation",
 					"mark it //qenv:go (the call must be a function literal), or //qenv:ok if it should stay outside")
 			}
 		case *ast.SelectorExpr:
 			if syncMethods[n.Sel.Name] && !called[n] && marked[fset.Position(n.Pos()).Line] != "//qenv:ok" {
-				add(n, "method value "+n.Sel.Name+" is not woven (weaving rewrites calls)",
+				add(n, "weave.method_value", "method value "+n.Sel.Name+" is not woven (weaving rewrites calls)",
 					"wrap it in a function literal that calls it: func() { x."+n.Sel.Name+"() }")
 			}
 		}
