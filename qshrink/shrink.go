@@ -1,7 +1,9 @@
 package qshrink
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +13,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/stepdiff"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 // A Resetter returns the system a shrink reruns to its initial state:
@@ -93,6 +96,8 @@ type Result struct {
 	NotMinimal string
 	// Keep is the failure kept: the one given, or the default.
 	Keep Keep
+	// ComponentFailures is the named component-obligation identity kept by the default criterion.
+	ComponentFailures []ComponentFailure
 }
 
 // Run shrinks the sequence to a 1-minimal one that still fails the same
@@ -144,21 +149,22 @@ func (r *Result) String() string {
 
 // record is a Result's JSON: what the shrink did.
 type record struct {
-	Original      int    `json:"original"`
-	Set           []int  `json:"set"`
-	Actions       int    `json:"actions"`
-	Keep          string `json:"keep"`
-	Reruns        int    `json:"reruns"`
-	Reproduced    int    `json:"reproduced"`
-	NotReproduced int    `json:"notReproduced"`
-	Undecided     int    `json:"undecided"`
-	Diverged      int    `json:"diverged"`
-	Errors        int    `json:"errors"`
-	Baseline      Rate   `json:"baseline"`
-	PerCandidate  int    `json:"perCandidate"`
-	Rate          Rate   `json:"rate"`
-	Minimal       bool   `json:"minimal"`
-	NotMinimal    string `json:"notMinimal,omitempty"`
+	Original          int                `json:"original"`
+	Set               []int              `json:"set"`
+	Actions           int                `json:"actions"`
+	Keep              string             `json:"keep"`
+	ComponentFailures []ComponentFailure `json:"componentFailures"`
+	Reruns            int                `json:"reruns"`
+	Reproduced        int                `json:"reproduced"`
+	NotReproduced     int                `json:"notReproduced"`
+	Undecided         int                `json:"undecided"`
+	Diverged          int                `json:"diverged"`
+	Errors            int                `json:"errors"`
+	Baseline          Rate               `json:"baseline"`
+	PerCandidate      int                `json:"perCandidate"`
+	Rate              Rate               `json:"rate"`
+	Minimal           bool               `json:"minimal"`
+	NotMinimal        string             `json:"notMinimal,omitempty"`
 }
 
 // MarshalJSON writes what the shrink did, as a manifest's shrink.json
@@ -175,9 +181,17 @@ func (r *Result) MarshalJSON() ([]byte, error) {
 	if set == nil {
 		set = []int{}
 	}
-	return json.Marshal(record{Original: r.Original, Set: set, Actions: len(r.Set), Keep: keep, Reruns: r.Reruns, Reproduced: r.Reproduced,
+	components := componentFailuresSnapshot(r.ComponentFailures)
+	return json.Marshal(record{ComponentFailures: components, Original: r.Original, Set: set, Actions: len(r.Set), Keep: keep, Reruns: r.Reruns, Reproduced: r.Reproduced,
 		NotReproduced: r.NotReproduced, Undecided: r.Undecided, Diverged: r.Diverged, Errors: r.Errors, Baseline: r.Baseline, PerCandidate: r.PerCandidate,
 		Rate: r.Rate, Minimal: r.Minimal, NotMinimal: r.NotMinimal})
+}
+
+// componentFailuresSnapshot makes independent artifact storage and represents
+// an absent component criterion as an empty JSON array, never a fabricated one.
+func componentFailuresSnapshot(in []ComponentFailure) []ComponentFailure {
+	out := append([]ComponentFailure{}, in...)
+	return out
 }
 
 // shrinker is a Shrink running.
@@ -241,7 +255,7 @@ func (s *shrinker) once(ctx context.Context, idx []int) attempt {
 	s.longest = max(s.longest, time.Since(began))
 	var rep *validate.Report
 	if err == nil {
-		rep, err = s.judge(ctx, steps)
+		rep, err = s.judgeHistory(ctx, steps)
 		if err != nil {
 			err = fmt.Errorf("checking its steps: %w", err)
 		}
@@ -265,6 +279,33 @@ func (s *shrinker) once(ctx context.Context, idx []int) attempt {
 		s.count(a.v)
 	}
 	return a
+}
+
+// judgeHistory ties a registered composition to the exact captured input,
+// before the user-supplied judge can mutate it or reuse a stale assessment.
+func (s *shrinker) judgeHistory(ctx context.Context, steps []qtrace.Step) (*validate.Report, error) {
+	before, encodeErr := json.Marshal(steps)
+	rep, err := s.judge(ctx, steps)
+	if err != nil || rep == nil || rep.Composition == nil {
+		return rep, err
+	}
+	if encodeErr != nil {
+		return nil, fmt.Errorf("encoding captured composition history: %w", encodeErr)
+	}
+	after, err := json.Marshal(steps)
+	if err != nil {
+		return nil, fmt.Errorf("encoding composition history after Judge: %w", err)
+	}
+	if !bytes.Equal(before, after) {
+		return nil, fmt.Errorf("Judge changed the captured history while assessing composition")
+	}
+	expected := fmt.Sprintf("sha256:%x", sha256.Sum256(before))
+	if rep.Composition.History != expected {
+		return nil, fmt.Errorf("composition assessment belongs to another captured history: got %q, want %q", rep.Composition.History, expected)
+	}
+	copy := *rep
+	copy.Composition = rep.Composition.Clone()
+	return &copy, nil
 }
 
 // count counts a judged rerun by Keep's value of it: a rerun with no
@@ -377,7 +418,7 @@ func (s *shrinker) emptyRerun(ctx context.Context, when string) {
 	if s.keep == nil {
 		return
 	}
-	rep, err := s.judge(ctx, steps)
+	rep, err := s.judgeHistory(ctx, steps)
 	if err != nil {
 		s.fatalf("checking a Rerun of no actions (%s): %v", when, err)
 	}
@@ -391,7 +432,11 @@ func (s *shrinker) emptyRerun(ctx context.Context, when string) {
 // decided reports whether rep has a failure and a verdict for every
 // part a failure is judged by (SameFailure's): the failure to keep.
 func decided(rep *validate.Report) bool {
-	return rep != nil && len(firstFailures(rep)) > 0 && !unjudgedFailure(rep)
+	if rep == nil || unjudgedFailure(rep) {
+		return false
+	}
+	components, why := compositionFailures(rep)
+	return why == "" && (len(firstFailures(rep)) > 0 || len(components) > 0)
 }
 
 // shrink checks the Resetter's contract, calibrates on the original and
@@ -427,6 +472,13 @@ func (s *shrinker) shrink() *Result {
 		// verdict for a part (a lost tail) says nothing of how it fails
 		var first []*validate.Report
 		for _, a := range base {
+			if a.ran && a.rep != nil && a.rep.Composition != nil {
+				if status, _ := a.rep.Composition.Problem(); status == receipt.Fail {
+					if _, why := compositionFailures(a.rep); why != "" {
+						s.fatalf("cannot select a component-aware failure for the original: %s; provide complete named-obligation judgments or an explicit Keep for a supported scope", why)
+					}
+				}
+			}
 			if a.ran && decided(a.rep) {
 				first = append(first, a.rep)
 			}
@@ -542,5 +594,6 @@ func (s *shrinker) shrink() *Result {
 	}
 	res.Reruns, res.Reproduced, res.NotReproduced, res.Undecided, res.Diverged, res.Errors = s.reruns, s.reproduced, s.notReproduced, s.undecided, s.diverged, s.errs
 	res.Keep = s.keep
+	res.ComponentFailures = ComponentFailures(s.keep)
 	return res
 }

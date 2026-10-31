@@ -3797,6 +3797,31 @@ per action. It is checked against brute force on up to 8 letters (a
 monotone failure reaches one of the inclusion-minimal sets) and with
 quint on letters.qnt.
 
+Component-aware action shrinking uses the same identity in baseline selection,
+calibration and candidate matching. Existing primary actor fingerprints remain
+first failures in replay order. Registered local/protocol models add a multiset
+of `(role, target, binding, obligation kind, obligation name)` for every failed
+named obligation. Receipts do not carry temporal failure indices, so this does
+not invent a first component property. Actor IDs, record IDs, counterexample
+ordering and explanatory prose are excluded. Mixed primary/component failures
+must keep both scopes. Missing checks, exhausted searches and inconsistent or
+unjudged nested receipts are insufficient; peer-agreement and component
+conformance failures lack supported identities and are explicitly refused.
+A checked protocol counterexample is a decided failure without exhaustive order
+search; an exhausted search without a counterexample is not a reproduction.
+
+`ActionShrink.System` supplies the registered binding, options and assessment;
+`Binding` must be empty, and additional `Opts` follow the system's options.
+`Rerun` still creates and drives the fresh environment. Each intermediate rerun
+and the final `Validate` recompute the composition assessment outside the primary
+verdict cache. The generic shrinker checks the assessment's SHA256 against the
+captured native steps and detects mutation around `Judge`. Selected component
+identities survive expectation wrappers in `ComponentFailures` and shrink.json;
+text names the criterion, and the final composition receipt remains available
+to JSON and navigation/TUI consumers. The acceptance case is a plain qenv
+producer/consumer counter with a no-deduplication contrast checked by Quint,
+independent of grist and inventory.
+
 Four decisions make a rerun's answer mean something:
 - **The failure kept.** Any failure would let a shrink drift to another
   bug its smaller sequences show. `SameFailure` (Keep's default) is each

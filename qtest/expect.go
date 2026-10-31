@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/internal/nearest"
+	"github.com/chucklehead-dev/gotogether/qshrink"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
 	"github.com/chucklehead-dev/gotogether/validate/receipt"
@@ -27,8 +28,10 @@ func RequireQuint(t testing.TB) {
 // An Expectation is what a test expects of a verdict: it returns nil when
 // the report meets it, else why not.
 type Expectation struct {
-	desc  string
-	check func(*validate.Report) bool
+	// componentFailures retain structured identity when a SameFailure criterion is wrapped.
+	componentFailures []qshrink.ComponentFailure
+	desc              string
+	check             func(*validate.Report) bool
 	// every: a passing run meets it (Conforms, Satisfies), which
 	// ShrinkActions' Keep refuses
 	every bool

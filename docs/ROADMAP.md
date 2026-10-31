@@ -33,8 +33,12 @@ implemented: shared text/JSON evidence, rule-site findings and explicit blocked
 checks. See [the walkthrough](lint-onboarding.md). Broader onboarding and editor
 integration should follow concrete adopter friction before expanding choice modes.
 
-Component-aware shrinking is the next concrete follow-up. Additional lint,
-editor and onboarding breadth waits for concrete adopter blockers. Select the next adapter or starter from the
+The first component-aware shrinking slice is implemented: named local/protocol
+obligations retain component/binding identity through real reruns, calibration
+and artifacts, with explicit refusal outside the supported receipt evidence.
+The non-inventory acceptance case is a plain qenv producer/consumer counter.
+Select one adopter-driven capability next; further shrinking, lint, editor and
+onboarding breadth waits for concrete blockers. Select the next adapter or starter from the
 adoption results; outbound streams are a candidate, not a committed catalog-wide
 expansion. Do not start all these tracks at once. Tags remain the maintainer's
 call. See HISTORY's "Breadth and core lessons review, 2026-10-30" for tradeoffs.

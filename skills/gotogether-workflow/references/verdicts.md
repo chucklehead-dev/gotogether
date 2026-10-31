@@ -266,6 +266,11 @@ shrink treats it so:
 - another failure is not a reproduction: `qtest.SameFailure` (the
   default kept) wants each of the original's failing actors' first
   failure, kind and name.
+  Registered local/protocol failures additionally preserve component role,
+  target, binding and every failed named obligation. Reuse the registered
+  system through `ActionShrink.System`; an omitted/unjudged obligation cannot
+  reproduce it, and peer/conformance-only identities remain unsupported.
+  The selected identities are structured in `ComponentFailures` and shrink.json.
 
 ## When it fails
 
@@ -335,8 +340,11 @@ pass; it proves only the supplied collected history within its causal evidence.
 Navigation reruns the registrations; model cursor state remains separate.
 Manifest primary-binding replay and case drivers that cannot carry registrations
 refuse the operation: reproduce the originating registered System/test instead.
-Composition-only failure shrinking requires a component-aware criterion and is
-explicitly refused by default. No compatibility fallback interprets missing data.
+Use `ActionShrink.System` to retain the registrations while rerunning actions.
+Default shrinking preserves every failed named local/protocol obligation by
+component role, target, binding, kind and name. Unsupported peer-agreement and
+component-conformance identities remain explicit refusals; missing or unjudged
+required checks cannot reproduce a failure. No fallback interprets missing data.
 
 Driven explorations include resolved run profiles and observed simulator limits
 in evidence and navigation JSON. Inspect the effective seed range, fault policy,

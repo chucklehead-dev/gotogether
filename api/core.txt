@@ -1702,6 +1702,7 @@ type Key[T any] struct
 const NotReproduced Shown = iota (spec 2 of its group)
 const Reproduced Shown = iota (spec 1 of its group)
 const Undecided Shown = iota
+func ComponentFailures(keep Keep) []ComponentFailure
 func SameFailure(rep *validate.Report) Keep
 type Calibration struct
     field Baseline int
@@ -1710,6 +1711,12 @@ type Calibration struct
     field Alpha float64
     field Budget int
     field Time time.Duration
+type ComponentFailure struct
+    field Role string `json:"role"`
+    field Target string `json:"target"`
+    field Binding string `json:"binding"`
+    field Kind string `json:"kind"`
+    field Name string `json:"name"`
 type Keep interface
     Shows(rep *validate.Report) Shown
     Why(rep *validate.Report) string
@@ -1736,6 +1743,7 @@ type Result struct
     field Minimal bool
     field NotMinimal string
     field Keep Keep
+    field ComponentFailures []ComponentFailure
     method (*Result) MarshalJSON() ([]byte, error)
     method (*Result) String() string
 type Shown int
@@ -1849,6 +1857,7 @@ func Undecided(e Expectation, because ...string) Expectation
 func Validate(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...Option) *Run
 func Violates(invariant string) Expectation
 type ActionShrink[A any] struct
+    field System *System
     field Binding string
     field Rerun func(ctx context.Context, actions []A) ([]qtrace.Step, error)
     field Reset Resetter
@@ -2021,6 +2030,7 @@ type ShrinkClaim interface
     String() string
     holdsShrunk(n int, r *Run) (bool, string)
 type ShrunkActions[A any] struct
+    field ComponentFailures []qshrink.ComponentFailure
     field Actions []A
     field Run *Run
     field Original int
@@ -3162,6 +3172,7 @@ type Composition struct
     field Local []Component `json:"local"`
     field Peers []Component `json:"peers"`
     field Protocol Protocol `json:"protocol"`
+    method (*Composition) Clone() *Composition
     method (Composition) Problem() (Status, string)
     method (Composition) String() string
 type Effect struct

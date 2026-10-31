@@ -52,76 +52,81 @@ type Keep interface {
 // invariant of a conforming actor left unjudged, which may have failed
 // first) has no verdict for it: Undecided, never a pass.
 //
-// A composition-only non-pass has no primary actor fingerprint and is refused.
-// With both primary and composition checks, this criterion preserves the primary
-// actor failure only; it does not fingerprint or preserve composition failures.
+// Named local and protocol obligations are preserved by component role, target,
+// binding, kind and name, with multiplicity. Unsupported component failures are
+// refused rather than silently degrading to primary-only shrinking.
 func SameFailure(rep *validate.Report) Keep {
 	var want []string
 	if rep != nil {
 		want = firstFailures(rep)
 	}
-	if rep != nil && rep.Composition != nil && len(want) == 0 {
+	components, why := compositionFailures(rep)
+	if why != "" {
+		panic("qshrink.SameFailure: cannot preserve composition failure: " + why)
+	}
+	if rep != nil && rep.Composition != nil && len(want) == 0 && len(components) == 0 {
 		if status, _ := rep.Composition.Problem(); status != receipt.Pass {
-			panic("qshrink.SameFailure: composition-only failure: reproduce the registered System; shrinking requires a component-aware criterion")
+			panic("qshrink.SameFailure: composition has no decided supported failure")
 		}
 	}
-	return sameFailure{want: want, primaryOnly: rep != nil && rep.Composition != nil}
+	return sameFailure{want: want, components: components}
 }
 
 type sameFailure struct {
-	want        []string
-	primaryOnly bool
+	want       []string
+	components []ComponentFailure
 }
 
 func (s sameFailure) String() string {
-	if len(s.want) == 0 {
+	if len(s.want) == 0 && len(s.components) == 0 {
 		return "the same failure as a run that does not fail"
 	}
-	scope := "the same failure"
-	if s.primaryOnly {
-		scope = "the same primary actor failure"
-	}
-	return scope + " (" + strings.Join(s.want, "; ") + ")"
+	return "the same failure (" + failureDescription(s.want, s.components) + ")"
 }
 
-// Shows reports whether rep fails as the run SameFailure was given.
 func (s sameFailure) Shows(rep *validate.Report) Shown {
-	switch {
-	case len(s.want) == 0:
+	if len(s.want) == 0 && len(s.components) == 0 {
 		return NotReproduced
-	case rep == nil || unjudgedFailure(rep):
+	}
+	if rep == nil || unjudgedFailure(rep) {
 		return Undecided
 	}
 	got := firstFailures(rep)
+	primary := Reproduced
 	for _, w := range s.want {
 		i := slices.Index(got, w)
 		if i < 0 {
-			return NotReproduced
+			primary = NotReproduced
+			break
 		}
-		got = slices.Delete(got, i, i+1) // two actors failing alike want two
+		got = slices.Delete(got, i, i+1)
+	}
+	component := componentShows(rep, s.components)
+	if component == Undecided {
+		return Undecided
+	}
+	if primary != Reproduced || component != Reproduced {
+		return NotReproduced
 	}
 	return Reproduced
 }
 
-// Why says how rep fails, when it does not show the failure: for a
-// claim's message.
 func (s sameFailure) Why(rep *validate.Report) string {
-	if rep != nil && unjudgedFailure(rep) {
-		return "it has no verdict for a part a failure is judged by (an undecided actor, a lost tail, dropped steps, an invariant not judged)"
+	if rep == nil || unjudgedFailure(rep) {
+		return "it has no verdict for a part a failure is judged by"
 	}
-	var got []string
-	if rep != nil {
-		got = firstFailures(rep)
+	if componentShows(rep, s.components) == Undecided {
+		return "a required component or named obligation was not conclusively checked"
 	}
-	if len(got) == 0 && rep != nil && rep.Composition != nil {
-		if status, _ := rep.Composition.Problem(); status != receipt.Pass {
-			return "only a composition non-pass is present; this criterion preserves a primary actor failure"
-		}
+	components, why := compositionFailures(rep)
+	if why != "" {
+		return why
 	}
-	if len(got) == 0 {
+	description := failureDescription(firstFailures(rep), components)
+	if description == "" {
 		return "it fails nowhere"
 	}
-	return "it fails with " + strings.Join(got, "; ")
+	return "it fails with " + description
 }
 
 // unjudgedFailure reports whether rep lacks a verdict that its actors' first
@@ -305,8 +310,12 @@ func signatureOf(rep *validate.Report) string {
 	if rep == nil {
 		return "no report"
 	}
-	if f := firstFailures(rep); len(f) > 0 {
-		return strings.Join(f, "; ")
+	components, why := compositionFailures(rep)
+	if why != "" {
+		return "unsupported or unjudged composition: " + why
+	}
+	if f := failureDescription(firstFailures(rep), components); f != "" {
+		return f
 	}
 	if rep.OK() {
 		return "it passes"
