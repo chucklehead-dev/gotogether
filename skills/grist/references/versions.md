@@ -39,6 +39,19 @@ What an agent must not get wrong:
   `gristsim.Cluster`, claimed `gristtest.ReadersFirst()` at the clients;
   the deployed release kept as a package of its own (counters' `release1`).
 
+## Retained histories
+
+For kept committed-batch fixtures, use
+`gristtest.StoredLogs(t, App, gristtest.StoredLogsConfig{Files: files, Binding: commits})`.
+It restores each file fresh and checks event versions/tags, recorded observations,
+current fold/snapshot round trips, and committed-prefix conformance. It never
+starts processors or effects and does not synthesize settle. Inspect its typed
+stage statuses/native model document: missing rows or no verdict are not passes.
+The files contain no historical snapshots or original step-row timestamps;
+completion/within bindings are refused. This does not prove unchanged fold
+business meaning or historical capture completeness. Use the real tier when
+the test intentionally needs to execute pending work after restoration.
+
 ## Snapshots and the memo
 
 - On by default past `grist.DefaultSnapshotEvery` events per read:

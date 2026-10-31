@@ -86,6 +86,7 @@ type App struct
     method (*App) ArgsType(name string) reflect.Type
     method (*App) Catalog() Catalog
     method (*App) CheckSnapshots(ctx context.Context, st Store) error
+    method (*App) CheckStoredBatch(b store.Batch) error
     method (*App) CheckUpcasters() error
     method (*App) Commands() []string
     method (*App) Dependencies() []*Dependency
@@ -587,6 +588,7 @@ func ReadersFirst() qtest.Expectation
 func RuleMutants(app *grist.App) []string
 func Scenario(name string, steps ...grist.Invocation) qtest.Expectation
 func Snapshots(t testing.TB, app *grist.App, st grist.Store)
+func StoredLogs(t testing.TB, app *grist.App, cfg StoredLogsConfig) []StoredLogResult
 func Upcasts(t testing.TB, app *grist.App)
 func Upgrade(t testing.TB, binding string, from, app *grist.App, cfg gristsim.Config) qtest.System
 func WriteLog(l Log, path string) error
@@ -625,6 +627,20 @@ type ProtocolSearch struct
     field Checked int
     field Exhaustive bool
     field Counterexample []qtrace.Step
+type StoredLogResult struct
+    field File string `json:"file"`
+    field SHA256 string `json:"sha256,omitempty"`
+    field Scope string `json:"scope"`
+    field Batches int `json:"batches"`
+    field Events int `json:"events"`
+    field Tenants []string `json:"tenants,omitempty"`
+    field Steps int `json:"steps"`
+    field Checks []receipt.Check `json:"checks"`
+    field Model *validate.Document `json:"model,omitempty"`
+type StoredLogsConfig struct
+    field Files []string
+    field Binding string
+    field Options validate.Options
 type Tier struct
     field Store grist.Store
     field Client *client.Client
