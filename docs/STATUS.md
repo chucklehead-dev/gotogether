@@ -16,9 +16,9 @@ creation refuses changed artifacts or a different judging recipe. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
-format has one current version; published pins are coordinated after core push.
+format has one current version; all published core pins agree at b4025488a9ee.
 
-Captured-transition assertion follow-up (PR #32): qtest.TransitionsConform
+Captured-transition assertion follow-up (merged PR #32): qtest.TransitionsConform
 judges the existing native conformance facet for all judged actors or required
 exact identities. It replaces manual checks in counters' paused incident and
 requeue's storm, with their original rejection, payment, cycle and settlement
