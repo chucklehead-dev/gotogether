@@ -367,9 +367,17 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   synthetic day of payments judged in windows or partitions within a
   stated budget.
 - **I20. On-call reports (S-M). Done** (DESIGN §68, HISTORY "I20";
-  left: the incident walkthrough as an example, and a store-side grist
-  step's pod, which needs G8's location). What it was:
-  The report serves a model's author,
+  left: checked portable packaging and a store-side grist
+  step's pod, which needs G8's location).
+  The [jobqueue incident walkthrough](../examples/jobqueue/INCIDENT.md) now
+  exercises actual captures, native JSON, exact TUI record inspection,
+  relocated replay and a verified repair. It exposed a generic-rejection TUI
+  evidence gap, now closed without new formats. It also requires manual
+  pre-copying of model/binding files; the next bounded slice should reuse
+  native manifests with verified internal references and atomic staging,
+  refusing unsupported external/absolute references rather than claiming a
+  portable export. Export integrity must not become a model pass.
+  What it was: The report serves a model's author,
   not on-call at 3 a.m.: three indices for one record ("step 16",
   "seq 7", ":19"); no wall time, pod, trace or request id on the failing
   line; "enabled instead" lists the instance's synthetic arguments as if

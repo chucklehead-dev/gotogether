@@ -5653,6 +5653,33 @@ I36's generator reading json tags), and a filled document is checked
 against it.
 
 
+**Incident rehearsal and captured rejection evidence.** The
+[jobqueue runbook](../examples/jobqueue/INCIDENT.md) forces the existing
+stale-ack implementation mutant through actual service calls. Faithful and
+repaired controls use the same model and binding; the repaired execution also
+completes a fresh lease. Native conformance identity survives JSON, exact-record
+inspection and relocated replay. A header without observations has no verdict;
+changed or missing replay data is an error. These cannot earn incident credit
+from exit status alone.
+
+The exercise found that the TUI exposed annotated obligation records but only
+explained ordinary model rejections. Its failing-history adapter now confirms
+the selected actor and disabled-call boundary with the full checker and retains
+the captured `Failure.Step` reference. Inferred failures and missing identities
+do not acquire records; checking and lookup errors stay explicit. Evidence is
+labelled as the original collected history, separate from cursor diagnostics,
+and remains fixed across hypothetical model moves. Opening and leaving the
+record inspector does not move a cursor or change the history's verdict. The
+incident's four captured records become five model calls because restart is
+inferred, so record sequence and model position are deliberately distinct.
+Real terminal tapes and native-JSON acceptance cover that distinction.
+
+Portable handoff remains awkward: this bounded runbook pre-copies its model and
+binding before writing manifests. A follow-up should verify references and
+publish a complete staged bundle using existing formats, with explicit refusal
+for unsupported references. Copying files or verifying hashes establishes export
+integrity, not model conformance or production capture completeness.
+
 ## 69. The model alone: one engine, claims, one bound (I17)
 
 Review 11's architect (F4) found three engines answering "can the model

@@ -46,7 +46,7 @@ state  (* changed by the last move)
   answered = Set("t1-c1-1")
 ── lines 1–28 of 187 (pgup/pgdn scroll)
 
-enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
+enter take • ←/⌫ back • f fold • g failing step • s save • e evidence • / filter • ? help • q quit
 
 ========
 
@@ -98,4 +98,4 @@ state  (* changed by the last move)
 ── lines 1–38 of 187 (pgup/pgdn scroll)
 
 [37m/[m[37mshowCounter[m 
-enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
+enter take • ←/⌫ back • f fold • g failing step • s save • e evidence • / filter • ? help • q quit

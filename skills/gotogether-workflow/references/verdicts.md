@@ -73,6 +73,13 @@ its JSON there (the Action's job summary reads it).
 
 ## A prefix vs a finished run
 
+For a runnable alert-to-repair exercise, see the
+[jobqueue incident walkthrough](https://github.com/chucklehead-dev/gotogether/blob/main/examples/jobqueue/INCIDENT.md).
+Keep captured identity (actor, recorder, sequence), model-call position and
+display source location distinct. A TUI cursor or an enabled hypothetical branch
+does not replace the checked history's verdict. An empty capture can exit 1 with
+`no verdict`; a replay integrity error exits 2 with `error`.
+
 A run cut short conforms: three steps of a five-step workflow are a
 behaviour of the model, and `Conforms()` passes them. That is right of a
 run that stopped by right (a load test's horizon, a run with work

@@ -26,11 +26,26 @@ type evidenceItem struct {
 	label, scope, kind string
 	item               diagnostic.Item
 	ref                *diagnostic.RecordRef
+	rejected           bool
 }
 
 type evidenceList struct {
 	items  []evidenceItem
 	source entry
+}
+
+func rejectedRecord(c *entry) (diagnostic.RecordRef, bool) {
+	if c != nil {
+		if nav, ok := c.nav.(interface{ rejectedRecord() diagnostic.RecordRef }); ok {
+			return nav.rejectedRecord(), true
+		}
+	}
+	return diagnostic.RecordRef{}, false
+}
+
+func hasEvidence(c *entry) bool {
+	_, rejected := rejectedRecord(c)
+	return rejected || len(evidenceGroups(c)) > 0
 }
 
 // evidenceGroups includes composition diagnoses as well as the primary model.
@@ -91,6 +106,13 @@ func (m *Model) openEvidence() tea.Cmd {
 		return nil
 	}
 	list := &evidenceList{source: *c}
+	if ref, ok := rejectedRecord(c); ok {
+		list.items = append(list.items, evidenceItem{
+			label: "recorded conformance failure · rejected captured record",
+			scope: "original collected history · conformance failure · independent of model cursor",
+			kind:  "rejected captured record", ref: &ref, rejected: true,
+		})
+	}
 	for _, group := range evidenceGroups(c) {
 		d := group.detail
 		scope := group.label + " · " + d.Property + " · " + d.Scope
@@ -159,13 +181,26 @@ func (m *Model) inspectEvidence(list *evidenceList, item evidenceItem) tea.Cmd {
 }
 
 func (m *Model) evidenceScreen(c *entry) screen {
-	sc := screen{head: []string{m.st.title.Render("gotogether-nav") + "  outstanding obligation evidence", "path: " + m.crumbs(), "Captured records only · navigation cursors unchanged"}}
+	heading := "outstanding obligation evidence"
+	for _, item := range c.evidence.items {
+		if item.rejected {
+			heading = "captured history evidence"
+			break
+		}
+	}
+	sc := screen{head: []string{m.st.title.Render("gotogether-nav") + "  " + heading, "path: " + m.crumbs(), "Captured records only · navigation cursors unchanged"}}
 	sc.branches = []string{"", m.st.section.Render(fmt.Sprintf("evidence (%d) · enter inspects selected record", len(c.evidence.items)))}
 	sc.branches = append(sc.branches, m.branchLines(c, max(3, m.h/4), func(int) string { return "" })...)
 	vis := m.visible()
+	nativeFailure := false
 	if c.cursor < len(vis) {
 		item := c.evidence.items[vis[c.cursor].i]
-		sc.detail = []string{"", "scope: " + item.scope, "kind: " + item.item.Kind, "subject: " + item.item.Subject, "intent: " + item.item.Intent, "expected: " + item.item.Expected, "evidence: " + item.item.Evidence.Status}
+		nativeFailure = item.rejected
+		if item.rejected {
+			sc.detail = []string{"", "scope: " + item.scope, "kind: rejected recorded call", "The checked history rejected this capture; model branches do not change that evidence."}
+		} else {
+			sc.detail = []string{"", "scope: " + item.scope, "kind: " + item.item.Kind, "subject: " + item.item.Subject, "intent: " + item.item.Intent, "expected: " + item.item.Expected, "evidence: " + item.item.Evidence.Status}
+		}
 		if item.item.Evidence.Reason != "" {
 			sc.detail = append(sc.detail, item.item.Evidence.Reason)
 		}
@@ -179,7 +214,12 @@ func (m *Model) evidenceScreen(c *entry) screen {
 			}
 		}
 	}
-	sc.detail = append(sc.detail, "", "Evidence matching does not identify a root cause.", "Back returns to the unchanged navigation cursor.")
+	if nativeFailure {
+		sc.detail = append(sc.detail, "", "This identifies the checked history's rejected record, not a root cause.")
+	} else {
+		sc.detail = append(sc.detail, "", "Evidence matching does not identify a root cause.")
+	}
+	sc.detail = append(sc.detail, "Back returns to the unchanged navigation cursor.")
 	return sc
 }
 

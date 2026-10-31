@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- Added a deterministic jobqueue incident walkthrough across native JSON,
+  captured-record inspection, the TUI, relocated replay and a verified repair.
+  Generic rejected-call navigation now exposes its checked captured record in
+  the TUI evidence view, with history scope separate from model cursor state.
+
 - Existing-key updates in the Go evaluator share immutable map keys while
   copying values. Insertions still copy keys, preserving earlier and sibling
   states. Wider ring benchmarks and independent snapshot/reference controls

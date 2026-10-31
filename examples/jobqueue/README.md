@@ -13,6 +13,12 @@ The pieces:
   restart half-way through;
 - `model/jobqueue.qnt`: the Quint model.
 
+For a deterministic on-call workflow, run `./incident.sh` and follow
+[the incident walkthrough](INCIDENT.md): native JSON alert, exact captured
+record, TUI inspection, relocated replay and a verified repaired execution.
+`cmd/jobqueue-incident` records the actual service scenarios with fixed virtual
+time; it does not fabricate observations or model verdicts.
+
 ```sh
 ./run-demo.sh                          # conforms; exactlyOnce, checked explicitly, fails where a job ran twice
 MUTANT=ackAnyLease ./run-demo.sh   # accepts an ack whose lease was lost: rejected at that ack
@@ -67,6 +73,7 @@ $ gotogether validate -binding jobqueue.binding.yaml -invariants exactlyOnce ste
 | `TestSlowWorkerConformsButRunsTwice` | a slow worker's lease expires and the job runs twice: the run conforms, and `exactlyOnce` fails at the second perform |
 | `TestTwoLeasesOfOneJob` | a worker re-leases a job while holding its expired lease, and performs it under both. Hegel found it occasionally: the model kept leases as a set and lost the second. Leases are now a multiset in the model |
 | `TestRestartConforms` | a restart loses a lease: the ack after it is stale, and the restart is inferred |
+| `TestIncidentWorkflow` | native failure identity across CLI JSON, capture inspection and relocated replay; unchanged checks pass a fresh repaired execution; errors and no verdict remain distinct |
 | `TestMutantsRejected` | both mutants, rejected at the step the bug makes |
 | `TestHegelRunsConform` | Hegel interleaves enqueues, leases, work, time and restarts; every run conforms |
 | `TestHegelShrinksAckAnyLease` | Hegel shrinks the mutant to: enqueue, lease, restart, perform, ack accepted |

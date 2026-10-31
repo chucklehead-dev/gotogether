@@ -119,7 +119,7 @@ func (m *Model) Render() string {
 		foot = append(foot, m.st.status.Render(m.status))
 	}
 	helpKeys := m.keys
-	helpKeys.Evidence.SetEnabled(c != nil && c.evidence == nil && c.record == nil && len(evidenceGroups(c)) > 0)
+	helpKeys.Evidence.SetEnabled(c != nil && c.evidence == nil && c.record == nil && hasEvidence(c))
 	if c != nil && (c.evidence != nil || c.record != nil) {
 		helpKeys.Take.SetHelp("enter", "inspect")
 		helpKeys.Fold.SetEnabled(false)
@@ -251,6 +251,9 @@ func (m *Model) modelScreen(c *entry) screen {
 	var out []string
 	if c.why != "" {
 		heading := "the run's next call, which the model rejects"
+		if checkpoint, ok := c.nav.(interface{ checkpointMismatch() bool }); ok && checkpoint.checkpointMismatch() {
+			heading = "recorded checkpoint disagrees with replayed state"
+		}
 		for _, d := range n.Diagnostics {
 			if d.Scope == "settled_checked_history" {
 				heading = "completion failure · fixed checked history"
