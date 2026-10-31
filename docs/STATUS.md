@@ -383,7 +383,8 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I19: reduce measured evaluator allocation costs, then reassess incremental invariants | M | interacting baseline identifies per-entry binding allocations and map copying; preserve full evaluation semantics before adding dependency inference |
+| 1 | Grist: checked event scalar projection before append and relay | S | reproduced an internally emitted MaxUint64 committing successfully and relaying as obs.ints=[-1]; retained-log guards do not protect normal recording |
+| 2 | I19: reduce measured evaluator allocation costs, then reassess incremental invariants | M | interacting baseline identifies per-entry binding allocations and map copying; preserve full evaluation semantics before adding dependency inference |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
 Do not start all tracks at once. Worker completion and the bounded HTTP/SQLite

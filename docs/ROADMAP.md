@@ -344,6 +344,10 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   invalidation counterexamples. See [the measurements](validation-volume.md).
   Production incremental evaluation remains unimplemented; first investigate
   measured evaluator allocations while retaining full semantics.
+  A separately reproduced Grist scalar-projection overflow takes priority over
+  optimization: internally emitted unsigned values outside int64 currently
+  commit and relay wrapped observations. Share checked projection before append
+  and during relay/upcasting; the retained-log guard alone is insufficient.
   A synthetic payments log took 1.5 s at 90 steps, 5.3 s at 300,
   54 s at 900 (all in the Go
   evaluator, compile cached) and over 10 minutes at 9000: about n², and
