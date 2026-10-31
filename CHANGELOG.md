@@ -8,6 +8,13 @@ and adds a line here.
 
 ## Unreleased
 
+- `qload.SimulateTrajectory` now returns an error instead of averaging failed
+  runs or missing samples as zero. Calibration requires valid initial state,
+  positive run count and client timeout, and exact whole-second sample times;
+  zero-time samples retain the supplied initial state. A timeout lookahead
+  completes retrospective orbit observations. Grist sizing stops on trajectory
+  errors instead of recommending settings from incomplete calibration evidence.
+
 - Recovery batches now return errors for unjudged seeds and invalid sample
   counts. `qload.Runs`, `Count`, and `Mostly` require error handling; a failed
   simulation or missing healthy baseline cannot become a metastability trigger

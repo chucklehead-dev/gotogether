@@ -43,7 +43,11 @@ func TestCalibrate(t *testing.T) {
 	times := []float64{10, 20, 40, 60}
 	var data []qmeta.Trajectory
 	for _, from := range []qmeta.State{{U: 100, V: 20}, {U: 60, V: 10}, {U: 20, V: 0}} {
-		data = append(data, qload.SimulateTrajectory(sim(9.5), from, times, 20))
+		trajectory, err := qload.SimulateTrajectory(sim(9.5), from, times, 20)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data = append(data, trajectory)
 	}
 	p := qmeta.Params{Lambda: 9.5, Mu: 10, Timeout: 9, Retries: 3, Queue: 100, Orbit: 60}
 	t0 := time.Now()

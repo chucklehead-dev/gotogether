@@ -9,6 +9,11 @@ Gotchas for agents (and humans) before changing qload, qmeta or qrole, or a load
   `Runs`, `Count`, and `Mostly` before interpreting counts or a majority. An
   unjudged seed cannot become a degraded witness, including during shrinking
   or sizing searches. `Runs` retains observations on error for diagnosis.
+- `SimulateTrajectory` also returns an error: check it before fitting. It
+  samples exact whole seconds and completes a client-timeout lookahead so
+  retrospective orbit membership at the requested times is known. It refuses
+  nonpositive client timeouts, unrepresentable initial queues, and invalid or
+  missing samples; it does not bound the cost of an otherwise valid simulation.
 - qload metrics are time series of rates; sample counters reset every
   tick. `Sample.Orbit` is known only in hindsight (an attempt is in the
   orbit from its start if it times out) and is filled when the run ends.

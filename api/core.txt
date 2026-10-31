@@ -1214,7 +1214,7 @@ func Recovered() RecoveryClaim
 func Recovers(cfg SimConfig, base float64, tr Trigger, within time.Duration) Recovery
 func Runs(sys Target, tr Trigger, n int) ([]Recovery, error)
 func Simulate(cfg SimConfig) *Metrics
-func SimulateTrajectory(cfg SimConfig, from qmeta.State, times []float64, runs int) qmeta.Trajectory
+func SimulateTrajectory(cfg SimConfig, from qmeta.State, times []float64, runs int) (qmeta.Trajectory, error)
 func SomeTrigger() TriggerClaim
 func Spike(base, peak float64, from, to time.Duration) Shape
 func StaysDegraded() RecoveryClaim

@@ -58,7 +58,7 @@ const usage = `usage: <app> sizing -steps FILES -rate R -burst FxD [flags]
   -cpu D               CPU per request, from a real tier's profile (0: not sized); -heap BYTES peak heap (0: not sized)
   -endpoint-lag D      the cluster's endpoint lag (default 5s); -max-connections N, -reserve N the store's
   -slow F              how many times slower a dependency gets in the processors' stressor (default 10)
-  -seeds N             simulated seeds per confirmation (default 6; -1: the chain and arithmetic alone)
+  -seeds N             simulated seeds per confirmation (default 6; -1: no recovery confirmations; -calibrate still simulates)
   -calibrate           fit the chain's timeout to simulated trajectories first (slower)`
 
 // Run is sizing's command line on args (Main's, after the binary's

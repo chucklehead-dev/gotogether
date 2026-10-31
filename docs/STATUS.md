@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Recovery-evidence follow-up (current branch): `qload.Runs`, `Count`, and
+Calibration-evidence follow-up (current branch): generated trajectories now
+reject failed runs and missing samples rather than averaging zeros. Sample
+times are exact whole seconds (including an explicit initial-state sample at
+zero), initial queues must be representable, and simulation continues through
+a timeout lookahead to complete retrospective orbit observations. Grist sizing
+propagates trajectory errors before fitting or recommending a timeout.
+See DESIGN §11.1.
+
+Recovery-evidence follow-up (PR #19): `qload.Runs`, `Count`, and
 `Mostly` now return errors for invalid batches and any unjudged seed. The
 observations remain available in seed order, but no majority or degraded witness
 is inferred from missing evidence. Hegel trigger search and Grist sizing
@@ -154,16 +162,17 @@ exploration evidence and run manifests. `evidence -session` filters the
 suite before coverage and expectation checks; unscoped completeness checks
 require explicit `-history`. Use a fresh ID and `go test -count=1`.
 
-**As of 2026-10-31 (recovery-evidence branch).** GR4's first composition experiment is implemented
+**As of 2026-10-31 (calibration-evidence branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
-`4010e253` so checked recovery aggregation, interrupted lock waits, SQL cancellation, snapshot-checkpoint validation/navigation, scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
+`116b3f59` so complete calibration trajectories, checked recovery aggregation, interrupted lock waits, SQL cancellation, snapshot-checkpoint validation/navigation, scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
 run profiles, finite-choice witness evidence, structured lint emitters, component shrink identities, composition and nav/2
 contract work outside go.work; the
 merged declared-call span increment did not require a core-pin bump. The
 checkpoint slice updated the pins for navigation; the lock-wait slice advances
 them again so published SQL consumers share the terminal-wait contract; recovery
 aggregation advances them for the error-returning API used by Hegel and sizing.
+The calibration follow-up advances them again for checked trajectory construction.
 **Nothing is tagged**: every module is pre-release,
 published modules require each other at pseudo-versions, and breaking
 renames still land (R5 waits for the maintainer).

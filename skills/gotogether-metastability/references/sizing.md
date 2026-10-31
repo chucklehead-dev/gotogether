@@ -28,7 +28,12 @@ _, _, _ = r, w, limit
   latency floor (p99.9 service plus Erlang C's p99.9 wait,
   `Timeout.Floor`), raised for regular service to the burst's drain,
   then the shortest rung above it that recovers; with `data`
-  (`qload.SimulateTrajectory` at `p.Timeout`) it calibrates first.
+  (`qload.SimulateTrajectory` at `p.Timeout`) it calibrates first. Check the
+  trajectory's returned error before fitting: failed or missing samples cannot
+  become zeros. Samples use whole seconds; a positive client timeout supplies
+  the lookahead needed to classify retrospective orbit observations.
+  `-seeds -1` skips recovery confirmations; `-calibrate` independently requests
+  simulated calibration trajectories.
 - `Params.Unit`: a millisecond service behind a timeout of seconds is a
   queue of hundreds, too many states. In units of g requests the chain
   keeps the drift and loses noise: rank with it, confirm in simulation.
