@@ -277,8 +277,9 @@ func scalars(typ reflect.Type, body []byte) (strs []string, ints []int64, err er
 // failed every try: it names the processor and the trigger.
 const failedType = "grist.failed"
 
-// Failed is the body of a grist.failed event. The failure's text is not
-// in it (the model could not compute it): it is in the effect's steps.
+// Failed is the body of a grist.failed event. It has no stored error text;
+// processor or effect steps may retain further error evidence. It does not
+// establish that an external effect was not applied or that retry is safe.
 // Its cause, like every processor event's, is "processor:<name>".
 type Failed struct {
 	Processor string `json:"processor" grist:"tag"`
