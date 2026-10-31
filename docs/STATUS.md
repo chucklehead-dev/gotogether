@@ -7,7 +7,14 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Compiled-manifest follow-up (current branch): gotogether.run/3 records a hashed
+Source-capture follow-up (current branch): source judgments now retain private
+model identities and conservative cache dependencies; changed model, binding or
+conversion rules are refused before recording. Typed ITF schema inference and
+empty-history manifests obey the same stability checks. Definition-string file
+imports must move into model files. The bounded external-tool guarantee is
+documented in DESIGN §73.
+
+Compiled-manifest follow-up (PR #33): gotogether.run/3 records a hashed
 compiled artifact as the evaluator-only replay dependency. Bundle preserves its
 bytes/layout, binding, inputs and exact source-availability coverage, including
 absent-source provenance paths; relocated replay needs no Quint/Node probes.
@@ -23,7 +30,7 @@ checks. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
-format has one current version; all published core pins agree at 7c581c4fe7ed.
+format has one current version; all published core pins agree at b6fe0804a42e.
 
 Captured-transition assertion follow-up (merged PR #32): qtest.TransitionsConform
 judges the existing native conformance facet for all judged actors or required
