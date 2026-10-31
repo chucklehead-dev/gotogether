@@ -51,10 +51,12 @@ unchanged. It did expose a core machine-output blocker: graph completeness and
 counts required parsing human text. Canonical model-report documents now retain
 native graph scope, check bounds/proof coverage, reachability search extent and
 typed skip reasons; the rehearsal consumes those fields directly. No new runtime
-adapter was needed. The next core slice closes S11's skipped middle-snapshot gap: later snapshots
-check the whole replayed state and cannot reset it. The first snapshot retains
-its lost-head initialization role. This advances recorded-history correctness
-across ordinary libraries and services, rather than extending one adoption case.
+adapter was needed. S11's skipped middle-snapshot gap is implemented in PR #15:
+later snapshots check the whole replayed state and cannot reset it. The first
+snapshot retains its lost-head initialization role. The current I45 increment
+closes a separate database-history omission: known committed appenders that no
+external read observed still constrain reads. This catches strict stale reads
+and write skew without inventing unseen writer order or Unknown completion.
 Further shrinking, lint, editor and onboarding breadth still
 needs concrete blockers. Existing streams already covers simulated, Kafka and Kinesis
 tiers; a new outbound facade still needs evidence. Do not start all these tracks at once. Tags remain the maintainer's
@@ -679,8 +681,11 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   from the doubles' seams (Store keys, queue names). Example: raftkv's
   depth-2 election bug found by Exhaust at Delays=2 within MaxRuns, and
   by PCT at its predicted rate.
-- **I45. Elle's rest (S-M each).** Session-order edges, an rw-register
-  workload, a committed append no later read shows (a lost write).
+- **I45. Elle's rest (S-M each).** The bounded unobserved-append dependency
+  gap is fixed: known committed unseen writers still constrain whole-list reads,
+  catching strict stale reads and write skew without a final observer. No unseen
+  writer order or Unknown completion is invented; a missing later read alone
+  does not prove loss. Session-order edges and an rw-register workload remain.
   Example: SQLite against a hand-built "SI over read committed" shim
   with a seeded lost update, and a timeout-heavy run for I6.
 - **I46. Production capture (M each, after I19).** A trace-capture SDK
