@@ -1,4 +1,4 @@
-package qlint
+package lint
 
 import (
 	"errors"
@@ -11,6 +11,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/convert"
 	"github.com/chucklehead-dev/gotogether/internal/formats"
+	"github.com/chucklehead-dev/gotogether/qlint"
 	"github.com/chucklehead-dev/gotogether/schemas"
 )
 
@@ -85,14 +86,14 @@ func Inspect(o Options) *Report {
 	for _, item := range []struct {
 		at         int
 		path, code string
-		scan       func(string) ([]Finding, error)
-	}{{weave, o.Weave, "weave.unsupported", Woven}, {sim, o.Simulation, "simulation.escape", Sim}} {
+		scan       func(string) ([]qlint.Finding, error)
+	}{{weave, o.Weave, "weave.unsupported", qlint.Woven}, {sim, o.Simulation, "simulation.escape", qlint.Sim}} {
 		if item.at < 0 {
 			continue
 		}
 		fs, err := item.scan(item.path)
 		for _, f := range fs {
-			r.Findings = append(r.Findings, Diagnostic{Code: f.Code, Severity: Error, Message: f.What, Path: f.file, Line: f.line, Column: f.col, Fix: f.Fix, Confidence: "syntax"})
+			r.Findings = append(r.Findings, Diagnostic{Code: f.Code, Severity: Error, Message: f.What, Path: f.Path, Line: f.Line, Column: f.Column, Fix: f.Fix, Confidence: "syntax"})
 		}
 		if err != nil {
 			r.scanFailure(item.at, item.code+".scan", err, item.path)
@@ -148,7 +149,8 @@ func Inspect(o Options) *Report {
 		r.bindingFindings(x.lint, b.LintFindings(m), p)
 		r.bindingFindings(x.choices, b.LintChoiceFindings(m), p)
 		for _, property := range slices.Sorted(maps.Keys(m.Diagnostics)) {
-			r.Evidence = append(r.Evidence, Evidence{Kind: "model.diagnostic", Target: p, Count: 1, Items: []EvidenceItem{{Path: b.SpecPath(), Symbol: property, Action: m.Diagnostics[property]}}})
+			active := slices.Contains(b.Invariants, property) || slices.Contains(b.Eventually, property)
+			r.Evidence = append(r.Evidence, Evidence{Kind: "model.diagnostic", Target: p, Count: 1, Items: []EvidenceItem{{Path: b.SpecPath(), Symbol: m.Module + "." + property, Value: m.Diagnostics[property], Active: &active}}})
 		}
 		bound = append(bound, binding.Bound{Binding: b, Model: m})
 		r.Evidence = append(r.Evidence, Evidence{Kind: "binding", Target: p, Count: len(b.Actions)})

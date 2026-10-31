@@ -8,30 +8,30 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/internal/formats"
-	"github.com/chucklehead-dev/gotogether/qlint"
+	lintcheck "github.com/chucklehead-dev/gotogether/lint"
 	"github.com/chucklehead-dev/gotogether/schemas"
 )
 
 // lintDocument mirrors Report.MarshalJSON's derived fields. Validation below
 // checks the actual marshaled report, so the mirror cannot hide a wire change.
 type lintDocument struct {
-	qlint.Report
+	lintcheck.Report
 	Complete bool `json:"complete"`
 	ExitCode int  `json:"exitCode"`
 }
 
 func lintSchema(t *testing.T) []byte {
-	g := &generator{docs: docs(t, "../qlint"), tag: "json",
+	g := &generator{docs: docs(t, "../lint"), tag: "json",
 		structs: map[string]map[string]any{
 			"lintDocument": {"required": []string{"format", "scope", "limits", "checks", "findings", "evidence", "complete", "exitCode"}},
 			"Check":        {"type": "object", "required": []string{"name", "target", "status"}},
 			"Diagnostic":   {"type": "object", "required": []string{"code", "severity", "message", "fix", "confidence"}},
 			"Evidence":     {"type": "object", "required": []string{"kind", "target", "count"}},
-			"EvidenceItem": {"type": "object", "required": []string{"path", "line", "column", "action"}},
+			"EvidenceItem": {"type": "object", "required": []string{"path", "line", "column"}},
 		},
 		fields: map[string]map[string]any{
-			"Check.Status":          {"enum": []any{qlint.CheckPass, qlint.CheckFail, qlint.CheckBlocked}},
-			"Diagnostic.Severity":   {"enum": []any{qlint.Error, qlint.Warning, qlint.Info}},
+			"Check.Status":          {"enum": []any{lintcheck.CheckPass, lintcheck.CheckFail, lintcheck.CheckBlocked}},
+			"Diagnostic.Severity":   {"enum": []any{lintcheck.Error, lintcheck.Warning, lintcheck.Info}},
 			"lintDocument.ExitCode": {"enum": []any{0, 1, 2}},
 		},
 	}
@@ -47,7 +47,7 @@ func TestLintReportValidates(t *testing.T) {
 	}
 	// A schema failure produces a finding plus a blocked dependent check;
 	// inspect real output rather than a hand-constructed DTO approximation.
-	r := qlint.Inspect(qlint.Options{Conversions: []string{p}})
+	r := lintcheck.Inspect(lintcheck.Options{Conversions: []string{p}})
 	data, err := json.Marshal(r)
 	if err != nil {
 		t.Fatal(err)

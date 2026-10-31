@@ -3,7 +3,7 @@
 // file (gotogether.binding/2) and a span conversion rule file
 // (gotogether.convert/1); and of the report validate -json and simulate
 // -json print (gotogether.report/1, validate.Document), and lint reports
-// (gotogether.lint/1, qlint.Report), for a consumer
+// (gotogether.lint/1, lint.Report), for a consumer
 // that checks what it reads. Editors validate a file against its schema as
 // it is written, given its URL (BindingURL, ConvertURL) in a first-line
 // comment the YAML language server reads:

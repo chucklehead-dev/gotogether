@@ -1,4 +1,7 @@
-package qlint
+// Package lint coordinates nonwriting binding, recording and simulation
+// inspections into one structured report. Individual syntax rules live in qlint
+// so analyzers can use them without model or telemetry dependencies.
+package lint
 
 import "encoding/json"
 
@@ -51,7 +54,9 @@ type EvidenceItem struct {
 	Line   int    `json:"line"`
 	Column int    `json:"column"`
 	Symbol string `json:"symbol,omitempty"`
-	Action string `json:"action"`
+	Action string `json:"action,omitempty"`
+	Value  string `json:"value,omitempty"`
+	Active *bool  `json:"active,omitempty"`
 }
 
 // Evidence retains an inventory behind a completed check. Count is the number

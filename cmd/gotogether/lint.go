@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/chucklehead-dev/gotogether/qlint"
+	lintcheck "github.com/chucklehead-dev/gotogether/lint"
 )
 
 func lint(args []string) (int, error) {
@@ -25,11 +25,11 @@ func lint(args []string) (int, error) {
 		}
 		return strings.Split(value, ",")
 	}
-	report := qlint.Inspect(qlint.Options{Bindings: split(*bindings), Source: *source, Simulation: *simulation, Weave: *weave, Conversions: split(*conversions), Quint: *quint})
+	report := lintcheck.Inspect(lintcheck.Options{Bindings: split(*bindings), Source: *source, Simulation: *simulation, Weave: *weave, Conversions: split(*conversions), Quint: *quint})
 	if fs.NArg() > 0 {
 		reason := "unexpected positional arguments: " + strings.Join(fs.Args(), " ")
-		report.Checks = append(report.Checks, qlint.Check{Name: "request.arguments", Status: qlint.CheckBlocked, Reason: reason, Operational: true})
-		report.Findings = append(report.Findings, qlint.Diagnostic{Code: "request.arguments", Severity: qlint.Error, Message: reason, Fix: "select input paths with -binding, -src, -sim, -weave or -convert", Confidence: "request"})
+		report.Checks = append(report.Checks, lintcheck.Check{Name: "request.arguments", Status: lintcheck.CheckBlocked, Reason: reason, Operational: true})
+		report.Findings = append(report.Findings, lintcheck.Diagnostic{Code: "request.arguments", Severity: lintcheck.Error, Message: reason, Fix: "select input paths with -binding, -src, -sim, -weave or -convert", Confidence: "request"})
 	}
 	if *asJSON {
 		encoder := json.NewEncoder(os.Stdout)
@@ -43,7 +43,7 @@ func lint(args []string) (int, error) {
 	return report.ExitCode(), nil
 }
 
-func printLintReport(report *qlint.Report) {
+func printLintReport(report *lintcheck.Report) {
 	for _, finding := range report.Findings {
 		location := finding.Path
 		if finding.Line > 0 {
@@ -72,7 +72,11 @@ func printLintReport(report *qlint.Report) {
 			fmt.Printf("%s fits its schema and loads\n", evidence.Target)
 		case "model.diagnostic":
 			for _, item := range evidence.Items {
-				fmt.Printf("diagnostic %s -> %s\n", item.Symbol, item.Action)
+				fmt.Printf("diagnostic %s -> %s", item.Symbol, item.Value)
+				if item.Active != nil {
+					fmt.Printf(" (active=%v)", *item.Active)
+				}
+				fmt.Println()
 			}
 		}
 	}

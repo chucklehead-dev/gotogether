@@ -55,6 +55,9 @@
                 "action": {
                   "type": "string"
                 },
+                "active": {
+                  "type": "boolean"
+                },
                 "column": {
                   "type": "integer"
                 },
@@ -66,13 +69,15 @@
                 },
                 "symbol": {
                   "type": "string"
+                },
+                "value": {
+                  "type": "string"
                 }
               },
               "required": [
                 "path",
                 "line",
-                "column",
-                "action"
+                "column"
               ],
               "type": "object"
             },

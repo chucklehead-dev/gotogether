@@ -1,7 +1,7 @@
-// Package qlint inspects bindings, recording sites, and simulation integration.
-// Inspect produces one structured report for CLI, editor, and agent consumers;
-// SimFile and WovenFile also serve the qanalysis analyzers. It is apart from
-// qenv so gosim does not translate go/ast and go/parser with simulated code.
+// Package qlint finds syntax that escapes a simulation or cannot be woven.
+// SimFile and WovenFile serve the qanalysis analyzers without model-loading or
+// telemetry dependencies. Package lint coordinates their findings with binding
+// and model checks for CLI, editor, and agent consumers.
 package qlint
 
 import (
@@ -27,20 +27,22 @@ type Finding struct {
 	// At is Pos in the file set the file was parsed with, for analyzers.
 	At token.Pos
 
-	file      string
-	line, col int
+	// Path, Line and Column are the native source location (1-based).
+	Path   string
+	Line   int
+	Column int
 }
 
 func sortFindings(fs []Finding) {
 	sort.Slice(fs, func(i, j int) bool {
 		a, b := fs[i], fs[j]
-		if a.file != b.file {
-			return a.file < b.file
+		if a.Path != b.Path {
+			return a.Path < b.Path
 		}
-		if a.line != b.line {
-			return a.line < b.line
+		if a.Line != b.Line {
+			return a.Line < b.Line
 		}
-		return a.col < b.col
+		return a.Column < b.Column
 	})
 }
 
@@ -200,7 +202,7 @@ func simFile(fset *token.FileSet, f *ast.File, info *types.Info, all bool) []Fin
 		pos := fset.Position(n.Pos())
 		if !exempt[pos.Line] {
 			out = append(out, Finding{Code: code, Pos: fmt.Sprintf("%s:%d:%d", pos.Filename, pos.Line, pos.Column), What: what, Fix: fix,
-				At: n.Pos(), file: pos.Filename, line: pos.Line, col: pos.Column})
+				At: n.Pos(), Path: pos.Filename, Line: pos.Line, Column: pos.Column})
 		}
 	}
 	// funcOf is the package-level function e names (pkg.F, or F through a dot
@@ -396,7 +398,7 @@ func WovenFile(fset *token.FileSet, f *ast.File) []Finding {
 	add := func(n ast.Node, code, what, fix string) {
 		pos := fset.Position(n.Pos())
 		out = append(out, Finding{Code: code, Pos: fmt.Sprintf("%s:%d:%d", pos.Filename, pos.Line, pos.Column), What: what, Fix: fix,
-			At: n.Pos(), file: pos.Filename, line: pos.Line, col: pos.Column})
+			At: n.Pos(), Path: pos.Filename, Line: pos.Line, Column: pos.Column})
 	}
 	called := map[ast.Expr]bool{}
 	ast.Inspect(f, func(n ast.Node) bool {

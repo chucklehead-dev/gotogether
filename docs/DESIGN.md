@@ -117,7 +117,9 @@ aspect needs nothing model-specific. The model drives:
   (every field a template uses must be recorded).
 
 The core lint report is now assembled before either text or JSON rendering.
-`qlint.Inspect` records selected targets and their dependency phases, then runs
+`qlint` retains the lightweight syntax rules used by analyzers; the `lint`
+package composes bindings, conversion rules and schemas above it.
+`lint.Inspect` records selected targets and their dependency phases, then runs
 independent targets even if a binding fails its schema. Each requested phase is
 `pass`, `fail` or `blocked`; blocked model/source checks retain their reason.
 The current machine contract is `gotogether.lint/1`, with rule-site codes,

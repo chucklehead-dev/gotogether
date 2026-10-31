@@ -431,6 +431,63 @@ type Value struct
     method (Value) Quint() string
     method (Value) String() string
 
+== github.com/chucklehead-dev/gotogether/lint
+const CheckBlocked CheckStatus = "blocked"
+const CheckFail CheckStatus = "fail"
+const CheckPass CheckStatus = "pass"
+const Error Severity = "error"
+const Info Severity = "info"
+const Warning Severity = "warning"
+func Inspect(o Options) *Report
+type Check struct
+    field Name string `json:"name"`
+    field Target string `json:"target"`
+    field Status CheckStatus `json:"status"`
+    field Reason string `json:"reason,omitempty"`
+    field Operational bool `json:"operational,omitempty"`
+type CheckStatus string
+type Diagnostic struct
+    field Code string `json:"code"`
+    field Severity Severity `json:"severity"`
+    field Message string `json:"message"`
+    field Path string `json:"path,omitempty"`
+    field Line int `json:"line,omitempty"`
+    field Column int `json:"column,omitempty"`
+    field Symbol string `json:"symbol,omitempty"`
+    field Fix string `json:"fix"`
+    field Confidence string `json:"confidence"`
+type Evidence struct
+    field Kind string `json:"kind"`
+    field Target string `json:"target"`
+    field Count int `json:"count"`
+    field Items []EvidenceItem `json:"items,omitempty"`
+type EvidenceItem struct
+    field Path string `json:"path"`
+    field Line int `json:"line"`
+    field Column int `json:"column"`
+    field Symbol string `json:"symbol,omitempty"`
+    field Action string `json:"action,omitempty"`
+    field Value string `json:"value,omitempty"`
+    field Active *bool `json:"active,omitempty"`
+type Options struct
+    field Bindings []string
+    field Source string
+    field Simulation string
+    field Weave string
+    field Conversions []string
+    field Quint string
+type Report struct
+    field Format string `json:"format"`
+    field Scope string `json:"scope"`
+    field Limits []string `json:"limits"`
+    field Checks []Check `json:"checks"`
+    field Findings []Diagnostic `json:"findings"`
+    field Evidence []Evidence `json:"evidence"`
+    method (*Report) Complete() bool
+    method (*Report) ExitCode() int
+    method (*Report) MarshalJSON() ([]byte, error)
+type Severity string
+
 == github.com/chucklehead-dev/gotogether/otelio
 func Attrs(kvs []KeyValue) map[string]any
 func NewFileExporter(w io.Writer) *FileExporter
@@ -1121,71 +1178,21 @@ type Workload struct
     method (Workload) Generate() []Txn
 
 == github.com/chucklehead-dev/gotogether/qlint
-const CheckBlocked CheckStatus = "blocked"
-const CheckFail CheckStatus = "fail"
-const CheckPass CheckStatus = "pass"
-const Error Severity = "error"
-const Info Severity = "info"
-const Warning Severity = "warning"
-func Inspect(o Options) *Report
 func Sim(dir string) ([]Finding, error)
 func SimFile(fset *token.FileSet, f *ast.File) []Finding
 func SimFileTyped(fset *token.FileSet, f *ast.File, info *types.Info) []Finding
 func Woven(dir string) ([]Finding, error)
 func WovenFile(fset *token.FileSet, f *ast.File) []Finding
-type Check struct
-    field Name string `json:"name"`
-    field Target string `json:"target"`
-    field Status CheckStatus `json:"status"`
-    field Reason string `json:"reason,omitempty"`
-    field Operational bool `json:"operational,omitempty"`
-type CheckStatus string
-type Diagnostic struct
-    field Code string `json:"code"`
-    field Severity Severity `json:"severity"`
-    field Message string `json:"message"`
-    field Path string `json:"path,omitempty"`
-    field Line int `json:"line,omitempty"`
-    field Column int `json:"column,omitempty"`
-    field Symbol string `json:"symbol,omitempty"`
-    field Fix string `json:"fix"`
-    field Confidence string `json:"confidence"`
-type Evidence struct
-    field Kind string `json:"kind"`
-    field Target string `json:"target"`
-    field Count int `json:"count"`
-    field Items []EvidenceItem `json:"items,omitempty"`
-type EvidenceItem struct
-    field Path string `json:"path"`
-    field Line int `json:"line"`
-    field Column int `json:"column"`
-    field Symbol string `json:"symbol,omitempty"`
-    field Action string `json:"action"`
 type Finding struct
     field Code string
     field Pos string
     field What string
     field Fix string
     field At token.Pos
+    field Path string
+    field Line int
+    field Column int
     method (Finding) String() string
-type Options struct
-    field Bindings []string
-    field Source string
-    field Simulation string
-    field Weave string
-    field Conversions []string
-    field Quint string
-type Report struct
-    field Format string `json:"format"`
-    field Scope string `json:"scope"`
-    field Limits []string `json:"limits"`
-    field Checks []Check `json:"checks"`
-    field Findings []Diagnostic `json:"findings"`
-    field Evidence []Evidence `json:"evidence"`
-    method (*Report) Complete() bool
-    method (*Report) ExitCode() int
-    method (*Report) MarshalJSON() ([]byte, error)
-type Severity string
 
 == github.com/chucklehead-dev/gotogether/qload
 const Window = 100 * time.Second

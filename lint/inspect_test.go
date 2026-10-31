@@ -1,4 +1,4 @@
-package qlint
+package lint
 
 import (
 	"encoding/json"
