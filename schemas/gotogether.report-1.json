@@ -194,6 +194,21 @@
               "explored": {
                 "type": "integer"
               },
+              "initialization": {
+                "additionalProperties": false,
+                "properties": {
+                  "action": {
+                    "type": "string"
+                  },
+                  "expression": {
+                    "type": "string"
+                  }
+                },
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
               "limit": {
                 "type": "integer"
               },
@@ -828,6 +843,21 @@
                   "explored": {
                     "type": "integer"
                   },
+                  "initialization": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "type": "string"
+                      },
+                      "expression": {
+                        "type": "string"
+                      }
+                    },
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
                   "limit": {
                     "type": "integer"
                   },
@@ -1441,6 +1471,21 @@
                   "explored": {
                     "type": "integer"
                   },
+                  "initialization": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "type": "string"
+                      },
+                      "expression": {
+                        "type": "string"
+                      }
+                    },
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
                   "limit": {
                     "type": "integer"
                   },
@@ -1779,6 +1824,21 @@
                                 },
                                 "explored": {
                                   "type": "integer"
+                                },
+                                "initialization": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "action": {
+                                      "type": "string"
+                                    },
+                                    "expression": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
                                 },
                                 "limit": {
                                   "type": "integer"
@@ -2144,6 +2204,21 @@
                                 },
                                 "explored": {
                                   "type": "integer"
+                                },
+                                "initialization": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "action": {
+                                      "type": "string"
+                                    },
+                                    "expression": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
                                 },
                                 "limit": {
                                   "type": "integer"
@@ -2538,6 +2613,21 @@
                               },
                               "explored": {
                                 "type": "integer"
+                              },
+                              "initialization": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "action": {
+                                    "type": "string"
+                                  },
+                                  "expression": {
+                                    "type": "string"
+                                  }
+                                },
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
                               },
                               "limit": {
                                 "type": "integer"

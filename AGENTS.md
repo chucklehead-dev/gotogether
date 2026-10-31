@@ -159,6 +159,10 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   deliberate change to any of them regenerates it (`GOTOGETHER_UPDATE_API=1
   go test ./internal/apisurface/`, from the root) and adds a CHANGELOG
   line.
+- Shared receipt/report JSON fields also change the generated report schema.
+  After changing their shape, run `GOTOGETHER_UPDATE_SCHEMA=1 go test ./schemas/`
+  and check `go test ./schemas/ ./internal/apisurface/` together; API snapshots
+  alone do not verify the schema embedded in published modules.
 - The repository is a Go workspace (`go.work`, checked in): every module
   sees the others' code as it is, without a release. CI sets `GOWORK=off`
   and tests each module on its own go.mod, as a user would build it.
