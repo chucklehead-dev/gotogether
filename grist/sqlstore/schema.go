@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/grist/store"
@@ -19,19 +20,17 @@ type migration struct {
 	stmts   []string
 }
 
-// migrations are the schema's versions, in order (read-only). Version 1
-// is the tables slice 2 created at every boot with CREATE TABLE IF NOT
-// EXISTS: a database those boots made has them, and migrating it to 1
-// changes nothing. A later version is a new entry here, never an edit of
-// an applied one (a database at it would keep the old statements).
+// migrations are the supported schema's versions, in order (read-only).
+// Version 2 starts with immutable event identities. Version 1 and unversioned
+// pre-release tables cannot safely be backfilled: their events already caused
+// effects under position-based keys. Initialize a fresh database instead.
 var migrations = []migration{
-	{1, "grist's tables (slice 2's)", schema},
+	{2, "grist's tables with immutable event identities", schema},
 }
 
-// SchemaVersion is the schema version this sqlstore migrates a database
-// to (grist_schema): Open refuses a database at a later one, written by a
-// newer grist.
-const SchemaVersion = 1
+// SchemaVersion is the schema version this sqlstore initializes. Open refuses
+// older schemas whose stored events have no immutable identity, and newer ones.
+const SchemaVersion = 2
 
 // schemaTable is the schema's version, one row (id 1). Its row is also
 // the migrations' lock: a migration updates it first, so two nodes
@@ -63,6 +62,8 @@ func migrateTo(ctx context.Context, db *sql.DB, ms []migration) error {
 // errNewerSchema is a database a newer grist migrated.
 var errNewerSchema = errors.New("sqlstore: the database's schema is newer than this binary's")
 
+var errOlderSchema = errors.New("sqlstore: the database's schema has no immutable event identities")
+
 // migrateOnce applies the migrations after the database's version, under
 // the schema row's lock, in one transaction.
 func migrateOnce(ctx context.Context, db *sql.DB, ms []migration) error {
@@ -85,6 +86,9 @@ func migrateOnce(ctx context.Context, db *sql.DB, ms []migration) error {
 	if v > last {
 		return fmt.Errorf("%w: it is at version %d, this sqlstore migrates to %d: run a binary built with the grist that migrated it (a rollback past a migration needs the newer binary's down migration, which grist does not write)", errNewerSchema, v, last)
 	}
+	if v > 0 && v < ms[0].version {
+		return store.Permanent(fmt.Errorf("%w: version %d cannot be backfilled safely: initialize a fresh schema with this prerelease; existing events may already have caused effects under position-based keys", errOlderSchema, v))
+	}
 	if v == last {
 		return nil
 	}
@@ -94,6 +98,9 @@ func migrateOnce(ctx context.Context, db *sql.DB, ms []migration) error {
 		}
 		for _, q := range m.stmts {
 			if _, err := tx.ExecContext(ctx, q); err != nil {
+				if v == 0 && strings.Contains(err.Error(), "already exists") {
+					return store.Permanent(fmt.Errorf("%w: unversioned tables cannot be backfilled safely: initialize a fresh schema with this prerelease: %v", errOlderSchema, err))
+				}
 				return fmt.Errorf("sqlstore: migration %d (%s): %s: %w", m.version, m.why, q, classify(err))
 			}
 		}

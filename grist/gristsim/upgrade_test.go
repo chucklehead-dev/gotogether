@@ -2,10 +2,13 @@ package gristsim_test
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/gristsim"
+	"github.com/chucklehead-dev/gotogether/grist/memstore"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -76,23 +79,93 @@ func olderRefused(steps []qtrace.Step) (refused, shapes int) {
 	return
 }
 
-// A rolling update from release 1 to a release 2 that writes version 2 at
-// once: a node of release 1 still running meets a version 2 event, and
-// refuses the call (retried, a newer node answering it), never deciding
-// without the event. Held back (WritesVersion(1)), no node refuses
-// anything. Either way every commit is recorded in release 2's shape,
-// whichever release's node made it: the relay renders as release 2 from
-// the start.
-func TestRollout(t *testing.T) {
-	var eager, held, shapes int
-	for seed := uint64(1); seed <= 6; seed++ {
-		r, s := olderRefused(rollout(t, seed, notes(2, false)))
-		eager, shapes = eager+r, shapes+s
-		r, s = olderRefused(rollout(t, seed, notes(2, true)))
-		held, shapes = held+r, shapes+s
+// Force the overlap a random rolling schedule may never reach: a newer
+// release commits first, then the older release must read that exact event
+// before it can answer a query or decide a command. Refusal is retriable,
+// never a committed domain rejection that poisons the command's id.
+func TestRolloutReaderCompatibility(t *testing.T) {
+	for _, held := range []bool{false, true} {
+		name := "eager"
+		if held {
+			name = "held"
+		}
+		t.Run(name, func(t *testing.T) {
+			older, newer := notes(1, false), notes(2, held)
+			for _, app := range []*grist.App{older, newer} {
+				if err := app.Verify(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			sink := &qobs.MemorySink{}
+			recorder := qobs.NewRecorder(sink, qobs.WithID("rollout-reader-"+name))
+			t.Cleanup(func() {
+				if err := recorder.Close(); err != nil {
+					t.Error(err)
+				}
+			})
+			ctx := qobs.WithRecorder(t.Context(), recorder)
+			st := memstore.New("notes")
+			if err := st.CreateTenant(ctx, "t1"); err != nil {
+				t.Fatal(err)
+			}
+			args := json.RawMessage(`{"topic":"a"}`)
+			if _, err := newer.Execute(ctx, st, grist.Envelope{ID: "new-first", Tenant: "t1", Caller: "u"}, "note", args); err != nil {
+				t.Fatal(err)
+			}
+			stored, head, err := st.Read(ctx, "t1", grist.Selector{Types: []string{"noted"}}, 0)
+			version := 2
+			if held {
+				version = 1
+			}
+			if err != nil || head != 1 || len(stored) != 1 || stored[0].Version != version {
+				t.Fatalf("newer-writer prerequisite not reached: events=%+v head=%d err=%v, want one version %d event", stored, head, err, version)
+			}
+			answer, _, queryErr := older.Query(ctx, st, grist.Envelope{ID: "old-count", Tenant: "t1", Caller: "u"}, "count", args)
+			_, commandErr := older.Execute(ctx, st, grist.Envelope{ID: "old-note", Tenant: "t1", Caller: "u"}, "note", args)
+			if held {
+				var count Count
+				if queryErr != nil || json.Unmarshal(answer, &count) != nil || count.N != 1 || commandErr != nil {
+					t.Fatalf("older reader refused held version 1: answer=%s query=%v command=%v", answer, queryErr, commandErr)
+				}
+			} else {
+				for operation, err := range map[string]error{"query": queryErr, "command": commandErr} {
+					var newerVersion *grist.NewerVersionError
+					if !errors.As(err, &newerVersion) || !errors.Is(err, grist.ErrUnavailable) || newerVersion.Type != "noted" || newerVersion.Version != 2 || newerVersion.Newest != 1 {
+						t.Errorf("older %s answered a newer event: %v, want typed version-2 refusal (reader supports version 1)", operation, err)
+					}
+				}
+				remaining, head, err := st.Read(ctx, "t1", grist.Selector{Types: []string{"noted"}}, 0)
+				if err != nil || head != 1 || len(remaining) != 1 || remaining[0].ID != stored[0].ID {
+					t.Fatalf("older refusal changed the committed history: %+v head=%d (%v)", remaining, head, err)
+				}
+				if marker, exists, err := st.Marker(ctx, "t1", "old-note"); err != nil || exists {
+					t.Fatalf("older refusal committed a final domain answer: marker=%+v exists=%v (%v)", marker, exists, err)
+				}
+				if _, err := newer.Execute(ctx, st, grist.Envelope{ID: "old-note", Tenant: "t1", Caller: "u"}, "note", args); err != nil {
+					t.Fatalf("newer release could not retry the refused command's id: %v", err)
+				}
+			}
+			answer, _, err = newer.Query(ctx, st, grist.Envelope{ID: "new-count", Tenant: "t1", Caller: "u"}, "count", args)
+			var count Count
+			if err != nil || json.Unmarshal(answer, &count) != nil || count.N != 2 {
+				t.Fatalf("two accepted commands did not remain readable: answer=%s err=%v", answer, err)
+			}
+		})
 	}
-	if eager == 0 {
-		t.Errorf("no call refused by a node of release 1 in 6 rollouts of a release writing version 2 at once")
+}
+
+// Keep broad rolling-update schedules alongside the forced reader-overlap
+// witness above. Held back (WritesVersion(1)), no old node refuses a call.
+// Every commit is recorded in release 2's shape, whichever release's node
+// made it: the relay renders as release 2 from the start. Positive eager
+// refusal coverage does not depend on a small sample routing to an old node.
+func TestRollout(t *testing.T) {
+	var held, shapes int
+	for seed := uint64(1); seed <= 6; seed++ {
+		_, s := olderRefused(rollout(t, seed, notes(2, false)))
+		shapes += s
+		r, s := olderRefused(rollout(t, seed, notes(2, true)))
+		held, shapes = held+r, shapes+s
 	}
 	if held != 0 {
 		t.Errorf("%d calls refused by a node of release 1 in rollouts of a release writing version 1 (WritesVersion): it reads every event", held)

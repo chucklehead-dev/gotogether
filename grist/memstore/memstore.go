@@ -7,10 +7,12 @@ package memstore
 
 import (
 	"context"
+	"maps"
 	"sort"
 	"sync"
 
 	"github.com/chucklehead-dev/gotogether/grist/store"
+	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
 // Store is an in-memory store.Store.
@@ -19,7 +21,8 @@ type Store struct {
 
 	mu      sync.Mutex
 	tenants map[string]*tenant
-	changed chan struct{} // closed and replaced on every append
+	ids     map[string]bool // committed event identities across every tenant
+	changed chan struct{}   // closed and replaced on every append
 }
 
 type tenant struct {
@@ -32,7 +35,7 @@ type tenant struct {
 
 // New returns an empty store named name.
 func New(name string) *Store {
-	return &Store{name: name, tenants: map[string]*tenant{}, changed: make(chan struct{})}
+	return &Store{name: name, tenants: map[string]*tenant{}, ids: map[string]bool{}, changed: make(chan struct{})}
 }
 
 // Name implements store.Store.
@@ -85,6 +88,9 @@ func (s *Store) Read(_ context.Context, t string, q store.Selector, at store.Pos
 // Append implements store.Store. The marker, the checkpoint and the
 // condition are checked under the store's lock.
 func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Position, error) {
+	if err := b.CheckRetainedIDs(); err != nil {
+		return 0, err
+	}
 	s.mu.Lock()
 	tn := s.tenants[t]
 	if tn == nil {
@@ -98,12 +104,14 @@ func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Posi
 		}
 	}
 	if c := b.Checkpoint; c != nil && c.To > store.Position(len(tn.log)) {
+		err := &store.ConditionFailed{Event: c.To, Past: true, Head: store.Position(len(tn.log))}
 		s.mu.Unlock()
-		return 0, &store.ConditionFailed{Event: c.To, Past: true, Head: store.Position(len(tn.log))}
+		return 0, err
 	}
 	if c := b.Checkpoint; c != nil && tn.checkpoints[c.Processor] != c.From {
+		err := &store.CheckpointMoved{Processor: c.Processor, Expected: c.From, Found: tn.checkpoints[c.Processor]}
 		s.mu.Unlock()
-		return 0, &store.CheckpointMoved{Processor: c.Processor, Expected: c.From, Found: tn.checkpoints[c.Processor]}
+		return 0, err
 	}
 	if b.Condition != nil {
 		if err := store.CheckCondition(tn.log, *b.Condition); err != nil {
@@ -111,8 +119,30 @@ func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Posi
 			return 0, err
 		}
 	}
-	for _, e := range b.Events {
-		tn.log = append(tn.log, store.Stored{Event: e.Clone(), Tenant: t, Pos: store.Position(len(tn.log) + 1), Time: b.Time, Cause: b.Cause})
+	ids := make([]string, len(b.Events))
+	allocated := map[string]bool{}
+	for i := range ids {
+		for {
+			id := ""
+			if b.RetainedIDs != nil {
+				id = b.RetainedIDs[i]
+			} else {
+				id = qenv.NewID(ctx)
+			}
+			if s.ids[id] || allocated[id] {
+				if b.RetainedIDs != nil {
+					s.mu.Unlock()
+					return 0, store.Permanent(&store.IdentityExists{ID: id})
+				}
+				continue // a simulation may import IDs from an earlier run
+			}
+			ids[i], allocated[id] = id, true
+			break
+		}
+	}
+	for i, e := range b.Events {
+		tn.log = append(tn.log, store.Stored{Event: e.Clone(), ID: ids[i], Tenant: t, Pos: store.Position(len(tn.log) + 1), Time: b.Time, Cause: b.Cause})
+		s.ids[ids[i]] = true
 	}
 	head := store.Position(len(tn.log))
 	if b.Marker != nil {
@@ -226,7 +256,7 @@ func (s *Store) wait(ctx context.Context, t string, done func(*tenant) bool) err
 		}
 		ch := s.changed
 		s.mu.Unlock()
-		select {
+		select { //qenv:ok memstore is a real-time unit-test store; simulations use grist/simstore
 		case <-ch:
 		case <-ctx.Done():
 			return ctx.Err()
@@ -236,13 +266,16 @@ func (s *Store) wait(ctx context.Context, t string, done func(*tenant) bool) err
 
 // A Backup is a memstore's whole state at a point (Store.Backup), for a
 // test of what a restore does to a node: Store.Restore puts it back.
-type Backup struct{ tenants map[string]*tenant }
+type Backup struct {
+	tenants map[string]*tenant
+	ids     map[string]bool
+}
 
 // Backup is a copy of the store's state now.
 func (s *Store) Backup() *Backup {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return &Backup{tenants: copyTenants(s.tenants)}
+	return &Backup{tenants: copyTenants(s.tenants), ids: maps.Clone(s.ids)}
 }
 
 // Restore puts the store back to b, as a restore from a backup does to a
@@ -252,6 +285,7 @@ func (s *Store) Restore(b *Backup) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.tenants = copyTenants(b.tenants)
+	s.ids = maps.Clone(b.ids)
 	s.wake()
 }
 

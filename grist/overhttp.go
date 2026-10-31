@@ -16,7 +16,8 @@ import (
 )
 
 // CauseHeader is the header a call over HTTP carries its cause in (OverHTTP
-// sends it, ServeCalls reads it): <app>/<tenant>/<processor>/<trigger>/<head>,
+// sends it, ServeCalls reads it):
+// <app>/<tenant>/<processor>/<trigger>/<head>/<clock>/<trigger-id>,
 // each part path-escaped. With the Idempotency-Key (the call's key) it is
 // what places the dependency's record of the call in the caller's tenant's
 // trace, after the commit holding its trigger.
@@ -116,10 +117,8 @@ func (e *callUnknown) Is(target error) bool { return target == ErrOutcomeUnknown
 // encodeCause is c as CauseHeader's value.
 func encodeCause(c CallInfo) string {
 	parts := []string{url.PathEscape(c.App), url.PathEscape(c.Tenant), url.PathEscape(c.Processor),
-		strconv.FormatInt(int64(c.Trigger), 10), strconv.FormatInt(int64(c.Head), 10)}
-	if c.Clock != 0 {
-		parts = append(parts, strconv.FormatInt(c.Clock, 10)) // after a rewind only: an older grist's server reads five
-	}
+		strconv.FormatInt(int64(c.Trigger), 10), strconv.FormatInt(int64(c.Head), 10),
+		strconv.FormatInt(c.Clock, 10), c.TriggerID}
 	return strings.Join(parts, "/")
 }
 
@@ -132,30 +131,47 @@ func userNames(ci *callInfo) []string {
 	return out
 }
 
-// rewoundKey reports whether key is base's for a position a rewind gave
-// back (base~n, the poller's key after a rewind: rewind.go).
-func rewoundKey(key, base string) bool {
-	n, ok := strings.CutPrefix(key, base+"~")
-	if !ok {
+// validTriggerID is the canonical stored-event identity minted by qenv.NewID.
+func validTriggerID(id string) bool {
+	if len(id) != 32 {
 		return false
 	}
-	k, err := strconv.Atoi(n)
-	return err == nil && k > 0 && strconv.Itoa(k) == n
+	for _, c := range id {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func checkCallIdentity(c CallInfo) error {
+	if c.Trigger < 1 || c.Head < c.Trigger || c.Clock < 0 {
+		return fmt.Errorf("grist: call cause needs a positive trigger, a head at or past it, and a non-negative clock")
+	}
+	if err := CheckTenant(c.Tenant); err != nil {
+		return err
+	}
+	if !validTriggerID(c.TriggerID) {
+		return fmt.Errorf("grist: call trigger identity %q: want the stored event's 32 lowercase hexadecimal ID", c.TriggerID)
+	}
+	if c.Key != effectKeyOf(c.App, c.Processor, c.Tenant, c.Trigger, c.TriggerID) {
+		return fmt.Errorf("grist: Idempotency-Key %q: a call for processor %s's trigger %d in tenant %s carries its immutable event's effect key, %s (grist.EffectKey)", c.Key, c.Processor, c.Trigger, c.Tenant, effectKeyOf(c.App, c.Processor, c.Tenant, c.Trigger, c.TriggerID))
+	}
+	return nil
 }
 
 // decodeCause is CauseHeader's value v and the key as a CallInfo.
 func decodeCause(v, key string) (CallInfo, error) {
 	parts := strings.Split(v, "/")
-	var clock int64
-	if len(parts) == 6 {
-		c, err := strconv.ParseInt(parts[5], 10, 64)
-		if err != nil || c < 0 {
-			return CallInfo{}, fmt.Errorf("%s %q: its clock is the tenant's clock base, a non-negative integer, as grist.OverHTTP sends it", CauseHeader, v)
-		}
-		clock, parts = c, parts[:5]
+	if len(parts) != 7 {
+		return CallInfo{}, fmt.Errorf("%s %q: want <app>/<tenant>/<processor>/<trigger>/<head>/<clock>/<trigger-id>, as grist.OverHTTP sends it", CauseHeader, v)
 	}
-	if len(parts) != 5 {
-		return CallInfo{}, fmt.Errorf("%s %q: want <app>/<tenant>/<processor>/<trigger>/<head>[/<clock>], as grist.OverHTTP sends it", CauseHeader, v)
+	clock, err := strconv.ParseInt(parts[5], 10, 64)
+	if err != nil || clock < 0 {
+		return CallInfo{}, fmt.Errorf("%s %q: its clock is the tenant's clock base, a non-negative integer, as grist.OverHTTP sends it", CauseHeader, v)
+	}
+	if !validTriggerID(parts[6]) {
+		return CallInfo{}, fmt.Errorf("%s %q: its trigger identity is the stored event's 32 lowercase hexadecimal ID", CauseHeader, v)
 	}
 	var s [3]string
 	for i := range s {
@@ -175,7 +191,7 @@ func decodeCause(v, key string) (CallInfo, error) {
 	if key == "" {
 		return CallInfo{}, errors.New("no Idempotency-Key: a call carries its key (the effect's), as grist.OverHTTP sends it")
 	}
-	return CallInfo{App: s[0], Tenant: s[1], Processor: s[2], Trigger: Position(trigger), Head: Position(head), Key: key, Clock: clock}, nil
+	return CallInfo{App: s[0], Tenant: s[1], Processor: s[2], Trigger: Position(trigger), TriggerID: parts[6], Head: Position(head), Key: key, Clock: clock}, nil
 }
 
 // ServeCalls is an HTTP handler serving dependency d's calls with h, for
@@ -198,7 +214,7 @@ func decodeCause(v, key string) (CallInfo, error) {
 // It answers 200 with the response, 422 with {"rejected": name} for a
 // declared refusal, 400 for a request without its cause or key, of
 // another App, of a processor that does not use the call (Uses), whose
-// key is not its effect's (EffectKey: processor/tenant/trigger, as a
+// key is not its effect's (EffectKey: app/processor/tenant/position@event-id, as a
 // grist caller sends it), or that does not decode (nothing recorded:
 // nothing was applied), 404 for a call d does not declare, 405 for
 // another method than POST, and 500 for a handler's error that is no
@@ -253,10 +269,8 @@ func (s *callServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case !slices.ContainsFunc(ci.users, func(p *processorInfo) bool { return p.name == info.Processor }):
 		// its record would name a processor no rule makes the call for
 		err = fmt.Errorf("a call of processor %q, which does not use call %s (grist.Uses): its users are %v", info.Processor, ci.label(), userNames(ci))
-	case info.Key != effectKeyOf(info.App, info.Processor, info.Tenant, info.Trigger) && !rewoundKey(info.Key, effectKeyOf(info.App, info.Processor, info.Tenant, info.Trigger)):
-		// a grist caller's key is its effect's: another would record a
-		// second application of the trigger under a key of its own
-		err = fmt.Errorf("Idempotency-Key %q: a call for processor %s's trigger %d in tenant %s carries its effect's key, %s (grist.EffectKey)", info.Key, info.Processor, info.Trigger, info.Tenant, effectKeyOf(info.App, info.Processor, info.Tenant, info.Trigger))
+	default:
+		err = checkCallIdentity(info)
 	}
 	if err != nil {
 		fail(w, http.StatusBadRequest, "grist: dependency %s: %v", s.d.name, err)

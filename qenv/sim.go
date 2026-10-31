@@ -113,6 +113,7 @@ type Sim struct {
 	pred      []*task   // tasks waiting on a predicate (evaluated every step)
 	timers    timerHeap // deadlines of waiting tasks
 	nextID    int
+	valueIDs  atomic.Uint64 // fresh opaque IDs, never restored with a process or double
 	procs     []*Process
 	net       Network // the network between processes (Net)
 	clocksSet *Clocks // Clocks as the first process saw them

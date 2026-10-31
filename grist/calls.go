@@ -110,7 +110,7 @@ func (c *Call[Req, Resp]) Name() string { return c.info.name }
 // The fields every call step records beside its request's and response's:
 // a request or response field of one of these names would be overwritten.
 // Read-only.
-var callFields = map[string]bool{"processor": true, "trigger": true, "key": true, "result": true}
+var callFields = map[string]bool{"processor": true, "trigger": true, "triggerId": true, "key": true, "result": true}
 
 // NewCall declares call name of dependency d, with request Req and
 // response Resp. Its options are Keyed (the dependency applies each key
@@ -154,7 +154,7 @@ func NewCall[Req, Resp any](d *Dependency, name string, opts ...Option) *Call[Re
 			n := rec.JSONName(f)
 			switch {
 			case callFields[n]:
-				a.problems = append(a.problems, fmt.Sprintf("%s: its %s's field %s is named %q, which every call step records itself (processor, trigger, key, result): rename it (its JSON name)", what, side.name, f.Name, n))
+				a.problems = append(a.problems, fmt.Sprintf("%s: its %s's field %s is named %q, which every call step records itself (processor, trigger, triggerId, key, result): rename it (its JSON name)", what, side.name, f.Name, n))
 			case fields[n] != "":
 				a.problems = append(a.problems, fmt.Sprintf("%s: its request and its response both have a field %q: a step records both by name, so rename one (its JSON name)", what, n))
 			}
@@ -202,8 +202,8 @@ func Uses(calls ...CallName) Option {
 
 // CallInfo is a call's cause, carried from the effect that makes it to
 // wherever it is served: the App and tenant it is made for, the
-// processor and the trigger it is made for, the head the poller read when
-// it took the trigger, and the call's key (the effect's). The site's
+// processor and the immutable stored trigger it is made for, the head the
+// poller read when it took the trigger, and the call's key (the effect's). The site's
 // record is placed at it (order.pos 2·Head+1), so it follows the commit
 // holding the trigger. Clock is the tenant's clock base the effect's
 // steps are recorded at (0 until a rewind, ErrRewound): the site's record
@@ -211,8 +211,10 @@ func Uses(calls ...CallName) Option {
 type CallInfo struct {
 	App, Tenant, Processor string
 	Trigger, Head          Position
-	Key                    string
-	Clock                  int64
+	// TriggerID is the immutable identity of the stored trigger event.
+	TriggerID string
+	Key       string
+	Clock     int64
 }
 
 // A Transport answers a dependency's calls: JSON requests and responses,
@@ -229,14 +231,15 @@ type Transport interface {
 
 // effectCause is what an effect's context carries for its calls.
 type effectCause struct {
-	app     *App
-	s       Store
-	p       *processorInfo
-	tenant  string
-	trigger Position
-	head    Position
-	key     string
-	slot    int64 // the effect step's place among the processor's: 0 at least once (2·T), 1 at most once (2·T+1)
+	app       *App
+	s         Store
+	p         *processorInfo
+	tenant    string
+	trigger   Position
+	triggerID string
+	head      Position
+	key       string
+	slot      int64 // the effect step's place among the processor's: 0 at least once (2·T), 1 at most once (2·T+1)
 }
 
 type causeKey struct{}
@@ -277,8 +280,11 @@ func (c *Call[Req, Resp]) Do(ctx context.Context, req Req) (Resp, error) {
 		return zero, NotApplied(fmt.Errorf("grist: call %s: its request: %w", ci.label(), err))
 	}
 	base := orderBase(ctx, ec.tenant)
-	info := CallInfo{App: ec.app.Name, Tenant: ec.tenant, Processor: ec.p.name, Trigger: ec.trigger, Head: ec.head, Key: ec.key, Clock: base}
-	kv := append([]any{"actor", rec.Actor(ec.s.Name(), ec.tenant), "process", ec.s.Name(), "processor", ec.p.name, "trigger", int64(ec.trigger), "key", ec.key}, reqKV...)
+	info := CallInfo{App: ec.app.Name, Tenant: ec.tenant, Processor: ec.p.name, Trigger: ec.trigger, TriggerID: ec.triggerID, Head: ec.head, Key: ec.key, Clock: base}
+	if err := checkCallIdentity(info); err != nil {
+		return zero, NotApplied(err)
+	}
+	kv := append([]any{"actor", rec.Actor(ec.s.Name(), ec.tenant), "process", ec.s.Name(), "processor", ec.p.name, "trigger", int64(ec.trigger), "triggerId", ec.triggerID, "key", ec.key}, reqKV...)
 	// ordered as the effect step it precedes on the poller's thread: after
 	// the commits through the head, among the processor's steps at the
 	// effect's place
@@ -478,7 +484,7 @@ func (ci *callInfo) handler(f func(ctx context.Context, body []byte) ([]byte, er
 		reqKV, _ := rec.StepFields(ci.req, body, "")
 		i := hc.info
 		all := append([]any{"actor", rec.Actor(ci.dep.app.Name, i.Tenant), "process", ci.dep.app.Name, "thread", "grist.served/" + i.Key,
-			"processor", i.Processor, "trigger", int64(i.Trigger), "key", i.Key, "order.pos", sv.clock.at(i.Key, i.Clock+readOrder(i.Head))}, reqKV...)
+			"processor", i.Processor, "trigger", int64(i.Trigger), "triggerId", i.TriggerID, "key", i.Key, "order.pos", sv.clock.at(i.Key, i.Clock+readOrder(i.Head))}, reqKV...)
 		action := ci.quint + "Served"
 		if hc.replayed {
 			action = ci.quint + "Replayed"
@@ -574,9 +580,15 @@ type local struct {
 }
 
 func (l *local) Call(ctx context.Context, c CallInfo, call string, req json.RawMessage) (json.RawMessage, error) {
+	if err := checkCallIdentity(c); err != nil {
+		return nil, err
+	}
 	h, ok := l.by[call]
 	if !ok {
 		return nil, fmt.Errorf("grist: no handler of call %s: add the call's Handler to the Handlers", call)
+	}
+	if c.App != h.call.dep.app.Name {
+		return nil, fmt.Errorf("grist: call of App %q: dependency %s serves App %s's calls", c.App, h.call.dep.name, h.call.dep.app.Name)
 	}
 	return h.serve(context.WithValue(ctx, callInfoKey{}, served{info: c, clock: l.clock}), req)
 }

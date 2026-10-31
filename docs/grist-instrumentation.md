@@ -265,22 +265,26 @@ construction. A call `pay` of dependency `bank` is the Quint name
 
 | step | where | actor, process | arguments | observations | order |
 | --- | --- | --- | --- | --- | --- |
-| `bankPay` (the caller's view) | `Call.Do`: `qobs.Invoke` before the request, `Call.Done` with the answer | `<app>/<tenant>` (slice 5; the tenant before), the App's store | the request's fields, `processor`, `trigger`, `key`, then the response's fields (zero without a response) | none; outcome `ok`, a refusal's name or `unknown` | as the effect step: `order.pos` 2·H+1, `order.p.<processor>` 2·T (at least once) or 2·T+1 (at most once), the poller's thread, before the effect step |
-| `bankPayServed` (the site) | where the call is served: `Handlers`' wrapper (`Call.Handler`, served by `grist.Local`: gristsim's doubles), or `grist.ServeCalls` on a real dependency the team owns | the caller's tenant, the App's store | the request's fields, `processor`, `trigger`, `key`, the response's fields | none; outcome as the handler answered | `order.pos` 2·H+1 (H the head the poller read, carried in the cause), or an earlier record of the key's if later, on a thread of its own (the key) |
+| `bankPay` (the caller's view) | `Call.Do`: `qobs.Invoke` before the request, `Call.Done` with the answer | `<app>/<tenant>` (slice 5; the tenant before), the App's store | the request's fields, `processor`, `trigger`, `triggerId`, `key`, then the response's fields (zero without a response) | none; outcome `ok`, a refusal's name or `unknown` | as the effect step: `order.pos` 2·H+1, `order.p.<processor>` 2·T (at least once) or 2·T+1 (at most once), the poller's thread, before the effect step |
+| `bankPayServed` (the site) | where the call is served: `Handlers`' wrapper (`Call.Handler`, served by `grist.Local`: gristsim's doubles), or `grist.ServeCalls` on a real dependency the team owns | the caller's tenant, the App's store | the request's fields, `processor`, `trigger`, `triggerId`, `key`, the response's fields | none; outcome as the handler answered | `order.pos` 2·H+1 (H the head the poller read, carried in the cause), or an earlier record of the key's if later, on a thread of its own (the key) |
 | `bankPayReplayed` (the site's answer given again, `grist.Replayed`) | as `bankPayServed` | as `bankPayServed` | as `bankPayServed` | as `bankPayServed` | as `bankPayServed` |
 
 (Built so in slice 1. The response's fields are step arguments, not
 observations: the actions take them as parameters, each the same-named
 field, and a step without a response records their zeros, so every step
 of the call has every parameter; a request field and a response field of
-one name, or one named `processor`, `trigger`, `key` or `result`, is a
+one name, or one named `processor`, `trigger`, `triggerId`, `key` or `result`, is a
 declaration problem `Verify` reports. `processor` is recorded because a
 call may be used by several processors, each with its own rule.)
 
+`triggerId` is the immutable stored-event ID in native evidence. Existing
+generated models keep the key opaque and check retry consistency; this field
+is not a new model parameter or a proof of ID allocation.
+
 The call carries a **cause**, `grist.CallInfo{App, Tenant, Processor,
-Trigger, Head, Key}`, from the effect's context to wherever it is served
+Trigger, TriggerID, Head, Key, Clock}`, from the effect's context to wherever it is served
 (a field of the simulated request; headers on HTTP: `Idempotency-Key` and
-`Grist-Cause: <app>/<tenant>/<processor>/<trigger>/<head>`). That is what
+`Grist-Cause: <app>/<tenant>/<processor>/<trigger>/<head>/<clock>/<trigger-id>`). That is what
 lets the site record join the right tenant's trace and be **placed at its
 cause**: at 2·H+1, where H is the head the poller read when it took the
 trigger (H ≥ the end of the trigger's batch, as the effect step's own

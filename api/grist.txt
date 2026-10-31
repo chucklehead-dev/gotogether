@@ -106,6 +106,7 @@ type CallInfo struct
     field Processor string
     field Trigger Position
     field Head Position
+    field TriggerID string
     field Key string
     field Clock int64
 type CallName interface
@@ -612,6 +613,7 @@ type LocalModel struct
     field Checker *validate.Checker
 type Log struct
     field Batches []LoggedBatch
+    field CaptureError string
     method (Log) Restore(ctx context.Context, st grist.Store) error
     method (Log) Tenants() []string
 type LoggedBatch struct
@@ -711,7 +713,7 @@ type Store struct
 
 == github.com/chucklehead-dev/gotogether/grist/sqlstore
 const PostgresNotifyChannel = "grist_changed"
-const SchemaVersion = 1
+const SchemaVersion = 2
 func Open(ctx context.Context, db *sql.DB, d Dialect, o Options) (*Store, error)
 func SQLiteDSN(path string, busy time.Duration) string
 type Dialect struct
@@ -768,12 +770,14 @@ func StepTime(ctx context.Context) int64
 func Transient(err error) bool
 type Batch struct
     field Events []Event
+    field RetainedIDs []string `json:",omitempty"`
     field Condition *Condition
     field Marker *Marker
     field Checkpoint *CheckpointMove
     field Time int64
     field Cause string
     field Step json.RawMessage
+    method (Batch) CheckRetainedIDs() error
 type CheckpointMove struct
     field Processor string
     field From Position
@@ -803,12 +807,16 @@ type Event struct
 type EventRef struct
     field Tenant string
     field Pos Position
+type IdentityExists struct
+    field ID string
+    method (*IdentityExists) Error() string
 type Marker struct
     field ID string
     field Hash string
     field Outcome string
     field Receipt Receipt
 type Meta struct
+    field ID string
     field Tenant string
     field Pos Position
     field Time int64
@@ -867,6 +875,7 @@ type Store interface
     Wait(ctx context.Context, tenant string, p Position) error
 type Stored struct
     embed Event
+    field ID string
     field Tenant string
     field Pos Position
     field Time int64

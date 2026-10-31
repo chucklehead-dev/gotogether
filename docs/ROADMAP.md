@@ -376,9 +376,8 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   reference validation and atomic publication into a fresh directory. Unsupported
   model references and stale evidence are refused. Export integrity remains
   separate from the recorded model verdict and from executable replay support.
-  Next cross-cutting work returns to I25 runtime correctness: reproduce the
-  node-local rewind epoch's effect-key identity across surviving and restarted
-  nodes before choosing a durable marker/step-log design.
+  I25's following runtime slice now uses immutable stored-event identity for
+  restart-stable effect keys, rather than persisting node-local rewind counters.
   What it was: The report serves a model's author,
   not on-call at 3 a.m.: three indices for one record ("step 16",
   "seq 7", ":19"); no wall time, pod, trace or request id on the failing
@@ -459,9 +458,9 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   reconnecting listener through Main's drain, with polling retained; (2) an
   admin command listing and re-driving `grist.failed` dead letters;
   (3) `resume -from P` (checkpoints moved past triggers an operator
-  decided were handled, a model step `gristSkipped`); (4) the rewinds'
-  memory in the store (a marker per rewind), so a restarted node keys
-  effects and sees rewinds as a running one does; (5)
+  decided were handled, a model step `gristSkipped`); (4) durable rewind detection across entirely restarted nodes; effect-key
+  identity is now solved separately by immutable stored-event IDs, with retained
+  keys stable and identical replacement commits distinct on every node; (5)
   `qenv.Store.Connections`; (6) slice 5's DSN reopen on an
   authentication failure. The
   DSN from a file or the environment (a flag shows in `ps` and the pod

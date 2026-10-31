@@ -16,9 +16,8 @@ import (
 	"github.com/chucklehead-dev/gotogether/qenv/qsql"
 )
 
-// Open migrates a database to SchemaVersion: a fresh one, and one slice
-// 2's boots made (its tables, no grist_schema), whose rows stay; one a
-// newer grist migrated is refused, naming the fix.
+// Open initializes fresh storage with immutable event identities and refuses
+// old schemas rather than inventing identities for events that already ran.
 func TestMigrations(t *testing.T) {
 	ctx := context.Background()
 	open := func(t *testing.T) *sql.DB {
@@ -38,27 +37,40 @@ func TestMigrations(t *testing.T) {
 			t.Errorf("version %d (%v), want %d", v, err, SchemaVersion)
 		}
 	})
-	t.Run("slice 2's tables", func(t *testing.T) {
-		db := open(t)
-		for _, q := range schema {
-			if _, err := db.Exec(q); err != nil {
-				t.Fatal(err)
+	for _, versioned := range []bool{false, true} {
+		t.Run(fmt.Sprintf("old schema versioned=%v", versioned), func(t *testing.T) {
+			db := open(t)
+			for _, q := range []string{
+				`CREATE TABLE grist_heads (tenant TEXT NOT NULL, head BIGINT NOT NULL, steps BIGINT NOT NULL, PRIMARY KEY (tenant))`,
+				`CREATE TABLE grist_events (tenant TEXT NOT NULL, pos BIGINT NOT NULL, type TEXT NOT NULL, version BIGINT NOT NULL, at_ms BIGINT NOT NULL, cause TEXT NOT NULL, tags TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY (tenant, pos))`,
+				`INSERT INTO grist_heads (tenant, head, steps) VALUES ('t1', 1, 0)`,
+				`INSERT INTO grist_events (tenant, pos, type, version, at_ms, cause, tags, body) VALUES ('t1', 1, 'added', 1, 0, 'one', '[]', '{}')`,
+			} {
+				if _, err := db.Exec(q); err != nil {
+					t.Fatal(err)
+				}
 			}
-		}
-		if _, err := db.Exec(`INSERT INTO grist_heads (tenant, head, steps) VALUES ('t1', 0, 0)`); err != nil {
-			t.Fatal(err)
-		}
-		s, err := Open(ctx, db, SQLite, Options{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if ts, _ := s.Tenants(ctx); len(ts) != 1 {
-			t.Errorf("tenants after the migration: %v, want t1 kept", ts)
-		}
-		if v, _ := s.Version(ctx); v != SchemaVersion {
-			t.Errorf("version %d, want %d", v, SchemaVersion)
-		}
-	})
+			if versioned {
+				if _, err := db.Exec(schemaTable); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := db.Exec(`INSERT INTO grist_schema (id, version) VALUES (1, 1)`); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := Open(ctx, db, SQLite, Options{}); !errors.Is(err, errOlderSchema) || !strings.Contains(err.Error(), "fresh schema") {
+				t.Fatalf("old schema: %v, want explicit refusal and fresh-schema instruction", err)
+			}
+			var body string
+			if err := db.QueryRow(`SELECT body FROM grist_events WHERE tenant = 't1' AND pos = 1`).Scan(&body); err != nil || body != "{}" {
+				t.Fatalf("old event changed: body %q, err %v", body, err)
+			}
+			var columns int
+			if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('grist_events') WHERE name = 'event_id'`).Scan(&columns); err != nil || columns != 0 {
+				t.Fatalf("old event received a backfilled identity: columns=%d, err=%v", columns, err)
+			}
+		})
+	}
 	t.Run("newer", func(t *testing.T) {
 		db := open(t)
 		if _, err := Open(ctx, db, SQLite, Options{}); err != nil {
@@ -81,7 +93,7 @@ func TestMigrations(t *testing.T) {
 // a plain SELECT) a second runs it after the first committed and fails,
 // the table there (42P07, which no retry fixes).
 func TestMigrationsLocked(t *testing.T) {
-	once := migration{version: 2, why: "a test's table", stmts: []string{
+	once := migration{version: 3, why: "a test's table", stmts: []string{
 		`CREATE TABLE grist_once (id BIGINT NOT NULL, PRIMARY KEY (id))`,
 	}}
 	run := func(seed uint64) (errs []error, version int64) {
@@ -105,8 +117,8 @@ func TestMigrationsLocked(t *testing.T) {
 		return errs, version
 	}
 	for seed := uint64(1); seed <= 20; seed++ {
-		if errs, v := run(seed); len(errs) > 0 || v != 2 {
-			t.Fatalf("seed %d: %v, version %d; want every Open to succeed at version 2", seed, errs, v)
+		if errs, v := run(seed); len(errs) > 0 || v != 3 {
+			t.Fatalf("seed %d: %v, version %d; want every Open to succeed at version 3", seed, errs, v)
 		}
 	}
 }

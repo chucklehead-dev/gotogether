@@ -305,17 +305,20 @@ say, and the building found:
   `order.*` value shifted, the sites' too through `CallInfo.Clock`), so
   the new history is judged after the old one, not interleaved with it.
   Without the model action no step after a rewind could be judged.
-- **Effect keys are positions, and a rewind gives positions back.** A
-  deposit lost by a restore had been posted under `post/t1/1`; the next
-  deposit took position 1, and the Keyed ledger answered its post from
-  the lost one's record: the new move never posted
-  (`Rejects("ledgerPostReplayed")`, the replay's request not the
-  record's). After a rewind to position P, a trigger past P is keyed
-  `<processor>/<tenant>/<trigger>~<n>` (the n-th rewind), which
-  `ServeCalls` accepts; triggers at or before P keep their keys, so a
-  restored event's effect replays at the dependency. A node's memory: a
-  node started after the rewind keys by position again (left: the
-  rewinds in the store).
+- **Effect identity belongs to the stored event.** Stores mint an immutable
+  `Stored.ID` for every committed event, exposed to handlers as `Meta.ID`.
+  Keys are `<app>/<processor>/<tenant>/<position>@<event-id>` on every node.
+  Restored retained events keep their IDs and keys; replacement commits receive
+  new IDs even when body, cause, timestamp and position are identical. This
+  replaces node-local rewind counters, which gave a surviving and restarted
+  node different keys for the same trigger. Pruning markers or step rows cannot
+  remove event identity. Caller/site telemetry carries typed `triggerId` and
+  `CallInfo.TriggerID`; the seven-part cause header and full key must agree.
+  Existing model checks keep keys opaque and check retry consistency; shared
+  store contracts and deterministic restart/restore fixtures check ID allocation
+  and persistence independently. This does not make unobserved rewinds detectable,
+  close every read-to-effect restore window, or reconcile a dependency ahead of
+  a restored log. Fail-closed rewind handling and explicit operator resume remain.
 - **`loseTail` is named by whichever side saw it, not always the store's.**
   A commit acknowledged and lost before any node read it leaves the
   store's side nothing to judge (its steps are the history that remains,

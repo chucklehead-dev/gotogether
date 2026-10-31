@@ -704,6 +704,7 @@ func IsFault(kind string) bool
 func Mono(ctx context.Context) time.Duration
 func New(c Chooser) *Sim
 func NewDisk(s *Sim, name string, p *Process) *Disk
+func NewID(ctx context.Context) string
 func NewNative(c Chooser, p Platform) *Sim
 func NewPCT(base Chooser, seed uint64, depth, steps int) *PCT
 func NewQueue(s *Sim, name string, p *Process) *Queue

@@ -18,6 +18,18 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
+const transportTriggerID = "00000000000000000000000000000001"
+const transportTriggerID2 = "00000000000000000000000000000002"
+
+func triggerIDAt(log []grist.Stored, pos int64) string {
+	for _, event := range log {
+		if int64(event.Pos) == pos {
+			return event.ID
+		}
+	}
+	return ""
+}
+
 // serveBank serves h behind grist.ServeCalls on a loopback server, its
 // site recorded into a sink of its own (the bank's recorder).
 func serveBank(t *testing.T, bank *grist.Dependency, h grist.Handlers) (*httptest.Server, *qobs.MemorySink) {
@@ -102,14 +114,14 @@ func TestCallOverHTTP(t *testing.T) {
 		if c.Outcome != want[n] || tr != posOf[n] {
 			t.Errorf("caller step of amount %d at trigger %d: outcome %q, want %q at the amount's position %d", n, tr, c.Outcome, want[n], posOf[n])
 		}
-		if n == 5 && c.Args["ref"] != fmt.Sprint("ref-calls/payer/t1/", tr) {
+		if n == 5 && c.Args["ref"] != "ref-"+fmt.Sprintf("calls/payer/t1/%d@%s", tr, triggerIDAt(log, tr)) {
 			t.Errorf("caller step %v: want the bank's ref, decoded from its answer", c)
 		}
 	}
 	for _, s := range served {
 		tr := s.Args["trigger"].(int64)
 		c := byTrigger[tr]
-		if s.Actor != "calls/t1" || s.Process != a.Name || s.Recorder != "bank" || s.Args["key"] != c.Args["key"] || s.Args["processor"] != "payer" || s.Order["pos"] != c.Order["pos"] || s.Args["amount"] != c.Args["amount"] {
+		if s.Actor != "calls/t1" || s.Process != a.Name || s.Recorder != "bank" || s.Args["key"] != c.Args["key"] || s.Args["triggerId"] != triggerIDAt(log, tr) || c.Args["triggerId"] != triggerIDAt(log, tr) || s.Args["processor"] != "payer" || s.Order["pos"] != c.Order["pos"] || s.Args["amount"] != c.Args["amount"] {
 			t.Errorf("served step %+v: want the caller's tenant and process, the bank's recorder, the caller's key, processor, request and order.pos (%+v)", s, c)
 		}
 	}
@@ -131,12 +143,12 @@ func TestServeCallsRefuses(t *testing.T) {
 	_, bank, pay := callsApp(grist.AtMostOnce, true)
 	srv, sink := serveBank(t, bank, bankHandlers(pay))
 	ctx := context.Background()
-	info := grist.CallInfo{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 3, Key: "calls/payer/t1/1"}
+	info := grist.CallInfo{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 3, TriggerID: transportTriggerID, Key: "calls/payer/t1/1@" + transportTriggerID}
 	body, _ := json.Marshal(payReq{Amount: 5})
 	tr := grist.OverHTTP(srv.URL, nil)
 	for i := range 2 {
 		out, err := tr.Call(ctx, info, "pay", body)
-		if err != nil || string(out) != `{"ref":"ref-calls/payer/t1/1"}` {
+		if err != nil || string(out) != `{"ref":"ref-calls/payer/t1/1@`+transportTriggerID+`"}` {
 			t.Fatalf("try %d: %s, %v: want the bank's receipt", i, out, err)
 		}
 	}
@@ -162,13 +174,27 @@ func TestServeCallsRefuses(t *testing.T) {
 	notUser.Processor, notUser.Key = "refunder", "calls/refunder/t1/1"
 	_, err = tr.Call(ctx, notUser, "pay", body)
 	unknown("a processor that does not use the call", err)
-	for _, k := range []string{"calls/payer/t1/2", "calls/payer/t2/1", "other-key"} {
+	for _, k := range []string{"calls/payer/t1/2@" + transportTriggerID, "calls/payer/t2/1@" + transportTriggerID, "calls/payer/t1/1", "calls/payer/t1/1~1", "calls/payer/t1/1@" + transportTriggerID2, "other-key"} {
 		forged := info
 		forged.Key = k
 		_, err = tr.Call(ctx, forged, "pay", body)
 		unknown("key "+k, err)
 	}
-	for _, h := range []map[string]string{{}, {grist.CauseHeader: "calls/t1/payer/1/3"}, {"Idempotency-Key": "k"}, {grist.CauseHeader: "calls/t1/payer/5/3", "Idempotency-Key": "k"}} {
+	for _, id := range []string{"", "short", strings.ToUpper("abcdefabcdefabcdefabcdefabcdefab"), "0000000000000000000000000000000g"} {
+		forged := info
+		forged.TriggerID = id
+		_, err = tr.Call(ctx, forged, "pay", body)
+		unknown("invalid trigger identity "+id, err)
+	}
+	for _, h := range []map[string]string{
+		{},
+		{grist.CauseHeader: "calls/t1/payer/1/3"},
+		{"Idempotency-Key": "k"},
+		{grist.CauseHeader: "calls/t1/payer/5/3", "Idempotency-Key": "k"},
+		{grist.CauseHeader: "calls/t1/payer/1/3/0", "Idempotency-Key": info.Key},
+		{grist.CauseHeader: "calls/t1/payer/1/3/-1/" + transportTriggerID, "Idempotency-Key": info.Key},
+		{grist.CauseHeader: "calls/t1/payer/5/3/0/" + transportTriggerID, "Idempotency-Key": info.Key},
+	} {
 		req, _ := http.NewRequest(http.MethodPost, srv.URL+"/pay", strings.NewReader(string(body)))
 		for k, v := range h {
 			req.Header.Set(k, v)
@@ -231,12 +257,12 @@ func TestOverHTTPAnswers(t *testing.T) {
 	}))
 	defer srv.Close()
 	tr := grist.OverHTTP(srv.URL+"/", nil)
-	info := grist.CallInfo{App: "my app", Tenant: "t 1", Processor: "payer", Trigger: 4, Head: 9, Key: "payer/t 1/4"}
+	info := grist.CallInfo{App: "my app", Tenant: "t 1", Processor: "payer", Trigger: 4, Head: 9, Clock: 18, TriggerID: transportTriggerID, Key: "my app/payer/t 1/4@" + transportTriggerID}
 	ctx := context.Background()
 	if out, err := tr.Call(ctx, info, "ok", []byte(`{}`)); err != nil || string(out) != `{"ref":"r1"}` {
 		t.Errorf("200: %s, %v", out, err)
 	}
-	if got.Get("Idempotency-Key") != "payer/t 1/4" || got.Get(grist.CauseHeader) != "my%20app/t%201/payer/4/9" {
+	if got.Get("Idempotency-Key") != "my app/payer/t 1/4@"+transportTriggerID || got.Get(grist.CauseHeader) != "my%20app/t%201/payer/4/9/18/"+transportTriggerID {
 		t.Errorf("headers %v: want the key and the cause, each part escaped", got)
 	}
 	var rej *grist.Rejected
@@ -273,10 +299,10 @@ func TestServeCallsOrderPerKey(t *testing.T) {
 	body, _ := json.Marshal(payReq{Amount: 5})
 	node1, node2 := grist.OverHTTP(srv.URL, nil), grist.OverHTTP(srv.URL, nil)
 	ctx := context.Background()
-	if _, err := node2.Call(ctx, grist.CallInfo{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 7, Key: "calls/payer/t1/1"}, "pay", body); err != nil {
+	if _, err := node2.Call(ctx, grist.CallInfo{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 7, TriggerID: transportTriggerID, Key: "calls/payer/t1/1@" + transportTriggerID}, "pay", body); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := node1.Call(ctx, grist.CallInfo{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 4, Key: "calls/payer/t1/1"}, "pay", body); err != nil {
+	if _, err := node1.Call(ctx, grist.CallInfo{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 4, TriggerID: transportTriggerID, Key: "calls/payer/t1/1@" + transportTriggerID}, "pay", body); err != nil {
 		t.Fatal(err)
 	}
 	served := byAction(sink.Steps(), "bankPayServed")
@@ -310,7 +336,7 @@ func TestServeCallsDefault(t *testing.T) {
 	}, grist.Delivers(grist.AtLeastOnce), grist.Uses(send))
 	srv, sink := serveBank(t, mailer, nil)
 	tr := grist.OverHTTP(srv.URL, nil)
-	info := grist.CallInfo{App: "acks", Tenant: "t1", Processor: "p", Trigger: 1, Head: 1, Key: "acks/p/t1/1"}
+	info := grist.CallInfo{App: "acks", Tenant: "t1", Processor: "p", Trigger: 1, Head: 1, TriggerID: transportTriggerID, Key: "acks/p/t1/1@" + transportTriggerID}
 	for range 2 {
 		if out, err := tr.Call(context.Background(), info, "send", []byte(`{"amount":1}`)); err != nil || string(out) != "{}" {
 			t.Fatalf("%s, %v: want the acknowledgement", out, err)
@@ -328,7 +354,7 @@ func TestServeCallsDefault(t *testing.T) {
 // paid" of a payment nothing said was not made).
 func TestCallAnswerOfNoRefusal(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Idempotency-Key") == "calls/payer/t1/2" {
+		if strings.HasPrefix(r.Header.Get("Idempotency-Key"), "calls/payer/t1/2@") {
 			http.Redirect(w, r, "/elsewhere", http.StatusSeeOther)
 			return
 		}
