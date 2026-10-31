@@ -7,7 +7,17 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Calibration-evidence follow-up (current branch): generated trajectories now
+Finite-initialization follow-up (current branch): ordinary complete traces can
+start from several legal finite model states. Search budgets distinct roots,
+keeps each root's initial invariant history, and confirms the selected original
+initializer with Quint. Shared receipts retain separate initialization evidence
+for JSON, text and TUI, without inventing an observed input event. Model cursor
+exploration still explicitly refuses ambiguous starts; it does not choose an
+arbitrary root. Acceptance tests use an independent root/path oracle and
+ablations of both root enumeration and initial property checks.
+See [the scope contract](model-choice-witnesses.md).
+
+Calibration-evidence follow-up (merged PR #20): generated trajectories now
 reject failed runs and missing samples rather than averaging zeros. Sample
 times are exact whole seconds (including an explicit initial-state sample at
 zero), initial queues must be representable, and simulation continues through
@@ -162,7 +172,7 @@ exploration evidence and run manifests. `evidence -session` filters the
 suite before coverage and expectation checks; unscoped completeness checks
 require explicit `-history`. Use a fresh ID and `go test -count=1`.
 
-**As of 2026-10-31 (calibration-evidence branch).** GR4's first composition experiment is implemented
+**As of 2026-10-31 (finite-initialization branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
 `116b3f59` so complete calibration trajectories, checked recovery aggregation, interrupted lock waits, SQL cancellation, snapshot-checkpoint validation/navigation, scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
@@ -292,8 +302,8 @@ review" on.
 In the order to take them. Sizes as in ROADMAP (S under a week, M two to
 four, L more; agent-days in practice).
 
-1. **I4's broader scope.** The finite ordinary-trace slice is implemented on
-   this branch. History/hidden/partition/snapshot/resume/within integration,
+1. **I4's broader scope.** Finite ordinary-trace choices, including initialization,
+   are implemented on this branch. History/hidden/partition/snapshot/resume/within integration,
    broader IR rendering and tighter enumeration resource bounds remain; select
    further work from adopter evidence. See [the scope](model-choice-witnesses.md).
 2. **I35's rest.** (1) a test that every `gotogether` line in a

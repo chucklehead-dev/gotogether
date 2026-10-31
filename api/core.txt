@@ -2396,6 +2396,7 @@ type Checker struct
     method (*Checker) Nav(start NavStart) (*Navigator, error)
     method (*Checker) WithConstants(constants map[string]string) (*Checker, error)
     method (*Checker) WithInvariants(invariants ...string) (*Checker, error)
+type ChoiceInitialization = receipt.ChoiceInitialization
 type ChoiceSearch = receipt.ChoiceSearch
 type ChoiceStep = receipt.ChoiceStep
 type CompiledModel struct
@@ -3188,6 +3189,9 @@ type Check struct
     field Name string `json:"name"`
     field Status Status `json:"status"`
     field Reason string `json:"reason,omitempty"`
+type ChoiceInitialization struct
+    field Action string `json:"action"`
+    field Expression string `json:"expression"`
 type ChoiceSearch struct
     field Status string `json:"status"`
     field Reason string `json:"reason,omitempty"`
@@ -3195,6 +3199,7 @@ type ChoiceSearch struct
     field Explored int `json:"explored"`
     field Exhaustive bool `json:"exhaustive"`
     field Confirmation string `json:"confirmation"`
+    field Initialization *ChoiceInitialization `json:"initialization,omitempty"`
     field Witness []ChoiceStep `json:"witness,omitempty"`
     method (*ChoiceSearch) Clone() *ChoiceSearch
     method (*ChoiceSearch) String() string

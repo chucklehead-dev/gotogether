@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- Ordinary trace validation now supports finite nondeterministic initialization.
+  It budgets distinct initial states, preserves initial invariant history through
+  later observations, and confirms the selected original initializer with Quint.
+  JSON and shared text/TUI receipts retain explicit initialization evidence.
+  Unsupported cursor exploration continues to refuse ambiguous starts.
+
 - `qload.SimulateTrajectory` now returns an error instead of averaging failed
   runs or missing samples as zero. Calibration requires valid initial state,
   positive run count and client timeout, and exact whole-second sample times;

@@ -10,12 +10,13 @@ import (
 
 func TestChoicesDocumentAndReceiptKeepExactWitness(t *testing.T) {
 	r := &Result{Actor: "a", Conforms: Pass, Choices: &ChoiceSearch{Status: "matched", Limit: 20, Explored: 4, Exhaustive: true, Confirmation: "path_confirmed", Witness: []ChoiceStep{{Index: 1, Action: "pick", Expression: `all { x' = 9007199254740993 }`, Recorder: "source", Seq: ^uint64(0)}}}}
+	r.Choices.Initialization = &ChoiceInitialization{Action: "init", Expression: "all {\n x' = 9007199254740992\n}"}
 	d := r.Doc()
 	b, err := json.Marshal(d)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"choices"`, `"confirmation":"path_confirmed"`, `9007199254740993`, `18446744073709551615`} {
+	for _, want := range []string{`"choices"`, `"confirmation":"path_confirmed"`, `"initialization":{"action":"init","expression":"all {\n x' = 9007199254740992\n}"}`, `9007199254740993`, `18446744073709551615`} {
 		if !strings.Contains(string(b), want) {
 			t.Fatalf("missing %s: %s", want, b)
 		}
@@ -27,9 +28,16 @@ func TestChoicesDocumentAndReceiptKeepExactWitness(t *testing.T) {
 	if r.Choices.Witness[0].Expression == "changed" || d.Receipt.Choices.Witness[0].Expression == "changed" {
 		t.Fatal("output snapshots share mutable witness storage")
 	}
+	d.Choices.Initialization.Expression = "changed init"
+	if r.Choices.Initialization.Expression == "changed init" || d.Receipt.Choices.Initialization.Expression == "changed init" {
+		t.Fatal("output snapshots share mutable initialization witness storage")
+	}
 	text := (&Report{Actors: []*Result{r}}).Receipt().String()
 	if !strings.Contains(text, "model choices: matched") || !strings.Contains(text, "selected path confirmed by Quint") || !strings.Contains(text, "exhaustive Go search") {
 		t.Fatalf("scope omitted from shared rendering: %s", text)
+	}
+	if !strings.Contains(text, `initialization witness (init): all {\n x' = 9007199254740992\n}`) {
+		t.Fatalf("shared rendering omitted initializer witness: %s", text)
 	}
 }
 

@@ -320,12 +320,15 @@ instrumenting one of those.
 ## Finite internal choices
 
 Ordinary complete traces can use finite `nondet`/`any` actions without new binding
-syntax. Search retains whole paths; one must explain all observations and satisfy
+syntax, including choosing initial states. Search retains whole paths and initial
+property history; one must explain all observations and satisfy
 all applicable invariant/settled-eventual properties together. A selected path is
 confirmed by Quint using original guards, domains and assignments. Complete
 negative conclusions come from exhaustive Go enumeration. `-choice-limit` defaults
 to 20,000 expanded states; exhaustion or unsupported scope gives no verdict.
 Inspect JSON `choices` (status, limit, explored, exhaustive, confirmation and
-witness), or the text/TUI receipt, before treating an outcome as decided. Manifest
+witness, and the separate initialization action/expression), or the text/TUI
+receipt, before treating an outcome as decided. Cursor model exploration can
+still refuse an ambiguous start; that does not erase the whole-run receipt. Manifest
 replay retains the exact effective limit. See
 [the scope and evidence contract](../../../docs/model-choice-witnesses.md).

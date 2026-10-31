@@ -4219,7 +4219,13 @@ ones that fail.
   All evaluation policies disclose this Go search plus selected-path Quint
   confirmation. Complete negative conclusions remain Go enumeration results.
   Bounds, joint-property semantics, current refusals and receipt fields are
-  specified in [model-choice witnesses](model-choice-witnesses.md). The following
+  specified in [model-choice witnesses](model-choice-witnesses.md). Initialization
+  now follows the same rule: distinct finite roots are charged before filtering
+  observations, each carries its initial invariant history, and the selected
+  original initializer is pinned from no pre-state and confirmed by Quint.
+  Equal later states do not merge different property histories. Initialization
+  has separate receipt evidence without an invented observed row; cursor model
+  exploration still explicitly refuses ambiguous starts. The following
   sampled-replay notes record the historical limitation and other replay paths.
 - **A choice quint samples.** quint's replay of `nondet x = oneOf(S)`
   picks one value at random, not one that enables the action
