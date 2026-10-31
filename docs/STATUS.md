@@ -15,7 +15,7 @@ independent serial-execution oracle checks 1,402 bounded combinations, alongside
 actual qenv store-history controls. Session-order checking, new workloads and
 automatic recorder timestamps remain separate work. See DESIGN's I45 note.
 
-Snapshot-checkpoint follow-up (PR #15): a trace's later snapshots now
+Snapshot-checkpoint follow-up ([PR #15](https://github.com/chucklehead-dev/gotogether/pull/15)): a trace's later snapshots now
 check the complete replayed state instead of being skipped. The first snapshot
 still establishes a lost-head log's initial state; later ones cannot reset the
 model or erase earlier failures. A disagreement is a conformance mismatch at
@@ -113,7 +113,8 @@ for every native history, including navigation. `Report.Composition` is canonica
 normal conformance assertions include applicable checks. Wrong histories, wrong
 service bindings, unknown obligations and order limits cannot silently pass.
 Receipts preserve model-authored diagnostics. See [grist-composition.md](grist-composition.md).
-PRs #2 through #14 are merged; the single current navigation contract is nav/2.
+The implementation PRs are identified in the follow-up entries above; the
+single current navigation contract is nav/2.
 
 Check-receipt first increment (merged PR #3): validation reports and run
 navigation share structured statuses, ordering-search limits and assumed effects
