@@ -506,9 +506,16 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Exercise the complete evidence workflow on another real contract | S–M | input, compiled and source capture boundaries now have refusal controls; choose a concrete adoption blocker across modeling, diagnosis and resolution before adding more provenance machinery |
+| 1 | Identify a new contract or diagnosis gap through a bounded external rehearsal | S–M | Goo counted-values is a candidate, but already has strong Hegel reference tests; establish a remaining modeling/evidence usability gap before duplicating coverage, then freeze a bounded model, inspect JSON/navigation diagnosis and fix at most one demonstrated toolkit blocker; agent-assisted, not independent adoption |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
+
+One candidate is grounded in Goo's [counted-values contract](https://github.com/casselc/goo/blob/0659a4b20fb7fe83bbfd32a194ceb9a7d0c339a9/docs/COUNTED_VALUES.md)
+and `exploration.Source.FetchCountedValues`, using its existing HTTP client seam.
+Its existing `TestHegelCountedValuesReferenceAndSourceBoundary` already checks
+the central semantics, so first establish what additional evidence a Quint trial
+would provide; choose another contract if there is no gap. Keep UI ownership,
+real ClickHouse and performance outside a first trial.
 
 Do not start all tracks at once. Worker completion and the bounded HTTP/SQLite
 rehearsal are merged in PR #9; finite pinned choices in PR #10, structured lint
