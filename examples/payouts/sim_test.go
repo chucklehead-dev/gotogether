@@ -71,6 +71,40 @@ func retried(e *qtest.Exploration) int {
 	return n
 }
 
+// lostBankReply isolates the retry contract: one valid payout, and exactly
+// the first bank reply lost after its payment commits. Other faults stay off;
+// scheduler seeds vary ordering, not whether the required witness occurs.
+func lostBankReply(binding string) qtest.System {
+	cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 1, Send: []string{"request"},
+		Gen: map[string]func(func(int) int) any{"request": func(func(int) int) any {
+			return Request{Payout: "a", Account: "a", Amount: 1}
+		}}, Peers: []*grist.App{bank.App}}
+	return gristsim.System(binding, App, cfg).WithRates(qenv.NoFaults)
+}
+
+func lostBankReplyConfig() qtest.ExploreConfig {
+	return qtest.ExploreConfig{Seeds: 8, ShortSeeds: 2, Chooser: func(seed uint64) qenv.Chooser {
+		base := qenv.NewSeeded(seed)
+		base.Rates = qenv.NoFaults
+		return &qenv.Script{Base: base, Faults: []qenv.Scripted{{Kind: "rpc.bank.response", Name: "lost"}}}
+	}}
+}
+
+func TestLostBankReply(t *testing.T) {
+	t.Parallel()
+	qtest.RequireQuint(t)
+	e := lostBankReply(commits).Explore(t, lostBankReplyConfig())
+	e.Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("rpc.bank.response").Faulted().InAtLeast(1))
+	if n := retried(e); n != len(e.Runs) {
+		t.Errorf("lost bank reply: %d of %d runs retried the same key, want every run", n, len(e.Runs))
+	}
+	for _, r := range e.Runs {
+		gristtest.Linked(t, App, bank.App, r.Recorded)
+	}
+	lostBankReply(atBank).Explore(t, lostBankReplyConfig()).Expect(t,
+		qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("rpc.bank.response").Faulted().InAtLeast(1))
+}
+
 // TestFaithful: through the bank's lost and late answers, both nodes'
 // crashes and both stores' lost commit answers, the pair conforms on both
 // sides, each judged by its own model: the payouts' (every payout sent

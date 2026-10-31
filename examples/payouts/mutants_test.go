@@ -28,13 +28,14 @@ func TestMutant(t *testing.T) {
 		// and Links finds a bank commit whose id names payouts that no call
 		// has. The payouts' own model sees nothing: its calls are as the
 		// faithful's, each try under the trigger's key
-		// about half the runs pay twice: 6 seeds miss it 1.6% of the time
-		cfg.ShortSeeds = 6
-		system(atBank, pair).Explore(t, cfg).Expect(t, qtest.Some(qtest.Violates("onePaymentPerPayout")))
-		e := system(commits, pair).Explore(t, cfg)
-		e.Expect(t, qtest.Conforms())
-		if linked(t, e) == 0 {
-			t.Errorf("freshKey: Links found no run's bank commit unlinked over %d runs", len(e.Runs))
+		// Force the lost reply after a valid payment: mutant detection
+		// must not depend on random workload/fault choices reaching it.
+		lostBankReply(atBank).Explore(t, lostBankReplyConfig()).Expect(t,
+			qtest.All(qtest.Violates("onePaymentPerPayout")), qtest.Reaches("rpc.bank.response").Faulted().InAtLeast(1))
+		e := lostBankReply(commits).Explore(t, lostBankReplyConfig())
+		e.Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("rpc.bank.response").Faulted().InAtLeast(1))
+		if n := linked(t, e); n != len(e.Runs) {
+			t.Errorf("freshKey: Links found %d of %d runs unlinked, want every lost-reply run", n, len(e.Runs))
 		}
 	case "noDuplicateCheck":
 		// a payout's id requested twice is two requests, each sent: the
