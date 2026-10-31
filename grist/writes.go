@@ -179,9 +179,13 @@ func (info *eventInfo) downcasterProblems(inverse bool) []string {
 // version, its body downcast. It fails on one that version cannot hold:
 // the downcast, upcast again, is another event.
 func (a *App) written(block string, events []Event) error {
+	if err := a.checkEventObservations(block, events); err != nil {
+		return err
+	}
 	for i, e := range events {
 		info := a.events[e.Type]
-		if info == nil || info.writes == nil || storedVersion(e.Version) != info.version {
+
+		if info.writes == nil || storedVersion(e.Version) != info.version {
 			continue
 		}
 		d := info.writes
@@ -209,6 +213,9 @@ func (a *App) written(block string, events []Event) error {
 			tags = append(tags, TagPair{Key: tf.key, Value: fmt.Sprint(old.Field(tf.index).Interface())})
 		}
 		events[i] = Event{Type: e.Type, Version: d.version, Tags: tags, Body: body}
+		if _, _, _, err := info.storedValue(events[i], info.version); err != nil {
+			return fmt.Errorf("grist: %s's written event %s observations: %w", block, e.Type, err)
+		}
 	}
 	return nil
 }

@@ -41,6 +41,14 @@ What an agent must not get wrong:
 
 ## Retained histories
 
+Event scalar values, including emitted and upcast values, must fit int64. A
+value above 9223372036854775807 is an application/data error, never a wrapped
+observation. New evidence is checked before append. `OnSuccess` is validated and
+frozen before the effect runs; invalid success evidence prevents the effect.
+Relay checks known retained versions even on already-rendered rows and stops on
+invalid bodies without advancing that row. Fix the producer/upcaster and audit
+retained data; do not convert this error into a domain refusal or drop the field.
+
 For kept committed-batch fixtures, use
 `gristtest.StoredLogs(t, App, gristtest.StoredLogsConfig{Files: files, Binding: commits})`.
 It restores each file fresh and checks event versions/tags, recorded observations,

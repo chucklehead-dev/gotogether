@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- Grist checks event scalar observations before append and relay rendering.
+  Unsigned values outside int64 and malformed bodies are errors instead of
+  wrapped or empty evidence. Processor success events are validated and frozen
+  before effects run; retained and upcast data errors stop relay progress.
+
 - `gristtest.StoredLogs` checks retained committed-batch fixtures against
   today's app and commit-side model in fresh stores, without starting processors
   or effects. It returns typed per-stage evidence and the native model report.

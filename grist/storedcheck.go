@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"reflect"
 	"slices"
 	"strings"
 
-	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
 	"github.com/chucklehead-dev/gotogether/grist/store"
 )
 
@@ -122,72 +120,6 @@ func checkStoredTags(got, want []TagPair) error {
 	return nil
 }
 
-// storedValue reads the stored shape and applies only the registered links up
-// to target. Rows from a rolling writer can already describe a newer shape than
-// the event on disk, while an old row may still describe its original shape.
-func (info *eventInfo) storedValue(e Event, target int) (v reflect.Value, typ reflect.Type, tags []tagField, err error) {
-	version := storedVersion(e.Version)
-	if version > info.version || target > info.version {
-		return v, nil, nil, &NewerVersionError{Type: info.name, Version: max(version, target), Newest: info.version}
-	}
-	if version < 1 || target < version {
-		return v, nil, nil, fmt.Errorf("cannot render stored version %d as version %d", version, target)
-	}
-	body := bytes.TrimSpace(e.Body)
-	if len(body) == 0 || body[0] != '{' {
-		return v, nil, nil, fmt.Errorf("event body must be a JSON object, not null or a scalar")
-	}
-	typ, tags = info.typ, info.tags
-	if version < info.version {
-		if version > len(info.ups) {
-			return v, nil, nil, fmt.Errorf("version %d has no registered upcaster", version)
-		}
-		typ, tags = info.ups[version-1].in, info.ups[version-1].inTags
-	}
-	p := reflect.New(typ)
-	if err = json.Unmarshal(body, p.Interface()); err != nil {
-		return v, nil, nil, err
-	}
-	v = p.Elem()
-	if err := storedScalarFields(v); err != nil {
-		return v, nil, nil, fmt.Errorf("version %d scalar observations: %w", version, err)
-	}
-	link := version
-	defer func() {
-		if value := recover(); value != nil {
-			err = fmt.Errorf("upcaster of %s from version %d panicked: %v", info.name, link, value)
-		}
-	}()
-	for ; link < target; link++ {
-		if link > len(info.ups) {
-			return v, nil, nil, fmt.Errorf("version %d has no registered upcaster", link)
-		}
-		v = info.ups[link-1].f(v)
-		if err := storedScalarFields(v); err != nil {
-			return v, nil, nil, fmt.Errorf("version %d scalar observations: %w", link+1, err)
-		}
-	}
-	typ = v.Type()
-	tags = info.tags
-	if target < info.version {
-		tags = info.ups[target-1].inTags
-	}
-	return v, typ, tags, nil
-}
-
-// scalars is the runtime observation projection, whose integer result is int64.
-// Validate each stored/upcast shape with the recorder's exact scalar rules first:
-// wrapping a uint64 into a negative observation is not faithful model evidence,
-// even if a later upcaster would discard that intermediate value.
-func storedScalarFields(v reflect.Value) error {
-	body, err := json.Marshal(v.Interface())
-	if err != nil {
-		return err
-	}
-	_, err = rec.StepFields(v.Type(), body, "")
-	return err
-}
-
 func (a *App) checkStoredObservations(s relayStep, events []Event, cause string) error {
 	fields := map[string]any{}
 	for i := 0; i+1 < len(s.kv); i += 2 {
@@ -240,7 +172,10 @@ func (a *App) checkStoredObservations(s relayStep, events []Event, cause string)
 		if err != nil {
 			return err
 		}
-		ss, ns := scalars(typ, body)
+		ss, ns, err := scalars(typ, body)
+		if err != nil {
+			return err
+		}
 		types, strs, ints, causes = append(types, e.Type), append(strs, ss...), append(ints, ns...), append(causes, []string{kind, name})
 	}
 	for _, observation := range []struct {

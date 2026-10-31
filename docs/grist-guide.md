@@ -90,6 +90,19 @@ No binding is written by hand.
 
 ## 2. The blocks
 
+Event scalar observations must fit the model's signed 64-bit integers, including
+values produced inside commands, processors and upcasters. An unsigned field is
+allowed, but a value above 9223372036854775807 is an application error; use a
+bounded integer in a stated unit, or a string for an identifier. Commands do not
+append the invalid event or a success marker. Invalid processor emits follow
+handling-failure semantics; an invalid `OnSuccess` event prevents the external
+effect from running. Valid success events are frozen before the effect runs.
+
+The relay checks bodies of event versions this App understands, including rows
+already marked as rendered. Malformed or unrepresentable retained/upcast values
+stop that row with a data error; they do not become empty or wrapped observations.
+Unknown/newer event versions retain the rolling-reader behavior described in §7.
+
 Every block is registered on one App, a package-level variable:
 
 ```go

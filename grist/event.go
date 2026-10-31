@@ -1,8 +1,10 @@
 package grist
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
 	"time"
 
@@ -217,14 +219,21 @@ func modelable(typ reflect.Type, path string) []string {
 // type typ, in field order: strings, then integers (booleans as 0 and 1).
 // Slice 1's recording names an event's values so (obs.strs, obs.ints):
 // its binding takes scalars and toList only (docs/grist.md §3.2).
-func scalars(typ reflect.Type, body []byte) (strs []string, ints []int64) {
+func scalars(typ reflect.Type, body []byte) (strs []string, ints []int64, err error) {
 	strs, ints = []string{}, []int64{}
 	if typ == nil || typ.Kind() != reflect.Struct {
-		return
+		return nil, nil, fmt.Errorf("event observations require a registered struct shape")
+	}
+	body = bytes.TrimSpace(body)
+	if len(body) == 0 || body[0] != '{' {
+		return nil, nil, fmt.Errorf("event body must be a JSON object, not null or a scalar")
+	}
+	if _, err := rec.StepFields(typ, body, ""); err != nil {
+		return nil, nil, err
 	}
 	v := reflect.New(typ)
-	if json.Unmarshal(body, v.Interface()) != nil {
-		return
+	if err := json.Unmarshal(body, v.Interface()); err != nil {
+		return nil, nil, err
 	}
 	v = v.Elem()
 	for i := 0; i < typ.NumField(); i++ {
@@ -244,7 +253,11 @@ func scalars(typ reflect.Type, body []byte) (strs []string, ints []int64) {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			ints = append(ints, f.Int())
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			ints = append(ints, int64(f.Uint()))
+			u := f.Uint()
+			if u > math.MaxInt64 {
+				return nil, nil, fmt.Errorf("field %s is %d, past the model's integers (int64): give a value at most %d, or make the field an int64 (a string for an identifier)", rec.JSONName(typ.Field(i)), u, int64(math.MaxInt64))
+			}
+			ints = append(ints, int64(u))
 		}
 	}
 	return
@@ -297,4 +310,85 @@ func failedEvent(processor string, trigger Position) Event {
 	f := Failed{Processor: processor, Trigger: int64(trigger)}
 	body, _ := json.Marshal(f)
 	return Event{Type: failedType, Version: 1, Tags: []TagPair{{Key: "processor", Value: processor}}, Body: body}
+}
+
+// storedValue reads the stored shape and applies only the registered links up
+// to target. Rows from a rolling writer can already describe a newer shape than
+// the event on disk, while an old row may still describe its original shape.
+func (info *eventInfo) storedValue(e Event, target int) (v reflect.Value, typ reflect.Type, tags []tagField, err error) {
+	version := storedVersion(e.Version)
+	if version > info.version || target > info.version {
+		return v, nil, nil, &NewerVersionError{Type: info.name, Version: max(version, target), Newest: info.version}
+	}
+	if version < 1 || target < version {
+		return v, nil, nil, fmt.Errorf("cannot render stored version %d as version %d", version, target)
+	}
+	body := bytes.TrimSpace(e.Body)
+	if len(body) == 0 || body[0] != '{' {
+		return v, nil, nil, fmt.Errorf("event body must be a JSON object, not null or a scalar")
+	}
+	typ, tags = info.typ, info.tags
+	if version < info.version {
+		if version > len(info.ups) {
+			return v, nil, nil, fmt.Errorf("version %d has no registered upcaster", version)
+		}
+		typ, tags = info.ups[version-1].in, info.ups[version-1].inTags
+	}
+	p := reflect.New(typ)
+	if err = json.Unmarshal(body, p.Interface()); err != nil {
+		return v, nil, nil, err
+	}
+	v = p.Elem()
+	if err := storedScalarFields(v); err != nil {
+		return v, nil, nil, fmt.Errorf("version %d scalar observations: %w", version, err)
+	}
+	link := version
+	defer func() {
+		if value := recover(); value != nil {
+			err = fmt.Errorf("upcaster of %s from version %d panicked: %v", info.name, link, value)
+		}
+	}()
+	for ; link < target; link++ {
+		if link > len(info.ups) {
+			return v, nil, nil, fmt.Errorf("version %d has no registered upcaster", link)
+		}
+		v = info.ups[link-1].f(v)
+		if err := storedScalarFields(v); err != nil {
+			return v, nil, nil, fmt.Errorf("version %d scalar observations: %w", link+1, err)
+		}
+	}
+	typ = v.Type()
+	tags = info.tags
+	if target < info.version {
+		tags = info.ups[target-1].inTags
+	}
+	return v, typ, tags, nil
+}
+
+// storedScalarFields checks every stored/upcast shape with the shared
+// projection rules before the next registered link can discard its fields:
+// wrapping a uint64 into a negative observation is not faithful model evidence,
+// even if a later upcaster would discard that intermediate value.
+func storedScalarFields(v reflect.Value) error {
+	body, err := json.Marshal(v.Interface())
+	if err != nil {
+		return err
+	}
+	_, _, err = scalars(v.Type(), body)
+	return err
+}
+
+// checkEventObservations validates emitted shapes without converting them to
+// a rollout's stored version: business rules must still see the newest body.
+func (a *App) checkEventObservations(block string, events []Event) error {
+	for _, e := range events {
+		info := a.events[e.Type]
+		if info == nil {
+			return fmt.Errorf("grist: %s emits unregistered event %s", block, e.Type)
+		}
+		if _, _, _, err := info.storedValue(e, info.version); err != nil {
+			return fmt.Errorf("grist: %s's event %s observations: %w", block, e.Type, err)
+		}
+	}
+	return nil
 }
