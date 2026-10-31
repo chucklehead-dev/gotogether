@@ -175,7 +175,7 @@ require explicit `-history`. Use a fresh ID and `go test -count=1`.
 **As of 2026-10-31 (finite-initialization branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
-`006e1cb8` so finite initialization witnesses, complete calibration trajectories, checked recovery aggregation, interrupted lock waits, SQL cancellation, snapshot-checkpoint validation/navigation, scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
+`ff1a24e2` so finite initialization witnesses and their published report schema, complete calibration trajectories, checked recovery aggregation, interrupted lock waits, SQL cancellation, snapshot-checkpoint validation/navigation, scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
 run profiles, finite-choice witness evidence, structured lint emitters, component shrink identities, composition and nav/2
 contract work outside go.work; the
 merged declared-call span increment did not require a core-pin bump. The

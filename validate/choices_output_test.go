@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/schemas"
 	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
@@ -20,6 +21,12 @@ func TestChoicesDocumentAndReceiptKeepExactWitness(t *testing.T) {
 		if !strings.Contains(string(b), want) {
 			t.Fatalf("missing %s: %s", want, b)
 		}
+	}
+	doc := NewDocument("validate")
+	doc.Verdict = string(Pass)
+	doc.AddReport(&Report{Actors: []*Result{r}})
+	if problems, err := schemas.Check(schemas.Report(), doc.JSON()); err != nil || len(problems) != 0 {
+		t.Fatalf("initializer evidence is outside the published report schema: %v, %v", problems, err)
 	}
 	if d.Receipt.Search != nil || d.Receipt.Ordering != "reconstructed" || d.Receipt.Choices == nil {
 		t.Fatalf("model choices relabeled as history ordering: %+v", d.Receipt)
