@@ -116,6 +116,28 @@ aspect needs nothing model-specific. The model drives:
   names, constants, invariants), and the Go annotations against the binding
   (every field a template uses must be recorded).
 
+The core lint report is now assembled before either text or JSON rendering.
+`qlint` retains the lightweight syntax rules used by analyzers; the `lint`
+package composes bindings, conversion rules and schemas above it.
+`lint.Inspect` records selected targets and their dependency phases, then runs
+independent targets even if a binding fails its schema. Each requested phase is
+`pass`, `fail` or `blocked`; blocked model/source checks retain their reason.
+The current machine contract is `gotogether.lint/1`, with rule-site codes,
+severity, message, fix, analysis basis and native source positions where known.
+No renderer extracts identity or position from prose. Source inventories remain
+structured evidence rather than proof that dynamic recording sites were found.
+
+Completeness and the command's exit status are derived from that report. Exit 0
+means clean performed checks, 1 means authored findings (including invalid schema
+that blocks dependent phases), and 2 means operational input/tool failure or an
+invalid request. A completed failing check is complete; a blocked check is not.
+The CLI scans Go syntax, while qanalysis can use Go type information. Model
+metadata/template inspection is not trace conformance. Binding's string lint
+helpers render the same typed findings for existing Go callers; they do not
+introduce a second machine report format. Grist preflight remains its separate
+maintenance contract; LSP/SARIF integration is not part of this increment. The
+[executable walkthrough](lint-onboarding.md) exercises the public CLI contract.
+
 Rules the annotation route imposes, learned in this spike:
 - **Function granularity.** A model step must be a function whose return is
   the step's linearization point. In the stand-in, the three S3 writes, the

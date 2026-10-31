@@ -13,7 +13,7 @@ Standing decisions, with the maintainer:
   only OTel and yaml.v3.
 - MIT license.
 
-Current order (reviewed 2026-10-30): this is a prerelease library.
+Current order (reviewed 2026-10-31): this is a prerelease library.
 Correctness and usable core contracts come before release machinery. The bounded
 composition, Goo lifecycle, declared-call span, workload-phase and diagnostic
 experiments have answered their initial questions; rotate away from inventory
@@ -28,11 +28,13 @@ HTTP/SQLite rehearsal now exercises actual observations, a frozen model/source
 contrast, replay and real workload shrinking, with prefix and missing-evidence
 controls. See [the rehearsal](../internal/adoptiontest/http-sql/README.md). I4's first finite pinned-witness slice is implemented for ordinary complete
 traces, with whole-path search, original-action Quint confirmation and explicit
-unsupported/bounded outcomes. See [its scope](model-choice-witnesses.md). Next
-rotate to typed core lint and executable onboarding before expanding choice modes.
+unsupported/bounded outcomes. See [its scope](model-choice-witnesses.md). The first typed core lint report and executable lint walkthrough are also
+implemented: shared text/JSON evidence, rule-site findings and explicit blocked
+checks. See [the walkthrough](lint-onboarding.md). Broader onboarding and editor
+integration should follow concrete adopter friction before expanding choice modes.
 
-Typed core lint findings (including performed/blocked checks) and component-aware
-shrinking are concrete follow-ups. Select the next adapter or starter from the
+Component-aware shrinking is the next concrete follow-up. Additional lint,
+editor and onboarding breadth waits for concrete adopter blockers. Select the next adapter or starter from the
 adoption results; outbound streams are a candidate, not a committed catalog-wide
 expansion. Do not start all these tracks at once. Tags remain the maintainer's
 call. See HISTORY's "Breadth and core lessons review, 2026-10-30" for tradeoffs.

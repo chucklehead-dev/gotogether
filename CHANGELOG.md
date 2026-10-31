@@ -8,6 +8,14 @@ and adds a line here.
 
 ## Unreleased
 
+- Core lint: text and `-json` now render one structured `gotogether.lint/1`
+  inspection report. Requested checks retain pass/fail/blocked status;
+  independent targets continue after failures. Rule-site findings carry stable
+  codes, source locations where known, fixes and analysis basis. JSON also
+  retains scan inventories, derived completeness and exit status. The executable
+  [lint walkthrough](docs/lint-onboarding.md) checks planted mistakes and their
+  corrections without treating static inspection as trace conformance.
+
 - Validation: finite internal model choices now use whole-trace search and an
   original-action pinned Quint witness, preserving guards, domains and assignments.
   Joint properties require one common path; complete negative conclusions disclose

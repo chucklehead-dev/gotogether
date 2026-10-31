@@ -2,7 +2,8 @@
 // per format at its current major (internal/formats' table): a binding
 // file (gotogether.binding/2) and a span conversion rule file
 // (gotogether.convert/1); and of the report validate -json and simulate
-// -json print (gotogether.report/1, validate.Document), for a consumer
+// -json print (gotogether.report/1, validate.Document), and lint reports
+// (gotogether.lint/1, lint.Report), for a consumer
 // that checks what it reads. Editors validate a file against its schema as
 // it is written, given its URL (BindingURL, ConvertURL) in a first-line
 // comment the YAML language server reads:
@@ -41,9 +42,10 @@ const (
 	BindingURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.binding-2.json"
 	ConvertURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.convert-1.json"
 	ReportURL  = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.report-1.json"
+	LintURL    = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.lint-1.json"
 )
 
-// binding, convert and report are the schemas' bytes. Read-only.
+// binding, convert, report and lint are the schemas' bytes. Read-only.
 var (
 	//go:embed gotogether.binding-2.json
 	binding []byte
@@ -51,6 +53,8 @@ var (
 	convert []byte
 	//go:embed gotogether.report-1.json
 	report []byte
+	//go:embed gotogether.lint-1.json
+	lint []byte
 )
 
 // Binding is the binding file's schema (gotogether.binding/2), as JSON.
@@ -63,6 +67,9 @@ func Convert() []byte { return slices.Clone(convert) }
 // Report is a command's machine-readable report's schema
 // (gotogether.report/1: validate -json, simulate -json), as JSON.
 func Report() []byte { return slices.Clone(report) }
+
+// Lint is the nonwriting lint report schema (gotogether.lint/1), as JSON.
+func Lint() []byte { return slices.Clone(lint) }
 
 // A Problem is one place where a file breaks its schema.
 type Problem struct {

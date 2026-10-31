@@ -67,6 +67,7 @@ qnav/         separate module (published; Charm's v2 libraries): gotogether-nav,
 qload/ qmeta/ load simulation (open/closed-loop clients, servers, triggers, the recovery property); CTMC, alert rules (qmeta imports nothing of the module)
 qcover/ qrun/ code coverage by model step (woven by qweave -cover); a run's state found from its context or goroutine
 qnemesis/     a real deployment's nemesis (processes, containers, Toxiproxy links), its faults recorded as steps and re-made in qenv
+lint/         nonwriting lint orchestration and structured findings/check evidence (CLI text and JSON); above qlint/binding/schemas
 qlint/        simulation and weaving lints (gotogether lint -sim, -weave); per file for qanalysis
 qanalysis/    separate module (x/tools): analyzers (cmd/quintvet, golangci plugin; quintraw: a grist effect's raw calls), static action map (cmd/actionmap)
 qmut/         mutant schemata (woven by qweave -mutate): one build, a mutant per run; qtest's System.Mutate explores each

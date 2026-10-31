@@ -503,17 +503,20 @@ func (b *Binding) relPath() string {
 // original-action pinned replay; unsupported shapes and exhausted searches
 // remain explicit no verdicts. Exposing a choice in recorded arguments or
 // observations can make the model cheaper to search and easier to diagnose.
-func (b *Binding) LintChoices(m *Model) []string {
-	var out []string
+func (b *Binding) LintChoices(m *Model) []string { return lintMessages(b.LintChoiceFindings(m)) }
+
+// LintChoiceFindings describes internal-choice sites and their supported validation scope.
+func (b *Binding) LintChoiceFindings(m *Model) []LintFinding {
+	var out []LintFinding
 	for _, name := range slices.Sorted(maps.Keys(b.Actions)) {
 		a := b.Actions[name]
 		if a.Expect == "" {
 			continue
 		}
 		if cs := m.Chooses(name); len(cs) > 0 {
-			out = append(out, fmt.Sprintf("action %s makes a choice of its own (%s) and its expect reads the state after it: supported finite choices use bounded search and original-action pinned replay; unsupported shapes or exhaustion give an explicit no verdict; "+
+			out = append(out, LintFinding{Code: "binding.action.internal_choice", Severity: "warning", Symbol: name, Confidence: "model_metadata", Fix: "Expose an observed choice as a parameter or record its observation to reduce search.", Message: fmt.Sprintf("action %s makes a choice of its own (%s) and its expect reads the state after it: supported finite choices use bounded search and original-action pinned replay; unsupported shapes or exhaustion give an explicit no verdict; "+
 				"expose the choice as a parameter of %s (the step's argument), or record it as an observation the binding passes, to reduce search and improve diagnostics",
-				name, strings.Join(cs, ", "), name))
+				name, strings.Join(cs, ", "), name)})
 		}
 	}
 	return out
@@ -523,51 +526,58 @@ func (b *Binding) LintChoices(m *Model) []string {
 // is given exactly its parameters, the restart action exists and takes none,
 // invariants are vals, templates parse, and every constant is set. It returns
 // all problems found.
-func (b *Binding) Lint(m *Model) []string {
-	var errs []string
+func (b *Binding) Lint(m *Model) []string { return lintMessages(b.LintFindings(m)) }
+
+// LintFindings checks model metadata and templates, emitting typed findings at each rule.
+func (b *Binding) LintFindings(m *Model) []LintFinding {
+	var errs []LintFinding
+	add := func(code, symbol, fix, message string) {
+		errs = append(errs, LintFinding{Code: code, Severity: "error", Message: message, Symbol: symbol, Fix: fix, Confidence: "model_metadata"})
+	}
 	if err := b.checkEvidence(m); err != nil {
-		errs = append(errs, err.Error())
+		add("binding.evidence.invalid", "", "Correct the evidence selector using the model diagnostic fields.", err.Error())
 	}
 	for _, name := range slices.Sorted(maps.Keys(b.Actions)) {
 		a := b.Actions[name]
 		ps, ok := m.Actions[name]
 		if !ok {
-			errs = append(errs, "action "+m.notAnAction(name))
+			add("binding.action.unknown", name, "Bind an action declared by the model.", "action "+m.notAnAction(name))
 			continue
 		}
 		want := map[string]bool{}
 		for _, p := range ps {
 			want[p.Name] = true
 		}
-		for arg, tpl := range a.Args {
+		for _, arg := range slices.Sorted(maps.Keys(a.Args)) {
+			tpl := a.Args[arg]
 			if !want[arg] {
-				errs = append(errs, fmt.Sprintf("action %s: %q is not a parameter; signature %s", name, arg, m.Signature(name)))
+				add("binding.parameter.unknown", name, "Use only parameters from the action signature.", fmt.Sprintf("action %s: %q is not a parameter; signature %s", name, arg, m.Signature(name)))
 			}
 			if _, err := parseTpl(tpl); err != nil {
-				errs = append(errs, fmt.Sprintf("action %s arg %s: %v", name, arg, err))
+				add("binding.template.invalid", name, "Correct the argument template syntax.", fmt.Sprintf("action %s arg %s: %v", name, arg, err))
 			}
 		}
 		if a.Expect != "" {
 			if _, err := parseTpl(a.Expect); err != nil {
-				errs = append(errs, fmt.Sprintf("action %s expect: %v", name, err))
+				add("binding.template.invalid", name, "Correct the expect template syntax.", fmt.Sprintf("action %s expect: %v", name, err))
 			}
 		}
 	}
 	if b.Restart != "" {
 		if ps, ok := m.Actions[b.Restart]; !ok {
-			errs = append(errs, "restart: "+m.notAnAction(b.Restart))
+			add("binding.restart.unknown", b.Restart, "Choose a model action for restart.", "restart: "+m.notAnAction(b.Restart))
 		} else if len(ps) != 0 {
-			errs = append(errs, fmt.Sprintf("restart: %s takes parameters; a restart action must take none", m.Signature(b.Restart)))
+			add("binding.restart.parameters", b.Restart, "Use a nullary restart action.", fmt.Sprintf("restart: %s takes parameters; a restart action must take none", m.Signature(b.Restart)))
 		}
 	}
 	for _, inv := range b.Invariants {
 		if !m.Vals[inv] {
-			errs = append(errs, fmt.Sprintf("invariant %s: not a val of %s", inv, m.Module))
+			add("binding.invariant.unknown", inv, "Select a model val as the invariant.", fmt.Sprintf("invariant %s: not a val of %s", inv, m.Module))
 		}
 	}
 	for _, ev := range b.Eventually {
 		if !m.Vals[ev] {
-			errs = append(errs, fmt.Sprintf("eventually %s: not a val of %s", ev, m.Module))
+			add("binding.eventually.unknown", ev, "Select a model val as the eventual property.", fmt.Sprintf("eventually %s: not a val of %s", ev, m.Module))
 		}
 	}
 	seenHidden := map[string]bool{}
@@ -575,18 +585,18 @@ func (b *Binding) Lint(m *Model) []string {
 		ps, ok := m.Actions[h]
 		switch {
 		case seenHidden[h]:
-			errs = append(errs, fmt.Sprintf("hidden %s: listed twice", h))
+			add("binding.hidden.duplicate", h, "List each hidden action once.", fmt.Sprintf("hidden %s: listed twice", h))
 		case h == "init" || h == "step":
-			errs = append(errs, fmt.Sprintf("hidden %s: the model's %s is no action of the system: name the actions that run unrecorded", h, h))
+			add("binding.hidden.reserved", h, "Name an unrecorded system action instead of init or step.", fmt.Sprintf("hidden %s: the model's %s is no action of the system: name the actions that run unrecorded", h, h))
 		case h == b.Restart:
-			errs = append(errs, fmt.Sprintf("hidden %s is the restart action, which the binding infers where the process changes: it is not hidden", h))
+			add("binding.hidden.restart", h, "Remove the restart action from hidden.", fmt.Sprintf("hidden %s is the restart action, which the binding infers where the process changes: it is not hidden", h))
 		case !ok:
-			errs = append(errs, fmt.Sprintf("hidden %s: not an action of %s", h, m.Module))
+			add("binding.hidden.unknown", h, "Select an action declared by the model.", fmt.Sprintf("hidden %s: not an action of %s", h, m.Module))
 		case len(ps) > 0:
-			errs = append(errs, fmt.Sprintf("hidden %s takes parameters: a hidden action's choices are unknown; give the model one that picks them (action %sAny = nondet ... %s(...))", h, h, h))
+			add("binding.hidden.parameters", h, "Use a nullary action that chooses its parameters internally.", fmt.Sprintf("hidden %s takes parameters: a hidden action's choices are unknown; give the model one that picks them (action %sAny = nondet ... %s(...))", h, h, h))
 		}
 		if _, bound := b.Actions[h]; bound {
-			errs = append(errs, fmt.Sprintf("hidden %s is bound too: an action is recorded (actions) or hidden, not both", h))
+			add("binding.hidden.bound", h, "Choose recorded or hidden ownership for the action.", fmt.Sprintf("hidden %s is bound too: an action is recorded (actions) or hidden, not both", h))
 		}
 		seenHidden[h] = true
 	}
@@ -594,13 +604,13 @@ func (b *Binding) Lint(m *Model) []string {
 		ps, ok := m.Actions[a]
 		switch {
 		case a == "init" || a == "step":
-			errs = append(errs, fmt.Sprintf("snapshot %s: the model's %s is no snapshot: name an action whose parameters are the whole state (action restore(b: int, n: int) = all { balance' = b, ops' = n })", a, a))
+			add("binding.snapshot.reserved", a, "Use a snapshot action whose parameters describe the whole state.", fmt.Sprintf("snapshot %s: the model's %s is no snapshot: name an action whose parameters are the whole state (action restore(b: int, n: int) = all { balance' = b, ops' = n })", a, a))
 		case !ok:
-			errs = append(errs, "snapshot: "+m.notAnAction(a))
+			add("binding.snapshot.unknown", a, "Select an action declared by the model.", "snapshot: "+m.notAnAction(a))
 		case a == b.Restart || seenHidden[a]:
-			errs = append(errs, fmt.Sprintf("snapshot %s is the binding's restart or a hidden action: a snapshot is a recorded step of its own", a))
+			add("binding.snapshot.conflict", a, "Use a separate recorded snapshot action.", fmt.Sprintf("snapshot %s is the binding's restart or a hidden action: a snapshot is a recorded step of its own", a))
 		case len(ps) == 0:
-			errs = append(errs, fmt.Sprintf("snapshot %s takes no parameters: a snapshot's parameters are the state the trace starts from (action %s(b: int, ...) = all { balance' = b, ... })", a, a))
+			add("binding.snapshot.parameters", a, "Give the snapshot parameters describing the whole state.", fmt.Sprintf("snapshot %s takes no parameters: a snapshot's parameters are the state the trace starts from (action %s(b: int, ...) = all { balance' = b, ... })", a, a))
 		default:
 			if vars, known := m.Assigns(a); known {
 				var left []string
@@ -610,12 +620,12 @@ func (b *Binding) Lint(m *Model) []string {
 					}
 				}
 				if len(left) > 0 {
-					errs = append(errs, fmt.Sprintf("snapshot %s leaves %s unassigned: a snapshot assigns every state variable from its parameters (%s' = ...), the whole state the trace starts from",
+					add("binding.snapshot.incomplete", a, "Assign every state variable from snapshot parameters.", fmt.Sprintf("snapshot %s leaves %s unassigned: a snapshot assigns every state variable from its parameters (%s' = ...), the whole state the trace starts from",
 						a, strings.Join(left, ", "), left[0]))
 				}
 			}
 			if r := readVars(m, a); r != "" {
-				errs = append(errs, fmt.Sprintf("snapshot %s reads %s: a trace starts in it from no state, so it assigns every variable from its parameters alone", a, r))
+				add("binding.snapshot.reads", a, "Assign the snapshot from parameters without reading prior state.", fmt.Sprintf("snapshot %s reads %s: a trace starts in it from no state, so it assigns every variable from its parameters alone", a, r))
 			}
 		}
 	}
@@ -628,22 +638,22 @@ func (b *Binding) Lint(m *Model) []string {
 		}
 		switch {
 		case len(has) == 0:
-			errs = append(errs, fmt.Sprintf("partition %s: no action of %s takes a parameter %s: name the argument each step's entity is (a charge's id)", a, m.Module, a))
+			add("binding.partition.parameter", a, "Name an action parameter identifying the entity.", fmt.Sprintf("partition %s: no action of %s takes a parameter %s: name the argument each step's entity is (a charge's id)", a, m.Module, a))
 		case len(b.Hidden) > 0 || b.Resume != "" || b.Restart != "":
-			errs = append(errs, fmt.Sprintf("partition %s with hidden, resume or restart: not combined, since each is a step of no entity's, or of every one's; judge the log whole", a))
+			add("binding.partition.conflict", a, "Judge the whole trace or remove hidden, resume and restart.", fmt.Sprintf("partition %s with hidden, resume or restart: not combined, since each is a step of no entity's, or of every one's; judge the log whole", a))
 		}
 	}
 	if a := b.Resume; a != "" {
 		ps, ok := m.Actions[a]
 		switch {
 		case a == "init" || a == "step":
-			errs = append(errs, fmt.Sprintf("resume %s: the model's %s is no resume: name a nullary action that picks the states a log may start in (action resumeAny = nondet b = 0.to(LIMIT).oneOf() all { balance' = b, ops' = 0 })", a, a))
+			add("binding.resume.reserved", a, "Use a nullary action choosing complete possible initial states.", fmt.Sprintf("resume %s: the model's %s is no resume: name a nullary action that picks the states a log may start in (action resumeAny = nondet b = 0.to(LIMIT).oneOf() all { balance' = b, ops' = 0 })", a, a))
 		case !ok:
-			errs = append(errs, "resume: "+m.notAnAction(a))
+			add("binding.resume.unknown", a, "Select an action declared by the model.", "resume: "+m.notAnAction(a))
 		case a == b.Restart || seenHidden[a] || a == b.Snapshot:
-			errs = append(errs, fmt.Sprintf("resume %s is the binding's restart, a hidden action or its snapshot: a resume is no step, only the states a trace may start in", a))
+			add("binding.resume.conflict", a, "Use a separate resume action.", fmt.Sprintf("resume %s is the binding's restart, a hidden action or its snapshot: a resume is no step, only the states a trace may start in", a))
 		case len(ps) > 0:
-			errs = append(errs, fmt.Sprintf("resume %s takes parameters: a resume picks the states itself (nondet ... oneOf()), and takes none", m.Signature(a)))
+			add("binding.resume.parameters", a, "Choose initial values within a nullary resume action.", fmt.Sprintf("resume %s takes parameters: a resume picks the states itself (nondet ... oneOf()), and takes none", m.Signature(a)))
 		default:
 			if vars, known := m.Assigns(a); known {
 				var left []string
@@ -653,51 +663,52 @@ func (b *Binding) Lint(m *Model) []string {
 					}
 				}
 				if len(left) > 0 {
-					errs = append(errs, fmt.Sprintf("resume %s leaves %s unassigned: a resume assigns every state variable (%s' = ...), the whole state a trace may start in",
+					add("binding.resume.incomplete", a, "Assign every state variable in resume.", fmt.Sprintf("resume %s leaves %s unassigned: a resume assigns every state variable (%s' = ...), the whole state a trace may start in",
 						a, strings.Join(left, ", "), left[0]))
 				}
 			}
 			if r := readVars(m, a); r != "" {
-				errs = append(errs, fmt.Sprintf("resume %s reads %s: a trace starts in it from no state, so it picks every variable from constants and values alone (nondet b = 0.to(LIMIT).oneOf())", a, r))
+				add("binding.resume.reads", a, "Choose resume values without reading prior state.", fmt.Sprintf("resume %s reads %s: a trace starts in it from no state, so it picks every variable from constants and values alone (nondet b = 0.to(LIMIT).oneOf())", a, r))
 			}
 		}
 		if _, bound := b.Actions[a]; bound {
-			errs = append(errs, fmt.Sprintf("resume %s is bound too: it is no recorded step (record a snapshot for that: snapshot)", a))
+			add("binding.resume.bound", a, "Remove resume from recorded actions or use a snapshot instead.", fmt.Sprintf("resume %s is bound too: it is no recorded step (record a snapshot for that: snapshot)", a))
 		}
 	}
 	if b.Complete && len(b.Eventually) == 0 {
-		errs = append(errs, "complete with no eventual vals: a settled prefix of a run would pass as complete; state the journey's end as one (eventually: [ended], a ghost flag its last step sets)")
+		add("binding.complete.eventually", "", "Declare an eventual val describing the journey end.", "complete with no eventual vals: a settled prefix of a run would pass as complete; state the journey's end as one (eventually: [ended], a ghost flag its last step sets)")
 	}
 	if b.HiddenDepth < 0 {
-		errs = append(errs, "hiddenDepth: negative")
+		add("binding.hidden.depth", "", "Use a nonnegative hiddenDepth.", "hiddenDepth: negative")
 	}
 	if b.HiddenDepth != 0 && len(b.Hidden) == 0 {
-		errs = append(errs, "hiddenDepth with no hidden actions: list them (hidden: [gossip])")
+		add("binding.hidden.depth", "", "List hidden actions or remove hiddenDepth.", "hiddenDepth with no hidden actions: list them (hidden: [gossip])")
 	}
 	for _, w := range b.Within {
 		for _, v := range []string{w.After, w.Holds} {
 			if !m.Vals[v] {
-				errs = append(errs, fmt.Sprintf("%s: %q is not a val of %s (within takes vals: after, holds)", w.Name(), v, m.Module))
+				add("binding.within.val", v, "Use model vals for after and holds.", fmt.Sprintf("%s: %q is not a val of %s (within takes vals: after, holds)", w.Name(), v, m.Module))
 			}
 		}
 		if w.Bound <= 0 {
-			errs = append(errs, fmt.Sprintf("%s: no bound: give a positive duration (bound: 3s)", w.Name()))
+			add("binding.within.bound", w.Name(), "Give within a positive duration bound.", fmt.Sprintf("%s: no bound: give a positive duration (bound: 3s)", w.Name()))
 		}
 	}
 	for _, c := range slices.Sorted(maps.Keys(m.Consts)) {
 		if v, ok := b.Constants[c]; !ok || strings.TrimSpace(v) == "" {
 			// an empty one (scaffold's '') once linted and failed in quint's parser
-			errs = append(errs, fmt.Sprintf("constant %s: no value (type %s): give it a Quint expression (%s: '3')", c, m.Consts[c], c))
+			add("binding.constant.missing", c, "Set the constant to a nonempty Quint expression.", fmt.Sprintf("constant %s: no value (type %s): give it a Quint expression (%s: '3')", c, m.Consts[c], c))
 		}
 	}
-	for c := range b.Constants {
+	for _, c := range slices.Sorted(maps.Keys(b.Constants)) {
 		if _, ok := m.Consts[c]; !ok {
-			errs = append(errs, fmt.Sprintf("constant %s: not a const of %s", c, m.Module))
+			add("binding.constant.unknown", c, "Remove constants not declared by the model.", fmt.Sprintf("constant %s: not a const of %s", c, m.Module))
 		}
 	}
-	for arg, scope := range b.Intern {
+	for _, arg := range slices.Sorted(maps.Keys(b.Intern)) {
+		scope := b.Intern[arg]
 		if scope != "actor" && scope != "process" {
-			errs = append(errs, fmt.Sprintf("intern %s: scope must be actor or process, not %q", arg, scope))
+			add("binding.intern.scope", arg, "Use actor or process as the intern scope.", fmt.Sprintf("intern %s: scope must be actor or process, not %q", arg, scope))
 		}
 	}
 	return errs

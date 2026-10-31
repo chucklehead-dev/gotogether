@@ -28,7 +28,6 @@ package main
 
 import (
 	"bytes"
-	"cmp"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -45,9 +44,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/input"
 	"github.com/chucklehead-dev/gotogether/internal/quintnames"
 	"github.com/chucklehead-dev/gotogether/otelio"
-	"github.com/chucklehead-dev/gotogether/qlint"
 	"github.com/chucklehead-dev/gotogether/qtrace"
-	"github.com/chucklehead-dev/gotogether/schemas"
 	"github.com/chucklehead-dev/gotogether/skills"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
@@ -270,176 +267,6 @@ func scaffoldTo(w io.Writer, out, spec, module string, system, http bool, bpath,
 		fmt.Fprintf(w, "  #   - '%s'   # some trace takes %s so (set the value)\n", callForm(a, m.Actions[a]), a)
 	}
 	return nil
-}
-
-func lint(args []string) (int, error) {
-	fset := commandFlags("lint")
-	bpath := fset.String("binding", "", "binding file; several, comma-separated, for a source tree that records for each (-src checks each step against their union)")
-	src := fset.String("src", "", "Go source tree to scan for //quint:action annotations and literal qobs.Record actions")
-	sim := fset.String("sim", "", "Go source tree of simulation code (files importing qenv) to check for what escapes the simulation")
-	weave := fset.String("weave", "", "Go source tree woven by qenv/weave to check for what weaving cannot rewrite")
-	conv := fset.String("convert", "", "span conversion rule files (comma-separated) to check against their schema (gotogether.convert/1)")
-	quint := fset.String("quint", "quint", "quint binary")
-	fset.Parse(args)
-	simFindings := 0
-	if *conv != "" {
-		bad, err := lintSchema(*conv, schemas.Convert(), func(p string) error { _, err := convert.Load(p); return err })
-		if err != nil {
-			return 2, err
-		}
-		if *bpath == "" && *sim == "" && *weave == "" {
-			if bad {
-				return 1, nil
-			}
-			return 0, nil
-		}
-		if bad {
-			simFindings++
-		}
-	}
-	if *weave != "" {
-		fs, err := qlint.Woven(*weave)
-		if err != nil {
-			return 2, err
-		}
-		for _, f := range fs {
-			fmt.Printf("%s: %s (%s)\n", f.Pos, f.What, f.Fix)
-		}
-		fmt.Printf("%d places under %s that weaving cannot rewrite\n", len(fs), *weave)
-		simFindings += len(fs)
-		if *bpath == "" && *sim == "" {
-			if simFindings > 0 {
-				return 1, nil
-			}
-			return 0, nil
-		}
-	}
-	if *sim != "" {
-		fs, err := qlint.Sim(*sim)
-		if err != nil {
-			return 2, err
-		}
-		for _, f := range fs {
-			fmt.Printf("%s: %s (%s)\n", f.Pos, f.What, f.Fix)
-		}
-		fmt.Printf("%d places under %s escape the simulation\n", len(fs), *sim)
-		simFindings += len(fs)
-		if *bpath == "" {
-			if simFindings > 0 {
-				return 1, nil
-			}
-			return 0, nil
-		}
-	}
-	// every binding against its schema first: all its problems at once,
-	// each at its line, where the strict decoder stops at the first
-	if bad, err := lintSchema(*bpath, schemas.Binding(), nil); err != nil {
-		return 2, err
-	} else if bad {
-		return 1, nil
-	}
-	var bound []binding.Bound
-	var errs []string
-	for path := range strings.SplitSeq(*bpath, ",") {
-		b, err := binding.Load(path)
-		if err != nil {
-			return 2, err
-		}
-		if err := b.CheckSpec(); err != nil {
-			return 2, err
-		}
-		m, err := binding.LoadModel(*quint, b.SpecPath(), b.Module)
-		if err != nil {
-			return 2, err
-		}
-		for _, e := range b.Lint(m) {
-			if strings.Contains(*bpath, ",") {
-				e = path + ": " + e
-			}
-			errs = append(errs, e)
-		}
-		for _, property := range slices.Sorted(maps.Keys(m.Diagnostics)) {
-			active := slices.Contains(b.Invariants, property) || slices.Contains(b.Eventually, property)
-			fmt.Printf("diagnostic %s.%s -> %s (active=%v; Set[record])\n", m.Module, property, m.Diagnostics[property], active)
-		}
-		bound = append(bound, binding.Bound{Binding: b, Model: m})
-	}
-	var warns, choices []string
-	for i, b := range bound {
-		for _, w := range b.Binding.LintChoices(b.Model) {
-			if strings.Contains(*bpath, ",") {
-				w = strings.Split(*bpath, ",")[i] + ": " + w
-			}
-			choices = append(choices, w)
-		}
-	}
-	if *src != "" {
-		anns, err := binding.ScanAnnotations(*src)
-		if err != nil {
-			return 2, err
-		}
-		fmt.Printf("%d //quint:action annotations under %s\n", len(anns), *src)
-		for _, a := range anns {
-			fmt.Printf("  %-28s %-14s %s\n", a.Pos[strings.LastIndex(a.Pos, "/")+1:], a.Action, a.Func)
-		}
-		recs, err := binding.ScanRecords(*src)
-		if err != nil {
-			return 2, err
-		}
-		fmt.Printf("%d literal Record calls under %s\n", len(recs), *src)
-		e, w := binding.LintSources(bound, anns, recs)
-		errs, warns = append(errs, e...), w
-	}
-	for _, w := range append(choices, warns...) {
-		fmt.Println("warning:", w)
-	}
-	for _, e := range errs {
-		fmt.Println("error:", e)
-	}
-	if len(errs) > 0 || simFindings > 0 {
-		return 1, nil
-	}
-	for i, b := range bound {
-		but := ""
-		if n := len(b.Binding.LintChoices(b.Model)); n > 0 {
-			but = fmt.Sprintf("; %d choose inside; finite choices use bounded search and pinned replay: the warnings above", n)
-		}
-		fmt.Printf("binding %s fits %s (%d actions bound%s)\n", strings.Split(*bpath, ",")[i], b.Binding.Module, len(b.Binding.Actions), but)
-	}
-	return 0, nil
-}
-
-// lintSchema checks the comma-separated files against schema, printing
-// each problem as an error at its line, and with load (after a file
-// that fits) loads it, printing its error: whether any file had one.
-func lintSchema(paths string, schema []byte, load func(string) error) (bool, error) {
-	bad := false
-	for path := range strings.SplitSeq(paths, ",") {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return false, err
-		}
-		ps, err := schemas.Check(schema, data)
-		if err != nil {
-			return false, fmt.Errorf("%s: %w", path, err)
-		}
-		for _, p := range ps {
-			fmt.Printf("error: %s:%d:%d: %s: %s\n", path, p.Line, p.Column, cmp.Or(p.Path, "the document"), p.Message)
-		}
-		if len(ps) > 0 {
-			bad = true
-			continue
-		}
-		if load != nil {
-			if err := load(path); err != nil {
-				fmt.Printf("error: %s: %v\n", path, err)
-				bad = true
-				continue
-			}
-			fmt.Printf("%s fits its schema and loads\n", path)
-		}
-	}
-	return bad, nil
 }
 
 func readSteps(files []string, rules *convert.Rules) ([]qtrace.Step, error) {

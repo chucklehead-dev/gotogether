@@ -3,6 +3,7 @@ const FormatName = "gotogether.binding/2"
 func AnnotationsOf(fset *token.FileSet, f *ast.File) []Annotation
 func InstanceConstants(spec, instance string) (module string, constants []string, err error)
 func LintRecords(m *Model, recs []RecordCall) []string
+func LintSourceFindings(bs []Bound, anns []Annotation, recs []RecordCall) []LintFinding
 func LintSources(bs []Bound, anns []Annotation, recs []RecordCall) (errs, warns []string)
 func Load(path string) (*Binding, error)
 func LoadModel(quint, spec, module string) (*Model, error)
@@ -20,6 +21,9 @@ type Action struct
     method (Action) Fields(ps ...Param) []string
     method (Action) Template(p Param) string
 type Annotation struct
+    field Path string
+    field Line int
+    field Column int
     field Pos string
     field At token.Pos
     field Decl *ast.FuncDecl
@@ -56,7 +60,9 @@ type Binding struct
     method (*Binding) EvalModule(m *Model, qntPath string) (*EvalModule, error)
     method (*Binding) Lint(m *Model) []string
     method (*Binding) LintAnnotations(m *Model, anns []Annotation) (errs, warns []string)
+    method (*Binding) LintChoiceFindings(m *Model) []LintFinding
     method (*Binding) LintChoices(m *Model) []string
+    method (*Binding) LintFindings(m *Model) []LintFinding
     method (*Binding) LintSource(m *Model, anns []Annotation, recs []RecordCall) (errs, warns []string)
     method (*Binding) ObservedITF(t *qtrace.Trace) ([]byte, error)
     method (*Binding) Plan(m *Model, t *qtrace.Trace) (*Plan, error)
@@ -112,6 +118,16 @@ type ITFMeta struct
     field Invariants []string `json:"invariants,omitempty"`
     field Actor string `json:"actor,omitempty"`
     field Processes []string `json:"processes,omitempty"`
+type LintFinding struct
+    field Code string `json:"code"`
+    field Severity string `json:"severity"`
+    field Message string `json:"message"`
+    field Path string `json:"path,omitempty"`
+    field Line int `json:"line,omitempty"`
+    field Column int `json:"column,omitempty"`
+    field Symbol string `json:"symbol,omitempty"`
+    field Fix string `json:"fix"`
+    field Confidence string `json:"confidence"`
 type Model struct
     field Module string
     field Actions map[string][]Param
@@ -156,6 +172,9 @@ type Possible struct
     method (Possible) Resolve(m *Model) (when string, steps []StepPattern, err error)
     method (Possible) Text() string
 type RecordCall struct
+    field Path string
+    field Line int
+    field Column int
     field Pos string
     field At token.Pos
     field Call *ast.CallExpr
@@ -411,6 +430,63 @@ type Value struct
     method (Value) MarshalJSON() ([]byte, error)
     method (Value) Quint() string
     method (Value) String() string
+
+== github.com/chucklehead-dev/gotogether/lint
+const CheckBlocked CheckStatus = "blocked"
+const CheckFail CheckStatus = "fail"
+const CheckPass CheckStatus = "pass"
+const Error Severity = "error"
+const Info Severity = "info"
+const Warning Severity = "warning"
+func Inspect(o Options) *Report
+type Check struct
+    field Name string `json:"name"`
+    field Target string `json:"target"`
+    field Status CheckStatus `json:"status"`
+    field Reason string `json:"reason,omitempty"`
+    field Operational bool `json:"operational,omitempty"`
+type CheckStatus string
+type Diagnostic struct
+    field Code string `json:"code"`
+    field Severity Severity `json:"severity"`
+    field Message string `json:"message"`
+    field Path string `json:"path,omitempty"`
+    field Line int `json:"line,omitempty"`
+    field Column int `json:"column,omitempty"`
+    field Symbol string `json:"symbol,omitempty"`
+    field Fix string `json:"fix"`
+    field Confidence string `json:"confidence"`
+type Evidence struct
+    field Kind string `json:"kind"`
+    field Target string `json:"target"`
+    field Count int `json:"count"`
+    field Items []EvidenceItem `json:"items,omitempty"`
+type EvidenceItem struct
+    field Path string `json:"path"`
+    field Line int `json:"line"`
+    field Column int `json:"column"`
+    field Symbol string `json:"symbol,omitempty"`
+    field Action string `json:"action,omitempty"`
+    field Value string `json:"value,omitempty"`
+    field Active *bool `json:"active,omitempty"`
+type Options struct
+    field Bindings []string
+    field Source string
+    field Simulation string
+    field Weave string
+    field Conversions []string
+    field Quint string
+type Report struct
+    field Format string `json:"format"`
+    field Scope string `json:"scope"`
+    field Limits []string `json:"limits"`
+    field Checks []Check `json:"checks"`
+    field Findings []Diagnostic `json:"findings"`
+    field Evidence []Evidence `json:"evidence"`
+    method (*Report) Complete() bool
+    method (*Report) ExitCode() int
+    method (*Report) MarshalJSON() ([]byte, error)
+type Severity string
 
 == github.com/chucklehead-dev/gotogether/otelio
 func Attrs(kvs []KeyValue) map[string]any
@@ -1108,10 +1184,14 @@ func SimFileTyped(fset *token.FileSet, f *ast.File, info *types.Info) []Finding
 func Woven(dir string) ([]Finding, error)
 func WovenFile(fset *token.FileSet, f *ast.File) []Finding
 type Finding struct
+    field Code string
     field Pos string
     field What string
     field Fix string
     field At token.Pos
+    field Path string
+    field Line int
+    field Column int
     method (Finding) String() string
 
 == github.com/chucklehead-dev/gotogether/qload
@@ -2193,10 +2273,12 @@ var MutationOps = []string{"drop", "dup", "swap", "corrupt", "retime", "reactor"
 == github.com/chucklehead-dev/gotogether/schemas
 const BindingURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.binding-2.json"
 const ConvertURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.convert-1.json"
+const LintURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.lint-1.json"
 const ReportURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.report-1.json"
 func Binding() []byte
 func Check(schema, data []byte) ([]Problem, error)
 func Convert() []byte
+func Lint() []byte
 func Report() []byte
 type Problem struct
     field Line int

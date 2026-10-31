@@ -80,6 +80,9 @@ jobs:
           for m in $(git ls-files '*go.mod' | xargs -n1 dirname | grep -v -e testdata -e '^ci/consumer$'); do
             (cd "$m" && go mod tidy -diff) || { echo "::error::$m: go mod tidy"; exit 1; }
           done
+      - name: executable lint onboarding
+        if: matrix.part == 'core'
+        run: ci/lint-onboarding.sh
       - name: simulation code stays in the simulation
         if: matrix.part == 'core'
         run: go run ./cmd/gotogether lint -sim .

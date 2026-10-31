@@ -15,12 +15,15 @@ import (
 
 // Annotation is one //quint:action directive found in Go source.
 type Annotation struct {
-	Pos    string        // file:line
-	At     token.Pos     // Pos in the file set the file was parsed with
-	Decl   *ast.FuncDecl // the annotated function
-	Func   string
-	Action string
-	Keys   map[string]string // key -> Go expression
+	// Path, Line and Column are captured directly from the source file set.
+	Path         string
+	Line, Column int
+	Pos          string        // file:line
+	At           token.Pos     // Pos in the file set the file was parsed with
+	Decl         *ast.FuncDecl // the annotated function
+	Func         string
+	Action       string
+	Keys         map[string]string // key -> Go expression
 }
 
 // ScanAnnotations finds //quint:action directives on functions under dir.
@@ -60,7 +63,8 @@ func AnnotationsOf(fset *token.FileSet, f *ast.File) []Annotation {
 			if !strings.HasPrefix(c.Text, "//quint:action") || (len(c.Text) > 14 && c.Text[14] != ' ') {
 				continue
 			}
-			a := Annotation{Pos: fset.Position(c.Pos()).String(), At: c.Pos(), Decl: fn, Func: fn.Name.Name, Keys: map[string]string{}}
+			pos := fset.Position(c.Pos())
+			a := Annotation{Path: pos.Filename, Line: pos.Line, Column: pos.Column, Pos: pos.String(), At: c.Pos(), Decl: fn, Func: fn.Name.Name, Keys: map[string]string{}}
 			for _, kv := range directiveArgs(strings.TrimPrefix(c.Text, "//quint:action")) {
 				k, v := kv[0], kv[1]
 				if k == "action" {
@@ -141,21 +145,29 @@ func (b *Binding) LintAnnotations(m *Model, anns []Annotation) (errs, warns []st
 }
 
 func (b *Binding) lintAnnotations(m *Model, anns []Annotation) (errs []string, emitted map[string]bool) {
+	fs, emitted := b.lintAnnotationFindings(m, anns)
+	return lintMessages(fs), emitted
+}
+
+func (b *Binding) lintAnnotationFindings(m *Model, anns []Annotation) (errs []LintFinding, emitted map[string]bool) {
 	emitted = map[string]bool{}
 	for _, a := range anns {
+		add := func(code, fix, message string) {
+			errs = append(errs, sourceFinding(code, "error", message, a.Path, a.Line, a.Column, a.Action, fix, a.Pos))
+		}
 		if a.Action == "" {
-			errs = append(errs, fmt.Sprintf("%s: %s: //quint:action without action:NAME", a.Pos, a.Func))
+			add("source.annotation.action_missing", "Add action:NAME naming a model action.", fmt.Sprintf("%s: //quint:action without action:NAME", a.Func))
 			continue
 		}
 		emitted[a.Action] = true
 		if _, ok := m.Actions[a.Action]; !ok {
-			errs = append(errs, fmt.Sprintf("%s: %s: %s", a.Pos, a.Func, m.notAnAction(a.Action)))
+			add("source.action.unknown", "Use an action declared by the model.", fmt.Sprintf("%s: %s", a.Func, m.notAnAction(a.Action)))
 			continue
 		}
 		ab := b.Actions[a.Action]
 		for _, f := range ab.Fields(m.Actions[a.Action]...) {
 			if _, ok := a.Keys[f]; !ok { // obs fields are recorded as obs.<name> too
-				errs = append(errs, fmt.Sprintf("%s: %s: the binding for %s uses .%s, which this annotation does not record", a.Pos, a.Func, a.Action, f))
+				add("source.annotation.field_missing", "Record the field required by the binding template.", fmt.Sprintf("%s: the binding for %s uses .%s, which this annotation does not record", a.Func, a.Action, f))
 			}
 		}
 	}

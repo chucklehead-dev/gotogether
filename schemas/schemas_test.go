@@ -229,6 +229,7 @@ func TestSchemasAreGenerated(t *testing.T) {
 		{"gotogether.binding-2.json", bindingSchema(t), schemas.Binding()},
 		{"gotogether.convert-1.json", convertSchema(t), schemas.Convert()},
 		{"gotogether.report-1.json", reportSchema(t), schemas.Report()},
+		{"gotogether.lint-1.json", lintSchema(t), schemas.Lint()},
 	} {
 		if os.Getenv("GOTOGETHER_UPDATE_SCHEMA") == "1" {
 			if err := os.WriteFile(c.file, c.gen, 0o644); err != nil {

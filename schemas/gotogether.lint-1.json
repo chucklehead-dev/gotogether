@@ -1,0 +1,185 @@
+{
+  "$id": "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.lint-1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A nonwriting lint inspection: selected checks, actionable findings, source evidence and derived completeness and exit status. Generated from the Go type that reads it (GOTOGETHER_UPDATE_SCHEMA=1 go test ./schemas/).",
+  "properties": {
+    "checks": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "operational": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pass",
+              "fail",
+              "blocked"
+            ],
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "target",
+          "status"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "complete": {
+      "type": "boolean"
+    },
+    "evidence": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "active": {
+                  "type": "boolean"
+                },
+                "column": {
+                  "type": "integer"
+                },
+                "line": {
+                  "type": "integer"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "symbol": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "line",
+                "column"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target",
+          "count"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "exitCode": {
+      "enum": [
+        0,
+        1,
+        2
+      ],
+      "type": "integer"
+    },
+    "findings": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "column": {
+            "type": "integer"
+          },
+          "confidence": {
+            "type": "string"
+          },
+          "fix": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "error",
+              "warning",
+              "info"
+            ],
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "severity",
+          "message",
+          "fix",
+          "confidence"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "format": {
+      "const": "gotogether.lint/1",
+      "type": "string"
+    },
+    "limits": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "scope": {
+      "description": "Scope names the claim established by completed checks. Limits retains relevant exclusions for machine consumers as well as human renderers.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "format",
+    "scope",
+    "limits",
+    "checks",
+    "findings",
+    "evidence",
+    "complete",
+    "exitCode"
+  ],
+  "title": "gotogether lint report",
+  "type": "object"
+}
