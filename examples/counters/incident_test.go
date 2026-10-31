@@ -8,7 +8,6 @@ import (
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
-	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // callsPerKey is the most calls of action any one key had in a run of x
@@ -233,23 +232,7 @@ func TestRewindFailsClosed(t *testing.T) {
 	cfg.Send = []string{"show-counter"} // no extra refusal-marker commit in the lost tail
 	cfg.Store = &gristsim.Managed{Failover: &qenv.Failover{LoseTail: 1}}
 	closed := system(exactly, cfg).WithRates(qenv.NoFaults).Explore(t, runs)
-	closed.Expect(t, qtest.None(qtest.Settles()), qtest.None(qtest.Rejects("bankPay")), qtest.Reaches("store.counters.failover").Faulted(), qtest.Reaches("rpc.mailer.delay").Faulted(), qtest.Reaches("rpc.bank.response").Faulted())
-	// A paused tenant intentionally cannot settle without operator action.
-	// Check transition conformance separately; eventual payout outcomes remain
-	// unjudged, and this does not claim that the incident is reconciled.
-	for _, run := range closed.Runs {
-		checked := false
-		if run.Report != nil {
-			for _, actor := range run.Report.Actors {
-				if actor.Actor == "counters/t1" {
-					checked = actor.Conforms == validate.Pass
-				}
-			}
-		}
-		if !checked {
-			t.Errorf("fail closed: captured processor transitions did not conform: %v", run.Report)
-		}
-	}
+	closed.Expect(t, qtest.TransitionsConform("counters/t1"), qtest.None(qtest.Settles()), qtest.None(qtest.Rejects("bankPay")), qtest.Reaches("store.counters.failover").Faulted(), qtest.Reaches("rpc.mailer.delay").Faulted(), qtest.Reaches("rpc.bank.response").Faulted())
 	if n := callsPerKey(closed, "bankPay"); n != 1 || !rewound(closed) {
 		t.Errorf("fail closed: a payout key called %d times in a run (want once), every run rewound: %v", n, rewound(closed))
 	}
@@ -265,5 +248,5 @@ func TestRewindFailsClosed(t *testing.T) {
 	if !queriesPastRewind(ablated) {
 		t.Error("fail open: post-rewind queries did not retain the native history clock")
 	}
-	ablated.Expect(t, qtest.Some(qtest.AnyOf(qtest.Rejects("bankPay"), qtest.Rejects("welcome"))), qtest.Reaches("store.counters.failover").Faulted(), qtest.Reaches("rpc.mailer.delay").Faulted(), qtest.Reaches("rpc.bank.response").Faulted())
+	ablated.Expect(t, qtest.Some(qtest.Not(qtest.TransitionsConform("counters/t1"))), qtest.Some(qtest.AnyOf(qtest.Rejects("bankPay"), qtest.Rejects("welcome"))), qtest.Reaches("store.counters.failover").Faulted(), qtest.Reaches("rpc.mailer.delay").Faulted(), qtest.Reaches("rpc.bank.response").Faulted())
 }

@@ -21,18 +21,18 @@ import (
 //
 // An Expectation is of one run: Conforms, Rejects, Violates, Scenario,
 // Satisfies and grist's gristtest.NoClientErrors alike, and Not of one.
-// Over runs it takes its quantifier, Some, All or None, except the four
-// whose names say every run: Conforms, Settles, Completes and Finishes
-// alone are All of themselves. Any other alone panics with the fix: what
-// a bare Rejects meant (some run) and a bare Satisfies (every run) was
-// each constructor's, which a reader had to know.
+// Over runs it takes its quantifier, Some, All or None, except those
+// whose names say every run: Conforms, TransitionsConform, Settles, Completes
+// and Finishes alone are All of themselves. Any other alone panics with the
+// fix: what a bare Rejects meant (some run) and a bare Satisfies (every run)
+// was each constructor's, which a reader had to know.
 
 // A Claim is what a test expects of a set of runs (Exploration.Expect,
 // Sweep.Expect): that some, every or no run meets expectations (Some,
 // All, None), or what the runs reached and took (Reaches, Takes,
-// Exercised). Conforms, Settles, Completes and Finishes alone are about
-// every run (All); any other Expectation alone panics, naming Some, All
-// and None. Several claims are judged one by one, so Expect(t,
+// Exercised). Conforms, TransitionsConform, Settles, Completes and Finishes
+// alone are about every run (All); any other Expectation alone panics, naming
+// Some, All and None. Several claims are judged one by one, so Expect(t,
 // Some(Violates("a")), Some(Violates("b"))) wants each shown by some run,
 // not one run showing both (Some(a, b) says that).
 type Claim interface {
@@ -56,8 +56,8 @@ type judgment struct {
 func (e Expectation) judge(rs []*validate.Report) judgment { return quantify(e).judge(rs) }
 
 // quantify is c as a claim over runs: an Expectation alone is All of it
-// when its name says every run (Conforms, Settles, Completes, Finishes),
-// and a panic naming the fix otherwise. A bare Rejects meant some run and
+// when its name says every run (Conforms, TransitionsConform, Settles, Completes,
+// Finishes), and a panic naming the fix otherwise. A bare Rejects meant some run and
 // a bare Satisfies every run, which only the constructor's doc said.
 func quantify(c Claim) Claim {
 	e, ok := c.(Expectation)
@@ -72,7 +72,7 @@ func quantify(c Claim) Claim {
 		meant = "All"
 	}
 	panic(fmt.Sprintf("qtest: %q alone is a claim over runs with no quantifier: write qtest.Some(...) (some run shows it), qtest.All(...) (every run) or qtest.None(...) (no run); "+
-		"alone it meant %s(...). Only Conforms, Settles, Completes and Finishes stand alone, their names saying every run", e.desc, meant))
+		"alone it meant %s(...). Only Conforms, TransitionsConform, Settles, Completes and Finishes stand alone, their names saying every run", e.desc, meant))
 }
 
 // quantifyAll is quantify of each claim.
@@ -165,7 +165,7 @@ func (q quantified) judge(rs []*validate.Report) judgment {
 				if j.show < 0 {
 					j.show = i
 				}
-			case any == unknown || undecided(r) && !judgesUndecided(q.es):
+			case any == unknown || !judgesUndecided(q.es) && undecided(r):
 				j.unjudged++
 			}
 		}

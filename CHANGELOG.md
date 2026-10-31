@@ -8,6 +8,13 @@ and adds a line here.
 
 ## Unreleased
 
+- Added `qtest.TransitionsConform(actors...)` for captured transition conformance,
+  optionally requiring exact actor identities. It preserves native ordering and
+  evidence assumptions without claiming invariant, composition, completion or
+  settlement success. Empty, missing and unjudged evidence stays unknown under
+  quantification and negation; native report/JSON/TUI verdicts remain unchanged.
+  Counters' paused incident and requeue's storm controls use the scoped assertion.
+
 - Added read-only Grist outcome inspection: `App.InspectOutcomes` and
   `<app> outcomes ... [-json]` expose bounded pages of stored failed/unknown
   outcomes and independent retained/missing/replaced trigger observations.

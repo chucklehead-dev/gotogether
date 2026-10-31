@@ -47,16 +47,15 @@ func TestFaithfulConforms(t *testing.T) {
 		Expect(t, qtest.Finishes(), qtest.Exercised())
 }
 
-// stormCycle: the run's steps are the model's (an unsettled run does not
-// conform: its eventual val is not judged), and its hot cycle, evidence
-// beside the verdicts, is the storm's lasso, an advance to warming and a
-// replacement back to pending, the controller's requeue among them, gone
-// round again and again.
+// stormCycle checks the hot-cycle evidence separately from captured transition
+// conformance: the storm's lasso advances to warming and replaces back to pending,
+// with the controller's requeue among them, going round again and again. Neither
+// the cycle shape nor transition conformance claims settlement or eventual success.
 var stormCycle = qtest.Satisfies("the storm's hot cycle (advance, create)", func(r *validate.Report) error {
+	if len(r.Actors) == 0 {
+		return fmt.Errorf("%w: no actor supplied hot-cycle evidence", qtest.NoVerdict)
+	}
 	for _, a := range r.Actors {
-		if a.Conforms != validate.Pass {
-			return fmt.Errorf("actor %s: conformance %s", a.Actor, a.Conforms)
-		}
 		var steps []string
 		if a.Hot != nil {
 			steps = slices.DeleteFunc(slices.Clone(a.Hot.Steps), func(s string) bool { return s == "requeue" })
@@ -82,13 +81,13 @@ func TestMutant(t *testing.T) {
 		// storm is the same in every run.
 		qtest.RequireQuint(t)
 		system(false).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 3}).
-			Expect(t, qtest.Some(qtest.Rejects("create")))
-		// The storm's model allows the replacement: the runs conform and
-		// never settle, and each report's hot cycle (evidence, no
+			Expect(t, qtest.Some(qtest.Not(qtest.TransitionsConform())), qtest.Some(qtest.Rejects("create")))
+		// The storm's model allows the replacement: captured transitions
+		// conform, but the runs never settle, and each report's hot cycle (evidence, no
 		// verdict) is the lasso simulate -graph finds in that model, the
 		// requeue between a stutter.
 		system(true).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 3}).
-			Expect(t, qtest.None(qtest.Settles()), qtest.All(stormCycle))
+			Expect(t, qtest.TransitionsConform(), qtest.None(qtest.Settles()), qtest.All(stormCycle))
 	case "giveUp":
 		// The controller gives up after its first requeue, as one with a
 		// retry limit tuned to a faster cloud: every step it takes the

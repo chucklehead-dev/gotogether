@@ -47,13 +47,13 @@ func TestClaims(t *testing.T) {
 	}
 }
 
-// Over runs, only Conforms, Settles, Completes and Finishes stand alone
+// Over runs, only Conforms, TransitionsConform, Settles, Completes and Finishes stand alone
 // (All of themselves); any other expectation alone panics, naming the
 // quantifiers and what it meant alone before: Some for a failure's, All
 // for Satisfies'. PerMutant's claims panic as they are made.
 func TestBareClaims(t *testing.T) {
 	t.Parallel()
-	for _, e := range []Expectation{Conforms(), Settles(), Completes(), Finishes()} {
+	for _, e := range []Expectation{Conforms(), TransitionsConform(), TransitionsConform("actor"), Settles(), Completes(), Finishes()} {
 		if q, ok := quantify(e).(quantified); !ok || q.kind != "all" {
 			t.Errorf("%s alone: %v, want All of it", e, quantify(e))
 		}
