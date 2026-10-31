@@ -38,6 +38,8 @@ package convert
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"maps"
 	"os"
@@ -56,6 +58,7 @@ import (
 
 // Rules is a parsed rule file.
 type Rules struct {
+	sha256 string // identity of the exact bytes parsed, independent of later path changes
 	// Format, if set, names the rule file's format (FormatName,
 	// gotogether.convert/1): a later major is refused with the fix, not
 	// with its new keys "unknown". Empty: gotogether.convert/1.
@@ -73,6 +76,10 @@ type Rules struct {
 	Ref   string `yaml:"ref"`
 	Rules []Rule `yaml:"rules"`
 }
+
+// SHA256 returns the digest of the exact YAML bytes decoded by Parse or Load.
+// A manually constructed Rules has no captured digest. The file is never reread.
+func (r *Rules) SHA256() string { return r.sha256 }
 
 // Rule maps matching spans (or span events) to one model action.
 type Rule struct {
@@ -137,6 +144,8 @@ func Parse(b []byte) (*Rules, error) {
 			return nil, fmt.Errorf("rule %d: bad span pattern %q: %w", i, ru.Span, err)
 		}
 	}
+	digest := sha256.Sum256(b)
+	r.sha256 = hex.EncodeToString(digest[:])
 	return &r, nil
 }
 

@@ -8,6 +8,16 @@ and adds a line here.
 
 ## Unreleased
 
+- Source validation retains parsed binding/rule fingerprints and guards model
+  inventories across loading, warm caches, judgment and manifest capture.
+  Changed sources or effective instances require a new judgment; ITF models
+  are captured during validation. `Binding.SHA256`, `Rules.SHA256`,
+  `Result.SourceModel`, `Checker.VerifySource`, `CaptureModelSources`/`SourceGuard`,
+  and optional low-level `RunRecord.ConvertSHA256` expose
+  the captured evidence. External Quint still requires stable files; boundary
+  checks do not provide an atomic filesystem snapshot. File imports in binding
+  or ITF definition strings must move into model files so they can be captured.
+
 - Compiled validation now records, bundles and replays evaluator-only manifests
   without Quint/Node probes or fallback. The single current manifest format is
   `gotogether.run/3`, with the hashed compiled artifact as an executable dependency;

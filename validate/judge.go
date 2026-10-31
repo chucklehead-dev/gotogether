@@ -52,13 +52,26 @@ func (c *Checker) Judge(ctx context.Context, steps []qtrace.Step, opt SearchOpti
 // run whose search left claims (an actor that passed and was decided
 // needs none), and the runs searched again checked in a second batch.
 // Each report is marked on a copy: check's are left as they were.
-func (c *Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt SearchOptions, check BatchCheck) ([]*Judgment, []error) {
+func (c *Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt SearchOptions, check BatchCheck) (js []*Judgment, errs []error) {
+	js, errs = make([]*Judgment, len(runs)), make([]error, len(runs))
+	if err := c.verifySource(); err != nil {
+		for i := range errs {
+			errs[i] = err
+		}
+		return
+	}
+	defer func() {
+		if err := c.verifySource(); err != nil {
+			for i := range errs {
+				js[i], errs[i] = nil, err
+			}
+		}
+	}()
 	if check == nil {
 		check = func(ctx context.Context, runs [][]qtrace.Step) ([]*Report, []error) {
 			return c.CheckBatch(ctx, runs, 0)
 		}
 	}
-	js, errs := make([]*Judgment, len(runs)), make([]error, len(runs))
 	searches := make([]*search, len(runs))
 	searching := opt.Linearize || opt.ResolvePending
 	if searching && c.compiled != nil {

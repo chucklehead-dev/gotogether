@@ -1,6 +1,8 @@
 package validate
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,35 +21,46 @@ import (
 // the model depends on. An import whose file is missing is quint's to
 // report, not the manifest's: it is left out.
 func specFiles(path string) (*File, []File, error) {
-	spec, err := hashed(path)
+	return scanSpecFiles(path, false)
+}
+
+// scanSpecFiles discovers imports from the very bytes it hashes. Strict scans
+// refuse missing dependencies; manifest scans leave them for Quint to diagnose.
+func scanSpecFiles(path string, strict bool) (*File, []File, error) {
+	abs, err := filepath.Abs(path)
 	if err != nil {
 		return nil, nil, err
 	}
-	seen := map[string]bool{spec.Path: true}
+	seen := map[string]bool{abs: true}
+	todo := []string{abs}
+	var spec *File
 	var imports []File
-	todo := []string{spec.Path}
 	for len(todo) > 0 {
 		p := todo[0]
 		todo = todo[1:]
 		src, err := os.ReadFile(p)
 		if err != nil {
+			if p == abs || strict {
+				return nil, nil, fmt.Errorf("manifest: %w", err)
+			}
 			continue
+		}
+		digest := sha256.Sum256(src)
+		f := File{Path: p, SHA256: hex.EncodeToString(digest[:])}
+		if p == abs {
+			spec = &f
+		} else {
+			imports = append(imports, f)
 		}
 		for _, imp := range importPaths(string(src)) {
 			q := filepath.Join(filepath.Dir(p), filepath.FromSlash(imp))
 			if filepath.Ext(q) != ".qnt" {
-				q += ".qnt" // quint adds the extension a path leaves out
+				q += ".qnt"
 			}
-			if seen[q] {
-				continue
+			if !seen[q] {
+				seen[q] = true
+				todo = append(todo, q)
 			}
-			seen[q] = true
-			f, err := hashed(q)
-			if err != nil {
-				continue
-			}
-			imports = append(imports, *f)
-			todo = append(todo, q)
 		}
 	}
 	return spec, imports, nil

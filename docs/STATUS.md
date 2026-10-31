@@ -15,8 +15,11 @@ Actual compiled results retain their loaded digest and coverage so manifest
 creation refuses changed artifacts or a different judging recipe. High-level
 input readers also retain exact byte fingerprints and refuse changed/uncaptured
 inputs before recording, across native, converted and typed ITF paths. Source-mode
-model and conversion-rule snapshots remain a separate capture boundary; this
-slice does not claim an atomic snapshot of every executable dependency. Literal
+model and conversion-rule capture now guard exact parsed binding/rule bytes and
+source inventories at loading, judgment and manifest creation, including warm
+caches and ITF-only inputs. External Quint reads live files: pre/post guards
+do not prove atomic cross-file snapshots or detect mutations restored between
+checks. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
@@ -496,7 +499,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Complete source-mode model/rule capture identity | S–M | actual input fingerprints and compiled artifact/coverage are anchored; inspect and anchor the remaining source binding/spec and conversion-rule reads before attributing results to later file hashes; preserve low-level caller-trust scope without claiming an atomic cross-file snapshot |
+| 1 | Exercise the complete evidence workflow on another real contract | S–M | input, compiled and source capture boundaries now have refusal controls; choose a concrete adoption blocker across modeling, diagnosis and resolution before adding more provenance machinery |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 

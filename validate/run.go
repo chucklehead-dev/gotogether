@@ -39,6 +39,7 @@ type Checker struct {
 	// compiled, if set, is the compiled model it judges by, with no
 	// quint (NewCompiledChecker)
 	compiled *compiledState
+	source   *sourceCapture
 }
 
 // mode is how a checker's checks are made, set on the copies a search
@@ -80,14 +81,25 @@ func NewChecker(bindingPath string, opt Options) (*Checker, error) {
 	if err != nil {
 		return nil, err
 	}
+	source, err := captureSource(b)
+	if err != nil {
+		return nil, err
+	}
 	m, err := loadModel(opt.Quint, b.SpecPath(), b.Module)
 	if err != nil {
+		return nil, err
+	}
+	if err := checkSourceFiles(source.files, b.SpecPath()); err != nil {
 		return nil, err
 	}
 	if errs := b.Lint(m); len(errs) > 0 {
 		return nil, fmt.Errorf("binding %s does not fit %s: %v", bindingPath, b.Module, errs)
 	}
-	return &Checker{Binding: b, Model: m, Options: opt, scratch: &scratch{}}, nil
+	c := &Checker{Binding: b, Model: m, Options: opt, scratch: &scratch{}, source: source}
+	if err := c.verifySource(); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 // scratch is a checker's own temporary directory, for checks with no
@@ -169,6 +181,9 @@ func Cached(bindingPath string, o Options) (*Checker, error) {
 	key := abs + "|" + o.Quint + "|" + o.Backend
 	c, err := cached.Do(key, func() (*Checker, error) { return NewChecker(abs, o) })
 	if err != nil {
+		return nil, err
+	}
+	if err := c.verifySource(); err != nil {
 		return nil, err
 	}
 	cc := *c
@@ -300,7 +315,17 @@ func reconstruct(b *binding.Binding, steps []qtrace.Step) ([]*qtrace.Trace, []qt
 // Check reconstructs per-actor traces from steps (in any order, from any
 // number of recorders) and validates each.
 func (c *Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, error) {
+	if err := c.verifySource(); err != nil {
+		return nil, err
+	}
 	report, err := c.check(ctx, steps)
+	if err != nil {
+		return report, err
+	}
+	if err := c.verifySource(); err != nil {
+		return nil, err
+	}
+	c.captureReport(report)
 	if err == nil {
 		c.enrichDiagnostics(report, steps, false)
 	}
