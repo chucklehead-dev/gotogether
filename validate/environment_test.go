@@ -51,3 +51,30 @@ func TestResolvedEnvironmentRejectsMalformedPolicies(t *testing.T) {
 		}
 	}
 }
+
+func TestResolvedEnvironmentNormalizesChoicePolicy(t *testing.T) {
+	for _, key := range []string{"QUINT_BACKEND", "GOTOGETHER_EVAL", "GOTOGETHER_EVAL_SAMPLE"} {
+		t.Setenv(key, "")
+	}
+	for _, limit := range []int{0, 7, DefaultChoiceLimit} {
+		original := Options{ChoiceLimit: limit}
+		o, err := original.ResolveEnvironment()
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := limit
+		if want == 0 {
+			want = DefaultChoiceLimit
+		}
+		if o.ChoiceLimit != want || original.ChoiceLimit != limit {
+			t.Fatalf("limit %d resolved to %+v; caller %+v", limit, o, original)
+		}
+		again, err := o.ResolveEnvironment()
+		if err != nil || again.ChoiceLimit != want {
+			t.Fatalf("second resolution: %+v, %v", again, err)
+		}
+	}
+	if _, err := (Options{ChoiceLimit: -1}).ResolveEnvironment(); err == nil {
+		t.Fatal("negative choice limit accepted")
+	}
+}

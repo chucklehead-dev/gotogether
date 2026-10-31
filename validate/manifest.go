@@ -118,6 +118,8 @@ type RunModel struct {
 // RunCheck is how a run was judged, beyond the model: what validate's
 // flags (or qtest's options) asked for.
 type RunCheck struct {
+	// ChoiceLimit is the effective finite model-choice expansion bound.
+	ChoiceLimit    int    `json:"choiceLimit"`
 	Linearize      bool   `json:"linearize,omitempty"`
 	Key            string `json:"linearizeKey,omitempty"`
 	Budget         int    `json:"linearizeBudget,omitempty"`
@@ -499,6 +501,10 @@ func NewManifest(r RunRecord) (*Manifest, error) {
 		}
 	}
 	m.Check = r.Check
+	m.Check.ChoiceLimit = r.Options.ChoiceLimit
+	if m.Check.ChoiceLimit == 0 {
+		m.Check.ChoiceLimit = DefaultChoiceLimit
+	}
 	o := r.Search
 	m.Check.Linearize, m.Check.Key, m.Check.Budget, m.Check.ResolvePending = o.Linearize || o.Key != "", o.Key, o.Budget, o.ResolvePending
 	report := &Report{Actors: r.Results, Composition: r.Composition}

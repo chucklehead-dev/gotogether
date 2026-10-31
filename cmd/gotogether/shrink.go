@@ -54,6 +54,7 @@ func shrinkTo(out io.Writer, args []string) (int, error) {
 	dir := fset.String("dir", "", "where generated modules go (default: a temporary directory, removed at the end)")
 	quint := fset.String("quint", "quint", "quint binary")
 	backend := fset.String("backend", "", "quint test backend (default $QUINT_BACKEND or rust)")
+	choiceLimit := fset.Int("choice-limit", 0, "expanded states per actor for finite internal model choices (default 20000); exhaustion never reproduces a failure")
 	verbose := fset.Bool("v", false, "print each rerun's command and exit status, and each torn step log")
 	rerunTimeout := fset.Duration("rerun-timeout", 0, "the longest one rerun (or reset) may take: one that runs longer is killed and counts as a failed rerun, named (0: no limit)")
 	fset.Parse(args)
@@ -108,7 +109,7 @@ func shrinkTo(out io.Writer, args []string) (int, error) {
 	if quintDir == "" {
 		quintDir = filepath.Join(work, "quint")
 	}
-	opts := validate.Options{Quint: *quint, Backend: *backend, Dir: quintDir}
+	opts := validate.Options{Quint: *quint, Backend: *backend, Dir: quintDir, ChoiceLimit: *choiceLimit}
 	c, err := validate.NewChecker(*bpath, opts)
 	if err != nil {
 		return 2, err

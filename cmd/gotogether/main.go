@@ -402,7 +402,7 @@ func lint(args []string) (int, error) {
 	for i, b := range bound {
 		but := ""
 		if n := len(b.Binding.LintChoices(b.Model)); n > 0 {
-			but = fmt.Sprintf("; %d choose inside, which quint's replay samples: the warnings above", n)
+			but = fmt.Sprintf("; %d choose inside; finite choices use bounded search and pinned replay: the warnings above", n)
 		}
 		fmt.Printf("binding %s fits %s (%d actions bound%s)\n", strings.Split(*bpath, ",")[i], b.Binding.Module, len(b.Binding.Actions), but)
 	}

@@ -1,0 +1,8 @@
+spec: unsupported.qnt
+module: unsupportedWitness
+actions:
+  pick:
+    expect: 'phase == {{.obs.phase}}'
+invariants: [safe]
+simulate:
+  skip: tests explicit unsupported replay specialization, not a design invariant

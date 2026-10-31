@@ -178,6 +178,17 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 			groups[k] = append(groups[k], it)
 		}
 	}
+	// Internal choices need whole-path search and pinned confirmation, never a
+	// random draw in the deterministic batch replay, including Eval=quint.
+	for _, it := range all {
+		if c.hasChoiceCalls(it.plan) {
+			_, err := c.checkChoices(ctx, it.trace, it.plan, it.res, opt)
+			if err != nil {
+				errs[it.run] = err
+			}
+			it.decided = true
+		}
+	}
 	// the Go evaluator first: a plan it passes is decided, with no quint
 	// replay (decide.go); one it rejects goes to quint's detail replay
 	re := c.runEvaluator()
@@ -187,7 +198,7 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 		// day of 33,000 charges sampled at 1 in 50 took quint 37 s
 		sampledParts := map[*qtrace.Trace]int{}
 		for _, it := range all {
-			if it.whole == nil || !re.takes(it.plan) {
+			if it.decided || it.whole == nil || !re.takes(it.plan) {
 				continue
 			}
 			if sampledParts[it.whole] < maxSampledParts {
@@ -197,6 +208,9 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 		}
 		forEach(len(all), func(k int) {
 			it := all[k]
+			if it.decided {
+				return
+			}
 			var err error
 			if it.whole == nil {
 				it.sampled = re.takes(it.plan)

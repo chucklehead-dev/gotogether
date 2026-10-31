@@ -4014,6 +4014,14 @@ ones that fail.
   shadow each passing run's obligations are judged on both states and
   compared, verdict, failing step, note and absences, beside the
   states themselves.
+- **Finite pinned model choices (I4).** The ordinary complete-trace path now
+  uses whole-path finite enumeration and original-action witness specialization,
+  superseding the sampled-replay limitation below within its supported scope.
+  All evaluation policies disclose this Go search plus selected-path Quint
+  confirmation. Complete negative conclusions remain Go enumeration results.
+  Bounds, joint-property semantics, current refusals and receipt fields are
+  specified in [model-choice witnesses](model-choice-witnesses.md). The following
+  sampled-replay notes record the historical limitation and other replay paths.
 - **A choice quint samples.** quint's replay of `nondet x = oneOf(S)`
   picks one value at random, not one that enables the action
   (`oneOf(1.to(1000))` with `x == 7` fails `quint test` at almost every

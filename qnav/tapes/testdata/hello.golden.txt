@@ -32,7 +32,7 @@ effective run profile TestMutant#1:
   replay TestMutant#1:seed=1 node=0:1,1:1,2:2,4:1@5
   fixed choice prefix; nominal continuation; no seeded fault draws
   primary binding hello.binding.yaml
-── lines 1–26 of 36 (pgup/pgdn scroll)
+── lines 1–26 of 37 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -72,7 +72,7 @@ tasks
   counter.handle: runnable
   counter.main: runnable
 
-── lines 1–26 of 42 (pgup/pgdn scroll)
+── lines 1–26 of 43 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -112,7 +112,7 @@ effective run profile TestMutant#1:
   replay TestMutant#1:seed=1 node=0:1,1:1,2:2,4:1@5
   fixed choice prefix; nominal continuation; no seeded fault draws
   primary binding hello.binding.yaml
-── lines 1–26 of 36 (pgup/pgdn scroll)
+── lines 1–26 of 37 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -152,7 +152,7 @@ effective run profile TestMutant#1:
   replay TestMutant#1:seed=1 node=0:1,1:1,2:2,4:1@5
   fixed choice prefix; nominal continuation; no seeded fault draws
   primary binding hello.binding.yaml
-── lines 1–26 of 36 (pgup/pgdn scroll)
+── lines 1–26 of 37 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -192,7 +192,7 @@ effective run profile TestMutant#1:
   fixed choice prefix; nominal continuation; no seeded fault draws
   primary binding hello.binding.yaml
     constant REQUESTS = 1.to(3)
-── lines 1–27 of 36 (pgup/pgdn scroll)
+── lines 1–27 of 37 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -231,7 +231,7 @@ effective run profile TestMutant#1:
   replay TestMutant#1:seed=1 node=0:1,1:1,2:2,4:1,5:1@6
   fixed choice prefix; nominal continuation; no seeded fault draws
   primary binding hello.binding.yaml
-── lines 1–26 of 36 (pgup/pgdn scroll)
+── lines 1–26 of 37 (pgup/pgdn scroll)
 
 saved to the corpus: /tmp/gotogether-nav-tape-corpus/TestMutant/0ad08a7ca068.json
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit

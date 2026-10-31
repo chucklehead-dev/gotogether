@@ -7,7 +7,13 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Worker-completion follow-up (current branch): no-work signal waits are scoped;
+Finite-choice follow-up (current branch): I4's first bounded slice searches whole
+ordinary complete traces and confirms a selected original-action witness with
+Quint. JSON and TUI receipts distinguish exhaustive Go search from selected-path
+confirmation; unsupported scopes and exhausted bounds give no verdict. See
+[model-choice witnesses](model-choice-witnesses.md).
+
+Worker-completion follow-up (merged PR #9): no-work signal waits are scoped;
 grist watchers/relays/pollers and simlog senders count accepted work, callbacks,
 retry backoffs and paused obligations as active. Short bounds yield Unsettled,
 without a settle marker. A separate non-grist HTTP/SQLite cold-start rehearsal
@@ -46,7 +52,7 @@ for every native history, including navigation. `Report.Composition` is canonica
 normal conformance assertions include applicable checks. Wrong histories, wrong
 service bindings, unknown obligations and order limits cannot silently pass.
 Receipts preserve model-authored diagnostics. See [grist-composition.md](grist-composition.md).
-PRs #2, #3, #4, #5, #6, #7 and #8 are merged; the single current navigation contract is nav/2.
+PRs #2, #3, #4, #5, #6, #7, #8 and #9 are merged; the single current navigation contract is nav/2.
 
 Check-receipt first increment (merged PR #3): validation reports and run
 navigation share structured statuses, ordering-search limits and assumed effects
@@ -59,11 +65,11 @@ exploration evidence and run manifests. `evidence -session` filters the
 suite before coverage and expectation checks; unscoped completeness checks
 require explicit `-history`. Use a fresh ID and `go test -count=1`.
 
-**As of 2026-10-30 (worker-completion branch).** GR4's first composition experiment is implemented
+**As of 2026-10-31 (pinned-model-witness branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
-`1b117740` so scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
-run profiles, composition and nav/2
+`bd9f977e` so scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
+run profiles, finite-choice witness evidence, composition and nav/2
 contract work outside go.work; the
 merged declared-call span increment did not require a core-pin bump. **Nothing is tagged**: every module is pre-release,
 published modules require each other at pseudo-versions, and breaking
@@ -144,7 +150,7 @@ review" on.
 | I1 | a fixed upcaster refolds (fingerprint) | 3b20911 |
 | I2 | sound set folds in the evaluator | 4bdec87 |
 | I3 | `-graph` cross-checked against quint | 1471d77 |
-| I4 (S half) | an internal choice the expect observes: lint, no verdict | 3c92cd5 |
+| I4 (first bounded slice) | finite whole-path search, original-action pinned replay and explicit scope/evidence | current branch; lint 3c92cd5 |
 | I5 | ResolvePending keeps invariants if a placement can | fe01988 |
 | I6 | qhistory ignores an Unknown transaction's completion | 5cc4785 |
 | I7 | cross-recorder real time named in the verdict, a skew setting | 1b80ee0 |
@@ -184,10 +190,10 @@ review" on.
 In the order to take them. Sizes as in ROADMAP (S under a week, M two to
 four, L more; agent-days in practice).
 
-1. **I4's pinned replays (M).** Replays with the evaluator's witness
-   pinned, so quint confirms a path instead of sampling one; needs a
-   replay of a step naming its choice, which no binding template writes
-   yet (HISTORY "Eleventh review: silent wrong answers").
+1. **I4's broader scope.** The finite ordinary-trace slice is implemented on
+   this branch. History/hidden/partition/snapshot/resume/within integration,
+   broader IR rendering and tighter enumeration resource bounds remain; select
+   further work from adopter evidence. See [the scope](model-choice-witnesses.md).
 2. **I35's rest.** (1) a test that every `gotogether` line in a
    tutorial names a real command and flags (as cmd/gotogether's
    TestCommandNeeds); (2) `ci/tutorials.sh` running each `$` line and
@@ -250,17 +256,14 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I4 finite pinned-witness replay | M | extend core model support without resampling internal choices; retain refusal outside supported bounds |
-| 2 | Typed core lint findings and executable onboarding | S-M | generalize preflight's structured findings/performed checks across CLI, editors and agents; smoke-check one workflow in each track |
-| 3 | Component-aware shrinking | S-M | preserve the same component/obligation, refusing exhaustion, unchecked evidence and unreached prerequisites; include a non-inventory system |
-| 4 | One adopter-driven capability (outbound streams or library starter are candidates) | M | the HTTP/SQLite rehearsal exposed no missing adapter; use concrete next-trial blockers before adding a facade |
+| 1 | Typed core lint findings and executable onboarding | S-M | generalize preflight's structured findings/performed checks across CLI, editors and agents; smoke-check one workflow in each track |
+| 2 | Component-aware shrinking | S-M | preserve the same component/obligation, refusing exhaustion, unchecked evidence and unreached prerequisites; include a non-inventory system |
+| 3 | One adopter-driven capability (outbound streams or library starter are candidates) | M | the HTTP/SQLite rehearsal exposed no missing adapter; use concrete next-trial blockers before adding a facade |
 
-Do not start all tracks at once. The worker-completion slice and bounded
-HTTP/SQLite rehearsal are built on
-this branch. After reviewing them, the recommended next implementation is I4
-finite pinned-witness replay. Verification/product reviewers favored I4 next; the runtime
-review identified the existing daemon/settlement classification boundary as a
-smaller correctness step to take first. Further inventory/diagnostic expansion,
+Do not start all tracks at once. Worker completion and the bounded HTTP/SQLite
+rehearsal are merged in PR #9; the first finite I4 slice is implemented on this
+branch. The recommended next implementation is typed core lint findings and
+executable onboarding across tracks. Further inventory/diagnostic expansion,
 cycles, clusters and new platform facades wait for evidence. GR10c down-process
 settlement has separate semantics and stays separate from GR10b.
 

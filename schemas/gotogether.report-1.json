@@ -181,6 +181,61 @@
           "actor": {
             "type": "string"
           },
+          "choices": {
+            "additionalProperties": false,
+            "description": "Choices retains exact selected model expressions and search scope.",
+            "properties": {
+              "confirmation": {
+                "type": "string"
+              },
+              "exhaustive": {
+                "type": "boolean"
+              },
+              "explored": {
+                "type": "integer"
+              },
+              "limit": {
+                "type": "integer"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "witness": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "action": {
+                      "type": "string"
+                    },
+                    "expression": {
+                      "type": "string"
+                    },
+                    "index": {
+                      "type": "integer"
+                    },
+                    "recorder": {
+                      "type": "string"
+                    },
+                    "seq": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "type": "array"
+              }
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
           "conformance": {
             "description": "\"pass\", \"fail\", \"n/a\"",
             "type": "string"
@@ -761,6 +816,60 @@
                 },
                 "type": "array"
               },
+              "choices": {
+                "additionalProperties": false,
+                "properties": {
+                  "confirmation": {
+                    "type": "string"
+                  },
+                  "exhaustive": {
+                    "type": "boolean"
+                  },
+                  "explored": {
+                    "type": "integer"
+                  },
+                  "limit": {
+                    "type": "integer"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "witness": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "action": {
+                          "type": "string"
+                        },
+                        "expression": {
+                          "type": "string"
+                        },
+                        "index": {
+                          "type": "integer"
+                        },
+                        "recorder": {
+                          "type": "string"
+                        },
+                        "seq": {
+                          "type": "integer"
+                        }
+                      },
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
               "diagnostics": {
                 "items": {
                   "additionalProperties": false,
@@ -1167,6 +1276,60 @@
                 },
                 "type": "array"
               },
+              "choices": {
+                "additionalProperties": false,
+                "properties": {
+                  "confirmation": {
+                    "type": "string"
+                  },
+                  "exhaustive": {
+                    "type": "boolean"
+                  },
+                  "explored": {
+                    "type": "integer"
+                  },
+                  "limit": {
+                    "type": "integer"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "witness": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "action": {
+                          "type": "string"
+                        },
+                        "expression": {
+                          "type": "string"
+                        },
+                        "index": {
+                          "type": "integer"
+                        },
+                        "recorder": {
+                          "type": "string"
+                        },
+                        "seq": {
+                          "type": "integer"
+                        }
+                      },
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
               "diagnostics": {
                 "items": {
                   "additionalProperties": false,
@@ -1451,6 +1614,60 @@
                                 ]
                               },
                               "type": "array"
+                            },
+                            "choices": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "confirmation": {
+                                  "type": "string"
+                                },
+                                "exhaustive": {
+                                  "type": "boolean"
+                                },
+                                "explored": {
+                                  "type": "integer"
+                                },
+                                "limit": {
+                                  "type": "integer"
+                                },
+                                "reason": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "type": "string"
+                                },
+                                "witness": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "action": {
+                                        "type": "string"
+                                      },
+                                      "expression": {
+                                        "type": "string"
+                                      },
+                                      "index": {
+                                        "type": "integer"
+                                      },
+                                      "recorder": {
+                                        "type": "string"
+                                      },
+                                      "seq": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "type": [
+                                "object",
+                                "null"
+                              ]
                             },
                             "diagnostics": {
                               "items": {
@@ -1762,6 +1979,60 @@
                                 ]
                               },
                               "type": "array"
+                            },
+                            "choices": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "confirmation": {
+                                  "type": "string"
+                                },
+                                "exhaustive": {
+                                  "type": "boolean"
+                                },
+                                "explored": {
+                                  "type": "integer"
+                                },
+                                "limit": {
+                                  "type": "integer"
+                                },
+                                "reason": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "type": "string"
+                                },
+                                "witness": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "action": {
+                                        "type": "string"
+                                      },
+                                      "expression": {
+                                        "type": "string"
+                                      },
+                                      "index": {
+                                        "type": "integer"
+                                      },
+                                      "recorder": {
+                                        "type": "string"
+                                      },
+                                      "seq": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "type": [
+                                "object",
+                                "null"
+                              ]
                             },
                             "diagnostics": {
                               "items": {
@@ -2102,6 +2373,60 @@
                               ]
                             },
                             "type": "array"
+                          },
+                          "choices": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "confirmation": {
+                                "type": "string"
+                              },
+                              "exhaustive": {
+                                "type": "boolean"
+                              },
+                              "explored": {
+                                "type": "integer"
+                              },
+                              "limit": {
+                                "type": "integer"
+                              },
+                              "reason": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "witness": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "action": {
+                                      "type": "string"
+                                    },
+                                    "expression": {
+                                      "type": "string"
+                                    },
+                                    "index": {
+                                      "type": "integer"
+                                    },
+                                    "recorder": {
+                                      "type": "string"
+                                    },
+                                    "seq": {
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
+                                },
+                                "type": "array"
+                              }
+                            },
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           },
                           "diagnostics": {
                             "items": {

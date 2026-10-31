@@ -743,6 +743,15 @@ func noteDuplicates(r *Run) {
 // in cached the runs it did not check again: a run's steps already judged
 // against the instance inst, or the same as another's in the batch.
 func cachedCheck(cc *validate.Checker, inst string, cached *int) validate.BatchCheck {
+	choiceCapable := false
+	if cc.Model != nil {
+		for action := range cc.Model.Actions {
+			if len(cc.Model.Chooses(action)) > 0 {
+				choiceCapable = true
+				break
+			}
+		}
+	}
 	return func(ctx context.Context, runs [][]qtrace.Step) ([]*validate.Report, []error) {
 		reps, errs := make([]*validate.Report, len(runs)), make([]error, len(runs))
 		keys := make([]string, len(runs))
@@ -751,17 +760,22 @@ func cachedCheck(cc *validate.Checker, inst string, cached *int) validate.BatchC
 		at := map[int]int{}       // run -> index in todo
 		for i, steps := range runs {
 			keys[i] = inst + cc.Key(steps)
-			if v, ok := verdicts.get(keys[i]); ok {
+			if v, ok := verdicts.get(keys[i]); ok && choiceWitnessesRebasable(v.rep, v.steps) {
 				reps[i] = rebase(v.rep, v.steps, steps)
 				*cached++
 				continue
 			}
-			if j, ok := first[keys[i]]; ok {
+			// Sequence-less input cannot safely share a choice witness:
+			// several calls may have the same recorder and zero sequence.
+			share := !choiceCapable || !slices.ContainsFunc(steps, func(s qtrace.Step) bool { return s.Seq == 0 })
+			if j, ok := first[keys[i]]; ok && share {
 				at[i] = j
 				*cached++
 				continue
 			}
-			first[keys[i]] = len(todo)
+			if share {
+				first[keys[i]] = len(todo)
+			}
 			at[i] = len(todo)
 			todo = append(todo, steps)
 		}
@@ -774,12 +788,42 @@ func cachedCheck(cc *validate.Checker, inst string, cached *int) validate.BatchC
 			if !ok {
 				continue
 			}
-			if reps[i], errs[i] = rebase(treps[j], todo[j], runs[i]), terrs[j]; errs[i] == nil {
+			if reps[i], errs[i] = rebase(treps[j], todo[j], runs[i]), terrs[j]; errs[i] == nil && choiceWitnessesRebasable(treps[j], todo[j]) {
 				verdicts.put(keys[i], verdict{treps[j], todo[j]})
 			}
 		}
 		return reps, errs
 	}
+}
+
+// Witness actions name the bound model action, which can differ from the
+// recorded action. Only unique captured recorder/sequence pairs identify them.
+func choiceWitnessesRebasable(rep *validate.Report, steps []qtrace.Step) bool {
+	if rep == nil {
+		return true
+	}
+	if !slices.ContainsFunc(rep.Actors, func(a *validate.Result) bool { return a.Choices != nil && len(a.Choices.Witness) > 0 }) {
+		return true
+	}
+	type identity struct {
+		recorder string
+		seq      uint64
+	}
+	counts := make(map[identity]int, len(steps))
+	for _, s := range steps {
+		counts[identity{s.Recorder, s.Seq}]++
+	}
+	for _, a := range rep.Actors {
+		if a.Choices == nil {
+			continue
+		}
+		for _, w := range a.Choices.Witness {
+			if counts[identity{w.Recorder, w.Seq}] != 1 {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // verdicts keeps the model's verdicts by instance and steps, for the test
@@ -864,6 +908,20 @@ func rebase(rep *validate.Report, from, to []qtrace.Step) *validate.Report {
 	out.Actors = make([]*validate.Result, len(rep.Actors))
 	for i, a := range rep.Actors {
 		c := *a
+		c.Choices = a.Choices.Clone()
+		if c.Choices != nil {
+			for j := range c.Choices.Witness {
+				w := &c.Choices.Witness[j]
+				// Choices belong to an actor's planned calls, so Index is
+				// not an index into the complete captured history.
+				for k := range from {
+					if from[k].Recorder == w.Recorder && from[k].Seq == w.Seq {
+						w.Recorder, w.Seq = to[k].Recorder, to[k].Seq
+						break
+					}
+				}
+			}
+		}
 		c.Failure = fix(a.Failure)
 		c.Invariants = slices.Clone(a.Invariants)
 		for j := range c.Invariants {

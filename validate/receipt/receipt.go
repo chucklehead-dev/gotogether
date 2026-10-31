@@ -55,6 +55,8 @@ type Effect struct {
 
 // Actor describes a history checked against one model instance or partition.
 type Actor struct {
+	// Choices is a model-choice search, not a history-order search.
+	Choices *ChoiceSearch `json:"choices,omitempty"`
 	// Diagnostics retain model-authored detail from the judged history.
 	Diagnostics []diagnostic.Result `json:"diagnostics,omitempty"`
 	JudgedBy    string              `json:"judgedBy"`
@@ -114,7 +116,7 @@ func (s Summary) String() string {
 	visible := []Actor{}
 	folded := 0
 	for _, a := range s.Actors {
-		if a.Partition != "" && a.Status == Pass && a.Search == nil && len(a.AssumedEffects) == 0 {
+		if a.Partition != "" && a.Status == Pass && a.Search == nil && a.Choices == nil && len(a.AssumedEffects) == 0 {
 			folded++
 			continue
 		}
@@ -138,6 +140,9 @@ func (s Summary) String() string {
 			break
 		}
 		fmt.Fprintf(&b, "  actor %s: %s; %s order\n", a.Actor, a.Status, a.Ordering)
+		if a.Choices != nil {
+			fmt.Fprintf(&b, "    %s\n", a.Choices.String())
+		}
 		if q := a.Search; q != nil {
 			fmt.Fprintf(&b, "    search: %s; seeks one conforming history", q.Mode)
 			if q.BudgetExhausted {

@@ -35,6 +35,7 @@ effective run profile TestMutant#1:
     constant REQUESTS = 1.to(3)
     invariants: exactlyOnce
   validation quint quint; backend automatic; evaluator go
+  finite model-choice limit 20000 expanded states per actor
   configured evaluator confirmation rate 0.02; sample seed ""
     unconfirmed actions use at least a one-in-five confirmation rate
   simulation defaults: self-checks false; all fault families false
@@ -89,10 +90,10 @@ effective run profile TestMutant#1:
     constant REQUESTS = 1.to(3)
     invariants: exactlyOnce
   validation quint quint; backend automatic; evaluator go
+  finite model-choice limit 20000 expanded states per actor
   configured evaluator confirmation rate 0.02; sample seed ""
     unconfirmed actions use at least a one-in-five confirmation rate
-  simulation defaults: self-checks false; all fault families false
-── lines 1–38 of 41 (pgup/pgdn scroll)
+── lines 1–38 of 42 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -135,6 +136,7 @@ effective run profile TestMutant#1:
     constant REQUESTS = 1.to(3)
     invariants: exactlyOnce
   validation quint quint; backend automatic; evaluator go
+  finite model-choice limit 20000 expanded states per actor
   configured evaluator confirmation rate 0.02; sample seed ""
     unconfirmed actions use at least a one-in-five confirmation rate
   simulation defaults: self-checks false; all fault families false
@@ -182,6 +184,7 @@ effective run profile TestMutant#1:
     constant REQUESTS = 1.to(3)
     invariants: exactlyOnce
   validation quint quint; backend automatic; evaluator go
+  finite model-choice limit 20000 expanded states per actor
   configured evaluator confirmation rate 0.02; sample seed ""
     unconfirmed actions use at least a one-in-five confirmation rate
   simulation defaults: self-checks false; all fault families false
@@ -229,6 +232,7 @@ effective run profile TestMutant#1:
     constant REQUESTS = 1.to(3)
     invariants: exactlyOnce
   validation quint quint; backend automatic; evaluator go
+  finite model-choice limit 20000 expanded states per actor
   configured evaluator confirmation rate 0.02; sample seed ""
     unconfirmed actions use at least a one-in-five confirmation rate
   simulation defaults: self-checks false; all fault families false

@@ -50,6 +50,8 @@ type Rates struct {
 // composition checkers retain their own explicitly supplied options. Backend "automatic" preserves batch
 // backend selection (TypeScript batches with Rust failure details).
 type Validation struct {
+	// ChoiceLimit bounds expanded finite model-choice states per actor.
+	ChoiceLimit int `json:"choiceLimit"`
 	// Binding identifies the primary checker; empty means no primary model.
 	Binding string `json:"binding"`
 	// Constants and Invariants are resolved from the binding and workflow options.
@@ -162,6 +164,9 @@ func (p Profile) String() string {
 			fmt.Fprintf(&b, "\n    invariants: %s", strings.Join(invariants, ", "))
 		}
 		fmt.Fprintf(&b, "\n  validation quint %s; backend %s; evaluator %s", p.Validation.Quint, p.Validation.Backend, p.Validation.Eval)
+		if p.Validation.ChoiceLimit > 0 {
+			fmt.Fprintf(&b, "\n  finite model-choice limit %d expanded states per actor", p.Validation.ChoiceLimit)
+		}
 		fmt.Fprintf(&b, "\n  configured evaluator confirmation rate %g; sample seed %q", p.Validation.ConfirmationRate, p.Validation.ConfirmationSeed)
 		if p.Validation.Eval == "go" && p.Validation.ConfirmationRate > 0 {
 			b.WriteString("\n    unconfirmed actions use at least a one-in-five confirmation rate")

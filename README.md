@@ -403,6 +403,12 @@ gotogether nav -run 'TestShop#2:seed=17' -at fail                               
 # a manifest records the driver's args, absolute paths and the failing step's ref verbatim: sanitize a log before sharing it (steps -pseudonymize)
 ```
 
+Finite internal model choices in ordinary complete traces use whole-path search,
+then Quint confirms a pinned original-action witness. `-choice-limit` defaults to
+20,000 expanded states. JSON and TUI receipts disclose search completeness and
+selected-path confirmation separately; exhaustion and unsupported scopes give no
+verdict. See [model-choice witnesses](docs/model-choice-witnesses.md).
+
 On a terminal, `gotogether nav` opens the interactive navigator
 ([qnav](qnav)): here a failing run, at the choice before its failing
 step, then the run's option, whose step the model rejects, with why.

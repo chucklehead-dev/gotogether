@@ -18,8 +18,15 @@ type EvaluationSampling struct {
 // returned options can be reused without reading backend, evaluator or sampling
 // environment variables again. A blank Backend retains automatic batch/backend
 // selection; it does not force Rust for every batch. Invalid policies fail here,
-// before execution. Filesystem paths are not created or resolved by this method.
+// before execution. The finite model-choice limit is normalized to its effective
+// default too. Filesystem paths are not created or resolved by this method.
 func (o Options) ResolveEnvironment() (Options, error) {
+	if o.ChoiceLimit < 0 {
+		return o, fmt.Errorf("choice limit must be nonnegative (0 uses the default)")
+	}
+	if o.ChoiceLimit == 0 {
+		o.ChoiceLimit = DefaultChoiceLimit
+	}
 	o.Backend = o.envBackend()
 	o.NoEnvBackend = true
 	if o.Backend != "" && o.Backend != "rust" && o.Backend != "typescript" {

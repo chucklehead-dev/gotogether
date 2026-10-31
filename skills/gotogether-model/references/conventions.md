@@ -57,9 +57,14 @@ code (`connect`), Hegel-driven Go runs are judged by the model
    observe (queues, other components); validation lets the model compute
    them. Only what a driver's `State()` returns, or a binding's `expect`
    mentions, is compared.
-9. **Keep deterministic actions deterministic.** An action with a hidden
-   `nondet` inside it (not a parameter) makes replay ambiguous: replay is a
-   deterministic `run`. Lift the choice into a parameter.
+9. **Separate observed outcomes from internal choices.** Keep observed outcomes
+   as parameters. Ordinary complete-trace validation can search finite internal
+   `nondet`/`any` choices and confirm an original-action pinned witness with Quint;
+   hidden model state need not be exposed solely to avoid sampled replay. The
+   default expansion limit is 20,000 (`ChoiceLimit` / `-choice-limit`). Exhaustion,
+   compiled-only checking and unsupported scopes yield no verdict. Other workflows
+   may still require deterministic named actions; see
+   [the scope contract](../../../docs/model-choice-witnesses.md).
 
 ## Keep replays cheap
 
