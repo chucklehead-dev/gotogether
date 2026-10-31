@@ -508,16 +508,23 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Identify a new contract or diagnosis gap through a bounded external rehearsal | S–M | Goo counted-values is a candidate, but already has strong Hegel reference tests; establish a remaining modeling/evidence usability gap before duplicating coverage, then freeze a bounded model, inspect JSON/navigation diagnosis and fix at most one demonstrated toolkit blocker; agent-assisted, not independent adoption |
+| 1 | Goo counted-values large-integer arithmetic rehearsal | S–M | existing small-count Hegel tests do not reach valid counts above 2^53 or overflow of the sum of valid uint64 groups; first prove exact native integer round trips, then freeze an independent arithmetic model and real executor driver before a wrapping-addition contrast; fix at most one demonstrated toolkit blocker; agent-assisted, not independent adoption |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
-One candidate is grounded in Goo's [counted-values contract](https://github.com/casselc/goo/blob/0659a4b20fb7fe83bbfd32a194ceb9a7d0c339a9/docs/COUNTED_VALUES.md)
+The bounded trial is grounded in Goo's [counted-values contract](https://github.com/casselc/goo/blob/0659a4b20fb7fe83bbfd32a194ceb9a7d0c339a9/docs/COUNTED_VALUES.md)
 and `exploration.Source.FetchCountedValues`, using its existing HTTP client seam.
-Its existing `TestHegelCountedValuesReferenceAndSourceBoundary` already checks
-the central semantics, so first establish what additional evidence a Quint trial
-would provide; choose another contract if there is no gap. Keep UI ownership,
-real ClickHouse and performance outside a first trial.
+Its Hegel reference already checks ordinary semantics with 140 generated facts;
+existing tests must not be credited as missing coverage. The new cases are exact
+2^53+1, MaxUint64, and a group sum of MaxUint64+1 against total zero. Public
+counts are decimal strings; capture raw strings and `json.Number` integer values,
+never float64. Use an independent unbounded Quint sum (`Eval: "quint"`): the Go
+evaluator's int64 boundary is documented, not a newly demonstrated decoder bug.
+Prove native JSON/ITF/replay preservation before any contrast credit. Only then
+freeze and replace big.Int addition with wrapping uint64 addition in an isolated
+source contrast; expect changed_between_reads versus erroneous no_data.
+This is a test gap and usability trial, not evidence of a current source defect.
+Keep SQL, live ClickHouse, UI ownership, concurrency and performance outside it.
 
 Do not start all tracks at once. Worker completion and the bounded HTTP/SQLite
 rehearsal are merged in PR #9; finite pinned choices in PR #10, structured lint
