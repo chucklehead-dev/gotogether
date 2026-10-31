@@ -7,7 +7,14 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Stored-history follow-up (current branch): `gristtest.StoredLogs` restores each
+Interacting-validation baseline (current branch): separate transition, tracking,
+invariant and whole-validator benchmarks now measure histories with transfers.
+A test-only written-entry cache agrees with full evaluation on 1,360 bounded
+prefixes; destination and cross-entry controls demonstrate unsafe shortcuts.
+No production optimization or new binding syntax is introduced. See
+[measurements and the next decision](validation-volume.md).
+
+Stored-history follow-up (PR #22): `gristtest.StoredLogs` restores each
 retained fixture fresh, validates every event and its recorded observations,
 audits current fold/snapshot consistency, and checks the committed prefix against
 today's model. It never starts processors/effects or invents settle. Per-stage
@@ -376,7 +383,8 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I19: interacting-entity validation benchmark and soundness prototype | M | profile a nonpartitionable workload before choosing an incremental invariant design; compare with full evaluation |
+| 1 | Grist: checked event scalar projection before append and relay | S | reproduced an internally emitted MaxUint64 committing successfully and relaying as obs.ints=[-1]; retained-log guards do not protect normal recording |
+| 2 | I19: reduce measured evaluator allocation costs, then reassess incremental invariants | M | interacting baseline identifies per-entry binding allocations and map copying; preserve full evaluation semantics before adding dependency inference |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
 Do not start all tracks at once. Worker completion and the bounded HTTP/SQLite
