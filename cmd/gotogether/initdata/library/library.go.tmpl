@@ -1,0 +1,28 @@
+// Package {{.Name}} stores current values and captures immutable snapshots.
+// Recording belongs to the test driver, so the library has no toolkit imports.
+package {{.Name}}
+
+import "maps"
+
+// Store holds mutable current values. It is used by one goroutine at a time.
+type Store struct { values map[string]int }
+
+// initial is read-only; every Store owns its own mutable copy.
+var initial = map[string]int{"counter": 0}
+
+// New returns a store whose counter starts at zero. Other absent keys read zero.
+func New() *Store { return &Store{values: maps.Clone(initial)} }
+
+// Put replaces the current value of key.
+func (s *Store) Put(key string, value int) { s.values[key] = value }
+
+// Snapshot captures values that subsequent Put calls cannot change.
+func (s *Store) Snapshot() Snapshot {
+	return Snapshot{values: maps.Clone(s.values)}
+}
+
+// Snapshot is an immutable view of values at capture time.
+type Snapshot struct { values map[string]int }
+
+// Get returns the captured value of key, or zero when it was absent.
+func (s Snapshot) Get(key string) int { return s.values[key] }

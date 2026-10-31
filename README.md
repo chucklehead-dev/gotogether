@@ -65,6 +65,22 @@ and late requests, lost responses, refused connections and crashes), one
 over a real socket through `qobshttp`, and a mutant (`>` for `>=`) that
 `TestMutants` shows caught. Change the model first, then the handler:
 the tests say what no longer fits. For a service you already have,
+A synchronous Go library can start without a simulated environment:
+
+```sh
+gotogether init -kind library snapshots && cd snapshots
+go test -short -v ./...
+./run-demo.sh; MUTANT=aliasSnapshot ./run-demo.sh
+```
+
+This starter copies immutable snapshots from a mutable store. Its observing test
+records actual library calls and reads, and the planted aliasing mutant changes
+an old snapshot after a later write. The finite model catches the resulting
+observed-state mismatch. Production library code uses only the standard library;
+recording stays in the test driver. The demo records fresh evidence and replays
+its manifest. Adapt the contract and observations explicitly; this does not infer
+a model from arbitrary Go code.
+
 `gotogether scaffold -system -http -binding b.yaml` writes the same
 simulated wiring around your handler.
 
@@ -231,9 +247,20 @@ inside this repository):
 ```sh
 go mod init example.com/app
 go get github.com/chucklehead-dev/gotogether@latest github.com/chucklehead-dev/gotogether/qhegel@latest
-gotogether scaffold -spec model/app.qnt -module app -out app.binding.yaml   # then set its constants
+gotogether scaffold -spec model/app.qnt -module app -invariants safe -eventually complete -out app.binding.yaml   # choose your model's names; then set constants
 gotogether scaffold -system -binding app.binding.yaml -pkg app -out system_test.go   # -http: an HTTP service on qenv/qhttp
 ```
+
+Scaffolding requires explicit property roles when the model has Boolean vals.
+Use `-invariants` for safety and `-eventually` for completion; unselected vals
+remain listed for review and are never silently enabled. `-holds` and `-allows`
+optionally classify the selected safety vals for model simulation; when used,
+they must cover every selected invariant exactly once. Without that
+classification, scaffold leaves simulation guidance commented out. Use
+`-no-properties` only for a deliberately conformance-only binding. Unknown or
+overlapping selections fail before output is written. `-system` reads these
+choices from its binding and refuses property-selection flags.
+
 
 Bindings and span conversion rules have JSON Schemas (`schemas/`,
 `gotogether.binding-2.json` and `gotogether.convert-1.json`, one per
@@ -757,7 +784,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `qdriver` | an external driver's request log (protocol `gotogether.requests/1`, JSONL a driver writes itself): `Read`, `ReadFile`, `New`, `Log.Steps` (each request an invocation record, completed only by its own response; steps a driver saw; its times, refs and correlation ids), `Log.Warnings`, `Log.Write`, `Sniff`; Playwright's adapter is [adapters/playwright](adapters/playwright) |
 | `qdriver/bombadil` | Bombadil's `trace.jsonl` with a page that logs its requests, as a request log (`Log`, `LogFile`; its steps for `qtest.Validate`): `Options` (the spec's extract, its custom actions in `Clicks`, the log's `Fields`, the display as `Show` steps), `States` (experimental) for a mapping of your own |
 | `skills` | the agent skills below, embedded, and their install |
-| `cmd/gotogether` | the CLI: `init` (a new HTTP service's project, green as written), `scaffold` (`-system -http`: on qenv/qhttp), `lint` (a binding's schema first), `simulate` (the model alone: which invariants it guarantees, which the code must, and what it must be able to do, its `possible` list, each reached with a witness or failing as too strict; `-verify N`, Apalache to depth N; `-graph`, every reachable state by the Go evaluator, with the shortest counterexamples, deadlocks, the actions never enabled, and each eventual val as fair cycles: a lasso that keeps it false forever), `steps`, `validate`, `itf`, `convert`, `cover`, `evidence` (a suite's explorations, and what no faithful one tried; `-session ID -strict` for CI), `skills` |
+| `cmd/gotogether` | the CLI: `init` (a new HTTP service or synchronous library, green as written), `scaffold` (`-system -http`: on qenv/qhttp), `lint` (a binding's schema first), `simulate` (the model alone: which invariants it guarantees, which the code must, and what it must be able to do, its `possible` list, each reached with a witness or failing as too strict; `-verify N`, Apalache to depth N; `-graph`, every reachable state by the Go evaluator, with the shortest counterexamples, deadlocks, the actions never enabled, and each eventual val as fair cycles: a lasso that keeps it false forever), `steps`, `validate`, `itf`, `convert`, `cover`, `evidence` (a suite's explorations, and what no faithful one tried; `-session ID -strict` for CI), `skills` |
 | `qweave` (module) | weaves Orchestrion aspects into a `go -overlay`: `qweave go test ./...`, `-cover`, `-mutate` |
 | `qnav` (module) | `gotogether-nav`, the navigators' TUI (Charm's v2 libraries): a model's states or a run's choices, enter to take a branch, back, fold, the failing step, save; its VHS tapes are its docs' GIFs ([qnav](qnav)) |
 | `qanalysis` (module) | analyzers `quintsim`, `quintweave`, `quintaction`, `quintctx`, `quintraw` (a grist effect's raw HTTP, gRPC or SQL calls) (`cmd/quintvet`, a golangci plugin); `cmd/actionmap` |

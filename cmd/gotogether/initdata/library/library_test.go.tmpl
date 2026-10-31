@@ -1,0 +1,71 @@
+package {{.Name}}
+
+import (
+    "context"
+    "os"
+    "path/filepath"
+    "testing"
+
+    "github.com/chucklehead-dev/gotogether/qobs"
+    "github.com/chucklehead-dev/gotogether/qtest"
+)
+
+// observe records calls that actually ran and values read from actual Snapshot
+// objects. Snapshot IDs are caller-chosen labels, not invented return values.
+func observe(ctx context.Context) {
+    store := New()
+    store.Put("counter", 1)
+    qobs.Record(ctx, "write", nil, "key", "counter", "value", 1)
+    old := store.Snapshot()
+    qobs.Record(ctx, "capture", nil, "id", 1)
+    store.Put("counter", 2)
+    qobs.Record(ctx, "write", nil, "key", "counter", "value", 2)
+    recent := store.Snapshot()
+    qobs.Record(ctx, "capture", nil, "id", 2)
+    qobs.Record(ctx, "read", nil, "id", 1, "key", "counter", "obs.value", old.Get("counter"))
+    qobs.Record(ctx, "read", nil, "id", 2, "key", "counter", "obs.value", recent.Get("counter"))
+}
+
+func record(t *testing.T) *qtest.Run {
+    t.Helper()
+    qtest.RequireQuint(t)
+    return qtest.Record(t, "{{.Name}}.binding.yaml", func(rec *qobs.Recorder) {
+        observe(qobs.WithRecorder(t.Context(), rec))
+    })
+}
+
+// Ordinary synchronous Go calls are sufficient; no simulated environment is used.
+func TestConforms(t *testing.T) { record(t).Expect(t, qtest.Conforms()) }
+
+func TestMutant(t *testing.T) {
+    switch qtest.Mutant() {
+    case "": t.Skip("TestMutants builds the planted source overlay")
+    case "aliasSnapshot": record(t).Expect(t, qtest.Mismatch("read"))
+    default: t.Fatalf("unknown mutant %q", qtest.Mutant())
+    }
+}
+
+func TestMutants(t *testing.T) { qtest.Mutants{}.Run(t) }
+
+// The demo generates fresh native observations and a relocatable manifest.
+// The expected mutant verdict is precise: a tool error cannot satisfy Mismatch.
+func TestDemoEvidence(t *testing.T) {
+    directory := os.Getenv("GOTOGETHER_DEMO_DIR")
+    if directory == "" { t.Skip("run-demo.sh sets GOTOGETHER_DEMO_DIR") }
+    directory, err := filepath.Abs(directory)
+    if err != nil { t.Fatal(err) }
+    t.Setenv("GOTOGETHER_KEEP", directory)
+    run := record(t)
+    switch os.Getenv("GOTOGETHER_DEMO_MUTANT") {
+    case "": run.Expect(t, qtest.Conforms())
+    case "aliasSnapshot": run.Expect(t, qtest.Mismatch("read"))
+    default: t.Fatal("unknown GOTOGETHER_DEMO_MUTANT")
+    }
+    data, err := os.ReadFile(run.StepLog)
+    if err != nil { t.Fatal(err) }
+    if err = os.WriteFile(filepath.Join(directory,"steps.jsonl"),data,0600);err != nil { t.Fatal(err) }
+    manifest, err := run.Manifest()
+    if err != nil { t.Fatal(err) }
+    if err = manifest.Bundle(filepath.Join(directory,"run"));err != nil { t.Fatal(err) }
+    if err = manifest.Write(filepath.Join(directory,"manifest.json"));err != nil { t.Fatal(err) }
+}

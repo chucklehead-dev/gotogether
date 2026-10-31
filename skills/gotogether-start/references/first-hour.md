@@ -7,6 +7,8 @@ From the gotogether-start skill (its SKILL.md says when to read this).
 The `examples/...` paths in these skills are in the gotogether repository
 (https://github.com/chucklehead-dev/gotogether/tree/main/examples), not in
 your project: clone it to read and run them. A new HTTP service starts from `gotogether init -kind http NAME` (below);
+a synchronous library starts from `gotogether init -kind library NAME`, with
+ordinary observed-call tests and an immutable-snapshot source contrast;
 in your own module, `go get
 github.com/chucklehead-dev/gotogether@latest` (and `.../qhegel@latest`
 for Hegel) and start from `gotogether scaffold`; the examples' `replace`
@@ -86,8 +88,9 @@ example to start from (examples/grpcledger, examples/streams).
 
 ```sh
 gotogether init -kind http stock                   # a new HTTP service's project, green as written
+gotogether init -kind library snapshots            # a synchronous library, observing tests and an aliasing mutant
 quint typecheck model.qnt
-gotogether scaffold -spec model.qnt -module M -out m.binding.yaml      # a binding skeleton
+gotogether scaffold -spec model.qnt -module M -invariants safe -eventually complete -out m.binding.yaml  # choose your model's actual property names
 gotogether scaffold -system -binding m.binding.yaml -pkg app -out system_test.go   # a qtest.System test to fill in (-http: on qenv/qhttp)
 gotogether lint -binding m.binding.yaml -src .     # binding vs its schema and model, annotations vs binding
 gotogether lint -sim .                             # code that escapes a simulation

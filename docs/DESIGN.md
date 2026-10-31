@@ -116,6 +116,29 @@ aspect needs nothing model-specific. The model drives:
   names, constants, invariants), and the Go annotations against the binding
   (every field a template uses must be recorded).
 
+Binding scaffolding now separates runtime property roles from model simulation
+claims. Authors select safety vals with `-invariants` and completion vals with
+`-eventually`; they must not overlap. Model guarantee/allowed-violation
+classification is optional and explicit through `-holds`/`-allows`, restricted
+to selected safety vals; when either is provided, the two lists must cover all
+selected invariants exactly once. Without them no model-guarantee block is
+enabled. Unselected Boolean vals are listed, not asserted.
+A model with Boolean candidates requires a selection or the explicit
+`-no-properties` acknowledgment. Validation happens before output creation.
+This corrects the HTTP/SQL rehearsal's observed misclassification of `completed`
+as an invariant; names never determine semantics.
+
+The library starter extends the same model-first workflow to ordinary
+synchronous kernel calls. Its mutable store returns immutable snapshots;
+recording occurs in an observing test driver, and production code imports only
+the standard library. The finite model retains captured values independently of
+later writes. A single source overlay aliases the mutable map, so a real old
+snapshot read disagrees with the frozen binding. Snapshot IDs are driver-chosen
+labels for actual objects, not invented return values. Generated evidence and
+manifest replay use fresh executions. This is a concrete template, with explicit
+adaptation work for another API, rather than automatic model derivation or
+independent-adopter evidence.
+
 The core lint report is now assembled before either text or JSON rendering.
 `qlint` retains the lightweight syntax rules used by analyzers; the `lint`
 package composes bindings, conversion rules and schemas above it.

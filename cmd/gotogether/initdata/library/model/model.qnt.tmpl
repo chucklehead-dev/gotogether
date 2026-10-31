@@ -1,0 +1,39 @@
+// The bounded contract exercises two captured snapshots of one key. Map values
+// are immutable in Quint; the Go implementation must preserve that behavior.
+module {{.Name}} {
+  const KEYS: Set[str]
+  const VALUES: Set[int]
+  const IDS: Set[int]
+
+  var current: str -> int
+  var saved: int -> (str -> int)
+
+  action init = all {
+    current' = KEYS.mapBy(key => 0),
+    saved' = Map(),
+  }
+
+  action write(key: str, value: int): bool = all {
+    KEYS.contains(key), VALUES.contains(value),
+    current' = current.set(key, value), saved' = saved,
+  }
+  // id is a label chosen by the observing driver for a real Snapshot object.
+  action capture(id: int): bool = all {
+    IDS.contains(id), not(saved.keys().contains(id)),
+    saved' = saved.put(id, current), current' = current,
+  }
+  action read(id: int, key: str): bool = all {
+    saved.keys().contains(id), KEYS.contains(key),
+    saved' = saved, current' = current,
+  }
+  action step = {
+    nondet key = KEYS.oneOf()
+    nondet value = VALUES.oneOf()
+    nondet id = IDS.oneOf()
+    any { write(key, value), capture(id), read(id, key) }
+  }
+
+  val snapshotCountBound = saved.keys().size() <= IDS.size()
+  // A helper/reachability predicate, not an invariant: initially false.
+  val hasSnapshot = saved.keys().size() > 0
+}

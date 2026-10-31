@@ -20,11 +20,11 @@ type command struct{ purpose, example, short string }
 var helpOrder = []string{"init", "scaffold", "lint", "simulate", "validate", "nav", "evidence", "steps", "shrink", "itf", "convert", "cover", "compile", "skills", "doctor"}
 
 var commands = map[string]command{
-	"init": {"write a new service's project, green as written: an HTTP service (its handler recording each step, a client that retries a refused connection), its model and binding, a test in a simulation on qenv/qhttp (the server's process before the client), one over a real socket through qobshttp, and a mutant the tests catch",
-		"gotogether init -kind http stock && cd stock && go test -short -v ./...\n  gotogether init -kind http -dir svc -module github.com/me/svc stock",
-		"a new service? its whole project (http; grpc and queue: the example to start from), green as written"},
+	"init": {"write a new project, green as written: a synchronous library with observed-call tests, or an HTTP service (its handler recording each step, a client that retries a refused connection), its model and binding, a test in a simulation on qenv/qhttp (the server's process before the client), one over a real socket through qobshttp, and a mutant the tests catch",
+		"gotogether init -kind library snapshots && cd snapshots && go test -short -v ./...\n  gotogether init -kind http -dir svc -module github.com/me/svc stock",
+		"a new project? library or HTTP starter; grpc and queue name an example to start from"},
 	"scaffold": {"write a binding skeleton for a model (or, with -system, a qtest.System test for a binding; -http, on qenv/qhttp): the first step for code you have",
-		"gotogether scaffold -spec model/stock.qnt -module stock -out stock.binding.yaml\n  gotogether scaffold -system -binding stock.binding.yaml -out stock_test.go   (-http: an HTTP service on qenv/qhttp)",
+		"gotogether scaffold -spec model/stock.qnt -module stock -invariants neverOversold -holds neverOversold -out stock.binding.yaml\n  gotogether scaffold -system -binding stock.binding.yaml -out stock_test.go   (-http: an HTTP service on qenv/qhttp)",
 		"where do I start with code I have? a binding skeleton for a model; -system, a qtest.System test for a binding (-http: an HTTP service)"},
 	"simulate": {"run the model alone with the binding's invariants: which it guarantees (simulate.holds), which it lets fail (simulate.allows), and what it must be able to do (simulate.possible)",
 		"gotogether simulate -binding stock.binding.yaml -graph\n  gotogether simulate -binding stock.binding.yaml   (sampled by quint, for a model too big to enumerate)",

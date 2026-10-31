@@ -1,0 +1,22 @@
+# yaml-language-server: $schema={{.SchemaURL}}
+format: gotogether.binding/2
+spec: model/{{.Name}}.qnt
+module: {{.Name}}
+constants:
+  KEYS: 'Set("counter")'
+  VALUES: 'Set(0, 1, 2)'
+  IDS: 'Set(1, 2)'
+actions:
+  write: {}
+  capture: {}
+  read:
+    expect: 'saved.get({{"{{.id}}"}}).get({{"{{.key}}"}}) == {{"{{.obs.value}}"}}'
+invariants: [snapshotCountBound]
+eventually: []
+simulate:
+  holds: [snapshotCountBound]
+  possible:
+    - name: an old snapshot survives a later write
+      steps: ['write(key = "counter", value = 1)', 'capture(id = 1)', 'write(key = "counter", value = 2)', 'read(id = 1, key = "counter")']
+    - name: captured value differs from current
+      when: 'saved.keys().contains(1) and saved.get(1).get("counter") == 1 and current.get("counter") == 2'

@@ -15,8 +15,10 @@ From the gotogether-migration skill (its SKILL.md says when to read this).
 
 ## The binding
 
-`gotogether scaffold -spec model/payments.qnt -module payments -out
-payments.binding.yaml` writes one entry per action, each parameter the
+`gotogether scaffold -spec model/payments.qnt -module payments
+-invariants refundedAtMostOnce,neverNegative,settledOncePerDay
+-holds refundedAtMostOnce,neverNegative -allows settledOncePerDay
+-out payments.binding.yaml` writes one entry per action, each parameter the
 step field of its name. Map what the code records otherwise (an outcome
 as `result: '{{.outcome}}'`, an observation as `'{{.obs.found}}'`), the
 outcomes the errors name (`outcomes: { ok: '"ok"', conflict: '"conflict"' }`),

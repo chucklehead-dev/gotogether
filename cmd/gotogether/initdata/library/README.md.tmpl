@@ -1,0 +1,51 @@
+# {{.Name}}
+
+A synchronous Go library with mutable current values and immutable snapshots,
+written by `gotogether init -kind library {{.Name}}`. Its production code uses
+only the standard library. Ordinary tests call the actual API and record the
+returned snapshot values; no simulator or instrumentation in the library is
+needed.
+
+```sh
+go test -short -v ./...
+gotogether simulate -binding {{.Name}}.binding.yaml -graph
+./run-demo.sh
+MUTANT=aliasSnapshot ./run-demo.sh
+```
+
+The tests require Quint; the demo additionally requires `gotogether` and Python3
+on PATH. Each demo creates a fresh `logs/run-*` directory with actual native
+observations, exact validation results and a bundled manifest. It replays the
+same captured history; replay is distinct from executing the library again.
+The demo exits 0 when the expected semantic verdict occurs, 1 on a failed check,
+and 2 for an unknown mutant or a missing prerequisite. Tool errors do not count
+as detecting the planted bug.
+
+| file | purpose |
+|---|---|
+| `{{.Name}}.go` | `New`, `Put`, `Snapshot` and `Snapshot.Get`; snapshots own copied values |
+| `model/{{.Name}}.qnt` | a bounded map model; captured values remain unchanged by later puts |
+| `{{.Name}}.binding.yaml` | compares each actual `Get` result with the captured model value |
+| `library_test.go` | synchronous API calls, native recording and the expected mutant verdict |
+| `testdata/mutants/aliasSnapshot/{{.Name}}.go` | a source contrast that returns the mutable current map as a snapshot |
+
+| test | expected result |
+|---|---|
+| `TestConforms` | the first snapshot still returns 1 after a later put stores 2 |
+| `TestMutants` / `TestMutant` | aliasing is caught as `Mismatch("read")`, rather than a setup or tool failure |
+| `TestDemoEvidence` | when invoked by the demo, writes fresh observations and a portable manifest |
+
+The model deliberately covers one key (`counter`), values 0–2 and two snapshot
+labels. Labels are inputs chosen by the observing driver to select the real
+snapshot objects, not invented return values. This is a bounded safety contract,
+not a proof of arbitrary keys, concurrency or object lifetime behavior.
+`snapshotCountBound` is a safety property; `hasSnapshot` is an initially false
+helper/reachability predicate, so it is not asserted as an invariant. There is no
+eventual-completion claim for this synchronous API.
+
+Make it yours by defining the library contract in the model, then adapting the
+observing driver to your actual API results. Extend the model domain and reach
+checks deliberately. Keep observations independent of the model: do not replace
+an API result with the value that would make validation pass. For additional
+negative controls, remove `obs.value` from an actual `read` record: that must be
+an evidence error (exit 2), not credit for catching a source defect.

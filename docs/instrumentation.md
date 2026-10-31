@@ -113,8 +113,11 @@ Everything else is generic.
    processes can restart; invariants as `val`s. Values the model picks
    itself are checked with `expect`, not passed as arguments.
 2. **Scaffold the binding:**
-   `gotogether scaffold -spec model.qnt -module M -out binding.yaml`. It lists every
-   constant, and every action with its parameter names and types.
+   `gotogether scaffold -spec model.qnt -module M -invariants safe
+   -eventually complete -out binding.yaml`. Replace the property names with
+   the model's safety and completion vals, omitting an unused role. Scaffold
+   lists every constant and action signature; it does not guess a Boolean
+   val's role. Use `-no-properties` only for deliberate conformance-only checks.
 3. **Fill it in:**
    - `constants`: Quint expressions, which may use `set "arg"`, `max "arg"`,
      `procs`, `add`, `atLeast`;

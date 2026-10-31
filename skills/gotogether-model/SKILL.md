@@ -27,14 +27,15 @@ judges Hegel's runs (`qhegel`), and it replays recorded runs
 5. `quint typecheck`, `quint run --invariant`, then `gotogether simulate
    -binding` (`-graph`) with `holds`, `allows` and `possible`.
 6. `quint run --mbt` once: read `mbt::actionTaken` and `mbt::nondetPicks`.
-7. `gotogether scaffold -spec model.qnt -module M -out m.binding.yaml`.
+7. Select the model's actual safety/completion names (replace `safe`/`complete`):
+   `gotogether scaffold -spec model.qnt -module M -invariants safe -eventually complete -out m.binding.yaml`.
 
 ## Checklist
 
 - [ ] No inline `all { }` in `step`; every action named.
 - [ ] Every `nondet` named like the parameter it feeds.
 - [ ] No identifier Quint reserves (`to`, `of`, `get`, `set`, `size`, ...).
-- [ ] Each acceptance scenario is a `possible`, each property a `val` in `holds` or `allows`.
+- [ ] Each acceptance scenario is a `possible`; safety vals are classified in `holds`/`allows`, and completion vals in `eventually`.
 - [ ] A crashable process has a restart action, a failing operation an outcome value.
 - [ ] History properties are checked on arrival, with a ghost.
 

@@ -210,13 +210,13 @@ func TestScaffoldIntoSubdirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Chdir(dir)
-	if err := scaffold([]string{"-spec", "model/account.qnt", "-module", "account", "-out", "sub/b.yaml"}); err == nil {
+	if err := scaffold([]string{"-spec", "model/account.qnt", "-module", "account", "-invariants", "nonNegative,underLimit", "-holds", "nonNegative,underLimit", "-out", "sub/b.yaml"}); err == nil {
 		t.Fatal("scaffold into a missing directory succeeded")
 	}
 	if err := os.Mkdir("sub", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := scaffold([]string{"-spec", "model/account.qnt", "-module", "account", "-out", "sub/b.yaml"}); err != nil {
+	if err := scaffold([]string{"-spec", "model/account.qnt", "-module", "account", "-invariants", "nonNegative,underLimit", "-holds", "nonNegative,underLimit", "-out", "sub/b.yaml"}); err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile("sub/b.yaml")
@@ -283,7 +283,7 @@ func TestBindingSpecNotFound(t *testing.T) {
 
 // A scaffolded binding is checked as written: lint refuses its empty
 // constants with the fix (they once linted and failed in quint's parser),
-// it checks every boolean val and classifies them for simulate, and once
+// it checks the explicitly selected invariants and model guarantees, and once
 // its constants are set it lints and simulates.
 func TestScaffoldBindingChecks(t *testing.T) {
 	skip.Quint(t)
@@ -293,7 +293,7 @@ func TestScaffoldBindingChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := filepath.Join(dir, "account.binding.yaml")
-	if err := scaffold([]string{"-spec", spec, "-module", "account", "-out", p}); err != nil {
+	if err := scaffold([]string{"-spec", spec, "-module", "account", "-invariants", "nonNegative,underLimit", "-holds", "nonNegative,underLimit", "-out", p}); err != nil {
 		t.Fatal(err)
 	}
 	src, _ := os.ReadFile(p)
@@ -313,7 +313,8 @@ func TestScaffoldBindingChecks(t *testing.T) {
 	if code, out := capture(t, func() (int, error) { return lint([]string{"-binding", p}) }); code != 0 {
 		t.Errorf("lint with LIMIT set: exit %d:\n%s", code, out)
 	}
-	// underLimit can fail in the model (deposits have no cap): simulate
+	// The author selected underLimit as a guarantee, but it can fail in the
+	// model (deposits have no cap): simulate
 	// says to move it to allows, which is the classification's point
 	code, out = capture(t, func() (int, error) { return simulate([]string{"-binding", p, "-samples", "100"}) })
 	if code != 1 || !strings.Contains(out, "FAIL    underLimit: the model should guarantee it, and a trace violates it: fix the model if it must hold, or move it to simulate.allows") || strings.Contains(out, "FAIL    nonNegative") {
