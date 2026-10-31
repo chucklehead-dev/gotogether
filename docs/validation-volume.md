@@ -114,7 +114,62 @@ evaluator/validator tests remain the semantic oracle.
 GOWORK=off go test ./internal/qeval -run '^$' -bench '^BenchmarkLazyLetErrors$' -benchmem -count=3
 ```
 
+## Wider histories and map storage
+
+The next workload visits adjacent accounts around a ring. Complete cycles touch
+every account and edge; the smaller transfer-count benchmarks at 1,000 accounts
+measure a partial prefix, not a whole cycle. Transition benchmarks rotate the
+source account against a fixed initial state to isolate update cost. Full replay
+benchmarks advance the state and check every prefix.
+
+The qeval fixture independently checks entry bounds and global conservation.
+Its tests compare every prefix with Go balance arithmetic, preserve all earlier
+states, and verify that a controlled extra destination credit first breaks
+conservation at prefix 7 while bounds remain valid. The end-to-end validator's
+new `ring/` cases use the existing whole-ledger `nonNegative` model, matching the
+old pair cases. They do not measure the separate global-conservation predicate.
+Compilation, initial states and schedules are prepared outside timed loops.
+
+Profiles confirmed copying keys on existing-key updates as a bounded target.
+Maps now share their unchanged immutable key domain and copy values. Inserting
+a key always copies keys first, including when the shared backing array has spare
+capacity. Updates preserve snapshot and sibling ownership. The independent
+copying reference checks 1,111 bounded prefixes with numeric, string and
+equal-but-distinct record keys, checking every retained state. Removing either
+insertion-key copying or value copying fails the persistence regressions.
+
+Matched short before/after runs on the same shared 64-bit Go 1.26.1 executor:
+
+| ring workload | before bytes/op | after bytes/op | allocations |
+|---|---:|---:|---|
+| transition, 100 accounts | 9,128 | 5,544 | two fewer |
+| transition, 1,000 accounts | 67,496 | 34,728 | 38 to 36 |
+| whole validator, 100 accounts/1,000 transfers | 30,271,232 | 26,600,552 | approximately 377,852 to 375,747 |
+
+The 1,000-account transition saves 48.5% of its bytes; the whole-validator case
+saves 12.1%. Bounds and conservation evaluation allocations are unchanged.
+Shared-executor timings were noisy, so there is no latency or throughput claim.
+Sampled allocation profiles still attribute most transition allocation to map
+value copying; its share of whole-validator allocation falls from about 22% to
+15%. Profile shares describe these runs, not portable absolute costs. Values are
+still copied and full predicates still scan their state; state-size scaling
+remains.
+
+```sh
+GOWORK=off go test ./internal/qeval -run '^(TestMapPut.*|TestInteractingWide.*)$' -count=1
+GOWORK=off go test ./internal/qeval -run '^$' -bench '^BenchmarkInteractingWide$' -benchmem -count=3
+GOWORK=off go test ./validate -run '^$' -bench '^BenchmarkInteractingValidation/ring/' -benchmem -count=3
+```
+
 ## Next decision
+
+After these two bounded core storage changes, the next experiment is I20's
+incident walkthrough on an existing non-Grist example. Force one incident and
+check a faithful control, preserve native verdict/scope and failure identity
+across JSON, TUI and replay, move the evidence bundle to test portability, then
+verify the repaired run with the same full oracle. Keep tool/data errors and no
+verdict distinct from model failure. Add capabilities only when this exercise
+exposes a concrete blocker; this is a bounded rehearsal, not independent adoption.
 
 An evidence-integrity check during this work reproduced a Grist gap:
 a zero-argument command emitting an event with a `uint64` field set to
@@ -128,11 +183,11 @@ before effects run. See [the contract](grist-guide.md#2-the-blocks).
 These benchmarks do not change runtime semantics; the correctness follow-up
 precedes the performance work below.
 
-Full invariant evaluation dominates this fixture, but map copying still grows
-with account count after the binding-frame reduction. Profile the remaining
-copying costs on a wider interacting workload before choosing the next change. Retain
-this full oracle and the existing evaluator differential tests. Any later
+Full invariant evaluation and value copying still grow with account count.
+Retain this full oracle and the existing evaluator differential tests. Any later
 incremental design must establish predicate dependencies, handle initial state,
 domain changes and failed predicates, and fall back to full evaluation for
 unsupported accesses. A wider interaction graph is needed before extrapolating
-these results to general workloads.
+these results to general workloads; a ring is one topology, not a production
+volume requirement. Keep the benchmarks as regression guards and return to I19
+with representative scale or adopter evidence.

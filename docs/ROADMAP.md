@@ -342,8 +342,13 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   The interacting-entity baseline now separates transition, tracking, invariant
   and whole-validator costs, with a bounded oracle comparison and explicit
   invalidation counterexamples. See [the measurements](validation-volume.md).
-  Production incremental evaluation remains unimplemented; first investigate
-  measured evaluator allocations while retaining full semantics.
+  Production incremental evaluation remains unimplemented; the measured storage
+  changes retain full semantics.
+  Binding-frame and immutable-key storage improvements are now measured, with
+  ring histories, full global-property controls and snapshot/reference oracles
+  ([details](validation-volume.md)). Further incremental APIs wait for a real
+  volume target and dependency proof; the next bounded exercise is I20's
+  incident workflow across native JSON, TUI, portable replay and repair.
   The separately reproduced Grist scalar-projection overflow is fixed ahead of
   optimization: checked source/stored/upcast projection now guards append and
   relay, with effect success evidence prepared before dependency execution.

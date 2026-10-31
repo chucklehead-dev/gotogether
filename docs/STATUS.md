@@ -7,7 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Evaluator-allocation follow-up (current branch): ordinary immutable binding
+Map-storage follow-up (current branch): existing-key updates share an immutable
+key domain while copying values; insertions copy keys even with spare capacity.
+Independent copying-reference checks cover 1,111 bounded histories and retained
+snapshots. Ring workloads check every account/edge per complete cycle and full
+global conservation at each prefix. Measured ring transfer bytes fall about 49%
+at 1,000 accounts; whole-validator bytes fall about 12% at 100 accounts/1,000
+transfers. The latter still checks the existing nonNegative model, not the
+separate global-conservation fixture. See [the scope and measurements](validation-volume.md#wider-histories-and-map-storage).
+
+Evaluator-allocation follow-up (merged PR #25): ordinary immutable binding
 frames keep a pointer to a deferred error instead of reserving an error interface
 on every frame. The error cell is allocated inside the failure branch, preserving
 successful-let allocation counts. Measurements reduce the 1,000-account
@@ -400,7 +409,8 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I19: profile remaining map-copy costs on wider interacting histories, then reassess incremental invariants | M | smaller binding frames reduce measured bytes while retaining full semantics; account for the remaining state-size costs before dependency inference |
+| 1 | I20: a bounded incident walkthrough on an existing non-Grist example | S–M | exercise native JSON, TUI, portable replay and a verified fix; preserve exact failure identity and error/no-verdict distinctions across the workflow |
+| deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
 Do not start all tracks at once. Worker completion and the bounded HTTP/SQLite

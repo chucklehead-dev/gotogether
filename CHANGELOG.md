@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- Existing-key updates in the Go evaluator share immutable map keys while
+  copying values. Insertions still copy keys, preserving earlier and sibling
+  states. Wider ring benchmarks and independent snapshot/reference controls
+  cover the change; full invariant evaluation remains unchanged.
+
 - The Go evaluator uses smaller immutable binding frames, reducing memory for
   full invariant checks and validation. Deferred model errors retain their
   original behavior; a failed lazy definition uses one additional error cell.
