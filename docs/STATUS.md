@@ -7,7 +7,21 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Stored-effect-identity follow-up (current branch): two real restore cycles
+In-flight rewind follow-up (current branch): observed rewinds retire the node's
+processor work across resume. Late callbacks retain truthful native completion
+records with the original ID/key and pinned causal clock, while retired work
+cannot retry or submit checkpoints/domain outcomes. Retired read/append answers
+also cannot repopulate resumed rewind memory. Deterministic barriers cover
+retained/replaced triggers, retained/lost checkpoints, success/unknown/NotApplied
+and resume-before-return; normal controls retain outcomes/retries. The counter
+loss fixture's captured transitions now conform under its unchanged model;
+operator reconciliation and eventual payout properties remain unresolved while
+paused. This admission fence cannot revoke already-issued transactions/calls or
+detect unobserved restores. Stronger atomic store identity preconditions and
+explicit start/completion modeling remain separate work if a concrete boundary
+requires them.
+
+Stored-effect-identity follow-up (merged PR #29): two real restore cycles
 reproduced different effect keys on surviving and restarted nodes. Every store
 now mints immutable `Stored.ID` values, preserved as `Meta.ID`; keys derive from
 the captured stored event, and typed `CallInfo.TriggerID` plus native `triggerId`
@@ -18,8 +32,8 @@ without backfilling. The independent store contracts, restore/restart fixture,
 public crash/retry fixture and HTTP controls cover the guarantee; existing models
 keep keys opaque and do not prove identity generation. Rewind detection and
 operator reconciliation remain distinct requirements. The forced counter contrast
-checks payment-call budgets directly; it does not claim full conformance for
-completion of an already in-flight outcome across a rewind.
+checks payment-call budgets directly; the in-flight follow-up above adds the
+observed-rewind outcome fence and transition-conformance control.
 
 Portable-handoff follow-up (merged PR #28): `gotogether bundle -out DIR
 MANIFEST` verifies and exports the existing native manifest and complete file
@@ -444,8 +458,8 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I25: bounded in-flight outcome/rewind contract | S | the forced loss fixture distinguishes no new effect from completion of an already-started one; pin the intended model/runtime boundary before claiming broader incident conformance |
-| 2 | I25: read-only stored failure/unknown-outcome inspection | S–M | use existing `grist.failed`/`grist.unknown` records and trigger lookup to make blocked work visible without unsafe automatic redrive; rewind identity is now a stored-event property |
+| 1 | I25: read-only stored failure/unknown-outcome inspection | S–M | first persist the original trigger ID in both native outcome bodies (currently processor + position only), then expose retained/missing/replaced identity without inferring it from the current occupant or enabling automatic redrive |
+| 2 | Reassess a broader core/product blocker after inspection | S–M | review independent usage friction and recent evidence before expanding Grist administration; atomic stale-history guards require a concrete store contract and test witness |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 

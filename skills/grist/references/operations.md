@@ -54,6 +54,15 @@ Missing/malformed IDs stop processing before callbacks or checkpoint changes.
 These IDs do not detect an unobserved restore or reconcile lost external effects;
 resume still requires the operator's decision.
 
+An observed rewind permanently retires that node's in-flight processor work,
+including if resume occurs before its callback returns. A started callback may
+finish and record its actual result under the original trigger identity and
+causal clock. Old work cannot retry or submit checkpoints or domain outcomes;
+no failed/unknown event is fabricated for retirement. Check the dependency
+records and native telemetry before resuming. This is an admission fence, not
+revocation of an already-issued append/call or protection against an unobserved
+restore. Do not automatically replay or redrive a late completion.
+
 ## Simulating it
 
 ```go
