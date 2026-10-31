@@ -21,7 +21,7 @@ detect unobserved restores. Stronger atomic store identity preconditions and
 explicit start/completion modeling remain separate work if a concrete boundary
 requires them.
 
-Stored-effect-identity follow-up (PR #29): two real restore cycles
+Stored-effect-identity follow-up (merged PR #29): two real restore cycles
 reproduced different effect keys on surviving and restarted nodes. Every store
 now mints immutable `Stored.ID` values, preserved as `Meta.ID`; keys derive from
 the captured stored event, and typed `CallInfo.TriggerID` plus native `triggerId`
