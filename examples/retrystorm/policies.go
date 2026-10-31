@@ -102,8 +102,8 @@ func RecoveryTime(p Policy, lambda float64) float64 {
 var Spike = qload.Trigger{ExtraRate: 5, Duration: time.Minute}
 
 // Recoveries counts the seeds (1..n) whose run recovers from the trigger
-// within 5 minutes.
-func Recoveries(p Policy, lambda float64, tr qload.Trigger, n int) int {
+// within 5 minutes. An unjudged run returns an error instead of a count.
+func Recoveries(p Policy, lambda float64, tr qload.Trigger, n int) (int, error) {
 	return qload.Count(qload.OfSimulation(p.Config(lambda), lambda, 5*time.Minute), tr, n)
 }
 

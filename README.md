@@ -714,7 +714,9 @@ tier:
   `qload.OfSimulation`, or an application, `qload.Of(experiment)`): Hegel searches
   transient triggers (extra load, a slowdown, a duration) for one after
   which goodput does not recover, and shrinks it. Seeds of a trigger run
-  in parallel.
+  in parallel. `qload.Runs`, `Count`, and `Mostly` return errors for invalid
+  batches or unjudged seeds; check these before interpreting recovery.
+  Trigger-search errors likewise cannot satisfy either trigger claim.
 - Sizing (`qmeta.Size`, `LimitFor`, `TimeoutFor`, `RecoveryAfter` of a
   declared `Burst`; `qload.Layered` for a proxy's tries inside a
   client's): the fewest workers, the highest rate a one-at-a-time hop

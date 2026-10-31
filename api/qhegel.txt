@@ -36,6 +36,7 @@ type Config struct
 type Mode int
 type TriggerSearch struct
     field Found *qload.Recovery
+    field Err error
     field Runs int
     method (*TriggerSearch) Expect(t testing.TB, c qload.TriggerClaim) *qload.Recovery
 type VaryOptions struct

@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-PostgreSQL wake-hint follow-up (current branch): transactional notifications
+Recovery-evidence follow-up (current branch): `qload.Runs`, `Count`, and
+`Mostly` now return errors for invalid batches and any unjudged seed. The
+observations remain available in seed order, but no majority or degraded witness
+is inferred from missing evidence. Hegel trigger search and Grist sizing
+propagate these errors rather than finding a trigger or recommending settings.
+The recovery threshold, tie rule, and explicit chain-only sizing mode remain.
+See DESIGN §11.1.
+
+PostgreSQL wake-hint follow-up (merged PR #18): transactional notifications
 cover tenant creation and event or step-only appends. The optional
 `sqlstore/pgnotify.Serve()` adapter owns a dedicated reconnecting listener through
 Main's drain; every subscription and notification wakes readers to check SQL
@@ -146,7 +154,7 @@ exploration evidence and run manifests. `evidence -session` filters the
 suite before coverage and expectation checks; unscoped completeness checks
 require explicit `-history`. Use a fresh ID and `go test -count=1`.
 
-**As of 2026-10-31 (postgres-wake-hints branch).** GR4's first composition experiment is implemented
+**As of 2026-10-31 (recovery-evidence branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
 `e2f551a8` so interrupted lock waits, SQL cancellation, snapshot-checkpoint validation/navigation, scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,

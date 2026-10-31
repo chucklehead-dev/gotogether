@@ -1014,6 +1014,24 @@ decides (`Mostly`). Per-request randomness comes from a seeded
 generator, not the Chooser: a run has tens of thousands of requests, and
 what the search should vary is the trigger.
 
+The majority is meaningful only if every requested seed was judged. `Runs`
+returns all observations in seed order and an error wrapping the lowest-seeded
+failure; `Count` and `Mostly` refuse aggregate conclusions on that error, even
+when the remaining seeds already form a majority. A missing healthy baseline
+or simulation failure is neither recovery nor evidence of degradation. Empty
+batches and nil targets are configuration errors. Trigger search checks its
+error before either claim; sizing stops without a recommendation when a
+requested simulation cannot be judged. Explicit chain-only sizing remains a
+separate mode. This preserves the distinction between a system that stayed
+degraded and an experiment that could not measure it.
+
+Hegel's `Run` reports ordinary property failures and engine failures through
+the same error channel. Trigger search therefore uses a private panic marker
+that Hegel captures during search but propagates from its final deterministic
+replay. Only that reproduced marker establishes a found trigger. An earlier
+candidate, a failed replay, or an ordinary engine error cannot establish one;
+tests exercise this contract through the public pinned Hegel API.
+
 ### 11.2 The code under test on virtual time
 
 qload runs on qenv. That is what lets the retry library itself sit in the

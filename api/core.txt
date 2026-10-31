@@ -1201,9 +1201,9 @@ type Finding struct
 const Window = 100 * time.Second
 func Assess(x Experiment, goodput string, tr Trigger, within time.Duration, seed uint64) Recovery
 func Constant(v float64) Shape
-func Count(sys Target, tr Trigger, n int) int
+func Count(sys Target, tr Trigger, n int) (int, error)
 func Layered(inner int, outer Retrier) Retrier
-func Mostly(sys Target, tr Trigger, n int) (bool, Recovery)
+func Mostly(sys Target, tr Trigger, n int) (bool, Recovery, error)
 func NewClient(s *qenv.Sim, rnd *rand.Rand, m *Metrics, sv *Server, cfg ClientConfig) *Client
 func NewServer(s *qenv.Sim, rnd *rand.Rand, m *Metrics, cfg ServerConfig) *Server
 func NoTrigger() TriggerClaim
@@ -1212,7 +1212,7 @@ func OfSimulation(cfg SimConfig, base float64, within time.Duration) Target
 func Piecewise(tick time.Duration, scale float64, values ...float64) Shape
 func Recovered() RecoveryClaim
 func Recovers(cfg SimConfig, base float64, tr Trigger, within time.Duration) Recovery
-func Runs(sys Target, tr Trigger, n int) []Recovery
+func Runs(sys Target, tr Trigger, n int) ([]Recovery, error)
 func Simulate(cfg SimConfig) *Metrics
 func SimulateTrajectory(cfg SimConfig, from qmeta.State, times []float64, runs int) qmeta.Trajectory
 func SomeTrigger() TriggerClaim

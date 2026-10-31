@@ -34,7 +34,11 @@ func TestServiceTimeShape(t *testing.T) {
 		}
 		cfg := Policies[0].Config(8)
 		cfg.Server.Service = c.svc.Draw
-		if n := qload.Count(qload.OfSimulation(cfg, 8, 5*time.Minute), Spike, 6); n != c.recover {
+		n, err := qload.Count(qload.OfSimulation(cfg, 8, 5*time.Minute), Spike, 6)
+		if err != nil {
+			t.Fatalf("%s recovery assessment: %v", c.name, err)
+		}
+		if n != c.recover {
 			t.Errorf("%s service: %d of 6 seeds recover, want %d", c.name, n, c.recover)
 		}
 	}

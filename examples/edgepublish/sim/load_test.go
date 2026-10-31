@@ -20,7 +20,11 @@ func TestLoadRecovers(t *testing.T) {
 	woven(t)
 	for _, workers := range []int{4, 16} {
 		cfg := sim.LoadConfig{Rate: 3, Workers: workers}
-		if n := qload.Count(qload.Of(cfg.Experiment(nil), sim.Goodput, 5*time.Minute), dip, 3); n != 3 {
+		n, err := qload.Count(qload.Of(cfg.Experiment(nil), sim.Goodput, 5*time.Minute), dip, 3)
+		if err != nil {
+			t.Fatalf("%d exporters recovery assessment: %v", workers, err)
+		}
+		if n != 3 {
 			t.Errorf("%d exporters: %d of 3 runs recover", workers, n)
 		}
 	}

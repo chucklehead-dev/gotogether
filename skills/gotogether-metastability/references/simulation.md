@@ -23,7 +23,9 @@ r := qload.Recovers(cfg, 9, qload.Trigger{ExtraRate: 5, Duration: time.Minute}, 
 - Results are probabilities. Count recoveries over several seeds; in
   the metastable region, a run's escape is a coin toss.
   `qload.Mostly(sys, tr, n)` takes the majority, `Count` and `Runs`
-  give the runs. A `Recovery` prints its verdict and a `Warning` when
+  give counts and runs. Check their returned errors first: an unjudged seed
+  makes the batch unjudged, even if the other seeds form a majority.
+  A `Recovery` prints its verdict and a `Warning` when
   the goodput before the trigger was far below the offered load: an
   unhealthy baseline (set `Experiment.Healthy`).
 

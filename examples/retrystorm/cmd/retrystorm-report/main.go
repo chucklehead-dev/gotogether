@@ -47,7 +47,10 @@ func main() {
 			log.Fatal(err)
 		}
 		pred := retrystorm.RecoveryTime(p, *lambda)
-		n := retrystorm.Recoveries(p, *lambda, retrystorm.Spike, 6)
+		n, err := retrystorm.Recoveries(p, *lambda, retrystorm.Spike, 6)
+		if err != nil {
+			log.Fatalf("%s recovery assessment: %v", p.Name, err)
+		}
 		fmt.Printf("%-15s predicted recovery %9.3g s; %d/6 simulated runs recover after %v\n", p.Name, pred, n, retrystorm.Spike)
 		fmt.Fprintf(&rows, "<tr><td>%s</td><td>%.3g s</td><td>%d/6</td><td><img src=\"field-%s.svg\"></td><td><img src=\"run-%s.svg\"></td></tr>\n",
 			html.EscapeString(p.Name), pred, n, name, name)

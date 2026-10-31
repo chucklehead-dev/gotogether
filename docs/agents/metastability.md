@@ -5,6 +5,10 @@ Gotchas for agents (and humans) before changing qload, qmeta or qrole, or a load
 - A recovery verdict needs a healthy baseline (`Experiment.Healthy`):
   without one `Assess` returns `Recovery.Err`, since a system already
   collapsed before the trigger would "recover" to its collapsed goodput.
+- Recovery batches require every seed to be judged: check errors returned by
+  `Runs`, `Count`, and `Mostly` before interpreting counts or a majority. An
+  unjudged seed cannot become a degraded witness, including during shrinking
+  or sizing searches. `Runs` retains observations on error for diagnosis.
 - qload metrics are time series of rates; sample counters reset every
   tick. `Sample.Orbit` is known only in hindsight (an attempt is in the
   orbit from its start if it times out) and is filled when the run ends.

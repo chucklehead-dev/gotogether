@@ -38,6 +38,7 @@ stressor ends, goodput is back to 90% of before", cheapest tier first.
 - [ ] The chain's orbit bound (`Orbit`) is well above the storm's size.
 - [ ] Controllers are closed loops (`Population`, `Think`).
 - [ ] The Experiment has a healthy baseline (`Healthy`).
+- [ ] Recovery batch errors are checked before using counts, majorities or recommendations.
 - [ ] Service is measured (`qmeta.Measure(...).Exponential()`) before the chain's verdict is trusted.
 - [ ] Claims are orderings or orders of magnitude, never the chain's seconds.
 - [ ] Trigger searches stay out of `-short`.
@@ -49,6 +50,7 @@ stressor ends, goodput is back to 90% of before", cheapest tier first.
 | recovery times growing by orders of magnitude with λ | the metastable region | find the tipping point; try a mitigation |
 | `qload: want ..., got ...` from `Recovers` | the simulation disagrees with the claim | count over seeds (`qload.Mostly`), check the baseline |
 | `Experiment.Healthy is not set` | no baseline: a collapsed system would "recover" | set `Healthy` |
+| recovery batch or trigger-search error | no verdict, even if valid seeds form a majority | fix the named seed or search configuration |
 | `FindTrigger` returns the empty trigger | it collapses on noise alone | a design bound (concurrency past capacity × timeout) |
 | `SomeTrigger` holds | the design is fragile; `r.Trigger` is the shrunk one | compare mitigations against it |
 | `NoTrigger` fails | a trigger in the space breaks the mitigation | widen the mitigation, or the claim |

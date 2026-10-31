@@ -166,8 +166,14 @@ func TestSizingAcceptance(t *testing.T) {
 		}
 		return n
 	}
-	rec := qload.Runs(s.Commands(s.Recommended.Gateway, nil, s.Recommended.Timeout), s.Trigger(), 6)
-	mutant := qload.Runs(s.Commands(3, nil, 2*time.Second), s.Trigger(), 6)
+	rec, err := qload.Runs(s.Commands(s.Recommended.Gateway, nil, s.Recommended.Timeout), s.Trigger(), 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutant, err := qload.Runs(s.Commands(3, nil, 2*time.Second), s.Trigger(), 6)
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Logf("recommended (gateway %d, %v): %d of 6 recover; postRetries3: %d of 6", s.Recommended.Gateway, s.Recommended.Timeout, count(rec), count(mutant))
 	if count(rec) < 4 || count(mutant) > 2 {
 		t.Fatalf("recommended %d of 6, postRetries3 %d of 6: want most and few", count(rec), count(mutant))

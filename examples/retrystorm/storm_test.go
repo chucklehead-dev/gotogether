@@ -44,7 +44,11 @@ func TestStormAfterSpike(t *testing.T) {
 	const n, lam = 6, 9
 	got := map[string]int{}
 	for _, p := range Policies {
-		got[p.Name] = Recoveries(p, lam, Spike, n)
+		count, err := Recoveries(p, lam, Spike, n)
+		if err != nil {
+			t.Fatalf("%s recovery assessment: %v", p.Name, err)
+		}
+		got[p.Name] = count
 		t.Logf("%-15s %d/%d runs recover after %v", p.Name, got[p.Name], n, Spike)
 	}
 	if got["budget"] < n-1 || got["budget+backoff"] < n-1 {

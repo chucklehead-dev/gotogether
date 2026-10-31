@@ -19,7 +19,10 @@ x := qload.Experiment{
 	Sink: mem, // optional: the same steps, to check against the model
 }
 r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minute}, 5*time.Minute, seed)
-ok, first := qload.Mostly(qload.Of(x, "markPaid", 5*time.Minute), trigger, 3)   // seeds in parallel
+ok, first, err := qload.Mostly(qload.Of(x, "markPaid", 5*time.Minute), trigger, 3) // seeds in parallel
+if err != nil {
+	t.Fatal(err) // no recovery verdict: fix the named seed's error first
+}
 ```
 
 - **Goodput is a model step's rate.** The app's own recorded steps are
@@ -36,6 +39,11 @@ ok, first := qload.Mostly(qload.Of(x, "markPaid", 5*time.Minute), trigger, 3)   
   least 90% of healthy, give or take two standard errors over the
   100-second window. At a few requests per second, a plain 90% threshold
   fails a healthy run one time in ten.
+- **Check batch errors before interpreting a majority.** `Runs`, `Count`, and
+  `Mostly` return errors if any seed is unjudged or the target/sample count is
+  invalid. `Runs` retains the observations in seed order for inspection; the
+  aggregators return no verdict on error. `FindTrigger(...).Expect(...)` checks
+  search errors before either trigger claim.
 - **Faults in load runs.** `Experiment.Faults` injects them, and crashes
   are a rate per virtual second (`NemesisEvery`).
 

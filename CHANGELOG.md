@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- Recovery batches now return errors for unjudged seeds and invalid sample
+  counts. `qload.Runs`, `Count`, and `Mostly` require error handling; a failed
+  simulation or missing healthy baseline cannot become a metastability trigger
+  or disappear behind a recovered majority. Hegel trigger search and Grist
+  sizing propagate these errors instead of emitting a verdict or recommendation.
+
 - Grist can wake other PostgreSQL nodes after committed tenant, event, and
   step-log writes. `sqlstore/pgnotify.Serve()` wires transactional notifications
   and a reconnecting dedicated listener into `grist.Main`; polling remains the
