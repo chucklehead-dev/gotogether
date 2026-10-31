@@ -264,6 +264,18 @@ func TestMainHealth(t *testing.T) {
 		}
 	}
 	close(release)
+	// Releasing the effect only makes its goroutine runnable. Observe its
+	// poller leave the stuck trigger before checking drain's liveness;
+	// elapsed wall time alone does not prove it ran on a busy CI host.
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+		code, body := get(t, hu+"/livez")
+		if code == 200 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("/livez after releasing the effect: %d %s, want recovery before drain", code, body)
+		}
+	}
 	// lag: a trigger appended while the node is stopped would show it; a
 	// second add, handled at once, leaves 0
 	stop() // SIGTERM
@@ -271,8 +283,8 @@ func TestMainHealth(t *testing.T) {
 	if code, body := get(t, hu+"/readyz"); code != 503 || !strings.Contains(body, "draining") {
 		t.Errorf("/readyz after SIGTERM: %d %s, want 503 draining", code, body)
 	}
-	if code, _ := get(t, hu+"/livez"); code != 200 {
-		t.Errorf("/livez through the drain: %d, want ok", code)
+	if code, body := get(t, hu+"/livez"); code != 200 {
+		t.Errorf("/livez through the drain: %d %s, want ok", code, body)
 	}
 	if got, _, err := c.Query(context.Background(), grist.Envelope{Tenant: "t1", Caller: "x"}, "count", []byte(`{"name":""}`)); err != nil || !strings.Contains(string(got), `1`) {
 		t.Errorf("a query in the drain's delay: %s %v, want it served (the router still sends requests)", got, err)
