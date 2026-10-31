@@ -116,6 +116,29 @@ next.
 | `qtest.Completes()` | every call recorded with `qobs.Invoke` completed | (none alone) |
 | `qtest.Finishes()` | it conforms, `Settles()`, every eventual val holds at the settle, `Completes()` | `validate -require-finish`, or `complete: true` |
 
+## Captured transition conformance
+
+Use `qtest.TransitionsConform()` for a deliberately unfinished incident or storm
+when only the captured transitions are in scope. Optional exact actors, such as
+`qtest.TransitionsConform("counters/t1")`, also require those identities to have
+been judged. These are native `Result.Actor` values, not globs or display aliases;
+`""` selects an unnamed actor. Used alone over runs, it means All of itself.
+
+The predicate uses native conformance, with the same ordering, search witnesses,
+hidden-state and assumed-effect boundaries. A native pass with loss/collection
+metadata can still describe the captured history, not missing execution; a native
+no-verdict stays unknown. Capture or validation errors taint the affected actor;
+a global error taints the whole claim. A clean selected actor's definite
+transition failure can disprove it even if another actor is unjudged.
+
+`Conforms()` and `Finishes()` keep their existing broader meaning. A transition
+assertion may pass while an invariant fails or a run remains unsettled. It neither
+changes the native report nor turns JSON/TUI evidence into an overall pass.
+`None(TransitionsConform(...))` and `Not` require a definite transition
+counterexample; missing actors, exhausted searches and empty evidence cannot
+manufacture one. Keep named `Rejects`/`Mismatch` witnesses and the separate
+settlement, hot-cycle or dependency-budget checks alongside scoped claims.
+
 ## Over many runs: claims
 
 An exploration, a sweep row, a fuzz corpus or a mutant's runs are judged
@@ -123,8 +146,9 @@ together (`Exploration.Expect`):
 
 | Claim | Holds when |
 |---|---|
-| `qtest.Some(qtest.Rejects("ship"))` | some run shows it (the run is logged). An expectation alone over runs panics, naming `Some`, `All` and `None`, but the four whose names say every run: `Conforms`, `Settles`, `Completes`, `Finishes` |
+| `qtest.Some(qtest.Rejects("ship"))` | some run shows it (the run is logged). An expectation alone over runs panics, naming `Some`, `All` and `None`, but those whose names say every run: `Conforms`, `TransitionsConform`, `Settles`, `Completes`, `Finishes` |
 | `qtest.Conforms()` | every run conforms, and its system settled if the run had it settle; a run with no verdict (a search's budget, a lost tail, dropped steps) neither conforms nor fails, so the claim fails as `N of M runs have no verdict` |
+| `qtest.TransitionsConform(actors...)` | every run's captured transitions conform under the native report's ordering/search assumptions; optional actors require exact native Result.Actor identities, including `""` for unnamed actors and full partition labels; no invariant, composition, completion or settlement claim; missing/empty/unjudged evidence stays unknown and native JSON/TUI verdicts remain unchanged |
 | `qtest.Some(qtest.Pending("action"))` | some run left a call of the action invoked and never completed: a caller given up on, or that crashed |
 | `qtest.Settles()` | every run's system settled: it recorded a settle (`Sim.Settle` found it quiet, or `qobs.Settled`) with nothing after it, on its recorder or (by time, give or take a millisecond) on any other. A run with no Settle, or on the native runtime, does not; one with none that lost its tail (or whose log is still being collected) may have settled out of sight, and has no verdict; `None(qtest.Settles())` states a livelock. Across machines the times are their clocks': one behind can hide a step after the settle, one ahead unsettle a quiet run |
 | `qtest.Completes()` | every operation recorded with `qobs.Invoke` completed; a report names each other as `invoked, never completed: <call>`. A crashed caller's call is pending by right: claim it of callers that do not crash |

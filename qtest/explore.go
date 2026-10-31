@@ -1029,7 +1029,7 @@ func anySettled(runs []*Run) bool {
 
 // Expect states what the exploration must show, claim by claim: Some,
 // All or None of the runs meeting expectations, or what they reached and
-// took (Reaches, Takes, Exercised). Conforms, Settles, Completes and
+// took (Reaches, Takes, Exercised). Conforms, TransitionsConform, Settles, Completes and
 // Finishes alone are about every run; any other Expectation alone panics,
 // naming its quantifiers. With no claims, every run conforms.
 // Every failure says its quantifier ("in every run", "in no run", "some

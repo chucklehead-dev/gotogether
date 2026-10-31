@@ -1857,6 +1857,7 @@ func StepOp(op string) StepSelector
 func Survived(sel StepSelector) StepClaim
 func Takes(action string) Take
 func TakesEach(takes ...Take) TakeEach
+func TransitionsConform(actors ...string) Expectation
 func Undecided(e Expectation, because ...string) Expectation
 func Validate(t testing.TB, bindingPath string, steps []qtrace.Step, opts ...Option) *Run
 func Violates(invariant string) Expectation

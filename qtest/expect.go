@@ -35,8 +35,8 @@ type Expectation struct {
 	// every: a passing run meets it (Conforms, Satisfies), which
 	// ShrinkActions' Keep refuses
 	every bool
-	// alone: its name says every run (Conforms, Settles, Completes,
-	// Finishes), so alone over runs it is All of itself; any other
+	// alone: its name says every run (Conforms, TransitionsConform, Settles,
+	// Completes, Finishes), so alone over runs it is All of itself; any other
 	// Expectation takes Some, All or None (quantify)
 	alone bool
 	// the actions and invariants it names, checked against the model: a
