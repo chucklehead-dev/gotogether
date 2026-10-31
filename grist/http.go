@@ -14,6 +14,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
 
 	"github.com/chucklehead-dev/gotogether/grist/internal/rec"
+	"github.com/chucklehead-dev/gotogether/grist/sqlstore"
 	"github.com/chucklehead-dev/gotogether/grist/store"
 )
 
@@ -44,14 +45,26 @@ func CallerOf(ctx context.Context) string { a, _ := ctx.Value(callerKey{}).(stri
 type ServeOption struct{ apply func(*serveConfig) }
 
 type serveConfig struct {
-	middleware   []func(http.Handler) http.Handler
-	callerHeader string
-	catalog      bool
-	deps         func(context.Context) context.Context
-	served       []servedDep // Main's ServeDependency, in order
-	maxBody      int64
-	identity     *Identity // Main's WithIdentity
-	drain        Drain     // Main's WithDrain
+	middleware            []func(http.Handler) http.Handler
+	callerHeader          string
+	catalog               bool
+	deps                  func(context.Context) context.Context
+	served                []servedDep // Main's ServeDependency, in order
+	maxBody               int64
+	identity              *Identity // Main's WithIdentity
+	drain                 Drain     // Main's WithDrain
+	postgresNotifications func(context.Context, string, *sqlstore.Store) error
+}
+
+// WithPostgresNotifications enables transactional PostgreSQL wake hints in
+// Main's serve command and runs listen on a dedicated service context. Use
+// sqlstore/pgnotify.Serve for the pgx implementation. listen must reconnect
+// after temporary failures and return promptly when its context is canceled.
+// It receives the connection string, which must never be logged. Main keeps
+// it running through the node's drain, then cancels and joins it before closing
+// the database. SQLite and NewHandler ignore this option; polling remains on.
+func WithPostgresNotifications(listen func(context.Context, string, *sqlstore.Store) error) ServeOption {
+	return ServeOption{apply: func(c *serveConfig) { c.postgresNotifications = listen }}
 }
 
 // servedDep is a dependency Main serves on a loopback port (ServeDependency).

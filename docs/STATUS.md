@@ -7,7 +7,17 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Lock-wait follow-up (current branch): rolled-back and reset Store transactions
+PostgreSQL wake-hint follow-up (current branch): transactional notifications
+cover tenant creation and event or step-only appends. The optional
+`sqlstore/pgnotify.Serve()` adapter owns a dedicated reconnecting listener through
+Main's drain; every subscription and notification wakes readers to check SQL
+again. Polling remains the backstop. Native SQL waits subscribe before reading,
+closing a lost-wake window. Tests cover broadcast, spurious hints, cross-store
+polling, real PostgreSQL delivery/reconnect, and service cancellation/join.
+No generic changefeed, new simulation semantics, or notification-based progress
+is introduced. See grist §2.11.
+
+Lock-wait follow-up (PR #17): rolled-back and reset Store transactions
 stop waiting even while a different transaction holds the requested key. SQL
 statements recheck their transaction after a yielding operation, so an explicit
 transaction cancelled while blocked ends promptly with its cancellation result.
@@ -136,7 +146,7 @@ exploration evidence and run manifests. `evidence -session` filters the
 suite before coverage and expectation checks; unscoped completeness checks
 require explicit `-history`. Use a fresh ID and `go test -count=1`.
 
-**As of 2026-10-31 (lock-wait-abort branch).** GR4's first composition experiment is implemented
+**As of 2026-10-31 (postgres-wake-hints branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
 `e2f551a8` so interrupted lock waits, SQL cancellation, snapshot-checkpoint validation/navigation, scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
@@ -288,9 +298,7 @@ four, L more; agent-days in practice).
 6. **I20's incident example.** An incident walkthrough from alert to
    fix with `-json`, `nav` and `validate -replay`, doubling as the
    runbook; a store-side grist step's pod (needs G8's location).
-7. **I25's leftovers**, each concrete in ROADMAP: (1) PostgreSQL
-   `LISTEN/NOTIFY` (an `sqlstore.Options` hook, `pg_notify` in the
-   append); (2) an admin command listing and re-driving `grist.failed`
+7. **I25's leftovers**, each concrete in ROADMAP: (2) an admin command listing and re-driving `grist.failed`
    dead letters; (3) `resume -from P` with a model step
    `gristSkipped`; (4) rewinds' memory in the store (a marker per
    rewind); (5) the Store's connection faults; (6) slice 5's DSN reopen

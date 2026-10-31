@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- Grist can wake other PostgreSQL nodes after committed tenant, event, and
+  step-log writes. `sqlstore/pgnotify.Serve()` wires transactional notifications
+  and a reconnecting dedicated listener into `grist.Main`; polling remains the
+  backstop. Native SQL waiters register before reading their predicate, closing
+  a lost-wake window even when only local commits are used.
+
 - Store lock waits now end when their transaction is rolled back or reset,
   even while another transaction still holds the requested key. Explicit SQL
   transactions cancelled during a lock wait return their existing cancellation

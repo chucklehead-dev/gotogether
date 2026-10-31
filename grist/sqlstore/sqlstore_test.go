@@ -356,7 +356,7 @@ func TestWaitReturnsOnceSatisfied(t *testing.T) {
 // transient and retried it forever. Negative durations are refused too.
 func TestOptionsChecked(t *testing.T) {
 	ctx := context.Background()
-	for _, o := range []sqlstore.Options{{Isolation: sql.LevelLinearizable}, {LockTimeout: -time.Second}, {Poll: -1}, {Name: "a\x00b"}} {
+	for _, o := range []sqlstore.Options{{Isolation: sql.LevelLinearizable}, {LockTimeout: -time.Second}, {Poll: -1}, {Name: "a\x00b"}, {PostgresNotify: true}} {
 		if _, err := sqlstore.Open(ctx, openSQLite(t), sqlstore.SQLite, o); err == nil || !strings.Contains(err.Error(), "Options.") {
 			t.Errorf("SQLite with %+v: %v, want Open's error naming the option", o, err)
 		}

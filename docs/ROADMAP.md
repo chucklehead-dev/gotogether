@@ -424,9 +424,9 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   it either: its state is past the trigger).
 - **I25. grist's operations basics (M; GR10 slice 3 moved up). Done**
   (docs/HISTORY.md (I25 and GR10 slice 3; grist §0.18)). Left, each
-  concrete: (1) `LISTEN/NOTIFY`: an `sqlstore.Options` hook the binary
-  supplies (pgx's `Conn.Raw` + `WaitForNotification`), `pg_notify` in
-  the append on the Postgres dialect, its waits woken by it; (2) an
+  concrete: (1) `LISTEN/NOTIFY` is built: `Options.PostgresNotify`
+  emits transactional hints; `sqlstore/pgnotify.Serve()` owns a dedicated
+  reconnecting listener through Main's drain, with polling retained; (2) an
   admin command listing and re-driving `grist.failed` dead letters;
   (3) `resume -from P` (checkpoints moved past triggers an operator
   decided were handled, a model step `gristSkipped`); (4) the rewinds'
