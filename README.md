@@ -503,7 +503,8 @@ numbers (so a lost step is reported; a log that starts after seq 1 lost
 its head, and is judged from a `snapshot` step at it), program-order threads, domain
 clocks, and process incarnations, which become the model's restart
 action. See [docs/instrumentation.md](docs/instrumentation.md) and
-[skills/gotogether-traces](skills/gotogether-traces/SKILL.md).
+[skills/gotogether-traces](skills/gotogether-traces/SKILL.md). Later snapshots check the
+whole replayed state at their record; they cannot reset it or hide a mismatch.
 
 ## 4. Simulated environments and fault injection (`qenv`)
 

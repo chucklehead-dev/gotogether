@@ -419,9 +419,14 @@ func (e *evaluator) walk(c *Checker, consts map[string]qeval.Value, plan *bindin
 			w.rejected = i
 			return w, nil
 		}
+		matches := e.checkpointMatches(&call, s, next)
 		s = next
 		if keep != nil {
 			keep(s)
+		}
+		if !matches {
+			w.rejected = i
+			return w, nil
 		}
 		if ok, err := e.holds(consts, s, &call); err != nil {
 			return w, err
@@ -552,7 +557,7 @@ func (m *stateMemo) keys(calls []binding.Call) [][2]uint64 {
 	for i, c := range calls {
 		for j := range 2 {
 			h.SetSeed(m.seeds[j])
-			fmt.Fprintf(&h, "%d|%s|%s|%q", out[i][j], c.Quint, c.Expect, c.ExpectArgs)
+			fmt.Fprintf(&h, "%d|%s|%s|%q|checkpoint=%t", out[i][j], c.Quint, c.Expect, c.ExpectArgs, c.Checkpoint)
 			out[i+1][j] = h.Sum64()
 		}
 	}
@@ -648,4 +653,11 @@ func (c *choiceRefusal) what() string {
 	return fmt.Sprintf("%s at step %d makes a choice of its own (%s%s), and quint's replay draws one at random, so its verdict from that step on is a sample, not the model's: "+
 		"expose the choice as a parameter of %s (the step's argument), or record it as an observation the binding passes",
 		c.Action, c.At+1, c.Choice, held, c.Action)
+}
+
+// checkpointMatches constrains a snapshot's successor to its pre-state. Other
+// actions may change state. Use the evaluator's full identity, never a subset
+// inferred from snapshot parameter names or an observed projection.
+func (e *evaluator) checkpointMatches(call *binding.Call, before, after qeval.State) bool {
+	return !call.Checkpoint || e.m.Key(before) == e.m.Key(after)
 }

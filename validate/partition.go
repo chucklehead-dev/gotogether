@@ -77,6 +77,9 @@ func (c *Checker) partitionedChecks() bool {
 // judged so: a step that names no entity, a plan's error, or the model
 // not factoring.
 func (c *Checker) partition(t *qtrace.Trace) (*partitioned, error) {
+	if err := c.checkpointPartitionError(t); err != nil {
+		return nil, err
+	}
 	key := c.Binding.Partition
 	parts, at, missing := splitTrace(t, key, snapshotFirst(c.Binding, t))
 	if missing != nil {

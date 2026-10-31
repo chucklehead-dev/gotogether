@@ -79,6 +79,7 @@ type Bound struct
     field Binding *Binding
     field Model *Model
 type Call struct
+    field Checkpoint bool
     field Quint string
     field Expect string
     field ExpectTemplate string
@@ -159,6 +160,7 @@ type Plan struct
     field ObservedSteps int
     field Constants map[string]string
     field Calls []Call
+    field StateVars []string
     field Start *Call
     field Issues []qtrace.Issue
     method (*Plan) ConstantList() []string

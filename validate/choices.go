@@ -65,7 +65,7 @@ func (c *Checker) checkChoices(ctx context.Context, tr *qtrace.Trace, p *binding
 	if c.compiled != nil {
 		return refuse("compiled mode cannot confirm a pinned model-choice witness with Quint")
 	}
-	if c.mode.history != nil || len(c.Binding.Hidden) > 0 || c.Binding.Partition != "" || p.Start != nil || c.resumes(tr) || len(c.Binding.Within) > 0 {
+	if c.mode.history != nil || len(c.Binding.Hidden) > 0 || c.Binding.Partition != "" || p.Start != nil || slices.ContainsFunc(p.Calls, func(call binding.Call) bool { return call.Checkpoint }) || c.resumes(tr) || len(c.Binding.Within) > 0 {
 		return refuse("finite pinned choices currently require an ordinary trace without history search, hidden actions, partition, snapshot, resume or within checks")
 	}
 	if len(tr.Lost) > 0 || len(tr.Gaps) > 0 || slices.ContainsFunc(p.Calls, func(call binding.Call) bool { return call.Step != nil && call.Step.Ambiguous }) {
@@ -159,6 +159,9 @@ func (c *Checker) checkChoices(ctx context.Context, tr *qtrace.Trace, p *binding
 				}
 				explored++
 				enabled = true
+				if !e.checkpointMatches(&call, n.state, transition.State) {
+					continue
+				}
 				ok, err := e.holds(consts, transition.State, &call)
 				if err != nil {
 					return unsupported(err)

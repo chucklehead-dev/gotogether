@@ -8,6 +8,13 @@ and adds a line here.
 
 ## Unreleased
 
+- Trace snapshots after the first record are checked against the whole replayed
+  state instead of skipped. A differing checkpoint is a conformance mismatch at
+  its own record; it never resets model state. The first snapshot still supplies
+  the initial state of a log that lost its head.
+  History/pending-effect searches and partitioned checking explicitly refuse
+  later checkpoints in this bounded slice.
+
 - Added a bounded adaptation rehearsal of the published library starter against
   Goo's strict definition reader, with frozen contract files, actual API returns,
   a later parent-planted source contrast and exact semantic output checks.

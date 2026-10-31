@@ -57,12 +57,13 @@ func Generate(b *binding.Binding, m *binding.Model, t *qtrace.Trace, qntPath str
 	}
 	return RenderModule(ModuleSpec{
 		Spec: b.SpecPath(), Module: b.Module, Constants: p.ConstantList(), Defs: b.Defs, Invariants: b.Invariants, Eventually: b.Eventually,
-		Header: []string{fmt.Sprintf("actor %q, %d observed steps, processes %v", t.Actor, len(t.Steps), t.Processes)}, Start: p.Start,
+		Header: []string{fmt.Sprintf("actor %q, %d observed steps, processes %v", t.Actor, len(t.Steps), t.Processes)}, Start: p.Start, StateVars: p.StateVars,
 	}, p.Calls, qntPath)
 }
 
 // ModuleSpec says what a generated replay module imports and checks.
 type ModuleSpec struct {
+	StateVars  []string // complete state, compared by noninitial snapshot checkpoints
 	Spec       string   // the model file
 	Module     string   // parameterised module, instantiated with Constants
 	Constants  []string // "NAME = expr"
@@ -112,6 +113,13 @@ func RenderModule(ms ModuleSpec, calls []binding.Call, qntPath string) (*Generat
 // `quint test` process checks them all. Each returned Generated describes
 // one run; all share Text. With a single run there is no prefix.
 func RenderBatch(ms ModuleSpec, runs [][]binding.Call, qntPath string) ([]*Generated, error) {
+	for _, calls := range runs {
+		for _, call := range calls {
+			if call.Checkpoint && len(ms.StateVars) == 0 {
+				return nil, fmt.Errorf("snapshot checkpoint %s: replay needs the model's complete state variables", call.Action)
+			}
+		}
+	}
 	rel, err := filepath.Rel(filepath.Dir(qntPath), strings.TrimSuffix(ms.Spec, ".qnt"))
 	if err != nil {
 		return nil, err
@@ -206,7 +214,11 @@ func RenderBatch(ms ModuleSpec, runs [][]binding.Call, qntPath string) ([]*Gener
 						// string's, which Quint writes as it is) would end it
 						pr("    // step %d: %s", it.call+1, oneLine(calls[it.call].String()))
 					}
-					text = step(calls[it.call])
+					c := calls[it.call]
+					if c.Checkpoint {
+						c.Quint = checkpoint(c.Quint, ms.StateVars)
+					}
+					text = step(c)
 				}
 				g.LineStep[line] = it.last
 				if then {
@@ -313,7 +325,7 @@ func RenderBatch(ms ModuleSpec, runs [][]binding.Call, qntPath string) ([]*Gener
 // Spec is what a replay of plan p with binding b imports and checks.
 func Spec(b *binding.Binding, p *binding.Plan) ModuleSpec {
 	return ModuleSpec{Spec: b.SpecPath(), Module: b.Module, Constants: p.ConstantList(), Defs: b.Defs, Invariants: b.Invariants, Eventually: b.Eventually,
-		Header: []string{fmt.Sprintf("actor %q, %d observed steps, processes %v", p.Actor, p.ObservedSteps, p.Processes)}, Start: p.Start}
+		Header: []string{fmt.Sprintf("actor %q, %d observed steps, processes %v", p.Actor, p.ObservedSteps, p.Processes)}, Start: p.Start, StateVars: p.StateVars}
 }
 
 func indent(s, pfx string) string {
@@ -328,3 +340,19 @@ func indent(s, pfx string) string {
 
 // oneLine is s with its line breaks written as \n and \r, for a comment.
 func oneLine(s string) string { return strings.NewReplacer("\n", `\n`, "\r", `\r`).Replace(s) }
+
+// checkpoint captures state eagerly: a val would be reevaluated after the
+// snapshot and make this comparison tautological. The singleton choice has
+// exactly one outcome. A successful snapshot is a stutter; a mismatch fails.
+func checkpoint(action string, vars []string) string {
+	var fields []string
+	for i, v := range vars {
+		fields = append(fields, fmt.Sprintf("v%d: %s", i, v))
+	}
+	state := "{ " + strings.Join(fields, ", ") + " }"
+	name := "__gtg_checkpoint_before"
+	for strings.Contains(action+state, name) {
+		name += "_"
+	}
+	return fmt.Sprintf("{ nondet %s = Set(%s).oneOf() %s.expect(%s == %s) }", name, state, action, state, name)
+}

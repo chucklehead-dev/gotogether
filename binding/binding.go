@@ -122,7 +122,8 @@ type Binding struct {
 	// step of it first in its trace is the state the trace starts from,
 	// instead of init. A log that lost its prefix (rotated, truncated, a
 	// recorder started mid-run) is judged from the snapshot recorded at
-	// its head; a snapshot step anywhere else is skipped, with an issue.
+	// its head. A later snapshot is a checkpoint: it must equal the complete
+	// state before it and cannot reset replay.
 	Snapshot string `yaml:"snapshot"`
 	// Resume is a nullary model action whose nondet picks give the states
 	// a trace that lost its prefix may start in (bounded by the model's

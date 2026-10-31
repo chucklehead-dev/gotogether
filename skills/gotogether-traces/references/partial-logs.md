@@ -29,10 +29,25 @@ it first in every order, hidden actions' search; a key partition starts
 each key from it). The lost prefix of its own recorder becomes `issue:
 info lost-prefix: judged from the state recorded by restore at seq 3
 (recorder r lost seqs 1..2)`; another recorder's lost prefix stays an
-error (its lost steps may have come after the snapshot). A snapshot step
-anywhere but first is skipped, with `issue: info snapshot`. `gotogether
-itf` writes such a trace with state 0 the snapshot's, and validating the
-ITF starts there too.
+error (its lost steps may have come after the snapshot). `gotogether itf`
+writes such a trace with state 0 the snapshot's, and validating the ITF
+starts there too.
+
+A later snapshot is a checkpoint of the whole replayed state. Every state
+variable must agree with the state described by its recorded parameters; a
+difference is a conformance mismatch at that snapshot record. It cannot reset
+the model or erase an earlier mismatch. For example, after a deposit of 5,
+`restore(5, 1)` agrees with balance 5 and one operation; `restore(5, 0)`
+disagrees even though the balance matches. Record these checkpoints atomically
+with the operations they describe. A checkpoint does not repair a missing
+prefix or gap earlier in the log, and does not establish settlement.
+History-order and pending-effect searches refuse traces with later checkpoints
+in this first slice: moving a checkpoint to the head must not turn it into a
+free initial state. Partitioned validation also refuses them because a checkpoint
+describes the whole state. Finite model-choice witness search retains its
+existing snapshot exclusion. Validate a deterministic, ordinary ordered capture
+instead.
+
 
 Record the snapshot when no operation is in flight (under the lock that
 rotates the log). A linearization keeps it first, but a step invoked

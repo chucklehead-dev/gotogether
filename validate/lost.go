@@ -146,3 +146,24 @@ func notJudged(eventually []string, lost []qtrace.Lost) qtrace.Issue {
 	}
 	return qtrace.Issue{Severity: "info", Kind: "eventually", Msg: fmt.Sprintf("eventual vals not judged (%s): %s", strings.Join(eventually, ", "), why)}
 }
+
+// laterSnapshot identifies checkpoint evidence before any search or partition
+// can move it to a trace's head and accidentally turn it into a free restore.
+func laterSnapshot(b *binding.Binding, tr *qtrace.Trace) *qtrace.Step {
+	if b.Snapshot == "" {
+		return nil
+	}
+	for i := 1; i < len(tr.Steps); i++ {
+		if tr.Steps[i].Action == b.Snapshot && !tr.Steps[i].Ambiguous {
+			return &tr.Steps[i]
+		}
+	}
+	return nil
+}
+
+func (c *Checker) checkpointPartitionError(tr *qtrace.Trace) error {
+	if st := laterSnapshot(c.Binding, tr); st != nil {
+		return fmt.Errorf("partition %s: snapshot checkpoint %s compares the complete model state: partitioned checkpoints are not supported; remove partition to judge the log whole", c.Binding.Partition, st.String())
+	}
+	return nil
+}

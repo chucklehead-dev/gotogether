@@ -3350,6 +3350,24 @@ A lost head needs a first state. Two ways, both named in the binding:
   is sound but its FAIL only once the closure stops growing, which real
   models do not reach, so every such log would be no verdict.
 
+Later snapshots are observations of the current whole state, not transitions
+that restore it. Planning retains them as checkpoints. Native replay requires
+the snapshot action's result to equal the prior state; Quint replay eagerly
+captures that prior state through a singleton choice and checks it after the
+original snapshot action. A lazy local val is insufficient: it may read the
+post-state and turn the comparison into a tautology. A matching checkpoint
+stutters; a differing one fails at its recorded location. It cannot repair
+missing history, clear an earlier failure, or declare settlement. The model's
+snapshot action still describes the full state through its parameters, without
+reading the preceding state. History-order and pending-effect searches refuse
+later checkpoints for now: reordering must not promote an observation to a free
+initial state, including the final replay of a searched history. Partitioned
+checking likewise refuses a whole-state checkpoint rather than projecting it
+into separate entities. These refusals leave the existing head-snapshot search
+contract intact. Finite model-choice witnesses retain their existing snapshot
+exclusion; hidden and resume searches constrain snapshot successors before
+merging paths.
+
 Verdict caches key a lost log by its steps' times and its start
 (`Checker.Key`), since the cut and the start decide the verdict.
 
