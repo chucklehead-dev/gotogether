@@ -926,8 +926,8 @@ whose `Wait` returns at once fails the wake-up check.
     no timer runs, so a second Store over the database wakes them and a
     settled system is quiet. A wait returns as soon as its read holds,
     and when the head (or the step count) is below what it waits on: a
-    log that went backwards (§2.11). `LISTEN/NOTIFY` is left (§2.11):
-    database/sql has no notification API, so it needs the driver's.
+    log that went backwards (§2.11). PostgreSQL can also wake these
+    predicates with transactional hints and a dedicated listener (§2.11).
 - **sqlstore on qsql** (slice 2, built): the same code on `qsql.Open`
   over a `qenv.Store` (`sqlstore.QSQL`, `gristsim.Config.SQL`), so the
   SQL tier is explored with qsql's anomalies, SQLSTATEs and commit faults.
@@ -1007,12 +1007,23 @@ docs/grist-platform.md §3.4):
   1,000-1,260/s, tenants or not. A tenant that needs more than its
   ceiling is two tenants (sharding by tenant is GR10 slice 11's).
 - **Other processes' appends** are found by polling (`-poll`, 250 ms).
-  `LISTEN/NOTIFY` was judged not cheap here: database/sql has no
-  notification API, so a listener needs the driver's own connection
-  (pgx's `WaitForNotification` through `Conn.Raw`), which sqlstore, which
-  imports no driver, would take as an option the binary supplies; left,
-  with the poll's latency the cost (a processor on another node starts up
-  to 250 ms later).
+  PostgreSQL applications can add `pgnotify.Serve()` from
+  `grist/sqlstore/pgnotify` to their `grist.Main` options. This enables
+  transactional `pg_notify` for tenant creation and event or step-only
+  appends, and runs one dedicated pgx listener through the node's drain.
+  It reconnects after connection loss and wakes readers after each successful
+  subscription. Notifications only trigger rereads: positions and tenant/step
+  counts still come from SQL, and polling covers missed hints or outages.
+  Every writer must enable notifications for prompt cross-node wakeups;
+  writers without them still converge by polling. The fixed `grist_changed`
+  channel is shared within the database; unrelated schemas can cause harmless
+  extra reads. LISTEN needs a direct or session-pooled connection, not a
+  transaction-pooled endpoint, and consumes one connection per node outside
+  the application's SQL pool. Notification production is part of the write
+  transaction: a PostgreSQL notification error can fail that transaction.
+  SQL-only users can enable `sqlstore.Options.PostgresNotify` and own
+  `pgnotify.Run(ctx, dsn, st)` themselves; cancel and join it before closing
+  the database. Keep connection strings out of logs.
 - **Rewinds** (GR10 slice 3: docs/grist-platform.md §3.4): a node that
   sees a tenant's log go backwards records it (`gristRewound`, a model
   action every generated model has), stops the tenant's processors

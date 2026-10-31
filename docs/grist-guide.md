@@ -524,6 +524,25 @@ Its options: `grist.Middleware`, `grist.CallerFromHeader`,
 `grist.MaxBody`, `grist.WithIdentity`, `grist.WithDrain`. A `kube`
 command is designed, not built (docs/grist-platform.md).
 
+For PostgreSQL nodes, add the managed notification adapter to reduce the
+polling delay between a commit on one node and work on another:
+
+```go
+import (
+	"github.com/chucklehead-dev/gotogether/grist/sqlstore/pgnotify"
+	_ "github.com/jackc/pgx/v5/stdlib"
+)
+
+func main() { grist.Main(inventory.App, pgnotify.Serve()) }
+```
+
+Use it on every writing node. The adapter reconnects using one dedicated
+connection and stays alive through drain; `-poll` remains the safety backstop.
+Use a direct or session-pooled PostgreSQL endpoint for LISTEN. The same binary
+can serve SQLite (with its driver imported); the option is ignored there.
+Notifications are transactional hints, so a notification error can abort a
+write; they never replace checking committed database state.
+
 ## 5. The model: generated and written
 
 The model is one tenant's log. `go run ./cmd/<app> model` writes, from

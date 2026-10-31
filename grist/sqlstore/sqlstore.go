@@ -57,6 +57,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -65,6 +66,10 @@ import (
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qenv/qsql"
 )
+
+// PostgresNotifyChannel is the database-scoped channel for commit wake hints.
+// Payloads are empty; a notification always means to reread authoritative data.
+const PostgresNotifyChannel = "grist_changed"
 
 // Options configure a Store.
 type Options struct {
@@ -86,6 +91,11 @@ type Options struct {
 	// (qenv.Store.Changed) wakes every Store's waiters, and a timer would
 	// keep a settled simulation busy.
 	Poll time.Duration
+	// PostgresNotify queues a database-scoped wake hint in each tenant creation
+	// and append transaction. Pair it with a listener (sqlstore/pgnotify.Run)
+	// on every reader; Poll remains the backstop for missed notifications.
+	// It is valid only with the Postgres dialect.
+	PostgresNotify bool
 }
 
 // Store is a store.Store and store.StepLog over a database/sql database.
@@ -93,10 +103,11 @@ type Store struct {
 	db      *sql.DB
 	d       Dialect
 	o       Options
-	changed qenv.Signal   // notified after every append's COMMIT, whatever its answer
+	wakeMu  sync.Mutex
+	wakeCh  chan struct{} // closed and replaced on every local or external commit hint
 	commits atomic.Uint64 // the COMMITs tried: a waiter that read before one does not sleep through it
 	// sim is the qenv.Store a qsql database runs on (qsql.StoreOf), nil on
-	// a real one: its signal and version stand for changed and commits,
+	// a real one: its signal and version stand for wakeCh and commits,
 	// so a waiter wakes at any client's commit, another Store's over the
 	// same database included
 	sim *qenv.Store
@@ -123,6 +134,9 @@ var schema = []string{
 func Open(ctx context.Context, db *sql.DB, d Dialect, o Options) (*Store, error) {
 	if d.name == "" {
 		return nil, errors.New("sqlstore: the zero Dialect: use sqlstore.Postgres, sqlstore.SQLite or sqlstore.QSQL")
+	}
+	if o.PostgresNotify && d.name != Postgres.name {
+		return nil, errors.New("sqlstore: Options.PostgresNotify requires sqlstore.Postgres: disable it for SQLite or QSQL")
 	}
 	if o.Name == "" {
 		o.Name = "grist"
@@ -212,10 +226,60 @@ func indexKey(typ string, tags []store.TagPair) string {
 
 // CreateTenant implements store.Store.
 func (s *Store) CreateTenant(ctx context.Context, t string) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO grist_heads (tenant, head, steps) VALUES ($1, 0, 0) ON CONFLICT (tenant) DO NOTHING`, t)
-	s.commits.Add(1) // a tenant's watchers (WaitTenants) wake
-	s.changed.Notify()
+	const insert = `INSERT INTO grist_heads (tenant, head, steps) VALUES ($1, 0, 0) ON CONFLICT (tenant) DO NOTHING`
+	if !s.o.PostgresNotify {
+		_, err := s.db.ExecContext(ctx, insert, t)
+		s.NotifyExternal()
+		return classify(err)
+	}
+	tx, err := s.begin(ctx, false)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, insert, t); err != nil {
+		return classify(err)
+	}
+	if err := s.notifyTransaction(ctx, tx); err != nil {
+		return err
+	}
+	err = tx.Commit()
+	s.NotifyExternal() // a lost COMMIT answer may still have created the tenant
 	return classify(err)
+}
+
+// notifyTransaction queues the hint for delivery only if this transaction commits.
+func (s *Store) notifyTransaction(ctx context.Context, tx *sql.Tx) error {
+	if !s.o.PostgresNotify {
+		return nil
+	}
+	_, err := tx.ExecContext(ctx, `SELECT pg_notify($1, '')`, PostgresNotifyChannel)
+	return classify(err)
+}
+
+// NotifyExternal wakes all native waiters to reread the database. It is a hint,
+// not evidence that a particular write committed. Listener adapters call it
+// after subscription or reconnection as well as on each notification. On QSQL,
+// the simulated database's own commit signal remains authoritative.
+func (s *Store) NotifyExternal() {
+	s.wakeMu.Lock()
+	s.commits.Add(1)
+	if s.wakeCh != nil {
+		close(s.wakeCh)
+		s.wakeCh = nil
+	}
+	s.wakeMu.Unlock()
+}
+
+// wakeTicket subscribes before the predicate read: a hint while the read runs,
+// or between the generation check and the wait, closes this exact channel.
+func (s *Store) wakeTicket() <-chan struct{} {
+	s.wakeMu.Lock()
+	defer s.wakeMu.Unlock()
+	if s.wakeCh == nil {
+		s.wakeCh = make(chan struct{})
+	}
+	return s.wakeCh
 }
 
 // Tenants implements store.Store.
@@ -557,12 +621,14 @@ func (s *Store) tryAppend(ctx context.Context, t string, b store.Batch) (store.P
 			return 0, classify(err)
 		}
 	}
+	if err := s.notifyTransaction(ctx, tx); err != nil {
+		return 0, err
+	}
 	err = tx.Commit()
 	// every COMMIT wakes the waiters, its answer lost or not: one whose
 	// outcome is unknown may have committed, and a waiter that slept
 	// through it would sleep through its step
-	s.commits.Add(1)
-	s.changed.Notify()
+	s.NotifyExternal()
 	if err != nil {
 		return 0, errCommitted{classify(err)}
 	}
@@ -776,11 +842,11 @@ func (s *Store) wait(ctx context.Context, done func() (bool, error)) error {
 	if poll == 0 && s.sim == nil {
 		poll = 250 * time.Millisecond
 	}
-	signal := &s.changed
-	if s.sim != nil {
-		signal = s.sim.Changed()
-	}
 	for {
+		var ticket <-chan struct{}
+		if s.sim == nil {
+			ticket = s.wakeTicket()
+		}
 		seen := s.version()
 		ok, err := done() // a read: other tasks commit meanwhile
 		if err != nil && !store.Transient(err) {
@@ -799,11 +865,27 @@ func (s *Store) wait(ctx context.Context, done func() (bool, error)) error {
 			qenv.Sleep(ctx, 10*time.Millisecond) // a transient error: read again soon, not at once
 			continue
 		}
+		if s.sim == nil {
+			waitNative(ctx, ticket, poll)
+			continue
+		}
+		signal := s.sim.Changed()
 		if err == nil {
 			signal.WaitIdle(ctx, poll) // the successful read established no new work
 		} else {
 			signal.Wait(ctx, poll) // an unsuccessful read cannot establish quiescence
 		}
+	}
+}
+
+// waitNative is outside the simulation: QSQL uses its scheduler's signal.
+func waitNative(ctx context.Context, ticket <-chan struct{}, poll time.Duration) {
+	timer := time.NewTimer(poll) //qenv:ok the real database's polling backstop
+	defer timer.Stop()
+	select { //qenv:ok native database wait; the simulated tier uses qenv.Signal
+	case <-ctx.Done():
+	case <-ticket:
+	case <-timer.C:
 	}
 }
 

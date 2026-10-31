@@ -78,6 +78,7 @@ func Uses(calls ...CallName) Option
 func WithCaller(ctx context.Context, caller string) context.Context
 func WithDrain(d Drain) ServeOption
 func WithIdentity(id Identity) ServeOption
+func WithPostgresNotifications(listen func(context.Context, string, *sqlstore.Store) error) ServeOption
 func WithRelay(r *Relay) StartOption
 func WritesVersion[New, Old any](version int, down func(New) Old) EventOption
 type App struct
@@ -693,6 +694,7 @@ type Store struct
     method (*Store) WaitTenants(ctx context.Context, n int) error
 
 == github.com/chucklehead-dev/gotogether/grist/sqlstore
+const PostgresNotifyChannel = "grist_changed"
 const SchemaVersion = 1
 func Open(ctx context.Context, db *sql.DB, d Dialect, o Options) (*Store, error)
 func SQLiteDSN(path string, busy time.Duration) string
@@ -704,6 +706,7 @@ type Options struct
     field LockTimeout time.Duration
     field IdleTimeout time.Duration
     field Poll time.Duration
+    field PostgresNotify bool
 type Pruned struct
     field Steps int64
     field Markers int64
@@ -718,6 +721,7 @@ type Store struct
     method (*Store) Heads(ctx context.Context) (map[string]store.Position, error)
     method (*Store) Marker(ctx context.Context, t, id string) (store.Marker, bool, error)
     method (*Store) Name() string
+    method (*Store) NotifyExternal()
     method (*Store) Prune(ctx context.Context, r Retention) (Pruned, error)
     method (*Store) PruneSnapshots(ctx context.Context, t, name, key, keep string, before store.Position) (int, error)
     method (*Store) PutSnapshot(ctx context.Context, t string, snap store.Snapshot) error
@@ -732,6 +736,10 @@ type Store struct
 var Postgres = Dialect{name: "postgres", …}
 var QSQL = Dialect{name: "qsql", …}
 var SQLite = Dialect{name: "sqlite", …}
+
+== github.com/chucklehead-dev/gotogether/grist/sqlstore/pgnotify
+func Run(ctx context.Context, dsn string, s *sqlstore.Store) error
+func Serve() grist.ServeOption
 
 == github.com/chucklehead-dev/gotogether/grist/store
 func CheckCondition(log []Stored, c Condition) error

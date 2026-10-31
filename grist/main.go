@@ -411,9 +411,29 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 		return err
 	}
 	defer db.Close()
-	st, err := sqlstore.Open(ctx, db, dialect, sqlstore.Options{Name: app.Name, Poll: *poll})
+	useNotifications := cfg.postgresNotifications != nil && dialect == sqlstore.Postgres
+	st, err := sqlstore.Open(ctx, db, dialect, sqlstore.Options{Name: app.Name, Poll: *poll, PostgresNotify: useNotifications})
 	if err != nil {
 		return err
+	}
+	if useNotifications {
+		_, dsn, _ := strings.Cut(*dbSpec, ":")
+		if strings.HasPrefix(dsn, "//") {
+			dsn = *dbSpec // retain postgres:// or postgresql://
+		}
+		listenerCtx, stopListener := context.WithCancel(context.WithoutCancel(ctx))
+		listenerDone := make(chan struct{})
+		go func() { //qenv:ok PostgreSQL's native listener, outside simulation
+			defer close(listenerDone)
+			if err := cfg.postgresNotifications(listenerCtx, dsn, st); err != nil && listenerCtx.Err() == nil {
+				// Driver errors can contain credentials. Polling remains available.
+				lg.Warn("postgres_notifications_stopped", "fallback", "polling")
+			}
+		}()
+		defer func() {
+			stopListener()
+			<-listenerDone
+		}()
 	}
 	for _, t := range tenants {
 		if err := CheckTenant(t); err != nil {
