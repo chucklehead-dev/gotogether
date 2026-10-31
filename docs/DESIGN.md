@@ -3366,7 +3366,13 @@ checking likewise refuses a whole-state checkpoint rather than projecting it
 into separate entities. These refusals leave the existing head-snapshot search
 contract intact. Finite model-choice witnesses retain their existing snapshot
 exclusion; hidden and resume searches constrain snapshot successors before
-merging paths.
+merging paths. Checkpoint capture must also include imported state. If state
+reachable through imports is not visible in the selected model's exports, the
+planner and ITF replay refuse the checkpoint; comparing only local variables
+would silently miss a change in an imported module. Visibility is checked using
+variable declaration identities, so equal names do not establish equal scope.
+Stateful qualified imports and instances are refused conservatively because
+pre-flattening declaration IDs do not identify each instantiated state cell.
 
 Verdict caches key a lost log by its steps' times and its start
 (`Checker.Key`), since the cut and the start decide the verdict.

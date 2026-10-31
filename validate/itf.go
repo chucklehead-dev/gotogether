@@ -106,6 +106,11 @@ func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, e
 				return binding.Call{}, fmt.Errorf("state 0: a snapshot checkpoint needs a preceding model state; use an initial snapshot without gotogether::checkpoint")
 			}
 			c.Checkpoint = v.B
+			if c.Checkpoint {
+				if _, err := m.CheckpointVars(c.Action); err != nil {
+					return binding.Call{}, fmt.Errorf("state %d: %w", idx, err)
+				}
+			}
 		}
 		var vals []string
 		for _, p := range ps {

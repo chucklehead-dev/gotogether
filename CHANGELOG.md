@@ -14,6 +14,8 @@ and adds a line here.
   the initial state of a log that lost its head.
   History/pending-effect searches and partitioned checking explicitly refuse
   later checkpoints in this bounded slice.
+  Checkpoints also refuse imported state that cannot be captured completely
+  through the model's exports.
 
 - Added a bounded adaptation rehearsal of the published library starter against
   Goo's strict definition reader, with frozen contract files, actual API returns,

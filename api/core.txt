@@ -141,6 +141,7 @@ type Model struct
     method (*Model) ActionNames() []string
     method (*Model) Assigns(action string) (map[string]bool, bool)
     method (*Model) CalledBy(action string, callers map[string]bool) bool
+    method (*Model) CheckpointVars(action string) ([]string, error)
     method (*Model) Chooses(action string) []string
     method (*Model) NearestAction(name string) string
     method (*Model) Reads(action string) (map[string]bool, bool)

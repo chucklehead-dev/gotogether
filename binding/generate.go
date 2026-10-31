@@ -280,6 +280,11 @@ func (p *Planner) Plan(t *qtrace.Trace) (*Plan, error) {
 		}
 		data := stepData(s, args[i], procIdx[s.Process], outcome)
 		c := Call{Step: s, Action: s.Action, Args: map[string]string{}, Checkpoint: snapshot && !snapshotStart}
+		if c.Checkpoint && m != nil {
+			if _, err := m.CheckpointVars(c.Action); err != nil {
+				return nil, fmt.Errorf("step %d (%s, seq %d%s): %w", i+1, s.Action, s.Seq, where(s), err)
+			}
+		}
 		var vals []string
 		for _, p := range params {
 			tpl := ab.Template(p)

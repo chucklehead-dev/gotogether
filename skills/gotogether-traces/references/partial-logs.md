@@ -46,8 +46,11 @@ in this first slice: moving a checkpoint to the head must not turn it into a
 free initial state. Partitioned validation also refuses them because a checkpoint
 describes the whole state. Finite model-choice witness search retains its
 existing snapshot exclusion. Validate a deterministic, ordinary ordered capture
-instead.
-
+instead. Imported state must also be fully visible through the model
+module's exports; otherwise validation refuses the checkpoint rather than
+comparing only local variables. Re-export unqualified imported state for
+capture. Stateful qualified imports and instances remain unsupported in this
+slice.
 
 Record the snapshot when no operation is in flight (under the lock that
 rotates the log). A linearization keeps it first, but a step invoked
