@@ -61,8 +61,8 @@ type Load struct {
 	EndpointLag             time.Duration
 	MaxConnections, Reserve int
 	// Seeds is how many seeds each simulated confirmation runs (default
-	// 6); negative: none (the chain and the arithmetic alone, each row
-	// saying so).
+	// 6); negative: no recovery confirmations. Calibrate independently
+	// requests simulated calibration trajectories when set.
 	Seeds int
 	// Calibrate fits the chain's timeout to simulated trajectories (λ
 	// held) before TimeoutFor's ladder.
@@ -438,7 +438,8 @@ func (z *sizer) margin(h hop, r retry, t time.Duration) (float64, error) {
 // measurements. It takes seconds to a minute: a chain per setting, a
 // few simulations per confirmation. An unjudged requested confirmation or
 // margin run returns an error and no sizing, rather than counting as a
-// degraded seed. Negative Load.Seeds explicitly skips simulation.
+// degraded seed. Negative Load.Seeds skips recovery confirmations;
+// Load.Calibrate independently requests simulated calibration trajectories.
 func Report(app *grist.App, steps []qtrace.Step, load Load) (*Sizing, error) {
 	m, err := Measure(app, steps)
 	if err != nil {

@@ -1032,6 +1032,18 @@ replay. Only that reproduced marker establishes a found trigger. An earlier
 candidate, a failed replay, or an ordinary engine error cannot establish one;
 tests exercise this contract through the public pinned Hegel API.
 
+Generated calibration trajectories obey the same evidence rule.
+`SimulateTrajectory` returns an error on invalid inputs, simulation errors, or
+missing exact samples; it never substitutes zeros or returns a partial mean.
+Sample times are nonnegative whole seconds, matching its one-second sampler;
+their order and duplicates are retained. Time zero is the supplied initial
+state. Queue states that the simulator would silently clip are refused.
+The client timeout must be positive, and the simulation extends past the last
+requested sample by that timeout plus one sampling tick: orbit membership is
+retrospective, so an attempt active at the sample may only be classified when
+it later times out. Duration overflow is rejected; this is not a runtime or
+memory budget. Grist propagates trajectory errors before fitting its timeout.
+
 ### 11.2 The code under test on virtual time
 
 qload runs on qenv. That is what lets the retry library itself sit in the

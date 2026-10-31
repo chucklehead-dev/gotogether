@@ -24,7 +24,11 @@ func (z *sizer) timeout(h hop, svc qmeta.Service) error {
 		cfg := z.sim(h, z.rec, l.Timeout)
 		cfg.Server.QueueCap = p.Queue // the chain's bound, so their states compare
 		for _, from := range []qmeta.State{{U: p.Queue / 2, V: p.Orbit / 8}, {U: p.Queue / 4}, {U: p.Queue, V: p.Orbit / 4}} {
-			data = append(data, qload.SimulateTrajectory(cfg, from, []float64{5, 10, 20}, 10))
+			trajectory, err := qload.SimulateTrajectory(cfg, from, []float64{5, 10, 20}, 10)
+			if err != nil {
+				return fmt.Errorf("gristload: calibrating %s under %s at timeout %v from queue %d, orbit %d: %w", h.name, z.rec, l.Timeout, from.U, from.V, err)
+			}
+			data = append(data, trajectory)
 		}
 		tool = "calibrated chain (CalibrateTimeout, λ held)"
 	}
