@@ -33,7 +33,8 @@ type Str string
 // A Set is a finite set, its elements sorted by Compare and distinct.
 type Set struct{ Elems []Value }
 
-// A Map is a finite map, its keys sorted by Compare.
+// A Map is an immutable finite map, its keys sorted by Compare. Keys and Vals
+// are read-only after construction; successors may share an unchanged key domain.
 type Map struct {
 	Keys, Vals []Value
 }
@@ -193,15 +194,16 @@ func NewMap(keys, vals []Value) *Map {
 
 func (m *Map) find(k Value) (int, bool) { return slices.BinarySearchFunc(m.Keys, k, Compare) }
 
-// put is m with k set to v.
+// put is m with k set to v. Updating a key keeps the immutable key domain;
+// insertion clones it so spare capacity cannot change an earlier state.
 func (m *Map) put(k, v Value) *Map {
 	i, ok := m.find(k)
-	out := &Map{Keys: slices.Clone(m.Keys), Vals: slices.Clone(m.Vals)}
+	out := &Map{Keys: m.Keys, Vals: slices.Clone(m.Vals)}
 	if ok {
 		out.Vals[i] = v
 		return out
 	}
-	out.Keys, out.Vals = slices.Insert(out.Keys, i, k), slices.Insert(out.Vals, i, v)
+	out.Keys, out.Vals = slices.Insert(slices.Clone(m.Keys), i, k), slices.Insert(out.Vals, i, v)
 	return out
 }
 

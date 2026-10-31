@@ -5533,6 +5533,16 @@ about 6% fewer; failed lazy definitions gain one error-cell allocation. The
 success/failure benchmark checks that successful lets do not pay that extra
 allocation. See the [storage measurements](validation-volume.md#binding-frame-storage).
 
+The wider ring follow-up shares immutable map keys on existing-key updates while
+copying values; insertions copy key and value arrays before changing them. Independent
+copying-reference and retained-prefix controls protect snapshot ownership,
+including spare capacity. The ring fixture checks bounds and global conservation;
+the whole-validator benchmark retains its existing nonNegative predicate.
+Measured transfer bytes fall about 49% and whole-validator bytes about 12% in the
+documented cases, with no throughput claim. State-size scaling remains, so the
+next experiment broadens product coverage through I20's incident workflow before
+any incremental-invariant API. See [the map storage follow-up](validation-volume.md#wider-histories-and-map-storage).
+
 ## 67. Explicit quantifiers, one place for claims (I16)
 
 §18 made an expectation alone a claim about some run, with `Conforms`
