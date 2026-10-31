@@ -8,6 +8,10 @@ and adds a line here.
 
 ## Unreleased
 
+- The Go evaluator uses smaller immutable binding frames, reducing memory for
+  full invariant checks and validation. Deferred model errors retain their
+  original behavior; a failed lazy definition uses one additional error cell.
+
 - Grist checks event scalar observations before append and relay rendering.
   Unsigned values outside int64 and malformed bodies are errors instead of
   wrapped or empty evidence. Processor success events are validated and frozen

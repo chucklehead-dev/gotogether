@@ -57,15 +57,17 @@ type env struct {
 	name  string
 	val   Value
 	outer *env
-	// err is a let's failure, thrown where its name is read (bindLet)
-	err error
+	// err is a let's failure, thrown where its name is read (bindLet).
+	// Only failed lets need an error cell; ordinary parameter/let frames
+	// keep one pointer rather than the two-word error interface.
+	err *error
 }
 
 func (e *env) lookup(name string) (Value, bool) {
 	for ; e != nil; e = e.outer {
 		if e.name == name {
 			if e.err != nil {
-				throw(e.err)
+				throw(*e.err)
 			}
 			return e.val, true
 		}
@@ -583,7 +585,8 @@ func (ev *evaluation) bindLet(d *Decl, en *env) *env {
 	}
 	v, err := ev.evalOrErr(d.Expr, en)
 	if err != nil {
-		return &env{name: d.Name, outer: en, err: err}
+		deferred := err
+		return &env{name: d.Name, outer: en, err: &deferred}
 	}
 	return en.bind(d.Name, v)
 }
