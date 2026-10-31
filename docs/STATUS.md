@@ -175,7 +175,7 @@ require explicit `-history`. Use a fresh ID and `go test -count=1`.
 **As of 2026-10-31 (finite-initialization branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
-`116b3f59` so complete calibration trajectories, checked recovery aggregation, interrupted lock waits, SQL cancellation, snapshot-checkpoint validation/navigation, scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
+`006e1cb8` so finite initialization witnesses, complete calibration trajectories, checked recovery aggregation, interrupted lock waits, SQL cancellation, snapshot-checkpoint validation/navigation, scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
 run profiles, finite-choice witness evidence, structured lint emitters, component shrink identities, composition and nav/2
 contract work outside go.work; the
 merged declared-call span increment did not require a core-pin bump. The
@@ -183,6 +183,7 @@ checkpoint slice updated the pins for navigation; the lock-wait slice advances
 them again so published SQL consumers share the terminal-wait contract; recovery
 aggregation advances them for the error-returning API used by Hegel and sizing.
 The calibration follow-up advances them again for checked trajectory construction.
+Finite initialization advances them for shared receipt evidence and TUI previews.
 **Nothing is tagged**: every module is pre-release,
 published modules require each other at pseudo-versions, and breaking
 renames still land (R5 waits for the maintainer).
@@ -366,8 +367,9 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Independent-maintainer use or a concrete new contract blocker | M | the bounded Goo Read adaptation found no missing runtime adapter; avoid adding a facade without evidence |
-| 2 | Further lint/editor/onboarding breadth, only from adopter blockers | S-M | use observed friction after the starter and explicit-property scaffold increment |
+| 1 | I51: retained application-history regression workflow | S-M | reuse current upcasters, folds, snapshots and model checks; replay must not execute effects or turn missing step evidence into a pass |
+| 2 | I19: interacting-entity validation benchmark and soundness prototype | M | profile a nonpartitionable workload before choosing an incremental invariant design; compare with full evaluation |
+| alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
 Do not start all tracks at once. Worker completion and the bounded HTTP/SQLite
 rehearsal are merged in PR #9; finite pinned choices in PR #10, structured lint

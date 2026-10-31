@@ -14,6 +14,21 @@ exposing that model choice as a recorded runtime event. Paths that reach the
 same later state cannot erase an initial invariant violation or combine
 separately satisfiable properties into one passing explanation.
 
+For example, the model can leave the starting leader unobserved:
+
+```quint
+module leaders {
+  var leader: int
+  action init = { nondet first = Set(1, 2).oneOf(); leader' = first }
+  action read = leader' = leader
+}
+```
+
+With a bound `read` action whose expectation is
+`leader == {{.obs.leader}}`, a recorded read observing leader 2 selects that
+legal root. The driver need not invent an initialization event or expose the
+model's internal choice as an action parameter.
+
 ## Search and replay establish different facts
 
 The Go evaluator enumerates finite successors. An exhaustive search with no
