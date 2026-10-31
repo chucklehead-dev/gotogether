@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Event-projection follow-up (current branch): commands, processor emits and effect
+Evaluator-allocation follow-up (current branch): ordinary immutable binding
+frames keep a pointer to a deferred error instead of reserving an error interface
+on every frame. The error cell is allocated inside the failure branch, preserving
+successful-let allocation counts. Measurements reduce the 1,000-account
+invariant's bytes by 21% and whole-validator bytes by about 6%. Full evaluation,
+closure lifetimes and error verdicts are unchanged. See
+[the measurements and tradeoff](validation-volume.md#binding-frame-storage).
+
+Event-projection follow-up (PR #24): commands, processor emits and effect
 success events validate source, stored and intermediate upcast scalar shapes.
 Success events and observations are prepared before external effects. Invalid
 new evidence cannot commit; represented known retained shapes are checked even
@@ -392,7 +400,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I19: reduce measured evaluator allocation costs, then reassess incremental invariants | M | interacting baseline identifies per-entry binding allocations and map copying; preserve full evaluation semantics before adding dependency inference |
+| 1 | I19: profile remaining map-copy costs on wider interacting histories, then reassess incremental invariants | M | smaller binding frames reduce measured bytes while retaining full semantics; account for the remaining state-size costs before dependency inference |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
 Do not start all tracks at once. Worker completion and the bounded HTTP/SQLite

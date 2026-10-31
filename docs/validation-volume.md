@@ -76,6 +76,44 @@ write set alone is enough:
 incremental invalidation. Production checking, bindings, reports and verdicts
 remain unchanged. There is no incremental speedup claim or new user option.
 
+## Binding-frame storage
+
+The first runtime follow-up reduces each successful binding frame's allocation
+from 64 to 48 bytes on the measured 64-bit Go 1.26.1 runtime. Frames keep a
+pointer to a separately allocated deferred error cell; only a failed lazy
+definition needs that cell. Frames remain immutable and independently owned by
+their closures. Full invariant evaluation and all verdicts are unchanged.
+
+Three short before/after runs on the same shared executor measured:
+
+| workload | before B/op | after B/op | allocation counts |
+|---|---:|---:|---|
+| full invariant, 10 accounts | 1,608 | 1,288 | 34 unchanged |
+| full invariant, 100 accounts | 15,480 | 12,280 | 304 unchanged |
+| full invariant, 1,000 accounts | 152,472 | 120,472 | 3,004 unchanged |
+| successful lazy let | 128 | 96 | 2 unchanged |
+| unused failed lazy let | 176 | 160 | 5 to 6 |
+| referenced failed lazy let | 192 | 176 | 6 to 7 |
+
+The whole-validator benchmark at 100 accounts/1,000 transfers decreases from
+approximately 32.1 MB to 30.2 MB per check (about 6%). Bank, KV and payments
+transition benchmarks also use fewer bytes. Short-run latency measurements were
+noisy; these results establish memory reductions, not a throughput guarantee.
+Failed lazy definitions have an explicit extra-allocation tradeoff, including
+when the model does not read the failed binding.
+
+`BenchmarkLazyLetErrors` measures success, unused failure and referenced failure
+independently, checking the returned value or `EvalError`. It caught an early
+implementation that allocated the error cell on success too: taking the address
+of a variable declared before the branch makes it escape. Copying the error
+inside the failure branch avoids that cost. Existing differential checks compare
+lazy-error behavior with both Quint backends; closure/higher-order and complete
+evaluator/validator tests remain the semantic oracle.
+
+```sh
+GOWORK=off go test ./internal/qeval -run '^$' -bench '^BenchmarkLazyLetErrors$' -benchmem -count=3
+```
+
 ## Next decision
 
 An evidence-integrity check during this work reproduced a Grist gap:
@@ -91,8 +129,8 @@ These benchmarks do not change runtime semantics; the correctness follow-up
 precedes the performance work below.
 
 Full invariant evaluation dominates this fixture, but map copying still grows
-with account count. First evaluate whether reducing measured per-entry evaluator
-allocations improves ordinary full checks without changing semantics. Retain
+with account count after the binding-frame reduction. Profile the remaining
+copying costs on a wider interacting workload before choosing the next change. Retain
 this full oracle and the existing evaluator differential tests. Any later
 incremental design must establish predicate dependencies, handle initial state,
 domain changes and failed predicates, and fall back to full evaluation for

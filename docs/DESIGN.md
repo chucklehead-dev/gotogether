@@ -5522,8 +5522,16 @@ separately. Its written-entry cache is compared with full evaluation on bounded
 prefixes; destination-only and cross-entry counterexamples rule out using an
 action's source or write set alone as an invalidation proof. Existing footprint
 judgments do not provide such a proof. Production semantics remain unchanged;
-the measured evaluator allocations are the next investigation before a new
-incremental API or dependency analysis.
+the profiles guide allocation changes before a new incremental API or dependency
+analysis.
+
+The first allocation follow-up shrinks immutable lexical binding frames by
+storing deferred errors in separate cells created only on failure. It preserves
+closure ownership and lazy-error semantics, with full checks still performed.
+The measured 1,000-account invariant uses 21% fewer bytes and whole validation
+about 6% fewer; failed lazy definitions gain one error-cell allocation. The
+success/failure benchmark checks that successful lets do not pay that extra
+allocation. See the [storage measurements](validation-volume.md#binding-frame-storage).
 
 ## 67. Explicit quantifiers, one place for claims (I16)
 

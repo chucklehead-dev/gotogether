@@ -227,6 +227,15 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   proves nothing of it). The nightly mutates the core's packages
   (`ci/mutate-core.sh <pkg>`, `JOBS=n`); a survivor is a test to write,
   or an equivalent mutant the matrix's `max` names.
+- A planted mutant whose witness requires a particular input or fault gets a
+  contrast that forces those prerequisites, with the faithful implementation
+  checked under the same conditions. Keep broad exploration alongside it.
+  Assert that the required fault occurred and the expected invariant or link
+  failed; a small seed sample can miss the witness when scheduling changes.
+- A parallel test calling recording APIs outside an exploration owns a recorder
+  in its context, including tests that only measure read cost. Unowned steps can
+  overlap another test's strict run and be reported as escaped work. Keep the
+  strict check enabled and assert that the test captured its intended steps.
 - A skill's mechanics (how to weave, gosim, sweeps, coverage) go in
   `skills/<name>/references/*.md`, linked from its SKILL.md with when to
   read each; verdicts and expectations are in
