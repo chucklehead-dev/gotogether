@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- Added `gotogether bundle -out DIR MANIFEST` for verified portable evidence,
+  retaining the native manifest and recorded judgment. `Manifest.Bundle` now
+  refuses stale files, unsupported model references and existing destinations,
+  stages and verifies copies, and publishes without overwriting another export.
+  Failures leave the manifest's paths unchanged and publish no partial directory.
+
 - Added a deterministic jobqueue incident walkthrough across native JSON,
   captured-record inspection, the TUI, relocated replay and a verified repair.
   Generic rejected-call navigation now exposes its checked captured record in

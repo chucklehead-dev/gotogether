@@ -97,6 +97,11 @@ The reproduction checks faithful validation, the precise source mismatch,
 missing-observation errors and relocated replay while keeping the frozen SDK
 baseline intact.
 
+To hand off a checked run, use `gotogether bundle -out incident run.json`.
+It publishes the native manifest and verified files together; the recorded model
+verdict stays unchanged. Replay supported histories with
+`gotogether validate -replay incident/run.json -json`.
+
 For an on-call exercise on an existing service, follow the
 [jobqueue incident walkthrough](examples/jobqueue/INCIDENT.md): a native JSON
 alert, the same captured record in the TUI, portable replay and a verified repair.

@@ -1,6 +1,8 @@
 package validate
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/atomicdir"
 )
 
 // specFiles is the spec at path, hashed, and the files it imports,
@@ -217,24 +220,260 @@ func (md *RunModel) verify() []error {
 	return errs
 }
 
-// Bundle copies the files the manifest names into dir, so a manifest
-// written there (Write, with dir its directory) travels with them: the
-// inputs into dir/inputs, each model's binding, spec and imports into
-// dir/model/<n> at their places relative to one another (a binding's
-// relative spec: still resolves), and the artifacts into dir/artifacts.
-// Its paths become the copies'. A file already under dir stays.
+// Bundle copies the manifest's complete, hash-verified file graph into a fresh
+// directory, preserving relative references between model files. It refuses
+// absolute references inside bindings and Quint sources, incomplete metadata,
+// changed artifacts and existing destinations. Source symlinks to regular files
+// are materialized as regular copied bytes, never copied as symlinks.
 //
-// A binding whose spec: is an absolute path keeps naming the original:
-// the bundle then holds a copy no replay reads, and Verify on another
-// machine refuses the missing spec.
+// Publication is atomic and does not replace existing evidence. On error the
+// receiver and destination are unchanged. On success its paths name the copies;
+// Write can then place a native manifest beside them. This checks export
+// integrity, not the recorded run's verdict, and does not rerun the model.
 func (m *Manifest) Bundle(dir string) error {
 	dir, err := filepath.Abs(dir)
 	if err != nil {
 		return err
 	}
-	under := func(p string) bool { return within(dir, p) }
+	if _, err := os.Lstat(dir); err == nil {
+		return fmt.Errorf("manifest bundle: %s already exists: choose a fresh directory", dir)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := m.verifyBundle(""); err != nil {
+		return err
+	}
+	parent := filepath.Dir(dir)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return err
+	}
+	stage, err := os.MkdirTemp(parent, "."+filepath.Base(dir)+".stage-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(stage)
+	c := m.copy()
+	if err := c.copyBundle(stage); err != nil {
+		return err
+	}
+	if err := c.verifyBundle(stage); err != nil {
+		return err
+	}
+	if err := atomicdir.Publish(stage, dir); err != nil {
+		return err
+	}
+	c.paths(func(p string) string {
+		rel, _ := filepath.Rel(stage, p)
+		return filepath.Join(dir, rel)
+	})
+	*m = *c
+	return nil
+}
+
+type bundleFile struct {
+	path *string
+	hash string
+}
+
+// bundleFiles includes every referenced file, including specs and imports that
+// Verify normally checks through their binding's resolution instead.
+func (m *Manifest) bundleFiles() []bundleFile {
+	var out []bundleFile
+	for _, md := range m.models() {
+		for _, f := range []*File{md.Binding, md.Spec, md.Convert} {
+			if f != nil {
+				out = append(out, bundleFile{&f.Path, f.SHA256})
+			}
+		}
+		for i := range md.Imports {
+			f := &md.Imports[i]
+			out = append(out, bundleFile{&f.Path, f.SHA256})
+		}
+	}
+	for i := range m.Inputs {
+		f := &m.Inputs[i].File
+		out = append(out, bundleFile{&f.Path, f.SHA256})
+	}
+	for i := range m.Artifacts {
+		f := &m.Artifacts[i]
+		out = append(out, bundleFile{&f.Path, f.SHA256})
+	}
+	return out
+}
+
+// verifyBundle additionally proves that the explicit files describe the entire
+// executable model graph. specFiles deliberately leaves missing imports for
+// Quint to diagnose; a portable export must refuse that incomplete graph now.
+func (m *Manifest) verifyBundle(root string) error {
+	if m.Format != ManifestFormat {
+		return fmt.Errorf("manifest bundle: format %q: want %s", m.Format, ManifestFormat)
+	}
+	for _, f := range m.bundleFiles() {
+		p := *f.path
+		if !filepath.IsAbs(p) || f.hash == "" {
+			return fmt.Errorf("manifest bundle: %q needs an absolute resolved path and recorded hash", p)
+		}
+		if root != "" && !within(root, p) {
+			return fmt.Errorf("manifest bundle: file %s escapes the staged directory", p)
+		}
+		info, err := os.Stat(p)
+		if err != nil {
+			return fmt.Errorf("manifest bundle: %w", err)
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("manifest bundle: %s is not a regular file", p)
+		}
+		hash, err := hashFile(p)
+		if err != nil {
+			return err
+		}
+		if hash != f.hash {
+			return fmt.Errorf("manifest bundle: %s changed since the run was judged: restore the original evidence", p)
+		}
+	}
+	if warnings, err := m.Verify(); err != nil {
+		return fmt.Errorf("manifest bundle: %w", err)
+	} else if len(warnings) > 0 {
+		return fmt.Errorf("manifest bundle: %s", strings.Join(warnings, "; "))
+	}
+	for _, md := range m.models() {
+		if md.Binding != nil {
+			b, err := binding.Load(md.Binding.Path)
+			if err != nil {
+				return err
+			}
+			if len(importPaths(b.Defs)) > 0 {
+				return fmt.Errorf("manifest bundle: binding %s imports files from defs, whose dependencies were not recorded: move file imports into the model and validate anew", md.Binding.Path)
+			}
+			if absoluteReference(b.Spec) {
+				return fmt.Errorf("manifest bundle: binding %s has an absolute spec reference %q: validate anew with a relative spec before exporting", md.Binding.Path, b.Spec)
+			}
+			if md.Spec == nil || filepath.Clean(b.SpecPath()) != filepath.Clean(md.Spec.Path) {
+				return fmt.Errorf("manifest bundle: binding %s resolves a spec absent from its recorded model graph", md.Binding.Path)
+			}
+		}
+		if md.Spec == nil {
+			if len(md.Imports) > 0 {
+				return fmt.Errorf("manifest bundle: imports have no recorded main spec")
+			}
+			continue
+		}
+		graph := map[string]bool{filepath.Clean(md.Spec.Path): true}
+		sources := []File{*md.Spec}
+		sources = append(sources, md.Imports...)
+		for _, f := range md.Imports {
+			graph[filepath.Clean(f.Path)] = true
+		}
+		for _, f := range sources {
+			src, err := os.ReadFile(f.Path)
+			if err != nil {
+				return err
+			}
+			for _, ref := range importPaths(string(src)) {
+				if absoluteReference(ref) {
+					return fmt.Errorf("manifest bundle: spec %s has an absolute import reference %q: validate anew with relative imports before exporting", f.Path, ref)
+				}
+				target := filepath.Join(filepath.Dir(f.Path), filepath.FromSlash(ref))
+				if filepath.Ext(target) != ".qnt" {
+					target += ".qnt"
+				}
+				if !graph[filepath.Clean(target)] || root != "" && !within(root, target) {
+					return fmt.Errorf("manifest bundle: import %q in %s is absent from the recorded model graph: restore the complete model and validate anew", ref, f.Path)
+				}
+			}
+		}
+	}
+	for _, in := range m.Inputs {
+		switch in.Format {
+		case "steps", "otlp", "requests":
+			continue
+		case "itf":
+		default:
+			return fmt.Errorf("manifest bundle: input %s has unresolved or unsupported format %q: validate anew to record its actual input format before exporting", in.Path, in.Format)
+		}
+		if in.Model == nil || in.Model.Spec == nil {
+			return fmt.Errorf("manifest bundle: ITF input %s has no recorded model graph: validate anew before exporting", in.Path)
+		}
+		if m.Model.Binding != nil || in.Model.Binding != nil {
+			continue
+		} // binding defs replace metadata defs
+		meta, err := bundleITFMeta(in.Path)
+		if err != nil {
+			return err
+		}
+		if defs, ok := binding.ReadITFMeta(meta); ok && len(importPaths(defs.Defs)) > 0 {
+			return fmt.Errorf("manifest bundle: ITF input %s imports files from metadata defs, whose dependencies were not recorded: move file imports into the model and validate anew", in.Path)
+		}
+	}
+
+	return nil
+}
+
+// bundleITFMeta reads only metadata, skipping state values without building an
+// ITF trace. Export does not reinterpret model values (notably big integers).
+func bundleITFMeta(path string) (map[string]any, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	dec := json.NewDecoder(f)
+	tok, err := dec.Token()
+	if err != nil || tok != json.Delim('{') {
+		return nil, fmt.Errorf("manifest bundle: ITF input %s must be a JSON object", path)
+	}
+	var meta map[string]any
+	seenMeta := false
+	for dec.More() {
+		key, err := dec.Token()
+		if err != nil {
+			return nil, err
+		}
+		if key == "#meta" {
+			if seenMeta {
+				return nil, fmt.Errorf("manifest bundle: ITF input %s contains duplicate #meta fields: validate a capture with unambiguous metadata before exporting", path)
+			}
+			seenMeta = true
+			if err := dec.Decode(&meta); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if err := skipBundleJSON(dec); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := dec.Token(); err != nil {
+		return nil, err
+	}
+	return meta, nil
+}
+
+func skipBundleJSON(dec *json.Decoder) error {
+	token, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	if delim, ok := token.(json.Delim); ok && (delim == '{' || delim == '[') {
+		for dec.More() {
+			if err := skipBundleJSON(dec); err != nil {
+				return err
+			}
+		}
+		_, err = dec.Token()
+	}
+	return err
+}
+
+func absoluteReference(p string) bool {
+	return filepath.IsAbs(p) || filepath.VolumeName(p) != "" || strings.HasPrefix(p, "/") || strings.HasPrefix(p, `\\`) || len(p) > 1 && p[1] == ':'
+}
+
+// copyBundle works on a private manifest and destination. Each model keeps its
+// lexical file layout, including relative parent references within the graph.
+func (m *Manifest) copyBundle(dir string) error {
 	used := map[string]bool{}
-	place := func(sub, base string) string { // a name of its own: two inputs may share a base name
+	place := func(sub, base string) string {
 		p := filepath.Join(dir, sub, base)
 		for n := 2; used[p]; n++ {
 			p = filepath.Join(dir, sub, fmt.Sprintf("%d-%s", n, base))
@@ -243,38 +482,42 @@ func (m *Manifest) Bundle(dir string) error {
 		return p
 	}
 	for i := range m.Inputs {
-		if p := m.Inputs[i].Path; !under(p) {
-			to := place("inputs", filepath.Base(p))
-			if err := copyFile(p, to); err != nil {
-				return err
-			}
-			m.Inputs[i].Path = to
+		f := &m.Inputs[i].File
+		to := place("inputs", filepath.Base(f.Path))
+		if err := copyFile(f.Path, to); err != nil {
+			return err
 		}
+		f.Path = to
 	}
 	for n, md := range m.models() {
 		var files []*File
 		for _, f := range []*File{md.Binding, md.Spec, md.Convert} {
-			if f != nil && !under(f.Path) {
+			if f != nil {
 				files = append(files, f)
 			}
 		}
 		for i := range md.Imports {
-			if !under(md.Imports[i].Path) {
-				files = append(files, &md.Imports[i])
-			}
+			files = append(files, &md.Imports[i])
 		}
 		if len(files) == 0 {
 			continue
 		}
-		root := filepath.Dir(files[0].Path) // their deepest common directory
+		root := filepath.Dir(files[0].Path)
 		for _, f := range files[1:] {
 			for !within(root, f.Path) {
-				root = filepath.Dir(root)
+				next := filepath.Dir(root)
+				if next == root {
+					return fmt.Errorf("manifest bundle: model files do not share a filesystem root")
+				}
+				root = next
 			}
 		}
 		for _, f := range files {
-			r, _ := filepath.Rel(root, f.Path)
-			to := filepath.Join(dir, "model", fmt.Sprint(n), r)
+			rel, err := filepath.Rel(root, f.Path)
+			if err != nil {
+				return err
+			}
+			to := filepath.Join(dir, "model", fmt.Sprint(n), rel)
 			if err := copyFile(f.Path, to); err != nil {
 				return err
 			}
@@ -282,13 +525,12 @@ func (m *Manifest) Bundle(dir string) error {
 		}
 	}
 	for i := range m.Artifacts {
-		if p := m.Artifacts[i].Path; !under(p) {
-			to := place("artifacts", filepath.Base(p))
-			if err := copyFile(p, to); err != nil {
-				return fmt.Errorf("manifest: artifact %s: %w", m.Artifacts[i].Name, err)
-			}
-			m.Artifacts[i].Path = to
+		f := &m.Artifacts[i]
+		to := place("artifacts", filepath.Base(f.Path))
+		if err := copyFile(f.Path, to); err != nil {
+			return fmt.Errorf("manifest bundle: artifact %s: %w", f.Name, err)
 		}
+		f.Path = to
 	}
 	return nil
 }

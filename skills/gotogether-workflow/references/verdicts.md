@@ -370,3 +370,13 @@ Match rules belong in the
 binding's `diagnosticEvidence`, with explicit model-action string-argument
 selectors. Counterfactual model branches have no captured evidence. See
 [diagnostic evidence](../../../docs/model-diagnostics-prototype.md#exact-evidence-links).
+
+## Export integrity is not a model verdict
+
+`gotogether bundle -out handoff run.json` verifies and publishes the native
+manifest and its files without rerunning the model. Exit 0 means the handoff is
+complete; read its original receipt/verdict for pass, failure or no verdict.
+`-json` emits the native manifest, not a fresh validation report. Export refuses
+missing or changed evidence (including artifacts), unsupported model references,
+and an existing destination. A composition receipt remains non-executable by
+primary-binding replay; reproduce it through its registered System/test.

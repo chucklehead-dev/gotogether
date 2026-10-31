@@ -18,18 +18,40 @@ From this directory, with Go 1.26.1, Quint 0.33.0 and `jq` on PATH:
 incident_out=$(mktemp -d)
 OUT="$incident_out" ./incident.sh
 incident_bundle="$incident_out/moved-capture"
+incident_manifest="$incident_bundle/incident/run.json"
+incident_log="$incident_bundle/incident/$(jq -r '.inputs[0].path' "$incident_manifest")"
+incident_binding="$incident_bundle/incident/$(jq -r '.model.binding.path' "$incident_manifest")"
 ```
 
 The script builds the producer and CLI, records independent faithful/incident/
-repaired captures, validates them, moves the complete bundle, replays it from an
-unrelated working directory, and checks error/no-verdict controls. Existing
+repaired captures, validates them, exports each with `gotogether bundle`, moves
+the complete bundle, replays it from an unrelated working directory, and checks error/no-verdict controls. Existing
 evidence is not overwritten. Expected tamper and missing-file errors appear on
 stderr; their native error reports are retained. The script restores the input.
 
-The bundle contains the binding, model, three `.jsonl` captures, native
-`*.run.json` manifests, and `reports/` documents. Replay depends on the copied
+Each of `faithful/`, `incident/` and `repaired/` contains a native `run.json`
+and verified binding, model and capture files under `files/`. `reports/` keeps
+the original native reports and inspection documents. The temporary source
+captures are removed after export. Replay depends on the copied
 model/binding/inputs, not the checkout or the former bundle location. Go and
-Quint are still required tools. Generated work files are not the source model.
+Quint are still required tools. Export uses existing manifest data and leaves
+its verdict unchanged; it does not rerun the model or sanitize the evidence.
+Generated work files are not the source model.
+
+To export an existing manifest directly, use a fresh output directory:
+
+```sh
+gotogether bundle -out handoff run.json
+gotogether validate -replay handoff/run.json -json
+```
+
+`bundle -json` emits the native exported manifest, with paths relative to
+`handoff/run.json`. Exit 0 means the files were verified and published together,
+even when the recorded model verdict is failure or no verdict. Existing output,
+stale or missing files, unresolved input formats, and unsupported model
+references are errors. File imports in injected `defs` must move into the model
+before validating anew.
+Evidence is copied unchanged; select and sanitize logs before validation if needed.
 
 ## Route the alert using data
 
@@ -63,10 +85,10 @@ The agent-facing forms use existing native JSON:
 ```sh
 incident_ref=$(jq -c '.actors[0].failures[0].record | {actor, recorder, seq}' \
   "$incident_bundle/reports/incident.json")
-"$incident_out/bin/gotogether" nav -run "$incident_bundle/incident.jsonl" \
+"$incident_out/bin/gotogether" nav -run "$incident_log" \
   -record "$incident_ref" -json
-"$incident_out/bin/gotogether" nav -binding "$incident_bundle/jobqueue.binding.yaml" \
-  -run "$incident_bundle/incident.jsonl" -at 4 -json
+"$incident_out/bin/gotogether" nav -binding "$incident_binding" \
+  -run "$incident_log" -at 4 -json
 ```
 
 The first command returns the captured ack unchanged. The second returns a model
@@ -78,8 +100,8 @@ Build the interactive navigator from this checkout and open the same capture:
 
 ```sh
 (cd ../../qnav && go build -o "$incident_out/bin/gotogether-nav" ./cmd/gotogether-nav)
-"$incident_out/bin/gotogether-nav" -binding "$incident_bundle/jobqueue.binding.yaml" \
-  -run "$incident_bundle/incident.jsonl"
+"$incident_out/bin/gotogether-nav" -binding "$incident_binding" \
+  -run "$incident_log"
 ```
 
 It opens before call 5. Press `e`, select the rejected captured record, then
@@ -97,7 +119,7 @@ branch is not a repaired execution.
 ```sh
 cd "$incident_out"
 "$incident_out/bin/gotogether" validate \
-  -replay "$incident_bundle/incident.run.json" -json
+  -replay "$incident_manifest" -json
 ```
 
 Exit 1 with the same native conformance failure is expected. The script checks
