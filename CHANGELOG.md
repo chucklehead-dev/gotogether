@@ -8,6 +8,10 @@ and adds a line here.
 
 ## Unreleased
 
+- Added `qenv.NewID`: fresh opaque IDs in production and deterministic IDs
+  shared across a simulation's processes and stores, surviving simulated
+  crashes and restores without adding scheduling or fault choices.
+
 - Added `gotogether bundle -out DIR MANIFEST` for verified portable evidence,
   retaining the native manifest and recorded judgment. `Manifest.Bundle` now
   refuses stale files, unsupported model references and existing destinations,
