@@ -14,7 +14,9 @@ and adds a line here.
   older manifests must be regenerated. Artifact bytes, relative layout, actual
   source availability and native pass/fail/no-verdict scope are preserved.
   Manifest capture refuses changed artifacts/source coverage and mismatched
-  evaluation modes. Unsupported ITF inference stops before invoking Quint.
+  evaluation modes. High-level checks retain exact read-time input fingerprints
+  across native logs, requests, conversion and typed ITF, refusing files changed
+  between judgment and recording. Unsupported ITF inference stops before invoking Quint.
   Compiled checkers refuse overrides of constants frozen into IR with
   recompilation guidance; supported runtime parameter slots remain usable.
 

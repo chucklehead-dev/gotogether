@@ -486,6 +486,10 @@ type RunRecord struct {
 // ("steps", "otlp", "itf"), the steps read from it (none for ITF), and
 // an ITF trace's instance (ITFModel).
 type RunInput struct {
+	// SHA256, when set, is the digest captured from the exact bytes judged.
+	// NewManifest refuses a changed file instead of hashing new bytes onto an old
+	// verdict. Empty leaves provenance capture to the low-level caller.
+	SHA256       string
 	Path, Format string
 	Steps        []qtrace.Step
 	Model        *RunModel
@@ -541,7 +545,7 @@ func NewManifest(r RunRecord) (*Manifest, error) {
 		}
 	}
 	for _, in := range r.Inputs {
-		if err := m.addInput(in.Path, in.Format, in.Steps); err != nil {
+		if err := m.addInput(in.Path, in.Format, in.Steps, in.SHA256); err != nil {
 			return nil, err
 		}
 		m.Inputs[len(m.Inputs)-1].Model = in.Model
@@ -590,10 +594,13 @@ func (m *Manifest) setBinding(b *binding.Binding) error {
 
 // addInput adds the input at path, the steps read from it (recorded
 // steps; none for an ITF trace), hashing the file.
-func (m *Manifest) addInput(path, format string, steps []qtrace.Step) error {
+func (m *Manifest) addInput(path, format string, steps []qtrace.Step, expected string) error {
 	f, err := hashed(path)
 	if err != nil {
 		return err
+	}
+	if expected != "" && f.SHA256 != expected {
+		return fmt.Errorf("the input %s changed since its bytes were judged (sha256 %s, now %s): restore the captured input or validate anew before writing a manifest", path, short(expected), short(f.SHA256))
 	}
 	in := Input{File: *f, Format: format}
 	for _, s := range steps {

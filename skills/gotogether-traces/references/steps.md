@@ -210,6 +210,10 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   version probes; no fallback changes the judge. Compiler provenance stays in
   the artifact; runtime Tools.Quint/Backend stay empty. The single current run
   format is `/3`; regenerate older manifests rather than editing their format.
+  Readers retain exact input byte digests; if a log is appended or edited after
+  judgment, manifest creation refuses it. Restore the captured file or judge the
+  new input; do not rehash changed bytes onto the earlier verdict. Direct low-level
+  RunRecord callers can pass RunInput.SHA256 to enforce that identity check too.
   Original artifact bytes, binding-relative layout, source hashes and the
   present/absent source set are preserved. Sources absent at the actual check
   stay explicitly unchecked; adding them or losing previously checked sources

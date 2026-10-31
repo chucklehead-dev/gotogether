@@ -5324,6 +5324,11 @@ The actual loaded artifact digest and source-presence inventory travel privately
 with compiled results. Manifest creation rejects a different artifact or changed
 coverage instead of attaching an old verdict to freshly loaded data. Source hashes
 come from the artifact; the manifest records the subset present when judged.
+High-level input readers also retain fingerprints of the exact bytes parsed,
+including converted and schema-typed input paths. Judged.Manifest refuses changed
+or uncaptured inputs; it never attaches new bytes to an old verdict. Low-level
+RunRecord callers may supply expected RunInput.SHA256 fingerprints, or explicitly
+own provenance capture when they leave that field empty.
 Previously present sources must remain present and identical; absent sources must
 remain absent. Their provenance stays disclosed as unchecked, not silently
 upgraded. Portable export preserves artifact bytes and all relative paths,

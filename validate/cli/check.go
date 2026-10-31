@@ -11,6 +11,8 @@ package cli
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -106,6 +108,7 @@ type Input struct {
 	Torn *qtrace.TornTail
 	// Warnings are reading's (input.File.Warnings).
 	Warnings []string
+	sha256   string // exact byte image that supplied this input
 	file     *input.File
 }
 
@@ -195,12 +198,12 @@ func (chk Check) Judge(ctx context.Context) (*Judged, error) {
 	var steps []qtrace.Step
 	for _, f := range chk.Files {
 		if rules != nil {
-			cs, ok, err := convertFile(f, rules)
+			cs, digest, ok, err := convertFile(f, rules)
 			if err != nil {
 				return nil, err
 			}
 			if ok {
-				j.Inputs = append(j.Inputs, Input{Path: f, Format: input.OTLP, Converted: true, Steps: cs})
+				j.Inputs = append(j.Inputs, Input{Path: f, Format: input.OTLP, Converted: true, Steps: cs, sha256: digest})
 				steps = append(steps, cs...)
 				continue
 			}
@@ -215,7 +218,7 @@ func (chk Check) Judge(ctx context.Context) (*Judged, error) {
 		if err != nil {
 			return nil, err
 		}
-		j.Inputs = append(j.Inputs, Input{Path: f, Format: in.Format, Steps: in.Steps, Torn: in.Torn, Warnings: in.Warnings, file: in})
+		j.Inputs = append(j.Inputs, Input{Path: f, Format: in.Format, Steps: in.Steps, Torn: in.Torn, Warnings: in.Warnings, file: in, sha256: in.SHA256()})
 		if in.Format != input.ITF {
 			steps = append(steps, in.Steps...)
 		}
@@ -386,7 +389,10 @@ func (j *Judged) Manifest() (*validate.Manifest, error) {
 	rec.Check = validate.RunCheck{RequireFinish: j.Finish, Format: format, NoVars: chk.NoVars, LostPrefix: chk.LostPrefix, LostSuffix: chk.LostSuffix,
 		CompleteThrough: chk.CompleteThrough}
 	for _, in := range j.Inputs {
-		ri := validate.RunInput{Path: in.Path, Format: string(in.Format), Steps: in.Steps}
+		if in.sha256 == "" {
+			return nil, fmt.Errorf("input %s has no captured fingerprint of the judged bytes: judge it with Check.Judge before writing a manifest", in.Path)
+		}
+		ri := validate.RunInput{Path: in.Path, Format: string(in.Format), Steps: in.Steps, SHA256: in.sha256}
 		if io, ok := j.itfOpts[in.Path]; ok {
 			var err error
 			if ri.Model, err = validate.ITFModel(in.file.ITF, io); err != nil {
@@ -453,23 +459,24 @@ func readRunInfo(path string) (runInfo, error) {
 }
 
 // convertFile converts an OTLP/JSON file; ok is false for other formats.
-func convertFile(path string, rules *convert.Rules) ([]qtrace.Step, bool, error) {
+func convertFile(path string, rules *convert.Rules) ([]qtrace.Step, string, bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, false, err
+		return nil, "", false, err
 	}
 	if input.Sniff(data) != input.OTLP {
-		return nil, false, nil
+		return nil, "", false, nil
 	}
+	digest := sha256.Sum256(data)
 	tds, err := otelio.ReadTracesData(bytes.NewReader(data))
 	if err != nil {
-		return nil, false, fmt.Errorf("%s: %w", path, err)
+		return nil, "", false, fmt.Errorf("%s: %w", path, err)
 	}
 	steps, err := rules.Steps(tds)
 	if err != nil {
-		return nil, false, fmt.Errorf("%s: %w", path, err)
+		return nil, "", false, fmt.Errorf("%s: %w", path, err)
 	}
-	return steps, true, nil
+	return steps, hex.EncodeToString(digest[:]), true, nil
 }
 
 // markLost declares the losses of the recorders the steps cannot show
@@ -561,9 +568,9 @@ func (chk Check) readITFByTypes(path string, b *binding.Binding, a *itf.Ambiguou
 	if merr != nil {
 		return nil, fmt.Errorf("%s: %w (the model's types, which tell: %v)", path, a, merr)
 	}
-	tr, rerr := itf.ReadFileWith(path, m.Schema())
+	in, rerr := input.ReadITF(path, m.Schema())
 	if rerr != nil {
-		return nil, fmt.Errorf("%s (itf): %w", path, rerr)
+		return nil, rerr // the typed reader already names the input and format
 	}
-	return &input.File{Path: path, Format: input.ITF, ITF: tr}, nil
+	return in, nil
 }

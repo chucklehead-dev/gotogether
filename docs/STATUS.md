@@ -12,7 +12,9 @@ compiled artifact as the evaluator-only replay dependency. Bundle preserves its
 bytes/layout, binding, inputs and exact source-availability coverage, including
 absent-source provenance paths; relocated replay needs no Quint/Node probes.
 Actual compiled results retain their loaded digest and coverage so manifest
-creation refuses changed artifacts or a different judging recipe. Literal
+creation refuses changed artifacts or a different judging recipe. High-level
+input readers also retain exact byte fingerprints and refuse changed/uncaptured
+inputs before recording, across native, converted and typed ITF paths. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
