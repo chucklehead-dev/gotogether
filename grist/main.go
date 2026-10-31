@@ -52,6 +52,9 @@ import (
 //	           (qobs's), each tenant's from its first row kept or -after
 //	           a row, as a relay records them (for a pod's lost file, or an
 //	           operator's comparison after a rewind)
+//	outcomes   inspects a bounded page of stored failed/unknown outcomes and
+//	           original trigger identity; -json emits the same typed data,
+//	           with no callbacks, redrive, schema initialization or migration
 //	prune      deletes step rows and markers older than -steps and
 //	           -markers (retention: both tables grow with every commit)
 //	sizing     runs <app>-sizing, the app's sizing binary (gristload.Main), with
@@ -147,6 +150,7 @@ const mainUsage = `commands:
   resume (-db DB | -db-file PATH) -tenant T   let T's processors go on after a rewind stopped them (grist.ErrRewound),
                                    from their checkpoints: the effects of the triggers after them run again (decide first)
   steps -export (-db DB | -db-file PATH) [-tenant T] [-after N]   every committed step as JSONL on stdout
+  outcomes (-db DB | -db-file PATH) -tenant T [-processor P] [-after N] [-limit 1..1000] [-json]   inspect stored failed/unknown outcomes read-only
   prune (-db DB | -db-file PATH) [-steps AGE] [-markers AGE]   delete step rows and markers older than AGE (a duration, as 720h)`
 
 // mainArgs runs one of Main's commands, args the binary's arguments
@@ -177,6 +181,8 @@ func mainArgs(ctx context.Context, app *App, args []string, stdout, stderr io.Wr
 		return resumeMain(ctx, app, args[1:], stdout)
 	case "steps":
 		return stepsMain(ctx, app, args[1:], stdout)
+	case "outcomes":
+		return outcomesMain(ctx, app, args[1:], stdout)
 	case "prune":
 		return pruneMain(ctx, app, args[1:], stdout)
 	case "help", "-h", "-help", "--help":

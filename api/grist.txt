@@ -7,6 +7,9 @@ const DefaultMemoEntries = 4096
 const DefaultSnapshotAudit = 100
 const DefaultSnapshotEvery = 1000
 const ReplayedHeader = "Idempotent-Replayed"
+const TriggerMissing TriggerStatus = "missing"
+const TriggerReplaced TriggerStatus = "replaced"
+const TriggerRetained TriggerStatus = "retained"
 func Appends(types ...EventName) Option
 func AuditSnapshots(oneIn int) AppOption
 func Authenticated(caller, tenant string) bool
@@ -91,6 +94,7 @@ type App struct
     method (*App) Commands() []string
     method (*App) Dependencies() []*Dependency
     method (*App) Execute(ctx context.Context, s Store, env Envelope, name string, args json.RawMessage) (Receipt, error)
+    method (*App) InspectOutcomes(ctx context.Context, reader OutcomeReader, tenant string, opts OutcomeOptions) (*OutcomeInspection, error)
     method (*App) Processors() []string
     method (*App) Queries() []string
     method (*App) Query(ctx context.Context, s Store, env Envelope, name string, args json.RawMessage) (json.RawMessage, Position, error)
@@ -236,6 +240,7 @@ type EventType[E any] struct
 type Failed struct
     field Processor string `json:"processor" grist:"tag"`
     field Trigger int64 `json:"trigger"`
+    field TriggerID string `json:"triggerId"`
 type Guarantee = catalog.Guarantee
     method (Guarantee) MarshalText() ([]byte, error)
     method (Guarantee) String() string
@@ -268,6 +273,32 @@ type NewerVersionError struct
     field Newest int
     method (*NewerVersionError) Error() string
 type Option struct
+type OutcomeInspection struct
+    field App string `json:"app"`
+    field Tenant string `json:"tenant"`
+    field Coverage string `json:"coverage"`
+    field Observation string `json:"observation"`
+    field Limitations []string `json:"limitations"`
+    field ReadThrough Position `json:"readThrough"`
+    field After Position `json:"after"`
+    field Limit int `json:"limit"`
+    field Processor string `json:"processor,omitempty"`
+    field NextAfter Position `json:"nextAfter"`
+    field HasMore bool `json:"hasMore"`
+    field Outcomes []StoredOutcome `json:"outcomes"`
+type OutcomeOptions struct
+    field After Position
+    field Limit int
+    field Processor string
+type OutcomeReader interface
+    Read(context.Context, string, Selector, Position) ([]Stored, Position, error)
+    ReadEvent(context.Context, string, Position) (Stored, bool, error)
+type OutcomeTrigger struct
+    field Position Position `json:"position"`
+    field ID string `json:"id"`
+    field Status TriggerStatus `json:"status"`
+    field ObservedID string `json:"observedId,omitempty"`
+    field ObservedType string `json:"observedType,omitempty"`
 type Policy func(caller, tenant string) bool
 type Position = store.Position
 type Processor struct
@@ -331,13 +362,25 @@ type SnapshotStore = store.SnapshotStore
 type StartOption struct
 type Store = store.Store
 type Stored = store.Stored
+type StoredOutcome struct
+    field ID string `json:"id"`
+    field Position Position `json:"position"`
+    field Time int64 `json:"time"`
+    field Type string `json:"type"`
+    field Processor string `json:"processor"`
+    field ProcessorKnown bool `json:"processorKnown"`
+    field Trigger OutcomeTrigger `json:"trigger"`
+    field EffectKey string `json:"effectKey"`
+    field Error *string `json:"error,omitempty"`
 type TagPair = store.TagPair
 type Transport interface
     Call(ctx context.Context, c CallInfo, call string, req json.RawMessage) (json.RawMessage, error)
+type TriggerStatus string
 type Unknown struct
     field Processor string `json:"processor" grist:"tag"`
     field Error string `json:"error"`
     field Trigger int64 `json:"trigger"`
+    field TriggerID string `json:"triggerId"`
 type Upcaster struct
     method (Upcaster) Drops(fields ...string) Upcaster
 var ErrBadArgs = errors.New("grist: arguments refused")
@@ -683,6 +726,7 @@ type Store struct
     method (*Store) PruneSnapshots(_ context.Context, t, name, key, keep string, before store.Position) (int, error)
     method (*Store) PutSnapshot(_ context.Context, t string, snap store.Snapshot) error
     method (*Store) Read(_ context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error)
+    method (*Store) ReadEvent(_ context.Context, t string, position store.Position) (store.Stored, bool, error)
     method (*Store) Restore(b *Backup)
     method (*Store) StepCount(_ context.Context, t string) (int64, error)
     method (*Store) Steps(_ context.Context, t string, after int64, limit int) ([]store.StepRow, error)
@@ -704,6 +748,7 @@ type Store struct
     method (*Store) PruneSnapshots(ctx context.Context, t, name, key, keep string, before store.Position) (int, error)
     method (*Store) PutSnapshot(ctx context.Context, t string, snap store.Snapshot) error
     method (*Store) Read(ctx context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error)
+    method (*Store) ReadEvent(ctx context.Context, t string, position store.Position) (store.Stored, bool, error)
     method (*Store) StepCount(ctx context.Context, t string) (int64, error)
     method (*Store) Steps(ctx context.Context, t string, after int64, limit int) ([]store.StepRow, error)
     method (*Store) Tenants(ctx context.Context) ([]string, error)
@@ -715,6 +760,7 @@ type Store struct
 const PostgresNotifyChannel = "grist_changed"
 const SchemaVersion = 2
 func Open(ctx context.Context, db *sql.DB, d Dialect, o Options) (*Store, error)
+func OpenReadOnly(ctx context.Context, db *sql.DB, d Dialect, o Options) (*Store, error)
 func SQLiteDSN(path string, busy time.Duration) string
 type Dialect struct
     method (Dialect) String() string
@@ -744,6 +790,7 @@ type Store struct
     method (*Store) PruneSnapshots(ctx context.Context, t, name, key, keep string, before store.Position) (int, error)
     method (*Store) PutSnapshot(ctx context.Context, t string, snap store.Snapshot) error
     method (*Store) Read(ctx context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error)
+    method (*Store) ReadEvent(ctx context.Context, t string, position store.Position) (store.Stored, bool, error)
     method (*Store) StepCount(ctx context.Context, t string) (int64, error)
     method (*Store) Steps(ctx context.Context, t string, after int64, limit int) ([]store.StepRow, error)
     method (*Store) Tenants(ctx context.Context) ([]string, error)
@@ -868,6 +915,7 @@ type Store interface
     CreateTenant(ctx context.Context, tenant string) error
     Tenants(ctx context.Context) ([]string, error)
     Read(ctx context.Context, tenant string, q Selector, at Position) ([]Stored, Position, error)
+    ReadEvent(ctx context.Context, tenant string, position Position) (Stored, bool, error)
     Append(ctx context.Context, tenant string, b Batch) (Position, error)
     Marker(ctx context.Context, tenant, id string) (Marker, bool, error)
     Checkpoint(ctx context.Context, tenant, processor string) (Position, error)

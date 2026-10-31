@@ -3,6 +3,7 @@ package grist_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -78,7 +79,7 @@ func TestEffectAtMostOnce(t *testing.T) {
 	if counts[1] != 1 || counts[2] != 1 || counts[3] != 1 {
 		t.Errorf("effect runs by key %v: want each once, the failing one too", runs)
 	}
-	want := []string{`noted:{"of":1}`, `grist.failed:{"processor":"note","trigger":2}`, `grist.unknown:{"processor":"note","error":"bank 'down'","trigger":3}`}
+	want := []string{`noted:{"of":1}`, fmt.Sprintf(`grist.failed:{"processor":"note","trigger":2,"triggerId":%q}`, triggerIDAt(log, 2)), fmt.Sprintf(`grist.unknown:{"processor":"note","error":"bank 'down'","trigger":3,"triggerId":%q}`, triggerIDAt(log, 3))}
 	if got := outcomes(log); strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Errorf("outcome events %v, want %v", got, want)
 	}

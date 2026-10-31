@@ -494,11 +494,12 @@ func (pl *poller) run(ctx context.Context) {
 // grist.failed): its step is the processor's skip action
 // (<processor>Skip), not its checkpoint, which follows effect steps.
 type pending struct {
-	trigger Position
-	events  []Event
-	obs     []any // precomputed for a frozen success outcome
-	skip    bool
-	err     string // representation or rule fault, retained in the step
+	trigger   Position
+	triggerID string // original stored identity, retained in native checkpoint evidence
+	events    []Event
+	obs       []any // precomputed for a frozen success outcome
+	skip      bool
+	err       string // representation or rule fault, retained in the step
 }
 
 // handle handles evs (triggers after checkpoint cp, read with the head
@@ -544,10 +545,10 @@ func (pl *poller) handle(ctx context.Context, cp, head Position, evs []Stored) {
 		delivers := pl.p.opts.shape.kind == effectResult
 		switch res.kind {
 		case emitResult:
-			group = append(group, pending{trigger: e.Pos, events: res.events, skip: delivers})
+			group = append(group, pending{trigger: e.Pos, triggerID: e.ID, events: res.events, skip: delivers})
 			continue
 		case failResult:
-			p := pending{trigger: e.Pos, events: []Event{failedEvent(pl.p.name, e.Pos)}, skip: delivers}
+			p := pending{trigger: e.Pos, triggerID: e.ID, events: []Event{failedEvent(pl.p.name, e)}, skip: delivers}
 			if res.blocked || res.invalidEvidence {
 				p.err = res.err.Error()
 			}
@@ -717,7 +718,8 @@ func (pl *poller) commitAt(ctx context.Context, cp Position, group []pending, sl
 	// with its own events: the relay gives each the head after them
 	steps := make([]rowStep, 0, len(group))
 	for _, g := range group {
-		st, err := pl.step(g.trigger, g.events, g.obs, slot, g.skip, kv...)
+		extra := append([]any{"triggerId", g.triggerID}, kv...)
+		st, err := pl.step(g.trigger, g.events, g.obs, slot, g.skip, extra...)
 		if err != nil {
 			pl.pause(ctx)
 			return 0, false
@@ -833,7 +835,7 @@ func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res R
 			break
 		}
 		if try >= pl.p.opts.effectTries {
-			outcome = []Event{failedEvent(pl.p.name, e.Pos)}
+			outcome = []Event{failedEvent(pl.p.name, e)}
 			break
 		}
 		backoff(ctx, try)
@@ -849,7 +851,7 @@ func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res R
 	if ok {
 		obs = res.successObs
 	}
-	return pl.commit(ctx, cp, []pending{{trigger: e.Pos, events: outcome, obs: obs}}, "ok", ok)
+	return pl.commit(ctx, cp, []pending{{trigger: e.Pos, triggerID: e.ID, events: outcome, obs: obs}}, "ok", ok)
 }
 
 // atMostOnce runs an at-most-once Effect for trigger e (checkpoint cp
@@ -862,7 +864,7 @@ func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res R
 // poller's, and its effect is not run).
 func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Result) (Position, bool) {
 	ctx = pl.clocks.workContext(ctx, pl.tenant)
-	head, ok := pl.commitAt(ctx, cp, []pending{{trigger: e.Pos}}, 0, "ok", false)
+	head, ok := pl.commitAt(ctx, cp, []pending{{trigger: e.Pos, triggerID: e.ID}}, 0, "ok", false)
 	if !ok {
 		return 0, false
 	}
@@ -892,9 +894,9 @@ func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Res
 	var na *notApplied
 	switch {
 	case errors.As(err, &na):
-		outcome = []Event{failedEvent(pl.p.name, e.Pos)} // known: it did not happen
+		outcome = []Event{failedEvent(pl.p.name, e)} // known: it did not happen
 	case err != nil:
-		outcome = []Event{unknownEvent(pl.p.name, e.Pos, modelText(err.Error()))} // it may have happened
+		outcome = []Event{unknownEvent(pl.p.name, e, modelText(err.Error()))} // it may have happened
 	case res.onSuccess != nil:
 		outcome = []Event{*res.onSuccess}
 	}

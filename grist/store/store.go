@@ -163,6 +163,11 @@ type Store interface {
 	// q.Limit (0: all), and the position read through (at, or the head).
 	// The events are the reader's own copies (Stored.Clone).
 	Read(ctx context.Context, tenant string, q Selector, at Position) ([]Stored, Position, error)
+	// ReadEvent returns the raw event at exactly position, regardless of type,
+	// or false when that position has no event. It returns ErrUnknownTenant
+	// for a missing tenant and a permanent error for position <= 0. This is
+	// one position's observation, not a snapshot shared with other reads.
+	ReadEvent(ctx context.Context, tenant string, position Position) (Stored, bool, error)
 	// Append commits the batch at the tenant's next positions if its
 	// condition holds, its marker is new and its checkpoint is as
 	// expected, assigning each new event a fresh immutable ID (RetainedIDs

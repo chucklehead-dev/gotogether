@@ -12,6 +12,7 @@ is docs/grist.md §2.11 and docs/grist-platform.md §3.4.
 app serve -db-file /secrets/dsn -addr :8080 -health-addr :8081 -steps /steps/   # the DSN out of ps and the pod spec
 app resume -db-file /secrets/dsn -tenant t1         # after a rewind, once an operator decided: never automatic
 app steps -export -db-file /secrets/dsn -tenant t1  # every committed step as JSONL, as a relay records them
+app outcomes -db-file /secrets/dsn -tenant t1 -limit 100 -json  # stored outcomes and independent trigger observations; no redrive
 app prune -db-file /secrets/dsn -steps 720h -markers 2160h   # retention: step rows and markers past the horizon
 ```
 
@@ -62,6 +63,31 @@ no failed/unknown event is fabricated for retirement. Check the dependency
 records and native telemetry before resuming. This is an admission fence, not
 revocation of an already-issued append/call or protection against an unobserved
 restore. Do not automatically replay or redrive a late completion.
+
+## Inspecting stored outcomes
+
+`app outcomes -tenant T (-db DB | -db-file PATH) [-processor P] [-after N]
+[-limit 1..1000] [-json]` and `App.InspectOutcomes` expose the same bounded typed
+page. Default limit is 100; use `hasMore`/`nextAfter` for the next page. The CLI
+opens only an existing current schema without migration; SQLite uses `mode=ro`,
+and PostgreSQL can use SELECT-only credentials. No callbacks or writes run.
+
+Both `Failed` and `Unknown` require captured `TriggerID`. Original provenance
+stays separate from a raw `Store.ReadEvent` lookup: retained, missing, or replaced,
+even when the replacement's type is no longer registered. Retired processors stay
+visible. The derived effect key is not proof that an external call ran. Missing
+or malformed original IDs are errors; never infer or backfill them from today's
+occupant. Framework identity remains opaque to the generated model.
+
+JSON and text share explicit coverage and limitations: stored failed/unknown
+records only, independent reads rather than a snapshot. Restore may change the
+history between pages/lookups; `readThrough` is the page's read position, not a
+history token. Restart inspection after reconciling a changed history. Unknown
+has stored error text, failed does not. Failed includes handler failures and
+exhausted ALO attempts, so no universal safe-to-retry conclusion follows. Absence
+of outcomes can mean success, pending/crashed/lost work or a retired completion;
+the list is not a complete reconciliation queue. Use native steps and dependency
+records too. Do not add automatic redrive or resume based on this inspection.
 
 ## Simulating it
 

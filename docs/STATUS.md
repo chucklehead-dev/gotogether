@@ -7,7 +7,19 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-In-flight rewind follow-up (current branch): observed rewinds retire the node's
+Stored-outcome inspection follow-up (current branch): both native Failed/Unknown
+bodies now require captured TriggerID, and checkpoint telemetry exposes it too.
+App.InspectOutcomes and `<app> outcomes [-json]` share bounded typed pages, original
+provenance, raw retained/missing/replaced observations and explicit limitations.
+Store.ReadEvent supports raw exact positions across all tiers, so unfamiliar
+replacement types are visible. OpenReadOnly checks only an existing current SQL
+schema and rejects all mutators; the CLI opens SQLite with mode=ro. Page and
+trigger lookups are independent reads, not snapshots, and stored outcomes cannot
+enumerate every pending/lost/retired completion or authorize redrive. The logical
+model remains identity-opaque; native provenance and store contracts carry these
+facts. Old position-only outcomes are refused without reconstruction.
+
+In-flight rewind follow-up (PR #30): observed rewinds retire the node's
 processor work across resume. Late callbacks retain truthful native completion
 records with the original ID/key and pinned causal clock, while retired work
 cannot retry or submit checkpoints/domain outcomes. Retired read/append answers
@@ -458,8 +470,8 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I25: read-only stored failure/unknown-outcome inspection | S–M | first persist the original trigger ID in both native outcome bodies (currently processor + position only), then expose retained/missing/replaced identity without inferring it from the current occupant or enabling automatic redrive |
-| 2 | Reassess a broader core/product blocker after inspection | S–M | review independent usage friction and recent evidence before expanding Grist administration; atomic stale-history guards require a concrete store contract and test witness |
+| 1 | Core: scoped captured-transition conformance assertion | S–M | counters' paused incident and requeue's storm check both hand-walk actor conformance; replace those ad hoc checks without claiming settlement, eventual properties or composition success; empty/unjudged evidence must stay unknown and native report verdicts unchanged |
+| alternative | I21: compiled-model manifest and portable replay | M | validate currently refuses compiled + manifest; a bounded relocated bundle could preserve native pass/fail/no-verdict without Quint for already-supported compiled evaluation |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 

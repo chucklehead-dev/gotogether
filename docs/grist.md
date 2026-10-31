@@ -1040,6 +1040,17 @@ docs/grist-platform.md §3.4):
   be revoked, and an unobserved restore is not fenced. Operator reconciliation
   remains necessary; no failed/unknown event is invented for retired work.
 
+Stored outcome inspection (`App.InspectOutcomes`, `<app> outcomes [-json]`) is
+read-only and bounded: native failed/unknown bodies carry the original trigger
+ID; raw `Store.ReadEvent` observations distinguish retained, missing and replaced
+identities without filtering unfamiliar event types. JSON and text share coverage
+and limitations. Page reads and trigger lookups are independent, not a snapshot
+across restore. These are stored outcomes only, not all pending/lost/retired
+completions or a safe-redrive queue. `sqlstore.OpenReadOnly` opens a current schema
+without initialization/migration and refuses mutations; the CLI opens SQLite
+files in read-only mode. Native identity is deliberately outside the logical
+model projection, as stored event IDs already are.
+
 ## 3. What a grist application gets from gotogether
 
 This is the reason for grist. Each subsection is something an

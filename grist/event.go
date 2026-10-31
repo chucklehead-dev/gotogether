@@ -236,7 +236,17 @@ func scalars(typ reflect.Type, body []byte) (strs []string, ints []int64, err er
 		return nil, nil, err
 	}
 	v = v.Elem()
+	// Built-in outcome identity is native provenance, like Stored.ID. The
+	// current model projects logical event fields and keeps identities opaque;
+	// do not silently extend this exception to application fields.
+	builtinOutcome := typ == reflect.TypeFor[Failed]() || typ == reflect.TypeFor[Unknown]()
+	if builtinOutcome && !validTriggerID(v.FieldByName("TriggerID").String()) {
+		return nil, nil, fmt.Errorf("built-in outcome triggerId must be a canonical immutable trigger ID: restore valid outcome data; do not infer identity from the current event at its trigger position")
+	}
 	for i := 0; i < typ.NumField(); i++ {
+		if builtinOutcome && typ.Field(i).Name == "TriggerID" {
+			continue
+		}
 		if !typ.Field(i).IsExported() {
 			continue
 		}
@@ -273,6 +283,8 @@ const failedType = "grist.failed"
 type Failed struct {
 	Processor string `json:"processor" grist:"tag"`
 	Trigger   int64  `json:"trigger"`
+	// TriggerID is the immutable identity of the original trigger.
+	TriggerID string `json:"triggerId"`
 }
 
 func failedInfo() *eventInfo {
@@ -292,6 +304,8 @@ type Unknown struct {
 	Processor string `json:"processor" grist:"tag"`
 	Error     string `json:"error"`
 	Trigger   int64  `json:"trigger"`
+	// TriggerID is the immutable identity of the original trigger.
+	TriggerID string `json:"triggerId"`
 }
 
 func unknownInfo() *eventInfo {
@@ -300,14 +314,14 @@ func unknownInfo() *eventInfo {
 
 // unknownEvent is the grist.unknown event for processor's trigger, whose
 // effect returned err.
-func unknownEvent(processor string, trigger Position, err string) Event {
-	body, _ := json.Marshal(Unknown{Processor: processor, Error: err, Trigger: int64(trigger)})
+func unknownEvent(processor string, trigger Stored, err string) Event {
+	body, _ := json.Marshal(Unknown{Processor: processor, Error: err, Trigger: int64(trigger.Pos), TriggerID: trigger.ID})
 	return Event{Type: unknownType, Version: 1, Tags: []TagPair{{Key: "processor", Value: processor}}, Body: body}
 }
 
 // failedEvent is the grist.failed event for processor's trigger.
-func failedEvent(processor string, trigger Position) Event {
-	f := Failed{Processor: processor, Trigger: int64(trigger)}
+func failedEvent(processor string, trigger Stored) Event {
+	f := Failed{Processor: processor, Trigger: int64(trigger.Pos), TriggerID: trigger.ID}
 	body, _ := json.Marshal(f)
 	return Event{Type: failedType, Version: 1, Tags: []TagPair{{Key: "processor", Value: processor}}, Body: body}
 }

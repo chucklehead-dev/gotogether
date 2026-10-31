@@ -48,6 +48,7 @@ func Checks() []Check {
 	return []Check{
 		{"DensePositions", densePositions},
 		{"EventIdentities", eventIdentities},
+		{"ExactEventReads", exactEventReads},
 		{"RetainedIdentities", retainedIdentities},
 		{"ConcurrentRetainedIdentities", concurrentRetainedIdentities},
 		{"ConditionsAgainstBruteForce", conditionsAgainstBruteForce},

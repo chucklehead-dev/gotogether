@@ -8,6 +8,15 @@ and adds a line here.
 
 ## Unreleased
 
+- Added read-only Grist outcome inspection: `App.InspectOutcomes` and
+  `<app> outcomes ... [-json]` expose bounded pages of stored failed/unknown
+  outcomes and independent retained/missing/replaced trigger observations.
+  Both built-in bodies now require the original `TriggerID`; checkpoint telemetry
+  carries it too. Position-only outcomes are refused without reconstruction.
+  `Store.ReadEvent` reads raw exact positions across all store tiers, including
+  unregistered types. `sqlstore.OpenReadOnly` refuses schema initialization,
+  migration and mutation; the CLI opens existing SQLite files with `mode=ro`.
+
 - Grist retires in-flight processor work when a node observes a rewind, even
   across resume. Started callbacks retain truthful native completion evidence;
   retired work cannot retry or submit domain outcomes or checkpoint moves.
