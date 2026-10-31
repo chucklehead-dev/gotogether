@@ -9,6 +9,7 @@ description: Start here for checking Go code against a Quint model with gotogeth
 
 | Question | Skill |
 |---|---|
+| A synchronous Go library, from nothing | `gotogether init -kind library NAME`: actual observed kernel calls, snapshots and a planted aliasing bug |
 | A new HTTP service, from nothing | `gotogether init -kind http NAME`: a green project to change ([references/first-hour.md](references/first-hour.md)) |
 | A new component: what order, which tests, CI? | gotogether-workflow (model first) |
 | A team arrives with existing code and no model | gotogether-migration (walked through in examples/migrate-payments) |

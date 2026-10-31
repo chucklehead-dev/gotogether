@@ -139,8 +139,16 @@ quint run model.qnt --main design --mbt --max-steps 5 --n-traces 1 --out-itf /tm
 # look at mbt::actionTaken and mbt::nondetPicks in /tmp/t.itf.json: every action
 # named, every parameter picked under its own name
 quint test model.qnt --main design                          # named `run ...Test` scenarios
-gotogether scaffold -spec model.qnt -module M -out m.binding.yaml   # binding skeleton; parameters default to same-named step fields
+gotogether scaffold -spec model.qnt -module M -invariants safe -eventually complete -out m.binding.yaml   # replace property names with the model's
 ```
+
+Scaffold never guesses a Boolean val's role. Select actual safety names with
+`-invariants`, completion names with `-eventually`; unselected candidates stay
+visible as comments. Optional `-holds`/`-allows` classify only selected safety
+vals for simulation; when either is used, classify every selected invariant
+exactly once. `-system` takes property roles from the binding instead of flags.
+Use `-no-properties` only to deliberately check conformance
+without properties. Invalid selections leave no output file.
 
 Backends: `--backend rust` (default, fast) or `--backend typescript`.
 gotogether reads `QUINT_BACKEND`.

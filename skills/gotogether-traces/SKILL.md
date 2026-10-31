@@ -27,8 +27,10 @@ and whether the invariants hold.
    a call that may never hear back; `//quint:action`; slog; `convert`.
 2. A program: a recorder on `qobs.FileSink(path, qobs.PerStep)`, ended
    by `rec.Close()`.
-3. `gotogether scaffold -spec ... -module ...`; add only `expect`,
-   `outcomes`, `restart`, `constants`, `invariants`.
+3. `gotogether scaffold -spec ... -module ... -invariants SAFETY -eventually COMPLETION`;
+   choose actual model vals, omitting an unused role. Add `expect`, `outcomes`,
+   `restart` and `constants`. Scaffold does not infer properties; use
+   `-no-properties` only for a deliberately conformance-only binding.
 4. `gotogether lint -binding b.yaml -src ./pkg`. For agent/editor evidence add
    `-json`: inspect findings and requested-check statuses, including blocked
    checks. A clean static lint report does not establish trace conformance.

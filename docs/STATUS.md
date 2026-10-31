@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Component-shrinking follow-up (current branch): default identity preserves named
+Library-entry follow-up (current branch): `init -kind library` supplies an
+ordinary Go snapshot-library workflow with actual observed calls, a finite
+model, a planted aliasing contrast and portable evidence/replay. It extends
+workflow coverage demonstrated by the hand-authored Goo trial; it does not
+establish unaided or independent-maintainer adoption. Binding scaffold property
+roles are now explicit, addressing the HTTP/SQL trial's completion-as-invariant
+friction. No new stream facade or automatic model inference is introduced.
+
+Component-shrinking follow-up (merged PR #12): default identity preserves named
 local/protocol obligations by component role, target, binding, kind and name,
 with multiplicity, alongside primary actor failures. `ActionShrink.System`
 reuses registered checks for every fresh rerun. Structured identities survive in
@@ -68,7 +76,7 @@ for every native history, including navigation. `Report.Composition` is canonica
 normal conformance assertions include applicable checks. Wrong histories, wrong
 service bindings, unknown obligations and order limits cannot silently pass.
 Receipts preserve model-authored diagnostics. See [grist-composition.md](grist-composition.md).
-PRs #2, #3, #4, #5, #6, #7, #8, #9, #10 and #11 are merged; the single current navigation contract is nav/2.
+PRs #2, #3, #4, #5, #6, #7, #8, #9, #10, #11 and #12 are merged; the single current navigation contract is nav/2.
 
 Check-receipt first increment (merged PR #3): validation reports and run
 navigation share structured statuses, ordering-search limits and assumed effects
@@ -81,7 +89,7 @@ exploration evidence and run manifests. `evidence -session` filters the
 suite before coverage and expectation checks; unscoped completeness checks
 require explicit `-history`. Use a fresh ID and `go test -count=1`.
 
-**As of 2026-10-31 (component-shrinking branch).** GR4's first composition experiment is implemented
+**As of 2026-10-31 (library-starter branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
 `e9f8c08e` so scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
@@ -272,18 +280,18 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | One adopter-driven capability (outbound streams or library starter are candidates) | M | the HTTP/SQLite rehearsal exposed no missing adapter; use concrete next-trial blockers before adding a facade |
-| 2 | Further lint/editor/onboarding breadth, only from adopter blockers | S-M | the canonical report and executable lint walkthrough are built; select integration work from observed friction |
+| 1 | Apply the library starter in an external adopter's actual contract | M | validate adaptation and missing capabilities before adding another facade |
+| 2 | Further lint/editor/onboarding breadth, only from adopter blockers | S-M | use observed friction after the starter and explicit-property scaffold increment |
 
 Do not start all tracks at once. Worker completion and the bounded HTTP/SQLite
-rehearsal are merged in PR #9; the first finite I4 slice is merged in
-PR #10. The structured core lint report and executable lint walkthrough are
-merged in PR #11. The first component-aware shrink slice is implemented on this
-branch; broader peer/conformance identity support needs typed evidence and an
-adoption case. Rotate to one adopter-driven capability before expanding shrink
-scope or editor/onboarding breadth. Further inventory/diagnostic expansion,
-cycles, clusters and new platform facades wait for evidence. GR10c down-process
-settlement has separate semantics and stays separate from GR10b.
+rehearsal are merged in PR #9; finite pinned choices in PR #10, structured lint
+in PR #11, and the first component-aware shrink slice in PR #12. This branch
+adds a bounded library entry point and fixes the observed scaffold property-role
+mistake. An external adaptation should guide the next capability; outbound
+streams remain a candidate only if that evidence requires them. Broader peer or
+conformance shrink identities still need typed evidence and an adoption case.
+Further inventory/diagnostic expansion, cycles, clusters and platform facades
+wait for evidence. GR10c down-process settlement stays separate from GR10b.
 
 The span round-trip and inventory trials retain explicit limits; they do not
 establish generic third-party HTTP inference or unaided onboarding. R5 is

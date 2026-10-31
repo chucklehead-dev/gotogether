@@ -30,10 +30,17 @@ var initData embed.FS
 
 // initKinds are the kinds of service init writes, and what to read for
 // those it does not yet.
-var initKinds = map[string]string{
-	"http":  "",
-	"grpc":  "not written by init yet: start from examples/grpcledger (simgrpc serves a generated gRPC service in qenv)",
-	"queue": "not written by init yet: start from examples/streams (a consumer and an outbox on Kafka, Kinesis or a simulated log)",
+type initKind struct {
+	unavailable, summary string
+	mutant, line, bug    string
+}
+
+// initKinds is the project catalog and each source contrast. Read-only.
+var initKinds = map[string]initKind{
+	"http":    {summary: "an HTTP service, its model and binding, a simulated and a real-socket test, a mutant", mutant: "offByOne", line: offByOneLine, bug: offByOneBug},
+	"library": {summary: "a Go library with immutable snapshots, its model and binding, observed-call tests and a snapshot-aliasing mutant", mutant: "aliasSnapshot", line: "return Snapshot{values: maps.Clone(s.values)}", bug: "return Snapshot{values: s.values} // the bug: the snapshot aliases mutable state"},
+	"grpc":    {unavailable: "not written by init yet: start from examples/grpcledger (simgrpc serves a generated gRPC service in qenv)"},
+	"queue":   {unavailable: "not written by init yet: start from examples/streams (a consumer and an outbox on Kafka, Kinesis or a simulated log)"},
 }
 
 // initVars are what a project's templates see.
@@ -56,23 +63,23 @@ const (
 	offByOneBug  = "if left > qty { // the bug: the last unit of a sku is refused"
 )
 
-// runInit writes a new service's project: `gotogether init -kind http NAME`.
+// runInit writes a new project: `gotogether init -kind http|library NAME`.
 func runInit(stdout, stderr io.Writer, args []string) error {
 	fset := commandFlags("init")
-	kind := fset.String("kind", "http", "the kind of service: http (grpc and queue: not yet, init names the example to start from)")
+	kind := fset.String("kind", "http", "the project kind: http or library (grpc and queue name an example to start from)")
 	dir := fset.String("dir", "", "where to write the project (default ./NAME; it must be empty or absent)")
 	module := fset.String("module", "", "its module path (default example.com/NAME)")
 	replace := fset.String("replace", "", "require gotogether from a checkout at this path (resolved against the current directory), not at this CLI's version")
 	noTidy := fset.Bool("no-tidy", false, "write the files only: skip go get and go mod tidy (which download the toolkit)")
 	fset.Parse(args)
 	if fset.NArg() != 1 {
-		return needs("init", "a service's name")
+		return needs("init", "a project's name")
 	}
 	name := fset.Arg(0)
-	if why, ok := initKinds[*kind]; !ok {
-		return fmt.Errorf("init -kind %s: the kinds are http, grpc and queue", *kind)
-	} else if why != "" {
-		return fmt.Errorf("init -kind %s: %s", *kind, why)
+	if choice, ok := initKinds[*kind]; !ok {
+		return fmt.Errorf("init -kind %s: the kinds are http, library, grpc and queue", *kind)
+	} else if choice.unavailable != "" {
+		return fmt.Errorf("init -kind %s: %s", *kind, choice.unavailable)
 	}
 	if err := checkServiceName(name); err != nil {
 		return err
@@ -97,7 +104,7 @@ func runInit(stdout, stderr io.Writer, args []string) error {
 	if err := writeInitGoMod(*dir, *module, *replace); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "wrote %s (module %s): an HTTP service, its model and binding, a simulated and a real-socket test, a mutant\n", *dir, *module)
+	fmt.Fprintf(stdout, "wrote %s (module %s): %s\n", *dir, *module, initKinds[*kind].summary)
 	if *noTidy {
 		fmt.Fprintf(stdout, "next: cd %s && go mod tidy && go test -short -v ./...\n", *dir)
 		return nil
@@ -121,7 +128,7 @@ func runInit(stdout, stderr io.Writer, args []string) error {
 func checkServiceName(name string) error {
 	switch {
 	case !serviceName.MatchString(name):
-		return fmt.Errorf("init: %q: name the service with lower-case letters and digits, a letter first (stock, orders2): it is the Go package's name, the model's module and the server's host", name)
+		return fmt.Errorf("init: %q: name the service with lower-case letters and digits, a letter first (stock, orders2): it is the Go package's name and the model's module", name)
 	case token.IsKeyword(name) || name == "main":
 		return fmt.Errorf("init: %q is Go's own (a keyword, or main's package): name the service otherwise", name)
 	case quintnames.Reserved(name):
@@ -131,7 +138,7 @@ func checkServiceName(name string) error {
 }
 
 // writeProject renders kind's templates into dir, then the mutant: a
-// copy of the service's file with one line changed.
+// copy of the implementation file with one line changed.
 func writeProject(dir, kind string, v initVars) error {
 	root := path.Join("initdata", kind)
 	var service []byte
@@ -153,7 +160,7 @@ func writeProject(dir, kind string, v initVars) error {
 		}
 		rel := strings.TrimSuffix(strings.TrimPrefix(p, root+"/"), ".tmpl")
 		switch rel {
-		case "service.go":
+		case "service.go", "library.go":
 			rel = v.Name + ".go"
 			service = b.Bytes()
 		case "model/model.qnt":
@@ -175,14 +182,15 @@ func writeProject(dir, kind string, v initVars) error {
 	if service == nil {
 		return nil
 	}
-	if bytes.Count(service, []byte(offByOneLine)) != 1 {
-		return fmt.Errorf("init: the service's template has no single %q for its mutant", offByOneLine) // the template's own bug
+	contrast := initKinds[kind]
+	if bytes.Count(service, []byte(contrast.line)) != 1 {
+		return fmt.Errorf("init: the implementation template has no single %q for its mutant", contrast.line) // the template's own bug
 	}
-	mutant := bytes.Replace(service, []byte(offByOneLine), []byte(offByOneBug), 1)
+	mutant := bytes.Replace(service, []byte(contrast.line), []byte(contrast.bug), 1)
 	if mutant, err = format.Source(mutant); err != nil {
 		return fmt.Errorf("init: the mutant does not parse: %w", err)
 	}
-	return writeNew(filepath.Join(dir, "testdata", "mutants", "offByOne", v.Name+".go"), mutant, false)
+	return writeNew(filepath.Join(dir, "testdata", "mutants", contrast.mutant, v.Name+".go"), mutant, false)
 }
 
 // writeNew writes a new file, its directories made.

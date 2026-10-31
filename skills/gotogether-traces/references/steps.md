@@ -60,7 +60,7 @@ the sinks and who closes them.
 ## 2. Write the binding
 
 ```sh
-gotogether scaffold -spec model/bank.qnt -module bank -out bank.binding.yaml
+gotogether scaffold -spec model/bank.qnt -module bank -invariants noOverdraft -holds noOverdraft -out bank.binding.yaml
 ```
 
 ```yaml

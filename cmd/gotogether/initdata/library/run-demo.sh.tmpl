@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Fresh synchronous library observations, exact validation and bundled replay.
+set -euo pipefail
+cd "$(dirname "$0")"
+# The generated project is checked against its own go.mod.
+export GOWORK=off
+for tool in go quint gotogether python3; do
+  command -v "$tool" >/dev/null || { echo "$tool is required on PATH" >&2; exit 2; }
+done
+case "${MUTANT:-}" in
+  "") expected=0 ;;
+  aliasSnapshot) expected=1 ;;
+  *) echo "unknown MUTANT=$MUTANT (choose aliasSnapshot)" >&2; exit 2 ;;
+esac
+# Every invocation preserves its own logs and manifests, without overwriting
+# evidence from the faithful run or a preceding mutant run.
+mkdir -p logs
+evidence=$(mktemp -d "$PWD/logs/run-XXXXXXXX")
+args=()
+if [ -n "${MUTANT:-}" ]; then
+  python3 - "$PWD" "$evidence/overlay.json" <<'PY'
+import json, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+source = root / "{{.Name}}.go"
+mutant = root / "testdata/mutants/aliasSnapshot/{{.Name}}.go"
+pathlib.Path(sys.argv[2]).write_text(json.dumps({"Replace": {str(source): str(mutant)}}))
+PY
+  args=(-overlay "$evidence/overlay.json")
+fi
+GOTOGETHER_DEMO_DIR="$evidence" GOTOGETHER_DEMO_MUTANT="${MUTANT:-}" \
+  go test "${args[@]}" -count=1 -run '^TestDemoEvidence$' -v .
+check_report() {
+  local status=0 name="$1"
+  shift
+  gotogether validate -json "$@" > "$evidence/$name.json" || status=$?
+  if [ "$status" -ne "$expected" ]; then
+    echo "$name exited $status, expected $expected" >&2
+    cat "$evidence/$name.json" >&2
+    exit 1
+  fi
+  python3 - "$evidence/$name.json" "$expected" <<'PY'
+import json, sys
+report = json.load(open(sys.argv[1]))
+expected = int(sys.argv[2])
+actors = report["actors"]
+assert len(actors) == 1, report
+actor = actors[0]
+if expected:
+    failure = actor["failures"][0]
+    assert actor["conformance"] == "fail" and failure["kind"] == "state", report
+    assert failure["record"]["action"] == "read", report
+else:
+    assert actor["conformance"] == "pass", report
+PY
+}
+check_report validate -binding {{.Name}}.binding.yaml -dir "$evidence/validate" "$evidence/steps.jsonl"
+check_report replay -replay "$evidence/manifest.json" -dir "$evidence/replay"
+printf 'Evidence: %s\n' "$evidence"

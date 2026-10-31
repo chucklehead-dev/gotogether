@@ -126,9 +126,9 @@ func TestInitRefuses(t *testing.T) {
 		{[]string{"item"}, "quint keeps"},
 		{[]string{"-kind", "grpc", "ledger"}, "examples/grpcledger"},
 		{[]string{"-kind", "queue", "jobs"}, "examples/streams"},
-		{[]string{"-kind", "soap", "x"}, "the kinds are http, grpc and queue"},
+		{[]string{"-kind", "soap", "x"}, "the kinds are http, library, grpc and queue"},
 		{[]string{"-replace", t.TempDir(), "-dir", filepath.Join(t.TempDir(), "s"), "shop"}, "no go.mod there"},
-		{nil, "init needs a service's name"},
+		{nil, "init needs a project's name"},
 	} {
 		err := runInit(io.Discard, io.Discard, c.args)
 		if err == nil || !strings.Contains(err.Error(), c.want) {

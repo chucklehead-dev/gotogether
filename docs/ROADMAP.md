@@ -37,10 +37,14 @@ The first component-aware shrinking slice is implemented: named local/protocol
 obligations retain component/binding identity through real reruns, calibration
 and artifacts, with explicit refusal outside the supported receipt evidence.
 The non-inventory acceptance case is a plain qenv producer/consumer counter.
-Select one adopter-driven capability next; further shrinking, lint, editor and
-onboarding breadth waits for concrete blockers. Select the next adapter or starter from the
-adoption results; outbound streams are a candidate, not a committed catalog-wide
-expansion. Do not start all these tracks at once. Tags remain the maintainer's
+The synchronous library starter is implemented on this branch: actual kernel
+observations, immutable snapshots, a source-aliasing contrast and fresh manifest
+replay without a simulated environment. It is a bounded entry point, not model
+inference. Explicit scaffold property roles also address the HTTP/SQL trial's
+reported completion-as-invariant mistake. Use the starter in an external
+adopter's actual contract next; further shrinking, lint, editor and onboarding
+breadth follows concrete blockers. Existing streams already covers simulated,
+Kafka and Kinesis tiers; a new outbound facade still needs evidence. Do not start all these tracks at once. Tags remain the maintainer's
 call. See HISTORY's "Breadth and core lessons review, 2026-10-30" for tradeoffs.
 
 GR4's first increment is built: acyclic peer graphs, one store/node/API

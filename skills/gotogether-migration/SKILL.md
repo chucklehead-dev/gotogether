@@ -34,7 +34,8 @@ code changes. The model is the specification: requirements live in the
    `possible` scenario covering a whole lifecycle; each "must never" a
    `val` in `holds` or `allows`; each "eventually" an eventual val.
 4. **Bind and simulate it alone**: `gotogether scaffold -spec model.qnt
-   -module M -out m.binding.yaml` (constants as templates over a run,
+   -module M -invariants SAFETY -eventually COMPLETION -out m.binding.yaml`
+   (replace the property names, omitting an unused role; constants as templates over a run,
    the scenarios under `simulate:`), then `gotogether simulate -binding
    m.binding.yaml` until every scenario is reached and every property
    is classified.

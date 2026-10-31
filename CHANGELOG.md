@@ -8,6 +8,15 @@ and adds a line here.
 
 ## Unreleased
 
+- `gotogether init -kind library` writes a synchronous snapshot library,
+  its finite model/binding, observing tests, a source-aliasing mutant and a
+  fresh-evidence/replay demo. Production code needs no toolkit instrumentation
+  or simulator.
+- Binding scaffolding now requires explicit safety/completion selections (or
+  `-no-properties`). It no longer treats every Boolean val as an invariant or
+  model guarantee. Optional `-holds`/`-allows` classify selected safety vals;
+  invalid selections fail before writing output.
+
 - Action shrinking: default failure identity now preserves named local/protocol
   obligations by component role, target, binding, kind and name, alongside primary
   actor failures. `ActionShrink.System` reuses registered checks for every rerun;
