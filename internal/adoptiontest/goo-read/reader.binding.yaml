@@ -1,0 +1,62 @@
+format: gotogether.binding/2
+spec: model/reader.qnt
+module: reader
+constants:
+  CASES: '0.to(15)'
+actions:
+  read:
+    expect: >-
+      accepted == {{.obs.accepted}} and
+      (not(accepted)) == {{.obs.hasError}} and
+      (not(accepted)) == {{.obs.nilDefinition}} and
+      fieldCount == {{.obs.fieldCount}} and measureCount == {{.obs.measureCount}} and
+      (if (accepted) "cohort" else "") == {{.obs.name}} and
+      (if (accepted) "goo/v1alpha1" else "") == {{.obs.apiVersion}} and
+      (if (accepted) "subject-facts" else "") == {{.obs.kind}} and
+      (if (accepted) "subject" else "") == {{.obs.subjectKey}} and
+      (if (accepted) "demo.facts" else "") == {{.obs.binding}} and
+      (if (accepted) "bool" else "") == {{.obs.healthyType}} and
+      (if (accepted) "healthy" else "") == {{.obs.dimension}} and
+      (if (accepted) "count" else "") == {{.obs.totalOp}} and
+      (lastCase == 1) == {{.obs.populationTrue}} and
+      (lastCase == 1) == {{.obs.whereTrue}} and
+      (if (lastCase == 1) "ratio" else "") == {{.obs.fractionOp}} and
+      (if (lastCase == 1) "good" else "") == {{.obs.numerator}} and
+      (if (lastCase == 1) "total" else "") == {{.obs.denominator}}
+invariants: [boundedCase, acceptedShape]
+eventually: []
+simulate:
+  holds: [boundedCase, acceptedShape]
+  possible:
+    - name: valid_count
+      steps: ['read(caseID = 0)']
+    - name: valid_ratio
+      steps: ['read(caseID = 1)']
+    - name: unknown_top
+      steps: ['read(caseID = 2)']
+    - name: unknown_source
+      steps: ['read(caseID = 3)']
+    - name: unknown_measure
+      steps: ['read(caseID = 4)']
+    - name: unknown_predicate
+      steps: ['read(caseID = 5)']
+    - name: extra_document
+      steps: ['read(caseID = 6)']
+    - name: invalid_version
+      steps: ['read(caseID = 7)']
+    - name: missing_subject_key
+      steps: ['read(caseID = 8)']
+    - name: unsupported_type
+      steps: ['read(caseID = 9)']
+    - name: no_measures
+      steps: ['read(caseID = 10)']
+    - name: invalid_predicate_type
+      steps: ['read(caseID = 11)']
+    - name: invalid_ratio_reference
+      steps: ['read(caseID = 12)']
+    - name: invalid_binding
+      steps: ['read(caseID = 13)']
+    - name: malformed_yaml
+      steps: ['read(caseID = 14)']
+    - name: empty_input
+      steps: ['read(caseID = 15)']

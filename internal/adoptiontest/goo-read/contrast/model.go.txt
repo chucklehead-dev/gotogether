@@ -1,0 +1,228 @@
+// Package subjectfacts implements a portable aggregate subset over prepared
+// subject facts. It does not infer lifecycle outcomes from raw telemetry.
+// Native OTel measurement binding and evaluation live in the measurements package.
+package subjectfacts
+
+import (
+	"fmt"
+	"io"
+	"regexp"
+	"sort"
+	"strings"
+	"unicode/utf8"
+
+	"gopkg.in/yaml.v3"
+)
+
+type Definition struct {
+	APIVersion string             `yaml:"apiVersion" json:"apiVersion"`
+	Name       string             `yaml:"name" json:"name"`
+	Source     Source             `yaml:"source" json:"source"`
+	Population *Predicate         `yaml:"population,omitempty" json:"population,omitempty"`
+	Dimensions map[string]string  `yaml:"dimensions" json:"dimensions"`
+	Measures   map[string]Measure `yaml:"measures" json:"measures"`
+}
+
+type Source struct {
+	Kind       string              `yaml:"kind" json:"kind"`
+	Fields     map[string]string   `yaml:"fields" json:"fields"`
+	Enums      map[string][]string `yaml:"enums,omitempty" json:"enums,omitempty"`
+	SubjectKey []string            `yaml:"subjectKey" json:"subjectKey"`
+	Bindings   map[string]string   `yaml:"bindings" json:"bindings"`
+}
+
+// Predicate is deliberately bounded. CEL/KCL authoring can eventually lower
+// into a typed expression tree; arbitrary SQL strings are not accepted here.
+type Predicate struct {
+	Field string `yaml:"field" json:"field"`
+	Eq    any    `yaml:"eq" json:"eq"`
+}
+
+type Measure struct {
+	Op          string     `yaml:"op" json:"op"`
+	Where       *Predicate `yaml:"where,omitempty" json:"where,omitempty"`
+	Numerator   string     `yaml:"numerator,omitempty" json:"numerator,omitempty"`
+	Denominator string     `yaml:"denominator,omitempty" json:"denominator,omitempty"`
+	UnknownWhen []string   `yaml:"unknownWhen,omitempty" json:"unknownWhen,omitempty"`
+}
+
+var identifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func Read(r io.Reader) (*Definition, error) {
+	dec := yaml.NewDecoder(r)
+	dec.KnownFields(false)
+	var d Definition
+	if err := dec.Decode(&d); err != nil {
+		return nil, fmt.Errorf("definition: %w", err)
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		return nil, fmt.Errorf("definition must contain exactly one YAML document")
+	}
+	if err := d.Validate(); err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
+func names[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func validTable(s string) bool {
+	parts := strings.Split(s, ".")
+	if len(parts) > 3 {
+		return false
+	}
+	for _, p := range parts {
+		if !identifier.MatchString(p) {
+			return false
+		}
+	}
+	return true
+}
+
+func (d *Definition) checkPredicate(p *Predicate) error {
+	if p == nil {
+		return nil
+	}
+	typ, ok := d.Source.Fields[p.Field]
+	if !ok {
+		return fmt.Errorf("unknown predicate field %q", p.Field)
+	}
+	if p.Field == "evaluation_id" {
+		return fmt.Errorf("evaluation_id is bound by the execution context, not a predicate")
+	}
+	switch typ {
+	case "string":
+		v, ok := p.Eq.(string)
+		if !ok || !utf8.ValidString(v) {
+			return fmt.Errorf("%s requires a UTF-8 string literal", p.Field)
+		}
+		if values, exists := d.Source.Enums[p.Field]; exists && !contains(values, v) {
+			return fmt.Errorf("%s requires a declared enum value", p.Field)
+		}
+	case "bool":
+		if _, ok := p.Eq.(bool); !ok {
+			return fmt.Errorf("%s requires a bool literal", p.Field)
+		}
+	}
+	return nil
+}
+
+func (d *Definition) Validate() error {
+	if d.APIVersion != "goo/v1alpha1" || !identifier.MatchString(d.Name) {
+		return fmt.Errorf("require apiVersion goo/v1alpha1 and a simple identifier name")
+	}
+	if d.Source.Kind != "subject-facts" || d.Source.Fields["evaluation_id"] != "string" {
+		return fmt.Errorf("source must be subject-facts with a string evaluation_id")
+	}
+	for field, typ := range d.Source.Fields {
+		if !identifier.MatchString(field) || (typ != "string" && typ != "bool") {
+			return fmt.Errorf("unsupported source field/type %q: %q", field, typ)
+		}
+	}
+	for field, values := range d.Source.Enums {
+		if d.Source.Fields[field] != "string" || len(values) == 0 {
+			return fmt.Errorf("enum %q requires a string field and values", field)
+		}
+		seenValues := map[string]bool{}
+		for _, v := range values {
+			if !utf8.ValidString(v) {
+				return fmt.Errorf("enum %s requires UTF-8 values", field)
+			}
+			if seenValues[v] {
+				return fmt.Errorf("duplicate enum value in %s", field)
+			}
+			seenValues[v] = true
+		}
+	}
+	if len(d.Source.SubjectKey) == 0 {
+		return fmt.Errorf("source requires an explicitly scoped subjectKey")
+	}
+	seen := map[string]bool{}
+	for _, field := range d.Source.SubjectKey {
+		if d.Source.Fields[field] != "string" || field == "evaluation_id" || seen[field] {
+			return fmt.Errorf("invalid or duplicate subject-key field %q", field)
+		}
+		seen[field] = true
+	}
+	for target, table := range d.Source.Bindings {
+		if target != "clickhouse" && target != "databricks" || !validTable(table) {
+			return fmt.Errorf("unsupported binding %q: %q", target, table)
+		}
+		if target == "databricks" && len(strings.Split(table, ".")) != 3 {
+			return fmt.Errorf("Databricks binding requires catalog.schema.table")
+		}
+	}
+	if err := d.checkPredicate(d.Population); err != nil {
+		return err
+	}
+	for name, field := range d.Dimensions {
+		if !identifier.MatchString(name) || name == "evaluation_id" || strings.HasSuffix(name, "_state") || d.Source.Fields[field] == "" || field == "evaluation_id" {
+			return fmt.Errorf("invalid dimension %q: %q", name, field)
+		}
+	}
+	if len(d.Measures) == 0 {
+		return fmt.Errorf("at least one measure is required")
+	}
+	for name, m := range d.Measures {
+		if !identifier.MatchString(name) || name == "evaluation_id" || strings.HasSuffix(name, "_state") {
+			return fmt.Errorf("invalid or reserved measure name %q", name)
+		}
+		if _, ok := d.Dimensions[name]; ok {
+			return fmt.Errorf("dimension and measure names collide: %q", name)
+		}
+		switch m.Op {
+		case "count":
+			if m.Numerator != "" || m.Denominator != "" || len(m.UnknownWhen) != 0 {
+				return fmt.Errorf("count %q has ratio-only fields", name)
+			}
+			if err := d.checkPredicate(m.Where); err != nil {
+				return fmt.Errorf("measure %s: %w", name, err)
+			}
+		case "ratio":
+			if m.Where != nil {
+				return fmt.Errorf("ratio %q cannot change the population", name)
+			}
+			for _, ref := range append([]string{m.Numerator, m.Denominator}, m.UnknownWhen...) {
+				if d.Measures[ref].Op != "count" {
+					return fmt.Errorf("ratio %s requires count reference %q", name, ref)
+				}
+			}
+			// This subset proves containment by requiring an unfiltered count
+			// over the same source/population as the denominator.
+			if d.Measures[m.Denominator].Where != nil {
+				return fmt.Errorf("ratio %s denominator must count the whole population", name)
+			}
+		default:
+			return fmt.Errorf("unsupported operator %q in %s", m.Op, name)
+		}
+	}
+	return nil
+}
+
+func contains(values []string, value string) bool {
+	for _, v := range values {
+		if v == value {
+			return true
+		}
+	}
+	return false
+}
+
+func (d *Definition) validateGroups(groups []string) error {
+	seen := map[string]bool{}
+	for _, g := range groups {
+		if _, ok := d.Dimensions[g]; !ok || seen[g] {
+			return fmt.Errorf("unknown or duplicate grouping dimension %q", g)
+		}
+		seen[g] = true
+	}
+	return nil
+}

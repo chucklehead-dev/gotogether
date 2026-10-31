@@ -8,6 +8,21 @@ and adds a line here.
 
 ## Unreleased
 
+- Added a bounded adaptation rehearsal of the published library starter against
+  Goo's strict definition reader, with frozen contract files, actual API returns,
+  a later parent-planted source contrast and exact semantic output checks.
+  Expected library rejections are distinct from missing observations and tool
+  errors. The recipe handles dependency contrasts through a temporary source
+  copy and alternate modfile, without editing the module cache or baseline pins.
+  No runtime adapter was required. The exercise exposed a machine-report gap:
+  `simulate -json` now retains native graph extent/completeness, per-check bounds
+  and reachability search results through `validate/model.Report.Doc()`.
+- Model reports expose `graph`, check `bound` and `possible`, and `skipReason`
+  as typed data. Scope includes configured limits, actual search extent,
+  truncation/stopping and proof coverage; samples never acquire proof status.
+  CLI facts no longer depend on English display text. These are optional fields
+  in the current report format; navigation continues using its native graph.
+
 - `gotogether init -kind library` writes a synchronous snapshot library,
   its finite model/binding, observing tests, a source-aliasing mutant and a
   fresh-evidence/replay demo. Production code needs no toolkit instrumentation

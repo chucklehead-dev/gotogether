@@ -196,6 +196,7 @@ func reportSchema(t *testing.T) []byte {
 		fields: map[string]map[string]any{
 			"Document.Verdict":   {"enum": []any{"pass", "fail", "no verdict", "error"}},
 			"Document.Command":   {"enum": []any{"validate", "simulate"}},
+			"DocGraph.Scope":     {"enum": []any{"model_state_graph"}},
 			"DocFailure.Verdict": {"enum": []any{"fail", "n/a"}},
 			"Change.Kind":        {"enum": []any{"changed", "added", "removed"}},
 		},
@@ -376,7 +377,8 @@ func TestReportValidates(t *testing.T) {
 			Why: &validate.Explanation{Action: "refund(...)", Conditions: []validate.Condition{{In: "refund", Expr: "x", Values: []validate.NamedValue{{Name: "x", Value: "1"}}}},
 				Expected: "refund(...)", Changes: []validate.Change{{Path: "charges", Kind: "added", After: "1"}}, Enabled: []string{"e"}, More: 1},
 			State: map[string]string{"charges": "Map()"}}}}}
-	d.Checks = []validate.DocCheck{{Name: "i", Kind: "invariant", Verdict: "holds", Detail: "d"}}
+	d.Graph = &validate.DocGraph{Scope: "model_state_graph", States: 2, Starts: 1, Transitions: 2, Depth: 1, Complete: true, Bound: validate.DocGraphBound{States: 100, Depth: 0}, Unfair: []string{"read"}}
+	d.Checks = []validate.DocCheck{{Name: "i", Kind: "invariant", Verdict: "holds", Detail: "d", Bound: &validate.DocBound{Kind: "complete", States: 2, Proves: true}}, {Name: "p", Kind: "possible", Verdict: "reached", Possible: &validate.DocPossible{Found: true, Search: &validate.DocPossibleSearch{Found: true, Complete: false, Nodes: 2, Depth: 1, Path: []string{"write()"}}}}}
 	ps, err := schemas.Check(schemas.Report(), d.JSON())
 	if err != nil {
 		t.Fatal(err)

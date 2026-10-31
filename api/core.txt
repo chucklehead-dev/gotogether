@@ -2438,7 +2438,17 @@ type DocActor struct
     field Module string `json:"module,omitempty"`
     field ITF string `json:"itf,omitempty"`
     field Nav string `json:"nav,omitempty"`
+type DocBound struct
+    field Kind string `json:"kind"`
+    field States int `json:"states"`
+    field Depth int `json:"depth"`
+    field Traces int `json:"traces"`
+    field Steps int `json:"steps"`
+    field Stopped string `json:"stopped,omitempty"`
+    field Proves bool `json:"proves"`
 type DocCheck struct
+    field Possible *DocPossible `json:"possible,omitempty"`
+    field Bound *DocBound `json:"bound,omitempty"`
     field Name string `json:"name"`
     field Kind string `json:"kind"`
     field Verdict string `json:"verdict"`
@@ -2459,6 +2469,24 @@ type DocFailure struct
     field Note string `json:"note,omitempty"`
     field Brief string `json:"brief"`
     field Text string `json:"text"`
+type DocGraph struct
+    field Scope string `json:"scope"`
+    field States int `json:"states"`
+    field Starts int `json:"starts"`
+    field Transitions int `json:"transitions"`
+    field Depth int `json:"depth"`
+    field Complete bool `json:"complete"`
+    field Cut string `json:"cut,omitempty"`
+    field Stopped string `json:"stopped,omitempty"`
+    field Bound DocGraphBound `json:"bound"`
+    field Deadlocks int `json:"deadlocks"`
+    field Terminals int `json:"terminals"`
+    field Quiescent int `json:"quiescent"`
+    field Unfair []string `json:"unfair,omitempty"`
+    field Stops []string `json:"stops,omitempty"`
+type DocGraphBound struct
+    field States int `json:"states"`
+    field Depth int `json:"depth"`
 type DocInput struct
     field Path string `json:"path"`
     field Format string `json:"format"`
@@ -2475,6 +2503,18 @@ type DocPartition struct
     field Pass int `json:"pass"`
     field Of int `json:"of"`
     field Steps int `json:"steps"`
+type DocPossible struct
+    field Found bool `json:"found"`
+    field Impossible bool `json:"impossible"`
+    field Search *DocPossibleSearch `json:"search,omitempty"`
+    field EvaluatorError string `json:"evaluatorError,omitempty"`
+type DocPossibleSearch struct
+    field Found bool `json:"found"`
+    field Complete bool `json:"complete"`
+    field Cut string `json:"cut,omitempty"`
+    field Nodes int `json:"nodes"`
+    field Depth int `json:"depth"`
+    field Path []string `json:"path,omitempty"`
 type DocRecord struct
     field Ambiguous bool `json:"ambiguous,omitempty"`
     field ID string `json:"id"`
@@ -2497,6 +2537,8 @@ type DocRecord struct
     field SpanID string `json:"spanId,omitempty"`
     field Text string `json:"text"`
 type Document struct
+    field SkipReason string `json:"skipReason,omitempty"`
+    field Graph *DocGraph `json:"graph,omitempty"`
     field Receipt *receipt.Summary `json:"receipt,omitempty"`
     field Format string `json:"format"`
     field Command string `json:"command"`
@@ -3030,6 +3072,7 @@ type Report struct
     field EvaluatorBug string
     field Code int
     field Text string
+    method (*Report) Doc() *validate.Document
 type SimulateOptions struct
     field Quint string
     field Seed string

@@ -64,7 +64,8 @@ effect), its model and binding, a test in a simulation on `qenv/qhttp`
 and late requests, lost responses, refused connections and crashes), one
 over a real socket through `qobshttp`, and a mutant (`>` for `>=`) that
 `TestMutants` shows caught. Change the model first, then the handler:
-the tests say what no longer fits. For a service you already have,
+the tests say what no longer fits.
+
 A synchronous Go library can start without a simulated environment:
 
 ```sh
@@ -81,6 +82,22 @@ recording stays in the test driver. The demo records fresh evidence and replays
 its manifest. Adapt the contract and observations explicitly; this does not infer
 a model from arbitrary Go code.
 
+A bounded [Goo Read adaptation](internal/adoptiontest/goo-read/README.md) replaces
+the starter's toy contract with a real strict-definition API. It freezes authored
+inputs, model and observations before a later source contrast. Expected input
+rejection is domain data; missing observations and tool errors cannot earn credit
+for catching the contrast. The exercise exposed a machine-output gap: graph
+completeness and counts were available only in display prose. `simulate -json`
+now carries native `graph` facts, per-check `bound` coverage and `possible`
+reachability evidence. `validate/model.Report.Doc()` supplies the same canonical
+document to Go callers; `notes` and `detail` remain display context.
+
+This agent-assisted rehearsal found no missing runtime adapter within its scope.
+The reproduction checks faithful validation, the precise source mismatch,
+missing-observation errors and relocated replay while keeping the frozen SDK
+baseline intact.
+
+For a service you already have,
 `gotogether scaffold -system -http -binding b.yaml` writes the same
 simulated wiring around your handler.
 
@@ -751,7 +768,7 @@ r := qload.Assess(x, "markPaid", qload.Trigger{Slowdown: 3, Duration: time.Minut
 | `validate` | replay in the Go evaluator (passes) or with `quint test` (failures, and what it cannot judge): `Checker` (`Check`, `CheckBatch`, `MutateSteps`: a log's observation mutants), `Cached`, `ValidateITF`; structured verdicts (`Report.Verdict`); run manifests (`NewManifest`, `ReadManifest`, `Verify`, `Bundle`) |
 | `validate/receipt` | structured history judgment: check statuses, ordering-search scope and assumed effects, shared by JSON, text and run navigation; [receipts](docs/check-receipts.md) |
 | `validate/diagnostic` | model-authored diagnostics with exact evidence references and TUI record inspection; [annotation prototype](docs/model-diagnostics-prototype.md) |
-| `validate/model` | the model on its own, before any code: `Simulate` (what `gotogether simulate` prints: quint's sampling, `Verify`, or the Go evaluator's state graph, with the possibles searched then sampled; a `Report` of `Verdict`s, each with its `Bound`), `Analyzer` (`New`, `For` a validate `Checker`: `Graph`, `Possible`, `Simulate`); `qtest.Model`'s claims judge by it |
+| `validate/model` | the model on its own, before any code: `Simulate` (what `gotogether simulate` prints: quint's sampling, `Verify`, or the Go evaluator's state graph, with the possibles searched then sampled; a `Report` of `Verdict`s, each with its `Bound`, and `Report.Doc()` for canonical structured output), `Analyzer` (`New`, `For` a validate `Checker`: `Graph`, `Possible`, `Simulate`); `qtest.Model`'s claims judge by it |
 | `validate/runprofile` | effective execution policy and observed simulator limits, shared by evidence JSON, text and navigation; [run profiles](docs/run-profiles.md) |
 | `validate/navproto` | the run navigation protocol between a test binary serving its runs (GOTOGETHER_NAV=serve) and a navigator (`gotogether nav`, gotogether-nav): `Request`, `Response`, `Session`, `Node`, versioned (`Protocol`, `CheckProtocol`) |
 | `validate/cli` | the CLI's check of files in Go: `Check` (as `gotogether validate` makes it, and its `Manifest`), `Replay` (a manifest's run judged again: `validate -replay`); its own package, so `validate` brings no OpenTelemetry SDK |

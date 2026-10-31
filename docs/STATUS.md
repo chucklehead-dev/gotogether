@@ -7,7 +7,26 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Library-entry follow-up (current branch): `init -kind library` supplies an
+Library-adaptation follow-up (current branch): the published library starter was
+adapted to Goo's real strict `subjectfacts.Read` boundary with 16 fixed YAML
+inputs and actual returned values. Model, binding, driver, fixtures and module
+pins were frozen before a parent-planted source contrast disabled unknown-field
+checking. The faithful run passes; the contrast is a state mismatch on an
+unexpectedly accepted input. See [the rehearsal](../internal/adoptiontest/goo-read/README.md).
+Expected input rejections remain domain observations, and tool/setup failures earn
+no contrast credit. This is agent-assisted, instruction-isolated evidence, not
+independent-maintainer adoption, general parser verification or discovery of a
+production bug. No missing runtime adapter blocked this bounded exercise.
+The actual blocker was machine-readable graph scope: agents had to extract
+completeness/counts from display prose. The canonical model `Report.Doc()` now
+emits native graph extent, limits, truncation, per-check proof coverage and
+reachability search evidence; skipped checks retain a typed no-verdict reason.
+The reproduction checks exact faithful/mismatch/error results and replay after
+both evidence bundles move and the original project path disappears. All seven
+frozen contract hashes remain intact; the frozen SDK pin records the original
+workflow, while reproduction uses the newer CLI for typed graph checks.
+
+Library-entry follow-up (merged PR #13): `init -kind library` supplies an
 ordinary Go snapshot-library workflow with actual observed calls, a finite
 model, a planted aliasing contrast and portable evidence/replay. It extends
 workflow coverage demonstrated by the hand-authored Goo trial; it does not
@@ -76,7 +95,7 @@ for every native history, including navigation. `Report.Composition` is canonica
 normal conformance assertions include applicable checks. Wrong histories, wrong
 service bindings, unknown obligations and order limits cannot silently pass.
 Receipts preserve model-authored diagnostics. See [grist-composition.md](grist-composition.md).
-PRs #2, #3, #4, #5, #6, #7, #8, #9, #10, #11 and #12 are merged; the single current navigation contract is nav/2.
+PRs #2, #3, #4, #5, #6, #7, #8, #9, #10, #11, #12 and #13 are merged; the single current navigation contract is nav/2.
 
 Check-receipt first increment (merged PR #3): validation reports and run
 navigation share structured statuses, ordering-search limits and assumed effects
@@ -89,7 +108,7 @@ exploration evidence and run manifests. `evidence -session` filters the
 suite before coverage and expectation checks; unscoped completeness checks
 require explicit `-history`. Use a fresh ID and `go test -count=1`.
 
-**As of 2026-10-31 (library-starter branch).** GR4's first composition experiment is implemented
+**As of 2026-10-31 (library-adaptation branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
 `e9f8c08e` so scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
@@ -280,15 +299,20 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Apply the library starter in an external adopter's actual contract | M | validate adaptation and missing capabilities before adding another facade |
+| 1 | Independent-maintainer use or a concrete new contract blocker | M | the bounded Goo Read adaptation found no missing runtime adapter; avoid adding a facade without evidence |
 | 2 | Further lint/editor/onboarding breadth, only from adopter blockers | S-M | use observed friction after the starter and explicit-property scaffold increment |
 
 Do not start all tracks at once. Worker completion and the bounded HTTP/SQLite
 rehearsal are merged in PR #9; finite pinned choices in PR #10, structured lint
-in PR #11, and the first component-aware shrink slice in PR #12. This branch
-adds a bounded library entry point and fixes the observed scaffold property-role
-mistake. An external adaptation should guide the next capability; outbound
-streams remain a candidate only if that evidence requires them. Broader peer or
+in PR #11, the first component-aware shrink slice in PR #12, and the library
+starter/property-role fix in PR #13. This branch records a bounded adaptation of
+the published starter to Goo's strict definition reader. It confirms this
+workflow for the selected contract and identifies setup/authoring friction.
+It also fixes the demonstrated graph-report data gap, without adding a runtime
+adapter. Model and CLI machine output share native facts through `Report.Doc()`;
+next work should address another observed blocker rather than expanding a catalog. The next capability should follow an
+actual blocker or independent-maintainer use; outbound streams remain a
+candidate only if that evidence requires them. Broader peer or
 conformance shrink identities still need typed evidence and an adoption case.
 Further inventory/diagnostic expansion, cycles, clusters and platform facades
 wait for evidence. GR10c down-process settlement stays separate from GR10b.

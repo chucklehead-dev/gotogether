@@ -1,0 +1,82 @@
+[
+  {
+    "id": 0,
+    "name": "valid_count",
+    "yaml": "apiVersion: goo/v1alpha1\nname: cohort\nsource:\n  kind: subject-facts\n  fields: {evaluation_id: string, subject: string, healthy: bool}\n  subjectKey: [subject]\n  bindings: {clickhouse: demo.facts}\ndimensions: {health: healthy}\nmeasures:\n  total: {op: count}\n"
+  },
+  {
+    "id": 1,
+    "name": "valid_ratio",
+    "yaml": "apiVersion: goo/v1alpha1\nname: cohort\nsource:\n  kind: subject-facts\n  fields: {evaluation_id: string, subject: string, healthy: bool}\n  subjectKey: [subject]\n  bindings: {clickhouse: demo.facts}\ndimensions: {health: healthy}\nmeasures:\n  total: {op: count}\n  good: {op: count, where: {field: healthy, eq: true}}\n  fraction: {op: ratio, numerator: good, denominator: total}\npopulation: {field: healthy, eq: true}\n"
+  },
+  {
+    "id": 2,
+    "name": "unknown_top",
+    "yaml": "apiVersion: goo/v1alpha1\nname: cohort\nsource:\n  kind: subject-facts\n  fields: {evaluation_id: string, subject: string, healthy: bool}\n  subjectKey: [subject]\n  bindings: {clickhouse: demo.facts}\ndimensions: {health: healthy}\nmeasures:\n  total: {op: count}\nmystery: true\n"
+  },
+  {
+    "id": 3,
+    "name": "unknown_source",
+    "yaml": "apiVersion: goo/v1alpha1\nname: cohort\nsource:\n  mystery: true\n  kind: subject-facts\n  fields: {evaluation_id: string, subject: string, healthy: bool}\n  subjectKey: [subject]\n  bindings: {clickhouse: demo.facts}\ndimensions: {health: healthy}\nmeasures:\n  total: {op: count}\n"
+  },
+  {
+    "id": 4,
+    "name": "unknown_measure",
+    "yaml": "apiVersion: goo/v1alpha1\nname: cohort\nsource:\n  kind: subject-facts\n  fields: {evaluation_id: string, subject: string, healthy: bool}\n  subjectKey: [subject]\n  bindings: {clickhouse: demo.facts}\ndimensions: {health: healthy}\nmeasures:\n  total: {op: count, mystery: true}\n"
+  },
+  {
+    "id": 5,
+    "name": "unknown_predicate",
+    "yaml": "apiVersion: goo/v1alpha1\nname: cohort\nsource:\n  kind: subject-facts\n  fields: {evaluation_id: string, subject: string, healthy: bool}\n  subjectKey: [subject]\n  bindings: {clickhouse: demo.facts}\ndimensions: {health: healthy}\nmeasures:\n  total: {op: count}\n  good: {op: count, where: {field: healthy, eq: true, mystery: true}}\n  fraction: {op: ratio, numerator: good, denominator: total}\npopulation: {field: healthy, eq: true, mystery: true}\n"
+  },
+  {
+    "id": 6,
+    "name": "extra_document",
+    "yaml": "apiVersion: goo/v1alpha1\nname: cohort\nsource:\n  kind: subject-facts\n  fields: {evaluation_id: string, subject: string, healthy: bool}\n  subjectKey: [subject]\n  bindings: {clickhouse: demo.facts}\ndimensions: {health: healthy}\nmeasures:\n  total: {op: count}\n---\n{}\n"
+  },
+  {
+    "id": 7,
+    "name": "invalid_version",
+    "yaml": "apiVersion: goo/v2\nname: cohort\nsource:\n  kind: subject-facts\n  fields: {evaluation_id: string, subject: string, healthy: bool}\n  subjectKey: [subject]\n  bindings: {clickhouse: demo.facts}\ndimensions: {health: healthy}\nmeasures:\n  total: {op: count}\n"
+  },
+  {
+    "id": 8,
+    "name": "missing_subject_key",
+    "yaml": "apiVersion: goo/v1alpha1\nname: cohort\nsource:\n  kind: subject-facts\n  fields: {evaluation_id: string, subject: string, healthy: bool}\n  bindings: {clickhouse: demo.facts}\ndimensions: {health: healthy}\nmeasures:\n  total: {op: count}\n"
+  },
+  {
+    "id": 9,
+    "name": "unsupported_type",
+    "yaml": "apiVersion: goo/v1alpha1\nname: cohort\nsource:\n  kind: subject-facts\n  fields: {evaluation_id: string, subject: string, healthy: int}\n  subjectKey: [subject]\n  bindings: {clickhouse: demo.facts}\ndimensions: {health: healthy}\nmeasures:\n  total: {op: count}\n"
+  },
+  {
+    "id": 10,
+    "name": "no_measures",
+    "yaml": "apiVersion: goo/v1alpha1\nname: cohort\nsource:\n  kind: subject-facts\n  fields: {evaluation_id: string, subject: string, healthy: bool}\n  subjectKey: [subject]\n  bindings: {clickhouse: demo.facts}\ndimensions: {health: healthy}\nmeasures: {}\n"
+  },
+  {
+    "id": 11,
+    "name": "invalid_predicate_type",
+    "yaml": "apiVersion: goo/v1alpha1\nname: cohort\nsource:\n  kind: subject-facts\n  fields: {evaluation_id: string, subject: string, healthy: bool}\n  subjectKey: [subject]\n  bindings: {clickhouse: demo.facts}\ndimensions: {health: healthy}\nmeasures:\n  total: {op: count}\n  good: {op: count, where: {field: healthy, eq: wrong}}\n  fraction: {op: ratio, numerator: good, denominator: total}\npopulation: {field: healthy, eq: wrong}\n"
+  },
+  {
+    "id": 12,
+    "name": "invalid_ratio_reference",
+    "yaml": "apiVersion: goo/v1alpha1\nname: cohort\nsource:\n  kind: subject-facts\n  fields: {evaluation_id: string, subject: string, healthy: bool}\n  subjectKey: [subject]\n  bindings: {clickhouse: demo.facts}\ndimensions: {health: healthy}\nmeasures:\n  total: {op: count}\n  good: {op: count, where: {field: healthy, eq: true}}\n  fraction: {op: ratio, numerator: absent, denominator: total}\npopulation: {field: healthy, eq: true}\n"
+  },
+  {
+    "id": 13,
+    "name": "invalid_binding",
+    "yaml": "apiVersion: goo/v1alpha1\nname: cohort\nsource:\n  kind: subject-facts\n  fields: {evaluation_id: string, subject: string, healthy: bool}\n  subjectKey: [subject]\n  bindings: {clickhouse: demo;drop}\ndimensions: {health: healthy}\nmeasures:\n  total: {op: count}\n"
+  },
+  {
+    "id": 14,
+    "name": "malformed_yaml",
+    "yaml": "[broken"
+  },
+  {
+    "id": 15,
+    "name": "empty_input",
+    "yaml": ""
+  }
+]

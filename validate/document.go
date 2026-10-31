@@ -34,6 +34,10 @@ const ReportFormat = "gotogether.report/1"
 // -json): gotogether.report/1. A field added later is optional; a field
 // changed or removed is a new major.
 type Document struct {
+	// SkipReason identifies an intentionally unperformed model check.
+	SkipReason string `json:"skipReason,omitempty"`
+	// Graph is the native model-state exploration scope; absent for sampling or history validation.
+	Graph *DocGraph `json:"graph,omitempty"`
 	// Receipt describes the history judgment, including folded partitions.
 	Receipt *receipt.Summary `json:"receipt,omitempty"`
 	Format  string           `json:"format"`  // ReportFormat
@@ -207,10 +211,70 @@ type DocPartition struct {
 // "allows", "bounded", "unchecked" or "fail"), a possible's ("reached",
 // "fail") or the graph's (its deadlocks, the actions it never enables).
 type DocCheck struct {
-	Name    string `json:"name"`
-	Kind    string `json:"kind"` // "invariant", "possible", "graph"
-	Verdict string `json:"verdict"`
-	Detail  string `json:"detail,omitempty"`
+	// Possible retains native reachability evidence, including incomplete searches.
+	Possible *DocPossible `json:"possible,omitempty"`
+	// Bound states what this model check covers, independently of its display detail.
+	Bound   *DocBound `json:"bound,omitempty"`
+	Name    string    `json:"name"`
+	Kind    string    `json:"kind"` // "invariant", "eventually", "possible", "graph"
+	Verdict string    `json:"verdict"`
+	Detail  string    `json:"detail,omitempty"`
+}
+
+// DocGraph describes a model-state graph, not recorded executions. Complete
+// means exploration finished within Bound; a depth bound still limits its scope.
+type DocGraph struct {
+	Scope       string        `json:"scope"`
+	States      int           `json:"states"`
+	Starts      int           `json:"starts"`
+	Transitions int           `json:"transitions"`
+	Depth       int           `json:"depth"`
+	Complete    bool          `json:"complete"`
+	Cut         string        `json:"cut,omitempty"`
+	Stopped     string        `json:"stopped,omitempty"`
+	Bound       DocGraphBound `json:"bound"`
+	Deadlocks   int           `json:"deadlocks"`
+	Terminals   int           `json:"terminals"`
+	Quiescent   int           `json:"quiescent"`
+	Unfair      []string      `json:"unfair,omitempty"`
+	Stops       []string      `json:"stops,omitempty"`
+}
+
+// DocGraphBound is the configured exploration cap; zero depth means no depth cap.
+type DocGraphBound struct {
+	States int `json:"states"`
+	Depth  int `json:"depth"`
+}
+
+// DocBound is a model check's scope. Proves describes coverage, not success:
+// a counterexample can fail a check even in a partial or sampled search.
+type DocBound struct {
+	Kind    string `json:"kind"`
+	States  int    `json:"states"`
+	Depth   int    `json:"depth"`
+	Traces  int    `json:"traces"`
+	Steps   int    `json:"steps"`
+	Stopped string `json:"stopped,omitempty"`
+	Proves  bool   `json:"proves"`
+}
+
+// DocPossible separates finding a witness from proving a scenario impossible.
+type DocPossible struct {
+	Found          bool               `json:"found"`
+	Impossible     bool               `json:"impossible"`
+	Search         *DocPossibleSearch `json:"search,omitempty"`
+	EvaluatorError string             `json:"evaluatorError,omitempty"`
+}
+
+// DocPossibleSearch is the evaluator's actual search extent, not configured caps.
+// Found may differ from DocPossible.Found when Quint found the witness instead.
+type DocPossibleSearch struct {
+	Found    bool     `json:"found"`
+	Complete bool     `json:"complete"`
+	Cut      string   `json:"cut,omitempty"`
+	Nodes    int      `json:"nodes"`
+	Depth    int      `json:"depth"`
+	Path     []string `json:"path,omitempty"`
 }
 
 // NewDocument is an empty document of command's.

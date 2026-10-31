@@ -1,0 +1,9 @@
+{
+  "module": "github.com/casselc/goo",
+  "commit": "0659a4b20fb7fe83bbfd32a194ceb9a7d0c339a9",
+  "file": "subjectfacts/model.go",
+  "originalSHA256": "b6343eb25930c375dced643a819013fcf1693375f8280cc9b0b09b1bb4a09c2c",
+  "contrastSHA256": "450138a53faf18fecf5e4a7c0d11ec31d6d15305427e685b4ddcc67309af0576",
+  "change": "KnownFields(true) to KnownFields(false)",
+  "kind": "parent-planted source contrast"
+}
