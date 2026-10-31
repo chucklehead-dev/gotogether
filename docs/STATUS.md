@@ -19,7 +19,7 @@ enumerate every pending/lost/retired completion or authorize redrive. The logica
 model remains identity-opaque; native provenance and store contracts carry these
 facts. Old position-only outcomes are refused without reconstruction.
 
-In-flight rewind follow-up (PR #30): observed rewinds retire the node's
+In-flight rewind follow-up (merged PR #30): observed rewinds retire the node's
 processor work across resume. Late callbacks retain truthful native completion
 records with the original ID/key and pinned causal clock, while retired work
 cannot retry or submit checkpoints/domain outcomes. Retired read/append answers
