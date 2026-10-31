@@ -8,6 +8,13 @@ and adds a line here.
 
 ## Unreleased
 
+- Store lock waits now end when their transaction is rolled back or reset,
+  even while another transaction still holds the requested key. Explicit SQL
+  transactions cancelled during a lock wait return their existing cancellation
+  result promptly instead of waiting for an unrelated holder and reporting a
+  serialization conflict. Applied commits retain success or unknown-outcome
+  results when cancellation follows application.
+
 - Database history checks retain dependencies from reads to known committed
   appends that no external read observed. Strict stale reads and write-skew
   histories can no longer pass merely because the writes never appeared in a

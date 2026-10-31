@@ -3439,6 +3439,19 @@ goroutine that is not a task), the request body's probe decided on the
 task, a handler served on its Service's task without `http.Server`.
 Pool limits and handlers that start goroutines are qgosim's (§14).
 
+**Ended transactions do not keep waiting for locks.** A lock or commit wait
+ends when the waiting transaction is rolled back or its connection is reset,
+regardless of whether a different transaction still owns the key. Resetting a
+connection and then giving the same key to a new transaction must not keep the
+old waiter asleep. Store callers retain their existing ended/reset errors.
+For explicit SQL transactions, the cancellation reaper can roll a waiter back;
+the statement rechecks transaction usability after yielding, preserving
+`sql.ErrTxDone` instead of translating the ended transaction to 40001.
+An interrupted commit rechecks only a non-applied error: a successful or
+unknown-outcome commit cannot be reclassified as rolled back because its context
+was cancelled after application. This does not add new cancellation tracking for
+autocommit operations or distinct per-statement contexts.
+
 **When a task is unwound inside a statement** (a crash, or Close), qenv's
 unwind panic passed through `database/sql`'s query and leaked its lock,
 and the service's `defer tx.Rollback()` deadlocked: the driver recovers

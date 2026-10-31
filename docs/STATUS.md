@@ -7,7 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Unobserved-append follow-up (current branch): qhistory retains rw dependencies
+Lock-wait follow-up (current branch): rolled-back and reset Store transactions
+stop waiting even while a different transaction holds the requested key. SQL
+statements recheck their transaction after a yielding operation, so an explicit
+transaction cancelled while blocked ends promptly with its cancellation result.
+Applied commits preserve success or unknown outcome. Tests cover lock and commit
+waits, a fresh holder after reset, ordinary waiting and deterministic replay.
+This fixes lifecycle handling; it does not add pool-capacity simulation or new
+per-statement cancellation tracking. See DESIGN §51.
+
+Unobserved-append follow-up (merged PR #16): qhistory retains rw dependencies
 from whole-list reads to known committed appenders absent from every external
 read. This closes a strict stale-read and write-skew false-pass boundary without
 inventing unseen writer order or treating timeouts as completed commits. A small
@@ -127,7 +136,7 @@ exploration evidence and run manifests. `evidence -session` filters the
 suite before coverage and expectation checks; unscoped completeness checks
 require explicit `-history`. Use a fresh ID and `go test -count=1`.
 
-**As of 2026-10-31 (unobserved-appends branch).** GR4's first composition experiment is implemented
+**As of 2026-10-31 (lock-wait-abort branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
 `2afc4109` so snapshot-checkpoint validation/navigation, scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
