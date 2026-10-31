@@ -79,7 +79,7 @@ func pairRun(t *testing.T, seed uint64, cfg gristsim.Config) []qtrace.Step {
 
 // A peer runs beside the App on its own store, node and API: the App's
 // effects call its command through grist/client over qhttp, each try
-// under the effect's key (<app>/<processor>/<tenant>/<trigger>) as its
+// under the effect's key (<app>/<processor>/<tenant>/<position>@<event-id>) as its
 // command id, as the caller service:<app>; each App records under its
 // own actors, so the two tenants t1 are two instances; and through lost
 // answers and both nodes' crashes the two sides agree (gristtest.Links),

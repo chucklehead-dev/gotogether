@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -145,8 +144,8 @@ func (r Result) check(processor string) error {
 type effectKey struct{}
 
 // EffectKey is the idempotency key an effect hands its dependency:
-// app/processor/tenant/trigger, the same on every run of the effect for
-// that trigger, so a dependency that supports keys can make "at least
+// app/processor/tenant/position@event-id, the same on every run of the
+// effect for that stored event, so a dependency that supports keys can make "at least
 // once" "once"; the App's name first, so two Apps' keys never collide at
 // a dependency they share (a peer's markers: NewPeer).
 func EffectKey(ctx context.Context) string { k, _ := ctx.Value(effectKey{}).(string); return k }
@@ -431,6 +430,9 @@ func (pl *poller) progress(ctx context.Context) {
 
 func (pl *poller) run(ctx context.Context) {
 	for ctx.Err() == nil {
+		if pl.relay.isStopped(pl.tenant) {
+			return
+		}
 		if pl.clocks.stopped(pl.tenant) != nil {
 			// a rewind (ErrRewound): fail closed for effects until an
 			// operator resumes the tenant. Drain bookkeeping counts this wait,
@@ -498,6 +500,15 @@ type pending struct {
 // at head) until one fails to commit: consecutive Emits and Skips commit
 // in one transaction, an Effect alone.
 func (pl *poller) handle(ctx context.Context, cp, head Position, evs []Stored) {
+	// An identity is stored evidence, never reconstructed from the position or
+	// this node's memory. Invalid store data must not invoke a handler/effect or
+	// become a domain failure with an advanced checkpoint.
+	for _, e := range evs {
+		if !validTriggerID(e.ID) {
+			pl.relay.setErr(pl.tenant, fmt.Errorf("grist: store %s returned tenant %s event at position %d with invalid immutable ID %q: restore valid event data before restarting the node", pl.s.Name(), pl.tenant, e.Pos, e.ID), true)
+			return
+		}
+	}
 	var group []pending
 	flush := func() bool {
 		if len(group) == 0 {
@@ -550,7 +561,7 @@ func (pl *poller) handle(ctx context.Context, cp, head Position, evs []Stored) {
 // failure EffectTries times; false on a store error (read again).
 func (pl *poller) decide(ctx context.Context, e Stored) (Result, bool) {
 	for try := 1; ; try++ {
-		r := readsAt(ctx, pl.app, pl.s, pl.tenant, e.Pos, pl.key(e.Pos))
+		r := readsAt(ctx, pl.app, pl.s, pl.tenant, e.Pos, pl.key(e))
 		res := pl.p.handle(ctx, r, e)
 		if r.err != nil {
 			pl.pause(ctx)
@@ -650,29 +661,23 @@ func (pl *poller) blocked(r *Reads, res Result) error {
 // its calls' cause (Call.Do): trigger, the head the poller read (the
 // effect step's place on the tenant's clock, 2·head+1, and the site's),
 // and slot, the effect step's place among the processor's steps.
-func (pl *poller) effectContext(ctx context.Context, trigger, head Position, key string, slot int64) context.Context {
+func (pl *poller) effectContext(ctx context.Context, trigger Stored, head Position, key string, slot int64) context.Context {
 	ctx = context.WithValue(ctx, effectKey{}, key)
-	return context.WithValue(ctx, causeKey{}, &effectCause{app: pl.app, s: pl.s, p: pl.p, tenant: pl.tenant, trigger: trigger, head: head, key: key, slot: slot})
+	return context.WithValue(ctx, causeKey{}, &effectCause{app: pl.app, s: pl.s, p: pl.p, tenant: pl.tenant, trigger: trigger.Pos, triggerID: trigger.ID, head: head, key: key, slot: slot})
 }
 
 // markKey is the poller's key among its node's (clocks.observe).
 func (pl *poller) markKey() string { return fmt.Sprintf("%p", pl) }
 
-func (pl *poller) key(t Position) string {
-	k := effectKeyOf(pl.app.Name, pl.p.name, pl.tenant, t)
-	if n := pl.clocks.keyEpoch(pl.tenant, t); n > 0 {
-		// a position a rewind gave back and the log filled again: another
-		// event's, whose effect must not be answered from the lost one's
-		// record at a Keyed dependency (rewind.go)
-		k += "~" + strconv.Itoa(n)
-	}
-	return k
+func (pl *poller) key(e Stored) string {
+	return effectKeyOf(pl.app.Name, pl.p.name, pl.tenant, e.Pos, e.ID)
 }
 
-// effectKeyOf is the effect key of app's processor's effect for trigger
-// t in tenant (EffectKey): what ServeCalls requires a call's key to be.
-func effectKeyOf(app, processor, tenant string, t Position) string {
-	return fmt.Sprintf("%s/%s/%s/%d", app, processor, tenant, t)
+// effectKeyOf names the immutable trigger, with its position retained for
+// operator context. Every node derives the same key from the stored event;
+// a replacement at the same position has a fresh identity after restore.
+func effectKeyOf(app, processor, tenant string, position Position, id string) string {
+	return fmt.Sprintf("%s/%s/%s/%d@%s", app, processor, tenant, position, id)
 }
 
 // commit appends a group's events with the checkpoint moved from cp to
@@ -782,7 +787,7 @@ func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res R
 	if res.guarantee == AtMostOnce {
 		return pl.atMostOnce(ctx, cp, e, res)
 	}
-	key := pl.key(e.Pos)
+	key := pl.key(e)
 	kind := EffectFaults(pl.p.name)
 	sim, proc := qenv.From(ctx), qenv.ProcessOf(ctx)
 	var outcome []Event
@@ -795,9 +800,9 @@ func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res R
 			proc.Crash()
 		}
 		pl.effects.Add(1)
-		err := res.effect(pl.effectContext(ctx, e.Pos, head, key, 0))
+		err := res.effect(pl.effectContext(ctx, e, head, key, 0))
 		pl.effects.Add(-1)
-		record(ctx, pl.s, pl.tenant, pl.p.quint+"Effect", nil, "trigger", int64(e.Pos), "key", key, "ok", err == nil,
+		record(ctx, pl.s, pl.tenant, pl.p.quint+"Effect", nil, "trigger", int64(e.Pos), "triggerId", e.ID, "key", key, "ok", err == nil,
 			"order.pos", readOrder(head), "order.p."+pl.p.quint, 2*int64(e.Pos))
 		if sim != nil && proc != nil && sim.FaultOf(kind) == "crashAfter" {
 			proc.Crash()
@@ -842,7 +847,7 @@ func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Res
 	if !ok {
 		return 0, false
 	}
-	key := pl.key(e.Pos)
+	key := pl.key(e)
 	kind := EffectFaults(pl.p.name)
 	sim, proc := qenv.From(ctx), qenv.ProcessOf(ctx)
 	if sim != nil && proc != nil && sim.FaultOf(kind.Only("crashBefore")) != "" {
@@ -854,9 +859,9 @@ func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Res
 		return 0, false
 	}
 	pl.effects.Add(1)
-	err := res.effect(pl.effectContext(ctx, e.Pos, head, key, 1))
+	err := res.effect(pl.effectContext(ctx, e, head, key, 1))
 	pl.effects.Add(-1)
-	record(ctx, pl.s, pl.tenant, pl.p.quint+"Effect", nil, "trigger", int64(e.Pos), "key", key, "ok", err == nil,
+	record(ctx, pl.s, pl.tenant, pl.p.quint+"Effect", nil, "trigger", int64(e.Pos), "triggerId", e.ID, "key", key, "ok", err == nil,
 		"order.pos", readOrder(head), "order.p."+pl.p.quint, 2*int64(e.Pos)+1)
 	if sim != nil && proc != nil && sim.FaultOf(kind) == "crashAfter" {
 		proc.Crash() // the effect ran once, its outcome is lost
@@ -890,7 +895,7 @@ func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Res
 			return head, true // retain the diagnostic; never claim NotApplied
 		}
 	}
-	step := newRowStep(pl.p.quint+"Outcome", len(outcome), append([]any{"trigger", int64(e.Pos), "key", key, "ok", err == nil, "known", known, "error", text}, obs...)...)
+	step := newRowStep(pl.p.quint+"Outcome", len(outcome), append([]any{"trigger", int64(e.Pos), "triggerId", e.ID, "key", key, "ok", err == nil, "known", known, "error", text}, obs...)...)
 	b := store.Batch{Events: outcome, Marker: &store.Marker{ID: reservedID + key, Hash: "outcome"},
 		Time: qenv.Now(ctx).UnixMilli(), Cause: "processor:" + pl.p.name, Step: encodeRow([]rowStep{step})}
 	// the outcome outlives the node's stop: f ran, and an outcome not

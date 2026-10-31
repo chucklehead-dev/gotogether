@@ -5843,3 +5843,74 @@ Three shapes were weighed:
 **The model navigator** stays in validate for v1 (§70): it starts from
 a recorded run's state and explains disabled actions with the runs'
 explanations.
+
+
+## 72. Stored identity instead of node-local rewind epochs (I25)
+
+A deterministic two-node fixture exposed a mismatch: after restore/resume,
+a surviving node keyed a replacement trigger with its local rewind epoch while
+a restarted node used its position. Repeating the restore widened the mismatch.
+Persisting those counters would need a shared retained boundary, despite
+nodes observing different windows and step-log pruning deleting old evidence.
+
+Every store tier now mints and persists an immutable `Stored.ID` for each event;
+`Meta.ID` carries it to callbacks. Effect keys include that ID. Retained events
+keep their keys, replacement events get new keys even with identical body,
+cause, timestamp and position, and all nodes derive the same answer without
+rewind-memory reconstruction. Native effect and call records carry `triggerId`;
+`CallInfo.TriggerID`, the one required HTTP cause header and the full key must
+agree. Missing/invalid identities stop the batch before callbacks or checkpoints.
+SQL schema 2 refuses older data rather than inventing identities for events
+that may already have caused external effects.
+
+`qenv.NewID` supplies random 128-bit production identities and a deterministic
+per-simulation allocator shared by setup, processes and stores. Simulated
+restores do not rewind that allocator, and it consumes no scheduling/fault
+choices. Separate simulated universes may reuse values. Stores reject duplicate
+explicit retained identities and skip allocator collisions with imported fixture
+identities. IDs are opaque; users must not derive them from positions or clocks.
+
+Historical copies use explicit `Batch.RetainedIDs`, validated and committed
+atomically with the events. `gristtest.Capture` assigns its private batch IDs
+before append, avoiding a read-after-commit race with restore/replacement. A
+known commit stays committed even if evidence collection fails; unknown outcomes
+or overlapping captures make the capture unusable rather than exporting an
+incomplete or falsely ordered history. Raw fixture batches without recorded
+identities are new materializations, not evidence of original event identity.
+
+Shared store tests cover duplicate IDs, read stability, unknown commit retries,
+rollback and repeated restores. The public effect fixture scripts crash/restart
+and retry; caller/site checks validate typed identity. Existing generated models
+keep keys opaque and check retry consistency; they do not prove ID allocation.
+This change does not detect every unobserved restore or atomically close a
+read-to-effect restore window. Fail-closed detection and operator reconciliation
+remain separate guarantees.
+
+
+The additional identity-index seams exposed two integration assumptions. A
+rollout test depended on a small seed sample happening to select an old reader;
+a deterministic eager/held writer contrast now proves the refusal prerequisite,
+while retaining broad rollouts. A relay could read an old step row and then find
+its events gone after a restore, classifying it as permanent malformed data.
+On decoding failure only, it now checks the exact native row again: changed or
+missing rows restart prefix verification, while unchanged malformed data retains
+its error. Reread failures remain errors. Neither successful rows nor model
+judgments bypass their existing validation.
+
+
+A forced counter incident then exposed a context-composition bug: installing
+`gristsim.Config.Setup` dependencies discarded the relay clock for served
+commands/queries. Processors still had it, so post-restore query records sorted
+before the commits they read. Setup now preserves that mandatory clock layer;
+the model is unchanged. The incident fixture targets the paid effect and lost
+checkpoint directly, rather than assuming a global nth commit has that role.
+
+
+The forced fail-open counter contrast retains a bounded claim: specified loss
+occurs after a real bank application, a retained trigger's checkpoint is lost,
+and only the ablation makes the same full key/ID call again after rewind without
+resume. The faithful side makes one call and never rejects a new bank call; it
+does not establish full conformance for an outcome already in flight when the
+checkpoint disappears. That completion boundary needs its own small contract
+fixture before expanding incident-conformance claims. The model is not loosened
+to hide that distinction.

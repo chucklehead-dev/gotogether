@@ -11,7 +11,8 @@
 // t/<t>/m/<command id> (markers), t/<t>/c/<processor> (checkpoints),
 // t/<t>/s/<seq, 20 digits> and t/<t>/sseq (the step log, a
 // store.StepLog), t/<t>/n/<read model>/<key>/<fingerprint> (snapshots,
-// a store.SnapshotStore); and tenants/<t>. Segments are query-escaped, so a
+// a store.SnapshotStore); tenants/<t>; and identities/<event ID>, a global
+// committed-identity index kept by the same backup and restore. Segments are query-escaped, so a
 // value holding a slash or an equals sign names no other key.
 //
 // An append takes the head with GetForUpdate (the tenant's lock),
@@ -64,6 +65,7 @@ func esc(s string) string { return url.QueryEscape(s) }
 
 func headKey(t string) string                    { return "t/" + esc(t) + "/head" }
 func eventKey(t string, p store.Position) string { return "t/" + esc(t) + "/e/" + poskey.Of(p) }
+func identityKey(id string) string               { return "identities/" + id }
 func markerKey(t, id string) string              { return "t/" + esc(t) + "/m/" + esc(id) }
 func checkpointKey(t, p string) string           { return "t/" + esc(t) + "/c/" + esc(p) }
 func stepKey(t string, seq int64) string {
@@ -181,6 +183,9 @@ func (s *Store) Read(ctx context.Context, t string, q store.Selector, at store.P
 
 // Append implements store.Store.
 func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Position, error) {
+	if err := b.CheckRetainedIDs(); err != nil {
+		return 0, err
+	}
 	tx := s.db.Begin(ctx)
 	defer tx.Rollback()
 	v, ok, err := tx.GetForUpdate(headKey(t)) // the tenant's lock
@@ -221,10 +226,35 @@ func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Posi
 			}
 		}
 	}
-	for _, e := range b.Events {
+	ids := make([]string, len(b.Events))
+	allocated := map[string]bool{}
+	for i := range ids {
+		for {
+			id := ""
+			if b.RetainedIDs != nil {
+				id = b.RetainedIDs[i]
+			} else {
+				id = qenv.NewID(ctx)
+			}
+			_, exists, err := tx.GetForUpdate(identityKey(id))
+			if err != nil {
+				return 0, store.NotCommitted(err)
+			}
+			if exists || allocated[id] {
+				if b.RetainedIDs != nil {
+					return 0, store.Permanent(&store.IdentityExists{ID: id})
+				}
+				continue
+			}
+			ids[i], allocated[id] = id, true
+			break
+		}
+	}
+	for i, e := range b.Events {
 		h++
 		e = e.Clone() // the store's own: the caller may reuse its slices
-		tx.Put(eventKey(t, h), store.Stored{Event: e, Tenant: t, Pos: h, Time: b.Time, Cause: b.Cause})
+		tx.Put(eventKey(t, h), store.Stored{Event: e, ID: ids[i], Tenant: t, Pos: h, Time: b.Time, Cause: b.Cause})
+		tx.Put(identityKey(ids[i]), true)
 		tx.Put(indexPrefix(t, e.Type, nil)+poskey.Of(h), true)
 		for _, tag := range e.Tags {
 			tx.Put(indexPrefix(t, e.Type, []store.TagPair{tag})+poskey.Of(h), true)

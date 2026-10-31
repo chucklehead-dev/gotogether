@@ -68,6 +68,10 @@ func (e Event) Clone() Event {
 // Stored is an event as the store holds it: the event and its envelope.
 type Stored struct {
 	Event
+	// ID is the immutable identity minted for this committed event: 32 lower-case
+	// hexadecimal digits. Unlike Pos, it is not reused when a restore gives a
+	// position back. Readers, clones and retained backups keep it unchanged.
+	ID     string
 	Tenant string
 	Pos    Position
 	// Time is the append's time, Unix milliseconds (qenv.Now: virtual in a
@@ -86,6 +90,7 @@ func (s Stored) Clone() Stored {
 
 // Meta is a stored event's envelope, as folds and handlers see it.
 type Meta struct {
+	ID     string // immutable event identity (Stored.ID), independent of position
 	Tenant string
 	Pos    Position
 	Time   int64 // Unix milliseconds
@@ -93,7 +98,9 @@ type Meta struct {
 }
 
 // Meta is the stored event's envelope.
-func (s Stored) Meta() Meta { return Meta{Tenant: s.Tenant, Pos: s.Pos, Time: s.Time, Cause: s.Cause} }
+func (s Stored) Meta() Meta {
+	return Meta{ID: s.ID, Tenant: s.Tenant, Pos: s.Pos, Time: s.Time, Cause: s.Cause}
+}
 
 // A Selector selects events: of one of Types, carrying every tag of Tags,
 // after position After, newest first if Reverse, at most Limit (0: all).
@@ -158,7 +165,11 @@ type Store interface {
 	Read(ctx context.Context, tenant string, q Selector, at Position) ([]Stored, Position, error)
 	// Append commits the batch at the tenant's next positions if its
 	// condition holds, its marker is new and its checkpoint is as
-	// expected, and returns the head after it. A *ConditionFailed or a
+	// expected, assigning each new event a fresh immutable ID (RetainedIDs
+	// explicitly preserves imported history), and returns the head after it.
+	// IDs are not computed from positions, payloads, times or
+	// causes: distinct events retain distinct identities even when these repeat.
+	// A *ConditionFailed or a
 	// *CheckpointMoved says which did not hold; any other error is
 	// transient (a lost race for the tenant's lock, a commit whose
 	// outcome is unknown, which may have committed).
@@ -297,6 +308,13 @@ type Condition struct {
 // A Batch is what one Append commits, atomically.
 type Batch struct {
 	Events []Event
+	// RetainedIDs are the events' original identities when importing trusted
+	// retained history. Nil appends new events with freshly minted identities.
+	// A non-nil list must match Events, contain distinct canonical identities,
+	// and name no event already committed in any tenant of this store. Ordinary
+	// commands and processors leave it nil; restoration preserves history rather
+	// than representing a new execution of the events.
+	RetainedIDs []string `json:",omitempty"`
 	// Condition, if set, must hold (nil: unconditioned).
 	Condition *Condition
 	// Marker, if set, is written under its ID, which must be new: a key
@@ -321,6 +339,42 @@ type Batch struct {
 	// hook (slice 1's Batch.OnCommit, which only a simulation could run
 	// even when the caller was told the outcome is unknown).
 	Step json.RawMessage
+}
+
+// CheckRetainedIDs validates the explicit historical identities of b. It does
+// not check collisions with existing events; a Store must check those under its
+// append transaction. Invalid input is permanent and commits nothing.
+func (b Batch) CheckRetainedIDs() error {
+	if b.RetainedIDs == nil {
+		return nil
+	}
+	if len(b.RetainedIDs) != len(b.Events) {
+		return Permanent(fmt.Errorf("retained event identities: got %d identities for %d events: preserve one original identity per event", len(b.RetainedIDs), len(b.Events)))
+	}
+	seen := map[string]bool{}
+	for _, id := range b.RetainedIDs {
+		valid := len(id) == 32
+		for _, c := range id {
+			valid = valid && (c >= '0' && c <= '9' || c >= 'a' && c <= 'f')
+		}
+		if !valid {
+			return Permanent(fmt.Errorf("retained event identity %q is not 32 lowercase hexadecimal digits: restore the original captured identity", id))
+		}
+		if seen[id] {
+			return Permanent(fmt.Errorf("retained event identity %s occurs twice in one batch: restore distinct original event identities", id))
+		}
+		seen[id] = true
+	}
+	return nil
+}
+
+// IdentityExists is an append whose retained identity already belongs to a
+// committed event in this store. Stores wrap it in Permanent: no part of the
+// batch committed, and restoration must not replace the original event.
+type IdentityExists struct{ ID string }
+
+func (e *IdentityExists) Error() string {
+	return fmt.Sprintf("retained event identity %s already belongs to a committed event: restore into a fresh store", e.ID)
 }
 
 // A Marker is a key's committed outcome: the hash of the command (its

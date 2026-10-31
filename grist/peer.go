@@ -6,7 +6,7 @@ import "fmt"
 // calls are peer's commands (NewPeerCall), sent to peer's API by
 // grist/client (client.Peer: in a simulation over qhttp,
 // gristsim.Config.Peers; for real over HTTP), each under the effect's key
-// as its command id (EffectKey: <app>/<processor>/<tenant>/<trigger>), in
+// as its command id (EffectKey: <app>/<processor>/<tenant>/<position>@<event-id>), in
 // the caller's tenant, as the caller PeerCaller(app.Name). So an
 // at-least-once effect's tries are one command at the peer, answered from
 // its marker after the first (docs/grist-instrumentation.md §3.7): the

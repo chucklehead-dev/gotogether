@@ -250,6 +250,7 @@ func (r *Relay) flush(ctx context.Context, t string) error {
 		return r.Err()
 	}
 	p := r.tenant(t)
+history:
 	for {
 		if r.clocks.toRecord(t) {
 			if err := r.recordRewind(ctx, t, p); err != nil {
@@ -302,6 +303,21 @@ func (r *Relay) flush(ctx context.Context, t string) error {
 			// decoded before the record's lock: upcasting reads the store
 			steps, err := r.decode(ctx, t, row)
 			if err != nil {
+				var malformed *rowError
+				if errors.As(err, &malformed) {
+					// Decoding may read events after the step-log read. A
+					// restore between those seams can remove or replace the
+					// candidate row; that is another history, not corrupt
+					// evidence in the current one. Check the native row before
+					// making its failure permanent, then recheck the prefix.
+					current, readErr := r.currentRow(ctx, t, row)
+					if readErr != nil {
+						return readErr
+					}
+					if !current {
+						continue history
+					}
+				}
 				return err
 			}
 			if err := r.record(ctx, t, p, row, steps, epoch); err != nil {
@@ -312,6 +328,17 @@ func (r *Relay) flush(ctx context.Context, t string) error {
 			return nil
 		}
 	}
+}
+
+// currentRow compares the exact native row, not rendered observations. An
+// unchanged malformed row must retain its original decoding/schema error.
+func (r *Relay) currentRow(ctx context.Context, t string, row store.StepRow) (bool, error) {
+	rows, err := r.log.Steps(ctx, t, max(row.Seq-1, 0), 1)
+	if err != nil {
+		return false, err
+	}
+	return len(rows) == 1 && rows[0].Seq == row.Seq && rows[0].Head == row.Head &&
+		rows[0].Time == row.Time && bytes.Equal(rows[0].Step, row.Step), nil
 }
 
 // decode is a row's steps, its events stored at an older version

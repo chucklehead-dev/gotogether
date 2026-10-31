@@ -392,7 +392,8 @@ func TestOptionsChecked(t *testing.T) {
 // lost race for the head lock (qsql's 40001 under serializable), where
 // grist's retry decides again without "outcome unknown"; COMMIT's own
 // error (08006, the answer lost) is unmarked, the outcome unknown; a
-// permanent error stays permanent.
+// permanent error stays permanent. An answer lost after a committed batch
+// cannot remint its events when the caller retries under its marker.
 func TestNotCommittedBeforeCommit(t *testing.T) {
 	base := qenv.NewSeeded(1)
 	base.Rates = qenv.NoFaults
@@ -411,10 +412,27 @@ func TestNotCommittedBeforeCommit(t *testing.T) {
 		if err = s.CreateTenant(ctx, "t1"); err != nil {
 			return
 		}
+		batch := store.Batch{Events: []store.Event{e}, Marker: &store.Marker{ID: "lost-answer"}}
 		st.CommitFaults = true
-		_, e1 := s.Append(ctx, "t1", store.Batch{Events: []store.Event{e}})
+		_, e1 := s.Append(ctx, "t1", batch)
 		lost = append(lost, e1)
 		st.CommitFaults = false
+		before, _, readErr := s.Read(ctx, "t1", store.Selector{Types: []string{"a"}}, 0)
+		if readErr != nil || len(before) != 1 || before[0].ID == "" {
+			err = fmt.Errorf("committed event after lost answer: %+v, %v", before, readErr)
+			return
+		}
+		_, retryErr := s.Append(ctx, "t1", batch)
+		var cf *store.ConditionFailed
+		if !errors.As(retryErr, &cf) || cf.Marker != batch.Marker.ID {
+			err = fmt.Errorf("retry after lost answer: %v, want existing marker", retryErr)
+			return
+		}
+		after, _, readErr := s.Read(ctx, "t1", store.Selector{Types: []string{"a"}}, 0)
+		if readErr != nil || len(after) != 1 || after[0].ID != before[0].ID {
+			err = fmt.Errorf("retry changed committed identity: before=%+v after=%+v err=%v", before, after, readErr)
+			return
+		}
 		done := make([]bool, 4)
 		for i := range 4 {
 			qenv.Go(ctx, fmt.Sprint("racer", i), func(ctx context.Context) {

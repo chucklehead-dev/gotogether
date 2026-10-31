@@ -4,13 +4,12 @@
 // driver: the application opens the database with its own (pgx's stdlib,
 // modernc.org/sqlite) and names its Dialect.
 //
-// Tables (Open migrates the database to them, SchemaVersion, under
-// grist_schema's lock: two nodes opening one database at once migrate it
-// once):
+// Tables (Open initializes the current SchemaVersion under grist_schema's
+// lock; schemas without immutable event identities are refused):
 //
 //	grist_schema(id, version)                    the schema's version, its row the migrations' lock
 //	grist_heads(tenant, head, steps)             the tenant's lock, its head, its step rows' count
-//	grist_events(tenant, pos, type, version, at_ms, cause, tags, body)
+//	grist_events(tenant, pos, event_id, type, version, at_ms, cause, tags, body)
 //	grist_index(tenant, k, pos)                  k: i/<type>, or g/<type>/<key>=<value>
 //	grist_markers(tenant, id, hash, outcome, pos, events)
 //	grist_checkpoints(tenant, processor, pos)
@@ -113,20 +112,21 @@ type Store struct {
 	sim *qenv.Store
 }
 
-// schema is the tables, in the SQL every dialect runs: migration 1
-// (migrations). Read-only.
+// schema is the current tables, in the SQL every dialect runs. The initial
+// versioned creation refuses an unversioned pre-release schema. Read-only.
 var schema = []string{
-	`CREATE TABLE IF NOT EXISTS grist_heads (tenant TEXT NOT NULL, head BIGINT NOT NULL, steps BIGINT NOT NULL, PRIMARY KEY (tenant))`,
-	`CREATE TABLE IF NOT EXISTS grist_events (tenant TEXT NOT NULL, pos BIGINT NOT NULL, type TEXT NOT NULL, version BIGINT NOT NULL, at_ms BIGINT NOT NULL, cause TEXT NOT NULL, tags TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY (tenant, pos))`,
-	`CREATE TABLE IF NOT EXISTS grist_index (tenant TEXT NOT NULL, k TEXT NOT NULL, pos BIGINT NOT NULL, PRIMARY KEY (tenant, k, pos))`,
-	`CREATE TABLE IF NOT EXISTS grist_markers (tenant TEXT NOT NULL, id TEXT NOT NULL, hash TEXT NOT NULL, outcome TEXT NOT NULL, pos BIGINT NOT NULL, events BIGINT NOT NULL, PRIMARY KEY (tenant, id))`,
-	`CREATE TABLE IF NOT EXISTS grist_checkpoints (tenant TEXT NOT NULL, processor TEXT NOT NULL, pos BIGINT NOT NULL, PRIMARY KEY (tenant, processor))`,
-	`CREATE TABLE IF NOT EXISTS grist_steps (tenant TEXT NOT NULL, seq BIGINT NOT NULL, head BIGINT NOT NULL, at_ns BIGINT NOT NULL, step TEXT NOT NULL, PRIMARY KEY (tenant, seq))`,
-	`CREATE TABLE IF NOT EXISTS grist_snapshots (tenant TEXT NOT NULL, name TEXT NOT NULL, k TEXT NOT NULL, fingerprint TEXT NOT NULL, pos BIGINT NOT NULL, state TEXT NOT NULL, checksum TEXT NOT NULL, PRIMARY KEY (tenant, name, k, fingerprint))`,
+	`CREATE TABLE grist_heads (tenant TEXT NOT NULL, head BIGINT NOT NULL, steps BIGINT NOT NULL, PRIMARY KEY (tenant))`,
+	`CREATE TABLE grist_events (tenant TEXT NOT NULL, pos BIGINT NOT NULL, event_id TEXT NOT NULL UNIQUE, type TEXT NOT NULL, version BIGINT NOT NULL, at_ms BIGINT NOT NULL, cause TEXT NOT NULL, tags TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY (tenant, pos))`,
+	`CREATE TABLE grist_index (tenant TEXT NOT NULL, k TEXT NOT NULL, pos BIGINT NOT NULL, PRIMARY KEY (tenant, k, pos))`,
+	`CREATE TABLE grist_markers (tenant TEXT NOT NULL, id TEXT NOT NULL, hash TEXT NOT NULL, outcome TEXT NOT NULL, pos BIGINT NOT NULL, events BIGINT NOT NULL, PRIMARY KEY (tenant, id))`,
+	`CREATE TABLE grist_checkpoints (tenant TEXT NOT NULL, processor TEXT NOT NULL, pos BIGINT NOT NULL, PRIMARY KEY (tenant, processor))`,
+	`CREATE TABLE grist_steps (tenant TEXT NOT NULL, seq BIGINT NOT NULL, head BIGINT NOT NULL, at_ns BIGINT NOT NULL, step TEXT NOT NULL, PRIMARY KEY (tenant, seq))`,
+	`CREATE TABLE grist_snapshots (tenant TEXT NOT NULL, name TEXT NOT NULL, k TEXT NOT NULL, fingerprint TEXT NOT NULL, pos BIGINT NOT NULL, state TEXT NOT NULL, checksum TEXT NOT NULL, PRIMARY KEY (tenant, name, k, fingerprint))`,
 }
 
-// Open returns a store over db in dialect d, creating its tables if they
-// do not exist; on SQLite it checks the single-writer mode (SQLiteDSN).
+// Open returns a store over db in dialect d, initializing a fresh schema or
+// opening the current one. It refuses old schemas without immutable event
+// identities; on SQLite it checks the single-writer mode (SQLiteDSN).
 // It checks the options (a negative duration, a name a recorder cannot
 // carry) and begins one transaction at the isolation level, so a level
 // the database or its driver does not offer is Open's error, naming the
@@ -324,7 +324,7 @@ func head(ctx context.Context, q querier, t string) (store.Position, error) {
 // and a LIMIT appended): one statement for every event under the key, a
 // range of grist_index's key and a lookup of grist_events' per row, on
 // PostgreSQL, SQLite and qsql alike. Read-only.
-const readStmt = `SELECT grist_events.pos, grist_events.type, grist_events.version, grist_events.at_ms, grist_events.cause, grist_events.tags, grist_events.body ` +
+const readStmt = `SELECT grist_events.pos, grist_events.event_id, grist_events.type, grist_events.version, grist_events.at_ms, grist_events.cause, grist_events.tags, grist_events.body ` +
 	`FROM grist_index JOIN grist_events ON grist_events.tenant = grist_index.tenant AND grist_events.pos = grist_index.pos ` +
 	`WHERE grist_index.tenant = $1 AND grist_index.k = $2 AND grist_index.pos > $3 AND grist_index.pos <= $4 ORDER BY grist_index.pos `
 
@@ -389,13 +389,13 @@ func events(ctx context.Context, q querier, t string, sel store.Selector, after,
 
 // scanEvent is t's event in a row of readStmt.
 func scanEvent(rows *sql.Rows, t string) (store.Stored, error) {
-	var typ, cause, tags string
+	var id, typ, cause, tags string
 	var body []byte // a copy of its own (Scan's), so the event's body is the caller's
 	var p, version, at int64
-	if err := rows.Scan(&p, &typ, &version, &at, &cause, &tags, &body); err != nil {
+	if err := rows.Scan(&p, &id, &typ, &version, &at, &cause, &tags, &body); err != nil {
 		return store.Stored{}, classify(err)
 	}
-	e := store.Stored{Event: store.Event{Type: typ, Version: int(version), Body: json.RawMessage(body)}, Tenant: t, Pos: store.Position(p), Time: at, Cause: cause}
+	e := store.Stored{Event: store.Event{Type: typ, Version: int(version), Body: json.RawMessage(body)}, ID: id, Tenant: t, Pos: store.Position(p), Time: at, Cause: cause}
 	pairs, ok := decodeTags(tags)
 	if !ok {
 		var kvs [][2]string
@@ -497,6 +497,9 @@ func (s *Store) Read(ctx context.Context, t string, q store.Selector, at store.P
 
 // Append implements store.Store.
 func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Position, error) {
+	if err := b.CheckRetainedIDs(); err != nil {
+		return 0, err
+	}
 	h, err := s.append(ctx, t, b)
 	if err != nil {
 		return 0, err
@@ -593,9 +596,28 @@ func (s *Store) tryAppend(ctx context.Context, t string, b store.Batch) (store.P
 		if body == "" {
 			body = "null"
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO grist_events (tenant, pos, type, version, at_ms, cause, tags, body) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-			t, p, e.Type, int64(e.Version), b.Time, b.Cause, string(tags), body); err != nil {
-			return 0, classify(err)
+		for {
+			id := ""
+			if b.RetainedIDs != nil {
+				id = b.RetainedIDs[i]
+			} else {
+				id = qenv.NewID(ctx)
+			}
+			var inserted string
+			err := tx.QueryRowContext(ctx, `INSERT INTO grist_events (tenant, pos, event_id, type, version, at_ms, cause, tags, body) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (event_id) DO NOTHING RETURNING event_id`,
+				t, p, id, e.Type, int64(e.Version), b.Time, b.Cause, string(tags), body).Scan(&inserted)
+			if errors.Is(err, sql.ErrNoRows) {
+				if b.RetainedIDs != nil {
+					return 0, store.Permanent(&store.IdentityExists{ID: id})
+				}
+				// Imported simulation history may already own an allocator value.
+				// The unique index arbitrates without a separate lookup round trip.
+				continue
+			}
+			if err != nil {
+				return 0, classify(err)
+			}
+			break
 		}
 		if err := s.index(ctx, tx, t, e, p); err != nil {
 			return 0, err

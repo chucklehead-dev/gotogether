@@ -8,6 +8,20 @@ and adds a line here.
 
 ## Unreleased
 
+- Grist effect keys now use immutable stored-event IDs, shared by every node
+  across restarts, restores and retries. `Stored.ID`, `Meta.ID` and
+  `CallInfo.TriggerID` expose the identity; native effect/call telemetry includes
+  `triggerId`. All store tiers persist IDs, and SQL schema 2 refuses older
+  schemas without backfilling. Calls require the single updated cause-header
+  layout and matching key; missing identities stop processing before callbacks.
+  Retained batches preserve explicit IDs, while uncertain or overlapping log
+  captures are refused as incomplete evidence. Relay decode failures recheck
+  changed history, and simulation setup preserves post-rewind request clocks.
+
+- Added `qenv.NewID`: fresh opaque IDs in production and deterministic IDs
+  shared across a simulation's processes and stores, surviving simulated
+  crashes and restores without adding scheduling or fault choices.
+
 - Added `gotogether bundle -out DIR MANIFEST` for verified portable evidence,
   retaining the native manifest and recorded judgment. `Manifest.Bundle` now
   refuses stale files, unsupported model references and existing destinations,

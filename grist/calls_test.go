@@ -184,8 +184,8 @@ func TestCallSteps(t *testing.T) {
 	}
 	for _, c := range calls {
 		tr := c.Args["trigger"].(int64)
-		key := fmt.Sprintf("calls/payer/t1/%d", tr)
-		if c.Call == 0 || c.Actor != "calls/t1" || c.Process != "calls" || c.Args["processor"] != "payer" || c.Args["key"] != key || c.Args["amount"] == nil {
+		key := fmt.Sprintf("calls/payer/t1/%d@%s", tr, triggerIDAt(log, tr))
+		if c.Call == 0 || c.Actor != "calls/t1" || c.Process != "calls" || c.Args["processor"] != "payer" || c.Args["key"] != key || c.Args["triggerId"] != triggerIDAt(log, tr) || c.Args["amount"] == nil {
 			t.Errorf("caller step %+v: want a completion (Call set) of actor t1, process calls, processor payer, key %s, the request's amount", c, key)
 		}
 		if c.Outcome != wantOutcome[tr] {
@@ -324,7 +324,7 @@ func TestReplayedRecorded(t *testing.T) {
 		t.Errorf("replay %+v: want the served record's fields, outcome, thread and place %+v", r, s)
 	}
 	calls := byAction(steps, "bankPay")
-	if len(calls) != 1 || calls[0].Outcome != "ok" || calls[0].Args["ref"] != "ref-calls/payer/t1/1" {
+	if len(calls) != 1 || calls[0].Outcome != "ok" || calls[0].Args["ref"] != "ref-"+calls[0].Args["key"].(string) {
 		t.Errorf("caller steps %v: want one, answered with the first application's ref", calls)
 	}
 }
@@ -349,9 +349,9 @@ func TestSiteOrderPerKey(t *testing.T) {
 	})})
 	body, _ := json.Marshal(payReq{Amount: 5})
 	for _, c := range []grist.CallInfo{
-		{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 7, Key: "calls/payer/t1/1"}, // the retry, served first
-		{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 4, Key: "calls/payer/t1/1"}, // the delayed first try
-		{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 2, Head: 4, Key: "calls/payer/t1/2"},
+		{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 7, TriggerID: transportTriggerID, Key: "calls/payer/t1/1@" + transportTriggerID}, // the retry, served first
+		{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 4, TriggerID: transportTriggerID, Key: "calls/payer/t1/1@" + transportTriggerID}, // the delayed first try
+		{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 2, Head: 4, TriggerID: transportTriggerID2, Key: "calls/payer/t1/2@" + transportTriggerID2},
 	} {
 		if _, err := tr.Call(ctx, c, "pay", body); err != nil {
 			t.Fatal(err)
@@ -377,7 +377,7 @@ func TestSiteOrderPerKey(t *testing.T) {
 	}
 	var order []uint64
 	for _, s := range traces[0].Steps {
-		if s.Args["key"] == "calls/payer/t1/1" {
+		if s.Args["key"] == "calls/payer/t1/1@"+transportTriggerID {
 			order = append(order, s.Seq)
 		}
 	}
@@ -391,6 +391,9 @@ func TestSiteOrderPerKey(t *testing.T) {
 // a field in both request and response, a refusal named unknown, a call
 // of another App's dependency.
 func TestCallDeclarations(t *testing.T) {
+	type identityClash struct {
+		ID string `json:"triggerId"`
+	}
 	type clash struct {
 		Key string `json:"key"`
 	}
@@ -402,6 +405,8 @@ func TestCallDeclarations(t *testing.T) {
 	d := grist.NewDependency(a, "bank")
 	ok := grist.NewCall[payReq, payResp](d, "pay")
 	grist.NewCall[clash, payResp](d, "keyed-field")
+	grist.NewCall[identityClash, payResp](d, "request-trigger-id")
+	grist.NewCall[payReq, identityClash](d, "response-trigger-id")
 	grist.NewCall[ref, payResp](d, "both")
 	grist.NewCall[payReq, payResp](d, "odd", grist.Refuses(grist.Rejection("unknown")))
 	other := grist.New("other")
@@ -417,6 +422,8 @@ func TestCallDeclarations(t *testing.T) {
 	for _, want := range []string{
 		`processor "emits" uses call bank/pay, but declares no Delivers`,
 		`call bank/keyed-field: its request's field Key is named "key"`,
+		`call bank/request-trigger-id: its request's field ID is named "triggerId", which every call step records itself`,
+		`call bank/response-trigger-id: its response's field ID is named "triggerId", which every call step records itself`,
 		`call bank/both: its request and its response both have a field "ref"`,
 		`call bank/odd: a refusal named "unknown"`,
 		`processor "foreign" uses call bank/pay, of another App's dependency`,
@@ -446,8 +453,10 @@ func TestDefaultHandlers(t *testing.T) {
 	tr := grist.Local(grist.DefaultHandlers(bank))
 	body, _ := json.Marshal(payReq{Amount: 5})
 	for _, call := range []string{"pay", "pay", "tip", "tip"} {
-		for _, key := range []string{"calls/payer/t1/1", "calls/payer/t1/2"} {
-			out, err := tr.Call(ctx, grist.CallInfo{App: "defaults", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 2, Key: key}, call, body)
+		for _, trigger := range []grist.Position{1, 2} {
+			id := fmt.Sprintf("%032x", trigger)
+			key := fmt.Sprintf("defaults/payer/t1/%d@%s", trigger, id)
+			out, err := tr.Call(ctx, grist.CallInfo{App: "defaults", Tenant: "t1", Processor: "payer", Trigger: trigger, TriggerID: id, Head: 2, Key: key}, call, body)
 			if err != nil || string(out) != `{}` {
 				t.Errorf("%s %s: %s, %v: want the acknowledgement", call, key, out, err)
 			}
@@ -473,5 +482,33 @@ func TestDefaultHandlers(t *testing.T) {
 		if r, s := replayed[i], served[i]; r.Outcome != "ok" || fmt.Sprint(r.Args) != fmt.Sprint(s.Args) || r.Order["pos"] != s.Order["pos"] {
 			t.Errorf("replay %+v: want the served record's fields and place %+v", r, s)
 		}
+	}
+}
+
+// The in-process transport enforces the same immutable cause/key contract as
+// HTTP before applying or recording a call. It cannot silently accept an empty
+// ID or retain the former node-local rewind suffix.
+func TestLocalCallsRefuseUnstableIdentity(t *testing.T) {
+	_, _, pay := callsApp(grist.AtLeastOnce, true)
+	applied := 0
+	tr := grist.Local(grist.Handlers{pay.Handler(func(ctx context.Context, req payReq) (payResp, error) {
+		applied++
+		return payResp{}, nil
+	})})
+	sink := &qobs.MemorySink{}
+	recorder := qobs.NewRecorder(sink)
+	defer recorder.Close()
+	ctx := qobs.WithRecorder(context.Background(), recorder)
+	for _, info := range []grist.CallInfo{
+		{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 1, Key: "calls/payer/t1/1"},
+		{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 1, TriggerID: transportTriggerID, Key: "calls/payer/t1/1~1"},
+		{App: "calls", Tenant: "t1", Processor: "payer", Trigger: 1, Head: 1, TriggerID: transportTriggerID, Key: "calls/payer/t1/1@" + transportTriggerID2},
+	} {
+		if _, err := tr.Call(ctx, info, "pay", []byte(`{"amount":5}`)); err == nil {
+			t.Errorf("accepted unstable identity: %+v", info)
+		}
+	}
+	if applied != 0 || len(sink.Steps()) != 0 {
+		t.Fatalf("invalid identity applied %d calls and recorded %d steps", applied, len(sink.Steps()))
 	}
 }

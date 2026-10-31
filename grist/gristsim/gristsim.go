@@ -544,7 +544,10 @@ func Run(c qenv.Chooser, app *grist.App, cfg Config) error {
 	deps := func(ctx context.Context) context.Context { return relay.With(served(ctx)) }
 	if cfg.Setup != nil {
 		if d := cfg.Setup(s, st); d != nil {
-			deps = func(ctx context.Context) context.Context { return d(served(ctx)) }
+			// Dependencies supplied by setup must retain the relay's clock.
+			// Commands and queries share it with the node's processors after
+			// a rewind, even when setup installs application context values.
+			deps = func(ctx context.Context) context.Context { return relay.With(d(served(ctx))) }
 		}
 	}
 	if n := cfg.SnapshotEvery; n != 0 {
