@@ -12,7 +12,9 @@ model identities and conservative cache dependencies; changed model, binding or
 conversion rules are refused before recording. Typed ITF schema inference and
 empty-history manifests obey the same stability checks. Definition-string file
 imports must move into model files. The bounded external-tool guarantee is
-documented in DESIGN §73.
+documented in DESIGN §73. Vacuity witness predicates now use an internal
+diagnostic checker bracketed by the original source guards; they cannot inherit
+the original binding's recorded identity or fall back from compiled-only mode.
 
 Compiled-manifest follow-up (PR #33): gotogether.run/3 records a hashed
 compiled artifact as the evaluator-only replay dependency. Bundle preserves its
@@ -30,7 +32,7 @@ checks. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
-format has one current version; all published core pins agree at b6fe0804a42e.
+format has one current version; all published core pins agree at c5734a692c96.
 
 Captured-transition assertion follow-up (merged PR #32): qtest.TransitionsConform
 judges the existing native conformance facet for all judged actors or required
