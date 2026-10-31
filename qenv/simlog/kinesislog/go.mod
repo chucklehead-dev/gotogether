@@ -5,7 +5,7 @@ go 1.26.1
 require (
 	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/aws/aws-sdk-go-v2/service/kinesis v1.56.6
-	github.com/chucklehead-dev/gotogether v0.0.0-20261031033417-2afc4109807f
+	github.com/chucklehead-dev/gotogether v0.0.0-20261031044517-e2f551a859e8
 )
 
 require (

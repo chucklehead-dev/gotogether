@@ -139,12 +139,12 @@ require explicit `-history`. Use a fresh ID and `go test -count=1`.
 **As of 2026-10-31 (lock-wait-abort branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
-`2afc4109` so snapshot-checkpoint validation/navigation, scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
+`e2f551a8` so interrupted lock waits, SQL cancellation, snapshot-checkpoint validation/navigation, scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
 run profiles, finite-choice witness evidence, structured lint emitters, component shrink identities, composition and nav/2
 contract work outside go.work; the
 merged declared-call span increment did not require a core-pin bump. The
-checkpoint slice updates the pins so published navigation shares the same
-full-state checkpoint contract. **Nothing is tagged**: every module is pre-release,
+checkpoint slice updated the pins for navigation; the lock-wait slice advances
+them again so published SQL consumers share the terminal-wait contract. **Nothing is tagged**: every module is pre-release,
 published modules require each other at pseudo-versions, and breaking
 renames still land (R5 waits for the maintainer).
 
