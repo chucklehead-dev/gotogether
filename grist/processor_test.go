@@ -3,6 +3,7 @@ package grist_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -34,6 +35,15 @@ type Noted struct {
 // and count as of it, and whose "note" processor runs effect, at least
 // once, noting success.
 func procApp(effect func(ctx context.Context) error) (*grist.App, *grist.EventType[Added], *grist.EventType[Summed]) {
+	if effect == nil {
+		return procAppMeta(nil)
+	}
+	return procAppMeta(func(ctx context.Context, _ grist.Meta) error { return effect(ctx) })
+}
+
+// procAppMeta exposes the typed trigger to fault controls without parsing its
+// opaque effect key, which includes the immutable identity of the stored event.
+func procAppMeta(effect func(context.Context, grist.Meta) error) (*grist.App, *grist.EventType[Added], *grist.EventType[Summed]) {
 	a := grist.New("procs")
 	added := grist.NewEvent[Added](a, "added")
 	summed := grist.NewEvent[Summed](a, "summed")
@@ -48,7 +58,7 @@ func procApp(effect func(ctx context.Context) error) (*grist.App, *grist.EventTy
 	})
 	if effect != nil {
 		grist.NewProcessor(a, "note", added, func(ctx context.Context, r *grist.Reads, e Added, m grist.Meta) grist.Result {
-			return grist.Effect(effect, grist.AtLeastOnce, grist.OnSuccess(noted.Of(Noted{Of: int64(m.Pos)})))
+			return grist.Effect(func(ctx context.Context) error { return effect(ctx, m) }, grist.AtLeastOnce, grist.OnSuccess(noted.Of(Noted{Of: int64(m.Pos)})))
 		})
 	}
 	return a, added, summed
@@ -100,6 +110,37 @@ func simulateOn(t *testing.T, a *grist.App, added *grist.EventType[Added], c qen
 	return log, sink.Steps()
 }
 
+// noteRuns checks exact effect keys against the actual stored triggers. It
+// rejects omitted IDs, invented IDs and unexpected keys instead of normalizing
+// keys to positions; each trigger's retries must share its one persisted key.
+func noteRuns(t *testing.T, log []grist.Stored, runs map[string]int) map[grist.Position]int {
+	t.Helper()
+	counts := map[grist.Position]int{}
+	expected := map[string]bool{}
+	ids := map[string]bool{}
+	for _, event := range log {
+		if event.Type != "added" {
+			continue
+		}
+		if event.ID == "" || ids[event.ID] {
+			t.Fatalf("stored triggers need distinct immutable identities: %+v", log)
+		}
+		ids[event.ID] = true
+		key := fmt.Sprintf("procs/note/t1/%d@%s", event.Pos, event.ID)
+		expected[key] = true
+		counts[event.Pos] = runs[key]
+	}
+	if len(counts) != 3 {
+		t.Fatalf("read %d trigger identities, want all three", len(counts))
+	}
+	for key := range runs {
+		if !expected[key] {
+			t.Errorf("effect used key %q absent from the stored trigger identities", key)
+		}
+	}
+	return counts
+}
+
 // Emit: each trigger's events and the checkpoint commit together (one
 // transaction for the batch of triggers read), the handler reading as of
 // its trigger, whatever came after; one step per trigger, on the domain
@@ -138,16 +179,17 @@ func TestEmitAsOfTrigger(t *testing.T) {
 func TestEffectAtLeastOnce(t *testing.T) {
 	keys := map[string]int{}
 	errDown := errors.New("mailer down")
-	a, added, _ := procApp(func(ctx context.Context) error {
+	a, added, _ := procAppMeta(func(ctx context.Context, meta grist.Meta) error {
 		k := grist.EffectKey(ctx)
 		keys[k]++
-		if k == "procs/note/t1/1" || k == "procs/note/t1/2" && keys[k] == 1 {
+		if meta.Pos == 1 || meta.Pos == 2 && keys[k] == 1 {
 			return errDown // the first trigger's always fails, the second's once
 		}
 		return nil
 	})
 	log, steps := simulate(t, a, added, qenv.NewSeeded(1))
-	if keys["procs/note/t1/1"] != effectTries || keys["procs/note/t1/2"] != 2 || keys["procs/note/t1/3"] != 1 {
+	counts := noteRuns(t, log, keys)
+	if counts[1] != effectTries || counts[2] != 2 || counts[3] != 1 {
 		t.Errorf("effect runs by key %v: want %d for the failing trigger, 2 and 1", keys, effectTries)
 	}
 	var outcomes []string
@@ -189,7 +231,8 @@ func TestEffectCrashAfter(t *testing.T) {
 	if len(c.Remaining()) != 0 {
 		t.Fatalf("the crash never happened: %v", c.Remaining())
 	}
-	if runs["procs/note/t1/1"] != 2 || runs["procs/note/t1/2"] != 1 {
+	counts := noteRuns(t, log, runs)
+	if counts[1] != 2 || counts[2] != 1 || counts[3] != 1 {
 		t.Errorf("effect runs %v: want the first trigger's twice (the crash after it), the others once", runs)
 	}
 	noted := 0
@@ -258,11 +301,12 @@ func TestPollerCheckpointRaced(t *testing.T) {
 	runs := map[string]int{}
 	a, added, _ := procApp(func(ctx context.Context) error { runs[grist.EffectKey(ctx)]++; return nil })
 	var w *movedAfterCheckpoint
-	simulateOn(t, a, added, quiet(1), func(s grist.Store) grist.Store { w = &movedAfterCheckpoint{Store: s.(*simstore.Store)}; return w })
+	log, _ := simulateOn(t, a, added, quiet(1), func(s grist.Store) grist.Store { w = &movedAfterCheckpoint{Store: s.(*simstore.Store)}; return w })
 	if !w.moved {
 		t.Fatal("the checkpoint was never moved between the poller's reads")
 	}
-	if runs["procs/note/t1/1"] != 0 {
+	counts := noteRuns(t, log, runs)
+	if counts[1] != 0 {
 		t.Errorf("effect runs %v: the first trigger, checkpointed by the other poller before this one read it, ran here", runs)
 	}
 }

@@ -23,7 +23,9 @@ app prune -db-file /secrets/dsn -steps 720h -markers 2160h   # retention: step r
   `grist_build_info`, `grist_rewound{tenant}`, beside the processor,
   relay and snapshot gauges.
 - `sqlstore.Open` migrates under `grist_schema`'s lock: pods starting at
-  once are safe; a database a newer grist migrated is refused.
+  once are safe; a database a newer grist migrated is refused. Schema version 2
+  requires immutable stored-event IDs. Older prerelease/unversioned tables are
+  refused without backfilling; initialize a fresh schema deliberately.
 - A marker pruned is a key whose retry runs again: give `-markers` a
   horizon far past any client's retries. `steps -export` before pruning
   where a whole history is wanted.
@@ -42,6 +44,15 @@ receipts, the dependencies' records, `steps -export` and another node's
 steps file), then `app resume -tenant T`: the processors go on from their
 checkpoints, at-least-once effects replay under their keys (a Keyed
 dependency answers from its record), at-most-once ones run again.
+
+Effect keys include the immutable `Meta.ID` of the trigger, not a node's rewind
+counter: `<app>/<processor>/<tenant>/<position>@<event-id>`. A surviving and a
+fresh node use the same key. Restored retained events keep their IDs, while
+replacement commits get fresh IDs even with identical fields. Native effect and
+call records expose `triggerId`; `CallInfo.TriggerID` also crosses transports.
+Missing/malformed IDs stop processing before callbacks or checkpoint changes.
+These IDs do not detect an unobserved restore or reconcile lost external effects;
+resume still requires the operator's decision.
 
 ## Simulating it
 
@@ -76,3 +87,15 @@ an exported invocation with no completion is pending. Never infer settle
 or completeness from span end or exporter flush. See examples/payouts'
 `SPANS=1 ./run-demo.sh` and `GOTOGETHER_SPANS_OUT` for the real HTTP,
 lost-reply, interrupted-recorder and generated-mutant acceptance path.
+
+## Retaining committed history
+
+`gristtest.Capture` submits its private event IDs with each batch, so a captured
+log restores the exact recorded identities through `Batch.RetainedIDs`.
+Ordinary commands/processors leave that field nil and stores mint new IDs.
+Explicit retained IDs must be canonical, distinct, and absent from the target
+store; a collision is a typed permanent `store.IdentityExists` with no partial
+commit. Raw fixture batches without IDs materialize new identities and do not
+prove the original ones. Capture errors, overlapping appends, unknown outcomes
+and snapshots sampled during an append cannot be written or restored as a
+complete capture. Collect a fresh known-complete sequential history instead.

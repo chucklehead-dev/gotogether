@@ -308,8 +308,11 @@ var Payout = grist.NewProcessor(App, "payout", Retired,
   `grist.Delivers(guarantee, successType)`. Another result fails the
   trigger. The model's action for the processor is generated from it.
 - An effect's key (`grist.EffectKey(ctx)`,
-  `<app>/<processor>/<tenant>/<trigger>`) is the same on every try: a
-  dependency deduplicates by it.
+  `<app>/<processor>/<tenant>/<position>@<event-id>`) is the same on every try
+  and node for the same stored event. `grist.Meta.ID` exposes that immutable
+  identity. A restored prefix keeps its keys; replacement events receive fresh
+  IDs even when position, payload, cause and timestamp repeat. A dependency
+  deduplicates by the full key. Never construct it from a position yourself.
 - A handler or effect error is tried `grist.EffectTries(n)` times
   (default 3), then the trigger is checkpointed with a `grist.failed`
   event (`grist.Failed`); an at-most-once effect whose outcome is unknown
@@ -319,6 +322,12 @@ var Payout = grist.NewProcessor(App, "payout", Retired,
 - A processor that needs a command run uses an `Internal` command (§2.9)
   and Emit, never a raw append to the store: a raw append is a
   `Mismatch` (counters' `dispatchDirect` mutant).
+
+Stored event IDs are assigned inside the store's append transaction and retained
+by reads, backups and reopen. Missing or malformed identities stop processing
+before callbacks or checkpoint changes; they never become domain failure events.
+SQL schema version 2 requires these identities. Older prerelease or unversioned
+tables are refused without backfilling: initialize a fresh schema deliberately.
 
 ### 2.8 Dependencies and calls
 

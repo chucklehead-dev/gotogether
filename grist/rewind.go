@@ -89,10 +89,6 @@ type tenantClock struct {
 	// back only when the log does; two pollers' do not compare (one's read
 	// begun before the other's committed may end after it)
 	marks map[string]*pollMark
-	// kept are the positions each recorded rewind went back to, in order:
-	// a position past one was given back and filled again, by another
-	// event, whose effect key must differ from the lost one's (keyEpoch)
-	kept []Position
 }
 
 // clocks are a node's tenant clocks (Relay.clocks).
@@ -235,36 +231,14 @@ func (c *clocks) base(t string) int64 {
 	return c.of(t).base
 }
 
-// rewound marks t's rewind to position kept recorded and returns its
+// rewound marks t's rewind recorded and returns its
 // step's place on the tenant's clock.
-func (c *clocks) rewound(t string, kept Position) int64 {
+func (c *clocks) rewound(t string) int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	tc := c.of(t)
 	tc.recorded = true
-	tc.kept = append(tc.kept, kept)
 	return tc.rewindAt
-}
-
-// keyEpoch is the number of the last rewind of t whose kept position is
-// before p (1 for the first), 0 for none: an effect key for trigger p
-// carries it, so the event that filled a position a rewind gave back gets
-// a key of its own. A Keyed dependency deduplicating by the plain key
-// would answer it from the record of the lost event's effect (another
-// move's post), and its own effect never happen. Positions at or before
-// every kept one keep their keys: the same events, whose effects replay
-// under them. A node's memory: a node started after the rewind keys by
-// position again (docs/grist-platform.md §3.4).
-func (c *clocks) keyEpoch(t string, p Position) int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	tc := c.of(t)
-	for k := len(tc.kept); k > 0; k-- {
-		if p > tc.kept[k-1] {
-			return k
-		}
-	}
-	return 0
 }
 
 // resume lets t's processors go on, their memory now the log's (head and
@@ -515,7 +489,7 @@ func (r *Relay) recordRewind(ctx context.Context, t string, p *relayed) error {
 	if !r.clocks.toRecord(t) {
 		return nil // another flush recorded it
 	}
-	kv = append(kv, "order.pos", r.clocks.rewound(t, head))
+	kv = append(kv, "order.pos", r.clocks.rewound(t))
 	p.scratch.Record(context.Background(), "gristRewound", nil, kv...)
 	out := p.sink.Steps()
 	p.sink.Reset()
@@ -650,7 +624,7 @@ func resumeID(ns int64) string { return reservedID + "resume/" + strconv.FormatI
 // Resume is `<app> resume`: it lets every node's processors of tenant go
 // on after a rewind stopped them (ErrRewound), from their checkpoints, so
 // the effects of the triggers after them run again (at least once, under
-// the same EffectKey: a Keyed dependency answers from its record; at most
+// each retained event's same EffectKey: a Keyed dependency answers from its record; at most
 // once, again: decide first). It commits a step row with no event, the
 // step gristResumed, which each node's relay reads; a node that saw no
 // rewind records it and goes on. Never automatic (docs/grist-platform.md

@@ -47,6 +47,9 @@ type Check struct {
 func Checks() []Check {
 	return []Check{
 		{"DensePositions", densePositions},
+		{"EventIdentities", eventIdentities},
+		{"RetainedIdentities", retainedIdentities},
+		{"ConcurrentRetainedIdentities", concurrentRetainedIdentities},
 		{"ConditionsAgainstBruteForce", conditionsAgainstBruteForce},
 		{"ReadsAgainstBruteForce", readsAgainstBruteForce},
 		{"Checkpoints", checkpoints},
@@ -139,7 +142,7 @@ func same(got, want []store.Stored) bool {
 		return false
 	}
 	for i := range got {
-		if got[i].Pos != want[i].Pos || got[i].Tenant != want[i].Tenant || got[i].Type != want[i].Type ||
+		if got[i].ID != want[i].ID || got[i].Pos != want[i].Pos || got[i].Tenant != want[i].Tenant || got[i].Type != want[i].Type ||
 			string(got[i].Body) != string(want[i].Body) || !reflect.DeepEqual(got[i].Tags, want[i].Tags) ||
 			got[i].Time != want[i].Time || got[i].Cause != want[i].Cause {
 			return false
@@ -181,6 +184,9 @@ func densePositions(ctx context.Context, s store.Store) error {
 	}
 	got, at, err := s.Read(ctx, "t1", store.Selector{Types: types}, 0)
 	if err != nil {
+		return err
+	}
+	if err := assignedIDs(want, got); err != nil {
 		return err
 	}
 	if at != store.Position(len(want)) || !same(got, want) {
@@ -283,6 +289,19 @@ func readsAgainstBruteForce(ctx context.Context, s store.Store) error {
 		}
 		log = append(log, stored("t1", store.Position(len(log)), []store.Event{e}, 0, "")...)
 	}
+	// IDs are minted by the store, so the reference captures them once from a
+	// full read, then requires every selected/reversed/bounded read to retain
+	// those exact IDs. The event fields still come from the independent input.
+	baseline, _, err := s.Read(ctx, "t1", store.Selector{Types: types}, 0)
+	if err != nil {
+		return err
+	}
+	if err := assignedIDs(log, baseline); err != nil {
+		return err
+	}
+	if !same(baseline, log) {
+		return fmt.Errorf("reads: initial full read differs from the appended events")
+	}
 	twoFound := 0
 	for i := 0; i < 200; i++ {
 		q := randQuery(r, store.Position(len(log)))
@@ -375,6 +394,13 @@ func markers(ctx context.Context, s store.Store) error {
 	if err != nil {
 		return err
 	}
+	before, _, err := s.Read(ctx, "t1", store.Selector{Types: []string{e.Type}}, 0)
+	if err != nil {
+		return err
+	}
+	if err := checkIDs(before); err != nil {
+		return err
+	}
 	m, ok, err := s.Marker(ctx, "t1", "cmd-1")
 	want := store.NewReceipt("t1", head, 2)
 	if err != nil || !ok || m.Hash != "h1" || !reflect.DeepEqual(m.Receipt, want) {
@@ -387,6 +413,13 @@ func markers(ctx context.Context, s store.Store) error {
 	}
 	if h, _ := s.Heads(ctx); h["t1"] != head {
 		return fmt.Errorf("markers: the refused batch moved the head to %d", h["t1"])
+	}
+	after, _, err := s.Read(ctx, "t1", store.Selector{Types: []string{e.Type}}, 0)
+	if err != nil {
+		return err
+	}
+	if !same(after, before) {
+		return fmt.Errorf("markers: retrying a committed marker changed stored event identities")
 	}
 	if _, ok, _ := s.Marker(ctx, "t1", "cmd-2"); ok {
 		return fmt.Errorf("markers: cmd-2 found, never written")
@@ -482,6 +515,9 @@ func concurrentAgainstBruteForce(ctx context.Context, s store.Store) error {
 	}
 	log, _, err := s.Read(ctx, "t1", store.Selector{Types: types}, 0)
 	if err != nil {
+		return err
+	}
+	if err := checkIDs(log); err != nil {
 		return err
 	}
 	for i, e := range log {
@@ -609,6 +645,13 @@ func Rewinds(ctx context.Context, s store.Store, backup, restore func(ctx contex
 	if _, err := s.Append(ctx, "t1", store.Batch{Events: []store.Event{ev}, Step: []byte(`{"n":1}`)}); err != nil {
 		return err
 	}
+	kept, _, err := s.Read(ctx, "t1", store.Selector{Types: []string{ev.Type}}, 0)
+	if err != nil {
+		return err
+	}
+	if err := checkIDs(kept); err != nil {
+		return err
+	}
 	if err := backup(ctx); err != nil {
 		return err
 	}
@@ -616,6 +659,13 @@ func Rewinds(ctx context.Context, s store.Store, backup, restore func(ctx contex
 		if _, err := s.Append(ctx, "t1", store.Batch{Events: []store.Event{ev}, Step: []byte(fmt.Sprintf(`{"n":%d}`, i))}); err != nil {
 			return err
 		}
+	}
+	original, _, err := s.Read(ctx, "t1", store.Selector{Types: []string{ev.Type}}, 0)
+	if err != nil {
+		return err
+	}
+	if err := checkIDs(original); err != nil {
+		return err
 	}
 	var head, steps, waiting atomic.Int32
 	qenv.Go(ctx, "storetest.headwaiter", func(ctx context.Context) {
@@ -664,6 +714,41 @@ func Rewinds(ctx context.Context, s store.Store, backup, restore func(ctx contex
 	_, err = s.Append(ctx, "t1", store.Batch{Checkpoint: &store.CheckpointMove{Processor: "p", From: 0, To: 3}})
 	if !errors.As(err, &cf) || !cf.Past {
 		return fmt.Errorf("rewinds: a checkpoint moved to 3 in a log of 1: %v, want a *store.ConditionFailed, Past", err)
+	}
+	seen := map[string]bool{}
+	for _, e := range original {
+		seen[e.ID] = true
+	}
+	// Repeating the same restore must preserve the retained event and mint a
+	// new identity each time identical bytes take the lost position again.
+	for attempt := 0; attempt < 2; attempt++ {
+		retained, _, err := s.Read(ctx, "t1", store.Selector{Types: []string{ev.Type}}, 0)
+		if err != nil {
+			return err
+		}
+		if !same(retained, kept) {
+			return fmt.Errorf("rewinds: restore changed a retained event's identity")
+		}
+		if _, err := s.Append(ctx, "t1", store.Batch{Events: []store.Event{ev}}); err != nil {
+			return err
+		}
+		events, _, err := s.Read(ctx, "t1", store.Selector{Types: []string{ev.Type}}, 0)
+		if err != nil {
+			return err
+		}
+		if len(events) != 2 || !same(events[:1], kept) {
+			return fmt.Errorf("rewinds: replacement changed the retained prefix")
+		}
+		if err := checkIDs(events); err != nil {
+			return err
+		}
+		if seen[events[1].ID] {
+			return fmt.Errorf("rewinds: replacement event reused identity %s from lost history", events[1].ID)
+		}
+		seen[events[1].ID] = true
+		if err := restore(ctx); err != nil {
+			return err
+		}
 	}
 	return nil
 }
