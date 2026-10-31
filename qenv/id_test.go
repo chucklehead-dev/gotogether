@@ -19,13 +19,14 @@ func TestNewIDSurvivesStoreRestoreAndProcessRestart(t *testing.T) {
 		s := qenv.New(c)
 		defer s.Close()
 		st := qenv.NewStore(s, "ids", qenv.Serializable)
-		var ids []string
+		// Store adapters also mint IDs during setup, before a task is running.
+		ids := []string{qenv.NewID(s.Context()), qenv.NewID(context.Background())}
 		p := s.Process("writer", false, func(ctx context.Context) {
 			// A library using Background must remain in its caller's simulation.
 			ids = append(ids, qenv.NewID(context.Background()))
 		})
 		s.Spawn("restore", func(ctx context.Context) {
-			qenv.Wait(ctx, func() bool { return len(ids) == 1 })
+			qenv.Wait(ctx, func() bool { return len(ids) == 3 })
 			retained := ids[0]
 			if err := put(ctx, st, "event", retained); err != nil {
 				t.Error(err)
@@ -54,7 +55,7 @@ func TestNewIDSurvivesStoreRestoreAndProcessRestart(t *testing.T) {
 		if err := s.Run(time.Minute); err != nil {
 			t.Fatal(err)
 		}
-		if st.Restored() != 2 || p.Incarnation != 3 || len(ids) != 5 {
+		if st.Restored() != 2 || p.Incarnation != 3 || len(ids) != 7 {
 			t.Fatalf("fixture did not restore and restart twice: restores=%d incarnation=%d ids=%v", st.Restored(), p.Incarnation, ids)
 		}
 		seen := map[string]bool{}
@@ -71,6 +72,31 @@ func TestNewIDSurvivesStoreRestoreAndProcessRestart(t *testing.T) {
 		if got := run(chooser); !reflect.DeepEqual(got, want) {
 			t.Errorf("ID source depends on chooser entropy or previous simulations: got %v, want %v", got, want)
 		}
+	}
+}
+
+func TestNewIDNestedCreatorScopes(t *testing.T) {
+	run := func() []string {
+		outer := qenv.New(qenv.Nominal{})
+		first := qenv.NewID(outer.Context())
+		inner := qenv.New(qenv.Nominal{})
+		innerFirst := qenv.NewID(inner.Context())
+		inner.Close()
+		second := qenv.NewID(context.Background())
+		outer.Close()
+		if first != innerFirst || first == second {
+			t.Fatalf("creator scopes share or lose their allocators: outer first=%q inner first=%q outer second=%q", first, innerFirst, second)
+		}
+		return []string{first, innerFirst, second}
+	}
+	if first, second := run(), run(); !reflect.DeepEqual(first, second) {
+		t.Fatalf("creator IDs changed across repeated simulation setup: %v vs %v", first, second)
+	}
+	// Close removes both creator scopes; allocating on this goroutine must
+	// return to the production path rather than advance a closed universe.
+	id := qenv.NewID(context.Background())
+	if strings.HasPrefix(id, strings.Repeat("0", 16)) {
+		t.Fatalf("closed simulation still owns creator allocation: %q", id)
 	}
 }
 

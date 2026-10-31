@@ -14,11 +14,19 @@ import (
 // IDs from separate simulations can repeat. Do not depend on their value or
 // ordering, or use simulated IDs as unpredictable secrets.
 //
-// NewID makes no scheduling or fault choice. Like Now, it finds the calling
-// task's simulation even when ctx carries none.
+// NewID makes no scheduling or fault choice. It also uses the simulation's
+// counter while its creator prepares initial data before Run. An explicit task
+// context takes precedence; without one, the calling goroutine's innermost
+// simulation supplies the counter, whether it is the creator or a running task.
 func NewID(ctx context.Context) string {
 	var b [16]byte
-	if s := From(ctx); s != nil {
+	s := From(ctx)
+	if s == nil && live.Load() != 0 {
+		if owner, ok := ownerOf(goid()); ok {
+			s = owner.s
+		}
+	}
+	if s != nil {
 		for {
 			previous := s.valueIDs.Load()
 			if previous == ^uint64(0) {
