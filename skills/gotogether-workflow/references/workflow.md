@@ -315,3 +315,31 @@ deliberately and say why in the commit and the README.
   `gotogether validate -require-finish` (or `complete: true` in the
   binding), and claim `qtest.Finishes()` of a driver's runs: a run cut
   short conforms (verdicts reference, "A prefix vs a finished run").
+
+## Adapting the library starter to an existing API
+
+Replace the toy implementation, model, observations and toy mutant deliberately;
+catching the unchanged starter mutant is not evidence about the external API.
+Record actual returns, including expected input rejection, as domain outcomes.
+Keep fixture/recording/tool failures separate and require a precise semantic
+verdict for a source contrast. Freeze the contract and dependency pins before
+receiving a separately supplied contrast. The bounded Goo Read rehearsal in
+`internal/adoptiontest/goo-read` demonstrates this workflow with published pins.
+Its 16-case model is not a parser specification or independent-maintainer trial.
+
+For dependency source contrasts, preserve the module cache and baseline go.mod.
+Go 1.27 rejects module-cache overlays; use a temporary exact source copy and a
+separate modfile for contrast-only replacement, as that recipe records. Check
+source hashes and exact output statuses so a rejected build setup earns no
+model-defect credit.
+
+Consume model exploration scope from `simulate -json`'s typed fields: `graph`
+identifies model-state scope, actual counts, completeness, cut/stopped causes and
+configured bounds. Check `bound.kind` and `bound.proves` for proof coverage;
+`possible` separates a found witness from a complete impossibility conclusion
+and retains actual search extent/path. Samples do not prove absence. Read
+`skipReason` and no-verdict status for unperformed checks, and reserve errors for
+actual failures. Never regex `notes` or `detail` to recover these machine facts.
+Go consumers use the canonical model report's `Doc()` projection. The Goo Read
+reproduction exercises this contract while preserving its historical frozen SDK
+baseline and using the current CLI for typed graph checks.

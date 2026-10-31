@@ -139,6 +139,53 @@ manifest replay use fresh executions. This is a concrete template, with explicit
 adaptation work for another API, rather than automatic model derivation or
 independent-adopter evidence.
 
+The starter's first bounded adaptation uses the published SDK and Goo dependency
+for strict definition reading. A fresh agent authored 16 fixed YAML inputs and an
+observation projection from the actual returned definition/error, then froze the
+model, binding, driver, cases and module pins before receiving a source contrast.
+The model graph is complete for those case IDs (17 states, 272 transitions), not
+for arbitrary YAML or every validator branch. Structural model invariants and
+binding observation checks establish different facts; the injected regression is
+caught by an observed-state mismatch after unknown fields become accepted.
+See [the recorded exercise](../internal/adoptiontest/goo-read/README.md).
+
+Two workflow lessons are retained. An expected API rejection belongs in the
+contract's observed data; fixture, recorder, compiler and tool failures must not
+be relabeled as successful rejections. Also, Go 1.27 refuses overlays beneath its
+module cache. Dependency contrasts use an exact temporary production-package
+copy and a separate modfile plus source overlay. The baseline project remains on
+its published pins, and source hashes identify the injected change. Neither the
+initial rejected overlay nor the later planted contrast is a production finding.
+This exercise supplies no evidence for a new runtime facade.
+
+The adaptation exposed a report-boundary gap even though the runtime adapter was
+sufficient: agents could obtain graph completeness/counts only by interpreting
+English summary text. The canonical `validate/model.Report.Doc()` projection now
+constructs `validate.Document` directly from native results. `graph` identifies
+`model_state_graph` scope and retains states, starts, transitions, depth,
+completeness, cut/stopped reasons, configured state/depth bounds, deadlock and
+terminal/quiescent counts, and fairness/stopping selections. These describe a
+model graph, not recorded executions or all workloads.
+
+Each model check carries a typed `bound`; its `kind` and `proves` describe
+coverage, independently of success. A sampled check is never a proof; exhaustive
+coverage within a depth remains bounded by that depth. A counterexample can fail
+a check even when exploration is incomplete. Reachability `possible` data retains
+found/impossible separately from the evaluator's search completeness, cut, node
+count, depth and witness path. An unperformed model check retains `skipReason`
+and no-verdict status, including unsupported modes that are skipped. A partial
+exploration reports its native cut/stopped scope instead; actual errors remain
+errors. CLI rendering uses the same
+projection, so changing display text cannot change machine facts. Notes and
+details provide context rather than a second machine interface.
+
+These optional fields extend `gotogether.report/1` without an alternate legacy
+representation or prose-parsing fallback. The TUI already consumes native graph
+results, so this change needs no navigation format migration. The adaptation's
+portable checker now consumes native scope and proof data; faithful and contrast
+bundles replay after relocation with the original project unavailable, and a
+missing observation remains error 2 rather than mutant credit.
+
 The core lint report is now assembled before either text or JSON rendering.
 `qlint` retains the lightweight syntax rules used by analyzers; the `lint`
 package composes bindings, conversion rules and schemas above it.

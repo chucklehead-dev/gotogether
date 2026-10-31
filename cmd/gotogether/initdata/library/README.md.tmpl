@@ -49,3 +49,23 @@ checks deliberately. Keep observations independent of the model: do not replace
 an API result with the value that would make validation pass. For additional
 negative controls, remove `obs.value` from an actual `read` record: that must be
 an evidence error (exit 2), not credit for catching a source defect.
+
+When adapting an API that rejects invalid inputs, model that rejection as an
+observed domain outcome (for example, whether a real error or result was
+returned). Keep fixture decoding, recorder and tool failures separate; they
+cannot count as catching a library defect. A worked adaptation of a real strict
+reader is recorded at
+https://github.com/chucklehead-dev/gotogether/tree/main/internal/adoptiontest/goo-read.
+
+For a source contrast in a dependency, keep the baseline module and pinned
+source intact. Go may refuse an overlay beneath its module cache. The worked
+recipe copies the exact dependency package to a temporary directory and uses an
+alternate modfile plus overlay for the contrast only; it does not edit the cache
+or add a replacement to the baseline project.
+
+For automated model checks, use `gotogether simulate -graph -json`. Inspect the
+native `graph` completeness, limits and cut/stopped fields, plus each check's
+`bound` and `possible` data. A sampled result is not a proof, and a bounded proof
+covers only its stated bound. A found counterexample can be decisive before
+search completes. `skipReason` marks an unperformed check; do not derive success
+from prose in `notes` or `detail`.

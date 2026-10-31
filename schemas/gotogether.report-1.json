@@ -1092,15 +1092,95 @@
       "items": {
         "additionalProperties": false,
         "properties": {
+          "bound": {
+            "additionalProperties": false,
+            "description": "Bound states what this model check covers, independently of its display detail.",
+            "properties": {
+              "depth": {
+                "type": "integer"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "proves": {
+                "type": "boolean"
+              },
+              "states": {
+                "type": "integer"
+              },
+              "steps": {
+                "type": "integer"
+              },
+              "stopped": {
+                "type": "string"
+              },
+              "traces": {
+                "type": "integer"
+              }
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
           "detail": {
             "type": "string"
           },
           "kind": {
-            "description": "\"invariant\", \"possible\", \"graph\"",
+            "description": "\"invariant\", \"eventually\", \"possible\", \"graph\"",
             "type": "string"
           },
           "name": {
             "type": "string"
+          },
+          "possible": {
+            "additionalProperties": false,
+            "description": "Possible retains native reachability evidence, including incomplete searches.",
+            "properties": {
+              "evaluatorError": {
+                "type": "string"
+              },
+              "found": {
+                "type": "boolean"
+              },
+              "impossible": {
+                "type": "boolean"
+              },
+              "search": {
+                "additionalProperties": false,
+                "properties": {
+                  "complete": {
+                    "type": "boolean"
+                  },
+                  "cut": {
+                    "type": "string"
+                  },
+                  "depth": {
+                    "type": "integer"
+                  },
+                  "found": {
+                    "type": "boolean"
+                  },
+                  "nodes": {
+                    "type": "integer"
+                  },
+                  "path": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            },
+            "type": [
+              "object",
+              "null"
+            ]
           },
           "verdict": {
             "type": "string"
@@ -1131,6 +1211,79 @@
       "const": "gotogether.report/1",
       "description": "ReportFormat",
       "type": "string"
+    },
+    "graph": {
+      "additionalProperties": false,
+      "description": "Graph is the native model-state exploration scope; absent for sampling or history validation.",
+      "properties": {
+        "bound": {
+          "additionalProperties": false,
+          "properties": {
+            "depth": {
+              "type": "integer"
+            },
+            "states": {
+              "type": "integer"
+            }
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "cut": {
+          "type": "string"
+        },
+        "deadlocks": {
+          "type": "integer"
+        },
+        "depth": {
+          "type": "integer"
+        },
+        "quiescent": {
+          "type": "integer"
+        },
+        "scope": {
+          "enum": [
+            "model_state_graph"
+          ],
+          "type": "string"
+        },
+        "starts": {
+          "type": "integer"
+        },
+        "states": {
+          "type": "integer"
+        },
+        "stopped": {
+          "type": "string"
+        },
+        "stops": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "terminals": {
+          "type": "integer"
+        },
+        "transitions": {
+          "type": "integer"
+        },
+        "unfair": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": [
+        "object",
+        "null"
+      ]
     },
     "inputs": {
       "description": "Inputs are what was read, each with its warnings.",
@@ -2692,6 +2845,10 @@
       ]
     },
     "result": {
+      "type": "string"
+    },
+    "skipReason": {
+      "description": "SkipReason identifies an intentionally unperformed model check.",
       "type": "string"
     },
     "verdict": {

@@ -12,7 +12,7 @@ import (
 // simulate runs the binding's model on its own: model.Simulate (the
 // one engine for the model alone, qtest.Model's too) with the flags'
 // options, its report printed (and, with -json and the other machine
-// reports, read from its lines). By default quint samples; with -verify
+// reports, projected from native results). By default quint samples; with -verify
 // N, quint verify checks every trace of up to N steps; with -graph, the
 // Go evaluator explores the state graph within one search bound
 // (simulate.search, -states and -depth), the possibles' too, with
@@ -72,6 +72,7 @@ func simulateCmd(args []string, mr *machineReports, log *simLog) (int, error) {
 	if err != nil {
 		return 2, err
 	}
+	log.result = rep.Doc()
 	simPrint(rep.Text)
 	return rep.Code, nil
 }

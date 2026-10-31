@@ -61,7 +61,9 @@ func (m *machineReports) write(d *validate.Document, stdout io.Writer, code int,
 		d.Error = err.Error()
 	}
 	switch {
-	case code == 2 || err != nil && d.Verdict == "":
+	case err != nil:
+		d.Verdict = "error"
+	case code == 2 && d.Verdict == "":
 		d.Verdict = "error"
 	case d.Verdict == "" && code == 0:
 		d.Verdict = "pass"
@@ -92,12 +94,10 @@ func (m *machineReports) write(d *validate.Document, stdout io.Writer, code int,
 	return code, err
 }
 
-// simLog is simulate's report as it prints it, kept for its
-// machine-readable report: simulate's lines are "  <verdict> <name>:
-// <detail>" (holds, allows, bounded, FAIL, possible, live, ...), a
-// counterexample's lines after its verdict's, and the header and the
-// graph's lines notes.
+// simLog retains display text and the native simulation document. Display
+// wording is never parsed to infer machine-readable checks or scope.
 type simLog struct {
+	result  *validate.Document
 	text    strings.Builder
 	quiet   bool // -json: the text is the document's, not printed
 	binding string
@@ -123,55 +123,16 @@ func simPrint(s string) {
 	os.Stdout.WriteString(s)
 }
 
-// simVerdicts are the words that begin a verdict's line of simulate's
-// report, and the document's verdict for each. Read-only.
-var simVerdicts = map[string]string{"holds": "holds", "allows": "allows", "bounded": "bounded", "unchecked": "unchecked", "FAIL": "fail",
-	"live": "live", "hot": "hot", "possible": "reached"}
-
-// document is the report's lines as a Document: each verdict's line a
-// check (its continuation lines its detail), any other a note.
+// document returns native facts when simulation completed, and only contextual
+// text when a tool failure prevented a native report from being produced.
 func (l *simLog) document() *validate.Document {
+	if l.result != nil {
+		return l.result
+	}
 	d := validate.NewDocument("simulate")
 	d.Binding = l.binding
-	last := -1 // the check a continuation line belongs to
-	for line := range strings.Lines(l.text.String()) {
-		line = strings.TrimRight(line, "\n")
-		rest, indented := strings.CutPrefix(line, "  ")
-		word, body, _ := strings.Cut(rest, " ")
-		verdict, ok := simVerdicts[word]
-		if !indented || !ok || strings.HasPrefix(rest, " ") {
-			if last >= 0 && (strings.HasPrefix(line, "   ") || !indented && !strings.HasPrefix(line, "simulate ")) {
-				d.Checks[last].Detail += "\n" + line // a counterexample's lines
-				continue
-			}
-			if line != "" {
-				d.Notes = append(d.Notes, strings.TrimSpace(line))
-			}
-			last = -1
-			continue
-		}
-		body = strings.TrimSpace(body)
-		kind := "invariant"
-		if word == "possible" {
-			kind, body = "possible", "possible "+body
-		}
-		if p, ok := strings.CutPrefix(body, "possible "); ok {
-			kind, body = "possible", p
-		}
-		name, detail, _ := strings.Cut(body, ": ")
-		if word == "FAIL" && name == "deadlock" {
-			kind = "graph"
-		}
-		if word == "possible" && !strings.HasPrefix(detail, "reached") {
-			verdict, _, _ = strings.Cut(detail, " ")
-		}
-		d.Checks = append(d.Checks, validate.DocCheck{Name: name, Kind: kind, Verdict: verdict, Detail: detail})
-		last = len(d.Checks) - 1
-	}
-	for _, c := range d.Checks {
-		if c.Verdict == "fail" {
-			d.Verdict = "fail"
-		}
+	if l.text.Len() > 0 {
+		d.Notes = append(d.Notes, strings.TrimSpace(l.text.String()))
 	}
 	return d
 }
