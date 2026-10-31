@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -25,7 +26,11 @@ type Resetter = qshrink.Resetter
 // did not drive (an external explorer's, a Go client's, a replayed
 // session's) and judges each rerun.
 type ActionShrink[A any] struct {
-	// Binding is the binding each rerun's steps are checked against.
+	// System supplies the registered binding, options and composition assessment.
+	// When set, Binding must be empty; Opts apply after System.Opts. Rerun still
+	// drives the action sequence in a fresh environment; System.Run is not used.
+	System *System
+	// Binding is the binding each rerun's steps are checked against when System is nil.
 	Binding string
 	// Rerun does actions on the system, from its initial state, and
 	// returns the steps the run recorded (the system's and the
@@ -51,6 +56,9 @@ type ActionShrink[A any] struct {
 // ShrunkActions is what ShrinkActions found: the smallest sequence that
 // still fails as the original did, and what the reruns showed.
 type ShrunkActions[A any] struct {
+	// ComponentFailures identifies every named component obligation preserved
+	// by the selected criterion. It is also retained in shrink.json.
+	ComponentFailures []qshrink.ComponentFailure
 	// Actions is the shrunk sequence, a subsequence of the original.
 	Actions []A
 	// Run is a rerun of Actions that showed the failure, checked as
@@ -111,10 +119,22 @@ type ShrunkActions[A any] struct {
 // when three reruns in a row fail.
 func ShrinkActions[A any](t testing.TB, original []A, s ActionShrink[A]) *ShrunkActions[A] {
 	t.Helper()
-	c := config(t, s.Opts)
+	checkOpts := s.Opts
+	bindingPath := s.Binding
+	if s.System != nil {
+		if s.Binding != "" {
+			t.Fatal("gotogether: ShrinkActions: select System or Binding, not both")
+		}
+		bindingPath = s.System.Binding
+		checkOpts = s.System.opts(s.Opts...)
+	}
+	c := config(t, checkOpts)
 	c.refuse(t, "ShrinkActions", validateIgnores)
-	if s.Rerun == nil || s.Binding == "" {
-		t.Fatalf("gotogether: ShrinkActions needs a Binding and a Rerun (which does a sequence of actions on the system and returns its steps)")
+	if len(s.Keep.componentFailures) > 0 && c.assess == nil {
+		t.Fatal("gotogether: ShrinkActions: a component failure criterion requires the registered System assessment; pass ActionShrink.System with Assess")
+	}
+	if s.Rerun == nil || bindingPath == "" {
+		t.Fatalf("gotogether: ShrinkActions needs a System or Binding, and a Rerun (which does a sequence of actions on the system and returns its steps)")
 	}
 	if s.Keep.every {
 		t.Fatalf("gotogether: ShrinkActions: Keep %s describes a passing run; Keep names the failure each smaller sequence must show "+
@@ -122,7 +142,7 @@ func ShrinkActions[A any](t testing.TB, original []A, s ActionShrink[A]) *Shrunk
 	}
 	o := c.Options
 	o.Dir = filepath.Join(c.Dir, "quint")
-	cc, inst, _ := instanceChecker(t, s.Binding, o, c)
+	cc, inst, _ := instanceChecker(t, bindingPath, o, c)
 	var keep qshrink.Keep
 	if s.Keep.check != nil {
 		var actions map[string]bool
@@ -139,11 +159,15 @@ func ShrinkActions[A any](t testing.TB, original []A, s ActionShrink[A]) *Shrunk
 	}
 	var cached int
 	judge := func(ctx context.Context, steps []qtrace.Step) (*validate.Report, error) {
+		run := &Run{Recorded: steps, Steps: steps}
+		assessHistory(ctx, c, run)
 		js, errs := cc.JudgeBatch(ctx, [][]qtrace.Step{steps}, c.searchOptions(), cachedCheck(cc, inst, &cached))
 		if errs[0] != nil {
 			return nil, errs[0]
 		}
-		return js[0].Report, nil
+		run.Report, run.Steps = js[0].Report, js[0].Steps
+		run.adjust(cc)
+		return run.Report, nil
 	}
 	res, err := runShrink(t, qshrink.Shrink{Actions: len(original), Reset: s.Reset, Judge: judge, Keep: keep, Calibration: s.Calibration,
 		Rerun: func(ctx context.Context, idx []int) ([]qtrace.Step, error) { return s.Rerun(ctx, pick(original, idx)) }})
@@ -153,7 +177,7 @@ func ShrinkActions[A any](t testing.TB, original []A, s ActionShrink[A]) *Shrunk
 	out := shrunkOf(original, res, s.Keep)
 	// the minimal run, checked as Validate checks it, with what the
 	// shrink did as its manifest's artifacts
-	opts := append([]Option{}, s.Opts...)
+	opts := append([]Option{}, checkOpts...)
 	if c.driver == nil {
 		opts = append(opts, Driver(validate.Driver{Name: "qtest.ShrinkActions", Args: []string{fmt.Sprintf("actions=%d of %d", len(out.Actions), out.Original)}}))
 	}
@@ -162,7 +186,7 @@ func ShrinkActions[A any](t testing.TB, original []A, s ActionShrink[A]) *Shrunk
 	} else {
 		opts = append(opts, Artifacts(arts...))
 	}
-	out.Run = Validate(t, s.Binding, res.Steps, opts...)
+	out.Run = Validate(t, bindingPath, res.Steps, opts...)
 	t.Logf("gotogether: %s", out)
 	return out
 }
@@ -184,7 +208,7 @@ func runShrink(t testing.TB, s qshrink.Shrink) (*qshrink.Result, error) {
 // shrunkOf is a shrink's result over original's actions, keeping keep
 // (the zero Expectation: the default's, SameFailure).
 func shrunkOf[A any](original []A, res *qshrink.Result, keep Expectation) *ShrunkActions[A] {
-	out := &ShrunkActions[A]{Actions: pick(original, res.Set), Original: len(original)}
+	out := &ShrunkActions[A]{Actions: pick(original, res.Set), Original: len(original), ComponentFailures: slices.Clone(res.ComponentFailures)}
 	out.Reruns, out.Reproduced, out.NotReproduced, out.Undecided, out.Diverged, out.Errors = res.Reruns, res.Reproduced, res.NotReproduced, res.Undecided, res.Diverged, res.Errors
 	out.Baseline, out.PerCandidate, out.Rate, out.Minimal, out.NotMinimal = res.Baseline, res.PerCandidate, res.Rate, res.Minimal, res.NotMinimal
 	out.keep = keep
@@ -200,8 +224,12 @@ func (s *ShrunkActions[A]) String() string {
 	if !s.Minimal {
 		m = "not minimal: " + s.NotMinimal
 	}
-	return fmt.Sprintf("shrunk %d actions to %d (%s), reproducing %s: %v; %d reruns (%d reproduced, %d not, %d undecided, %d diverged, %d errors), the original's rate %s, %d per candidate",
+	summary := fmt.Sprintf("shrunk %d actions to %d (%s), reproducing %s: %v; %d reruns (%d reproduced, %d not, %d undecided, %d diverged, %d errors), the original's rate %s, %d per candidate",
 		s.Original, len(s.Actions), m, s.Rate, s.Actions, s.Reruns, s.Reproduced, s.NotReproduced, s.Undecided, s.Diverged, s.Errors, s.Baseline, s.PerCandidate)
+	if len(s.ComponentFailures) > 0 {
+		summary += "; keeping " + s.keep.String()
+	}
+	return summary
 }
 
 // writeArtifacts writes actions.json and shrink.json (shrinkfiles.Write)

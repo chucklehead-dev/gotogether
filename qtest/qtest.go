@@ -527,6 +527,8 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 	if c.tempDir {
 		run.keep = &keeper{dir: c.Dir, name: t.Name()}
 	}
+	assessHistory(t.Context(), c, run)
+	run.adjust(ch)
 	writeManifest(t, run)
 	return run
 }

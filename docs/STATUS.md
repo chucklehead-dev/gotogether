@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Structured-lint follow-up (current branch): text and JSON share one
+Component-shrinking follow-up (current branch): default identity preserves named
+local/protocol obligations by component role, target, binding, kind and name,
+with multiplicity, alongside primary actor failures. `ActionShrink.System`
+reuses registered checks for every fresh rerun. Structured identities survive in
+results and shrink.json; unsupported identities and missing/unchecked scopes do
+not reproduce a failure. The bounded acceptance case uses a plain qenv
+producer/consumer counter checked by Quint. See DESIGN's "E8. External shrinking".
+
+Structured-lint follow-up (merged PR #11): text and JSON share one
 `gotogether.lint/1` report with typed rule-site findings, native source positions,
 fixes, inventories and requested checks marked pass/fail/blocked. Independent
 checks survive another target's failure. Completeness and exit status are derived
@@ -60,7 +68,7 @@ for every native history, including navigation. `Report.Composition` is canonica
 normal conformance assertions include applicable checks. Wrong histories, wrong
 service bindings, unknown obligations and order limits cannot silently pass.
 Receipts preserve model-authored diagnostics. See [grist-composition.md](grist-composition.md).
-PRs #2, #3, #4, #5, #6, #7, #8, #9 and #10 are merged; the single current navigation contract is nav/2.
+PRs #2, #3, #4, #5, #6, #7, #8, #9, #10 and #11 are merged; the single current navigation contract is nav/2.
 
 Check-receipt first increment (merged PR #3): validation reports and run
 navigation share structured statuses, ordering-search limits and assumed effects
@@ -73,7 +81,7 @@ exploration evidence and run manifests. `evidence -session` filters the
 suite before coverage and expectation checks; unscoped completeness checks
 require explicit `-history`. Use a fresh ID and `go test -count=1`.
 
-**As of 2026-10-31 (structured-lint branch).** GR4's first composition experiment is implemented
+**As of 2026-10-31 (component-shrinking branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
 `760b914b` so scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
@@ -264,15 +272,16 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Component-aware shrinking | S-M | preserve the same component/obligation, refusing exhaustion, unchecked evidence and unreached prerequisites; include a non-inventory system |
-| 2 | One adopter-driven capability (outbound streams or library starter are candidates) | M | the HTTP/SQLite rehearsal exposed no missing adapter; use concrete next-trial blockers before adding a facade |
-| 3 | Further lint/editor/onboarding breadth, only from adopter blockers | S-M | the canonical report and executable lint walkthrough are built; select integration work from observed friction |
+| 1 | One adopter-driven capability (outbound streams or library starter are candidates) | M | the HTTP/SQLite rehearsal exposed no missing adapter; use concrete next-trial blockers before adding a facade |
+| 2 | Further lint/editor/onboarding breadth, only from adopter blockers | S-M | the canonical report and executable lint walkthrough are built; select integration work from observed friction |
 
 Do not start all tracks at once. Worker completion and the bounded HTTP/SQLite
 rehearsal are merged in PR #9; the first finite I4 slice is merged in
-PR #10. The first structured core lint report and executable lint walkthrough
-are implemented on this branch. Broader onboarding across tracks and editor
-integration still need an adoption case. Further inventory/diagnostic expansion,
+PR #10. The structured core lint report and executable lint walkthrough are
+merged in PR #11. The first component-aware shrink slice is implemented on this
+branch; broader peer/conformance identity support needs typed evidence and an
+adoption case. Rotate to one adopter-driven capability before expanding shrink
+scope or editor/onboarding breadth. Further inventory/diagnostic expansion,
 cycles, clusters and new platform facades wait for evidence. GR10c down-process
 settlement has separate semantics and stays separate from GR10b.
 

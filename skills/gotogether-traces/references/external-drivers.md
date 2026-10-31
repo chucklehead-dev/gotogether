@@ -335,6 +335,14 @@ shrunk.Expect(t, qtest.Violates("finishedOnce"), qtest.AtMostActions(2))
   sequence shows. `Keep` names another (`Violates(...)`,
   `Rejects(...)`); one a passing run meets (`Conforms`, `Finishes`) is
   refused.
+- **Registered component checks.** Supply `ActionShrink.System` and leave
+  `Binding` empty to reuse a system's binding, options and assessment on every
+  candidate and final rerun. `Rerun` still drives a fresh environment;
+  `System.Run` is not used. The default criterion preserves named local/protocol
+  failures by role, target, binding, kind and name, with multiplicity, alongside
+  primary failures. Missing or unjudged checks are undecided; peer-agreement and
+  component-conformance-only identities remain unsupported. Inspect structured
+  `ComponentFailures` and shrink.json instead of parsing the criterion's text.
 - **No verdict is no pass**: a rerun with no verdict for the failure
   kept (a lost tail, an invariant of a conforming actor left unjudged,
   a search out of its budget) is `Undecided`, counted apart and not

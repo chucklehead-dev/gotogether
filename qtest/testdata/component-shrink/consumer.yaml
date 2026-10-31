@@ -1,0 +1,9 @@
+spec: consumer.qnt
+module: consumer
+actors: [consumer]
+actions:
+  apply:
+    expect: 'deliveries == {{.obs.count}}'
+  observe:
+    expect: 'deliveries == {{.obs.count}}'
+invariants: [exactlyOnce]

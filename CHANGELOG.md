@@ -8,6 +8,13 @@ and adds a line here.
 
 ## Unreleased
 
+- Action shrinking: default failure identity now preserves named local/protocol
+  obligations by component role, target, binding, kind and name, alongside primary
+  actor failures. `ActionShrink.System` reuses registered checks for every rerun;
+  `ComponentFailures` and shrink.json retain the selected identity. Unsupported
+  peer/conformance-only identities and unjudged checks cannot reproduce a failure.
+  Composition history hashes and mutation guards apply throughout shrinking.
+
 - Core lint: text and `-json` now render one structured `gotogether.lint/1`
   inspection report. Requested checks retain pass/fail/blocked status;
   independent targets continue after failures. Rule-site findings carry stable

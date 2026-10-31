@@ -38,7 +38,7 @@ func assessHistory(ctx context.Context, c settings, r *Run) {
 	if aerr != nil || string(before) != string(after) {
 		result.Error = "composition assessment mutated the captured history"
 	}
-	r.assessment = &result
+	r.assessment = result.Clone()
 }
 
 // compositionSummary keeps unperformed phases visible even in a passing suite.

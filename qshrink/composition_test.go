@@ -23,7 +23,7 @@ func TestSameFailureRefusesCompositionOnlyFingerprint(t *testing.T) {
 			defer func() {
 				p := recover()
 				message := fmt.Sprint(p)
-				if p == nil || !strings.Contains(message, "composition-only failure") || !strings.Contains(message, "component-aware criterion") {
+				if p == nil || !strings.Contains(message, "cannot preserve composition failure") {
 					t.Fatalf("composition was silently treated as no failure: %v", p)
 				}
 			}()
@@ -32,26 +32,16 @@ func TestSameFailureRefusesCompositionOnlyFingerprint(t *testing.T) {
 	}
 }
 
-func TestSameFailureWithCompositionNamesItsPrimaryScope(t *testing.T) {
+func TestSameFailureWithUnsupportedCompositionRefusesPrimaryOnlyDrift(t *testing.T) {
 	original := compositionShrinkReport(receipt.Fail)
 	original.Actors[0].Conforms = validate.Fail
 	original.Actors[0].Failure = &validate.Failure{Kind: "disabled", Step: &qtrace.Step{Action: "place"}}
-	criterion := SameFailure(original)
-	if !strings.Contains(criterion.String(), "primary actor failure") {
-		t.Fatalf("criterion overclaims composition preservation: %s", criterion)
-	}
-	// This criterion intentionally preserves the primary refusal, not another
-	// service's failure or a protocol's counterexample ordering.
-	candidate := compositionShrinkReport(receipt.Pass)
-	candidate.Actors[0].Conforms = validate.Fail
-	candidate.Actors[0].Failure = &validate.Failure{Kind: "disabled", Step: &qtrace.Step{Action: "place"}}
-	if criterion.Shows(candidate) != Reproduced {
-		t.Fatal("primary failure changed scope")
-	}
-	onlyComposition := compositionShrinkReport(receipt.Fail)
-	if criterion.Shows(onlyComposition) != NotReproduced || !strings.Contains(criterion.Why(onlyComposition), "composition") {
-		t.Fatal("composition-only failure substituted for primary fingerprint")
-	}
+	defer func() {
+		if p := recover(); p == nil || !strings.Contains(fmt.Sprint(p), "cannot preserve composition failure") {
+			t.Fatalf("unsupported composition was dropped: %v", p)
+		}
+	}()
+	SameFailure(original)
 }
 
 func TestEvaluatorErrorIsNotPrimaryFailureFingerprint(t *testing.T) {

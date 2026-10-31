@@ -3,6 +3,7 @@ package qtest
 import (
 	"github.com/chucklehead-dev/gotogether/qshrink"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"slices"
 )
 
 // SameFailure: the run fails as r does, by each failing actor's first
@@ -21,9 +22,9 @@ import (
 // may have failed first) has no verdict for it: not reproduced, never a
 // pass.
 //
-// With registered composition checks this preserves the primary actor failure
-// only. A composition-only non-pass is refused: reproduce the registered System;
-// shrinking it requires a component-aware criterion.
+// Registered local/protocol failures preserve their component role, target,
+// binding and every failed named obligation, alongside primary actor failures.
+// Unsupported component identities and unjudged scopes cannot reproduce them.
 // A workload prerequisite failure is also refused: establish setup before
 // shrinking the model failure the workload was intended to reach.
 func SameFailure(r *Run) Expectation {
@@ -49,7 +50,7 @@ func keepExpectation(k qshrink.Keep) Expectation {
 		}
 		return unknown
 	}
-	return Expectation{desc: k.String(), check: func(rep *validate.Report) bool { return value(rep) == yes }, tri: value, why: k.Why}
+	return Expectation{componentFailures: qshrink.ComponentFailures(k), desc: k.String(), check: func(rep *validate.Report) bool { return value(rep) == yes }, tri: value, why: k.Why}
 }
 
 // shrinkKeep is an expectation as a shrink's Keep: what a rerun must
@@ -57,6 +58,10 @@ func keepExpectation(k qshrink.Keep) Expectation {
 type shrinkKeep struct{ e Expectation }
 
 func (k shrinkKeep) String() string { return k.e.String() }
+
+func (k shrinkKeep) ComponentFailures() []qshrink.ComponentFailure {
+	return slices.Clone(k.e.componentFailures)
+}
 
 func (k shrinkKeep) Shows(rep *validate.Report) qshrink.Shown {
 	switch k.e.value(rep) {

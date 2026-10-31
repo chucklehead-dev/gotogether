@@ -1,0 +1,6 @@
+spec: producer.qnt
+module: producer
+actors: [producer]
+actions:
+  publish: {}
+  noise: {}

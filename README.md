@@ -177,6 +177,14 @@ table for agents):
 | Does it recover after a spike or a slow dependency? | `qmeta`, `qload`, `qhegel.FindTrigger`, alert rules from the chain |
 | My model is in Choreo | named transitions over `choreo::step_with`, then any of the above ([examples/twophase](examples/twophase)) |
 
+Action shrinking can reuse a registered system's checks through
+`ActionShrink.System`, with `Binding` left empty. The rerun still drives a fresh
+action sequence; `System.Run` is not called. The default criterion keeps each
+primary actor's first failure and every failed named local/protocol obligation,
+including its component and binding. Results and shrink.json retain structured
+`ComponentFailures`; missing or unjudged checks cannot count as reproduction.
+Peer-agreement and component-conformance-only failures remain outside this slice.
+
 Status: early, not yet released: the API may change. It grew out of a
 spike in casselc/observability, where it checks an OTel exporter against
 its protocol model (`examples/edgepublish`).
