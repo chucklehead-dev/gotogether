@@ -16,7 +16,7 @@ text). It takes the same arguments:
 
 ```sh
 gotogether-nav -binding limiter.yaml                                   # a model, from init
-gotogether-nav -binding b.yaml -run steps.jsonl [-actor a] [-at k]     # a recorded run's state after k steps (a run the model rejects opens at its failing step)
+gotogether-nav -binding b.yaml -run steps.jsonl [-actor a] [-at k]     # state after k model calls (inferred calls count); a rejected run opens at its failing step
 gotogether-nav -run 'TestX#2:seed=17' [-pkg DIR] [-at fail|start|<schedule>@<k>]   # an exploration's run (a failing report's navigate: line)
 ```
 
@@ -41,6 +41,7 @@ package's mutants of another package, payd's).
 | ⌫ (←, h) | back to the node before |
 | f | fold the linear stretch: a model's single branches until a node of several; a run's choices that are no decision (nominal where the base run's are) to the run's next decision |
 | g | the failing step: a run's last choice before its failing step (`fail`); a recorded run's state before the call the model rejects |
+| e | inspect available captured evidence: model-authored obligations or a checked conformance rejection; Enter opens the exact record and Backspace returns without moving the cursor |
 | s | save the run node's run to the exploration's corpus (`ExploreConfig.Corpus` or `GOTOGETHER_CORPUS`) |
 | / | filter the branches (enter keeps it, esc clears it) |
 | pgdn/pgup | scroll the node's detail |
@@ -48,6 +49,15 @@ package's mutants of another package, payd's).
 | q | quit |
 
 ## What a node shows
+
+For the recorded-history path, an exact rejected record is exposed only when a
+full check confirms a disabled call at the same model boundary and the capture
+has a complete identity. Inferred failures and missing identities do not acquire
+invented records; checker and lookup errors stay explicit. The evidence remains
+scoped to the original checked history across hypothetical model moves. Cursor
+nodes do not acquire whole-history verdicts. See the
+[jobqueue incident walkthrough](../examples/jobqueue/INCIDENT.md) for JSON,
+interactive inspection, relocated replay and a fresh repaired execution.
 
 A model's node: the path from the start (crumbs), its branches (the
 step's transitions: the action's call with its arguments), the state

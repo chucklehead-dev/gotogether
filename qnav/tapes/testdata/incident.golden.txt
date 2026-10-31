@@ -1,0 +1,347 @@
+gotogether-nav  model jobqueue: the state before call 5, which the model rejects  (from actor
+  jobqueue's state after 4 of its 5 steps)
+path: failing step
+
+branches (9)
+› lease("w1", 1)
+  ack("w1", 1, Stale)
+  restart  picks job = 1, worker = "w1"
+  lease("w2", 1)
+  restart#2  picks job = 1, worker = "w2"
+  lease("w3", 1)
+  restart#3  picks job = 1, worker = "w3"
+  lease("w4", 1)
+  … 1 below
+
+the run's next call, which the model rejects
+  call 5 (ack("w1", 1, Ok))
+    why: the model's ack(worker = "w1", job = 1, o = Ok) is disabled:
+      in ack, the else branch of if (jobs.get(job) == Leased(worker)): o == Stale is false
+        where o = Ok, Stale = Stale
+      the model expects: ack(worker = "w1", job = 1, o = Stale), which changes:
+        finished[("w1", 1)]: 1 -> 0
+      enabled instead (the model's moves from this state, not records): lease (4 ways),
+        ack(worker = "w1", job = 1, o = Stale), restart
+
+state  (* changed by the last move)
+  finished = Map(("w1", 1) -> 1)
+  jobs = Map(1 -> Pending)
+  performed = Map(1 -> 1)
+  working = Map(("w1", 1) -> 0)
+
+── lines 1–17 of 37 (pgup/pgdn scroll)
+
+enter take • ←/⌫ back • f fold • g failing step • s save • e evidence • / filter • ? help • q quit
+
+========
+
+gotogether-nav  captured history evidence
+path: failing step › evidence
+Captured records only · navigation cursors unchanged
+
+evidence (1) · enter inspects selected record
+› recorded conformance failure · rejected captured record
+
+scope: original collected history · conformance failure · independent of model cursor
+kind: rejected recorded call
+The checked history rejected this capture; model branches do not change that evidence.
+rejected captured record: actor "jobqueue" · recorder "jobqueue-incident-incident" · seq 4
+source: incident.jsonl:5
+
+This identifies the checked history's rejected record, not a root cause.
+Back returns to the unchanged navigation cursor.
+
+enter inspect • ←/⌫ back • / filter • ? help • q quit
+
+========
+
+gotogether-nav  rejected captured record
+path: failing step › evidence › rejected captured record
+Captured record · no model judgment or cursor move
+actor: jobqueue
+recorder: jobqueue-incident-incident · seq 4
+action: ack
+outcome: ok
+time: 2026-01-01T00:00:00Z
+source: incident.jsonl:5
+process: queue-2
+arguments:
+{
+    "job": 1,
+    "worker": "w1"
+  }
+observations:
+{}
+
+Back returns to the evidence list.
+
+enter inspect • ←/⌫ back • / filter • ? help • q quit
+
+========
+
+gotogether-nav  captured history evidence
+path: failing step › evidence
+Captured records only · navigation cursors unchanged
+
+evidence (1) · enter inspects selected record
+› recorded conformance failure · rejected captured record
+
+scope: original collected history · conformance failure · independent of model cursor
+kind: rejected recorded call
+The checked history rejected this capture; model branches do not change that evidence.
+rejected captured record: actor "jobqueue" · recorder "jobqueue-incident-incident" · seq 4
+source: incident.jsonl:5
+
+This identifies the checked history's rejected record, not a root cause.
+Back returns to the unchanged navigation cursor.
+
+enter inspect • ←/⌫ back • / filter • ? help • q quit
+
+========
+
+gotogether-nav  model jobqueue: the state before call 5, which the model rejects  (from actor
+  jobqueue's state after 4 of its 5 steps)
+path: failing step
+
+branches (9)
+› lease("w1", 1)
+  ack("w1", 1, Stale)
+  restart  picks job = 1, worker = "w1"
+  lease("w2", 1)
+  restart#2  picks job = 1, worker = "w2"
+  lease("w3", 1)
+  restart#3  picks job = 1, worker = "w3"
+  lease("w4", 1)
+  … 1 below
+
+the run's next call, which the model rejects
+  call 5 (ack("w1", 1, Ok))
+    why: the model's ack(worker = "w1", job = 1, o = Ok) is disabled:
+      in ack, the else branch of if (jobs.get(job) == Leased(worker)): o == Stale is false
+        where o = Ok, Stale = Stale
+      the model expects: ack(worker = "w1", job = 1, o = Stale), which changes:
+        finished[("w1", 1)]: 1 -> 0
+      enabled instead (the model's moves from this state, not records): lease (4 ways),
+        ack(worker = "w1", job = 1, o = Stale), restart
+
+state  (* changed by the last move)
+  finished = Map(("w1", 1) -> 1)
+  jobs = Map(1 -> Pending)
+  performed = Map(1 -> 1)
+  working = Map(("w1", 1) -> 0)
+
+── lines 1–17 of 37 (pgup/pgdn scroll)
+
+enter take • ←/⌫ back • f fold • g failing step • s save • e evidence • / filter • ? help • q quit
+
+========
+
+gotogether-nav  model jobqueue: the state before call 5, which the model rejects  (from actor
+  jobqueue's state after 4 of its 5 steps)
+path: failing step
+
+branches (9)
+› ack("w1", 1, Stale)
+
+the run's next call, which the model rejects
+  call 5 (ack("w1", 1, Ok))
+    why: the model's ack(worker = "w1", job = 1, o = Ok) is disabled:
+      in ack, the else branch of if (jobs.get(job) == Leased(worker)): o == Stale is false
+        where o = Ok, Stale = Stale
+      the model expects: ack(worker = "w1", job = 1, o = Stale), which changes:
+        finished[("w1", 1)]: 1 -> 0
+      enabled instead (the model's moves from this state, not records): lease (4 ways),
+        ack(worker = "w1", job = 1, o = Stale), restart
+
+state  (* changed by the last move)
+  finished = Map(("w1", 1) -> 1)
+  jobs = Map(1 -> Pending)
+  performed = Map(1 -> 1)
+  working = Map(("w1", 1) -> 0)
+
+invariants
+  doneImpliesPerformed = true
+
+disabled
+  enqueue
+    why: the model's enqueue is disabled:
+      in enqueue (job = 1, the one closest to enabled of the 1 values of JOBS, each disabling
+── lines 1–24 of 37 (pgup/pgdn scroll)
+
+/ack
+enter take • ←/⌫ back • f fold • g failing step • s save • e evidence • / filter • ? help • q quit
+
+========
+
+gotogether-nav  model jobqueue: the state before call 5, which the model rejects  (from actor
+  jobqueue's state after 4 of its 5 steps)
+path: failing step › ack("w1", 1, Stale)
+
+branches (8)
+› lease("w1", 1)
+  restart  picks job = 1, worker = "w1"
+  lease("w2", 1)
+  restart#2  picks job = 1, worker = "w2"
+  lease("w3", 1)
+  restart#3  picks job = 1, worker = "w3"
+  lease("w4", 1)
+  restart#4  picks job = 1, worker = "w4"
+
+state  (* changed by the last move)
+* finished = Map(("w1", 1) -> 0)
+  jobs = Map(1 -> Pending)
+  performed = Map(1 -> 1)
+  working = Map(("w1", 1) -> 0)
+
+invariants
+  doneImpliesPerformed = true
+
+disabled
+  enqueue
+    why: the model's enqueue is disabled:
+      in enqueue (job = 1, the one closest to enabled of the 1 values of JOBS, each disabling
+        it): not(jobs.keys().contains(job)) is false
+        where jobs.keys() = Set(1), jobs = Map(1 -> Pending), job = 1
+  perform
+    why: the model's perform is disabled:
+── lines 1–18 of 33 (pgup/pgdn scroll)
+
+enter take • ←/⌫ back • f fold • g failing step • s save • e evidence • / filter • ? help • q quit
+
+========
+
+gotogether-nav  captured history evidence
+path: failing step › ack("w1", 1, Stale) › evidence
+Captured records only · navigation cursors unchanged
+
+evidence (1) · enter inspects selected record
+› recorded conformance failure · rejected captured record
+
+scope: original collected history · conformance failure · independent of model cursor
+kind: rejected recorded call
+The checked history rejected this capture; model branches do not change that evidence.
+rejected captured record: actor "jobqueue" · recorder "jobqueue-incident-incident" · seq 4
+source: incident.jsonl:5
+
+This identifies the checked history's rejected record, not a root cause.
+Back returns to the unchanged navigation cursor.
+
+enter inspect • ←/⌫ back • / filter • ? help • q quit
+
+========
+
+gotogether-nav  rejected captured record
+path: failing step › ack("w1", 1, Stale) › evidence › rejected captured record
+Captured record · no model judgment or cursor move
+actor: jobqueue
+recorder: jobqueue-incident-incident · seq 4
+action: ack
+outcome: ok
+time: 2026-01-01T00:00:00Z
+source: incident.jsonl:5
+process: queue-2
+arguments:
+{
+    "job": 1,
+    "worker": "w1"
+  }
+observations:
+{}
+
+Back returns to the evidence list.
+
+enter inspect • ←/⌫ back • / filter • ? help • q quit
+
+========
+
+gotogether-nav  captured history evidence
+path: failing step › ack("w1", 1, Stale) › evidence
+Captured records only · navigation cursors unchanged
+
+evidence (1) · enter inspects selected record
+› recorded conformance failure · rejected captured record
+
+scope: original collected history · conformance failure · independent of model cursor
+kind: rejected recorded call
+The checked history rejected this capture; model branches do not change that evidence.
+rejected captured record: actor "jobqueue" · recorder "jobqueue-incident-incident" · seq 4
+source: incident.jsonl:5
+
+This identifies the checked history's rejected record, not a root cause.
+Back returns to the unchanged navigation cursor.
+
+enter inspect • ←/⌫ back • / filter • ? help • q quit
+
+========
+
+gotogether-nav  model jobqueue: the state before call 5, which the model rejects  (from actor
+  jobqueue's state after 4 of its 5 steps)
+path: failing step › ack("w1", 1, Stale)
+
+branches (8)
+› lease("w1", 1)
+  restart  picks job = 1, worker = "w1"
+  lease("w2", 1)
+  restart#2  picks job = 1, worker = "w2"
+  lease("w3", 1)
+  restart#3  picks job = 1, worker = "w3"
+  lease("w4", 1)
+  restart#4  picks job = 1, worker = "w4"
+
+state  (* changed by the last move)
+* finished = Map(("w1", 1) -> 0)
+  jobs = Map(1 -> Pending)
+  performed = Map(1 -> 1)
+  working = Map(("w1", 1) -> 0)
+
+invariants
+  doneImpliesPerformed = true
+
+disabled
+  enqueue
+    why: the model's enqueue is disabled:
+      in enqueue (job = 1, the one closest to enabled of the 1 values of JOBS, each disabling
+        it): not(jobs.keys().contains(job)) is false
+        where jobs.keys() = Set(1), jobs = Map(1 -> Pending), job = 1
+  perform
+    why: the model's perform is disabled:
+── lines 1–18 of 33 (pgup/pgdn scroll)
+
+enter take • ←/⌫ back • f fold • g failing step • s save • e evidence • / filter • ? help • q quit
+
+========
+
+gotogether-nav  model jobqueue: the state before call 5, which the model rejects  (from actor
+  jobqueue's state after 4 of its 5 steps)
+path: failing step
+
+branches (9)
+› lease("w1", 1)
+  ack("w1", 1, Stale)
+  restart  picks job = 1, worker = "w1"
+  lease("w2", 1)
+  restart#2  picks job = 1, worker = "w2"
+  lease("w3", 1)
+  restart#3  picks job = 1, worker = "w3"
+  lease("w4", 1)
+  … 1 below
+
+the run's next call, which the model rejects
+  call 5 (ack("w1", 1, Ok))
+    why: the model's ack(worker = "w1", job = 1, o = Ok) is disabled:
+      in ack, the else branch of if (jobs.get(job) == Leased(worker)): o == Stale is false
+        where o = Ok, Stale = Stale
+      the model expects: ack(worker = "w1", job = 1, o = Stale), which changes:
+        finished[("w1", 1)]: 1 -> 0
+      enabled instead (the model's moves from this state, not records): lease (4 ways),
+        ack(worker = "w1", job = 1, o = Stale), restart
+
+state  (* changed by the last move)
+  finished = Map(("w1", 1) -> 1)
+  jobs = Map(1 -> Pending)
+  performed = Map(1 -> 1)
+  working = Map(("w1", 1) -> 0)
+
+── lines 1–17 of 37 (pgup/pgdn scroll)
+
+enter take • ←/⌫ back • f fold • g failing step • s save • e evidence • / filter • ? help • q quit

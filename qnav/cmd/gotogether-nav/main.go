@@ -113,18 +113,19 @@ func run(args []string) error {
 		return errors.New("-at and -actor open a recorded run: add -run steps.jsonl")
 	}
 	n, err := ch.Nav(start)
+	var model tui.ModelNav = n
 	if err != nil && start.Steps != nil && *at == "" {
 		// all of a run the model rejects: open it at its failing step
 		f, title, why, ferr := tui.Failing(ch, start)
 		if ferr != nil {
-			return err
+			return ferr
 		}
-		n, c.Title, c.Why, err = f.(*validate.Navigator), c.Title+": "+title, why, nil
+		model, c.Title, c.Why, err = f, c.Title+": "+title, why, nil
 	}
 	if err != nil {
 		return err
 	}
-	c.Model, c.Path = n, validate.SplitPath(path)
+	c.Model, c.Path = model, validate.SplitPath(path)
 	return program(c)
 }
 

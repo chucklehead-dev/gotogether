@@ -7,7 +7,17 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Map-storage follow-up (current branch): existing-key updates share an immutable
+Incident-workflow follow-up (current branch): the existing jobqueue stale-ack
+mutant is recorded through actual service calls, checked as native JSON, inspected
+in the TUI, relocated and replayed, then repaired under the unchanged model.
+The repaired execution also accepts a fresh valid ack. Generic disabled-call
+navigation now exposes its exact checked captured record without assigning a
+verdict to a model cursor or fabricating obligation evidence. Empty, changed and
+missing evidence retain no-verdict/error status. This is a bounded planted
+rehearsal, not production discovery or independent adoption. See
+[the runnable runbook](../examples/jobqueue/INCIDENT.md).
+
+Map-storage follow-up (merged PR #26): existing-key updates share an immutable
 key domain while copying values; insertions copy keys even with spare capacity.
 Independent copying-reference checks cover 1,111 bounded histories and retained
 snapshots. Ring workloads check every account/edge per complete cycle and full
@@ -367,9 +377,10 @@ four, L more; agent-days in practice).
    cannot be partitioned and is still judged at the sum of its states;
    judging only the entries a step changed would make entry-wise
    invariants linear. Also the million-step example.
-6. **I20's incident example.** An incident walkthrough from alert to
-   fix with `-json`, `nav` and `validate -replay`, doubling as the
-   runbook; a store-side grist step's pod (needs G8's location).
+6. **I20's portable handoff.** The jobqueue runbook now covers native JSON,
+   TUI capture inspection and relocated replay, but pre-copies model/binding
+   files. Make packaging checked and self-contained through existing formats;
+   a store-side grist step's pod still needs G8's location.
 7. **I25's leftovers**, each concrete in ROADMAP: (2) an admin command listing and re-driving `grist.failed`
    dead letters; (3) `resume -from P` with a model step
    `gristSkipped`; (4) rewinds' memory in the store (a marker per
@@ -409,7 +420,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I20: a bounded incident walkthrough on an existing non-Grist example | S–M | exercise native JSON, TUI, portable replay and a verified fix; preserve exact failure identity and error/no-verdict distinctions across the workflow |
+| 1 | I20: checked portable evidence handoff using existing manifest/report formats | S–M | the incident runbook needs manual model/binding copying; verify references, refuse unsupported external paths, stage atomically, and preserve the original verdict/scope/identity |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 

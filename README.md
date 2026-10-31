@@ -97,6 +97,10 @@ The reproduction checks faithful validation, the precise source mismatch,
 missing-observation errors and relocated replay while keeping the frozen SDK
 baseline intact.
 
+For an on-call exercise on an existing service, follow the
+[jobqueue incident walkthrough](examples/jobqueue/INCIDENT.md): a native JSON
+alert, the same captured record in the TUI, portable replay and a verified repair.
+
 For a service you already have,
 `gotogether scaffold -system -http -binding b.yaml` writes the same
 simulated wiring around your handler.

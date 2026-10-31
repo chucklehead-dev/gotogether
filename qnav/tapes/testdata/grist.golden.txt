@@ -31,7 +31,7 @@ the run's next call, which the model rejects
       grist: event 1 (counter-created events tagged counter="c", name="c"), appended after the
 ── lines 1–17 of 176 (pgup/pgdn scroll)
 
-enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
+enter take • ←/⌫ back • f fold • g failing step • s save • e evidence • / filter • ? help • q quit
 
 ========
 
@@ -68,4 +68,4 @@ the run's next call, which the model rejects
 ── lines 1–23 of 176 (pgup/pgdn scroll)
 
 /showCounter
-enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
+enter take • ←/⌫ back • f fold • g failing step • s save • e evidence • / filter • ? help • q quit
