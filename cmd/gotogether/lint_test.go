@@ -61,10 +61,8 @@ func pay(ctx context.Context) {
 	}
 }
 
-// lint -binding warns of a bound action that chooses inside (an any {}
-// of assignments) whose expect reads the result: quint's replay draws
-// the choice, and the binding once "fit" (review 11, F2). The warning
-// names the action, the choice and the fix, and the fits line says so.
+// Internal-choice lint explains bounded finite-choice validation, its no-verdict
+// limits, and how recording choices can reduce search and improve diagnostics.
 func TestLintInternalChoice(t *testing.T) {
 	skip.Quint(t)
 	r, w, err := os.Pipe()
@@ -83,7 +81,9 @@ func TestLintInternalChoice(t *testing.T) {
 	for _, want := range []string{
 		"warning: action flipit makes a choice of its own (any {} of 4 branches)",
 		"expose the choice as a parameter of flipit",
-		"1 choose inside, which quint's replay samples",
+		"supported finite choices use bounded search and original-action pinned replay",
+		"unsupported shapes or exhaustion give an explicit no verdict",
+		"1 choose inside; finite choices use bounded search and pinned replay",
 	} {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("output lacks %q:\n%s", want, out)

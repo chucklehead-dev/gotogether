@@ -283,6 +283,9 @@ var ErrNeedsQuint = errors.New("needs quint: a compiled model (validate -compile
 // model at compiledPath alone: no quint process, ever. It refuses a stale
 // artifact (the rules above CompiledFormat), naming the fix.
 func NewCompiledChecker(bindingPath, compiledPath string, opt Options) (*Checker, error) {
+	if opt.ChoiceLimit < 0 {
+		return nil, fmt.Errorf("choice limit must be nonnegative (0 uses the default)")
+	}
 	cm, err := LoadCompiled(compiledPath)
 	if err != nil {
 		return nil, err
@@ -451,6 +454,10 @@ func needsQuint(r *Result, why string) {
 // which call, an eventual val false at the settle), the model's state
 // there the evaluator's; a refusal no verdict.
 func (c *Checker) judgeCompiled(e *evaluator, t *qtrace.Trace, p *binding.Plan, r *Result, o Options) error {
+	if c.hasChoiceCalls(p) {
+		c.choiceNoVerdict(r, "unsupported", "compiled mode cannot confirm a pinned model-choice witness with Quint", 0)
+		return nil
+	}
 	v, err := e.judgeRun(c, t, p, true)
 	if err != nil {
 		needsQuint(r, err.Error())

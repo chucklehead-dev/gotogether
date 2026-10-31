@@ -26,9 +26,10 @@ asynchronous consumer. This is a known daemon/settlement classification boundary
 not a newly demonstrated silent pass. Alongside it, a cold-start non-grist
 HTTP/SQLite rehearsal now exercises actual observations, a frozen model/source
 contrast, replay and real workload shrinking, with prefix and missing-evidence
-controls. See [the rehearsal](../internal/adoptiontest/http-sql/README.md). Next
-advance I4's finite pinned-witness replay, which expands supported models across
-trace validation and simulation. Keep unsupported choices explicit.
+controls. See [the rehearsal](../internal/adoptiontest/http-sql/README.md). I4's first finite pinned-witness slice is implemented for ordinary complete
+traces, with whole-path search, original-action Quint confirmation and explicit
+unsupported/bounded outcomes. See [its scope](model-choice-witnesses.md). Next
+rotate to typed core lint and executable onboarding before expanding choice modes.
 
 Typed core lint findings (including performed/blocked checks) and component-aware
 shrinking are concrete follow-ups. Select the next adapter or starter from the
@@ -111,16 +112,15 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   samples quint (`simulate.samples`) and requires each state quint
   visits to be a node of a complete graph: a missing one is an evaluator
   bug and an error. It would have caught I2 in milliseconds.
-- **I4. An internal choice the expect observes (S, then M). The S half
-  done** (the lint, a failure after the choice no verdict, its issue
-  naming the fix); **left: pinned replays (M)**. A bound action that chooses inside (`nondet`, `any {}`)
-  whose result the binding's expect reads is sampled by quint's replay:
-  the same input gave Mismatch at different steps on three reruns, and
-  `lint -binding` said "fits". First a lint and a report line ("bind it
-  as a parameter"); then replays with the evaluator's witness pinned,
-  as `-graph`'s replays write literal calls, so quint confirms a path
-  instead of sampling one (the M half stays here if the agent's fix is
-  the lint alone).
+- **I4. An internal choice the expect observes (S, then M). First bounded
+  pinned-replay slice implemented.** Ordinary complete traces retain finite
+  whole-path alternatives, with one path satisfying the joint property set.
+  Quint confirms a selected witness specialized from original action IR; complete
+  negative conclusions disclose Go enumeration. Bounds, evidence and explicit
+  unsupported scopes are described in [model-choice witnesses](model-choice-witnesses.md).
+  History/hidden/partition/snapshot/resume/within integration, broader IR rendering
+  and tighter enumeration resource bounds remain separate follow-ups, driven by
+  adopter evidence rather than an automatic expansion of this slice.
 - **I5. ResolvePending keeps the invariants if a placement can (S).
   Done** (fe01988, with a brute-force test). It judged invariants on the first placement that conforms,
   so `Violates` held for a run that a later placement keeps (and the

@@ -136,6 +136,10 @@ func (m *Model) print(b *strings.Builder, e *Expr) {
 		return
 	}
 	switch e.Kind {
+	case "pinnedName":
+		// PinAction has established this identifier's source binding. Unlike
+		// explanation names it must not be shortened or have suffixes removed.
+		b.WriteString(e.Name)
 	case "int":
 		b.WriteString(e.Value.String())
 	case "bool":

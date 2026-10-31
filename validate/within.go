@@ -318,7 +318,11 @@ func stamp(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
 func (c *Checker) Key(steps []qtrace.Step) string {
 	backend := c.Options.envBackend()
 	var b strings.Builder
-	fmt.Fprintf(&b, "eval=%s|backend=%s|snapshot=%s|resume=%s|", c.Options.evalMode(), backend, c.Binding.Snapshot, c.Binding.Resume)
+	limit := c.Options.ChoiceLimit
+	if limit == 0 {
+		limit = DefaultChoiceLimit
+	}
+	fmt.Fprintf(&b, "eval=%s|backend=%s|snapshot=%s|resume=%s|choices=%d|", c.Options.evalMode(), backend, c.Binding.Snapshot, c.Binding.Resume, limit)
 	b.WriteString(qtrace.Key(steps))
 	// a lost tail's cut is judged by time (a failure recorded after it is
 	// no verdict): its steps' times, and the loss records', are verdicts'

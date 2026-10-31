@@ -55,6 +55,7 @@ func (r *Report) Receipt() receipt.Summary {
 func (r *Result) Receipt() receipt.Actor {
 	v := runVerdictOf([]*Result{r})
 	a := receipt.Actor{JudgedBy: r.JudgedBy(), Partition: r.Partition, Scope: "collected_history", Actor: r.Actor, Status: receiptStatus(v.Verdict), Reason: v.Reason, Ordering: "reconstructed", Search: r.historySearch, Checks: []receipt.Check{{Kind: "conformance", Name: "history", Status: receiptStatus(r.Conforms)}}}
+	a.Choices = r.Choices.Clone()
 	if r.inputScope != "" {
 		a.Scope = r.inputScope
 		a.Ordering = "model_trace"

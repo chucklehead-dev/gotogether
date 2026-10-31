@@ -8,6 +8,14 @@ and adds a line here.
 
 ## Unreleased
 
+- Validation: finite internal model choices now use whole-trace search and an
+  original-action pinned Quint witness, preserving guards, domains and assignments.
+  Joint properties require one common path; complete negative conclusions disclose
+  exhaustive Go enumeration. `ChoiceLimit` / `-choice-limit` (default 20,000),
+  manifests, JSON, profiles and TUI receipts retain bounds and confirmation.
+  Exhaustion and unsupported scopes produce no verdict. See
+  [the scope and evidence contract](docs/model-choice-witnesses.md).
+
 - qenv: `Signal.WaitIdle(ctx, d)` exempts a confirmed no-work wait, ending
   the exemption at notification/timeout. Grist workers and simlog senders no
   longer hide handlers, callbacks, retry backoffs or paused work behind a

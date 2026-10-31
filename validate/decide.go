@@ -251,6 +251,7 @@ func (re *runEval) decide(c *Checker, t *qtrace.Trace, p *binding.Plan, v runVer
 // clone is r with copies of what judgeWithin adds to.
 func (r *Result) clone() *Result {
 	c := *r
+	c.Choices = r.Choices.Clone()
 	c.Invariants = slices.Clone(r.Invariants)
 	c.Issues = slices.Clone(r.Issues)
 	c.withins = slices.Clone(r.withins)
@@ -283,6 +284,10 @@ func fillPass(b *binding.Binding, res *Result, plan *binding.Plan) {
 // the second error is a disagreement with the evaluator's verdict. o is
 // resolved; base names the evaluator's ITF.
 func (c *Checker) checkPlan(ctx context.Context, re *runEval, t *qtrace.Trace, p *binding.Plan, res *Result, o Options) (*Result, error, error) {
+	if c.hasChoiceCalls(p) {
+		r, err := c.checkChoices(ctx, t, p, res, o)
+		return r, nil, err
+	}
 	if re == nil {
 		r, err := validatePlanIn(ctx, c.Binding, t, p, o, res, false)
 		return r, nil, err

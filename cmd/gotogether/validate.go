@@ -19,6 +19,7 @@ import (
 // validateRun is one validate command: what its flags ask for (a
 // cli.Check), and how its report is printed (a replay's too).
 type validateRun struct {
+	choiceLimit                          int
 	binding, dir, backend, quint, format string
 	spec, module, instance               string // an ITF input's
 	conv, history                        string
@@ -74,6 +75,7 @@ func validateTo(out io.Writer, args []string) (int, error) {
 	fset.StringVar(&v.conv, "convert", "", "convert OTLP/JSON spans with this rule file (see gotogether convert)")
 	invs := fset.String("invariants", "", "comma-separated model invariants to check instead of the binding's")
 	fset.BoolVar(&v.withITF, "itf", false, "also write the ITF of conforming runs, the model's state at every step (slow for models with a large state); failing runs always get theirs")
+	fset.IntVar(&v.choiceLimit, "choice-limit", 0, "expanded states per actor for finite internal model choices (default 20000); exhaustion gives no verdict")
 	noITF := fset.Bool("noitf", false, "gone: no ITF for conforming runs is the default")
 	lin := fset.Bool("linearize", false, "check each actor's steps in an order real time allows, searched for one the model accepts (a client history: steps recorded when calls returned)")
 	fset.StringVar(&v.search.Key, "linearize-key", "", "linearize each actor's history partitioned by this argument's value (independent keys), each partition alone")
@@ -207,7 +209,7 @@ func (v *validateRun) run() (int, error) {
 	chk := cli.Check{Binding: v.binding, Files: v.files, Format: format, Convert: v.conv, Spec: v.spec, Module: v.module, Instance: v.instance,
 		NoVars: v.novars, Invariants: v.invariants, Search: v.search, LostPrefix: fields(v.lostPrefix), LostSuffix: fields(v.lostSuffix),
 		CompleteThrough: v.completeThrough, RequireFinish: v.requireFinish, RunInfo: v.runInfo, Compiled: v.compiled,
-		Options: validate.Options{Quint: v.quint, Backend: v.backend, Dir: v.dir, NoITF: !v.withITF}}
+		Options: validate.Options{Quint: v.quint, Backend: v.backend, Dir: v.dir, NoITF: !v.withITF, ChoiceLimit: v.choiceLimit}}
 	j, err := chk.Judge(context.Background())
 	return v.report(j, err)
 }

@@ -1,0 +1,13 @@
+spec: merged-history.qnt
+module: mergedWitness
+actions:
+  pick:
+    expect: 'phase == {{.obs.phase}}'
+  forget:
+    expect: 'phase == {{.obs.phase}}'
+  onlyNegative:
+    expect: 'phase == {{.obs.phase}}'
+invariants: [safe]
+eventually: [completed]
+simulate:
+  skip: acceptance fixture intentionally admits a previously unsafe path

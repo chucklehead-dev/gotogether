@@ -46,6 +46,14 @@ func Replay(ctx context.Context, m *validate.Manifest, o validate.Options) (*Rep
 		return nil, err
 	}
 	r := &Replayed{Want: m.Verdict, Warnings: warns}
+	choiceLimit := m.Check.ChoiceLimit
+	if choiceLimit == 0 {
+		choiceLimit = validate.DefaultChoiceLimit
+	}
+	if o.ChoiceLimit != 0 && o.ChoiceLimit != choiceLimit {
+		return nil, fmt.Errorf("ChoiceLimit %d: the run was judged with model-choice limit %d; replay uses its recorded limit", o.ChoiceLimit, choiceLimit)
+	}
+	o.ChoiceLimit = choiceLimit
 	if o.Backend != "" && o.Backend != m.Tools.Backend {
 		return nil, fmt.Errorf("-backend %s: the run was judged on backend %q (\"\": the default), and verdicts depend on it: drop -backend", o.Backend, m.Tools.Backend)
 	}

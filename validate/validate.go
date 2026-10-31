@@ -31,9 +31,12 @@ import (
 
 // Options configures a validation run.
 type Options struct {
-	Quint   string // quint binary; default "quint"
-	Backend string // quint test --backend; default $QUINT_BACKEND, else "rust" (a CheckBatch chunk of several traces: "typescript")
-	Dir     string // where generated modules and ITF go; default a temp dir
+	// ChoiceLimit bounds expanded states in a finite model-choice search.
+	// Zero uses DefaultChoiceLimit; exhaustion gives no verdict.
+	ChoiceLimit int
+	Quint       string // quint binary; default "quint"
+	Backend     string // quint test --backend; default $QUINT_BACKEND, else "rust" (a CheckBatch chunk of several traces: "typescript")
+	Dir         string // where generated modules and ITF go; default a temp dir
 	// NoITF skips writing the ITF of conforming runs (Result.ITF stays
 	// empty). The ITF holds the model's full state at every step, which for
 	// a model with a large state is much of the cost of a check.
@@ -85,6 +88,8 @@ const (
 
 // Result is the outcome of validating one actor's trace.
 type Result struct {
+	// Choices discloses finite internal-choice search and selected-path confirmation.
+	Choices       *ChoiceSearch
 	historySearch *receipt.Search
 	inputScope    string
 	Actor         string
@@ -322,6 +327,12 @@ func newResultWith(b *binding.Binding, t *qtrace.Trace, p *binding.Plan, constan
 }
 
 func (opt Options) resolve() (Options, error) {
+	if opt.ChoiceLimit < 0 {
+		return opt, fmt.Errorf("choice limit must be nonnegative (0 uses the default)")
+	}
+	if opt.ChoiceLimit == 0 {
+		opt.ChoiceLimit = DefaultChoiceLimit
+	}
 	if opt.Quint == "" {
 		opt.Quint = "quint"
 	}
@@ -859,6 +870,9 @@ func (r *Result) VerboseSummary() string { return r.summary(true) }
 func (r *Result) summary(verbose bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "actor %s: %d steps\n", r.Actor, r.Steps)
+	if r.Choices != nil {
+		fmt.Fprintf(&b, "  %s\n", r.Choices.String())
+	}
 	for _, i := range r.Issues {
 		fmt.Fprintf(&b, "  issue: %s\n", i)
 	}

@@ -40,7 +40,11 @@ func validationProfile(c settings) runprofile.Validation {
 	if backend == "" {
 		backend = "automatic"
 	}
-	p := runprofile.Validation{Quint: c.Options.Quint, Backend: backend, Eval: c.Options.Eval}
+	limit := c.Options.ChoiceLimit
+	if limit == 0 {
+		limit = validate.DefaultChoiceLimit
+	}
+	p := runprofile.Validation{Quint: c.Options.Quint, Backend: backend, Eval: c.Options.Eval, ChoiceLimit: limit}
 	if c.Options.EvalSample != nil {
 		p.ConfirmationRate = c.Options.EvalSample.Rate
 		p.ConfirmationSeed = c.Options.EvalSample.Seed

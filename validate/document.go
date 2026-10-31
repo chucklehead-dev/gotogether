@@ -78,6 +78,8 @@ type DocInput struct {
 
 // A DocActor is one actor's result (Result) as data.
 type DocActor struct {
+	// Choices retains exact selected model expressions and search scope.
+	Choices   *ChoiceSearch  `json:"choices,omitempty"`
 	Receipt   *receipt.Actor `json:"receipt,omitempty"`
 	Actor     string         `json:"actor"`
 	Partition string         `json:"partition,omitempty"`
@@ -266,7 +268,7 @@ func (d *Document) AddReport(rep *Report) {
 // Doc is r as data.
 func (r *Result) Doc() DocActor {
 	summary := r.Receipt()
-	a := DocActor{Receipt: &summary, Actor: r.Actor, Partition: r.Partition, Steps: r.Steps, Verdict: string(Pass), Reason: r.Reason(),
+	a := DocActor{Choices: r.Choices.Clone(), Receipt: &summary, Actor: r.Actor, Partition: r.Partition, Steps: r.Steps, Verdict: string(Pass), Reason: r.Reason(),
 		Conformance: string(r.Conforms), Constants: r.Constants, JudgedBy: r.JudgedBy()}
 	switch {
 	case strings.HasPrefix(a.Reason, "no verdict"):

@@ -73,6 +73,9 @@ func (m mode) context() context.Context {
 // NewChecker loads a binding file, typechecks its model and lints the
 // binding against it.
 func NewChecker(bindingPath string, opt Options) (*Checker, error) {
+	if opt.ChoiceLimit < 0 {
+		return nil, fmt.Errorf("choice limit must be nonnegative (0 uses the default)")
+	}
 	b, err := binding.Load(bindingPath)
 	if err != nil {
 		return nil, err

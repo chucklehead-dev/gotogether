@@ -123,10 +123,10 @@ func (m *Model) Assigns(action string) (map[string]bool, bool) {
 
 // Chooses are the choices action makes inside, itself or through the
 // actions it calls: its nondets ("nondet v") and its any {} of several
-// branches. quint's replay of a step draws each at random, not the one
-// the step took, so an expect that reads what it chose (or a choice that
-// disables the action for some values) is checked against one draw: the
-// lint says so, and validate gives a failure after one no verdict.
+// branches. Validation searches supported finite choices within a bound and
+// confirms a selected witness by replaying the pinned original actions.
+// Unsupported shapes and exhausted searches give an explicit no verdict.
+// This identifies syntax, not whether a particular runtime call is supported.
 func (m *Model) Chooses(action string) []string {
 	var out []string
 	seen := map[string]bool{}

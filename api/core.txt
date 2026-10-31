@@ -2220,6 +2220,7 @@ var Targets = map[string]string{…}
 
 == github.com/chucklehead-dev/gotogether/validate
 const CompiledFormat = "gotogether.model/1"
+const DefaultChoiceLimit = 20000
 const DefaultHiddenDepth = 4
 const DefaultLinearizeBudget = qtrace.DefaultLinearizeBudget
 const DefaultResolveBudget = 200
@@ -2300,6 +2301,8 @@ type Checker struct
     method (*Checker) Nav(start NavStart) (*Navigator, error)
     method (*Checker) WithConstants(constants map[string]string) (*Checker, error)
     method (*Checker) WithInvariants(invariants ...string) (*Checker, error)
+type ChoiceSearch = receipt.ChoiceSearch
+type ChoiceStep = receipt.ChoiceStep
 type CompiledModel struct
     field Format string `json:"format"`
     field Quint string `json:"quint"`
@@ -2325,6 +2328,7 @@ type DocAbsence struct
     field Cause string `json:"cause"`
     field Why string `json:"why"`
 type DocActor struct
+    field Choices *ChoiceSearch `json:"choices,omitempty"`
     field Receipt *receipt.Actor `json:"receipt,omitempty"`
     field Actor string `json:"actor"`
     field Partition string `json:"partition,omitempty"`
@@ -2554,6 +2558,7 @@ type Node struct
     field Folded int `json:"folded,omitempty"`
     method (*Node) String() string
 type Options struct
+    field ChoiceLimit int
     field Quint string
     field Backend string
     field Dir string
@@ -2579,6 +2584,7 @@ type Report struct
     method (*Report) Verdict() RunVerdict
     method (*Report) WithoutRefs() *Report
 type Result struct
+    field Choices *ChoiceSearch
     field Actor string
     field Partition string
     field Steps int
@@ -2608,6 +2614,7 @@ type Result struct
     method (*Result) Summary() string
     method (*Result) VerboseSummary() string
 type RunCheck struct
+    field ChoiceLimit int `json:"choiceLimit"`
     field Linearize bool `json:"linearize,omitempty"`
     field Key string `json:"linearizeKey,omitempty"`
     field Budget int `json:"linearizeBudget,omitempty"`
@@ -3026,6 +3033,7 @@ const Inconclusive Status = "inconclusive"
 const NotChecked Status = "not_checked"
 const Pass Status = "pass"
 type Actor struct
+    field Choices *ChoiceSearch `json:"choices,omitempty"`
     field Diagnostics []diagnostic.Result `json:"diagnostics,omitempty"`
     field JudgedBy string `json:"judgedBy"`
     field Partition string `json:"partition,omitempty"`
@@ -3042,6 +3050,22 @@ type Check struct
     field Name string `json:"name"`
     field Status Status `json:"status"`
     field Reason string `json:"reason,omitempty"`
+type ChoiceSearch struct
+    field Status string `json:"status"`
+    field Reason string `json:"reason,omitempty"`
+    field Limit int `json:"limit"`
+    field Explored int `json:"explored"`
+    field Exhaustive bool `json:"exhaustive"`
+    field Confirmation string `json:"confirmation"`
+    field Witness []ChoiceStep `json:"witness,omitempty"`
+    method (*ChoiceSearch) Clone() *ChoiceSearch
+    method (*ChoiceSearch) String() string
+type ChoiceStep struct
+    field Index int `json:"index"`
+    field Action string `json:"action"`
+    field Expression string `json:"expression"`
+    field Recorder string `json:"recorder,omitempty"`
+    field Seq uint64 `json:"seq,omitempty"`
 type Component struct
     field Target string `json:"target"`
     field Binding string `json:"binding,omitempty"`
@@ -3191,6 +3215,7 @@ type Simulation struct
     field Horizon string `json:"horizon"`
     field Scheduler *Scheduler `json:"scheduler,omitempty"`
 type Validation struct
+    field ChoiceLimit int `json:"choiceLimit"`
     field Binding string `json:"binding"`
     field Constants map[string]string `json:"constants,omitempty"`
     field Invariants []string `json:"invariants"`

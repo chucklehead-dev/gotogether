@@ -136,10 +136,16 @@ func (c Composition) String() string {
 		}
 	}
 	details := func(v Component) {
-		if v.Status == Pass || v.Judgment == nil {
+		if v.Judgment == nil {
 			return
 		}
 		for _, a := range v.Judgment.Actors {
+			if a.Choices != nil {
+				fmt.Fprintf(&b, "    actor %s: %s\n", a.Actor, a.Choices.String())
+			}
+			if v.Status == Pass {
+				continue
+			}
 			for _, d := range a.Diagnostics {
 				fmt.Fprintf(&b, "    %s\n", d.String())
 			}

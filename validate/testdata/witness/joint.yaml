@@ -1,0 +1,22 @@
+spec: model.qnt
+module: witness
+actions:
+  pick:
+    expect: 'phase == {{.obs.phase}}'
+  anyPick:
+    expect: 'phase == {{.obs.phase}}'
+  guardedPick:
+    expect: 'phase == {{.obs.phase}}'
+  riskyPick:
+    expect: 'phase == {{.obs.phase}}'
+  donePick:
+    expect: 'phase == {{.obs.phase}}'
+  finish:
+    args: {wanted: '{{.wanted}}'}
+    expect: 'phase == {{.obs.phase}}'
+  reset:
+    expect: 'phase == {{.obs.phase}}'
+invariants: [safe, nonPositive, phaseBounded]
+eventually: [completed]
+simulate:
+  skip: acceptance fixture deliberately admits unsafe hidden choices

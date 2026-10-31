@@ -56,13 +56,10 @@ func TestSoundResolveKeepsInvariants(t *testing.T) {
 	Validate(t, "testdata/flag.yaml", late, ResolvePending()).Expect(t, Violates("ok"))
 }
 
-// An action that chooses inside (any {} of four assignments, a die's
-// nondet) whose result the expect reads: quint's replay draws one choice
-// at random, so three validations of one input once failed at different
-// steps, or passed (F2). A failure at or after the choice is no verdict
-// now, its issue naming the action, the choice and the fix; a draw that
-// passes stands (a path the model takes).
-func TestSoundInternalChoiceIsNoVerdict(t *testing.T) {
+// Finite internal choices must explain the entire observed trace with one
+// original-action witness, confirmed by Quint. Repeated checks cannot depend
+// on which branch a random replay happens to draw.
+func TestSoundInternalChoiceIsPinned(t *testing.T) {
 	RequireQuint(t)
 	t.Parallel()
 	var flips []qtrace.Step
@@ -73,22 +70,35 @@ func TestSoundInternalChoiceIsNoVerdict(t *testing.T) {
 	for _, c := range []struct {
 		binding string
 		steps   []qtrace.Step
-		choice  string
-	}{{"testdata/flip.yaml", flips, "any {} of 4 enabled branches"}, {"testdata/die.yaml", roll, "nondet v"}} {
+	}{{"testdata/flip.yaml", flips}, {"testdata/die.yaml", roll}} {
+		var witness string
 		for range 3 {
 			run := Validate(t, c.binding, c.steps)
 			a := run.Report.Actors[0]
-			if a.Conforms == validate.Fail {
-				t.Fatalf("%s: a sampled failure reported as a verdict:\n%s", c.binding, a.Summary())
+			if !run.Report.OK() || a.Conforms != validate.Pass || a.Choices == nil || a.Choices.Confirmation != "path_confirmed" || !a.Choices.Exhaustive || len(a.Choices.Witness) != len(c.steps) {
+				t.Fatalf("%s: missing confirmed finite witness: %+v\n%s", c.binding, a.Choices, a.Summary())
 			}
-			if s := fmt.Sprint(a.Issues); !strings.Contains(s, c.choice) || !strings.Contains(s, "expose the choice as a parameter") {
-				t.Errorf("%s: issues %s, want the choice (%s) and the fix named", c.binding, s, c.choice)
+			got := fmt.Sprint(a.Choices.Witness)
+			if witness != "" && got != witness {
+				t.Fatalf("%s: repeated validation changed its pinned witness: %s then %s", c.binding, witness, got)
 			}
+			witness = got
+		}
+		bounded := Validate(t, c.binding, c.steps, Quint(validate.Options{ChoiceLimit: 1}))
+		a := bounded.Report.Actors[0]
+		if a.Conforms != validate.NotEvaluated || a.Failure != nil || a.Choices == nil || a.Choices.Status != "exhausted" || a.Choices.Confirmation != "not_performed" || decidedFailing([]*Run{bounded}) {
+			t.Fatalf("%s: a bounded search manufactured a failure: %+v", c.binding, a)
 		}
 	}
-	// a value no successor gives is a Mismatch whatever the draw
+	// No finite successor gives seven. Exhaustive Go search proves this
+	// rejection; no sampled Quint path is presented as a nonexistence proof.
 	roll[0].Obs["x"] = int64(7)
-	Validate(t, "testdata/die.yaml", roll).Expect(t, Mismatch("roll"))
+	rejected := Validate(t, "testdata/die.yaml", roll)
+	rejected.Expect(t, Mismatch("roll"))
+	choices := rejected.Report.Actors[0].Choices
+	if choices == nil || choices.Status != "rejected" || !choices.Exhaustive || choices.Confirmation != "not_performed" || !decidedFailing([]*Run{rejected}) {
+		t.Fatalf("impossible die observation lacks exhaustive rejection: %+v", choices)
+	}
 }
 
 // Two hosts: a write recorded by one completes at 1 ms, a read recorded

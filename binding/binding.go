@@ -498,17 +498,11 @@ func (b *Binding) relPath() string {
 	return b.Path
 }
 
-// Lint checks the binding against the model: every bound action exists and
-// is given exactly its parameters, the restart action exists and takes none,
-// invariants are vals, templates parse, and every constant is set. It returns
-// all problems found.
-// LintChoices are warnings about b's bound actions that choose inside
-// (Model.Chooses) and whose expect reads the state after them: quint's
-// replay draws the choice at random, not the one the step took, so a
-// step the model admits fails for every other draw, at a different step
-// on each rerun (review 11, F2). The fix: make the choice a parameter of
-// the action, which the step names, or an observation the binding
-// passes to one.
+// LintChoices explains internal choices in bound actions whose expect reads
+// their resulting state. Supported finite choices use bounded search and
+// original-action pinned replay; unsupported shapes and exhausted searches
+// remain explicit no verdicts. Exposing a choice in recorded arguments or
+// observations can make the model cheaper to search and easier to diagnose.
 func (b *Binding) LintChoices(m *Model) []string {
 	var out []string
 	for _, name := range slices.Sorted(maps.Keys(b.Actions)) {
@@ -517,14 +511,18 @@ func (b *Binding) LintChoices(m *Model) []string {
 			continue
 		}
 		if cs := m.Chooses(name); len(cs) > 0 {
-			out = append(out, fmt.Sprintf("action %s makes a choice of its own (%s) and its expect reads the state after it: quint's replay draws the choice at random, so a step the model admits fails for other draws "+
-				"(validate gives such a failure no verdict); expose the choice as a parameter of %s (the step's argument), or record it as an observation the binding passes",
+			out = append(out, fmt.Sprintf("action %s makes a choice of its own (%s) and its expect reads the state after it: supported finite choices use bounded search and original-action pinned replay; unsupported shapes or exhaustion give an explicit no verdict; "+
+				"expose the choice as a parameter of %s (the step's argument), or record it as an observation the binding passes, to reduce search and improve diagnostics",
 				name, strings.Join(cs, ", "), name))
 		}
 	}
 	return out
 }
 
+// Lint checks the binding against the model: every bound action exists and
+// is given exactly its parameters, the restart action exists and takes none,
+// invariants are vals, templates parse, and every constant is set. It returns
+// all problems found.
 func (b *Binding) Lint(m *Model) []string {
 	var errs []string
 	if err := b.checkEvidence(m); err != nil {
