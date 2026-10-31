@@ -1032,6 +1032,13 @@ docs/grist-platform.md §3.4):
   `gristResumed`), never resuming on its own. A decision that read the
   gone history, or a checkpoint moved to a trigger the log no longer
   holds, does not commit (`*store.ConditionFailed`, `Past`).
+  An observed rewind retires processor work already read by that node, even
+  after resume. A callback already started may finish: its actual result keeps
+  its original trigger identity and causal clock in native telemetry. The old
+  work cannot retry or submit a checkpoint or domain outcome. This is an
+  admission fence: an already-issued store transaction or external call cannot
+  be revoked, and an unobserved restore is not fenced. Operator reconciliation
+  remains necessary; no failed/unknown event is invented for retired work.
 
 ## 3. What a grist application gets from gotogether
 

@@ -446,6 +446,7 @@ func (pl *poller) run(ctx context.Context) {
 			ctx = qobs.Thread(ctx)
 			continue
 		}
+		workCtx := pl.clocks.workContext(ctx, pl.tenant)
 		base := pl.clocks.base(pl.tenant)
 		cp, err := pl.s.Checkpoint(ctx, pl.tenant, pl.p.name)
 		if err != nil {
@@ -457,7 +458,11 @@ func (pl *poller) run(ctx context.Context) {
 			pl.pause(ctx)
 			continue
 		}
-		if pl.clocks.observe(pl.tenant, pl.p.name, pl.markKey(), cp, head) != nil {
+		rewound, current := pl.clocks.observeWork(workCtx, pl.tenant, pl.p.name, pl.markKey(), cp, head)
+		if !current {
+			continue
+		}
+		if rewound != nil {
 			pl.relay.recordRewindNow(ctx, pl.tenant) // the rewind's step before any step of the new history
 			continue
 		}
@@ -479,7 +484,7 @@ func (pl *poller) run(ctx context.Context) {
 			continue
 		}
 		pl.busy.Store(qenv.Now(ctx).UnixNano())
-		pl.handle(withBase(ctx, pl.tenant, base), cp, head, evs) // its steps on the clock it read at
+		pl.handle(withBase(workCtx, pl.tenant, base), cp, head, evs) // its steps on the clock it read at
 		pl.busy.Store(0)
 	}
 }
@@ -500,6 +505,7 @@ type pending struct {
 // at head) until one fails to commit: consecutive Emits and Skips commit
 // in one transaction, an Effect alone.
 func (pl *poller) handle(ctx context.Context, cp, head Position, evs []Stored) {
+	ctx = pl.clocks.workContext(ctx, pl.tenant)
 	// An identity is stored evidence, never reconstructed from the position or
 	// this node's memory. Invalid store data must not invoke a handler/effect or
 	// become a domain failure with an advanced checkpoint.
@@ -521,6 +527,9 @@ func (pl *poller) handle(ctx context.Context, cp, head Position, evs []Stored) {
 		return ok
 	}
 	for _, e := range evs {
+		if !pl.clocks.workCurrent(ctx, pl.tenant) {
+			return
+		}
 		pl.progress(ctx)
 		if pl.relay.verify(ctx, pl.tenant, e) != nil && !pl.clocks.noStop {
 			flush()
@@ -560,7 +569,11 @@ func (pl *poller) handle(ctx context.Context, cp, head Position, evs []Stored) {
 // decide runs the handler for trigger e at its position, trying a
 // failure EffectTries times; false on a store error (read again).
 func (pl *poller) decide(ctx context.Context, e Stored) (Result, bool) {
+	ctx = pl.clocks.workContext(ctx, pl.tenant)
 	for try := 1; ; try++ {
+		if !pl.clocks.workCurrent(ctx, pl.tenant) {
+			return Result{}, false
+		}
 		r := readsAt(ctx, pl.app, pl.s, pl.tenant, e.Pos, pl.key(e))
 		res := pl.p.handle(ctx, r, e)
 		if r.err != nil {
@@ -666,7 +679,7 @@ func (pl *poller) effectContext(ctx context.Context, trigger Stored, head Positi
 	return context.WithValue(ctx, causeKey{}, &effectCause{app: pl.app, s: pl.s, p: pl.p, tenant: pl.tenant, trigger: trigger.Pos, triggerID: trigger.ID, head: head, key: key, slot: slot})
 }
 
-// markKey is the poller's key among its node's (clocks.observe).
+// markKey is the poller's key among its node's (clocks.observeWork).
 func (pl *poller) markKey() string { return fmt.Sprintf("%p", pl) }
 
 func (pl *poller) key(e Stored) string {
@@ -693,6 +706,7 @@ func (pl *poller) commit(ctx context.Context, cp Position, group []pending, kv .
 // 2·trigger+slot: 1 after the trigger's effect steps (at least once,
 // Emit), 0 before them (at most once's checkpoint).
 func (pl *poller) commitAt(ctx context.Context, cp Position, group []pending, slot int64, kv ...any) (Position, bool) {
+	ctx = pl.clocks.workContext(ctx, pl.tenant)
 	var events []Event
 	triggers := []int64{}
 	for _, g := range group {
@@ -714,13 +728,13 @@ func (pl *poller) commitAt(ctx context.Context, cp Position, group []pending, sl
 	b := store.Batch{Events: events, Checkpoint: &store.CheckpointMove{Processor: pl.p.name, From: cp, To: group[len(group)-1].trigger},
 		Time: qenv.Now(ctx).UnixMilli(), Cause: "processor:" + pl.p.name, Step: encodeRow(steps)}
 	for {
-		if pl.clocks.stopped(pl.tenant) != nil {
-			return 0, false // a rewind: nothing more of the trigger's until a resume
+		if !pl.clocks.workCurrent(ctx, pl.tenant) {
+			return 0, false // this work was retired by an observed rewind
 		}
 		head, err := pl.s.Append(ctx, pl.tenant, b)
 		if err == nil {
 			pl.tries = 0
-			pl.clocks.committed(pl.tenant, pl.p.name, pl.markKey(), b.Checkpoint.To, head)
+			pl.clocks.committedWork(ctx, pl.tenant, pl.p.name, pl.markKey(), b.Checkpoint.To, head)
 			return head, true
 		}
 		if !store.Transient(err) {
@@ -784,6 +798,7 @@ func (pl *poller) step(trigger Position, events []Event, obs []any, slot int64, 
 // read at head), then commits the checkpoint with its outcome event; it
 // returns the head after, false if the checkpoint did not commit.
 func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res Result) (Position, bool) {
+	ctx = pl.clocks.workContext(ctx, pl.tenant)
 	if res.guarantee == AtMostOnce {
 		return pl.atMostOnce(ctx, cp, e, res)
 	}
@@ -793,8 +808,8 @@ func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res R
 	var outcome []Event
 	ok := false
 	for try := 1; ; try++ {
-		if pl.clocks.stopped(pl.tenant) != nil {
-			return 0, false // a rewind: no effect until a resume, which handles the trigger again
+		if !pl.clocks.workCurrent(ctx, pl.tenant) {
+			return 0, false // a rewind retired this invocation, including its retries
 		}
 		if sim != nil && proc != nil && sim.FaultOf(kind.Only("crashBefore")) != "" {
 			proc.Crash()
@@ -806,6 +821,9 @@ func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res R
 			"order.pos", readOrder(head), "order.p."+pl.p.quint, 2*int64(e.Pos))
 		if sim != nil && proc != nil && sim.FaultOf(kind) == "crashAfter" {
 			proc.Crash()
+		}
+		if !pl.clocks.workCurrent(ctx, pl.tenant) {
+			return 0, false // completion is evidence; retired work cannot retry or commit
 		}
 		if err == nil {
 			ok = true
@@ -843,6 +861,7 @@ func (pl *poller) effect(ctx context.Context, cp, head Position, e Stored, res R
 // not commit (read again: a commit of unknown outcome counts as another
 // poller's, and its effect is not run).
 func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Result) (Position, bool) {
+	ctx = pl.clocks.workContext(ctx, pl.tenant)
 	head, ok := pl.commitAt(ctx, cp, []pending{{trigger: e.Pos}}, 0, "ok", false)
 	if !ok {
 		return 0, false
@@ -853,7 +872,7 @@ func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Res
 	if sim != nil && proc != nil && sim.FaultOf(kind.Only("crashBefore")) != "" {
 		proc.Crash() // the checkpoint moved, the effect never runs: lost, by right
 	}
-	if pl.clocks.stopped(pl.tenant) != nil {
+	if !pl.clocks.workCurrent(ctx, pl.tenant) {
 		// a rewind since its checkpoint: it does not run (lost, as after
 		// a crash between the two), whatever the log holds now
 		return 0, false
@@ -865,6 +884,9 @@ func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Res
 		"order.pos", readOrder(head), "order.p."+pl.p.quint, 2*int64(e.Pos)+1)
 	if sim != nil && proc != nil && sim.FaultOf(kind) == "crashAfter" {
 		proc.Crash() // the effect ran once, its outcome is lost
+	}
+	if !pl.clocks.workCurrent(ctx, pl.tenant) {
+		return 0, false // preserve the completion above, but retire its domain outcome
 	}
 	var outcome []Event
 	var na *notApplied
@@ -898,12 +920,16 @@ func (pl *poller) atMostOnce(ctx context.Context, cp Position, e Stored, res Res
 	step := newRowStep(pl.p.quint+"Outcome", len(outcome), append([]any{"trigger", int64(e.Pos), "triggerId", e.ID, "key", key, "ok", err == nil, "known", known, "error", text}, obs...)...)
 	b := store.Batch{Events: outcome, Marker: &store.Marker{ID: reservedID + key, Hash: "outcome"},
 		Time: qenv.Now(ctx).UnixMilli(), Cause: "processor:" + pl.p.name, Step: encodeRow([]rowStep{step})}
-	// the outcome outlives the node's stop: f ran, and an outcome not
+	// Without a rewind, the outcome outlives ordinary node cancellation:
+	// f ran, and an outcome not
 	// appended is a payment recorded nowhere, so a context ended (a node
 	// stopping) still gets defaultTransientTries tries; a crash (a
 	// simulation's) stops the task where it is
 	octx := context.WithoutCancel(ctx)
 	for try := 1; ctx.Err() == nil || try <= defaultTransientTries; try++ {
+		if !pl.clocks.workCurrent(octx, pl.tenant) {
+			return 0, false
+		}
 		h, err := pl.s.Append(octx, pl.tenant, b)
 		var cf *store.ConditionFailed
 		switch {

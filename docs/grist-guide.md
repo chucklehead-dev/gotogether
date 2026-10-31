@@ -1208,6 +1208,13 @@ The database's versioned schema migrations run at boot under the schema
 row's lock; an older binary refuses a newer schema. Give the DSN with
 `-db` or `-db-file` (read at startup, without live pool reopening).
 
+A detected rewind stops processors and retires their work already in flight.
+An external callback may finish and record its actual result, but that old work
+cannot retry or submit an outcome or checkpoint, even after `resume`. Reconcile
+the dependency records and exported steps before resuming. This fence applies
+to work after the node observes a rewind; already-issued transactions and
+unobserved restores remain outside it.
+
 ### 9.2 Identity
 
 A node's steps are recorded under `<app>/<node>/<incarnation>`. The

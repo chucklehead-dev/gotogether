@@ -8,6 +8,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // callsPerKey is the most calls of action any one key had in a run of x
@@ -206,8 +207,8 @@ func TestRepeatedPaymentWitnessUsesCanonicalHistory(t *testing.T) {
 // (grist.ErrRewound), no operator resuming it here. The payout's trigger,
 // back in the log after its checkpoint, is not paid again: one call of
 // its key, and no run rejects the payout's call (its lost outcome,
-// everyPayoutOutcomeLogged, is the tail's loss). This is the bounded bank-call
-// safety claim, not full conformance of an in-flight outcome after tail loss.
+// everyPayoutOutcomeLogged, is the tail's loss). Captured transitions conform,
+// including a late completion; eventual outcomes remain unjudged while paused.
 // With the fail-closed
 // ablated (gristsim.Managed.FailOpen: the processors go on after the
 // rewind, as a grist without ErrRewound would) the payout runs again
@@ -232,7 +233,23 @@ func TestRewindFailsClosed(t *testing.T) {
 	cfg.Send = []string{"show-counter"} // no extra refusal-marker commit in the lost tail
 	cfg.Store = &gristsim.Managed{Failover: &qenv.Failover{LoseTail: 1}}
 	closed := system(exactly, cfg).WithRates(qenv.NoFaults).Explore(t, runs)
-	closed.Expect(t, qtest.None(qtest.Rejects("bankPay")), qtest.Reaches("store.counters.failover").Faulted(), qtest.Reaches("rpc.mailer.delay").Faulted(), qtest.Reaches("rpc.bank.response").Faulted())
+	closed.Expect(t, qtest.None(qtest.Settles()), qtest.None(qtest.Rejects("bankPay")), qtest.Reaches("store.counters.failover").Faulted(), qtest.Reaches("rpc.mailer.delay").Faulted(), qtest.Reaches("rpc.bank.response").Faulted())
+	// A paused tenant intentionally cannot settle without operator action.
+	// Check transition conformance separately; eventual payout outcomes remain
+	// unjudged, and this does not claim that the incident is reconciled.
+	for _, run := range closed.Runs {
+		checked := false
+		if run.Report != nil {
+			for _, actor := range run.Report.Actors {
+				if actor.Actor == "counters/t1" {
+					checked = actor.Conforms == validate.Pass
+				}
+			}
+		}
+		if !checked {
+			t.Errorf("fail closed: captured processor transitions did not conform: %v", run.Report)
+		}
+	}
 	if n := callsPerKey(closed, "bankPay"); n != 1 || !rewound(closed) {
 		t.Errorf("fail closed: a payout key called %d times in a run (want once), every run rewound: %v", n, rewound(closed))
 	}

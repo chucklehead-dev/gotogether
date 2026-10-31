@@ -71,9 +71,12 @@ func (e *RewoundError) Is(target error) bool { return target == ErrRewound }
 // it saw, whether its processors are stopped by a rewind, and the base its
 // steps' domain clocks (order.*) are recorded at.
 type tenantClock struct {
-	head    Position
-	cps     map[string]Position
-	stopped *RewoundError
+	// generation retires processor work across an observed rewind, including
+	// work whose callback returns only after a later resume.
+	generation uint64
+	head       Position
+	cps        map[string]Position
+	stopped    *RewoundError
 	// recorded: the relay recorded the stop's gristRewound step, at
 	// rewindAt on the tenant's clock
 	recorded bool
@@ -130,6 +133,7 @@ func (c *clocks) stop(tc *tenantClock, e *RewoundError) {
 	for _, cp := range tc.cps {
 		seen = max(seen, cp)
 	}
+	tc.generation++
 	tc.stopped, tc.recorded = e, false
 	tc.rewindAt = tc.base + 2*int64(seen+1) + 1
 	tc.base = tc.rewindAt + 1
@@ -153,14 +157,20 @@ func (c *clocks) stopFor(t string, e *RewoundError) {
 	c.stop(c.of(t), e)
 }
 
-// observe checks what poller key, of processor p, read of tenant t (its
-// checkpoint cp and the head) against its own earlier reads, which it
-// then raises: a head below one it read, a checkpoint below one it read
-// or committed, or past the head, is a rewind, and stops the tenant's
-// processors. It returns the stop, if they are stopped.
-func (c *clocks) observe(t, p, key string, cp, head Position) *RewoundError {
+// observeWork checks a current poller's checkpoint and head against its earlier
+// reads. A lower head or checkpoint, or a checkpoint past the head, stops the
+// tenant. Retired reads are discarded atomically with the generation check;
+// the bool reports whether this observation belonged to current work.
+func (c *clocks) observeWork(ctx context.Context, t, p, key string, cp, head Position) (*RewoundError, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if !c.workCurrentLocked(ctx, t) {
+		return nil, false
+	}
+	return c.observeLocked(t, p, key, cp, head), true
+}
+
+func (c *clocks) observeLocked(t, p, key string, cp, head Position) *RewoundError {
 	tc := c.of(t)
 	m := tc.marks[key]
 	if m == nil {
@@ -186,11 +196,18 @@ func (c *clocks) observe(t, p, key string, cp, head Position) *RewoundError {
 	return tc.stopped
 }
 
-// committed raises poller key's memory after its own commit: the head
-// after it and the checkpoint it moved to.
-func (c *clocks) committed(t, p, key string, cp, head Position) {
+// committedWork raises a current poller's remembered checkpoint and head after
+// its own commit. It cannot revoke an admitted transaction, but a retired
+// acknowledgment must not seed the resumed generation's memory.
+func (c *clocks) committedWork(ctx context.Context, t, p, key string, cp, head Position) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.workCurrentLocked(ctx, t) {
+		c.committedLocked(t, p, key, cp, head)
+	}
+}
+
+func (c *clocks) committedLocked(t, p, key string, cp, head Position) {
 	tc := c.of(t)
 	if m := tc.marks[key]; m != nil {
 		m.head, m.cp = max(m.head, head), max(m.cp, cp)
@@ -207,6 +224,41 @@ func (c *clocks) stopped(t string) *RewoundError {
 		return nil
 	}
 	return c.of(t).stopped
+}
+
+// processorWork pins a batch to the observed history in which it was read.
+// It is admission fencing only: a rewind cannot revoke an already-issued store
+// transaction or external call, and an unobserved restore is outside this fence.
+type processorWork struct {
+	clocks     *clocks
+	tenant     string
+	generation uint64
+}
+type processorWorkKey struct{}
+
+func (c *clocks) workContext(ctx context.Context, tenant string) context.Context {
+	if w, ok := ctx.Value(processorWorkKey{}).(processorWork); ok && w.clocks == c && w.tenant == tenant {
+		return ctx
+	}
+	c.mu.Lock()
+	generation := c.of(tenant).generation
+	c.mu.Unlock()
+	return context.WithValue(ctx, processorWorkKey{}, processorWork{c, tenant, generation})
+}
+
+func (c *clocks) workCurrent(ctx context.Context, tenant string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.workCurrentLocked(ctx, tenant)
+}
+
+func (c *clocks) workCurrentLocked(ctx context.Context, tenant string) bool {
+	if c.noStop {
+		return true
+	}
+	tc := c.of(tenant)
+	w, ok := ctx.Value(processorWorkKey{}).(processorWork)
+	return ok && w.clocks == c && w.tenant == tenant && w.generation == tc.generation && tc.stopped == nil
 }
 
 // waitResumed waits until t's processors may go on, or ctx is done.

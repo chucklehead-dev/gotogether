@@ -455,12 +455,17 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   (docs/HISTORY.md (I25 and GR10 slice 3; grist §0.18)). Left, each
   concrete: (1) `LISTEN/NOTIFY` is built: `Options.PostgresNotify`
   emits transactional hints; `sqlstore/pgnotify.Serve()` owns a dedicated
-  reconnecting listener through Main's drain, with polling retained; (2) an
-  admin command listing and re-driving `grist.failed` dead letters;
+  reconnecting listener through Main's drain, with polling retained; (2)
+  read-only inspection of stored `grist.failed`/`grist.unknown` outcomes and their
+  immutable trigger identities first; redrive requires an explicit safety contract;
   (3) `resume -from P` (checkpoints moved past triggers an operator
   decided were handled, a model step `gristSkipped`); (4) durable rewind detection across entirely restarted nodes; effect-key
   identity is now solved separately by immutable stored-event IDs, with retained
-  keys stable and identical replacement commits distinct on every node; (5)
+  keys stable and identical replacement commits distinct on every node; an
+  observed rewind now permanently retires in-flight processor work, including
+  across resume, while retaining native completion evidence. This admission
+  fence cannot revoke an already-issued transaction/call or fence an unobserved
+  restore; (5)
   `qenv.Store.Connections`; (6) slice 5's DSN reopen on an
   authentication failure. The
   DSN from a file or the environment (a flag shows in `ps` and the pod

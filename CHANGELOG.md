@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- Grist retires in-flight processor work when a node observes a rewind, even
+  across resume. Started callbacks retain truthful native completion evidence;
+  retired work cannot retry or submit domain outcomes or checkpoint moves.
+  Already-issued operations and unobserved restores remain outside this fence.
+
 - Grist effect keys now use immutable stored-event IDs, shared by every node
   across restarts, restores and retries. `Stored.ID`, `Meta.ID` and
   `CallInfo.TriggerID` expose the identity; native effect/call telemetry includes
