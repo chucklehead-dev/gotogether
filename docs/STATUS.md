@@ -7,7 +7,17 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Incident-workflow follow-up (current branch): the existing jobqueue stale-ack
+Portable-handoff follow-up (current branch): `gotogether bundle -out DIR
+MANIFEST` verifies and exports the existing native manifest and complete file
+graph through private staging and exclusive atomic publication. Existing output,
+stale inputs/artifacts and unsupported model references are refused. Library
+`Manifest.Bundle` has the same checked, transactional file-copy contract; its
+receiver stays unchanged on error. Export integrity never becomes a model pass.
+The jobqueue walkthrough now exports its three cases without manual model/binding
+copying, removes source captures and replays the relocated incident. Composition
+receipts remain evidence requiring their originating registered System/test.
+
+Incident-workflow follow-up (merged PR #27): the existing jobqueue stale-ack
 mutant is recorded through actual service calls, checked as native JSON, inspected
 in the TUI, relocated and replayed, then repaired under the unchanged model.
 The repaired execution also accepts a fresh valid ack. Generic disabled-call
@@ -377,10 +387,10 @@ four, L more; agent-days in practice).
    cannot be partitioned and is still judged at the sum of its states;
    judging only the entries a step changed would make entry-wise
    invariants linear. Also the million-step example.
-6. **I20's portable handoff.** The jobqueue runbook now covers native JSON,
-   TUI capture inspection and relocated replay, but pre-copies model/binding
-   files. Make packaging checked and self-contained through existing formats;
-   a store-side grist step's pod still needs G8's location.
+6. **I20's remaining deployment context.** Checked portable export now removes
+   manual model/binding staging from the jobqueue runbook. A store-side grist
+   step's pod still needs G8's location; packaging cannot invent deployment
+   provenance that was never recorded.
 7. **I25's leftovers**, each concrete in ROADMAP: (2) an admin command listing and re-driving `grist.failed`
    dead letters; (3) `resume -from P` with a model step
    `gristSkipped`; (4) rewinds' memory in the store (a marker per
@@ -420,7 +430,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I20: checked portable evidence handoff using existing manifest/report formats | S–M | the incident runbook needs manual model/binding copying; verify references, refuse unsupported external paths, stage atomically, and preserve the original verdict/scope/identity |
+| 1 | I25: restart-stable rewind/effect identity, starting with a two-node fixture | S–M | `keyEpoch` currently remembers rewinds in node-local `tenantClock.kept`; pin equal replacement-trigger keys across surviving/restarted nodes and unchanged retained-prefix keys before selecting durable storage |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 

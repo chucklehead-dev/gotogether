@@ -30,3 +30,22 @@ TUI evidence stays tied to the original checked history across hypothetical
 model moves. Exit 1 can mean either model failure or no verdict: inspect the
 native `verdict`, and keep tool/data errors separate.
 
+
+## Portable evidence handoff
+
+```sh
+gotogether validate -binding app.binding.yaml -manifest run.json clean.jsonl
+gotogether bundle -out handoff run.json
+gotogether validate -replay handoff/run.json -json
+```
+
+Export after validation, including a failed or unjudged history. `bundle` exits
+0 for a verified export, preserving the native manifest's receipt and verdict;
+this is not a model pass. `-json` emits that native manifest with file paths
+relative to the exported `run.json`. A fresh destination is required. Missing,
+changed or unhashed files, including artifacts, unresolved input formats and
+unsupported model references are refused. Move file imports out of injected
+`defs` into the model and validate anew; these dependencies were not recorded. Files and metadata remain unsanitized; select and
+sanitize before validation. Composition receipts travel as evidence but still
+require the originating registered System/test to rerun their checks. Packaging
+does not expand the replay engine's supported histories.

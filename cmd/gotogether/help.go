@@ -17,7 +17,7 @@ type command struct{ purpose, example, short string }
 
 // helpOrder is the order gotogether help lists the commands in: a
 // newcomer's first ones first. Read-only.
-var helpOrder = []string{"init", "scaffold", "lint", "simulate", "validate", "nav", "evidence", "steps", "shrink", "itf", "convert", "cover", "compile", "skills", "doctor"}
+var helpOrder = []string{"init", "scaffold", "lint", "simulate", "validate", "bundle", "nav", "evidence", "steps", "shrink", "itf", "convert", "cover", "compile", "skills", "doctor"}
 
 var commands = map[string]command{
 	"init": {"write a new project, green as written: a synchronous library with observed-call tests, or an HTTP service (its handler recording each step, a client that retries a refused connection), its model and binding, a test in a simulation on qenv/qhttp (the server's process before the client), one over a real socket through qobshttp, and a mutant the tests catch",
@@ -41,6 +41,9 @@ var commands = map[string]command{
 	"validate": {"check recorded runs (step logs, OTLP/JSON, ITF) against the model",
 		"gotogether validate -binding stock.binding.yaml runs/*.jsonl\n  gotogether validate -binding stock.binding.yaml -compiled stock.model.json runs/*.jsonl   (no quint: gotogether compile's)",
 		"do recorded runs (step logs, OTLP/JSON, ITF) conform to the model? -replay judges a manifest's run again"},
+	"bundle": {"export a run manifest and its verified files into a fresh portable directory, without rerunning or changing its recorded verdict; unsupported absolute model references and stale or missing files are refused",
+		"gotogether bundle -out incident run.json\n  gotogether validate -replay incident/run.json -json",
+		"share recorded evidence? verify and package a native manifest and its files; -json emits the exported manifest"},
 	"shrink": {"shrink a failing sequence of an external driver's actions to a 1-minimal one that fails the same way, rerunning the driver per candidate and judging its steps",
 		"gotogether shrink -binding webjobs.binding.yaml -actions journey.json -out shrunk -- ./play -actions {actions} -steps {steps}",
 		"which of an external driver's failing actions does the failure need?"},
@@ -114,7 +117,7 @@ func isZeroValue(f *flag.Flag) bool {
 
 // commandNames are main's commands, for the unknown command's
 // did-you-mean.
-var commandNames = []string{"init", "scaffold", "simulate", "evidence", "lint", "steps", "validate", "shrink", "nav", "itf", "convert", "cover", "compile", "skills", "doctor", "help", "version"}
+var commandNames = []string{"init", "scaffold", "simulate", "evidence", "lint", "steps", "validate", "bundle", "shrink", "nav", "itf", "convert", "cover", "compile", "skills", "doctor", "help", "version"}
 
 // unknownCommand says that name is no command, with the nearest one if
 // it is a likely misspelling, and where the list is: the whole usage

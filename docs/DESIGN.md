@@ -5674,11 +5674,29 @@ incident's four captured records become five model calls because restart is
 inferred, so record sequence and model position are deliberately distinct.
 Real terminal tapes and native-JSON acceptance cover that distinction.
 
-Portable handoff remains awkward: this bounded runbook pre-copies its model and
-binding before writing manifests. A follow-up should verify references and
-publish a complete staged bundle using existing formats, with explicit refusal
-for unsupported references. Copying files or verifying hashes establishes export
-integrity, not model conformance or production capture completeness.
+**Checked portable handoff.** `gotogether bundle -out DIR MANIFEST` exports
+existing native evidence without executing or rejudging it. The library's
+`Manifest.Bundle` first validates the recorded hashes and full model reference
+graph, including imports that ordinary verification leaves for Quint to diagnose.
+Unsupported absolute model references and missing/unhashed/changed files,
+including artifacts, are refused rather than rewritten. Relative parent imports
+remain supported when the copied model layout keeps the whole graph internal.
+Source symlinks to regular files are materialized as ordinary copied bytes.
+
+Both the library file operation and the CLI's complete manifest directory use
+private sibling staging, verification of staged copies, and atomic exclusive
+publication. Concurrent exporters cannot replace each other's evidence; failure
+leaves the receiver and final destination unchanged. Linux, macOS and Windows
+use their native no-replace rename operation; unsupported systems/filesystems
+return an error. Atomic visibility does not claim crash durability. The CLI emits
+the native manifest under `-json`; exit zero confirms export integrity even for a
+recorded model failure or no verdict. Composition receipts remain portable
+non-executable evidence, and packaging does not expand replay support.
+
+The jobqueue rehearsal now validates in its original layout, exports all three
+cases, removes source captures and replays after relocation. It no longer needs
+manual model/binding copies. This closes the observed handoff gap without a new
+report format or treating packaging as production capture completeness.
 
 ## 69. The model alone: one engine, claims, one bound (I17)
 

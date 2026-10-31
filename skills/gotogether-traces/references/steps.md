@@ -191,10 +191,14 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   validate -replay run.json` judges it again on the run's backend,
   refusing a changed input, binding, spec or one of the files it imports
   (the spec checked is the one the binding resolves now), naming it, and
-  exiting 1 if the verdict is not the manifest's (reasons worded
-  otherwise by a newer gotogether only noted). Keep the manifest beside
-  its files: paths under its directory are relative; `Manifest.Bundle`
-  copies them there. In code: `validate.NewManifest(validate.RunRecord{...})`,
+  retaining judgment exits (0 pass, 1 failure/no verdict); a changed verdict
+  also exits 1, while integrity/tool errors exit 2. Reworded reasons alone are
+  noted. `gotogether bundle -out handoff run.json` verifies and exports the
+  native manifest plus its files together; replay `handoff/run.json`.
+  Export exits 0 for file integrity, preserving the original judgment.
+  Its destination must be fresh; missing/changed files and unsupported model
+  references are refused. Paths under the manifest's directory are relative.
+  `Manifest.Bundle` applies the checked file-copy contract in code. In code: `validate.NewManifest(validate.RunRecord{...})`,
   `Bundle`, `Write`, `ReadManifest`, `Verify`; in a test, `qtest.Driver`,
   `qtest.Artifacts` and `Run.Manifest()` (written under
   `GOTOGETHER_EVIDENCE` as `run<N>.json`, its files bundled in
