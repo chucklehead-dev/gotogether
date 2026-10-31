@@ -79,6 +79,14 @@ func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, e
 	if len(tr.States) == 0 {
 		return nil, fmt.Errorf("empty trace")
 	}
+	if v, ok := tr.States[0].Extra["gotogether::checkpoint"]; ok {
+		if v.Kind != itf.Bool {
+			return nil, fmt.Errorf("state 0: gotogether::checkpoint must be Boolean")
+		}
+		if v.B {
+			return nil, fmt.Errorf("state 0: a snapshot checkpoint needs a preceding model state; use an initial snapshot without gotogether::checkpoint")
+		}
+	}
 	// call is state idx's call: its action with its picks, its expect and
 	// the variables it carries checked after it
 	call := func(idx int, st itf.State) (binding.Call, error) {
@@ -89,6 +97,20 @@ func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, e
 		c := binding.Call{Action: st.Action, Args: map[string]string{}, Note: fmt.Sprintf("state %d", idx)}
 		if obs, ok := st.Meta["observed"].(string); ok {
 			c.Note += ": " + obs
+		}
+		if v, ok := st.Extra["gotogether::checkpoint"]; ok {
+			if v.Kind != itf.Bool {
+				return binding.Call{}, fmt.Errorf("state %d: gotogether::checkpoint must be Boolean", idx)
+			}
+			if idx == 0 && v.B {
+				return binding.Call{}, fmt.Errorf("state 0: a snapshot checkpoint needs a preceding model state; use an initial snapshot without gotogether::checkpoint")
+			}
+			c.Checkpoint = v.B
+			if c.Checkpoint {
+				if _, err := m.CheckpointVars(c.Action); err != nil {
+					return binding.Call{}, fmt.Errorf("state %d: %w", idx, err)
+				}
+			}
 		}
 		var vals []string
 		for _, p := range ps {
@@ -133,7 +155,7 @@ func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, e
 		}
 		start = &c
 	}
-	ms := replay.ModuleSpec{Spec: spec, Module: module, Defs: defs, Invariants: invs,
+	ms := replay.ModuleSpec{Spec: spec, Module: module, Defs: defs, Invariants: invs, StateVars: m.Vars,
 		Header: []string{fmt.Sprintf("replay of a model-level ITF trace, %d states", len(tr.States))}}
 	if opt.Instance != "" {
 		im, consts, err := binding.InstanceConstants(spec, opt.Instance)

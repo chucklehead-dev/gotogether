@@ -18,8 +18,10 @@ import (
 
 // Call is one step of the replay.
 type Call struct {
-	Quint  string // e.g. writeTable({ payload: 1, ... }, Ok)
-	Expect string // post-state check, or ""
+	// Checkpoint requires this snapshot to equal the complete pre-state; it cannot reset replay.
+	Checkpoint bool
+	Quint      string // e.g. writeTable({ payload: 1, ... }, Ok)
+	Expect     string // post-state check, or ""
 	// ExpectTemplate is the binding's expect that rendered Expect, whose
 	// {{.obs.X}} the step's observations filled in
 	ExpectTemplate string
@@ -42,12 +44,13 @@ type Plan struct {
 	ObservedSteps int
 	Constants     map[string]string // constant -> Quint expression
 	Calls         []Call
+	// StateVars are the model variables visible to snapshot checkpoint replays.
+	StateVars []string
 	// Start is the call the replay starts from instead of init: the
 	// trace's first step, when it is the binding's snapshot action's
 	// (Binding.Snapshot), the state it recorded. Nil: init.
 	Start *Call
-	// Issues are what planning found: a snapshot step not first in its
-	// trace, skipped.
+	// Issues are observations about the plan.
 	Issues []qtrace.Issue
 }
 
@@ -227,6 +230,9 @@ func (p *Planner) Plan(t *qtrace.Trace) (*Plan, error) {
 		}
 	}
 	plan := &Plan{Actor: t.Actor, Processes: t.Processes, ObservedSteps: len(t.Steps), Constants: maps.Clone(p.consts)}
+	if m != nil {
+		plan.StateVars = slices.Clone(m.Vars)
+	}
 	p.mu.Lock() // the renderer's templates, added as they are first used
 	defer p.mu.Unlock()
 	rd := p.rd
@@ -251,13 +257,7 @@ func (p *Planner) Plan(t *qtrace.Trace) (*Plan, error) {
 			prevProc = s.Process
 		}
 		snapshot := b.Snapshot != "" && s.Action == b.Snapshot && !s.Ambiguous
-		if snapshot && i > 0 {
-			// the state it recorded may be checked against the replay's one
-			// day; for now a snapshot is where a trace starts, nothing more
-			plan.Issues = append(plan.Issues, qtrace.Issue{Severity: "info", Kind: "snapshot", Msg: fmt.Sprintf(
-				"step %d (%s, seq %d%s) is a snapshot not first in its trace: skipped (a trace starts from its first step's snapshot, a log's head)", i+1, s.Action, s.Seq, where(s))})
-			continue
-		}
+		snapshotStart := snapshot && i == 0 && b.SnapshotFirst(p.whole)
 		ab := b.Actions[s.Action]
 		var params []Param
 		if m != nil {
@@ -279,7 +279,12 @@ func (p *Planner) Plan(t *qtrace.Trace) (*Plan, error) {
 			continue
 		}
 		data := stepData(s, args[i], procIdx[s.Process], outcome)
-		c := Call{Step: s, Action: s.Action, Args: map[string]string{}}
+		c := Call{Step: s, Action: s.Action, Args: map[string]string{}, Checkpoint: snapshot && !snapshotStart}
+		if c.Checkpoint && m != nil {
+			if _, err := m.CheckpointVars(c.Action); err != nil {
+				return nil, fmt.Errorf("step %d (%s, seq %d%s): %w", i+1, s.Action, s.Seq, where(s), err)
+			}
+		}
 		var vals []string
 		for _, p := range params {
 			tpl := ab.Template(p)
@@ -320,7 +325,7 @@ func (p *Planner) Plan(t *qtrace.Trace) (*Plan, error) {
 				return nil, fmt.Errorf("step %d (%s%s): expect: %w", i+1, s.Action, where(s), err)
 			}
 		}
-		if snapshot {
+		if snapshotStart {
 			plan.Start = &c
 			continue
 		}

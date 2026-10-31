@@ -35,7 +35,9 @@ type Model struct {
 	// as Quint text: where A never holds, the val holds vacuously.
 	Antecedents map[string]string
 	Vars        []string
-	Consts      map[string]string // name -> type
+	// checkpointScope lists imported state not provably captured by Vars.
+	checkpointScope []string
+	Consts          map[string]string // name -> type
 	// Helpers are the frame conditions (`sameNet`: every assignment
 	// leaves a variable as it was) other actions call and step never
 	// names: parts of steps, not steps. Scaffold writes none, and a lint's
@@ -119,6 +121,30 @@ func (m *Model) Assigns(action string) (map[string]bool, bool) {
 	}
 	walk(action)
 	return out, true
+}
+
+// CheckpointVars returns the complete visible state a snapshot checkpoint must
+// preserve. Assignments to imported variables that the module does not export
+// cannot be captured by a replay importing that module and are refused.
+func (m *Model) CheckpointVars(action string) ([]string, error) {
+	if len(m.checkpointScope) > 0 {
+		return nil, fmt.Errorf("snapshot checkpoint %s cannot capture complete imported state (%s): re-export unqualified imported state with export MODULE.*; stateful qualified imports and instances are not supported for checkpoints", action, strings.Join(m.checkpointScope, ", "))
+	}
+	assigned, known := m.Assigns(action)
+	if !known {
+		return nil, fmt.Errorf("snapshot checkpoint %s: cannot determine its complete assigned state", action)
+	}
+	var hidden []string
+	for v := range assigned {
+		if !slices.Contains(m.Vars, v) {
+			hidden = append(hidden, v)
+		}
+	}
+	if len(hidden) > 0 {
+		slices.Sort(hidden)
+		return nil, fmt.Errorf("snapshot checkpoint %s assigns imported state %s that the model does not export: complete checkpoint capture is not supported; re-export the imported module's state with export MODULE.* before checking checkpoints", action, strings.Join(hidden, ", "))
+	}
+	return slices.Clone(m.Vars), nil
 }
 
 // Chooses are the choices action makes inside, itself or through the
@@ -492,6 +518,7 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 		m := &Model{Module: module, Actions: map[string][]Param{}, Vals: map[string]bool{}, Consts: map[string]string{}, Antecedents: map[string]string{}, Helpers: map[string]bool{},
 			assigns: assigns, calls: calls, reads: reads, chooses: chooses, typedefs: typedefs, types: &memo.Map[string, typeResult]{},
 			schema: schemaOf(&tc, module)}
+		m.checkpointScope = checkpointScope(module, decls, visible)
 		calledBy := map[string]map[string]bool{} // action -> the names its body refers to
 		frames := map[string]bool{}              // actions that leave every variable they assign as it was
 		for _, d := range visible {
@@ -874,4 +901,69 @@ func renderIR(raw json.RawMessage) (string, bool) {
 		return e.Opcode + "(" + strings.Join(args, ", ") + ")", e.Opcode != ""
 	}
 	return "", false
+}
+
+// checkpointScope compares declaration identities, not names: an imported
+// variable can share the name of a visible variable without being that state.
+// Stateful instances and qualified imports are refused conservatively because
+// their source declaration IDs do not identify each instantiated state cell.
+func checkpointScope(module string, decls map[string][]tcDecl, visible []tcDecl) []string {
+	captured := map[string]string{}
+	for _, d := range visible {
+		if d.Kind == "var" {
+			captured[d.Name] = string(d.ID)
+		}
+	}
+	ids := map[string]bool{}
+	for _, id := range captured {
+		ids[id] = true
+	}
+	var stateful func(string, map[string]bool) bool
+	stateful = func(name string, seen map[string]bool) bool {
+		if seen[name] {
+			return false
+		}
+		seen[name] = true
+		ds, known := decls[name]
+		if !known {
+			return true
+		}
+		for _, d := range ds {
+			if d.Kind == "var" {
+				return true
+			}
+			if d.ProtoName != "" && stateful(d.ProtoName, seen) {
+				return true
+			}
+		}
+		return false
+	}
+	missing, seen := map[string]bool{}, map[string]bool{}
+	var walk func(string)
+	walk = func(name string) {
+		if seen[name] {
+			return
+		}
+		seen[name] = true
+		ds, known := decls[name]
+		if !known {
+			missing["unresolved module "+name] = true
+			return
+		}
+		for _, d := range ds {
+			if d.Kind == "var" && !ids[string(d.ID)] {
+				missing[name+"::"+d.Name] = true
+			}
+			if d.ProtoName != "" {
+				if d.Kind == "instance" || d.Kind == "import" && (d.QualifiedName != "" || d.DefName != "*") {
+					if stateful(d.ProtoName, map[string]bool{}) {
+						missing["stateful import "+d.ProtoName] = true
+					}
+				}
+				walk(d.ProtoName)
+			}
+		}
+	}
+	walk(module)
+	return slices.Sorted(maps.Keys(missing))
 }

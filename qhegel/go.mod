@@ -3,7 +3,7 @@ module github.com/chucklehead-dev/gotogether/qhegel
 go 1.26.1
 
 require (
-	github.com/chucklehead-dev/gotogether v0.0.0-20261031011149-e9f8c08e4cf7
+	github.com/chucklehead-dev/gotogether v0.0.0-20261031033417-2afc4109807f
 	hegel.dev/go/hegel v0.9.27
 )
 

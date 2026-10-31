@@ -62,6 +62,10 @@ func (b *Binding) planITF(p *Plan) ([]byte, error) {
 			"mbt::actionTaken": c.Action,
 			"mbt::nondetPicks": picks,
 		}
+		if c.Checkpoint {
+			st["gotogether::checkpoint"] = true
+			varSet["gotogether::checkpoint"] = true
+		}
 		if c.Expect != "" {
 			st["gotogether::expect"] = c.Expect
 			varSet["gotogether::expect"] = true

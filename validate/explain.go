@@ -246,6 +246,8 @@ func (e *evaluator) before(c *Checker, plan *binding.Plan, i int) (map[string]qe
 		switch {
 		case err != nil:
 			return nil, nil, fmt.Sprintf("replaying step %d: %v", k+1, err)
+		case ok && !e.checkpointMatches(&plan.Calls[k], s, next):
+			return nil, nil, fmt.Sprintf("step %d is a snapshot checkpoint that disagrees with the complete state before it", k+1)
 		case !ok:
 			return nil, nil, fmt.Sprintf("the Go evaluator cannot take step %d, which quint took: a disagreement (report it)", k+1)
 		}
@@ -316,6 +318,12 @@ func (e *evaluator) explain(c *Checker, plan *binding.Plan, i int, quintState ma
 	as, err := e.callArgs(c, call)
 	if err != nil {
 		return no("%v", err)
+	}
+	if call.Checkpoint {
+		next, enabled, err := e.m.Step(consts, s, e.em.Actions[call.Action], as...)
+		if err == nil && enabled && !e.checkpointMatches(&call, s, next) {
+			return no("the snapshot checkpoint disagrees with the complete state before it; it cannot reset replay")
+		}
 	}
 	w, err := e.m.Explain(consts, s, "", e.em.Actions[call.Action], as...)
 	switch {

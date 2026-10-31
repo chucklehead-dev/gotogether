@@ -718,6 +718,7 @@ func annotateITF(path string, g *replay.Generated) error {
 			vars[i] = strip(fmt.Sprint(v))
 		}
 	}
+	checkpoint := false
 	states, _ := t["states"].([]any)
 	for i, s := range states {
 		st, ok := s.(map[string]any)
@@ -740,6 +741,9 @@ func annotateITF(path string, g *replay.Generated) error {
 		act := "init"
 		ns["mbt::nondetPicks"] = map[string]any{}
 		if c != nil {
+			if c.Checkpoint {
+				ns["gotogether::checkpoint"], checkpoint = true, true
+			}
 			act = c.Quint
 			if p := strings.IndexByte(act, '('); p >= 0 {
 				act = act[:p]
@@ -762,6 +766,10 @@ func annotateITF(path string, g *replay.Generated) error {
 		}
 		ns["mbt::actionTaken"] = act
 		states[i] = ns
+	}
+	if checkpoint {
+		vars, _ := t["vars"].([]any)
+		t["vars"] = append(vars, "gotogether::checkpoint")
 	}
 	out, err := json.Marshal(t)
 	if err != nil {

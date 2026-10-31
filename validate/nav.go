@@ -123,6 +123,9 @@ func (c *Checker) Nav(start NavStart) (*Navigator, error) {
 		// the actors a partitioned check reports: each entity's steps
 		var parts []*qtrace.Trace
 		for _, t := range traces {
+			if err := c.checkpointPartitionError(t); err != nil {
+				return nil, fmt.Errorf("nav: %w", err)
+			}
 			ps, _, missing := splitTrace(t, key, snapshotFirst(c.Binding, t))
 			if missing != nil {
 				return nil, fmt.Errorf("nav: partition %s: step %s has no %s argument", key, missing.String(), key)
@@ -176,6 +179,9 @@ func (c *Checker) Nav(start NavStart) (*Navigator, error) {
 		next, ok, err := e.m.Step(n.consts, s, e.em.Actions[call.Action], args...)
 		if err != nil {
 			return nil, fmt.Errorf("nav: call %d (%s): %w", k+1, call.Quint, err)
+		}
+		if ok && !e.checkpointMatches(&call, s, next) {
+			return nil, fmt.Errorf("nav: call %d (%s) is a snapshot checkpoint that disagrees with the complete state before it: open the run at %d, its last state", k+1, call.Quint, k)
 		}
 		if !ok {
 			why := e.explain(c, plan, k, nil)

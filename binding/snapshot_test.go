@@ -88,7 +88,7 @@ func TestLintPartition(t *testing.T) {
 }
 
 // A snapshot step first in its trace is the plan's start, not a call; one
-// anywhere else is skipped, with an issue that says so.
+// anywhere else is a checkpoint that must equal the state before it.
 func TestPlanSnapshotStart(t *testing.T) {
 	b := &Binding{Snapshot: "restore", Actions: map[string]Action{"restore": {Args: map[string]string{"a": "{{.a}}", "b": "{{.b}}"}}, "setX": {Args: map[string]string{"v": "{{.v}}"}}}}
 	restore := qtrace.Step{Action: "restore", Seq: 5, Recorder: "r", Process: "p", Args: map[string]any{"a": int64(3), "b": int64(4)}}
@@ -105,7 +105,7 @@ func TestPlanSnapshotStart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Start != nil || len(p.Calls) != 1 || len(p.Issues) != 1 || !strings.Contains(p.Issues[0].Msg, "snapshot not first in its trace: skipped") {
+	if p.Start != nil || len(p.Calls) != 2 || len(p.Issues) != 0 || !p.Calls[1].Checkpoint || p.Calls[0].Checkpoint {
 		t.Fatalf("start %+v calls %v issues %v", p.Start, p.Calls, p.Issues)
 	}
 }
@@ -161,5 +161,21 @@ func TestStepsToITFActors(t *testing.T) {
 	}
 	if len(issues) != 1 || issues[0].Severity != "info" || issues[0].Kind != "actors" || !strings.Contains(issues[0].Msg, "left out, another binding's (actors: !*.clients): t/1.clients (2 steps, 0 pending)") {
 		t.Errorf("issues %v, want the clients named with their steps", issues)
+	}
+}
+
+// A checkpoint moved to position zero of a candidate is still evidence against
+// init, never permission to initialize from the captured state.
+func TestPlannerSnapshotRoleComesFromWhole(t *testing.T) {
+	b := &Binding{Snapshot: "restore", Actions: map[string]Action{"restore": {}, "change": {}}}
+	change := qtrace.Step{Action: "change", Process: "p"}
+	restore := qtrace.Step{Action: "restore", Process: "p"}
+	whole := &qtrace.Trace{Steps: []qtrace.Step{change, restore}, Processes: []string{"p"}}
+	plan, err := b.Planner(nil, whole).Plan(&qtrace.Trace{Steps: []qtrace.Step{restore, change}, Processes: []string{"p"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Start != nil || len(plan.Calls) != 2 || !plan.Calls[0].Checkpoint {
+		t.Fatalf("reordered checkpoint became start: %+v", plan)
 	}
 }

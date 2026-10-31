@@ -212,6 +212,9 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 	if opt.Linearize || opt.ResolvePending {
 		traces, _ := reconstruct(c.Binding, steps)
 		for _, tr := range traces {
+			if st := laterSnapshot(c.Binding, tr); st != nil {
+				return nil, fmt.Errorf("history search of actor %s with snapshot checkpoint %s: not supported; check the recorded order without Linearize or ResolvePending (a checkpoint must not become an initial restore when reordered)", nameOf(tr.Actor), st.String())
+			}
 			if c.resumes(tr) {
 				return nil, fmt.Errorf("a search (Linearize, ResolvePending) of actor %s, which lost its head and resumes from the states %s admits: not combined, each candidate would be a search over those states; "+
 					"record a snapshot step at each log's head (snapshot: restore), which a search keeps first", nameOf(tr.Actor), c.Binding.Resume)

@@ -320,7 +320,7 @@
       ]
     },
     "snapshot": {
-      "description": "Snapshot is a model action whose parameters are the whole state (it assigns every variable from them: restore(balance, ops)): a step of it first in its trace is the state the trace starts from, instead of init. A log that lost its prefix (rotated, truncated, a recorder started mid-run) is judged from the snapshot recorded at its head; a snapshot step anywhere else is skipped, with an issue.",
+      "description": "Snapshot is a model action whose parameters are the whole state (it assigns every variable from them: restore(balance, ops)): a step of it first in its trace is the state the trace starts from, instead of init. A log that lost its prefix (rotated, truncated, a recorder started mid-run) is judged from the snapshot recorded at its head. A later snapshot is a checkpoint: it must equal the complete state before it and cannot reset replay.",
       "type": "string"
     },
     "spec": {

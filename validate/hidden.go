@@ -361,6 +361,9 @@ func (h *hiddenSearch) run(keep []string) (hiddenOutcome, error) {
 			}
 			for _, s2 := range succ {
 				enabled = true
+				if !h.e.checkpointMatches(&call, s, s2) {
+					continue
+				}
 				if call.Expect != "" && hooks.TamperEval.Load() != 5 {
 					v, err := h.e.m.Eval(h.consts, s2, h.e.em.Expects[call.Action], xs...)
 					if err != nil {

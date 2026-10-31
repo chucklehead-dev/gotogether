@@ -51,7 +51,11 @@ unchanged. It did expose a core machine-output blocker: graph completeness and
 counts required parsing human text. Canonical model-report documents now retain
 native graph scope, check bounds/proof coverage, reachability search extent and
 typed skip reasons; the rehearsal consumes those fields directly. No new runtime
-adapter was needed. Further shrinking, lint, editor and onboarding breadth still
+adapter was needed. The next core slice closes S11's skipped middle-snapshot gap: later snapshots
+check the whole replayed state and cannot reset it. The first snapshot retains
+its lost-head initialization role. This advances recorded-history correctness
+across ordinary libraries and services, rather than extending one adoption case.
+Further shrinking, lint, editor and onboarding breadth still
 needs concrete blockers. Existing streams already covers simulated, Kafka and Kinesis
 tiers; a new outbound facade still needs evidence. Do not start all these tracks at once. Tags remain the maintainer's
 call. See HISTORY's "Breadth and core lessons review, 2026-10-30" for tradeoffs.
@@ -1442,9 +1446,9 @@ more.
   pending calls unjudged; a lost head starts from a `snapshot:` step or
   the states a `resume:` action admits (searched by the evaluator, quint
   confirming); `-lost-prefix`, `-lost-suffix`; kvstore rotates its log
-  with a snapshot at each head; `-follow` not built. Left: a snapshot in
-  the middle of a log is skipped, not checked against the replayed
-  state; a snapshot argument cannot be a map of records; a resume past
+  with a snapshot at each head; `-follow` not built. Later snapshots now check
+  the whole replayed state at their records instead of being skipped. Left: a
+  snapshot argument cannot be a map of records; a resume past
   20000 states, or a failure past 200 confirmed by quint alone.
 - **S12. Adoption (L). Done** (DESIGN §51): `qenv/qsql` (database/sql
   over a Store, a one-table SQL subset with PostgreSQL's SQLSTATEs),
