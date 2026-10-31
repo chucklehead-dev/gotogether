@@ -38,7 +38,7 @@ func NewID(ctx context.Context) string {
 			}
 		}
 	} else {
-		rand.Read(b[:])
+		rand.Read(b[:]) //qenv:ok only the production path; simulated tasks and setup use the counter above
 	}
 	return hex.EncodeToString(b[:])
 }
