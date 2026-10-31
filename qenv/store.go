@@ -429,7 +429,10 @@ func (tx *tx) lockWait(keys []string) error {
 		o = tx.st.locks[next]
 	}
 	tx.waitKeys = keys
-	Wait(tx.ctx, func() bool { return tx.blocker(keys) == "" })
+	// A supervisor may abort or reset a blocked transaction. Its wait then
+	// ends independently of the holder: callers reject it before taking locks
+	// or applying writes, even if a fresh transaction now holds the same key.
+	Wait(tx.ctx, func() bool { return tx.done || tx.reset || tx.blocker(keys) == "" })
 	tx.waitKeys = nil
 	return nil
 }

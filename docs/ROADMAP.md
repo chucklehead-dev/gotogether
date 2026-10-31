@@ -53,10 +53,14 @@ native graph scope, check bounds/proof coverage, reachability search extent and
 typed skip reasons; the rehearsal consumes those fields directly. No new runtime
 adapter was needed. S11's skipped middle-snapshot gap is implemented in PR #15:
 later snapshots check the whole replayed state and cannot reset it. The first
-snapshot retains its lost-head initialization role. The current I45 increment
+snapshot retains its lost-head initialization role. The merged I45 increment (PR #16)
 closes a separate database-history omission: known committed appenders that no
 external read observed still constrain reads. This catches strict stale reads
 and write skew without inventing unseen writer order or Unknown completion.
+The next runtime slice fixes interrupted database lock waits: rolled-back or
+reset transactions wake independently of an unrelated lock holder, and explicit
+SQL cancellation retains its correct result after a yielding operation. This
+supports existing services without adding a pool or timer facade.
 Further shrinking, lint, editor and onboarding breadth still
 needs concrete blockers. Existing streams already covers simulated, Kafka and Kinesis
 tiers; a new outbound facade still needs evidence. Do not start all these tracks at once. Tags remain the maintainer's

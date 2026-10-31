@@ -7,7 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Unobserved-append follow-up (current branch): qhistory retains rw dependencies
+Lock-wait follow-up (current branch): rolled-back and reset Store transactions
+stop waiting even while a different transaction holds the requested key. SQL
+statements recheck their transaction after a yielding operation, so an explicit
+transaction cancelled while blocked ends promptly with its cancellation result.
+Applied commits preserve success or unknown outcome. Tests cover lock and commit
+waits, a fresh holder after reset, ordinary waiting and deterministic replay.
+This fixes lifecycle handling; it does not add pool-capacity simulation or new
+per-statement cancellation tracking. See DESIGN §51.
+
+Unobserved-append follow-up (merged PR #16): qhistory retains rw dependencies
 from whole-list reads to known committed appenders absent from every external
 read. This closes a strict stale-read and write-skew false-pass boundary without
 inventing unseen writer order or treating timeouts as completed commits. A small
@@ -127,15 +136,15 @@ exploration evidence and run manifests. `evidence -session` filters the
 suite before coverage and expectation checks; unscoped completeness checks
 require explicit `-history`. Use a fresh ID and `go test -count=1`.
 
-**As of 2026-10-31 (unobserved-appends branch).** GR4's first composition experiment is implemented
+**As of 2026-10-31 (lock-wait-abort branch).** GR4's first composition experiment is implemented
 (HISTORY "GR4: the first composition experiment") on the GR3 slice 5
 baseline. This prototype branch aligns published modules' core pins at
-`2afc4109` so snapshot-checkpoint validation/navigation, scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
+`e2f551a8` so interrupted lock waits, SQL cancellation, snapshot-checkpoint validation/navigation, scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
 run profiles, finite-choice witness evidence, structured lint emitters, component shrink identities, composition and nav/2
 contract work outside go.work; the
 merged declared-call span increment did not require a core-pin bump. The
-checkpoint slice updates the pins so published navigation shares the same
-full-state checkpoint contract. **Nothing is tagged**: every module is pre-release,
+checkpoint slice updated the pins for navigation; the lock-wait slice advances
+them again so published SQL consumers share the terminal-wait contract. **Nothing is tagged**: every module is pre-release,
 published modules require each other at pseudo-versions, and breaking
 renames still land (R5 waits for the maintainer).
 

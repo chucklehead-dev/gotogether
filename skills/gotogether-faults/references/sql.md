@@ -83,7 +83,13 @@ rows := qsql.Table(st, "accounts") // committed rows, for final-state checks
   not depend on that goroutine. The errors the caller sees are database/sql's
   own: a statement in the transaction fails with `sql.ErrTxDone`, and
   `Commit` with `context.Canceled` or `sql.ErrTxDone`, which of the two
-  depending on that goroutine's timing; treat both as rolled back. A context with a wall-clock deadline is wall
+  depending on that goroutine's timing; treat both as rolled back. A transaction
+  cancelled while its statement or commit waits for a row lock stops waiting at
+  the reaper's rollback, even if another transaction keeps the lock. A reset
+  likewise ends the old wait even when a new transaction takes the same key.
+  A commit that already applied keeps its success or unknown-outcome result;
+  later cancellation does not establish rollback. This is transaction-context
+  cancellation; no new tracking of distinct per-statement cancellation is added. A context with a wall-clock deadline is wall
   time: do not let one expire inside a simulation. `SetMaxOpenConns`
   with a full pool blocks a task outside the simulation: the watchdog
   (`Sim.Hang`) panics naming it. The database closes with the

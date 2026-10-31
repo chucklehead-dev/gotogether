@@ -391,6 +391,12 @@ func (t *tx) statement(ctx context.Context, st statement, args []any) (*result, 
 		return nil, err
 	}
 	r, err := t.exec(st, args)
+	// A Store lock wait yields: the reaper may have rolled the transaction
+	// back while this statement was asleep. Preserve that terminal result
+	// rather than translating its interrupted wait into a retryable conflict.
+	if unusable := t.usable(ctx); unusable != nil {
+		return nil, unusable
+	}
 	if err != nil {
 		err = sqlError(t.c.st.Name, err)
 		t.fail(err)
@@ -422,6 +428,14 @@ func (t *tx) Commit() (err error) {
 
 func (t *tx) commit() error {
 	err := t.txn.Commit()
+	// Only an unapplied, failed commit can become cancellation. A successful
+	// or unknown outcome must retain its result even if cancellation followed
+	// the commit's linearization point.
+	if err != nil && !errors.Is(err, qenv.ErrUnknownOutcome) {
+		if unusable := t.usable(context.Background()); unusable != nil {
+			err = unusable
+		}
+	}
 	t.ended = true
 	delete(t.c.live, t)
 	if errors.Is(err, qenv.ErrUnknownOutcome) {
