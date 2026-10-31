@@ -3,6 +3,7 @@ package validate
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/internal/skip"
@@ -158,6 +159,18 @@ func TestWitnessUsesOneJointPropertyPath(t *testing.T) {
 			conforms, good := witnessOracle(history, tc.positive, tc.nonpositive)
 			if !conforms || len(report.Actors) != 1 || report.Actors[0].Conforms != Pass || report.OK() != good {
 				t.Fatalf("oracle conforms=%t jointly satisfies=%t; report:\n%s", conforms, good, report.Summary())
+			}
+			if tc.binding == "joint.yaml" {
+				for _, property := range report.Actors[0].Invariants {
+					if property.Name == "phaseBounded" && property.Verdict != Pass {
+						t.Fatal("an unrelated always-true property was blamed for a joint conflict")
+					}
+					if property.Name == "safe" || property.Name == "nonPositive" {
+						if property.Verdict != Fail || property.Failure == nil || !strings.Contains(property.Failure.Note, "joint") || !strings.Contains(property.Failure.Note, "safe") || !strings.Contains(property.Failure.Note, "nonPositive") {
+							t.Fatalf("joint conflict misreported as individual universal violation: %+v", property)
+						}
+					}
+				}
 			}
 		})
 	}
