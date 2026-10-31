@@ -338,8 +338,14 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
 
 - **I19. Validation at production volume (M-L). Done** (DESIGN §66,
   HISTORY "I19"; left: incremental invariants for a log that cannot be
-  partitioned, and a million-step example). A synthetic payments
-  log took 1.5 s at 90 steps, 5.3 s at 300, 54 s at 900 (all in the Go
+  partitioned, and a million-step example).
+  The interacting-entity baseline now separates transition, tracking, invariant
+  and whole-validator costs, with a bounded oracle comparison and explicit
+  invalidation counterexamples. See [the measurements](validation-volume.md).
+  Production incremental evaluation remains unimplemented; first investigate
+  measured evaluator allocations while retaining full semantics.
+  A synthetic payments log took 1.5 s at 90 steps, 5.3 s at 300,
+  54 s at 900 (all in the Go
   evaluator, compile cached) and over 10 minutes at 9000: about n², and
   a payments service writes millions of steps a day. Reconstruct
   presized first (20-30% less time, 27-33% fewer bytes: two lines);

@@ -5515,6 +5515,16 @@ the rest is quint's one audit process. validate's `TestPartitionAtVolume`
 judges 10⁴ steps under a 30 s budget on every push (about 2 s) and 10⁵
 in the nightly (GOTOGETHER_SCALE_STEPS=100000, about 5 s).
 
+**Interacting histories.** Transfers cannot be partitioned into independent
+account histories. The test-only [interacting baseline](validation-volume.md)
+measures transitions, tracking, full invariants and warm whole validation
+separately. Its written-entry cache is compared with full evaluation on bounded
+prefixes; destination-only and cross-entry counterexamples rule out using an
+action's source or write set alone as an invalidation proof. Existing footprint
+judgments do not provide such a proof. Production semantics remain unchanged;
+the measured evaluator allocations are the next investigation before a new
+incremental API or dependency analysis.
+
 ## 67. Explicit quantifiers, one place for claims (I16)
 
 §18 made an expectation alone a claim about some run, with `Conforms`
