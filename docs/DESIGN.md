@@ -5329,6 +5329,10 @@ including converted and schema-typed input paths. Judged.Manifest refuses change
 or uncaptured inputs; it never attaches new bytes to an old verdict. Low-level
 RunRecord callers may supply expected RunInput.SHA256 fingerprints, or explicitly
 own provenance capture when they leave that field empty.
+This does not establish an atomic snapshot of all source-mode binding/spec or
+conversion-rule files; anchoring their actual load identities remains a separate
+follow-up. Artifact/input guards must not be described as compiler authenticity
+or a proof of a globally atomic capture.
 Previously present sources must remain present and identical; absent sources must
 remain absent. Their provenance stays disclosed as unchecked, not silently
 upgraded. Portable export preserves artifact bytes and all relative paths,

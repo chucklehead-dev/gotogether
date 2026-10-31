@@ -14,11 +14,13 @@ absent-source provenance paths; relocated replay needs no Quint/Node probes.
 Actual compiled results retain their loaded digest and coverage so manifest
 creation refuses changed artifacts or a different judging recipe. High-level
 input readers also retain exact byte fingerprints and refuse changed/uncaptured
-inputs before recording, across native, converted and typed ITF paths. Literal
+inputs before recording, across native, converted and typed ITF paths. Source-mode
+model and conversion-rule snapshots remain a separate capture boundary; this
+slice does not claim an atomic snapshot of every executable dependency. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
-format has one current version; all published core pins agree at b4025488a9ee.
+format has one current version; all published core pins agree at 7c581c4fe7ed.
 
 Captured-transition assertion follow-up (merged PR #32): qtest.TransitionsConform
 judges the existing native conformance facet for all judged actors or required
@@ -494,7 +496,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Reassess the next independent core/product blocker | S–M | compiled handoff and scoped claims close concrete workflow gaps; use fresh adopter friction or an independently reproduced correctness issue before expanding evaluator/search capabilities |
+| 1 | Complete source-mode model/rule capture identity | S–M | actual input fingerprints and compiled artifact/coverage are anchored; inspect and anchor the remaining source binding/spec and conversion-rule reads before attributing results to later file hashes; preserve low-level caller-trust scope without claiming an atomic cross-file snapshot |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
