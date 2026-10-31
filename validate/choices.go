@@ -71,9 +71,6 @@ func (c *Checker) checkChoices(ctx context.Context, tr *qtrace.Trace, p *binding
 	if len(tr.Lost) > 0 || len(tr.Gaps) > 0 || slices.ContainsFunc(p.Calls, func(call binding.Call) bool { return call.Step != nil && call.Step.Ambiguous }) {
 		return refuse("finite pinned choices require complete observed records without assumed effects")
 	}
-	if len(c.Model.Chooses("init")) > 0 {
-		return refuse("finite pinned choices currently require deterministic init")
-	}
 	if o.ChoiceLimit < 0 {
 		return nil, fmt.Errorf("choice limit must be nonnegative (0 uses the default)")
 	}
@@ -103,14 +100,13 @@ func (c *Checker) checkChoices(ctx context.Context, tr *qtrace.Trace, p *binding
 	if err != nil {
 		return unsupported(err)
 	}
-	initial, failed, err := e.start(c, consts, p)
+	initial, err := e.m.Successors(consts, nil, e.em.Init)
 	if err != nil {
 		return unsupported(err)
 	}
-	if failed || len(initial) != 1 {
-		return refuse("finite pinned choices require one admitted deterministic initial state")
+	if len(initial) == 0 {
+		return refuse("finite pinned choices require at least one admitted initial state; init is disabled")
 	}
-	root := &choiceNode{state: initial[0], bad: map[string]int{}, at: -1}
 	mark := func(n *choiceNode) error {
 		for _, name := range c.Binding.Invariants {
 			if _, bad := n.bad[name]; bad {
@@ -126,11 +122,29 @@ func (c *Checker) checkChoices(ctx context.Context, tr *qtrace.Trace, p *binding
 		}
 		return nil
 	}
-	if err := mark(root); err != nil {
-		return unsupported(err)
+	// Each admitted initial state starts a separate whole-path explanation.
+	// Charge roots before observations, just as transitions are charged below.
+	var frontier []*choiceNode
+	seenRoots := map[string]bool{}
+	for _, state := range initial {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		key := e.m.Key(state)
+		if seenRoots[key] {
+			continue
+		}
+		seenRoots[key] = true
+		if explored >= limit {
+			return exhausted()
+		}
+		explored++
+		root := &choiceNode{state: state, bad: map[string]int{}, at: -1}
+		if err := mark(root); err != nil {
+			return unsupported(err)
+		}
+		frontier = append(frontier, root)
 	}
-	explored = 1
-	frontier := []*choiceNode{root}
 	for i, call := range p.Calls {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -295,11 +309,17 @@ func (c *Checker) checkChoices(ctx context.Context, tr *qtrace.Trace, p *binding
 	}
 	pinned := *p
 	pinned.Calls = slices.Clone(p.Calls)
+	root := path[0]
 	initialExpect, err := stateExpect(root.state)
 	if err != nil {
 		return unsupported(err)
 	}
-	pinned.Start = &binding.Call{Quint: "init", Action: "init", Expect: initialExpect}
+	initExpr, err := e.m.PinAction(consts, nil, e.em.Init, nil, root.state, vars)
+	if err != nil {
+		return unsupported(err)
+	}
+	pinned.Start = &binding.Call{Quint: "(" + initExpr + ")", Action: "init", Expect: initialExpect}
+	detail.Initialization = &ChoiceInitialization{Action: "init", Expression: initExpr}
 	for i, call := range p.Calls {
 		args, err := e.args(c, call)
 		if err != nil {

@@ -67,7 +67,8 @@ run. See [the executable walkthrough](../../../docs/lint-onboarding.md).
    mentions, is compared.
 9. **Separate observed outcomes from internal choices.** Keep observed outcomes
    as parameters. Ordinary complete-trace validation can search finite internal
-   `nondet`/`any` choices and confirm an original-action pinned witness with Quint;
+   `nondet`/`any` choices, including finite initialization, and confirm the
+   original initializer/action witness with Quint;
    hidden model state need not be exposed solely to avoid sampled replay. The
    default expansion limit is 20,000 (`ChoiceLimit` / `-choice-limit`). Exhaustion,
    compiled-only checking and unsupported scopes yield no verdict. Other workflows

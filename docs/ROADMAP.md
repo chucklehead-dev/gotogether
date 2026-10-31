@@ -144,6 +144,10 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
 - **I4. An internal choice the expect observes (S, then M). First bounded
   pinned-replay slice implemented.** Ordinary complete traces retain finite
   whole-path alternatives, with one path satisfying the joint property set.
+  Finite initialization is included: distinct roots count toward the limit,
+  initial invariant history is retained, and a separate initializer witness
+  reaches JSON/text/TUI receipts. Cursor exploration still refuses ambiguous
+  starts instead of guessing one.
   Quint confirms a selected witness specialized from original action IR; complete
   negative conclusions disclose Go enumeration. Bounds, evidence and explicit
   unsupported scopes are described in [model-choice witnesses](model-choice-witnesses.md).

@@ -15,8 +15,16 @@ type ChoiceSearch struct {
 	Exhaustive bool   `json:"exhaustive"`
 	// Confirmation is path_confirmed or not_performed. A confirmed path does
 	// not independently establish that no other admissible path exists.
-	Confirmation string       `json:"confirmation"`
-	Witness      []ChoiceStep `json:"witness,omitempty"`
+	Confirmation   string                `json:"confirmation"`
+	Initialization *ChoiceInitialization `json:"initialization,omitempty"`
+	Witness        []ChoiceStep          `json:"witness,omitempty"`
+}
+
+// ChoiceInitialization pins the original model initializer to a legal starting
+// state. It is model witness evidence, not an observed runtime initialization.
+type ChoiceInitialization struct {
+	Action     string `json:"action"`
+	Expression string `json:"expression"`
 }
 
 // ChoiceStep pins an original model action to a legal finite choice.
@@ -35,6 +43,10 @@ func (c *ChoiceSearch) Clone() *ChoiceSearch {
 		return nil
 	}
 	copy := *c
+	if c.Initialization != nil {
+		initialization := *c.Initialization
+		copy.Initialization = &initialization
+	}
 	copy.Witness = slices.Clone(c.Witness)
 	return &copy
 }
@@ -54,8 +66,36 @@ func (c *ChoiceSearch) String() string {
 		confirmation = "selected path confirmed by Quint"
 	}
 	s := fmt.Sprintf("model choices: %s; %d/%d expanded states; %s; %s", c.Status, c.Explored, c.Limit, completeness, confirmation)
+	if c.Initialization != nil {
+		s += fmt.Sprintf("; initialization witness (%s): %s", c.Initialization.Action, initializationPreview(c.Initialization.Expression))
+	}
 	if c.Reason != "" {
 		s += "; " + c.Reason
 	}
 	return s
+}
+
+// Receipts appear at every navigation cursor. Keep the initializer discoverable
+// without flooding that summary; JSON retains the complete original expression.
+// Escaping line breaks avoids changing significant whitespace inside literals.
+func initializationPreview(expression string) string {
+	preview := make([]rune, 0, 160)
+	for _, r := range expression {
+		part := string(r)
+		switch r {
+		case '\r':
+			part = `\r`
+		case '\n':
+			part = `\n`
+		case '\t':
+			part = `\t`
+		}
+		for _, c := range part {
+			if len(preview) == 160 {
+				return string(preview) + "… (full expression in JSON)"
+			}
+			preview = append(preview, c)
+		}
+	}
+	return string(preview)
 }
