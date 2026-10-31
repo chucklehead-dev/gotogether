@@ -180,7 +180,9 @@ type Result struct {
 	byEvaluator, sampled bool
 	// compiled: judged by a compiled model (validate -compiled), the
 	// evaluator alone
-	compiled bool
+	compiled        bool
+	compiledHash    string // exact evaluator artifact used by the judgment
+	compiledSources []File // source coverage checked when that artifact was loaded
 	// Unfinished, set by a check that judges the finish (a recorded
 	// run's -require-finish, validate/cli), is why a result that
 	// passes is no finished run ("incomplete (no settle)", "no verdict

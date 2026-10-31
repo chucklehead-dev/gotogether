@@ -106,6 +106,10 @@ To hand off a checked run, use `gotogether bundle -out incident run.json`.
 It publishes the native manifest and verified files together; the recorded model
 verdict stays unchanged. Replay supported histories with
 `gotogether validate -replay incident/run.json -json`.
+To prepare a handoff that needs no Quint or Node at replay time, compile the
+binding once, then validate with `-compiled model.json -manifest run.json`.
+The manifest records the compiled artifact as a checked dependency; bundle and
+replay preserve that judge, its native verdict, and any unsupported-check limits.
 
 For an on-call exercise on an existing service, follow the
 [jobqueue incident walkthrough](examples/jobqueue/INCIDENT.md): a native JSON
@@ -472,7 +476,7 @@ gotogether validate -binding bank.binding.yaml -lost-suffix node-2 steps.jsonl  
 gotogether validate -binding bank.binding.yaml -require-finish steps.jsonl          # a finished run, not a prefix: settled, no call pending
 gotogether validate -binding bank.binding.yaml -complete-through '*=2026-10-26T12:00:00Z' steps.jsonl  # a collector's watermark: a step due before it and absent is a defect, after it uncollected
 gotogether validate -binding payments.day.binding.yaml day.jsonl                    # partition: id in the binding: a day's log judged charge by charge, every failing one reported (the model checked to factor)
-gotogether validate -binding bank.binding.yaml -manifest run.json -run-info driver.json steps.jsonl  # a portable failure (gotogether.run/2)
+gotogether validate -binding bank.binding.yaml -manifest run.json -run-info driver.json steps.jsonl  # a portable failure (gotogether.run/3)
 gotogether validate -replay run.json                                                 # judged again: its hashed inputs unchanged, the same verdict (validate/cli.Replay in Go)
 gotogether shrink -binding bank.binding.yaml -actions journey.json -- ./driver -play {actions} -steps {steps}  # a driver's failing actions, shrunk by rerunning it
 gotogether nav -binding bank.binding.yaml -follow 'deposit("carol", 2)' -json          # the model, a state at a time: branches, disabled actions with why

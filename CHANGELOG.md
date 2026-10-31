@@ -8,6 +8,16 @@ and adds a line here.
 
 ## Unreleased
 
+- Compiled validation now records, bundles and replays evaluator-only manifests
+  without Quint/Node probes or fallback. The single current manifest format is
+  `gotogether.run/3`, with the hashed compiled artifact as an executable dependency;
+  older manifests must be regenerated. Artifact bytes, relative layout, actual
+  source availability and native pass/fail/no-verdict scope are preserved.
+  Manifest capture refuses changed artifacts/source coverage and mismatched
+  evaluation modes. Unsupported ITF inference stops before invoking Quint.
+  Compiled checkers refuse overrides of constants frozen into IR with
+  recompilation guidance; supported runtime parameter slots remain usable.
+
 - Added `qtest.TransitionsConform(actors...)` for captured transition conformance,
   optionally requiring exact actor identities. It preserves native ordering and
   evidence assumptions without claiming invariant, composition, completion or

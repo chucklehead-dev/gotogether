@@ -2328,7 +2328,7 @@ const FateKilled = "killed"
 const FateMalformed = "malformed"
 const FateSurvived = "survived"
 const FateUndecided = "undecided"
-const ManifestFormat = "gotogether.run/2"
+const ManifestFormat = "gotogether.run/3"
 const NotEvaluated Verdict = "n/a"
 const Pass Verdict = "pass"
 const ReportFormat = "gotogether.report/1"
@@ -2772,6 +2772,7 @@ type RunInput struct
     field Steps []qtrace.Step
     field Model *RunModel
 type RunModel struct
+    field Compiled *File `json:"compiled,omitempty"`
     field Binding *File `json:"binding,omitempty"`
     field Spec *File `json:"spec,omitempty"`
     field Imports []File `json:"imports,omitempty"`
@@ -2781,6 +2782,7 @@ type RunModel struct
     field Constants map[string]string `json:"constants,omitempty"`
     field Invariants []string `json:"invariants"`
 type RunRecord struct
+    field Compiled string
     field Composition *receipt.Composition
     field Options Options
     field Binding *binding.Binding

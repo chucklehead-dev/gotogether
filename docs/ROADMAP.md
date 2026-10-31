@@ -253,7 +253,7 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   2026-10-28: pre-release, every reader reads the current major only (a
   file naming none is read as it); after v0.1, the maintainer decides.
   What it was: The step log, the longest-lived artifact, has no
-  version (every other format does: `gotogether.run/2`,
+  version (every other format does: `gotogether.run/3`,
   `gotogether.evidence/2`, `gotogether.requests/1`); bindings have no
   `format:` key, so a newer binding fails an older CLI with "unknown
   field"; the woven ABI is called by code a qweave binary generates
@@ -408,9 +408,13 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   `GOTOGETHER_*` in effect, each skew with its fix); a CI tiering guide
   (per PR: recorded tests' conformance and -short explorations under a
   CPU budget; nightly: seeds, Hegel, mutants) as a reusable workflow.
-  Then (M) a compiled-model artifact (`gotogether compile` writes the
-  evaluator's IR), so a validate-only pipeline (a canary, a CronJob, an
-  incident laptop) needs no Node or quint for passing runs. Example: a
+  Compiled-model artifacts and portable manifest replay are built: compile once
+  with Quint, then `validate -compiled ... -manifest ...`, bundle and replay the
+  single current run/3 recipe without Node/Quint. The artifact is a hashed
+  executable dependency, not a driver's informational artifact. Relative layout,
+  exact source availability, and native pass/fail/no-verdict are retained;
+  unsupported checks do not fall back. Actual compiled digest/coverage anchor
+  recording, and frozen-IR constant overrides require recompilation. Example: a
   CI-budget reference repository, ten small model-checked services under
   5 CPU minutes per PR each.
 
@@ -1312,7 +1316,7 @@ item reviewed before the next. Sizes as in S.
   `Report.Verdict` for `VerdictOf`, `NewManifest(RunRecord)` for the
   builders, `CurrentTools` for `ModuleVersion`/`QuintVersion`;
   `-require-finish` (`-require-settle` a deprecated alias; manifests
-  `gotogether.run/2`); the claims of a run's end side by side in
+  `gotogether.run/3`); the claims of a run's end side by side in
   verdicts.md; SameFailure's fields from `binding.ObsComparisons`; lists
   and maps corrupted, the fields only removed named; qshrink's `Shown`
   in Result's words, `Keep.Why`, `Result`'s JSON; the evidence view in

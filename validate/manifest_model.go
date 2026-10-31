@@ -163,6 +163,9 @@ func quintTokens(src string) []string {
 // another file), or the spec recorded, must be the one hashed, with the
 // same imports at the same places beside it.
 func (md *RunModel) verify() []error {
+	if md.Compiled != nil {
+		return md.verifyCompiled()
+	}
 	if md.Spec == nil {
 		return nil
 	}
@@ -280,7 +283,7 @@ type bundleFile struct {
 func (m *Manifest) bundleFiles() []bundleFile {
 	var out []bundleFile
 	for _, md := range m.models() {
-		for _, f := range []*File{md.Binding, md.Spec, md.Convert} {
+		for _, f := range []*File{md.Binding, md.Spec, md.Convert, md.Compiled} {
 			if f != nil {
 				out = append(out, bundleFile{&f.Path, f.SHA256})
 			}
@@ -337,6 +340,12 @@ func (m *Manifest) verifyBundle(root string) error {
 		return fmt.Errorf("manifest bundle: %s", strings.Join(warnings, "; "))
 	}
 	for _, md := range m.models() {
+		if md.Compiled != nil {
+			if err := md.verifyCompiledBundle(root); err != nil {
+				return err
+			}
+			continue
+		}
 		if md.Binding != nil {
 			b, err := binding.Load(md.Binding.Path)
 			if err != nil {
@@ -491,7 +500,7 @@ func (m *Manifest) copyBundle(dir string) error {
 	}
 	for n, md := range m.models() {
 		var files []*File
-		for _, f := range []*File{md.Binding, md.Spec, md.Convert} {
+		for _, f := range []*File{md.Binding, md.Spec, md.Convert, md.Compiled} {
 			if f != nil {
 				files = append(files, f)
 			}
@@ -503,8 +512,21 @@ func (m *Manifest) copyBundle(dir string) error {
 			continue
 		}
 		root := filepath.Dir(files[0].Path)
+		var places []string
 		for _, f := range files[1:] {
-			for !within(root, f.Path) {
+			places = append(places, f.Path)
+		}
+		if md.Compiled != nil {
+			_, paths, err := md.compiledSources()
+			if err != nil {
+				return err
+			}
+			for _, f := range paths {
+				places = append(places, f.Path)
+			}
+		}
+		for _, p := range places {
+			for !within(root, p) {
 				next := filepath.Dir(root)
 				if next == root {
 					return fmt.Errorf("manifest bundle: model files do not share a filesystem root")

@@ -179,7 +179,9 @@ func Cached(bindingPath string, o Options) (*Checker, error) {
 // WithConstants returns a checker for another instance of the same model:
 // the binding's constants with these overridden (Quint expressions, or
 // templates as in the binding). One binding then serves runs of different
-// sizes, such as a load run's stock and a small exploration's.
+// sizes, such as a load run's stock and a small exploration's. A compiled
+// checker permits changes only to runtime parameter slots; a literal frozen
+// into its IR requires a newly compiled binding.
 func (c *Checker) WithConstants(constants map[string]string) (*Checker, error) {
 	b := *c.Binding
 	b.Constants = map[string]string{}
@@ -189,6 +191,11 @@ func (c *Checker) WithConstants(constants map[string]string) (*Checker, error) {
 	for k, v := range constants {
 		if _, ok := c.Model.Consts[k]; !ok {
 			return nil, fmt.Errorf("constant %s: not a const of %s (it has %v)", k, c.Model.Module, slices.Sorted(maps.Keys(c.Model.Consts)))
+		}
+		if c.compiled != nil && v != c.Binding.Constants[k] {
+			if _, dynamic := c.compiled.model.Eval.Consts[k]; !dynamic {
+				return nil, fmt.Errorf("compiled model %s inlines constant %s as %s: overriding it to %s changes the compiled instance; compile a binding with that constant, or make it a runtime template before compiling", c.compiled.path, k, c.Binding.Constants[k], v)
+			}
 		}
 		b.Constants[k] = v
 	}
@@ -363,6 +370,11 @@ func (c *Checker) WithInvariants(invariants ...string) (*Checker, error) {
 	for _, inv := range invariants {
 		if !c.Model.Vals[inv] {
 			return nil, fmt.Errorf("invariant %s: not a boolean val of %s", inv, c.Binding.Module)
+		}
+		if c.compiled != nil {
+			if _, ok := c.compiled.model.Eval.Invariants[inv]; !ok {
+				return nil, fmt.Errorf("compiled model %s does not include invariant %s: compile a binding declaring that invariant", c.compiled.path, inv)
+			}
 		}
 	}
 	b := *c.Binding

@@ -10,11 +10,12 @@ import (
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // gotogether compile, then validate -compiled: the result line quint's
-// check gives, with no quint (-quint names none there is), a search and a
-// manifest refused (quint confirms or replays them), and a stale artifact
+// check gives, with no quint (-quint names none there is), compiled manifest
+// replay, an unsupported search refused, and a stale artifact
 // refused with the fix, leaving no empty artifacts directory behind. Not
 // parallel: it sets TMPDIR.
 func TestCompileThenValidate(t *testing.T) {
@@ -56,15 +57,22 @@ func TestCompileThenValidate(t *testing.T) {
 			t.Errorf("output lacks %q:\n%s", want, got)
 		}
 	}
-	for flag, want := range map[string]string{"-linearize": "needs quint", "-manifest": "drop one of them"} {
-		args := []string{"-binding", bind, "-compiled", model, "-dir", filepath.Join(dir, "out-"+flag[1:]), flag}
-		if flag == "-manifest" {
-			args = append(args, filepath.Join(dir, "m.json"))
-		}
-		code, got, err := validated(append(args, log))
-		if code != 2 || err == nil || !strings.Contains(err.Error(), want) {
-			t.Errorf("%s: exit %d, %v, want 2 and %q:\n%s", flag, code, err, want, got)
-		}
+	code, got, err = validated([]string{"-binding", bind, "-compiled", model, "-linearize", log})
+	if code != 2 || err == nil || !strings.Contains(err.Error(), "needs quint") {
+		t.Fatalf("unsupported search: exit %d, %v:\n%s", code, err, got)
+	}
+	manifest := filepath.Join(dir, "compiled-run.json")
+	code, got, err = validated([]string{"-binding", bind, "-compiled", model, "-quint", "/nonexistent/quint", "-manifest", manifest, log})
+	if code != 1 || err != nil {
+		t.Fatalf("compiled manifest: exit %d, %v:\n%s", code, err, got)
+	}
+	m, err := validate.ReadManifest(manifest)
+	if err != nil || m.Model.Compiled == nil || m.Tools.Quint != "" || m.Tools.Backend != "" {
+		t.Fatalf("recorded judge: %+v (%v)", m, err)
+	}
+	code, got, err = validated([]string{"-replay", manifest, "-quint", "/nonexistent/quint"})
+	if code != 1 || err != nil || !strings.Contains(string(got), "manifest's verdict, reproduced") {
+		t.Fatalf("compiled replay: exit %d, %v:\n%s", code, err, got)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "account.qnt"), append(mustRead(t, filepath.Join(dir, "account.qnt")), "\n// edited\n"...), 0o644); err != nil {
 		t.Fatal(err)

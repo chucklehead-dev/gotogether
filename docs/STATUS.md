@@ -7,7 +7,18 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Captured-transition assertion follow-up (current branch): qtest.TransitionsConform
+Compiled-manifest follow-up (current branch): gotogether.run/3 records a hashed
+compiled artifact as the evaluator-only replay dependency. Bundle preserves its
+bytes/layout, binding, inputs and exact source-availability coverage, including
+absent-source provenance paths; relocated replay needs no Quint/Node probes.
+Actual compiled results retain their loaded digest and coverage so manifest
+creation refuses changed artifacts or a different judging recipe. Literal
+constant overrides that would misjudge frozen IR now require recompilation;
+unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
+JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
+format has one current version; published pins are coordinated after core push.
+
+Captured-transition assertion follow-up (PR #32): qtest.TransitionsConform
 judges the existing native conformance facet for all judged actors or required
 exact identities. It replaces manual checks in counters' paused incident and
 requeue's storm, with their original rejection, payment, cycle and settlement
@@ -481,7 +492,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I21: compiled-model manifest and portable replay | M | validate currently refuses compiled + manifest; a bounded relocated bundle could preserve native pass/fail/no-verdict without Quint for already-supported compiled evaluation |
+| 1 | Reassess the next independent core/product blocker | S–M | compiled handoff and scoped claims close concrete workflow gaps; use fresh adopter friction or an independently reproduced correctness issue before expanding evaluator/search capabilities |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 

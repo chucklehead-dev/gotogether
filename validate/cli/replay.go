@@ -54,11 +54,12 @@ func Replay(ctx context.Context, m *validate.Manifest, o validate.Options) (*Rep
 		return nil, fmt.Errorf("ChoiceLimit %d: the run was judged with model-choice limit %d; replay uses its recorded limit", o.ChoiceLimit, choiceLimit)
 	}
 	o.ChoiceLimit = choiceLimit
+	compiled := m.Model.Compiled != nil
 	if o.Backend != "" && o.Backend != m.Tools.Backend {
 		return nil, fmt.Errorf("-backend %s: the run was judged on backend %q (\"\": the default), and verdicts depend on it: drop -backend", o.Backend, m.Tools.Backend)
 	}
 	o.Backend = m.Tools.Backend
-	if env := os.Getenv("QUINT_BACKEND"); m.Tools.Backend == "" && env != "" {
+	if env := os.Getenv("QUINT_BACKEND"); !compiled && m.Tools.Backend == "" && env != "" {
 		r.Notes = append(r.Notes, fmt.Sprintf("QUINT_BACKEND=%s ignored: the run was judged on the default backend", env))
 		o.NoEnvBackend = true
 	}
@@ -67,6 +68,11 @@ func Replay(ctx context.Context, m *validate.Manifest, o validate.Options) (*Rep
 		Module: m.Model.Module, Invariants: m.Model.Invariants, Constants: m.Model.Constants, itfModels: map[string]*validate.RunModel{}}
 	if m.Model.Binding != nil {
 		chk.Binding = m.Model.Binding.Path
+	}
+	if compiled {
+		chk.Compiled = m.Model.Compiled.Path
+		o.NoEnvBackend = true
+		chk.Options = o
 	}
 	for _, in := range m.Inputs {
 		if in.Model != nil {
@@ -85,12 +91,14 @@ func Replay(ctx context.Context, m *validate.Manifest, o validate.Options) (*Rep
 	if len(chk.Files) == 0 {
 		return nil, fmt.Errorf("the manifest names no input: it was written for a run with none, and there is nothing to judge")
 	}
-	now := validate.CurrentTools(o)
-	if now.Quint != m.Tools.Quint {
-		r.Notes = append(r.Notes, fmt.Sprintf("the run was judged with quint %q, this replay with %q", m.Tools.Quint, now.Quint))
-	}
-	if now.Gotogether != m.Tools.Gotogether {
-		r.Notes = append(r.Notes, fmt.Sprintf("the run was judged with gotogether %s, this replay with %s", m.Tools.Gotogether, now.Gotogether))
+	if !compiled {
+		now := validate.CurrentTools(o)
+		if now.Quint != m.Tools.Quint {
+			r.Notes = append(r.Notes, fmt.Sprintf("the run was judged with quint %q, this replay with %q", m.Tools.Quint, now.Quint))
+		}
+		if now.Gotogether != m.Tools.Gotogether {
+			r.Notes = append(r.Notes, fmt.Sprintf("the run was judged with gotogether %s, this replay with %s", m.Tools.Gotogether, now.Gotogether))
+		}
 	}
 	j, err := chk.Judge(ctx)
 	r.Got = j

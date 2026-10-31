@@ -27,7 +27,7 @@ import (
 // ManifestFormat is the format Manifest.Write writes and ReadManifest
 // reads. Bump it when a field's name or meaning changes, so an old
 // manifest is refused, not misread.
-const ManifestFormat = "gotogether.run/2" // 2: requireFinish, was requireSettle
+const ManifestFormat = "gotogether.run/3" // 3: compiled artifacts select evaluator-only replay
 
 // A Manifest says what a validated run was judged on and what came of
 // it, so a failure of a run gotogether did not drive (a browser
@@ -97,7 +97,9 @@ type File struct {
 
 // RunModel is the instance a run was judged against.
 type RunModel struct {
-	Binding *File `json:"binding,omitempty"`
+	// Compiled selects evaluator-only replay by this hashed artifact; nil uses Quint.
+	Compiled *File `json:"compiled,omitempty"`
+	Binding  *File `json:"binding,omitempty"`
 	// Spec is the model's main file (the binding's spec, or an ITF
 	// input's), and Imports the files it imports, transitively, as quint
 	// resolves them (relative to the importing file).
@@ -453,6 +455,8 @@ func (v RunVerdict) String() string {
 // was judged, its results, and the files its verdict depends on, each
 // hashed as the manifest is made.
 type RunRecord struct {
+	// Compiled is the evaluator-only artifact used to judge the recorded steps.
+	Compiled string
 	// Composition contains additional checks registered for the same history.
 	Composition *receipt.Composition
 	// Options are the tools the run was judged with: quint's version and
@@ -487,16 +491,35 @@ type RunInput struct {
 	Model        *RunModel
 }
 
-// NewManifest is the manifest of the run r records (gotogether.run/2):
+// NewManifest is the manifest of the run r records (gotogether.run/3):
 // the tools, the instance, how it was judged, each input and artifact
 // hashed with the inputs' losses, and the verdict. The caller names the
 // run (Name, Package, Import) and its Driver. A file that cannot be read
 // is an error.
 func NewManifest(r RunRecord) (*Manifest, error) {
-	m := emptyManifest(r.Options)
+	for _, result := range r.Results {
+		if result != nil && result.compiled != (r.Compiled != "") {
+			return nil, errors.New("manifest: judgment evaluation mode does not match RunRecord.Compiled: provide the exact compiled artifact used by compiled results, and none for source results")
+		}
+	}
+	var m *Manifest
+	if r.Compiled != "" {
+		m = &Manifest{Session: os.Getenv("GOTOGETHER_SESSION"), Format: ManifestFormat, Created: time.Now().UTC().Truncate(time.Second), Tools: Tools{Gotogether: toolkitVersion()}}
+	} else {
+		m = emptyManifest(r.Options)
+	}
 	m.Model.Invariants = []string{}
-	if r.Binding != nil {
+	if r.Compiled != "" {
+		if err := m.setCompiledBinding(r.Binding, r.Compiled); err != nil {
+			return nil, err
+		}
+	} else if r.Binding != nil {
 		if err := m.setBinding(r.Binding); err != nil {
+			return nil, err
+		}
+	}
+	if r.Compiled != "" {
+		if err := m.matchCompiledResults(r.Results); err != nil {
 			return nil, err
 		}
 	}
@@ -527,6 +550,9 @@ func NewManifest(r RunRecord) (*Manifest, error) {
 		if err := m.addArtifact(a.Name, a.Path); err != nil {
 			return nil, fmt.Errorf("artifact %s: %w", a.Name, err)
 		}
+	}
+	if err := m.checkEvaluation(); err != nil {
+		return nil, err
 	}
 	return m, nil
 }
@@ -628,7 +654,7 @@ type hashedFile struct {
 // then its artifacts.
 func (m *Manifest) files() (inputs []hashedFile, artifacts []*Artifact) {
 	for _, md := range m.models() { // the specs and imports Verify checks as the replay resolves them (verifyModel)
-		for _, f := range []hashedFile{{"the binding", md.Binding}, {"the convert rules", md.Convert}} {
+		for _, f := range []hashedFile{{"the binding", md.Binding}, {"the compiled model", md.Compiled}, {"the convert rules", md.Convert}} {
 			if f.f != nil {
 				inputs = append(inputs, f)
 			}
@@ -653,6 +679,9 @@ func (m *Manifest) files() (inputs []hashedFile, artifacts []*Artifact) {
 func (m *Manifest) Verify() (warnings []string, err error) {
 	inputs, artifacts := m.files()
 	var errs []error
+	if err := m.checkEvaluation(); err != nil {
+		errs = append(errs, err)
+	}
 	for _, md := range m.models() {
 		errs = append(errs, md.verify()...)
 	}
@@ -738,6 +767,9 @@ func ReadManifest(path string) (*Manifest, error) {
 		}
 		return filepath.Join(dir, filepath.FromSlash(p))
 	})
+	if err := m.checkEvaluation(); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	return &m, nil
 }
 
@@ -771,7 +803,7 @@ func (m *Manifest) copy() *Manifest {
 		return &g
 	}
 	cpModel := func(r RunModel) RunModel {
-		r.Binding, r.Spec, r.Convert = cp(r.Binding), cp(r.Spec), cp(r.Convert)
+		r.Binding, r.Spec, r.Convert, r.Compiled = cp(r.Binding), cp(r.Spec), cp(r.Convert), cp(r.Compiled)
 		r.Imports = slices.Clone(r.Imports)
 		return r
 	}
@@ -801,7 +833,7 @@ func (m *Manifest) models() []*RunModel {
 // paths rewrites every file path of m with f.
 func (m *Manifest) paths(f func(string) string) {
 	for _, md := range m.models() {
-		for _, p := range []*File{md.Binding, md.Spec, md.Convert} {
+		for _, p := range []*File{md.Binding, md.Spec, md.Convert, md.Compiled} {
 			if p != nil {
 				p.Path = f(p.Path)
 			}

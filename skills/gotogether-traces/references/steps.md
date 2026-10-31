@@ -182,7 +182,7 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   `-history out.svg`, `-mutate-steps` (observation mutants after a
   pass; `-mutate-ops`, `-mutate-limit`).
 - A portable failure: `-manifest run.json` writes the run's manifest
-  (`gotogether.run/2`: gotogether's and quint's versions, the binding,
+  (`gotogether.run/3`: gotogether's and quint's versions, the binding,
   spec, rules and inputs with their sha256, losses, constants,
   invariants, how it was judged, the verdict and failing step with its
   ref), and `-run-info driver.json` adds what gotogether did not see:
@@ -203,6 +203,23 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   `qtest.Artifacts` and `Run.Manifest()` (written under
   `GOTOGETHER_EVIDENCE` as `run<N>.json`, its files bundled in
   `run<N>/`).
+- For evaluator-only handoff, compile where Quint is available, then record:
+  `gotogether compile -binding b.yaml -o model.json`,
+  `gotogether validate -binding b.yaml -compiled model.json -manifest run.json steps.jsonl`.
+  Bundle/replay use the hashed compiled artifact with no Quint/Node, including
+  version probes; no fallback changes the judge. Compiler provenance stays in
+  the artifact; runtime Tools.Quint/Backend stay empty. The single current run
+  format is `/3`; regenerate older manifests rather than editing their format.
+  Original artifact bytes, binding-relative layout, source hashes and the
+  present/absent source set are preserved. Sources absent at the actual check
+  stay explicitly unchecked; adding them or losing previously checked sources
+  requires a new judgment. Keep artifact/binding relative links coherent;
+  absolute references and unrecorded file imports in binding defs are refused.
+  Unsupported searches, ITF and pinned-choice confirmation remain no-verdict or
+  errors; neither export integrity nor an empty capture becomes a model pass.
+  A constant baked into compiled IR cannot be changed by WithConstants:
+  recompile instead. Runtime-parameter slots and already-compiled invariant
+  selections retain their supported behavior. JSON/TUI keep native judgments.
 - What a manifest holds, verbatim: the driver's arguments and origin,
   absolute paths (often with a user's name), the failing step's ref; its
   bundle (qtest's under `GOTOGETHER_EVIDENCE`) holds the whole,

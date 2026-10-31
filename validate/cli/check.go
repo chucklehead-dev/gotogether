@@ -207,6 +207,9 @@ func (chk Check) Judge(ctx context.Context) (*Judged, error) {
 		}
 		in, err := input.Read(f, chk.Format)
 		if a, ok := errors.AsType[*itf.AmbiguousError](err); ok {
+			if chk.Compiled != "" {
+				return nil, fmt.Errorf("-compiled %s: an ambiguous ITF input needs Quint type inference (%w): validate it without -compiled", chk.Compiled, validate.ErrNeedsQuint)
+			}
 			in, err = chk.readITFByTypes(f, b, a, err)
 		}
 		if err != nil {
@@ -355,7 +358,7 @@ func (chk Check) Judge(ctx context.Context) (*Judged, error) {
 	return j, nil
 }
 
-// Manifest is the judgment's manifest (gotogether.run/2), as
+// Manifest is the judgment's manifest (gotogether.run/3), as
 // `gotogether validate -manifest` writes it: the tools, the instance, how
 // it was judged (the finish check as judged, the declared losses and
 // watermarks), each input hashed, the verdict, and the Check's name,
@@ -363,7 +366,7 @@ func (chk Check) Judge(ctx context.Context) (*Judged, error) {
 // else "": the CLI names it after its file.
 func (j *Judged) Manifest() (*validate.Manifest, error) {
 	chk := j.chk
-	rec := validate.RunRecord{Options: chk.Options, Search: chk.Search, Results: j.Results, Convert: chk.Convert, Artifacts: chk.Artifacts}
+	rec := validate.RunRecord{Compiled: chk.Compiled, Options: chk.Options, Search: chk.Search, Results: j.Results, Convert: chk.Convert, Artifacts: chk.Artifacts}
 	if j.Checker != nil {
 		rec.Binding = j.Checker.Binding
 	} else if chk.Binding != "" {

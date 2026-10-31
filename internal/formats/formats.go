@@ -66,7 +66,7 @@ var (
 		Older: "encode the run again (qenv.EncodeChoices) from its choices"}
 	// Manifest is a validated run's manifest (validate.Manifest), written
 	// anew by every run.
-	Manifest = Format{Thing: "run", Major: 2, What: "run manifest (validate -manifest)",
+	Manifest = Format{Thing: "run", Major: 3, What: "run manifest (validate -manifest)",
 		Older: "write it anew with this version (gotogether validate -manifest, or the test under GOTOGETHER_EVIDENCE)"}
 	// Evidence is an exploration's evidence (qtest.Evidence), written
 	// anew by every run.

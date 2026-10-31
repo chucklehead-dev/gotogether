@@ -96,7 +96,7 @@ func TestManifestRoundTrip(t *testing.T) {
 	}
 	other := filepath.Join(moved, "evidence.json")
 	os.WriteFile(other, []byte(`{"format": "gotogether.evidence/2", "runs": 1}`), 0o644)
-	if _, err := ReadManifest(other); err == nil || !strings.Contains(err.Error(), `not a run manifest of "gotogether.run/2"`) || IsManifest(other) {
+	if _, err := ReadManifest(other); err == nil || !strings.Contains(err.Error(), `not a run manifest of "gotogether.run/3"`) || IsManifest(other) {
 		t.Errorf("another format: %v", err)
 	}
 }
