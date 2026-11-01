@@ -431,13 +431,13 @@ module libraryGen {
     any {
       {
         nondet book = STRS.oneOf()
-        nondet copies = INTS.oneOf()
+        nondet arg_copies = INTS.oneOf()
         nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
         {
-          val args_: AddBookArgs = { book: book, copies: copies, caller: caller }
+          val args_: AddBookArgs = { book: book, copies: arg_copies, caller: caller }
           val result_ = addBookOutcome(log, args_)
-          addBook(book, copies, id, caller, log.length(), triplesOf(addBookNeeds(args_, result_)), result_)
+          addBook(book, arg_copies, id, caller, log.length(), triplesOf(addBookNeeds(args_, result_)), result_)
         }
       },
       {
@@ -625,10 +625,10 @@ module libraryCallsGen {
     any {
       {
         nondet book = STRS.oneOf()
-        nondet copies = INTS.oneOf()
+        nondet arg_copies = INTS.oneOf()
         nondet caller = STRS.oneOf()
         nondet id = nextID(answered).oneOf()
-        addBook(book, copies, id, caller, addBookOutcome(log, { book: book, copies: copies, caller: caller }))
+        addBook(book, arg_copies, id, caller, addBookOutcome(log, { book: book, copies: arg_copies, caller: caller }))
       },
       {
         nondet member = STRS.oneOf()

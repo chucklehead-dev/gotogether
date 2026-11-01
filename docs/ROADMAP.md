@@ -79,6 +79,14 @@ model conformance, runtime completion and execution limits are separate facts;
 none should stand in for another in JSON, TUI or claims. Further work should
 start with fresh end-to-end use or a demonstrated contract blocker.
 
+An adoption-driven generator correction removes a documented workaround:
+command order with argument order now gets a separate local model draw instead
+of shadowing its action. Argument and framework draw allocation preserves
+external vocabulary and rule records across store/client branches and
+reachability predicates. Native typechecking and executable witnesses retain
+the original catalog shape and cover related caller/helper collisions. This
+improves model authoring without an inference mode or a new format.
+
 S11's skipped middle-snapshot gap is implemented in PR #15:
 later snapshots check the whole replayed state and cannot reset it. The first
 snapshot retains its lost-head initialization role. The merged I45 increment (PR #16)

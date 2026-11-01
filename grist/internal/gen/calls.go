@@ -244,25 +244,25 @@ func (g *gen) callSteps() []string {
 		for _, p := range c.users {
 			for _, action := range actions {
 				site := action != c.Quint
-				d := newDraws()
-				d.pick("trigger_", "1.to(log.length() + 1)")
-				d.pick("key_", "KEYS")
+				d := g.newDraws()
+				trigger := d.pick("trigger_", "1.to(log.length() + 1)")
+				key := d.pick("key_", "KEYS")
 				rs := results
 				if !site {
 					rs = append(append([]string(nil), results...), fmt.Sprintf("%q", unknownOutcome))
 				}
-				d.pick("result_", "Set("+strings.Join(rs, ", ")+")")
+				result := d.pick("result_", "Set("+strings.Join(rs, ", ")+")")
 				resp := d.add(c.resp)
-				args := []string{fmt.Sprintf("%q", p.Name), "trigger_", "key_"}
+				args := []string{fmt.Sprintf("%q", p.Name), trigger, key}
 				for _, f := range c.req {
 					args = append(args, "req_."+f.json)
 				}
-				args = append(args, "result_")
+				args = append(args, result)
 				for _, f := range resp {
 					args = append(args, f.param)
 				}
-				call := fmt.Sprintf("{\n        val req_: %sRequest = if (trigger_ <= log.length() and log[trigger_ - 1].typ == %q) %s(log.slice(0, trigger_), trigger_) else %s\n        %s(%s)\n      }",
-					c.typeName(), p.On, c.ruleName(p), zeroRecord(c.req), action, strings.Join(args, ", "))
+				call := fmt.Sprintf("{\n        val req_: %sRequest = if (%s <= log.length() and log[%s - 1].typ == %q) %s(log.slice(0, %s), %s) else %s\n        %s(%s)\n      }",
+					c.typeName(), trigger, trigger, p.On, c.ruleName(p), trigger, trigger, zeroRecord(c.req), action, strings.Join(args, ", "))
 				out = append(out, d.branch(call))
 			}
 		}
