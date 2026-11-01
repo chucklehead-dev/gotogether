@@ -5,7 +5,7 @@ import sys
 mode, path = sys.argv[1:]
 with open(path) as stream:
     report = json.load(stream)
-assert report['format'] == 'gotogether.report/1', report
+assert report['format'] == 'gotogether.report/2', report
 if mode in ('pass', 'prefix'):
     assert report['exit'] == 0 and report['verdict'] == 'pass', report
     if mode == 'prefix':

@@ -3,7 +3,7 @@
 # install and the cache of typechecks and compiles kept between runs,
 # gotogether doctor, then your command, its result in the job summary
 # (read from each validate's and simulate's JSON report,
-# gotogether.report/1: GOTOGETHER_REPORT_DIR) and an annotation per
+# gotogether.report/2: GOTOGETHER_REPORT_DIR) and an annotation per
 # failure at its record's line.
 #
 #   - uses: chucklehead-dev/gotogether/.github/actions/gotogether@<commit>
@@ -112,7 +112,7 @@ runs:
       run: |
         out="$RUNNER_TEMP/gotogether-output.txt"
         # each validate and simulate the command runs writes its report as
-        # JSON here (gotogether.report/1): the summary and annotations are
+        # JSON here (gotogether.report/2): the summary and annotations are
         # read from it, not from the text
         export GOTOGETHER_REPORT_DIR="$RUNNER_TEMP/gotogether-reports"
         rm -rf "$GOTOGETHER_REPORT_DIR"

@@ -514,6 +514,13 @@ changed after they were read or judged. Revalidate after an edit. Source checks
 also guard warm caches; files must remain stable while external Quint runs.
 These checks do not provide an atomic cross-file snapshot.
 
+Model possibility results retain the resolved goal: a predicate that holds in a
+state, or an ordered action sequence that executes. A generated command-outcome
+predicate may hold initially because suitable arguments could produce that
+outcome; its empty witness records no command execution. In report/2, witness
+steps carry action names and exact named Quint literals, including internal
+model arguments. Unattributed transitions remain explicit model steps.
+
 Finite internal model choices in ordinary complete traces, including choosing
 initial states, use whole-path search. Quint confirms the original initializer
 and action witness. `-choice-limit` defaults to 20,000 expanded states, counting
@@ -549,7 +556,7 @@ actor default: 10 steps
 A failing record is named once, where it was read, with its wall time,
 process (a grist node's pod) and trace; `-v` adds its place in the
 replay and the model's whole state. `validate -json` and `simulate
--json` print the report as data (`gotogether.report/1`), `-report
+-json` print the report as data (`gotogether.report/2`), `-report
 junit=FILE` and `-report sarif=FILE` write it for CI, and the Action's
 job summary reads it (`GOTOGETHER_REPORT_DIR`).
 

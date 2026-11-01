@@ -8,6 +8,14 @@ and adds a line here.
 
 ## Unreleased
 
+- Model reachability reports distinguish state predicates from executed action
+  sequences and retain resolved goal definitions. Evaluator witness steps now
+  carry identified actions and exact named Quint literals, or explicit unknown
+  attribution, instead of requiring string parsing. The single current report
+  format is `gotogether.report/2`; `possible.search.path` contains objects.
+  Re-run commands to regenerate earlier reports. Search bounds and backend
+  witness distinctions remain explicit; predicate readiness is not execution.
+
 - Grist's model generator now allocates local draws without shadowing the
   actions and helpers they call. Commands such as `order` with an `order`
   argument, or a command named `caller`, retain their public names. Store/client

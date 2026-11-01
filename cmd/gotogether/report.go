@@ -14,7 +14,7 @@ import (
 
 // machineReports are the machine-readable reports a command writes
 // besides, or instead of, its text (I20): -json prints the report as
-// JSON (gotogether.report/1, validate.Document) in place of the text;
+// JSON (gotogether.report/2, validate.Document) in place of the text;
 // -report FORMAT=FILE writes it to FILE as json, junit or sarif beside
 // the text (repeatable); GOTOGETHER_REPORT_DIR=dir writes its JSON into
 // dir, a file per command (the Action reads them for the job summary).
@@ -32,8 +32,8 @@ var reportFormats = map[string]func(*validate.Document) []byte{
 }
 
 func (m *machineReports) flags(fset *flag.FlagSet) {
-	fset.BoolVar(&m.json, "json", false, "print the report as JSON (gotogether.report/1: the verdict, each failure's record with its wall time, recorder and trace, the model's expectation and the state's diff) instead of the text")
-	fset.Var(&m.files, "report", "FORMAT=FILE: also write the report to FILE as json (gotogether.report/1), junit (JUnit XML, a test case per check) or sarif (SARIF 2.1.0, a result per failure at its record's line); repeatable")
+	fset.BoolVar(&m.json, "json", false, "print the report as JSON (gotogether.report/2: the verdict, each failure's record with its wall time, recorder and trace, the model's expectation and the state's diff) instead of the text")
+	fset.Var(&m.files, "report", "FORMAT=FILE: also write the report to FILE as json (gotogether.report/2), junit (JUnit XML, a test case per check) or sarif (SARIF 2.1.0, a result per failure at its record's line); repeatable")
 }
 
 // resolve checks the -report flags, and silences the text (*out) under

@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Grist generated draws (current branch): the documented order/order collision
+Model possibility evidence (current branch): resolved goals distinguish state
+predicates from ordered action sequences. Predicate readiness can hold initially
+without executing a command. Report/2 carries structured evaluator transitions,
+identified actions and exact named Quint literals; unknown attribution remains
+explicit. Bounds, impossible and overall/backend found distinctions stay intact.
+The current schema/CLI/packaging checks advance together; frozen runtime SDKs,
+models and drivers remain unchanged. qtest model claims use the same wording.
+
+Grist generated draws (merged PR #40): the documented order/order collision
 no longer requires renaming a command to place. Argument and framework locals
 avoid action/helper/domain/temporary names and colliding type suffixes, while
 keeping public action/parameter names, recorded fields and binding identities.
@@ -84,7 +92,7 @@ checks. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
-format has one current version; all published core pins agree at f4f0be70171b.
+format has one current version; all published core pins agree at 7251fd215655.
 
 Captured-transition assertion follow-up (merged PR #32): qtest.TransitionsConform
 judges the existing native conformance facet for all judged actors or required
@@ -560,7 +568,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Independent-maintainer use or a concrete new contract blocker | S–M | collection authoring, navigation integrity and scheduler termination now have controls; use a fresh end-to-end workflow to identify the next limitation before adding inference or another narrow fixture |
+| 1 | Native partition judgment scope and replay provenance | S–M | reproduced one actor reported as two actors; retain source actor and partition identity, original/effective constants and unread-constant justification together across summaries, JSON receipts and TUI without changing replay optimization |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
@@ -641,10 +649,10 @@ or HTTPRoute weights); GR3's five design questions
 
 - **I35's list, reported not fixed** (HISTORY "I35: tutorials"): a
   partitioned report's RESULT counts partitions as "actors" and its
-  instance line shows the first partition's constants; a grist
-  command-outcome possible reads "reached in the initial state"; the
-  `qtest.Possible` witnesses of a grist app carry internal arguments
-  (`readPos`, `reads`); a passing negated claim is not in the test's
+  instance line shows optimized replay constants; native original/effective
+  provenance remains to be separated. Model possibility goal semantics are now
+  explicit; internal arguments (`readPos`, `reads`) remain available rather than
+  hidden by heuristic name filters. A passing negated claim is not in the test's
   summary line; hello's mutant report says "schedule 3" where its nav
   command says `schedule=1:2`; the quint cache grows unbounded (3.2 GB
   seen); `serve -steps DIR/` fails when DIR does not exist.

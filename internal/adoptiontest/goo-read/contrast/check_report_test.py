@@ -28,7 +28,7 @@ class SemanticVerifierTest(unittest.TestCase):
                   {'kind': 'invariant', 'name': 'boundedCase', 'status': 'pass'},
                   {'kind': 'invariant', 'name': 'acceptedShape', 'status': 'pass'}]
         actor_receipt = {'checks': checks}
-        self.report = {'format': 'gotogether.report/1', 'command': 'validate', 'verdict': 'pass', 'exit': 0,
+        self.report = {'format': 'gotogether.report/2', 'command': 'validate', 'verdict': 'pass', 'exit': 0,
                        'inputs': [{'steps': 16}],
                        'receipt': {'status': 'pass', 'scope': 'collected_history', 'otherExecutions': 'not_checked',
                                    'actors': [actor_receipt]},
@@ -111,7 +111,7 @@ class SemanticVerifierTest(unittest.TestCase):
         self.rejected('faithful', self.report, 0)
 
     def graph(self):
-        return {'format': 'gotogether.report/1', 'command': 'simulate', 'exit': 0, 'verdict': 'pass',
+        return {'format': 'gotogether.report/2', 'command': 'simulate', 'exit': 0, 'verdict': 'pass',
                 'checks': [{'kind': 'possible', 'name': case, 'verdict': 'reached'} for case in CASES] +
                           [{'kind': 'invariant', 'name': prop, 'verdict': 'holds'} for prop in ('boundedCase', 'acceptedShape')],
                 'graph': {'scope': 'model_state_graph', 'states': 17, 'starts': 1, 'transitions': 272,
@@ -141,7 +141,7 @@ class SemanticVerifierTest(unittest.TestCase):
     def test_missing_control_must_name_the_absent_observation(self):
         del self.rows[1]['quint.obs.accepted']
         self.write_rows()
-        report = {'format': 'gotogether.report/1', 'command': 'validate', 'exit': 2, 'verdict': 'error',
+        report = {'format': 'gotogether.report/2', 'command': 'validate', 'exit': 2, 'verdict': 'error',
                   'inputs': [{'steps': 16}], 'error': 'field "obs.accepted", which the step does not have'}
         check('missing', report, 2, self.steps)
         report['error'] = 'unrelated compiler error'

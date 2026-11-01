@@ -197,6 +197,7 @@ func (b Bound) String() string {
 // complete search reached it nowhere, and quint did not either), or
 // neither: not found within the bound or the samples, no verdict.
 type PossibleVerdict struct {
+	Goal       PossibleGoal
 	Possible   binding.Possible
 	Found      bool
 	Impossible bool

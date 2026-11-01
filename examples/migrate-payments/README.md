@@ -75,7 +75,7 @@ scenario, and `TestScenariosPossible` claims three of them in Go
       charges["ch_3"].refunded: 700 -> 1200
   ```
   (`-v` adds the replay's step 11 and the recorder's seq; `-json` the
-  same as `gotogether.report/1`.) Under the draft its
+  same as `gotogether.report/2`.) Under the draft its
   second record, a client's retry answered with its charge (`replayed`),
   was rejected: nothing in the draft knew idempotency keys.
 - An older log, rotated, starts at `audit_seq` 4113: `issue: error

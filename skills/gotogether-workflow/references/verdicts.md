@@ -55,7 +55,7 @@ not checked (N: ...)`: the model's states after a rejected step are not
 the run's, so nothing after it is judged.
 
 `validate -json` (and `simulate -json`) prints the report as data,
-`gotogether.report/1`: each failure's `record` (`id`, `time`, `process`,
+`gotogether.report/2`: each failure's `record` (`id`, `time`, `process`,
 `recorder`, `traceId`, `spanId`, `step`, `seq`), `brief` (one line for an
 alert), `why.expected`, `changes`, the `state` whole. `-report
 junit=FILE`, `-report sarif=FILE` write the CI renderings beside the
@@ -376,6 +376,14 @@ Default shrinking preserves every failed named local/protocol obligation by
 component role, target, binding, kind and name. Unsupported peer-agreement and
 component-conformance identities remain explicit refusals; missing or unjudged
 required checks cannot reproduce a failure. No fallback interprets missing data.
+
+For model-only possibilities, inspect `possible.goal.kind` and its predicate
+or action patterns. A generated command-outcome predicate that holds initially
+shows readiness for suitable arguments, not a command execution. Report/2's
+`possible.search.path` carries structured transitions and exact named Quint
+literal arguments; `kind: model_step` means no domain action was attributed.
+Keep overall `found` separate from evaluator `search.found`: Quint may find a
+witness the evaluator did not. A bounded miss is not an impossibility proof.
 
 Driven explorations include resolved run profiles and observed simulator limits
 in evidence and navigation JSON. The scheduler budget is cumulative across

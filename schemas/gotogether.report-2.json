@@ -1,8 +1,8 @@
 {
-  "$id": "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.report-1.json",
+  "$id": "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.report-2.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "A gotogether command's machine-readable report (gotogether.report/1): validate -json's and simulate -json's. Generated from the Go type that reads it (GOTOGETHER_UPDATE_SCHEMA=1 go test ./schemas/).",
+  "description": "A gotogether command's machine-readable report (gotogether.report/2): validate -json's and simulate -json's. Generated from the Go type that reads it (GOTOGETHER_UPDATE_SCHEMA=1 go test ./schemas/).",
   "properties": {
     "actors": {
       "description": "Actors are validate's: each actor's (or entity's) result, but the passing partitions of a partitioned log, folded into Partitions.",
@@ -1173,6 +1173,60 @@
               "found": {
                 "type": "boolean"
               },
+              "goal": {
+                "additionalProperties": false,
+                "description": "Goal is the resolved requirement, not a description inferred from its name.",
+                "properties": {
+                  "kind": {
+                    "description": "predicate or action_sequence",
+                    "enum": [
+                      "predicate",
+                      "action_sequence"
+                    ],
+                    "type": "string"
+                  },
+                  "predicate": {
+                    "type": "string"
+                  },
+                  "steps": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "action": {
+                          "type": "string"
+                        },
+                        "args": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "type": "array"
+                        }
+                      },
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
               "impossible": {
                 "type": "boolean"
               },
@@ -1195,8 +1249,43 @@
                     "type": "integer"
                   },
                   "path": {
+                    "description": "Path is the actual evaluator witness, with exact Quint argument literals. It is empty when a predicate already holds in the initial state.",
                     "items": {
-                      "type": "string"
+                      "additionalProperties": false,
+                      "properties": {
+                        "action": {
+                          "type": "string"
+                        },
+                        "args": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
+                          "type": "array"
+                        },
+                        "kind": {
+                          "enum": [
+                            "action",
+                            "model_step"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "type": [
+                        "object",
+                        "null"
+                      ]
                     },
                     "type": "array"
                   }
@@ -1238,7 +1327,7 @@
       "type": "integer"
     },
     "format": {
-      "const": "gotogether.report/1",
+      "const": "gotogether.report/2",
       "description": "ReportFormat",
       "type": "string"
     },

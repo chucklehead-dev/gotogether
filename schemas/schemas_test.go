@@ -194,11 +194,13 @@ func reportSchema(t *testing.T) []byte {
 			"Document": {"required": []string{"format", "command", "verdict", "exit"}},
 		},
 		fields: map[string]map[string]any{
-			"Document.Verdict":   {"enum": []any{"pass", "fail", "no verdict", "error"}},
-			"Document.Command":   {"enum": []any{"validate", "simulate"}},
-			"DocGraph.Scope":     {"enum": []any{"model_state_graph"}},
-			"DocFailure.Verdict": {"enum": []any{"fail", "n/a"}},
-			"Change.Kind":        {"enum": []any{"changed", "added", "removed"}},
+			"Document.Verdict":     {"enum": []any{"pass", "fail", "no verdict", "error"}},
+			"Document.Command":     {"enum": []any{"validate", "simulate"}},
+			"DocGraph.Scope":       {"enum": []any{"model_state_graph"}},
+			"DocPossibleGoal.Kind": {"enum": []any{"predicate", "action_sequence"}},
+			"DocPossibleStep.Kind": {"enum": []any{"action", "model_step"}},
+			"DocFailure.Verdict":   {"enum": []any{"fail", "n/a"}},
+			"Change.Kind":          {"enum": []any{"changed", "added", "removed"}},
 		},
 	}
 	return g.root(reflect.TypeFor[validate.Document](), validate.ReportFormat, schemas.ReportURL, "gotogether report",
@@ -229,7 +231,7 @@ func TestSchemasAreGenerated(t *testing.T) {
 	}{
 		{"gotogether.binding-2.json", bindingSchema(t), schemas.Binding()},
 		{"gotogether.convert-1.json", convertSchema(t), schemas.Convert()},
-		{"gotogether.report-1.json", reportSchema(t), schemas.Report()},
+		{"gotogether.report-2.json", reportSchema(t), schemas.Report()},
 		{"gotogether.lint-1.json", lintSchema(t), schemas.Lint()},
 	} {
 		if os.Getenv("GOTOGETHER_UPDATE_SCHEMA") == "1" {
@@ -378,7 +380,7 @@ func TestReportValidates(t *testing.T) {
 				Expected: "refund(...)", Changes: []validate.Change{{Path: "charges", Kind: "added", After: "1"}}, Enabled: []string{"e"}, More: 1},
 			State: map[string]string{"charges": "Map()"}}}}}
 	d.Graph = &validate.DocGraph{Scope: "model_state_graph", States: 2, Starts: 1, Transitions: 2, Depth: 1, Complete: true, Bound: validate.DocGraphBound{States: 100, Depth: 0}, Unfair: []string{"read"}}
-	d.Checks = []validate.DocCheck{{Name: "i", Kind: "invariant", Verdict: "holds", Detail: "d", Bound: &validate.DocBound{Kind: "complete", States: 2, Proves: true}}, {Name: "p", Kind: "possible", Verdict: "reached", Possible: &validate.DocPossible{Found: true, Search: &validate.DocPossibleSearch{Found: true, Complete: false, Nodes: 2, Depth: 1, Path: []string{"write()"}}}}}
+	d.Checks = []validate.DocCheck{{Name: "i", Kind: "invariant", Verdict: "holds", Detail: "d", Bound: &validate.DocBound{Kind: "complete", States: 2, Proves: true}}, {Name: "p", Kind: "possible", Verdict: "reached", Possible: &validate.DocPossible{Found: true, Search: &validate.DocPossibleSearch{Found: true, Complete: false, Nodes: 2, Depth: 1, Path: []validate.DocPossibleStep{{Kind: "action", Action: "write", Args: []validate.DocPossibleArgument{{Name: "amount", Value: "9007199254740993"}}}}}}}}
 	ps, err := schemas.Check(schemas.Report(), d.JSON())
 	if err != nil {
 		t.Fatal(err)
@@ -402,5 +404,18 @@ func TestCompositionReportValidates(t *testing.T) {
 	problems, err := schemas.Check(schemas.Report(), d.JSON())
 	if err != nil || len(problems) != 0 {
 		t.Fatalf("composition schema: %v %v\n%s", err, problems, d.JSON())
+	}
+}
+
+func TestReportRejectsObsoleteWitnessShape(t *testing.T) {
+	for _, data := range []string{
+		`{"format":"gotogether.report/1","command":"simulate","verdict":"pass","exit":0}`,
+		`{"format":"gotogether.report/2","command":"simulate","verdict":"pass","exit":0,"checks":[{"possible":{"search":{"path":["write()"]}}}]}`,
+		`{"format":"gotogether.report/2","command":"simulate","verdict":"pass","exit":0,"checks":[{"possible":{"goal":{"kind":"executed_predicate"}}}]}`,
+	} {
+		problems, err := schemas.Check(schemas.Report(), []byte(data))
+		if err != nil || len(problems) == 0 {
+			t.Fatalf("accepted obsolete/invalid report %s: %v %v", data, problems, err)
+		}
 	}
 }

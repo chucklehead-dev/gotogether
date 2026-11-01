@@ -329,7 +329,7 @@ func (s *sim) reportPossibles(bpath string, cs []*possibleCheck, rs []PossibleRe
 		case c.quintFound && c.quintWitnessN > 0:
 			quintSays = fmt.Sprintf("quint: it held in %d of %d sampled traces of up to %d steps", c.quintWitnessN, samples, steps)
 		case c.quintFound:
-			quintSays = "quint: reached in the initial state"
+			quintSays = "quint: found a witness"
 		case verify > 0:
 			quintSays = fmt.Sprintf("quint verify: no trace of up to %d steps (a bounded proof)", verify)
 		default:
@@ -347,7 +347,7 @@ func (s *sim) reportPossibles(bpath string, cs []*possibleCheck, rs []PossibleRe
 			what += " (steps " + strings.Join(c.p.Steps, ", ") + ")"
 		}
 		nav := fmt.Sprintf("gotogether nav -binding %s shows each action disabled in a state, with why", bpath)
-		v := PossibleVerdict{Possible: c.p, Eval: r, Quint: quintSays}
+		v := PossibleVerdict{Possible: c.p, Goal: possibleGoal(c.when, c.steps), Eval: r, Quint: quintSays}
 		if evalErr != nil {
 			v.EvalErr = evalErr.Error()
 		}
@@ -358,7 +358,11 @@ func (s *sim) reportPossibles(bpath string, cs []*possibleCheck, rs []PossibleRe
 			v.Line = fmt.Sprintf("  possible %s: %s\n", c.p.Text(), v.Verdict)
 		case c.quintFound:
 			v.Found = true
-			v.Verdict = fmt.Sprintf("reached (%s; %s)", quintSays, evalSays)
+			summary := "action sequence executed"
+			if c.when != "" {
+				summary = "predicate witnessed"
+			}
+			v.Verdict = fmt.Sprintf("%s (%s; %s)", summary, quintSays, evalSays)
 			v.Line = fmt.Sprintf("  possible %s: %s\n", c.p.Text(), v.Verdict)
 		case r != nil && r.Complete:
 			code = 1

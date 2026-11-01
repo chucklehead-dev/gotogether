@@ -83,7 +83,7 @@ def public_evidence(mode, steps_path, results_path):
 def check(mode, report, status, steps_path, results_path):
     expected = {'faithful': 0, 'contrast': 1, 'missing': 2}[mode]
     require(status == expected, f'{mode}: process exit {status}, expected {expected}')
-    require(report.get('format') == 'gotogether.report/1' and report.get('command') == 'validate', 'wrong native report format/command')
+    require(report.get('format') == 'gotogether.report/2' and report.get('command') == 'validate', 'wrong native report format/command')
     require(type(report.get('exit')) is int and report['exit'] == expected, 'report exit differs from process result')
     steps = public_evidence(mode, steps_path, results_path)
     inputs = report.get('inputs', [])

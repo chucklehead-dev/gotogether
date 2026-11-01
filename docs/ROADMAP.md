@@ -87,6 +87,15 @@ reachability predicates. Native typechecking and executable witnesses retain
 the original catalog shape and cover related caller/helper collisions. This
 improves model authoring without an inference mode or a new format.
 
+Model reachability evidence now separates predicates holding from action
+sequences executing. Resolved goals and exact structured evaluator witnesses
+are available in report/2, including explicit unattributed transitions and
+backend/search bounds. A generated command-outcome predicate may hold initially
+without a command executing. Next address the reproduced partition-report scope
+problem as one native-data slice: source actor/partition identities and original
+versus optimized replay constants must stay distinguishable in text, JSON and
+TUI. Keep the existing unread-constant replay optimization.
+
 S11's skipped middle-snapshot gap is implemented in PR #15:
 later snapshots check the whole replayed state and cannot reset it. The first
 snapshot retains its lost-head initialization role. The merged I45 increment (PR #16)
