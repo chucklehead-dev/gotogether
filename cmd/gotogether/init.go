@@ -9,7 +9,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -17,6 +16,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/chucklehead-dev/gotogether/internal/projectsetup"
 	"github.com/chucklehead-dev/gotogether/internal/quintnames"
 	"github.com/chucklehead-dev/gotogether/schemas"
 )
@@ -90,8 +90,16 @@ func runInit(stdout, stderr io.Writer, args []string) error {
 	if *module == "" {
 		*module = "example.com/" + name
 	}
-	if entries, err := os.ReadDir(*dir); err == nil && len(entries) > 0 {
-		return fmt.Errorf("init: %s exists and is not empty: give another -dir", *dir)
+	if err := projectsetup.CheckModule(*module); err != nil {
+		return fmt.Errorf("init: %w", err)
+	}
+	if err := projectsetup.CheckDestination(*dir); err != nil {
+		return fmt.Errorf("init: %w", err)
+	}
+	if !*noTidy {
+		if err := projectsetup.CheckGo(); err != nil {
+			return fmt.Errorf("init: %w", err)
+		}
 	}
 	if *replace != "" {
 		if _, err := os.Stat(filepath.Join(*replace, "go.mod")); err != nil {
@@ -105,21 +113,22 @@ func runInit(stdout, stderr io.Writer, args []string) error {
 		return err
 	}
 	fmt.Fprintf(stdout, "wrote %s (module %s): %s\n", *dir, *module, initKinds[*kind].summary)
+	plan := projectsetup.Plan{Label: "init", Dir: *dir}
+	if *replace == "" {
+		plan.Steps = append(plan.Steps, []string{"get", "github.com/chucklehead-dev/gotogether@" + cliVersion()})
+	}
+	plan.Steps = append(plan.Steps, []string{"mod", "tidy"})
 	if *noTidy {
-		fmt.Fprintf(stdout, "next: cd %s && go mod tidy && go test -short -v ./...\n", *dir)
+		fmt.Fprintf(stdout, "next: %s\n", plan.Resume(0))
 		return nil
 	}
 	if *replace == "" {
-		v := cliVersion()
-		fmt.Fprintf(stdout, "downloading the toolkit (gotogether at %s; the first time takes a minute or two)\n", v)
-		if err := initGo(*dir, stderr, "get", "github.com/chucklehead-dev/gotogether@"+v); err != nil {
-			return err
-		}
+		fmt.Fprintf(stdout, "downloading the toolkit (gotogether at %s; the first time takes a minute or two)\n", cliVersion())
 	}
-	if err := initGo(*dir, stderr, "mod", "tidy"); err != nil {
+	if err := plan.Run(stderr); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "next: cd %s && go test -short -v ./...   (with quint on PATH, about 15 s: each test's summary shown)\n", *dir)
+	fmt.Fprintf(stdout, "next: %s   (with quint on PATH, about 15 s: each test's summary shown)\n", projectsetup.Verify(*dir))
 	return nil
 }
 
@@ -218,7 +227,7 @@ func writeNew(p string, data []byte, exec bool) error {
 // to the module (as an example's replace => ../..).
 func writeInitGoMod(dir, module, replace string) error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "module %s\n\ngo 1.26.1\n", module)
+	fmt.Fprintf(&b, "module %s\n\ngo 1.26.1\n", projectsetup.ModulePath(module))
 	if replace != "" {
 		abs, err := filepath.Abs(replace)
 		if err != nil {
@@ -234,7 +243,7 @@ func writeInitGoMod(dir, module, replace string) error {
 				rel = "./" + rel
 			}
 		}
-		fmt.Fprintf(&b, "\nrequire github.com/chucklehead-dev/gotogether v0.0.0\n\nreplace github.com/chucklehead-dev/gotogether => %s\n", rel)
+		fmt.Fprintf(&b, "\nrequire github.com/chucklehead-dev/gotogether v0.0.0\n\nreplace github.com/chucklehead-dev/gotogether => %s\n", projectsetup.ModulePath(rel))
 	}
 	return writeNew(filepath.Join(dir, "go.mod"), []byte(b.String()), false)
 }
@@ -246,17 +255,4 @@ func cliVersion() string {
 		return bi.Main.Version
 	}
 	return "latest"
-}
-
-// initGo runs the go command in dir, its output to w, outside any
-// workspace: the project builds on its own go.mod.
-func initGo(dir string, w io.Writer, args ...string) error {
-	cmd := exec.Command("go", args...)
-	cmd.Dir = dir
-	cmd.Stdout, cmd.Stderr = w, w
-	cmd.Env = append(os.Environ(), "GOWORK=off")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("init: go %s in %s: %w", strings.Join(args, " "), dir, err)
-	}
-	return nil
 }

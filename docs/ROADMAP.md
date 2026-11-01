@@ -94,10 +94,14 @@ backend/search bounds. A generated command-outcome predicate may hold initially
 without a command executing. Partition reporting now preserves source actor/partition identities and original
 versus optimized replay constants in shared receipts, with local instance IDs,
 clone/merge isolation and near-linear serialization. Text, JSON and TUI share
-these facts without changing the unread-constant replay optimization. The next
-onboarding review should address documented scaffold setup failure recovery:
-keep user work safe and provide a concrete path after dependency/generation
-failure, rather than introducing another authoring format.
+these facts without changing the unread-constant replay optimization.
+Scaffold setup recovery now addresses the documented populated-directory failure:
+init/new retain files and print the failed and remaining setup steps plus
+verification, using shell-safe arguments and GOWORK=off. Write-only output uses
+the same complete plan; module/Go preflight and quoted replacement paths avoid
+predictable setup failures. The next step is a fresh end-to-end adoption exercise
+against a real contract. Choose further capabilities from observed friction;
+these agent-assisted rehearsals do not establish independent adoption.
 
 S11's skipped middle-snapshot gap is implemented in PR #15:
 later snapshots check the whole replayed state and cannot reset it. The first

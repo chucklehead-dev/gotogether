@@ -34,6 +34,16 @@ a time: the block in Go, `go run ./cmd/<name> model` (it names each new
 hole with a stub), the hole in `model/<name>_rules.qnt`, a claim and a mutant
 for it. No binding is written by hand.
 
+If setup fails, `grist new` retains the generated files and prints `resume:`
+with the failed stage, remaining stages and short verbose tests. Fix the reported
+cause and execute that command in a POSIX shell; do not regenerate into the
+populated directory. Execution and recovery use `GOWORK=off`. `-no-generate`
+prints the full setup plan without requiring Go, including the build-version
+`go get` (latest for a development build) unless `-replace` selects a checkout.
+Invalid module paths and missing Go in automatic mode are checked before writes;
+replacement paths are quoted in go.mod when needed. Recovery does not establish
+that the application's eventual model or implementation is correct.
+
 ## The loop
 
 1. **Elicit** the blocks: events (structs, tags `grist:"tag"` keyed by

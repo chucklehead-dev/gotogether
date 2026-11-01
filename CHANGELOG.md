@@ -8,6 +8,13 @@ and adds a line here.
 
 ## Unreleased
 
+- Project setup failures from `gotogether init` and `grist new` retain the
+  generated files and print shell-safe commands to resume the failed stage and
+  remaining setup, then verify with `GOWORK=off`. Write-only modes include the
+  same complete dependency plan, pinned to the installed CLI's version when
+  available. Invalid module paths and unavailable Go are checked before automatic
+  setup writes files; replacement paths are quoted correctly in `go.mod`.
+
 - Partitioned judgments retain source actor and typed key/value identities,
   receipt-local instance references, and original whole-history constants with
   explicit replay substitutions. JSON and TUI expose the same evaluated-prefix

@@ -7,7 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Partition scope and replay provenance (current branch): source actor identity
+Scaffold setup recovery (current branch): init/new retain generated files after
+failed dependency or model setup and print a shell-safe continuation from the
+failed stage through verification. Automatic execution and printed commands use
+GOWORK=off. Write-only flags print the full plan, including versioned dependency
+selection without a checkout replacement. Module/destination validation and Go
+availability preflight avoid predictable writes; replacement paths use go.mod
+quoting. No rollback or persisted resume format is introduced. Next: a fresh
+end-to-end adoption exercise to identify a concrete remaining blocker.
+
+Partition scope and replay provenance (merged PR #42, b35568c): source actor identity
 and typed partition key/value now survive reports without parsing display names.
 Receipt-local tables retain original constants once, effective substitutions and
 evaluated-prefix justification; folded passes and merged reports keep correct
@@ -577,7 +586,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Scaffold setup failure recovery | S–M | the library adoption log records populated destinations after dependency/model subprocess failures; review a concrete recovery path across init/new without overwriting user work or treating incomplete setup as success |
+| 1 | Fresh end-to-end adoption exercise | S–M | setup recovery and native judgment scope now have controls; use a real contract and the published workflow to identify the next blocker before adding capabilities |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
