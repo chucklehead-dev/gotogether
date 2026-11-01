@@ -681,7 +681,10 @@ db := qenv.NewStore(s, "shop", qenv.SnapshotIsolation)   // or Serializable, Rea
 q := qenv.NewQueue(s, "payments", nil)                   // at least once: lost acks, redelivery, reordering
 pay := qenv.NewService(s, "provider", nil, handler)      // lost or duplicated requests, lost responses
 s.Process("payments", true, func(ctx context.Context) { shop.RunPayments(ctx, q) }) // crashes and restarts
-s.Run(20 * time.Second); s.Settle(60 * time.Second)      // faults, then quiet
+if err := s.Run(20 * time.Second); err != nil {         // explore faults
+    return err
+}
+return s.Settle(60 * time.Second)                      // propagate incomplete recovery
 ```
 
 Check `Settle`'s error: deterministic settlement requires no pending work and
