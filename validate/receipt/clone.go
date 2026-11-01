@@ -20,9 +20,14 @@ func (c *Composition) Clone() *Composition {
 			return nil
 		}
 		copy := *j
+		copy.PartitionInstances = make([]PartitionInstance, len(j.PartitionInstances))
+		for i := range j.PartitionInstances {
+			copy.PartitionInstances[i] = *j.PartitionInstances[i].Clone()
+		}
 		copy.Actors = slices.Clone(j.Actors)
 		for i := range copy.Actors {
 			actor := &copy.Actors[i]
+			actor.PartitionInfo = actor.PartitionInfo.Clone()
 			actor.Checks = slices.Clone(actor.Checks)
 			if actor.Search != nil {
 				search := *actor.Search

@@ -53,6 +53,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/skills"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 func main() {
@@ -415,7 +416,7 @@ func failSummary(results []*validate.Result) string {
 	if len(results) == 0 {
 		return "nothing was checked"
 	}
-	return fmt.Sprintf("%d of %s: %s", bad, plural(len(results), "actor"), strings.Join(whys, ", "))
+	return fmt.Sprintf("%d of %s: %s", bad, judgmentSummary(results), strings.Join(whys, ", "))
 }
 
 // passSummary says what passing results showed: "3 actors conform to the
@@ -432,7 +433,7 @@ func passSummary(results []*validate.Result) string {
 	if len(results) == 1 {
 		conform, satisfy = "conforms", "satisfies"
 	}
-	s := fmt.Sprintf("%s %s to the model", plural(len(results), "actor"), conform)
+	s := fmt.Sprintf("%s %s to the model", judgmentSummary(results), conform)
 	switch len(invs) {
 	case 0:
 		return s + " (no invariant checked)"
@@ -440,6 +441,28 @@ func passSummary(results []*validate.Result) string {
 		return fmt.Sprintf("%s and %s its invariant", s, satisfy)
 	}
 	return fmt.Sprintf("%s and %s its %d invariants", s, satisfy, len(invs))
+}
+
+// judgmentSummary counts source histories separately from the instances judged.
+func judgmentSummary(results []*validate.Result) string {
+	summary := receipt.Summary{}
+	for _, r := range results {
+		summary.Actors = append(summary.Actors, r.Receipt())
+	}
+	counts := summary.Counts()
+	if counts.UnknownSourceJudgments > 0 {
+		return fmt.Sprintf("%s (%s; source identities unavailable for %s)", plural(counts.Judgments, "judgment"), plural(counts.Partitions, "partition"), plural(counts.UnknownSourceJudgments, "judgment"))
+	}
+	if counts.Partitions == 0 {
+		if counts.Actors == counts.Judgments {
+			return plural(counts.Judgments, "actor")
+		}
+		return fmt.Sprintf("%s for %s", plural(counts.Judgments, "actor judgment"), plural(counts.Actors, "source actor"))
+	}
+	if counts.Partitions == counts.Judgments {
+		return fmt.Sprintf("%s of %s", plural(counts.Partitions, "partition"), plural(counts.Actors, "actor"))
+	}
+	return fmt.Sprintf("%s (%s, %s; %s)", plural(counts.Judgments, "judgment"), plural(counts.Judgments-counts.Partitions, "actor trace"), plural(counts.Partitions, "partition"), plural(counts.Actors, "source actor"))
 }
 
 func plural(n int, what string) string {

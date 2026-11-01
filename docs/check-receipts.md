@@ -121,3 +121,28 @@ because that driver does not yet support it. Manifest replay also refuses a
 manifest containing a composition receipt and directs the user to rerun the
 originating registered system or test: a receipt records evidence, not an
 executable plan. Neither path silently runs just a subset of the checks.
+
+## Partition scope and replay instances
+
+`counts` separates known unique source actor identities, total judgments, and
+partition judgments. If `unknownSourceJudgments` is nonzero, the actor count is
+a lower bound: partition display labels alone do not establish source identity. A repeated source actor in two input histories is still one
+identity and two judgments. `actors[].sourceActor` is the input actor identity (recorded history or model
+trace), distinct from the actor field's partition display label. `partitionInfo` carries the key,
+typed recorded value and receipt-local `instance` reference. Numeric values stay
+exact through decoding; a number and a string containing its digits differ.
+
+`partitionInstances` stores original whole-history constant literals once per
+partitioned instance. Its replay substitutions name only the changed constants,
+with exact effective Quint literals and `unread_by_evaluated_prefixes` basis.
+Applying those substitutions to the original map yields the effective replay
+instance. Factoring is `checked_on_evaluated_prefixes`: evidence about this run's
+checked prefixes, not a universal factorization proof or other executions.
+
+Passing-partition folding keeps these tables and references. Merged reports
+remap incoming local IDs; separate composition histories keep separate ID spaces.
+The TUI renders the same provenance independently of model-cursor states.
+Standalone `Result.Receipt()` supplies typed identity without a table reference;
+use `Report.Receipt()` for aggregate context or `Result.PartitionInstance()` for
+an independent instance snapshot. Partition constants are not repeated in each
+JSON actor. Human literal display is bounded; structured values remain complete.

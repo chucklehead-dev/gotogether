@@ -200,11 +200,13 @@ type DocAbsence struct {
 // A DocPartition is the passing partitions of one actor of a log judged
 // by entity, folded as the text report folds them.
 type DocPartition struct {
-	Actor string `json:"actor"`
-	Key   string `json:"key"`
-	Pass  int    `json:"pass"`
-	Of    int    `json:"of"`
-	Steps int    `json:"steps"`
+	// Instances references the shared receipt partition instance table.
+	Instances []int  `json:"instances,omitempty"`
+	Actor     string `json:"actor"`
+	Key       string `json:"key"`
+	Pass      int    `json:"pass"`
+	Of        int    `json:"of"`
+	Steps     int    `json:"steps"`
 }
 
 // A DocCheck is one of simulate's verdicts: an invariant's ("holds",
@@ -318,7 +320,9 @@ func NewDocument(command string) *Document {
 // folded.
 func (d *Document) AddReport(rep *Report) {
 	summary := rep.Receipt()
+	offset := 0
 	if d.Receipt != nil {
+		offset = len(d.Receipt.Actors)
 		summary = mergeReceipts(*d.Receipt, summary)
 	}
 	d.Receipt = &summary
@@ -337,9 +341,12 @@ func (d *Document) AddReport(rep *Report) {
 	for _, r := range rest {
 		kept[r] = true
 	}
-	for _, r := range rep.Actors {
+	for index, r := range rep.Actors {
+		scope := d.Receipt.Actors[offset+index]
 		if kept[r] {
-			d.Actors = append(d.Actors, r.Doc())
+			actor := r.Doc()
+			actor.Receipt = &scope
+			d.Actors = append(d.Actors, actor)
 			continue
 		}
 		w := partitionOf(r)
@@ -347,7 +354,11 @@ func (d *Document) AddReport(rep *Report) {
 		if !ok {
 			i = len(d.Partitions)
 			folds[w] = i
-			d.Partitions = append(d.Partitions, DocPartition{Actor: w, Key: strings.SplitN(r.Partition, "=", 2)[0]})
+			key := scope.PartitionInfo.Key
+			d.Partitions = append(d.Partitions, DocPartition{Actor: w, Key: key})
+		}
+		if scope.PartitionInfo != nil && !slices.Contains(d.Partitions[i].Instances, scope.PartitionInfo.Instance) {
+			d.Partitions[i].Instances = append(d.Partitions[i].Instances, scope.PartitionInfo.Instance)
 		}
 		d.Partitions[i].Pass++
 		d.Partitions[i].Steps += r.Steps
@@ -366,6 +377,9 @@ func (r *Result) Doc() DocActor {
 	summary := r.Receipt()
 	a := DocActor{Choices: r.Choices.Clone(), Receipt: &summary, Actor: r.Actor, Partition: r.Partition, Steps: r.Steps, Verdict: string(Pass), Reason: r.Reason(),
 		Conformance: string(r.Conforms), Constants: r.Constants, JudgedBy: r.JudgedBy()}
+	if summary.PartitionInfo != nil {
+		a.Constants = nil
+	}
 	switch {
 	case strings.HasPrefix(a.Reason, "no verdict"):
 		a.Verdict = "no verdict"

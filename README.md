@@ -534,6 +534,12 @@ capture before navigating it; CLI JSON emits no state node on this input error.
 Identical retry copies remain usable, and existing gap/snapshot policies apply.
 Model-only navigation needs no capture.
 
+Partitioned reports distinguish source actors from partition judgments. Their
+receipts store original whole-history constants once and name any effective
+replay substitutions, justified only by this run's evaluated prefixes. JSON and
+TUI retain the same instance references even when passing partitions are folded.
+The navigator labels this as whole-run evidence, independent of its cursor.
+
 On a terminal, `gotogether nav` opens the interactive navigator
 ([qnav](qnav)): here a failing run, at the choice before its failing
 step, then the run's option, whose step the model rejects, with why.

@@ -8,6 +8,14 @@ and adds a line here.
 
 ## Unreleased
 
+- Partitioned judgments retain source actor and typed key/value identities,
+  receipt-local instance references, and original whole-history constants with
+  explicit replay substitutions. JSON and TUI expose the same evaluated-prefix
+  factoring scope; summaries count partitions as judgments rather than actors.
+  Instance data is stored once, including for folded passes, and exact numeric
+  identities survive JSON round trips. Report/2 and nav/2 gain optional evidence
+  fields; replay behavior and unread-constant optimization remain unchanged.
+
 - Model reachability reports distinguish state predicates from executed action
   sequences and retain resolved goal definitions. Evaluator witness steps now
   carry identified actions and exact named Quint literals, or explicit unknown

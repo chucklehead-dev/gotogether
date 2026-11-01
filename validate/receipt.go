@@ -1,8 +1,9 @@
 package validate
 
 import (
-	"github.com/chucklehead-dev/gotogether/validate/receipt"
 	"maps"
+
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 // Receipt describes what this report checked. It describes the whole judged
@@ -16,9 +17,21 @@ func (r *Report) Receipt() receipt.Summary {
 	if r.Unsettled != "" && s.Status == receipt.Pass {
 		s.Status, s.Reason = receipt.Inconclusive, r.Unsettled
 	}
+	instances := map[*receipt.PartitionInstance]int{}
 	hasError, hasFailure := false, false
 	for _, a := range r.Actors {
 		entry := a.Receipt()
+		if a.partitionInstance != nil {
+			id, ok := instances[a.partitionInstance]
+			if !ok {
+				id = len(s.PartitionInstances) + 1
+				instances[a.partitionInstance] = id
+				instance := a.PartitionInstance()
+				instance.ID = id
+				s.PartitionInstances = append(s.PartitionInstances, *instance)
+			}
+			entry.PartitionInfo.Instance = id
+		}
 		if len(s.Actors) == 0 {
 			s.Scope = entry.Scope
 		} else if s.Scope != entry.Scope {
@@ -52,9 +65,11 @@ func (r *Report) Receipt() receipt.Summary {
 }
 
 // Receipt describes this actor's checks and any history-search assumptions.
+// Partition identity has no instance ID here; Report.Receipt supplies the
+// deduplicated instance table, or PartitionInstance retrieves its evidence.
 func (r *Result) Receipt() receipt.Actor {
 	v := runVerdictOf([]*Result{r})
-	a := receipt.Actor{JudgedBy: r.JudgedBy(), Partition: r.Partition, Scope: "collected_history", Actor: r.Actor, Status: receiptStatus(v.Verdict), Reason: v.Reason, Ordering: "reconstructed", Search: r.historySearch, Checks: []receipt.Check{{Kind: "conformance", Name: "history", Status: receiptStatus(r.Conforms)}}}
+	a := receipt.Actor{SourceActor: r.SourceActor, PartitionInfo: r.partitionInfo.Clone(), JudgedBy: r.JudgedBy(), Partition: r.Partition, Scope: "collected_history", Actor: r.Actor, Status: receiptStatus(v.Verdict), Reason: v.Reason, Ordering: "reconstructed", Search: r.historySearch, Checks: []receipt.Check{{Kind: "conformance", Name: "history", Status: receiptStatus(r.Conforms)}}}
 	a.Choices = r.Choices.Clone()
 	if r.inputScope != "" {
 		a.Scope = r.inputScope
@@ -143,6 +158,15 @@ func receiptStatus(v Verdict) receipt.Status {
 	}
 }
 
+// PartitionInstance returns this partition's shared instance evidence as an
+// independent snapshot. ID is zero outside Report.Receipt's local table.
+func (r *Result) PartitionInstance() *receipt.PartitionInstance {
+	if r.partitionInstance == nil {
+		return nil
+	}
+	return r.partitionInstance.Clone()
+}
+
 // mergeReceipts preserves every report when Document.AddReport is used more
 // than once (including mixed recorded histories and model-level ITF inputs).
 func mergeReceipts(a, b receipt.Summary) receipt.Summary {
@@ -156,6 +180,27 @@ func mergeReceipts(a, b receipt.Summary) receipt.Summary {
 	if a.Scope != b.Scope {
 		a.Scope = "mixed_inputs"
 	}
-	a.Actors = append(append([]receipt.Actor{}, a.Actors...), b.Actors...)
+	// Tables use local IDs, not actor names: separate runs may share names.
+	instances := make([]receipt.PartitionInstance, 0, len(a.PartitionInstances)+len(b.PartitionInstances))
+	actors := make([]receipt.Actor, 0, len(a.Actors)+len(b.Actors))
+	for _, input := range []receipt.Summary{a, b} {
+		remap := map[int]int{}
+		for _, instance := range input.PartitionInstances {
+			clone := instance.Clone()
+			old := clone.ID
+			clone.ID = len(instances) + 1
+			remap[old] = clone.ID
+			instances = append(instances, *clone)
+		}
+		for _, actor := range input.Actors {
+			actor.PartitionInfo = actor.PartitionInfo.Clone()
+			if actor.PartitionInfo != nil && actor.PartitionInfo.Instance != 0 {
+				actor.PartitionInfo.Instance = remap[actor.PartitionInfo.Instance]
+			}
+			actors = append(actors, actor)
+		}
+	}
+	a.PartitionInstances = instances
+	a.Actors = actors
 	return a
 }

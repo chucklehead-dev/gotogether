@@ -92,7 +92,11 @@ type Result struct {
 	Choices       *ChoiceSearch
 	historySearch *receipt.Search
 	inputScope    string
-	Actor         string
+	// SourceActor is the original actor before any partition display suffix.
+	SourceActor       string
+	partitionInstance *receipt.PartitionInstance
+	partitionInfo     *receipt.PartitionInfo
+	Actor             string
 	// Partition is the entity the result judges, "<argument>=<value>"
 	// (Actor is "<actor> <argument>=<value>"), when the binding partitions
 	// the log by an argument (binding.Partition); "" else.
@@ -322,7 +326,7 @@ func newResult(b *binding.Binding, t *qtrace.Trace, p *binding.Plan) *Result {
 // newResultWith is newResult with the instance's constants listed
 // already (a partition's, its whole's).
 func newResultWith(b *binding.Binding, t *qtrace.Trace, p *binding.Plan, constants []string) *Result {
-	res := &Result{Actor: t.Actor, Issues: append(startIssues(b, t), p.Issues...), Pending: t.Pending, Settled: t.Settled, Constants: constants,
+	res := &Result{Actor: t.Actor, SourceActor: t.Actor, Issues: append(startIssues(b, t), p.Issues...), Pending: t.Pending, Settled: t.Settled, Constants: constants,
 		Gaps: t.Gaps, Collected: t.Collected}
 	if len(b.Eventually) > 0 && !t.Settled {
 		res.Issues = append(res.Issues, notJudged(b.Eventually, t.Lost))
@@ -950,7 +954,11 @@ func (r *Result) summary(verbose bool) string {
 		}
 	}
 	if !r.OK() && len(r.Constants) > 0 {
-		fmt.Fprintf(&b, "  instance: %s\n", strings.Join(r.Constants, ", "))
+		label := "instance"
+		if r.partitionInstance != nil {
+			label = "effective replay instance"
+		}
+		fmt.Fprintf(&b, "  %s: %s\n", label, strings.Join(r.Constants, ", "))
 	}
 	// a failing actor's module, to replay it by hand; a passing one's is
 	// none to look at, and the CLI removes its temporary directory
