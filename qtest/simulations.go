@@ -2,12 +2,25 @@ package qtest
 
 import (
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
+	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/validate/runprofile"
 )
 
 // execution is a fresh observation snapshot, never a configuration or judgment.
 func (r *Run) execution(name string) runprofile.Execution {
-	return (runprofile.Execution{Run: name, Simulations: r.simulations, Phases: r.Phases}).Clone()
+	return (runprofile.Execution{Run: name, Simulations: r.simulations, Phases: r.Phases, Settlement: r.settlement}).Clone()
+}
+
+func (r *Run) hasExecution() bool {
+	return r != nil && (len(r.simulations) > 0 || len(r.Phases) > 0 || r.settlement != nil)
+}
+
+func unsettledObservation(u *qenv.Unsettled) *runprofile.Settlement {
+	s := &runprofile.Settlement{Simulation: u.Simulation, After: u.After.String(), Tasks: append([]string{}, u.Tasks...), DownProcesses: []runprofile.ProcessIdentity{}}
+	for _, p := range u.DownProcesses {
+		s.DownProcesses = append(s.DownProcesses, runprofile.ProcessIdentity{Name: p.Name, Incarnation: p.Incarnation, Index: p.Index})
+	}
+	return s
 }
 
 func simulationCalls(calls []hooks.Simulation) []runprofile.Simulation {

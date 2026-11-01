@@ -32,6 +32,11 @@ func sameRun(a, b *Run) string {
 	if a.Unsettled != b.Unsettled {
 		return fmt.Sprintf("settling: %q, then %q", a.Unsettled, b.Unsettled)
 	}
+	x, _ := json.Marshal(a.settlement)
+	y, _ := json.Marshal(b.settlement)
+	if !bytes.Equal(x, y) {
+		return "settling: required process identities or pending tasks changed"
+	}
 	if diff := stepdiff.Diff(a.Steps, b.Steps); diff != "" {
 		return diff
 	}

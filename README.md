@@ -681,8 +681,21 @@ db := qenv.NewStore(s, "shop", qenv.SnapshotIsolation)   // or Serializable, Rea
 q := qenv.NewQueue(s, "payments", nil)                   // at least once: lost acks, redelivery, reordering
 pay := qenv.NewService(s, "provider", nil, handler)      // lost or duplicated requests, lost responses
 s.Process("payments", true, func(ctx context.Context) { shop.RunPayments(ctx, q) }) // crashes and restarts
-s.Run(20 * time.Second); s.Settle(60 * time.Second)      // faults, then quiet
+if err := s.Run(20 * time.Second); err != nil {         // explore faults
+    return err
+}
+return s.Settle(60 * time.Second)                      // propagate incomplete recovery
 ```
+
+Check `Settle`'s error: deterministic settlement requires no pending work and
+every registered process to be up. A crashed process returns `*qenv.Unsettled`
+with captured down-process identities and writes no completion marker.
+`SettleCore` requires its explicitly selected processes to be up and ignores
+completion work outside that core; process-free clients still count. Use `Run`
+to observe permanent shutdown without claiming recovery. Execution evidence and
+navigation retain the observed simulation identity, requested settle bound,
+pending tasks and down processes
+as runtime facts, separate from the model's judgment.
 
 The app is written against seams: `qenv.DB` and `qenv.Txn` (an app's
 records typed by `qenv.NewTable[T](prefix)`), its own

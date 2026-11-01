@@ -5,18 +5,87 @@ import (
 	"strings"
 )
 
-// Execution records scenario-owned simulation limits as actually used by one
-// driven run. These observations are separate from the exploration profile:
+// Execution records simulator limits, workload observations and terminal
+// incomplete settlement as actually observed in one driven run. These facts
+// are separate from the exploration profile:
 // scenarios may change limits between calls or create several simulations.
 type Execution struct {
 	Run         string       `json:"run"`
 	Simulations []Simulation `json:"simulations"`
 	Phases      []Phase      `json:"phases,omitempty"`
+	// Settlement is present when the scenario returned an unsettled outcome.
+	// It is runtime evidence, separate from the model's history judgment.
+	Settlement *Settlement `json:"settlement,omitempty"`
+}
+
+// ProcessIdentity identifies an observed process incarnation within one Sim.
+// Index is its 1-based creation position; names need not be unique. These
+// identities are local to the simulation, never global process identifiers.
+type ProcessIdentity struct {
+	Name        string `json:"name"`
+	Incarnation int    `json:"incarnation"`
+	Index       int    `json:"index"`
+}
+
+// Settlement records an incomplete terminal settlement attempt. DownProcesses
+// lists down processes required by that attempt's scope; it makes no assertion
+// about business work held by killed tasks or processes outside a SettleCore.
+// After is the requested bound, not observed elapsed time. Process indices are
+// local to the originating Sim. Simulation joins it to Simulation.Simulation;
+// zero means that no run-local simulation observation ID was available.
+type Settlement struct {
+	Simulation    int               `json:"simulation,omitempty"`
+	After         string            `json:"after"`
+	Tasks         []string          `json:"tasks"`
+	DownProcesses []ProcessIdentity `json:"downProcesses"`
+}
+
+// Clone returns an independent runtime observation snapshot.
+func (s *Settlement) Clone() *Settlement {
+	if s == nil {
+		return nil
+	}
+	copy := *s
+	copy.Tasks = append([]string{}, s.Tasks...)
+	copy.DownProcesses = append([]ProcessIdentity{}, s.DownProcesses...)
+	return &copy
+}
+
+// String describes observed incomplete settlement without judging the model.
+func (s *Settlement) String() string {
+	if s == nil {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "runtime did not settle (bound %s)", s.After)
+	if s.Simulation > 0 {
+		fmt.Fprintf(&b, "; simulation %d", s.Simulation)
+	}
+	if len(s.DownProcesses) > 0 {
+		b.WriteString("; required processes down:")
+		for _, p := range s.DownProcesses[:min(len(s.DownProcesses), 8)] {
+			fmt.Fprintf(&b, "\n  %q#%d (process %d)", p.Name, p.Incarnation, p.Index)
+		}
+		if len(s.DownProcesses) > 8 {
+			fmt.Fprintf(&b, "\n  %d more down processes; JSON retains every identity", len(s.DownProcesses)-8)
+		}
+	}
+	if len(s.Tasks) > 0 {
+		b.WriteString("; tasks still at work or waiting:")
+		for _, task := range s.Tasks[:min(len(s.Tasks), 8)] {
+			fmt.Fprintf(&b, "\n  %s", task)
+		}
+		if len(s.Tasks) > 8 {
+			fmt.Fprintf(&b, "\n  %d more tasks; JSON retains every task", len(s.Tasks)-8)
+		}
+	}
+	return b.String()
 }
 
 // Clone returns an independent snapshot, including each scheduler observation.
 func (e Execution) Clone() Execution {
 	copy := e
+	copy.Settlement = e.Settlement.Clone()
 	copy.Phases = make([]Phase, len(e.Phases))
 	for i, p := range e.Phases {
 		copy.Phases[i] = p.Clone()
@@ -32,9 +101,9 @@ func (e Execution) Clone() Execution {
 	return copy
 }
 
-// ExecutionsString summarizes observed policies across runs, without printing
-// each run or claiming its cumulative scheduler counters form one sequence.
-// Every reached limit contributes to the totals, including folded policies.
+// ExecutionsString summarizes observed policies across runs without claiming
+// their cumulative scheduler counters form one sequence. Every reached limit
+// contributes to the totals; incomplete settlements retain their run identity.
 func ExecutionsString(executions []Execution) string {
 	if len(executions) == 0 {
 		return ""
@@ -43,7 +112,22 @@ func ExecutionsString(executions []Execution) string {
 	for _, e := range executions {
 		combined.Simulations = append(combined.Simulations, e.Simulations...)
 	}
-	return combined.String()
+	var b strings.Builder
+	b.WriteString(combined.String())
+	shown := 0
+	for _, e := range executions {
+		if e.Settlement == nil {
+			continue
+		}
+		if shown < 8 {
+			fmt.Fprintf(&b, "\nsettlement %s: %s", e.Run, e.Settlement.String())
+		}
+		shown++
+	}
+	if shown > 8 {
+		fmt.Fprintf(&b, "\n%d more incomplete settlements; JSON retains each run", shown-8)
+	}
+	return b.String()
 }
 
 // Simulation is one Sim.Run invocation. Simulation identifies its instance
@@ -69,7 +153,8 @@ type Scheduler struct {
 	WatchdogReached  bool   `json:"watchdogReached"`
 }
 
-// String renders observed limits independently of configuration and judgment.
+// String renders observed limits and incomplete settlement independently of
+// configuration and model judgment.
 func (e Execution) String() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "simulation limits %s: %d %s", e.Run, len(e.Simulations), countNoun(len(e.Simulations), "call"))
@@ -136,6 +221,9 @@ func (e Execution) String() string {
 	}
 	if len(groups) > 8 {
 		fmt.Fprintf(&b, "\n  %d more simulation policies; JSON retains every call", len(groups)-8)
+	}
+	if e.Settlement != nil {
+		fmt.Fprintf(&b, "\nsettlement %s: %s", e.Run, e.Settlement.String())
 	}
 	return b.String()
 }

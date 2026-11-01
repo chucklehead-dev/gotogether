@@ -6207,3 +6207,45 @@ after original paths are removed; replay checks those captures rather than
 rerunning Goo. Disposable source copies leave both external checkout and module
 cache unchanged. This demonstrates a bounded workflow, not a production defect
 or independent-maintainer adoption, and requires no new core API or format.
+
+## 84. Settlement requires availability within its declared scope
+
+Killed tasks are absent from pending-task accounting. That does not establish
+availability: a required process can remain down while Settle sees no work and
+records a completion marker. Model obligations would then be judged against a
+system that could not make progress. GR10c makes process availability a separate
+prerequisite without guessing which business work died with a goroutine.
+
+Ordinary deterministic Settle requires every registered process up. SettleCore
+requires its explicitly selected processes up, counts their pending work and
+process-free clients, and permits failed replicas outside that scope. Run still
+schedules normally first, allowing recovery exactly at the supplied horizon;
+unrelated runtime/budget errors retain precedence. Outside-core blocked waits
+must follow the same scope as pending tasks, while runnable work and global step
+limits remain scheduler concerns. Native execution still cannot certify quiet.
+
+A required down process returns Unsettled and no settle marker. Its name,
+incarnation and 1-based creation index are captured by value; process names need
+not be unique, and later restarts cannot rewrite the snapshot. Permanent Exit
+also remains down. Returning normally from a process's main task is different:
+it does not mark the process down. Observe permanent shutdown with Run or state a
+surviving core explicitly; no inferred retirement protocol is introduced.
+
+The terminal scenario-returned Unsettled is retained as typed execution metadata
+alongside its human reason. It carries the requested bound, pending tasks and
+down-process snapshots through evidence JSON and navigation. The same run-local
+observation collector supplies the originating simulation identity; it is never
+guessed from the last simulation call. Process indices are local to that
+simulation. Zero means no simulation identity was observed. This is a terminal
+outcome, not a history of every
+settlement attempt; swallowed errors and raw captured steps cannot recreate it.
+Cloning protects each evidence/navigation snapshot, and shared bounded text
+rendering preserves run attribution while JSON retains every identity.
+
+Model receipts remain independent. Unavailable completion leaves eventual checks
+unjudged; it cannot hide a real prefix-conformance failure. A genuinely available,
+quiet system with an unfulfilled obligation still produces the model defect.
+Controls cover both cases, default/core scope, exact-bound recovery, duplicate
+process names, native behavior, structured JSON and cursor-independent TUI data.
+A two-simulation control returns an earlier failure after another simulation has
+run, preserving the original identity rather than attaching it to the last call.
