@@ -21,7 +21,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
@@ -29,6 +28,7 @@ import (
 	"text/template"
 
 	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
+	"github.com/chucklehead-dev/gotogether/internal/projectsetup"
 )
 
 //go:embed all:scaffold
@@ -91,8 +91,16 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if *module == "" {
 		*module = "example.com/" + name
 	}
-	if entries, err := os.ReadDir(*dir); err == nil && len(entries) > 0 {
-		return fmt.Errorf("grist new: %s exists and is not empty: give another -dir", *dir)
+	if err := projectsetup.CheckModule(*module); err != nil {
+		return usage(fmt.Sprintf("grist new: %v", err))
+	}
+	if err := projectsetup.CheckDestination(*dir); err != nil {
+		return fmt.Errorf("grist new: %w", err)
+	}
+	if !*noGenerate {
+		if err := projectsetup.CheckGo(); err != nil {
+			return fmt.Errorf("grist new: %w", err)
+		}
 	}
 	if *replace != "" {
 		// checked before anything is written: a bad path once left a
@@ -103,6 +111,12 @@ func run(args []string, stdout, stderr io.Writer) error {
 			}
 		}
 	}
+	version := selfVersion()
+	plan := projectsetup.Plan{Label: "grist new", Dir: *dir}
+	if *replace == "" {
+		plan.Steps = append(plan.Steps, []string{"get", "github.com/chucklehead-dev/gotogether/grist@" + version})
+	}
+	plan.Steps = append(plan.Steps, []string{"mod", "tidy"}, []string{"run", "./cmd/" + name, "model"})
 	data := struct{ Name, Pkg, Q, Module string }{name, strings.ReplaceAll(name, "-", ""), q, *module}
 	if err := write(*dir, data); err != nil {
 		return err
@@ -112,23 +126,16 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 	fmt.Fprintf(stdout, "wrote %s (module %s)\n", *dir, *module)
 	if *noGenerate {
-		fmt.Fprintf(stdout, "next: cd %s && go mod tidy && go run ./cmd/%s model && go test -short -v ./...\n%s", *dir, name, firstRun)
+		fmt.Fprintf(stdout, "next: %s\n%s", plan.Resume(0), firstRun)
 		return nil
 	}
 	if *replace == "" {
-		// grist and the core at the version this grist was built from: a
-		// first run downloads them, two minutes with no word of its own
-		fmt.Fprintf(stdout, "downloading the toolkit (grist and gotogether at %s; the first run takes about 2 minutes)\n", selfVersion())
-		if err := goCmd(*dir, stderr, "get", "github.com/chucklehead-dev/gotogether/grist@"+selfVersion()); err != nil {
-			return err
-		}
+		fmt.Fprintf(stdout, "downloading the toolkit (grist and gotogether at %s; the first run takes about 2 minutes)\n", version)
 	}
-	for _, c := range [][]string{{"mod", "tidy"}, {"run", "./cmd/" + name, "model"}} {
-		if err := goCmd(*dir, stderr, c...); err != nil {
-			return err
-		}
+	if err := plan.Run(stderr); err != nil {
+		return err
 	}
-	fmt.Fprintf(stdout, "generated the model's skeleton and bindings (go run ./cmd/%s model)\nnext: cd %s && go test -short -v ./...\n%s", name, *dir, firstRun)
+	fmt.Fprintf(stdout, "generated the model's skeleton and bindings (go run ./cmd/%s model)\nnext: %s\n%s", name, projectsetup.Verify(*dir), firstRun)
 	return nil
 }
 
@@ -182,7 +189,7 @@ func write(dir string, data any) error {
 // with replace, the toolkit's two modules from that checkout.
 func writeGoMod(dir, module, replace string) error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "module %s\n\ngo 1.26.1\n", module)
+	fmt.Fprintf(&b, "module %s\n\ngo 1.26.1\n", projectsetup.ModulePath(module))
 	if replace != "" {
 		// relative to the module, as an example's `replace => ../..`: the
 		// go.mod stays right when the checkout moves with it
@@ -202,7 +209,7 @@ func writeGoMod(dir, module, replace string) error {
 			}
 		}
 		fmt.Fprintf(&b, "\nrequire (\n\tgithub.com/chucklehead-dev/gotogether v0.0.0\n\tgithub.com/chucklehead-dev/gotogether/grist v0.0.0\n)\n")
-		fmt.Fprintf(&b, "\nreplace (\n\tgithub.com/chucklehead-dev/gotogether => %s\n\tgithub.com/chucklehead-dev/gotogether/grist => %s/grist\n)\n", rel, rel)
+		fmt.Fprintf(&b, "\nreplace (\n\tgithub.com/chucklehead-dev/gotogether => %s\n\tgithub.com/chucklehead-dev/gotogether/grist => %s\n)\n", projectsetup.ModulePath(rel), projectsetup.ModulePath(filepath.ToSlash(filepath.Join(rel, "grist"))))
 	}
 	return os.WriteFile(filepath.Join(dir, "go.mod"), []byte(b.String()), 0o644)
 }
@@ -214,17 +221,4 @@ func selfVersion() string {
 		return bi.Main.Version
 	}
 	return "latest"
-}
-
-// goCmd runs the go command in dir, its output to w, outside any
-// workspace (the new module builds on its own go.mod).
-func goCmd(dir string, w io.Writer, args ...string) error {
-	cmd := exec.Command("go", args...)
-	cmd.Dir = dir
-	cmd.Stdout, cmd.Stderr = w, w
-	cmd.Env = append(os.Environ(), "GOWORK=off")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("grist new: go %s in %s: %w", strings.Join(args, " "), dir, err)
-	}
-	return nil
 }
