@@ -70,11 +70,14 @@ adjacent numeric fixtures.
 
 A navigation integrity follow-up refuses non-loss reconstruction errors before
 anchoring an observed state, including within partitions and at cursor zero.
-Exact retries and existing loss/snapshot policies remain supported. Next, repair
-the demonstrated simulation budget boundary: a final permitted turn that leaves
-no work must complete normally; another runnable turn or an in-bound deadline
-advance must still respect the limit. Preserve stuck and horizon outcomes and
-consume no extra scheduling choices.
+Exact retries and existing loss/snapshot policies remain supported. The
+simulation budget follow-up now permits quiet completion on the final allowed
+turn, preserves stuck and horizon outcomes, and refuses another runnable turn or
+in-bound deadline advance before time or choices are consumed. The budget remains
+cumulative across calls. Recent fixes reinforce a shared rule: capture integrity,
+model conformance, runtime completion and execution limits are separate facts;
+none should stand in for another in JSON, TUI or claims. Further work should
+start with fresh end-to-end use or a demonstrated contract blocker.
 
 S11's skipped middle-snapshot gap is implemented in PR #15:
 later snapshots check the whole replayed state and cannot reset it. The first

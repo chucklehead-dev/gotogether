@@ -74,6 +74,12 @@ retain separate records in JSON; text groups identical policies to stay
 readable. These whole-run observations also appear in the TUI independently
 of its cursor.
 
+The step budget is cumulative across calls on one simulation. Completing on the
+last permitted turn succeeds: equal `stepsAfter` and `maxSteps` alone do not mean
+`stepLimitReached`. That flag means work required another turn. Quiet completion,
+a horizon stop, and blocked work keep their distinct outcomes at the limit.
+A refused in-bound deadline does not advance virtual time or draw another choice.
+
 A requested horizon is not elapsed time or proof that the system settled.
 Arbitrary workload settings inside a callback cannot be inferred and are not
 invented by the profile. Nor does a profile serialize executable custom chooser

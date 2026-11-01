@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Navigation reconstruction guard (current branch): observed-state navigation
+Simulation step-budget boundary (current branch): quiet completion on the last
+permitted turn now succeeds instead of returning ErrMaxSteps. Stuck and horizon
+outcomes remain distinct, and actual exhaustion stops before another task,
+fault choice or in-bound deadline advance. Limits remain cumulative across
+calls. Core hooks carry the corrected limit outcome into execution JSON and
+TUI profiles without a format or API change. Completion still proves no model
+property; settlement still requires its existing pending-work check.
+
+Navigation reconstruction guard (merged PR #38): observed-state navigation
 refuses non-loss errors in the selected whole actor, including conflicting
 recorder identities, ordering errors and partitions. Previously a discarded
 conflicting payload could silently determine the displayed state. CLI JSON and
@@ -67,7 +75,7 @@ checks. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
-format has one current version; all published core pins agree at c2cf31fa65ed.
+format has one current version; all published core pins agree at f4f0be70171b.
 
 Captured-transition assertion follow-up (merged PR #32): qtest.TransitionsConform
 judges the existing native conformance facet for all judged actors or required
@@ -543,7 +551,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Simulation exact-step-budget boundary | S | a completed final turn currently returns ErrMaxSteps from Run/Settle; distinguish quiet completion from work requiring another turn, preserving stuck, horizon and deadline semantics without consuming extra choices |
+| 1 | Independent-maintainer use or a concrete new contract blocker | S–M | collection authoring, navigation integrity and scheduler termination now have controls; use a fresh end-to-end workflow to identify the next limitation before adding inference or another narrow fixture |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 

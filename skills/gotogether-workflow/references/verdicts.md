@@ -378,7 +378,11 @@ component-conformance identities remain explicit refusals; missing or unjudged
 required checks cannot reproduce a failure. No fallback interprets missing data.
 
 Driven explorations include resolved run profiles and observed simulator limits
-in evidence and navigation JSON. Inspect the effective seed range, fault policy,
+in evidence and navigation JSON. The scheduler budget is cumulative across
+calls. Completing on its last permitted turn succeeds; a counter equal to the
+cap alone does not mean `stepLimitReached`. Quiet completion, horizon stops and
+blocked work retain their own outcomes. Actual exhaustion stops before another
+turn or in-bound deadline advance. Inspect the effective seed range, fault policy,
 primary validation policy and limits before comparing runs. Custom choosers do
 not imply the System rates were used; navigation uses fixed choices and nominal
 continuation. See [run profiles](../../../docs/run-profiles.md).

@@ -37,8 +37,9 @@ import (
 // goroutines, real time and map iteration order are outside it: a run that
 // depends on them is not reproducible (Replay detects that).
 type Sim struct {
-	// MaxSteps bounds a run's scheduling steps (default 100000): a
-	// livelock is reported, not looped.
+	// MaxSteps bounds cumulative scheduling steps across calls (default
+	// 100000). Completing on the final permitted step succeeds; work needing
+	// another turn reports ErrMaxSteps instead of looping.
 	MaxSteps int
 	// Log, if set, receives one line per fault and crash.
 	Log func(string)
@@ -1107,7 +1108,9 @@ func (s *Sim) stuck() string {
 	return strings.Join(lines, "\n")
 }
 
-// ErrMaxSteps is returned by Run when a run takes more than MaxSteps steps.
+// ErrMaxSteps is returned by Run when work remains but the cumulative
+// MaxSteps budget cannot permit another scheduling turn. Quiet completion,
+// a horizon stop and stuck work retain their own outcomes at the budget boundary.
 var ErrMaxSteps = errors.New("qenv: too many scheduling steps (livelock?)")
 
 // Run schedules tasks until none can run and no deadline is within d of
@@ -1162,9 +1165,6 @@ func (s *Sim) run(d time.Duration, done func() bool) (err error) {
 		if done != nil && done() {
 			return nil
 		}
-		if s.steps >= s.MaxSteps {
-			return ErrMaxSteps
-		}
 		n, cands := s.runnable()
 		if n == 0 {
 			next, ok := s.nextDeadline()
@@ -1179,8 +1179,17 @@ func (s *Sim) run(d time.Duration, done func() bool) (err error) {
 				}
 				return nil
 			}
+			// Do not advance to in-bound work we have no budget to schedule.
+			if s.steps >= s.MaxSteps {
+				return ErrMaxSteps
+			}
 			s.now = next
 			continue
+		}
+		// Classify quiet, stuck and horizon stops before enforcing the next
+		// turn's budget, without drawing a schedule or fault choice past it.
+		if s.steps >= s.MaxSteps {
+			return ErrMaxSteps
 		}
 		s.steps++
 		if s.Check {
