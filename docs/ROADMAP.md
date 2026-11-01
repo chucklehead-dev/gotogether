@@ -51,7 +51,18 @@ unchanged. It did expose a core machine-output blocker: graph completeness and
 counts required parsing human text. Canonical model-report documents now retain
 native graph scope, check bounds/proof coverage, reachability search extent and
 typed skip reasons; the rehearsal consumes those fields directly. No new runtime
-adapter was needed. S11's skipped middle-snapshot gap is implemented in PR #15:
+adapter was needed.
+
+A second [bounded real-library rehearsal](../internal/adoptiontest/goo-counted-values/README.md)
+checks exact large-count arithmetic through native recording, Quint/TypeScript,
+ITF, bundle and replay. The independent model/driver freeze precedes a planted
+wrapping-addition source contrast. Existing small-count tests remain credited;
+Rust/Go int64 refusals and absent TypeScript failure state remain explicit.
+No new decoder defect or runtime adapter was demonstrated. Further capabilities
+should follow independent use or a concrete contract blocker, rather than more
+adjacent numeric fixtures.
+
+S11's skipped middle-snapshot gap is implemented in PR #15:
 later snapshots check the whole replayed state and cannot reset it. The first
 snapshot retains its lost-head initialization role. The merged I45 increment (PR #16)
 closes a separate database-history omission: known committed appenders that no

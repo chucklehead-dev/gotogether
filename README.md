@@ -97,6 +97,12 @@ The reproduction checks faithful validation, the precise source mismatch,
 missing-observation errors and relocated replay while keeping the frozen SDK
 baseline intact.
 
+The [large-count rehearsal](internal/adoptiontest/goo-counted-values/README.md)
+adds an independent arithmetic contract against Goo's real counted-values
+executor. Exact native JSON, TypeScript ITF and replay preserve counts beyond
+int64; a frozen model detects a planted wrapping-sum contrast. It keeps backend
+range errors and unavailable failure state explicit, without a new adapter.
+
 `qtest.TransitionsConform("actor")` checks captured transitions for an exact
 actor (omit actors to check all). It preserves the native report's ordering,
 assumptions and verdict; it does not claim invariant, composition, completion or
