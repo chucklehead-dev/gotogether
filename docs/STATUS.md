@@ -7,7 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Collection conversion correction (current branch): removing redundant argument
+Collection argument lint (current branch): the original plain-field mapping
+mistake from the large-count rehearsal now produces an early authored finding.
+Known collection arguments need conversion, so identity mappings recommend
+omission and other recorded JSON fields get a typed conversion example.
+Interned argument IDs get separate guidance; `.outcome` and general expressions
+remain supported. Native lint JSON retains code, severity, parameter symbol,
+confidence and fix without inventing YAML coordinates. This is static binding
+compatibility evidence, not a trace verdict or complete expression checker.
+
+Collection conversion correction (merged PR #36): removing redundant argument
 mappings from the large-count trial exposed a core default-path defect. Flat
 collection helpers decoded through float64 and converted through int64, changing
 recorded operations before Quint saw them. Defaults and explicit helpers now
