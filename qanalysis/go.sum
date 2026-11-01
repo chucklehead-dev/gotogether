@@ -1,7 +1,7 @@
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
-github.com/chucklehead-dev/gotogether v0.0.0-20261031234612-c5734a692c96 h1:hwq/CU7HOkMtU0WtH++PUtuou9LhSu6q3WmYMcCYJlo=
-github.com/chucklehead-dev/gotogether v0.0.0-20261031234612-c5734a692c96/go.mod h1:QUWlJzVWkhA5Tvev8YRNKMBdYPS1i41x2FuoVhIFlPM=
+github.com/chucklehead-dev/gotogether v0.0.0-20261101002246-f8a939a15bcf h1:Krmhh8FBRK7N9Z7f5T3rJTjC/EcEa8a+Cx5mF3D1Aow=
+github.com/chucklehead-dev/gotogether v0.0.0-20261101002246-f8a939a15bcf/go.mod h1:QUWlJzVWkhA5Tvev8YRNKMBdYPS1i41x2FuoVhIFlPM=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/golangci/plugin-module-register v0.1.2 h1:e5WM6PO6NIAEcij3B053CohVp3HIYbzSuP53UAYgOpg=
 github.com/golangci/plugin-module-register v0.1.2/go.mod h1:1+QGTsKBvAIvPvoY/os+G5eoqxWn70HYDm2uvUyGuVw=

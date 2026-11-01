@@ -494,7 +494,7 @@ func evaluate(ctx context.Context, ms replay.ModuleSpec, runs [][]binding.Call, 
 		if withITF.Backend == "typescript" { // its failing tests write no ITF: say so where the state would be
 			for _, f := range res[i].failures() {
 				if f.State == nil {
-					f.noState = "not reported: the TypeScript backend writes no ITF for a failing test (QUINT_BACKEND=rust shows it)"
+					f.noState = "not reported: the TypeScript backend writes no ITF for a failing test (QUINT_BACKEND=rust may report it if the Rust backend supports this model)"
 				}
 			}
 		}

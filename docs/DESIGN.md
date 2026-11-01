@@ -5984,3 +5984,19 @@ Only witness booleans escape; the original source inventory is checked before
 and after the entire probe, including early returns. Derived reports are not
 attributed to the original binding or recorded. Compiled-only checks cannot
 compile these extra predicates and return `ErrNeedsQuint` without a tool probe.
+
+
+## 74. Numeric scope before source-contrast credit
+
+The independent Goo counted-values trial first proves exact values through
+native JSON, Quint/TypeScript, native ITF reading and bundled replay. Its
+unbounded mathematical sum then detects a planted wrapping-uint64 implementation
+contrast. Rust and Go-evaluator range refusals remain tool errors; they cannot
+stand in for source-defect evidence. Typed collection templates reuse the
+existing binding helpers. Missing TypeScript failure state stays unavailable,
+while native captured-record inspection identifies the offending observations.
+The missing-state hint now qualifies Rust guidance by model support instead of
+promising unavailable state. No compatibility format, core numeric extension or
+runtime adapter was needed.
+The bounded trial and original dependency/model/driver checksums are in
+internal/adoptiontest/goo-counted-values.

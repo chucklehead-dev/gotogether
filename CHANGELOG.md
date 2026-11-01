@@ -8,6 +8,10 @@ and adds a line here.
 
 ## Unreleased
 
+- Missing TypeScript failure-state diagnostics now qualify Rust guidance by
+  model support, avoiding an unconditional recommendation for models outside
+  the Rust backend's integer range.
+
 - Source validation retains parsed binding/rule fingerprints and guards model
   inventories across loading, warm caches, judgment and manifest capture.
   Changed sources or effective instances require a new judgment; ITF models

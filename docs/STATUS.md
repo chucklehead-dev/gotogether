@@ -7,7 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Source-capture follow-up (PR #34, current branch): source judgments now retain private
+Large-count rehearsal (current branch): a second real-library contract adds
+unbounded arithmetic and exact-value handoff evidence without a core format or
+API change. The Go evaluator and Quint Rust backend retain signed-int64 limits;
+Quint/TypeScript is explicit throughout the trial. Frozen drivers retain raw
+public decimal strings and exact native numeric projections. All artifacts and
+limitations are documented in internal/adoptiontest/goo-counted-values. The
+trial exposed one misleading core hint: missing-state Rust advice now qualifies
+backend support instead of promising an unavailable trace.
+
+Source-capture follow-up (merged PR #34): source judgments now retain private
 model identities and conservative cache dependencies; changed model, binding or
 conversion rules are refused before recording. Typed ITF schema inference and
 empty-history manifests obey the same stability checks. Definition-string file
@@ -32,7 +41,7 @@ checks. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
-format has one current version; all published core pins agree at c5734a692c96.
+format has one current version; all published core pins agree at f8a939a15bcf.
 
 Captured-transition assertion follow-up (merged PR #32): qtest.TransitionsConform
 judges the existing native conformance facet for all judged actors or required
@@ -508,23 +517,21 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Goo counted-values large-integer arithmetic rehearsal | S–M | existing small-count Hegel tests do not reach valid counts above 2^53 or overflow of the sum of valid uint64 groups; first prove exact native integer round trips, then freeze an independent arithmetic model and real executor driver before a wrapping-addition contrast; fix at most one demonstrated toolkit blocker; agent-assisted, not independent adoption |
+| 1 | Independent-maintainer use or a concrete new contract blocker | S–M | the counted-values arithmetic and exact-value handoff gate now pass; use real authoring, evidence or resolution friction to choose a core improvement, rather than expanding adjacent numeric fixtures |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
-The bounded trial is grounded in Goo's [counted-values contract](https://github.com/casselc/goo/blob/0659a4b20fb7fe83bbfd32a194ceb9a7d0c339a9/docs/COUNTED_VALUES.md)
-and `exploration.Source.FetchCountedValues`, using its existing HTTP client seam.
-Its Hegel reference already checks ordinary semantics with 140 generated facts;
-existing tests must not be credited as missing coverage. The new cases are exact
-2^53+1, MaxUint64, and a group sum of MaxUint64+1 against total zero. Public
-counts are decimal strings; capture raw strings and `json.Number` integer values,
-never float64. Use an independent unbounded Quint sum (`Eval: "quint"`): the Go
-evaluator's int64 boundary is documented, not a newly demonstrated decoder bug.
-Prove native JSON/ITF/replay preservation before any contrast credit. Only then
-freeze and replace big.Int addition with wrapping uint64 addition in an isolated
-source contrast; expect changed_between_reads versus erroneous no_data.
-This is a test gap and usability trial, not evidence of a current source defect.
-Keep SQL, live ClickHouse, UI ownership, concurrency and performance outside it.
+The counted-values trial is now implemented in
+[internal/adoptiontest/goo-counted-values](../internal/adoptiontest/goo-counted-values/README.md).
+Its independent mathematical model and real executor driver were frozen only
+after native JSON, TypeScript ITF and bundled replay preserved exact values.
+The wrapping-sum source contrast produces a native sequence-4 mismatch; missing
+observations remain evidence errors. Native record inspection and relocated
+replay preserve the result without inventing TypeScript's absent failure state.
+The existing small-count Hegel tests remain credited, and no production bug or
+new core decoder defect is claimed. See its FRICTION.md before proposing further
+numeric or backend work. Ordinary counts, SQL, live ClickHouse and UI behavior
+remain outside this bounded trial.
 
 Do not start all tracks at once. Worker completion and the bounded HTTP/SQLite
 rehearsal are merged in PR #9; finite pinned choices in PR #10, structured lint

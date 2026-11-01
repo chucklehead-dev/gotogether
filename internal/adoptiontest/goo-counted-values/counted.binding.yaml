@@ -1,0 +1,14 @@
+format: gotogether.binding/2
+spec: model/counted.qnt
+module: counted
+actions:
+  lookup:
+    args:
+      total: '{{.total}}'
+      groups: '{{toQuint "List[int]" .groups}}'
+    expect: >-
+      state == {{.obs.state}} and
+      count == {{.obs.count}} and
+      sameCounts(lastGroups, {{toQuint "List[int]" .obs.groups}})
+invariants: [countDomain, positiveGroups, stateClassification]
+eventually: []
