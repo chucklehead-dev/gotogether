@@ -58,7 +58,11 @@ checks exact large-count arithmetic through native recording, Quint/TypeScript,
 ITF, bundle and replay. The independent model/driver freeze precedes a planted
 wrapping-addition source contrast. Existing small-count tests remain credited;
 Rust/Go int64 refusals and absent TypeScript failure state remain explicit.
-No new decoder defect or runtime adapter was demonstrated. Further capabilities
+That frozen explicit-helper trial did not demonstrate a decoder defect. A later
+no-mapping variant exposed float64 rounding in flat collection defaults; the
+core now preserves exact integer literals through those defaults and helpers,
+with explicit refusal of fractional/exponent inputs. Frozen artifacts stay
+unchanged. Further capabilities
 should follow independent use or a concrete contract blocker, rather than more
 adjacent numeric fixtures.
 

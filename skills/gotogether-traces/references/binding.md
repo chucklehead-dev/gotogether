@@ -4,7 +4,12 @@ Rules:
 - A parameter with no template is the step field of its name, rendered as
   a Quint literal. Set, list and map parameters (type aliases included)
   are converted from the recorded JSON by `toSet`, `toList` and `toMap`;
-  one whose type holds a record or a sum (or a collection of
+  integer literals stay exact at any size, including nested tuples and map
+  values. Fractions and exponent notation are refused with their element path:
+  record integer units instead. Backend limits still apply. Use the default
+  when field and parameter names match; a redundant plain `{{.field}}` mapping
+  prints collection JSON as a string rather than converting it. A parameter
+  whose type holds a record or a sum (or a collection of
   collections) by `toQuint`, which decodes the field's JSON by a type of
   the model: `{{ toQuint "List[Event]" .obs.events }}` in an `expect`.
   Records are JSON objects (keys the fields' names, or Go's field names),

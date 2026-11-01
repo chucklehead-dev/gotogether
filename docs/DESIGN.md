@@ -6000,3 +6000,21 @@ promising unavailable state. No compatibility format, core numeric extension or
 runtime adapter was needed.
 The bounded trial and original dependency/model/driver checksums are in
 internal/adoptiontest/goo-counted-values.
+
+
+## 75. Exact values in collection argument defaults
+
+The large-count trial's explicit typed mappings preserved integers. Removing
+those redundant argument mappings exposed a different path: flat collection
+defaults call toList/toSet/toMap, which decoded through float64 and converted to
+int64. This changed actual recorded operations, not merely display values.
+
+Those helpers now decode numbers without floating conversion and render plain
+integer literals with arbitrary precision. Fractional and exponent forms fail
+with the element path, consistent with typed conversion. Strict EOF checking
+retains rejection of trailing JSON. Maps stay deterministically ordered, arrays
+inside collections stay tuples, and existing empty/null handling is unchanged.
+This cannot recover values already rounded by a producer, and does not extend
+any evaluator's numeric range. The frozen trial remains unchanged; a separate
+disposable binding omits argument mappings to exercise defaults through native
+validation, ITF and relocated replay.

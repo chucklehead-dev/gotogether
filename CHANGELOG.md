@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- Default collection argument mappings and `toList`/`toSet`/`toMap` now
+  preserve recorded integers without float64 rounding or int64 overflow,
+  including nested tuples and map values. Fractions and exponent notation
+  are refused with an element path and integer-recording guidance instead
+  of being silently truncated. Backend integer limits remain unchanged.
+
 - Missing TypeScript failure-state diagnostics now qualify Rust guidance by
   model support, avoiding an unconditional recommendation for models outside
   the Rust backend's integer range.

@@ -7,7 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Large-count rehearsal (current branch): a second real-library contract adds
+Collection conversion correction (current branch): removing redundant argument
+mappings from the large-count trial exposed a core default-path defect. Flat
+collection helpers decoded through float64 and converted through int64, changing
+recorded operations before Quint saw them. Defaults and explicit helpers now
+preserve arbitrary integer literals, reject fractional/exponent counts, and
+retain strict single-value JSON input. Regression controls and the disposable
+no-mapping rehearsal preserve exact values through ITF and relocated replay.
+The original frozen model, binding, driver and dependency pins are untouched.
+
+Large-count rehearsal (merged PR #35): a second real-library contract adds
 unbounded arithmetic and exact-value handoff evidence without a core format or
 API change. The Go evaluator and Quint Rust backend retain signed-int64 limits;
 Quint/TypeScript is explicit throughout the trial. Frozen drivers retain raw

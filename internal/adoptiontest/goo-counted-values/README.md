@@ -76,3 +76,13 @@ SQL correctness, real ClickHouse cardinalities, group identity, null/empty value
 distinctions, query/version echo, clocks, bases, UI ownership, concurrency and
 performance are outside this model. Their presence in the full response does not
 mean this projection checked them. See [FRICTION.md](FRICTION.md) for the lessons.
+
+
+## Default argument follow-up
+
+The runner also writes a separate disposable binding that omits `args` mappings,
+leaving the original frozen file intact. It verifies the same real observations
+and exact ITF values, then bundles and replays that variant after original paths
+disappear. This exposed and guards a later core bug in toList/toSet/toMap's
+floating-number conversion. Explicit typed helpers in the original freeze did
+not use that path. No additional source contract or production bug is claimed.

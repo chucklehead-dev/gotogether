@@ -3,7 +3,9 @@ package binding
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
+	"math/big"
 	"regexp"
 	"slices"
 	"sort"
@@ -462,7 +464,7 @@ func jsonQuint(v any, kind string) (string, error) {
 	}
 	if kind == "Map" {
 		var m map[string]any
-		if err := json.Unmarshal([]byte(text), &m); err != nil {
+		if err := decodeCollectionJSON(text, &m); err != nil {
 			return "", fmt.Errorf("toMap: %q is not a JSON object: %w", text, err)
 		}
 		keys := slices.Sorted(maps.Keys(m))
@@ -480,7 +482,7 @@ func jsonQuint(v any, kind string) (string, error) {
 		return "Map(" + strings.Join(parts, ", ") + ")", nil
 	}
 	var xs []any
-	if err := json.Unmarshal([]byte(text), &xs); err != nil {
+	if err := decodeCollectionJSON(text, &xs); err != nil {
 		return "", fmt.Errorf("to%s: %q is not a JSON array: %w", kind, text, err)
 	}
 	parts := make([]string, len(xs))
@@ -497,6 +499,24 @@ func jsonQuint(v any, kind string) (string, error) {
 	return "Set(" + strings.Join(parts, ", ") + ")", nil
 }
 
+// decodeCollectionJSON keeps integer lexemes exact. Requiring EOF also refuses
+// trailing values and invalid closing delimiters instead of discarding them.
+func decodeCollectionJSON(text string, dst any) error {
+	dec := json.NewDecoder(strings.NewReader(text))
+	dec.UseNumber()
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("more than one JSON value")
+	}
+	return nil
+}
+
 // jsonElem renders a decoded JSON value as Quint: arrays become tuples;
 // at is its path, for a string no Quint literal holds.
 func jsonElem(x any, at string) (string, error) {
@@ -511,8 +531,12 @@ func jsonElem(x any, at string) (string, error) {
 			parts[i] = p
 		}
 		return "(" + strings.Join(parts, ", ") + ")", nil
-	case float64:
-		return strconv.FormatInt(int64(y), 10), nil
+	case json.Number:
+		n, ok := new(big.Int).SetString(string(y), 10)
+		if !ok {
+			return "", fmt.Errorf("at %s: JSON number %q is not an integer literal: record an integer without a fraction or exponent", at, y)
+		}
+		return n.String(), nil
 	case bool:
 		return strconv.FormatBool(y), nil
 	}
