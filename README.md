@@ -66,6 +66,13 @@ over a real socket through `qobshttp`, and a mutant (`>` for `>=`) that
 `TestMutants` shows caught. Change the model first, then the handler:
 the tests say what no longer fits.
 
+If dependency setup fails, `init` retains the project and prints a `resume:`
+command for the failed stage onward, followed by verification. Run that command
+in a POSIX shell after fixing the reported cause. It uses `GOWORK=off`; rerunning
+`init` against the populated directory is unnecessary. `-no-tidy` writes files
+and prints the full setup plan, including the versioned dependency download.
+`grist new` provides the same recovery workflow (`-no-generate` for files only).
+
 A synchronous Go library can start without a simulated environment:
 
 ```sh

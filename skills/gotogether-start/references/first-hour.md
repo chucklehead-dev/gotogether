@@ -84,6 +84,17 @@ mutant `testdata/mutants/offByOne` (`>` for `>=`), caught as
 the binding. grpc and queue kinds are not written yet: init names the
 example to start from (examples/grpcledger, examples/streams).
 
+## Recovering project setup
+
+If `gotogether init` reports `setup incomplete`, keep its generated files and
+fix the reported dependency/setup cause, then execute its `resume:` command in
+a POSIX shell. The command starts at the failed stage and ends with short verbose
+tests, using `GOWORK=off`; do not rerun init into the populated directory.
+`-no-tidy` prints the complete plan without running Go, including the versioned
+`go get` when no `-replace` was supplied. Automatic setup checks module paths and
+Go availability before writing; checkout paths containing spaces are quoted in
+go.mod. A successful setup still needs the suggested tests with quint on PATH.
+
 ## First commands
 
 ```sh

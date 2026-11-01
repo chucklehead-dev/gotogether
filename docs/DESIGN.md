@@ -6150,3 +6150,32 @@ Factoring remains evidence about this run's evaluated prefixes, not all model
 states or other executions. Whole-run recipe data stays independent of the
 navigation cursor. The optional fields extend current report/2 and nav/2; there
 is no second authoring representation or compatibility reader.
+
+
+## 82. New-project setup failures leave a usable continuation
+
+The library adoption trial left a populated destination after dependency or
+model setup failed. Repeating the generator then refused that directory. The
+files can already contain useful work, so failure retains them and identifies
+the failed setup stage rather than deleting the project or claiming completion.
+
+Core init and grist new share an ordered plan of Go argument vectors. Execution
+and POSIX shell continuation rendering use that same plan: resume includes the
+failed stage and its successors, then short verbose tests, all with GOWORK=off.
+Successful setup suggests verification separately. Write-only modes print the
+full plan, including the toolkit download at the CLI's build version when known
+(development builds use latest) unless a checkout replacement is supplied.
+There is no persisted resume protocol and no generator rerun in the continuation.
+
+Module and destination validation precede writes; automatic mode also checks Go
+availability. Write-only mode can run without Go. Replacement paths are rendered
+as quoted go.mod tokens when needed, independently of shell argument quoting.
+Failure-stage and continuation tests cover retained edits, remaining-step order,
+workspace isolation and paths containing shell punctuation. This makes the
+existing starter workflow recoverable; it does not infer application contracts
+or establish independent adoption.
+
+The maintained x/mod parser avoids a second handwritten Go module grammar.
+Its dependency affects selected versions even in examples that only replace the
+core; root dependency changes therefore require standalone module tidy checks,
+including examples, rather than workspace builds alone.
