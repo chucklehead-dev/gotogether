@@ -6034,3 +6034,18 @@ text), other reserved metadata, compound templates and unknown parameter
 shapes. It does not infer `expect` types. Existing lint findings carry the rule
 identity, model confidence and fix through Go, text and JSON. Metadata supplies
 no YAML coordinates, so those remain absent. No format or public API changed.
+
+
+## 77. Navigation requires coherent captured evidence
+
+A reconstructed trace can retain one payload while reporting conflicting records
+or ordering evidence. Replaying that retained subset must not manufacture an
+observed model state. Navigation refuses non-loss error issues in the selected
+actor before planning, constant derivation and state construction, even at cursor
+zero. Partition traces consult their whole actor because splitting omits issues.
+
+Warnings, informational exact retry copies and unrelated clean actors remain
+usable. Gap and lost-prefix errors retain their existing snapshot/start policy;
+a valid model-failure prefix remains navigable. Refusal is an input error, not a
+model verdict or counterexample, and neither JSON nor TUI fallback can expose a
+node from that capture. No public API or output format changes are needed.

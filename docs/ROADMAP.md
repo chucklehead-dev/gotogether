@@ -68,6 +68,14 @@ explicit outcome-expression exclusions. Further capabilities
 should follow independent use or a concrete contract blocker, rather than more
 adjacent numeric fixtures.
 
+A navigation integrity follow-up refuses non-loss reconstruction errors before
+anchoring an observed state, including within partitions and at cursor zero.
+Exact retries and existing loss/snapshot policies remain supported. Next, repair
+the demonstrated simulation budget boundary: a final permitted turn that leaves
+no work must complete normally; another runnable turn or an in-bound deadline
+advance must still respect the limit. Preserve stuck and horizon outcomes and
+consume no extra scheduling choices.
+
 S11's skipped middle-snapshot gap is implemented in PR #15:
 later snapshots check the whole replayed state and cannot reset it. The first
 snapshot retains its lost-head initialization role. The merged I45 increment (PR #16)

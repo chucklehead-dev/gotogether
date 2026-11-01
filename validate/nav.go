@@ -93,7 +93,8 @@ type Disabled struct {
 // no evaluation (a binding with no step action), the binding computes
 // constants from steps and no run is given, or the run's calls before
 // At are not all transitions of the model (the error says which, and
-// why).
+// why). Non-loss reconstruction errors in the selected actor also prevent
+// anchoring a state to that capture, including when At is zero.
 func (c *Checker) Nav(start NavStart) (*Navigator, error) {
 	e := evaluatorFor(c)
 	if e.err != nil {
@@ -150,6 +151,15 @@ func (c *Checker) Nav(start NavStart) (*Navigator, error) {
 	whole := tr
 	if w := wholes[tr]; w != nil {
 		whole = w
+	}
+	// Partition traces do not carry their whole actor's reconstruction issues.
+	// Loss handling stays with the existing snapshot/start policy; conflicting
+	// records or ordering evidence cannot establish one observed starting path.
+	for _, issue := range whole.Issues {
+		if issue.Severity != "error" || issue.Kind == "gap" || issue.Kind == "lost-prefix" {
+			continue
+		}
+		return nil, fmt.Errorf("nav: actor %s has a reconstruction error (%s): %s; correct the capture before navigating its observed state", nameOf(tr.Actor), issue.Kind, issue.Msg)
 	}
 	plan, err := c.Binding.Planner(c.Model, whole).Plan(tr)
 	if err != nil {

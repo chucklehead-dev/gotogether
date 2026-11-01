@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- Navigation refuses non-loss reconstruction errors in the selected actor,
+  including conflicts hidden by partitioning or cursor zero. Conflicting captures
+  return an input error instead of a model state in CLI JSON or the TUI.
+  Identical retry copies and existing loss policies remain supported.
+
 - Binding lint now rejects a plain recorded-field template used as a collection
   argument. Structured findings recommend omitted mappings for matching names,
   typed conversion for other fields, and explicit collection construction for
