@@ -28,9 +28,68 @@ type PossibleSearch struct {
 	States, Depth int
 }
 
+// PossibleArgument is one named argument as an exact Quint literal.
+type PossibleArgument struct {
+	Name  string
+	Value string
+}
+
+// PossibleAction is a requested action and its constrained arguments.
+type PossibleAction struct {
+	Action string
+	Args   []PossibleArgument
+}
+
+// PossibleGoal distinguishes a predicate holding from an action sequence executing.
+type PossibleGoal struct {
+	Kind      string // predicate or action_sequence
+	Predicate string
+	Steps     []PossibleAction
+}
+
+// PossibleWitnessStep is one actual evaluator transition. A model_step
+// has no attributed action or arguments; it still counts as a transition.
+type PossibleWitnessStep struct {
+	Kind   string // action or model_step
+	Action string
+	Args   []PossibleArgument
+}
+
+func possibleGoal(when string, steps []binding.StepPattern) PossibleGoal {
+	if when != "" {
+		return PossibleGoal{Kind: "predicate", Predicate: when}
+	}
+	g := PossibleGoal{Kind: "action_sequence"}
+	for _, step := range steps {
+		a := PossibleAction{Action: step.Action}
+		for i, p := range step.Params {
+			a.Args = append(a.Args, PossibleArgument{Name: p, Value: step.Values[i]})
+		}
+		g.Steps = append(g.Steps, a)
+	}
+	return g
+}
+
+func possibleWitness(a qeval.Event, attributed bool) PossibleWitnessStep {
+	if !attributed {
+		return PossibleWitnessStep{Kind: "model_step"}
+	}
+	w := PossibleWitnessStep{Kind: "action", Action: a.Action}
+	for i, v := range a.Args {
+		name := ""
+		if i < len(a.Params) {
+			name = a.Params[i]
+		}
+		w.Args = append(w.Args, PossibleArgument{Name: name, Value: qeval.String(v)})
+	}
+	return w
+}
+
 // A PossibleResult is the Go evaluator's verdict on one possible.
 type PossibleResult struct {
 	Possible binding.Possible
+	Goal     PossibleGoal
+	Witness  []PossibleWitnessStep
 	// Found: Path are the transitions from init that reach it, each its
 	// action's call as the model's text names it (the shortest, for a
 	// predicate)
@@ -46,14 +105,25 @@ type PossibleResult struct {
 	Nodes, Depth int
 }
 
-// Verdict is the result as one line: "reached by a, b, c", "impossible:
-// no trace reaches it (the search saw the whole state graph, 25
-// states)", or "not found within the bound (2000 states, depth 7; ...)".
+// Verdict distinguishes a state predicate holding from executing an action
+// sequence, while preserving impossible and bounded-not-found conclusions.
 func (r PossibleResult) Verdict() string {
 	switch {
 	case r.Found && len(r.Path) == 0:
+		if r.Goal.Kind == "predicate" {
+			return "predicate holds initially"
+		}
+		if r.Goal.Kind == "action_sequence" {
+			return "action sequence executed without transitions"
+		}
 		return "reached in the initial state"
 	case r.Found:
+		if r.Goal.Kind == "predicate" {
+			return "predicate holds after " + strings.Join(r.Path, ", ")
+		}
+		if r.Goal.Kind == "action_sequence" {
+			return "action sequence executed by " + strings.Join(r.Path, ", ")
+		}
 		return "reached by " + strings.Join(r.Path, ", ")
 	case r.Complete:
 		return fmt.Sprintf("impossible: no trace reaches it (the search saw the whole state graph, %d states)", r.Nodes)
@@ -134,9 +204,11 @@ func (c *modelChecker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]Po
 	}
 	out := make([]PossibleResult, len(ps))
 	for i, r := range rs {
-		pr := PossibleResult{Possible: ps[i], Found: r.Found, Complete: r.Complete, Cut: r.Cut, Nodes: r.Nodes, Depth: r.Depth}
+		pr := PossibleResult{Possible: ps[i], Goal: possibleGoal(goals[i].when, goals[i].steps), Found: r.Found, Complete: r.Complete, Cut: r.Cut, Nodes: r.Nodes, Depth: r.Depth}
 		for _, t := range r.Path {
-			if a, ok := evalshare.BranchEvent(c.Model, t); ok {
+			a, ok := evalshare.BranchEvent(c.Model, t)
+			pr.Witness = append(pr.Witness, possibleWitness(a, ok))
+			if ok {
 				pr.Path = append(pr.Path, a.String())
 			} else {
 				pr.Path = append(pr.Path, "step")

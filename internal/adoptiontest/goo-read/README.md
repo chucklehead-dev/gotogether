@@ -25,16 +25,9 @@ go build -o "$PWD/bin/gotogether" ./cmd/gotogether
 PATH="$PWD/bin:$PATH" internal/adoptiontest/goo-read/reproduce.sh
 ```
 
-The reporting CLI is also available at an exact published revision:
-
-```sh
-GOBIN="$PWD/bin" GOWORK=off go install github.com/chucklehead-dev/gotogether/cmd/gotogether@7c581c4fe7ed
-PATH="$PWD/bin:$PATH" internal/adoptiontest/goo-read/reproduce.sh
-```
-
-This CLI revision supplies structured report fields and native evidence bundling.
-The frozen runtime SDK pin records what was available when the model and driver
-were authored.
+The current packaging checker consumes report/2, so build the checkout's CLI
+for reproduction. The frozen runtime SDK pin records what was available when
+the model and driver were authored; it is unchanged.
 
 Both runtime modules have exact published pins and the baseline has no local
 replacement. The script verifies the frozen hashes, works in a disposable module

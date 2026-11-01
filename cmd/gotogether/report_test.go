@@ -13,7 +13,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
-// validate -json prints the report as gotogether.report/1 and nothing
+// validate -json prints the report as gotogether.report/2 and nothing
 // else; -report writes its JUnit and SARIF renderings beside the text;
 // GOTOGETHER_REPORT_DIR gets the JSON of every run (I20). A failing
 // record is named by where it was read, with its wall time and process.

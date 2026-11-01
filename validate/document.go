@@ -18,7 +18,7 @@ import (
 )
 
 // A command's report for machines (I20): validate -json and simulate
-// -json write a Document, gotogether.report/1, which alert routing, CI
+// -json write a Document, gotogether.report/2, which alert routing, CI
 // and a job summary read instead of the text's lines; JUnit and SARIF are
 // renderings of it for CI's test and code-scanning views. The text report
 // stays the person's: the document carries what it says (the failing
@@ -28,10 +28,10 @@ import (
 
 // ReportFormat names a command's machine-readable report, a Document
 // (internal/formats' Report).
-const ReportFormat = "gotogether.report/1"
+const ReportFormat = "gotogether.report/2"
 
 // A Document is a command's report as data (validate -json, simulate
-// -json): gotogether.report/1. A field added later is optional; a field
+// -json): gotogether.report/2. A field added later is optional; a field
 // changed or removed is a new major.
 type Document struct {
 	// SkipReason identifies an intentionally unperformed model check.
@@ -260,6 +260,8 @@ type DocBound struct {
 
 // DocPossible separates finding a witness from proving a scenario impossible.
 type DocPossible struct {
+	// Goal is the resolved requirement, not a description inferred from its name.
+	Goal           *DocPossibleGoal   `json:"goal,omitempty"`
 	Found          bool               `json:"found"`
 	Impossible     bool               `json:"impossible"`
 	Search         *DocPossibleSearch `json:"search,omitempty"`
@@ -269,12 +271,42 @@ type DocPossible struct {
 // DocPossibleSearch is the evaluator's actual search extent, not configured caps.
 // Found may differ from DocPossible.Found when Quint found the witness instead.
 type DocPossibleSearch struct {
-	Found    bool     `json:"found"`
-	Complete bool     `json:"complete"`
-	Cut      string   `json:"cut,omitempty"`
-	Nodes    int      `json:"nodes"`
-	Depth    int      `json:"depth"`
-	Path     []string `json:"path,omitempty"`
+	Found    bool   `json:"found"`
+	Complete bool   `json:"complete"`
+	Cut      string `json:"cut,omitempty"`
+	Nodes    int    `json:"nodes"`
+	Depth    int    `json:"depth"`
+	// Path is the actual evaluator witness, with exact Quint argument literals.
+	// It is empty when a predicate already holds in the initial state.
+	Path []DocPossibleStep `json:"path,omitempty"`
+}
+
+// DocPossibleGoal distinguishes a predicate holding from a sequence executing.
+// Steps constrain only the named arguments supplied by the requirement.
+type DocPossibleGoal struct {
+	Kind      string              `json:"kind"` // predicate or action_sequence
+	Predicate string              `json:"predicate,omitempty"`
+	Steps     []DocPossibleAction `json:"steps,omitempty"`
+}
+
+// DocPossibleAction is a requested action and its named argument constraints.
+type DocPossibleAction struct {
+	Action string                `json:"action"`
+	Args   []DocPossibleArgument `json:"args,omitempty"`
+}
+
+// DocPossibleArgument retains an exact Quint literal, without JSON numeric coercion.
+type DocPossibleArgument struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// DocPossibleStep is an actual evaluator transition. Kind is action when the
+// model branch is identified; model_step has no fabricated action or arguments.
+type DocPossibleStep struct {
+	Kind   string                `json:"kind"`
+	Action string                `json:"action,omitempty"`
+	Args   []DocPossibleArgument `json:"args,omitempty"`
 }
 
 // NewDocument is an empty document of command's.

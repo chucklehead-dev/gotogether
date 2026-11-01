@@ -81,7 +81,7 @@ var (
 	// simulate -json; validate.Document), read by alert routing, CI and
 	// the Action's job summary. An added field is optional; a changed or
 	// removed one is a new major.
-	Report = Format{Thing: "report", Major: 1, What: "a command's machine-readable report (validate -json, simulate -json)",
+	Report = Format{Thing: "report", Major: 2, What: "a command's machine-readable report (validate -json, simulate -json)",
 		Older: "run the command again with this version"}
 	// Lint is the structured core lint report, shared by text and JSON.
 	Lint = Format{Thing: "lint", Major: 1, What: "core lint findings and performed checks (lint -json)", Older: "run gotogether lint again"}

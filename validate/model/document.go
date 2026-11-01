@@ -60,9 +60,13 @@ func (r *Report) Doc() *validate.Document {
 		if p.Found {
 			verdict = "reached"
 		}
-		possible := &validate.DocPossible{Found: p.Found, Impossible: p.Impossible, EvaluatorError: p.EvalErr}
+		goal := p.Goal
+		if goal.Kind == "" && p.Eval != nil {
+			goal = p.Eval.Goal
+		}
+		possible := &validate.DocPossible{Goal: possibleGoalDoc(goal), Found: p.Found, Impossible: p.Impossible, EvaluatorError: p.EvalErr}
 		if e := p.Eval; e != nil {
-			possible.Search = &validate.DocPossibleSearch{Found: e.Found, Complete: e.Complete, Cut: e.Cut, Nodes: e.Nodes, Depth: e.Depth, Path: slices.Clone(e.Path)}
+			possible.Search = &validate.DocPossibleSearch{Found: e.Found, Complete: e.Complete, Cut: e.Cut, Nodes: e.Nodes, Depth: e.Depth, Path: possiblePathDoc(e.Witness)}
 		}
 		d.Checks = append(d.Checks, validate.DocCheck{Name: p.Possible.Text(), Kind: "possible", Verdict: verdict, Detail: p.Verdict, Possible: possible})
 	}
@@ -148,4 +152,31 @@ func modelDocCheck(v Verdict, kind string) validate.DocCheck {
 		detail += "\n" + lassoText(v.Name, EventualVerdict{Name: v.Name, Lasso: v.Lasso})
 	}
 	return validate.DocCheck{Name: v.Name, Kind: kind, Verdict: verdict, Detail: detail, Bound: &validate.DocBound{Kind: v.Bound.Kind, States: v.Bound.States, Depth: v.Bound.Depth, Traces: v.Bound.Traces, Steps: v.Bound.Steps, Stopped: v.Bound.Stopped, Proves: v.Bound.Proves()}}
+}
+
+func possibleGoalDoc(g PossibleGoal) *validate.DocPossibleGoal {
+	if g.Kind == "" {
+		return nil // no resolved native goal; do not infer one from display text
+	}
+	d := &validate.DocPossibleGoal{Kind: g.Kind, Predicate: g.Predicate}
+	for _, s := range g.Steps {
+		d.Steps = append(d.Steps, validate.DocPossibleAction{Action: s.Action, Args: possibleArgsDoc(s.Args)})
+	}
+	return d
+}
+
+func possibleArgsDoc(args []PossibleArgument) []validate.DocPossibleArgument {
+	out := make([]validate.DocPossibleArgument, len(args))
+	for i, a := range args {
+		out[i] = validate.DocPossibleArgument{Name: a.Name, Value: a.Value}
+	}
+	return out
+}
+
+func possiblePathDoc(path []PossibleWitnessStep) []validate.DocPossibleStep {
+	out := make([]validate.DocPossibleStep, len(path))
+	for i, s := range path {
+		out[i] = validate.DocPossibleStep{Kind: s.Kind, Action: s.Action, Args: possibleArgsDoc(s.Args)}
+	}
+	return out
 }

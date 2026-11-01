@@ -179,7 +179,7 @@ errors. CLI rendering uses the same
 projection, so changing display text cannot change machine facts. Notes and
 details provide context rather than a second machine interface.
 
-These optional fields extend `gotogether.report/1` without an alternate legacy
+These optional fields extend `gotogether.report/2` without an alternate legacy
 representation or prose-parsing fallback. The TUI already consumes native graph
 results, so this change needs no navigation format migration. The adaptation's
 portable checker now consumes native scope and proof data; faithful and contrast
@@ -5160,7 +5160,7 @@ adjusting it is a field per format):
 | `gotogether.run/3` | validate's run manifest | the current only |
 | `gotogether.evidence/2` | qtest's evidence | the current only |
 | `gotogether.model/1` | a compiled model (gotogether compile, §64) | the current only |
-| `gotogether.report/1` | validate's and simulate's `-json` (validate.Document, §68) | the current only |
+| `gotogether.report/2` | validate's and simulate's `-json` (validate.Document, §68) | the current only |
 | `gotogether.nav/2` | navproto's Session and Node's `protocol` | the current only; unnamed protocols are refused |
 
 **None named is the current.** A binding with no format key, a log with
@@ -5672,7 +5672,7 @@ response's), so it reads the record's values where the model allows
 them. The invariants a non-conforming run leaves unchecked are one line.
 
 **A document for machines.** `validate -json` and `simulate -json`
-print `validate.Document`, `gotogether.report/1` in internal/formats'
+print `validate.Document`, `gotogether.report/2` in internal/formats'
 table: the verdict, exit status, reason and result line; inputs;
 validate's actors (each failure's record, `brief` line, `why`,
 `changes` and whole `state`, the text as printed), the passing
@@ -5685,7 +5685,7 @@ grepping the RESULT line. simulate's checks are read from the lines it
 prints (each "  <verdict> <name>: <detail>"), so its text and its
 document cannot disagree; a new kind of line must keep that shape. Its
 JSON Schema is generated from validate.Document as the binding's is from
-binding.Binding (schemas/gotogether.report-1.json, `schemas.Report`,
+binding.Binding (schemas/gotogether.report-2.json, `schemas.Report`,
 I36's generator reading json tags), and a filled document is checked
 against it.
 
@@ -6092,3 +6092,29 @@ rewrites handwritten model files. Native Quint typechecking and executable
 command witnesses test actual catalog vocabulary. This fixes generated draws,
 not arbitrary handwritten Quint parameters or lambda binders, and does not
 establish application rules.
+
+
+## 80. Reachability goals and execution witnesses are different facts
+
+Grist's generated command-outcome possibles are predicates over a model state:
+they ask whether arguments exist that would produce an outcome now. Reporting
+one as reached initially was mathematically correct but read as though the
+command had executed. The resolved native goal now records predicate text or an
+ordered sequence of action patterns, with only its supplied argument constraints.
+Human summaries say a predicate holds initially/after a path, or that an action
+sequence executed.
+
+A witness is separate: actual evaluator transitions retain identified actions
+and named arguments as exact Quint literals. An unattributed transition remains
+a model_step with no invented action or arguments. Display strings may abbreviate
+values; machine witnesses never reconstruct values from those strings. Goal
+metadata remains present when the evaluator is unsupported or only Quint finds
+a witness. Overall found and evaluator search.found stay distinct; bounds,
+completeness and impossible remain native evidence, not inferred from prose.
+
+Report/2 replaces string search.path entries with objects, with one current
+schema and no compatibility reader. Existing frozen SDK/model/driver pins in
+adoption trials remain unchanged; their current-CLI packaging checks consume
+report/2. The same native verdict wording reaches qtest model claims. There is
+no existing model-possibility TUI view to update. No arguments are hidden by
+heuristic name filtering; parameter-role metadata would be a separate design.

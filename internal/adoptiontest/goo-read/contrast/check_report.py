@@ -45,7 +45,7 @@ def native_steps(path, contrast=False, missing=False):
 
 
 def check(mode, report, status, steps=None):
-    require(report.get('format') == 'gotogether.report/1', 'wrong report format')
+    require(report.get('format') == 'gotogether.report/2', 'wrong report format')
     expected = {'faithful': 0, 'graph': 0, 'contrast': 1, 'missing': 2}[mode]
     require(type(status) is int and status == expected, f'{mode} process exit {status}, expected {expected}')
     require(type(report.get('exit')) is int and report.get('exit') == expected, 'report exit disagrees with the expected process result')

@@ -304,7 +304,7 @@ when it says more (grist's `<app>/<node>/<incarnation>`). Grep the id,
 then the logs and traces at that time and pod. `-v` adds the replay's
 step and the recorder's seq. The invariants a rejected step leaves
 unchecked are one line. For alerting and CI, `validate -json` prints
-the report as `gotogether.report/1` (each failure's `record`, `brief`,
+the report as `gotogether.report/2` (each failure's `record`, `brief`,
 `why`, `changes`, `state`); `-report junit=FILE` and `-report
 sarif=FILE` write JUnit and SARIF beside the text, and
 `GOTOGETHER_REPORT_DIR=dir` keeps every run's JSON (the Action's job

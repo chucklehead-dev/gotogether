@@ -2,7 +2,7 @@
 // per format at its current major (internal/formats' table): a binding
 // file (gotogether.binding/2) and a span conversion rule file
 // (gotogether.convert/1); and of the report validate -json and simulate
-// -json print (gotogether.report/1, validate.Document), and lint reports
+// -json print (gotogether.report/2, validate.Document), and lint reports
 // (gotogether.lint/1, lint.Report), for a consumer
 // that checks what it reads. Editors validate a file against its schema as
 // it is written, given its URL (BindingURL, ConvertURL) in a first-line
@@ -18,9 +18,9 @@
 // The schemas are generated from the Go types that read the files
 // (binding.Binding, convert.Rules), their doc comments as descriptions:
 // `GOTOGETHER_UPDATE_SCHEMA=1 go test ./schemas/` writes them anew, and
-// the test fails while a checked-in one differs. A new major of a format
-// is a new file beside the old one, which stays for the files written in
-// it.
+// the test fails while a checked-in one differs. A breaking report change
+// replaces its schema with the new current major; older reports must be
+// regenerated.
 package schemas
 
 import (
@@ -41,7 +41,7 @@ import (
 const (
 	BindingURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.binding-2.json"
 	ConvertURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.convert-1.json"
-	ReportURL  = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.report-1.json"
+	ReportURL  = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.report-2.json"
 	LintURL    = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.lint-1.json"
 )
 
@@ -51,7 +51,7 @@ var (
 	binding []byte
 	//go:embed gotogether.convert-1.json
 	convert []byte
-	//go:embed gotogether.report-1.json
+	//go:embed gotogether.report-2.json
 	report []byte
 	//go:embed gotogether.lint-1.json
 	lint []byte
@@ -65,7 +65,7 @@ func Binding() []byte { return slices.Clone(binding) }
 func Convert() []byte { return slices.Clone(convert) }
 
 // Report is a command's machine-readable report's schema
-// (gotogether.report/1: validate -json, simulate -json), as JSON.
+// (gotogether.report/2: validate -json, simulate -json), as JSON.
 func Report() []byte { return slices.Clone(report) }
 
 // Lint is the nonwriting lint report schema (gotogether.lint/1), as JSON.

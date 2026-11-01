@@ -64,7 +64,7 @@ and whether the invariants hold.
 A record is named once, where it was read (`day.jsonl:12`, `span …`, else
 `<recorder>#<seq>`), its wall time, process and trace on its `record:`
 line; `-v` adds the replay's step and the seq. `validate -json`
-(`gotogether.report/1`), `-report junit=F`, `-report sarif=F` are for
+(`gotogether.report/2`), `-report junit=F`, `-report sarif=F` are for
 machines and CI.
 
 Every verdict: [../gotogether-workflow/references/verdicts.md](../gotogether-workflow/references/verdicts.md).

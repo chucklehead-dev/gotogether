@@ -12,10 +12,12 @@ rehearsal, not independent-maintainer adoption or a newly discovered bug.
 With Go matching go.mod, Python3 and Quint available:
 
 ```sh
-GOBIN="$PWD/bin" GOWORK=off go install github.com/chucklehead-dev/gotogether/cmd/gotogether@v0.0.0-20261030211344-50b59b7cdb62
+mkdir -p "$PWD/bin"
+go build -o "$PWD/bin/gotogether" ./cmd/gotogether
 PATH="$PWD/bin:$PATH" internal/adoptiontest/http-sql/reproduce.sh
 ```
 
+The packaging checker consumes current report/2; the frozen SDK pin is unchanged.
 The script enforces exact exit codes and structured verdicts for faithful
 completion, an unfinished prefix, missing observations, a double-debit source
 contrast, replay and action shrinking. Shrinking launches fresh HTTP/SQLite runs

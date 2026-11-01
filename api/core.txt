@@ -2293,7 +2293,7 @@ var MutationOps = []string{"drop", "dup", "swap", "corrupt", "retime", "reactor"
 const BindingURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.binding-2.json"
 const ConvertURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.convert-1.json"
 const LintURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.lint-1.json"
-const ReportURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.report-1.json"
+const ReportURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.report-2.json"
 func Binding() []byte
 func Check(schema, data []byte) ([]Problem, error)
 func Convert() []byte
@@ -2335,7 +2335,7 @@ const FateUndecided = "undecided"
 const ManifestFormat = "gotogether.run/3"
 const NotEvaluated Verdict = "n/a"
 const Pass Verdict = "pass"
-const ReportFormat = "gotogether.report/1"
+const ReportFormat = "gotogether.report/2"
 const Uncollected Cause = "uncollected"
 func CacheDir() string
 func Cached(bindingPath string, o Options) (*Checker, error)
@@ -2516,17 +2516,32 @@ type DocPartition struct
     field Of int `json:"of"`
     field Steps int `json:"steps"`
 type DocPossible struct
+    field Goal *DocPossibleGoal `json:"goal,omitempty"`
     field Found bool `json:"found"`
     field Impossible bool `json:"impossible"`
     field Search *DocPossibleSearch `json:"search,omitempty"`
     field EvaluatorError string `json:"evaluatorError,omitempty"`
+type DocPossibleAction struct
+    field Action string `json:"action"`
+    field Args []DocPossibleArgument `json:"args,omitempty"`
+type DocPossibleArgument struct
+    field Name string `json:"name"`
+    field Value string `json:"value"`
+type DocPossibleGoal struct
+    field Kind string `json:"kind"`
+    field Predicate string `json:"predicate,omitempty"`
+    field Steps []DocPossibleAction `json:"steps,omitempty"`
 type DocPossibleSearch struct
     field Found bool `json:"found"`
     field Complete bool `json:"complete"`
     field Cut string `json:"cut,omitempty"`
     field Nodes int `json:"nodes"`
     field Depth int `json:"depth"`
-    field Path []string `json:"path,omitempty"`
+    field Path []DocPossibleStep `json:"path,omitempty"`
+type DocPossibleStep struct
+    field Kind string `json:"kind"`
+    field Action string `json:"action,omitempty"`
+    field Args []DocPossibleArgument `json:"args,omitempty"`
 type DocRecord struct
     field Ambiguous bool `json:"ambiguous,omitempty"`
     field ID string `json:"id"`
@@ -3058,8 +3073,20 @@ type InvariantVerdict struct
     field Checked int
     field Unchecked int
     method (InvariantVerdict) Held() bool
+type PossibleAction struct
+    field Action string
+    field Args []PossibleArgument
+type PossibleArgument struct
+    field Name string
+    field Value string
+type PossibleGoal struct
+    field Kind string
+    field Predicate string
+    field Steps []PossibleAction
 type PossibleResult struct
     field Possible binding.Possible
+    field Goal PossibleGoal
+    field Witness []PossibleWitnessStep
     field Found bool
     field Path []string
     field Complete bool
@@ -3072,6 +3099,7 @@ type PossibleSearch struct
     field States int
     field Depth int
 type PossibleVerdict struct
+    field Goal PossibleGoal
     field Possible binding.Possible
     field Found bool
     field Impossible bool
@@ -3080,6 +3108,10 @@ type PossibleVerdict struct
     field Quint string
     field Verdict string
     field Line string
+type PossibleWitnessStep struct
+    field Kind string
+    field Action string
+    field Args []PossibleArgument
 type Report struct
     field Binding string
     field Skipped string
