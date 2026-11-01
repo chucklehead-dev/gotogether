@@ -122,22 +122,7 @@ func (s Summary) String() string {
 	if s.Reason != "" {
 		fmt.Fprintf(&b, "  reason: %s\n", s.Reason)
 	}
-	counts := s.Counts()
-	if counts.Partitions > 0 || counts.Judgments != counts.Actors {
-		actorLabel := "source actor"
-		if counts.UnknownSourceJudgments > 0 {
-			actorLabel = "known source actor"
-		}
-		fmt.Fprintf(&b, "  scope: %s, %s, %s total\n", scopeQuantity(counts.Actors, actorLabel), scopeQuantity(counts.Partitions, "partition judgment"), scopeQuantity(counts.Judgments, "judgment"))
-		if counts.UnknownSourceJudgments > 0 {
-			fmt.Fprintf(&b, "  source identities unavailable for %s\n", scopeQuantity(counts.UnknownSourceJudgments, "judgment"))
-		}
-	}
-	for _, instance := range s.PartitionInstances {
-		for _, line := range strings.Split(instance.String(), "\n") {
-			fmt.Fprintf(&b, "  %s\n", line)
-		}
-	}
+	b.WriteString(partitionScopeText(s.Actors, s.PartitionInstances))
 	visible := []Actor{}
 	folded := 0
 	for _, a := range s.Actors {

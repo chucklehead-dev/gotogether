@@ -139,6 +139,12 @@ func (c Composition) String() string {
 		if v.Judgment == nil {
 			return
 		}
+		if scope := partitionScopeText(v.Judgment.Actors, v.Judgment.PartitionInstances); scope != "" {
+			fmt.Fprintf(&b, "    component %s partition scope (instance IDs local to this history):\n", v.Target)
+			for _, line := range strings.Split(strings.TrimSuffix(scope, "\n"), "\n") {
+				fmt.Fprintf(&b, "    %s\n", line)
+			}
+		}
 		for _, a := range v.Judgment.Actors {
 			if a.Choices != nil {
 				fmt.Fprintf(&b, "    actor %s: %s\n", a.Actor, a.Choices.String())
@@ -152,6 +158,9 @@ func (c Composition) String() string {
 		}
 	}
 	for _, v := range c.Local {
+		details(v)
+	}
+	for _, v := range c.Peers {
 		details(v)
 	}
 	details(c.Protocol.Component)

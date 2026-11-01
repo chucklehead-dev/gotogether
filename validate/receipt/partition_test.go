@@ -121,3 +121,22 @@ func TestPartitionLabelsDoNotInventSourceIdentities(t *testing.T) {
 		t.Fatalf("missing identity uncertainty: %s", text)
 	}
 }
+
+func TestCompositionRendersHistoryLocalPartitionScopes(t *testing.T) {
+	history := func(actor string) *History {
+		return &History{Status: Pass, Scope: "collected_history", OtherExecutions: NotChecked,
+			Actors:             []Actor{{Actor: actor + " acct=a", SourceActor: actor, Partition: "acct=a", PartitionInfo: &PartitionInfo{Key: "acct", Value: "a", Instance: 1}, Status: Pass}},
+			PartitionInstances: []PartitionInstance{{ID: 1, SourceActor: actor, Key: "acct", Factoring: "checked_on_evaluated_prefixes", OriginalConstants: map[string]string{"ACCTS": `Set("a", "b")`}, ReplaySubstitutions: []ConstantSubstitution{{Name: "ACCTS", Value: `Set("a")`, Basis: "unread_by_evaluated_prefixes"}}}},
+		}
+	}
+	c := Composition{Local: []Component{{Target: "ledger", Status: Pass, Judgment: history("ledger")}}, Peers: []Component{{Target: "peer", Status: Pass, Judgment: history("peer")}}, Protocol: Protocol{Component: Component{Target: "protocol", Status: Pass, Judgment: history("protocol")}}}
+	text := c.String()
+	for _, target := range []string{"ledger", "peer", "protocol"} {
+		if !strings.Contains(text, "component "+target+" partition scope (instance IDs local to this history)") {
+			t.Fatalf("missing component context %s: %s", target, text)
+		}
+	}
+	if strings.Count(text, "original whole-history instance:") != 3 || strings.Count(text, "effective replay override:") != 3 {
+		t.Fatalf("lost component recipe: %s", text)
+	}
+}
