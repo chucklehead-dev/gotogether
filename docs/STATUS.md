@@ -7,7 +7,7 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Source-capture follow-up (current branch): source judgments now retain private
+Source-capture follow-up (PR #34, current branch): source judgments now retain private
 model identities and conservative cache dependencies; changed model, binding or
 conversion rules are refused before recording. Typed ITF schema inference and
 empty-history manifests obey the same stability checks. Definition-string file
@@ -16,7 +16,7 @@ documented in DESIGN §73. Vacuity witness predicates now use an internal
 diagnostic checker bracketed by the original source guards; they cannot inherit
 the original binding's recorded identity or fall back from compiled-only mode.
 
-Compiled-manifest follow-up (PR #33): gotogether.run/3 records a hashed
+Compiled-manifest follow-up (merged PR #33): gotogether.run/3 records a hashed
 compiled artifact as the evaluator-only replay dependency. Bundle preserves its
 bytes/layout, binding, inputs and exact source-availability coverage, including
 absent-source provenance paths; relocated replay needs no Quint/Node probes.
