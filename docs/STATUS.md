@@ -7,7 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Large-count rehearsal (current branch): a second real-library contract adds
+Collection conversion correction (current branch): removing redundant argument
+mappings from the large-count trial exposed a core default-path defect. Flat
+collection helpers decoded through float64 and converted through int64, changing
+recorded operations before Quint saw them. Defaults and explicit helpers now
+preserve arbitrary integer literals, reject fractional/exponent counts, and
+retain strict single-value JSON input. Regression controls and the disposable
+no-mapping rehearsal preserve exact values through ITF and relocated replay.
+The original frozen model, binding, driver and dependency pins are untouched.
+
+Large-count rehearsal (merged PR #35): a second real-library contract adds
 unbounded arithmetic and exact-value handoff evidence without a core format or
 API change. The Go evaluator and Quint Rust backend retain signed-int64 limits;
 Quint/TypeScript is explicit throughout the trial. Frozen drivers retain raw
@@ -41,7 +50,7 @@ checks. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
-format has one current version; all published core pins agree at f8a939a15bcf.
+format has one current version; all published core pins agree at 5b715d5cd0a1.
 
 Captured-transition assertion follow-up (merged PR #32): qtest.TransitionsConform
 judges the existing native conformance facet for all judged actors or required
@@ -517,7 +526,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Independent-maintainer use or a concrete new contract blocker | S–M | the counted-values arithmetic and exact-value handoff gate now pass; use real authoring, evidence or resolution friction to choose a core improvement, rather than expanding adjacent numeric fixtures |
+| 1 | Independent-maintainer use or a concrete new contract blocker | S–M | the arithmetic handoff and omitted-mapping default path now have separate controls; use real authoring, evidence or resolution friction to choose a core improvement, rather than expanding adjacent numeric fixtures |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 

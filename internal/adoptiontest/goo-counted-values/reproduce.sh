@@ -43,6 +43,19 @@ cp faithful.jsonl faithful-results.json "$work/faithful-bundle/"
 report faithful 0 gate-replay "$project/faithful.jsonl" "$project/faithful-results.json" -itf -replay "$work/faithful-bundle/run.json" -dir "$work/gate-replay"
 go run ./cmd/inspect-itf -trace "$work/gate-replay/check-1/observed_counted_allTest.itf.json" -results faithful-results.json > "$work/reports/replay-itf.json"
 cmp "$work/reports/faithful-itf.json" "$work/reports/replay-itf.json"
+# Exercise the simpler default argument workflow without changing the freeze.
+python3 - <<'PYDEFAULTS'
+from pathlib import Path
+text = Path('counted.binding.yaml').read_text()
+assert text.count('    args:\n') == 1 and text.count('    expect:') == 1
+start, end = text.index('    args:\n'), text.index('    expect:')
+Path('counted-defaults.binding.yaml').write_text(text[:start] + text[end:])
+PYDEFAULTS
+report faithful 0 defaults "$project/faithful.jsonl" "$project/faithful-results.json" -itf -binding counted-defaults.binding.yaml -dir "$work/defaults-check" -manifest defaults-run.json faithful.jsonl
+go run ./cmd/inspect-itf -trace "$work/defaults-check/check-1/observed_counted_allTest.itf.json" -results faithful-results.json > "$work/reports/defaults-itf.json"
+cmp "$work/reports/faithful-itf.json" "$work/reports/defaults-itf.json"
+gotogether bundle -out "$work/defaults-bundle" defaults-run.json
+cp faithful.jsonl faithful-results.json "$work/defaults-bundle/"
 dependency=$(go list -m -f '{{.Dir}}' github.com/casselc/goo)
 contrast_root=$(mktemp -d "${TMPDIR:-/tmp}/counted-contrast-XXXXXXXX")
 trap 'python3 -c "import shutil,sys; shutil.rmtree(sys.argv[1])" "$contrast_root"' EXIT
@@ -83,5 +96,8 @@ for mode in faithful contrast; do
   if [ "$mode" = contrast ]; then expected=1; fi
   report "$mode" "$expected" "$mode-relocated" "$work/$mode-bundle/$mode.jsonl" "$work/$mode-bundle/$mode-results.json" -replay "$work/$mode-bundle/run.json" -dir "$work/$mode-relocated"
 done
+report faithful 0 defaults-relocated "$work/defaults-bundle/faithful.jsonl" "$work/defaults-bundle/faithful-results.json" -itf -replay "$work/defaults-bundle/run.json" -dir "$work/defaults-relocated"
+(cd "$work/project-hidden" && go run ./cmd/inspect-itf -trace "$work/defaults-relocated/check-1/observed_counted_allTest.itf.json" -results "$work/defaults-bundle/faithful-results.json") > "$work/reports/defaults-replay-itf.json"
+cmp "$work/reports/defaults-itf.json" "$work/reports/defaults-replay-itf.json"
 (cd "$work/project-hidden" && sha256sum -c FREEZE.sha256)
 printf 'Counted-values rehearsal passed; fresh evidence: %s\n' "$work"

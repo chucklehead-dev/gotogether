@@ -305,6 +305,14 @@ overlapping selections fail before output is written. `-system` reads these
 choices from its binding and refuses property-selection flags.
 
 
+When recorded argument names match the model, omit their binding mappings:
+collection parameters convert their recorded JSON automatically. These defaults
+and `toList`, `toSet`, `toMap` preserve integer literals exactly. Fractions and
+exponent notation need an explicit integer unit at recording time; conversion
+refuses them with the parameter and element path. Evaluator/backend numeric
+limits still apply. Use typed `toQuint` for structured values and observation
+expressions.
+
 Bindings and span conversion rules have JSON Schemas (`schemas/`,
 `gotogether.binding-2.json` and `gotogether.convert-1.json`, one per
 format at its current major): an editor with the YAML language server validates a
