@@ -478,6 +478,9 @@ type RunRecord struct {
 	// ones were converted with ("": none).
 	Inputs  []RunInput
 	Convert string
+	// ConvertSHA256 is the digest captured when conversion rules were parsed.
+	// Empty leaves capture to the low-level caller.
+	ConvertSHA256 string
 	// Artifacts are the driver's records of the run, by Name and Path.
 	Artifacts []Artifact
 }
@@ -544,6 +547,12 @@ func NewManifest(r RunRecord) (*Manifest, error) {
 			return nil, err
 		}
 	}
+	if r.ConvertSHA256 != "" && (m.Model.Convert == nil || m.Model.Convert.SHA256 != r.ConvertSHA256) {
+		return nil, fmt.Errorf("manifest: conversion rules %s changed since they were loaded: restore the captured rules or validate anew", r.Convert)
+	}
+	if err := m.matchSourceResults(r.Results, r.Inputs); err != nil {
+		return nil, err
+	}
 	for _, in := range r.Inputs {
 		if err := m.addInput(in.Path, in.Format, in.Steps, in.SHA256); err != nil {
 			return nil, err
@@ -582,6 +591,9 @@ func (m *Manifest) setBinding(b *binding.Binding) error {
 	var err error
 	if m.Model.Binding, err = hashed(b.Path); err != nil {
 		return err
+	}
+	if b.SHA256() != "" && m.Model.Binding.SHA256 != b.SHA256() {
+		return fmt.Errorf("manifest: binding %s changed since it was loaded: restore the captured binding or validate anew", b.Path)
 	}
 	if m.Model.Spec, m.Model.Imports, err = specFiles(b.SpecPath()); err != nil {
 		return err

@@ -39,10 +39,38 @@ type ITFOptions struct {
 //     by state;
 //
 // and it checks the invariants in every state.
-func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error) {
+func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (result *Result, resultErr error) {
+	captured, err := ITFModel(tr, opt)
+	if err != nil {
+		return nil, err
+	}
+	files, ok := specFilesAll(captured.Spec.Path)
+	if !ok {
+		return nil, fmt.Errorf("capture model sources %s: an imported source cannot be read", captured.Spec.Path)
+	}
+	defer func() {
+		if resultErr != nil {
+			return
+		}
+		if err := checkSourceFiles(files, captured.Spec.Path); err != nil {
+			result, resultErr = nil, err
+			return
+		}
+		if err := verifyCapturedModel(captured); err != nil {
+			result, resultErr = nil, err
+			return
+		}
+		if result != nil {
+			result.sourceModel = cloneRunModel(captured)
+			result.sourceFiles = append([]File{}, files...)
+		}
+	}()
 	meta, spec, module, defs, invs, err := itfInstance(tr, opt)
 	if err != nil {
 		return nil, err
+	}
+	if len(importPaths(defs)) > 0 {
+		return nil, fmt.Errorf("ITF model %s imports files from defs, whose dependencies cannot be captured: move file imports into the model", spec)
 	}
 	o, err := opt.Options.resolve()
 	if err == nil && o.Dir != "" { // a directory of its own, as a check's (dirFor)
@@ -236,6 +264,9 @@ func ITFModel(tr *itf.Trace, opt ITFOptions) (*RunModel, error) {
 	if b := opt.Binding; b != nil && b.Path != "" {
 		if m.Binding, err = hashed(b.Path); err != nil {
 			return nil, err
+		}
+		if b.SHA256() != "" && m.Binding.SHA256 != b.SHA256() {
+			return nil, fmt.Errorf("binding %s changed since it was loaded: restore it or validate anew", b.Path)
 		}
 	}
 	if m.Spec, m.Imports, err = specFiles(spec); err != nil {

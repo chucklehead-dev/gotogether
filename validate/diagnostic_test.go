@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -245,14 +247,11 @@ func TestDiagnosticOutputLimits(t *testing.T) {
 
 func TestDiagnosticAnnotationDoesNotSelectCheck(t *testing.T) {
 	skip.Quint(t)
-	c, err := NewChecker("testdata/diagnostic/binding.yaml", Options{Dir: t.TempDir()})
+	c, err := checkerFixtureVariant(t, "testdata/diagnostic/binding.yaml", map[string]any{"eventually": nil})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer c.Close()
-	b := *c.Binding
-	b.Eventually = nil
-	c.Binding = &b
 	if c.Model.Diagnostics["complete"] != "outstanding" {
 		t.Fatal("inactive annotation disappeared")
 	}
@@ -344,4 +343,39 @@ func TestDiagnosticEvaluationFailureDoesNotChangeVerdict(t *testing.T) {
 			}
 		})
 	}
+}
+
+// checkerFixtureVariant constructs the variant before source identity is frozen.
+// Keeping the model path absolute preserves its real transitive import layout.
+func checkerFixtureVariant(t *testing.T, path string, fields map[string]any) (*Checker, error) {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	spec, err := filepath.Abs(filepath.Join(filepath.Dir(path), doc["spec"].(string)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc["spec"] = spec
+	for key, value := range fields {
+		if value == nil {
+			delete(doc, key)
+		} else {
+			doc[key] = value
+		}
+	}
+	raw, err = yaml.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	variant := filepath.Join(t.TempDir(), "binding.yaml")
+	if err := os.WriteFile(variant, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	return NewChecker(variant, Options{Dir: t.TempDir()})
 }

@@ -94,12 +94,11 @@ func TestDiagnosticEvidenceProjectedOriginAndExactSequence(t *testing.T) {
 
 func TestDiagnosticEvidenceTerminalAndObservedPrefix(t *testing.T) {
 	skip.Quint(t)
-	c, err := NewChecker("testdata/diagnostic/binding.yaml", Options{Dir: t.TempDir()})
+	c, err := checkerFixtureVariant(t, "testdata/diagnostic/binding.yaml", map[string]any{"diagnosticEvidence": map[string]map[string]binding.EvidenceRule{"outstanding": {"cancellation": {Action: "request", Match: map[string]string{"id": "intent"}}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer c.Close()
-	c.Binding.DiagnosticEvidence = map[string]map[string]binding.EvidenceRule{"outstanding": {"cancellation": {Action: "request", Match: map[string]string{"id": "intent"}}}}
 	steps := diagnosticSteps(t, true)
 	report, err := c.Check(t.Context(), steps)
 	if err != nil {

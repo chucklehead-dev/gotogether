@@ -5951,3 +5951,36 @@ does not establish full conformance for an outcome already in flight when the
 checkpoint disappears. That completion boundary needs its own small contract
 fixture before expanding incident-conformance claims. The model is not loosened
 to hide that distinction.
+
+
+## 73. Source judgment identity
+
+A judgment must not be attributed to files reread after it completed. Binding
+and conversion parsers retain the SHA256 of their exact input bytes. Source
+checkers capture the conservative source inventory before loading and verify it
+before and after judgment; model/evaluator caches use the same inventory and
+verify it before publishing external tool output. Results retain a private copy
+of the effective model instance and source identities. Manifest creation refuses
+changed files or effective instances. ITF-only validation captures its model at
+validation time, rather than reconstructing provenance during recording.
+
+These guards detect changes observed at the boundaries. External Quint still
+reads live source files, so an edit restored during tool execution can evade
+pre/post checks. This is not an atomic cross-file snapshot. Stronger guarantees
+would require an immutable source tree shared by typechecking, compilation and
+ITF execution. Compiled artifacts remain the existing evaluator-only workflow.
+Low-level manually constructed records/results remain caller-provided evidence;
+optional expected fingerprints allow callers to enforce their own capture.
+File imports in binding or ITF definition strings are refused with guidance to
+move them into model files. Typed ITF inference retains a `SourceGuard` through
+decoding and validation, preventing schema and judgment from using different
+observed source inventories. Initial and checker binding loads must agree.
+No manifest format change or compatibility path is needed.
+
+
+Vacuity witness probes generate temporary predicates, so they use an explicit
+internal diagnostic checker rather than modifying a loaded source checker.
+Only witness booleans escape; the original source inventory is checked before
+and after the entire probe, including early returns. Derived reports are not
+attributed to the original binding or recorded. Compiled-only checks cannot
+compile these extra predicates and return `ErrNeedsQuint` without a tool probe.

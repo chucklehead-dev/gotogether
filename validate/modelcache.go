@@ -25,16 +25,23 @@ var models memo.Map[string, *binding.Model]
 // loadModel is binding.LoadModel through the content cache: the same
 // files give the same model, a changed one (or a changed import) another.
 func loadModel(quint, spec, module string) (*binding.Model, error) {
-	f, imports, err := specFiles(spec)
-	if err != nil {
-		return binding.LoadModel(quint, spec, module) // its error says what is wrong
+	files, ok := specFilesAll(spec)
+	if !ok {
+		return binding.LoadModel(quint, spec, module)
 	}
 	var key strings.Builder
-	fmt.Fprintf(&key, "%s|%s|%s|%s", quint, module, f.Path, f.SHA256)
-	for _, i := range imports {
-		fmt.Fprintf(&key, "|%s=%s", i.Path, i.SHA256)
+	fmt.Fprintf(&key, "%s|%s", quint, module)
+	for _, f := range files {
+		fmt.Fprintf(&key, "|%s=%s", f.Path, f.SHA256)
 	}
-	return models.Do(key.String(), func() (*binding.Model, error) { return typecheck(quint, spec, module) })
+
+	return models.Do(key.String(), func() (*binding.Model, error) {
+		m, err := typecheck(quint, spec, module)
+		if err == nil {
+			err = checkSourceFiles(files, spec)
+		}
+		return m, err
+	})
 }
 
 // typecheck is binding.LoadModel through the cache across processes
@@ -78,7 +85,11 @@ func typecheck(quint, spec, module string) (*binding.Model, error) {
 	if err != nil {
 		return nil, err
 	}
-	cachePut("typecheck", key, data)
+	if current, valid := cacheKey(quint, "typecheck", spec); valid && current == key {
+		cachePut("typecheck", key, data)
+	} else {
+		return nil, fmt.Errorf("model source %s changed during typecheck: validate anew", spec)
+	}
 	return m, nil
 }
 

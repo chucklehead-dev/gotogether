@@ -7,6 +7,8 @@ package binding
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -152,7 +154,8 @@ type Binding struct {
 	Dir string `yaml:"-"` // directory of the binding file
 	// Path is the binding file, absolute (Load): what a run's manifest
 	// hashes (validate.Manifest).
-	Path string `yaml:"-"`
+	Path   string `yaml:"-"`
+	sha256 string
 }
 
 // A Within is a bounded-response obligation (Binding.Within): after After
@@ -285,6 +288,8 @@ func Load(path string) (*Binding, error) {
 	}
 	abs, _ := filepath.Abs(path)
 	bd.Dir, bd.Path = filepath.Dir(abs), abs
+	digest := sha256.Sum256(b)
+	bd.sha256 = hex.EncodeToString(digest[:])
 	if bd.Spec == "" || bd.Module == "" {
 		return nil, fmt.Errorf("%s: spec and module are required", path)
 	}
@@ -1052,3 +1057,6 @@ func (b *Binding) UsedFields(m *Model) map[string][]string {
 	}
 	return out
 }
+
+// SHA256 is the digest of the exact bytes parsed by Load. It is empty for a binding built in memory.
+func (b *Binding) SHA256() string { return b.sha256 }

@@ -56,6 +56,22 @@ func chunkSize(total, steps, cpus int) int {
 // re-checked one trace at a time.
 func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProcess int) (reports []*Report, errs []error) {
 	reports, errs = make([]*Report, len(runs)), make([]error, len(runs))
+	if err := c.verifySource(); err != nil {
+		for i := range errs {
+			errs[i] = err
+		}
+		return
+	}
+	defer func() {
+		err := c.verifySource()
+		for i, rep := range reports {
+			if err != nil {
+				reports[i], errs[i] = nil, err
+			} else if errs[i] == nil {
+				c.captureReport(rep)
+			}
+		}
+	}()
 	defer func() {
 		for i, rep := range reports {
 			if errs[i] == nil {

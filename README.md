@@ -486,6 +486,11 @@ gotogether nav -run 'TestShop#2:seed=17' -at fail                               
 # a manifest records the driver's args, absolute paths and the failing step's ref verbatim: sanitize a log before sharing it (steps -pseudonymize)
 ```
 
+Manifest recording refuses input, binding, conversion-rule or model files that
+changed after they were read or judged. Revalidate after an edit. Source checks
+also guard warm caches; files must remain stable while external Quint runs.
+These checks do not provide an atomic cross-file snapshot.
+
 Finite internal model choices in ordinary complete traces, including choosing
 initial states, use whole-path search. Quint confirms the original initializer
 and action witness. `-choice-limit` defaults to 20,000 expanded states, counting

@@ -7,7 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Compiled-manifest follow-up (current branch): gotogether.run/3 records a hashed
+Source-capture follow-up (PR #34, current branch): source judgments now retain private
+model identities and conservative cache dependencies; changed model, binding or
+conversion rules are refused before recording. Typed ITF schema inference and
+empty-history manifests obey the same stability checks. Definition-string file
+imports must move into model files. The bounded external-tool guarantee is
+documented in DESIGN §73. Vacuity witness predicates now use an internal
+diagnostic checker bracketed by the original source guards; they cannot inherit
+the original binding's recorded identity or fall back from compiled-only mode.
+
+Compiled-manifest follow-up (merged PR #33): gotogether.run/3 records a hashed
 compiled artifact as the evaluator-only replay dependency. Bundle preserves its
 bytes/layout, binding, inputs and exact source-availability coverage, including
 absent-source provenance paths; relocated replay needs no Quint/Node probes.
@@ -15,12 +24,15 @@ Actual compiled results retain their loaded digest and coverage so manifest
 creation refuses changed artifacts or a different judging recipe. High-level
 input readers also retain exact byte fingerprints and refuse changed/uncaptured
 inputs before recording, across native, converted and typed ITF paths. Source-mode
-model and conversion-rule snapshots remain a separate capture boundary; this
-slice does not claim an atomic snapshot of every executable dependency. Literal
+model and conversion-rule capture now guard exact parsed binding/rule bytes and
+source inventories at loading, judgment and manifest creation, including warm
+caches and ITF-only inputs. External Quint reads live files: pre/post guards
+do not prove atomic cross-file snapshots or detect mutations restored between
+checks. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
-format has one current version; all published core pins agree at 7c581c4fe7ed.
+format has one current version; all published core pins agree at c5734a692c96.
 
 Captured-transition assertion follow-up (merged PR #32): qtest.TransitionsConform
 judges the existing native conformance facet for all judged actors or required
@@ -496,9 +508,23 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Complete source-mode model/rule capture identity | S–M | actual input fingerprints and compiled artifact/coverage are anchored; inspect and anchor the remaining source binding/spec and conversion-rule reads before attributing results to later file hashes; preserve low-level caller-trust scope without claiming an atomic cross-file snapshot |
+| 1 | Goo counted-values large-integer arithmetic rehearsal | S–M | existing small-count Hegel tests do not reach valid counts above 2^53 or overflow of the sum of valid uint64 groups; first prove exact native integer round trips, then freeze an independent arithmetic model and real executor driver before a wrapping-addition contrast; fix at most one demonstrated toolkit blocker; agent-assisted, not independent adoption |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
+
+The bounded trial is grounded in Goo's [counted-values contract](https://github.com/casselc/goo/blob/0659a4b20fb7fe83bbfd32a194ceb9a7d0c339a9/docs/COUNTED_VALUES.md)
+and `exploration.Source.FetchCountedValues`, using its existing HTTP client seam.
+Its Hegel reference already checks ordinary semantics with 140 generated facts;
+existing tests must not be credited as missing coverage. The new cases are exact
+2^53+1, MaxUint64, and a group sum of MaxUint64+1 against total zero. Public
+counts are decimal strings; capture raw strings and `json.Number` integer values,
+never float64. Use an independent unbounded Quint sum (`Eval: "quint"`): the Go
+evaluator's int64 boundary is documented, not a newly demonstrated decoder bug.
+Prove native JSON/ITF/replay preservation before any contrast credit. Only then
+freeze and replace big.Int addition with wrapping uint64 addition in an isolated
+source contrast; expect changed_between_reads versus erroneous no_data.
+This is a test gap and usability trial, not evidence of a current source defect.
+Keep SQL, live ClickHouse, UI ownership, concurrency and performance outside it.
 
 Do not start all tracks at once. Worker completion and the bounded HTTP/SQLite
 rehearsal are merged in PR #9; finite pinned choices in PR #10, structured lint

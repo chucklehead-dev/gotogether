@@ -114,20 +114,40 @@ func evaluatorOf(c *Checker, make func(path string) (*binding.EvalModule, error)
 	if err != nil {
 		return &evaluator{err: err}
 	}
-	src, err := os.ReadFile(c.Binding.SpecPath())
-	if err != nil {
-		return &evaluator{err: err}
+	files, ok := specFilesAll(c.Binding.SpecPath())
+	if !ok {
+		return &evaluator{err: fmt.Errorf("cannot capture model sources %s", c.Binding.SpecPath())}
 	}
 	h := sha256.New()
-	fmt.Fprintf(h, "%s\x00%s\x00%s", c.Options.Quint, em.Text, src)
+	fmt.Fprintf(h, "%s\x00%s", c.Options.Quint, em.Text)
+	for _, f := range files {
+		fmt.Fprintf(h, "\x00%s=%s", f.Path, f.SHA256)
+	}
+
 	key := hex.EncodeToString(h.Sum(nil))[:16]
-	return evaluators.Once(key, func() *evaluator { return compileEval(c, make, filepath.Join(dir, key)) })
+	e, _ := evaluators.Do(key, func() (*evaluator, error) {
+		e := compileEval(c, make, filepath.Join(dir, key))
+		if err := checkSourceFiles(files, c.Binding.SpecPath()); err != nil {
+			return &evaluator{err: err}, err
+		}
+		return e, e.err
+	})
+	return e
 }
 
 // compileEval writes the module make writes in dir and compiles it with
 // quint: its stdout to a file, since --out writes the modules
 // unflattened, and a pipe loses what quint has not flushed when it exits.
-func compileEval(c *Checker, make func(path string) (*binding.EvalModule, error), dir string) *evaluator {
+func compileEval(c *Checker, make func(path string) (*binding.EvalModule, error), dir string) (result *evaluator) {
+	files, ok := specFilesAll(c.Binding.SpecPath())
+	if !ok {
+		return &evaluator{err: fmt.Errorf("cannot capture model sources %s", c.Binding.SpecPath())}
+	}
+	defer func() {
+		if err := checkSourceFiles(files, c.Binding.SpecPath()); err != nil {
+			result = &evaluator{err: err}
+		}
+	}()
 	// the module imports the model relative to where it is written: write
 	// it at the same depth
 	em, err := make(filepath.Join(dir, "eval.qnt"))
@@ -198,7 +218,11 @@ func compileEval(c *Checker, make func(path string) (*binding.EvalModule, error)
 		return &evaluator{err: err}
 	}
 	if cached {
-		cachePut("compile", key, data)
+		if current, valid := cacheKey(c.Options.Quint, "compile", c.Binding.SpecPath(), "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, em.Text); valid && current == key {
+			cachePut("compile", key, data)
+		} else {
+			return &evaluator{err: fmt.Errorf("model source %s changed during compile: validate anew", c.Binding.SpecPath())}
+		}
 	}
 	return &evaluator{em: em, m: m}
 }

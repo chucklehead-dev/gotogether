@@ -84,31 +84,13 @@ func cacheKey(quint, kind, spec string, args ...string) (string, bool) {
 // by path: the spec, its imports (transitively), and every .qnt file in
 // their directories; false if an import cannot be read.
 func specFilesAll(spec string) ([]File, bool) {
-	f, imports, err := specFiles(spec)
+	f, imports, err := scanSpecFiles(spec, true)
 	if err != nil {
 		return nil, false
 	}
 	files := map[string]File{f.Path: *f}
-	todo := []string{f.Path}
 	for _, i := range imports {
 		files[i.Path] = i
-		todo = append(todo, i.Path)
-	}
-	// specFiles leaves out an import it cannot read: here that is no key
-	for _, p := range todo {
-		src, err := os.ReadFile(p)
-		if err != nil {
-			return nil, false
-		}
-		for _, imp := range importPaths(string(src)) {
-			q := filepath.Join(filepath.Dir(p), filepath.FromSlash(imp))
-			if filepath.Ext(q) != ".qnt" {
-				q += ".qnt"
-			}
-			if _, ok := files[q]; !ok {
-				return nil, false
-			}
-		}
 	}
 	dirs := map[string]bool{}
 	for p := range files {

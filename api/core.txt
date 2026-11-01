@@ -69,6 +69,7 @@ type Binding struct
     method (*Binding) Planner(m *Model, whole *qtrace.Trace) *Planner
     method (*Binding) PossibleModule(m *Model, qntPath string, preds []string) (*EvalModule, error)
     method (*Binding) Reconstruct(steps []qtrace.Step) ([]*qtrace.Trace, []qtrace.Issue)
+    method (*Binding) SHA256() string
     method (*Binding) Skips(s *qtrace.Step) bool
     method (*Binding) SnapshotFirst(tr *qtrace.Trace) bool
     method (*Binding) SpecPath() string
@@ -319,6 +320,7 @@ type Rules struct
     field Thread string `yaml:"thread"`
     field Ref string `yaml:"ref"`
     field Rules []Rule `yaml:"rules"`
+    method (*Rules) SHA256() string
     method (*Rules) Steps(tds []otelio.TracesData) ([]qtrace.Step, error)
     method (*Rules) Unmatched(tds []otelio.TracesData) ([]Unmatched, error)
 type Unmatched struct
@@ -2337,6 +2339,7 @@ const ReportFormat = "gotogether.report/1"
 const Uncollected Cause = "uncollected"
 func CacheDir() string
 func Cached(bindingPath string, o Options) (*Checker, error)
+func CaptureModelSources(spec string) (*SourceGuard, error)
 func Compile(bindingPath string, opt Options) (*CompiledModel, error)
 func CurrentTools(o Options) Tools
 func EventuallyName(val string) string
@@ -2352,7 +2355,7 @@ func QuintSupported(v string) bool
 func ReadManifest(path string) (*Manifest, error)
 func RecordID(s *qtrace.Step) string
 func SplitPath(s string) []string
-func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (*Result, error)
+func ValidateITF(ctx context.Context, tr *itf.Trace, opt ITFOptions) (result *Result, resultErr error)
 type Absence struct
     field Actor string
     field Diagnostic *diagnostic.Result
@@ -2393,11 +2396,12 @@ type Checker struct
     method (*Checker) Close() error
     method (*Checker) Compiled() *CompiledModel
     method (*Checker) Judge(ctx context.Context, steps []qtrace.Step, opt SearchOptions) (*Judgment, error)
-    method (*Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt SearchOptions, check BatchCheck) ([]*Judgment, []error)
+    method (*Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt SearchOptions, check BatchCheck) (js []*Judgment, errs []error)
     method (*Checker) Key(steps []qtrace.Step) string
     method (*Checker) MarkHot(rep *Report, steps []qtrace.Step)
     method (*Checker) MutateSteps(ctx context.Context, steps []qtrace.Step, opt SearchOptions, check BatchCheck, mopts ...qtrace.MutationOption) (*StepMutants, error)
     method (*Checker) Nav(start NavStart) (*Navigator, error)
+    method (*Checker) VerifySource() error
     method (*Checker) WithConstants(constants map[string]string) (*Checker, error)
     method (*Checker) WithInvariants(invariants ...string) (*Checker, error)
 type ChoiceInitialization = receipt.ChoiceInitialization
@@ -2753,6 +2757,7 @@ type Result struct
     method (*Result) PendingCause(p qtrace.Step) Cause
     method (*Result) Reason() string
     method (*Result) Receipt() receipt.Actor
+    method (*Result) SourceModel() *RunModel
     method (*Result) Summary() string
     method (*Result) VerboseSummary() string
 type RunCheck struct
@@ -2794,6 +2799,7 @@ type RunRecord struct
     field Results []*Result
     field Inputs []RunInput
     field Convert string
+    field ConvertSHA256 string
     field Artifacts []Artifact
 type RunVerdict struct
     field Verdict Verdict `json:"verdict"`
@@ -2809,6 +2815,8 @@ type SearchOptions struct
     field ResolvePending bool
     field ResolveBudget int
     field Skew time.Duration
+type SourceGuard struct
+    method (*SourceGuard) Verify() error
 type StepMutants struct
     field Original *Judgment
     field Mutants []StepMutation

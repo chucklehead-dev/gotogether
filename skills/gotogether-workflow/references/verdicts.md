@@ -404,3 +404,12 @@ complete; read its original receipt/verdict for pass, failure or no verdict.
 missing or changed evidence (including artifacts), unsupported model references,
 and an existing destination. A composition receipt remains non-executable by
 primary-binding replay; reproduce it through its registered System/test.
+
+
+Source-mode checks require stable model files during validation. Parsed binding
+and conversion-rule fingerprints and model inventories are retained through
+judgment; recording refuses changed files and asks for a new judgment. Do not
+retry only manifest creation after editing a model. Warm caches obey the same
+rule. Pre/post checks do not provide an atomic cross-file snapshot or detect
+edits restored during external Quint execution. Use compiled artifacts for the
+evaluator-only handoff workflow; read its coverage and native verdict normally.

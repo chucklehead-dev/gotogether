@@ -107,15 +107,17 @@ type Input struct {
 	// Torn is a step log whose last line was cut off.
 	Torn *qtrace.TornTail
 	// Warnings are reading's (input.File.Warnings).
-	Warnings []string
-	sha256   string // exact byte image that supplied this input
-	file     *input.File
+	Warnings    []string
+	sha256      string // exact byte image that supplied this input
+	file        *input.File
+	typesSource *validate.SourceGuard // model inventory that interpreted ambiguous ITF bytes
 }
 
 // Judged is what a Check found: the inputs read, the steps' judgment,
 // each ITF trace's result, the finish check and the run's verdict.
 type Judged struct {
-	Inputs []Input
+	convertSHA256 string // exact conversion-rule bytes that produced the judged steps
+	Inputs        []Input
 	// Dir is where generated modules and failing runs' ITF went. One the
 	// Check made (no Options.Dir) is temporary: Close removes it, and the
 	// caller decides when (the CLI keeps a failing run's).
@@ -143,9 +145,9 @@ type Judged struct {
 	OK      bool
 	Verdict validate.RunVerdict
 
-	chk     Check
-	temp    bool                           // Dir is the Check's to remove
-	itfOpts map[string]validate.ITFOptions // each ITF input's, for its instance in the manifest
+	chk       Check
+	temp      bool                          // Dir is the Check's to remove
+	itfModels map[string]*validate.RunModel // captured at each ITF judgment
 }
 
 // Temporary reports whether Dir is a temporary directory the Check
@@ -177,13 +179,14 @@ func unfinished(r *validate.Result, why string) *validate.Result {
 // what was read and where (Dir: kept, for what it holds; Close removes a
 // temporary one).
 func (chk Check) Judge(ctx context.Context) (*Judged, error) {
-	j := &Judged{chk: chk, itfOpts: map[string]validate.ITFOptions{}}
+	j := &Judged{chk: chk, itfModels: map[string]*validate.RunModel{}}
 	var rules *convert.Rules
 	if chk.Convert != "" {
 		var err error
 		if rules, err = convert.Load(chk.Convert); err != nil {
 			return nil, err
 		}
+		j.convertSHA256 = rules.SHA256()
 	}
 	var b *binding.Binding
 	if chk.Binding != "" {
@@ -208,17 +211,18 @@ func (chk Check) Judge(ctx context.Context) (*Judged, error) {
 				continue
 			}
 		}
+		var typesSource *validate.SourceGuard
 		in, err := input.Read(f, chk.Format)
 		if a, ok := errors.AsType[*itf.AmbiguousError](err); ok {
 			if chk.Compiled != "" {
 				return nil, fmt.Errorf("-compiled %s: an ambiguous ITF input needs Quint type inference (%w): validate it without -compiled", chk.Compiled, validate.ErrNeedsQuint)
 			}
-			in, err = chk.readITFByTypes(f, b, a, err)
+			in, typesSource, err = chk.readITFByTypes(f, b, a, err)
 		}
 		if err != nil {
 			return nil, err
 		}
-		j.Inputs = append(j.Inputs, Input{Path: f, Format: in.Format, Steps: in.Steps, Torn: in.Torn, Warnings: in.Warnings, file: in, sha256: in.SHA256()})
+		j.Inputs = append(j.Inputs, Input{Path: f, Format: in.Format, Steps: in.Steps, Torn: in.Torn, Warnings: in.Warnings, file: in, typesSource: typesSource, sha256: in.SHA256()})
 		if in.Format != input.ITF {
 			steps = append(steps, in.Steps...)
 		}
@@ -279,6 +283,9 @@ func (chk Check) Judge(ctx context.Context) (*Judged, error) {
 		}
 		if err != nil {
 			return j, err
+		}
+		if b != nil && b.SHA256() != c.Binding.SHA256() {
+			return j, fmt.Errorf("binding %s changed while inputs were read: validate anew", chk.Binding)
 		}
 		if err := validate.Finishable(c.Binding); j.Finish && err != nil {
 			why := "-require-finish"
@@ -343,11 +350,17 @@ func (chk Check) Judge(ctx context.Context) (*Judged, error) {
 				io.Spec = md.Spec.Path
 			}
 		}
+		if err := in.typesSource.Verify(); err != nil {
+			return j, fmt.Errorf("%s: ITF type inference: %w", in.Path, err)
+		}
 		r, err := validate.ValidateITF(ctx, in.file.ITF, io)
 		if err != nil {
 			return j, fmt.Errorf("%s: %w", in.Path, err)
 		}
-		j.itfOpts[in.Path] = io
+		if err := in.typesSource.Verify(); err != nil {
+			return j, fmt.Errorf("%s: ITF type inference: %w", in.Path, err)
+		}
+		j.itfModels[in.Path] = r.SourceModel()
 		j.ITF = append(j.ITF, r)
 		j.OK = j.OK && r.OK()
 		if j.Finish && r.OK() {
@@ -369,8 +382,14 @@ func (chk Check) Judge(ctx context.Context) (*Judged, error) {
 // else "": the CLI names it after its file.
 func (j *Judged) Manifest() (*validate.Manifest, error) {
 	chk := j.chk
-	rec := validate.RunRecord{Compiled: chk.Compiled, Options: chk.Options, Search: chk.Search, Results: j.Results, Convert: chk.Convert, Artifacts: chk.Artifacts}
+	if chk.Convert != "" && j.convertSHA256 == "" {
+		return nil, fmt.Errorf("conversion rules %s have no captured fingerprint: judge them with Check.Judge before writing a manifest", chk.Convert)
+	}
+	rec := validate.RunRecord{Compiled: chk.Compiled, Options: chk.Options, Search: chk.Search, Results: j.Results, Convert: chk.Convert, ConvertSHA256: j.convertSHA256, Artifacts: chk.Artifacts}
 	if j.Checker != nil {
+		if err := j.Checker.VerifySource(); err != nil {
+			return nil, err
+		}
 		rec.Binding = j.Checker.Binding
 	} else if chk.Binding != "" {
 		// ITF inputs checked with no checker: the binding, if given; each
@@ -393,10 +412,10 @@ func (j *Judged) Manifest() (*validate.Manifest, error) {
 			return nil, fmt.Errorf("input %s has no captured fingerprint of the judged bytes: judge it with Check.Judge before writing a manifest", in.Path)
 		}
 		ri := validate.RunInput{Path: in.Path, Format: string(in.Format), Steps: in.Steps, SHA256: in.sha256}
-		if io, ok := j.itfOpts[in.Path]; ok {
-			var err error
-			if ri.Model, err = validate.ITFModel(in.file.ITF, io); err != nil {
-				return nil, err
+		if in.Format == input.ITF {
+			ri.Model = j.itfModels[in.Path]
+			if ri.Model == nil {
+				return nil, fmt.Errorf("input %s has no captured source model: judge it with Check.Judge before writing a manifest", in.Path)
 			}
 		}
 		rec.Inputs = append(rec.Inputs, ri)
@@ -556,21 +575,28 @@ func markComplete(steps []qtrace.Step, specs []string) ([]qtrace.Step, error) {
 // one (a bignumber.js object) from a record of fields s, e and c: the
 // binding's model, else -spec's -module. Without either, the read's error
 // stands (err, which names the fix).
-func (chk Check) readITFByTypes(path string, b *binding.Binding, a *itf.AmbiguousError, err error) (*input.File, error) {
+func (chk Check) readITFByTypes(path string, b *binding.Binding, a *itf.AmbiguousError, err error) (*input.File, *validate.SourceGuard, error) {
 	spec, module := chk.Spec, chk.Module
 	if b != nil {
 		spec, module = b.SpecPath(), b.Module
 	}
 	if spec == "" || module == "" {
-		return nil, fmt.Errorf("%s: %w (give -binding, or -spec and -module, to read it by the model's types)", path, err)
+		return nil, nil, fmt.Errorf("%s: %w (give -binding, or -spec and -module, to read it by the model's types)", path, err)
+	}
+	source, captureErr := validate.CaptureModelSources(spec)
+	if captureErr != nil {
+		return nil, nil, captureErr
 	}
 	m, merr := binding.LoadModel(chk.Options.Quint, spec, module)
 	if merr != nil {
-		return nil, fmt.Errorf("%s: %w (the model's types, which tell: %v)", path, a, merr)
+		return nil, nil, fmt.Errorf("%s: %w (the model's types, which tell: %v)", path, a, merr)
 	}
 	in, rerr := input.ReadITF(path, m.Schema())
 	if rerr != nil {
-		return nil, rerr // the typed reader already names the input and format
+		return nil, nil, rerr // the typed reader already names the input and format
 	}
-	return in, nil
+	if err := source.Verify(); err != nil {
+		return nil, nil, err
+	}
+	return in, source, nil
 }
