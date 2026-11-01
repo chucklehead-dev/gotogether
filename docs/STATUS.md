@@ -12,7 +12,9 @@ unbounded arithmetic and exact-value handoff evidence without a core format or
 API change. The Go evaluator and Quint Rust backend retain signed-int64 limits;
 Quint/TypeScript is explicit throughout the trial. Frozen drivers retain raw
 public decimal strings and exact native numeric projections. All artifacts and
-limitations are documented in internal/adoptiontest/goo-counted-values.
+limitations are documented in internal/adoptiontest/goo-counted-values. The
+trial exposed one misleading core hint: missing-state Rust advice now qualifies
+backend support instead of promising an unavailable trace.
 
 Source-capture follow-up (PR #34, current branch): source judgments now retain private
 model identities and conservative cache dependencies; changed model, binding or
@@ -39,7 +41,7 @@ checks. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
-format has one current version; all published core pins agree at c5734a692c96.
+format has one current version; all published core pins agree at f8a939a15bcf.
 
 Captured-transition assertion follow-up (merged PR #32): qtest.TransitionsConform
 judges the existing native conformance facet for all judged actors or required
