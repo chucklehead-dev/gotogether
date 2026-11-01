@@ -16,7 +16,7 @@ limitations are documented in internal/adoptiontest/goo-counted-values. The
 trial exposed one misleading core hint: missing-state Rust advice now qualifies
 backend support instead of promising an unavailable trace.
 
-Source-capture follow-up (PR #34, current branch): source judgments now retain private
+Source-capture follow-up (merged PR #34): source judgments now retain private
 model identities and conservative cache dependencies; changed model, binding or
 conversion rules are refused before recording. Typed ITF schema inference and
 empty-history manifests obey the same stability checks. Definition-string file
