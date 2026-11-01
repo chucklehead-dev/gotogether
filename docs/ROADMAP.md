@@ -91,10 +91,13 @@ Model reachability evidence now separates predicates holding from action
 sequences executing. Resolved goals and exact structured evaluator witnesses
 are available in report/2, including explicit unattributed transitions and
 backend/search bounds. A generated command-outcome predicate may hold initially
-without a command executing. Next address the reproduced partition-report scope
-problem as one native-data slice: source actor/partition identities and original
-versus optimized replay constants must stay distinguishable in text, JSON and
-TUI. Keep the existing unread-constant replay optimization.
+without a command executing. Partition reporting now preserves source actor/partition identities and original
+versus optimized replay constants in shared receipts, with local instance IDs,
+clone/merge isolation and near-linear serialization. Text, JSON and TUI share
+these facts without changing the unread-constant replay optimization. The next
+onboarding review should address documented scaffold setup failure recovery:
+keep user work safe and provide a concrete path after dependency/generation
+failure, rather than introducing another authoring format.
 
 S11's skipped middle-snapshot gap is implemented in PR #15:
 later snapshots check the whole replayed state and cannot reset it. The first

@@ -4,10 +4,11 @@ package receipt
 
 import (
 	"fmt"
-	"github.com/chucklehead-dev/gotogether/validate/diagnostic"
 	"maps"
 	"slices"
 	"strings"
+
+	"github.com/chucklehead-dev/gotogether/validate/diagnostic"
 )
 
 // Status distinguishes a conclusion, an inconclusive attempt, and no check.
@@ -60,13 +61,17 @@ type Actor struct {
 	// Diagnostics retain model-authored detail from the judged history.
 	Diagnostics []diagnostic.Result `json:"diagnostics,omitempty"`
 	JudgedBy    string              `json:"judgedBy"`
-	Partition   string              `json:"partition,omitempty"`
-	Scope       string              `json:"scope"` // "collected_history" or "model_trace"
-	Actor       string              `json:"actor"`
-	Status      Status              `json:"status"`
-	Reason      string              `json:"reason,omitempty"`
-	Ordering    string              `json:"ordering"` // "reconstructed", "searched", "model_trace"
-	Search      *Search             `json:"search,omitempty"`
+	// SourceActor is the input actor identity, distinct from a partition's display name.
+	SourceActor string `json:"sourceActor,omitempty"`
+	// PartitionInfo identifies the recorded key/value and its receipt-local instance.
+	PartitionInfo *PartitionInfo `json:"partitionInfo,omitempty"`
+	Partition     string         `json:"partition,omitempty"`
+	Scope         string         `json:"scope"` // "collected_history" or "model_trace"
+	Actor         string         `json:"actor"`
+	Status        Status         `json:"status"`
+	Reason        string         `json:"reason,omitempty"`
+	Ordering      string         `json:"ordering"` // "reconstructed", "searched", "model_trace"
+	Search        *Search        `json:"search,omitempty"`
 	// AssumedEffects identify pending calls placed in the checked candidate.
 	// They are model assumptions, not evidence that the calls took effect.
 	AssumedEffects []Effect `json:"assumedEffects,omitempty"`
@@ -83,6 +88,8 @@ type Summary struct {
 	Scope           string       `json:"scope"` // "collected_history", "model_trace", or "mixed_inputs"
 	OtherExecutions Status       `json:"otherExecutions"`
 	Actors          []Actor      `json:"actors"`
+	// PartitionInstances stores whole-history constants once per partitioned instance.
+	PartitionInstances []PartitionInstance `json:"partitionInstances,omitempty"`
 }
 
 // History is one model's judgment on one history. It cannot contain a
@@ -94,6 +101,8 @@ type History struct {
 	Scope           string  `json:"scope"` // "collected_history", "model_trace", or "mixed_inputs"
 	OtherExecutions Status  `json:"otherExecutions"`
 	Actors          []Actor `json:"actors"`
+	// PartitionInstances uses IDs local to this history, never another component.
+	PartitionInstances []PartitionInstance `json:"partitionInstances,omitempty"`
 }
 
 // History projects an uncomposed model judgment. A combined assessment must
@@ -102,7 +111,7 @@ func (s Summary) History() History {
 	if s.Composition != nil {
 		panic("receipt: cannot relabel a composed assessment as one model judgment; use its component Judgments")
 	}
-	return History{Status: s.Status, Reason: s.Reason, Scope: s.Scope, OtherExecutions: s.OtherExecutions, Actors: s.Actors}
+	return History{Status: s.Status, Reason: s.Reason, Scope: s.Scope, OtherExecutions: s.OtherExecutions, Actors: s.Actors, PartitionInstances: s.PartitionInstances}
 }
 
 // String renders the same scope and assumptions exposed as JSON.
@@ -112,6 +121,22 @@ func (s Summary) String() string {
 	fmt.Fprintf(&b, "what was checked: %s · %s\n", s.Status, scope)
 	if s.Reason != "" {
 		fmt.Fprintf(&b, "  reason: %s\n", s.Reason)
+	}
+	counts := s.Counts()
+	if counts.Partitions > 0 || counts.Judgments != counts.Actors {
+		actorLabel := "source actor"
+		if counts.UnknownSourceJudgments > 0 {
+			actorLabel = "known source actor"
+		}
+		fmt.Fprintf(&b, "  scope: %s, %s, %s total\n", scopeQuantity(counts.Actors, actorLabel), scopeQuantity(counts.Partitions, "partition judgment"), scopeQuantity(counts.Judgments, "judgment"))
+		if counts.UnknownSourceJudgments > 0 {
+			fmt.Fprintf(&b, "  source identities unavailable for %s\n", scopeQuantity(counts.UnknownSourceJudgments, "judgment"))
+		}
+	}
+	for _, instance := range s.PartitionInstances {
+		for _, line := range strings.Split(instance.String(), "\n") {
+			fmt.Fprintf(&b, "  %s\n", line)
+		}
 	}
 	visible := []Actor{}
 	folded := 0

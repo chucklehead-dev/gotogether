@@ -6118,3 +6118,35 @@ adoption trials remain unchanged; their current-CLI packaging checks consume
 report/2. The same native verdict wording reaches qtest model claims. There is
 no existing model-possibility TUI view to update. No arguments are hidden by
 heuristic name filtering; parameter-role metadata would be a separate design.
+
+
+## 81. Partition scope is native evidence, not a display-name convention
+
+A ledger actor with two account partitions was reported as two actors in the
+CLI result. Unread constants deliberately used the first partition's smaller
+instance, but JSON exposed only that effective list and a prose explanation.
+Parsing labels or calling the optimized value the original instance would lose
+which recorded actor was checked and how its replay was justified.
+
+Each result now retains source identity and typed partition key/value separately
+from its display label. A shared native instance captures the whole-history
+constant map before optimization, plus sorted effective substitutions and their
+unread-on-evaluated-prefixes basis. The footprint check and batching optimization
+are unchanged. Standalone receipts have no dangling reference; their result can
+provide an independent instance snapshot. Aggregate receipts assign local IDs
+and store each instance once. Report merges remap IDs and clone storage;
+composition histories preserve their own tables and independent clones.
+
+Counts derive from identities and judgments, including incomplete/failed work,
+not from folded display rows. Partition labels without typed source identity
+produce an explicit unknown-source judgment count, never guessed actor IDs. JSON actor entries carry small references instead
+of duplicating large constant literals; passing folds retain instance IDs.
+Document and receipt tests bound serialized growth as partitions and whole
+instances grow together. Numeric partition identities decode without float64
+coercion. Text and TUI render original values and replay overrides from the same
+typed facts, with bounded literal display and exact values left in JSON.
+
+Factoring remains evidence about this run's evaluated prefixes, not all model
+states or other executions. Whole-run recipe data stays independent of the
+navigation cursor. The optional fields extend current report/2 and nav/2; there
+is no second authoring representation or compatibility reader.

@@ -132,6 +132,9 @@ func (g *generator) schema(t reflect.Type) map[string]any {
 			}
 			props[name] = s
 		}
+		if t == reflect.TypeFor[receipt.Summary]() || t == reflect.TypeFor[receipt.History]() {
+			props["counts"] = g.schema(reflect.TypeFor[receipt.JudgmentCounts]())
+		}
 		s := map[string]any{"type": []string{"object", "null"}, "properties": props, "additionalProperties": false}
 		for k, v := range g.structs[t.Name()] {
 			s[k] = v
@@ -194,13 +197,15 @@ func reportSchema(t *testing.T) []byte {
 			"Document": {"required": []string{"format", "command", "verdict", "exit"}},
 		},
 		fields: map[string]map[string]any{
-			"Document.Verdict":     {"enum": []any{"pass", "fail", "no verdict", "error"}},
-			"Document.Command":     {"enum": []any{"validate", "simulate"}},
-			"DocGraph.Scope":       {"enum": []any{"model_state_graph"}},
-			"DocPossibleGoal.Kind": {"enum": []any{"predicate", "action_sequence"}},
-			"DocPossibleStep.Kind": {"enum": []any{"action", "model_step"}},
-			"DocFailure.Verdict":   {"enum": []any{"fail", "n/a"}},
-			"Change.Kind":          {"enum": []any{"changed", "added", "removed"}},
+			"Document.Verdict":            {"enum": []any{"pass", "fail", "no verdict", "error"}},
+			"Document.Command":            {"enum": []any{"validate", "simulate"}},
+			"DocGraph.Scope":              {"enum": []any{"model_state_graph"}},
+			"DocPossibleGoal.Kind":        {"enum": []any{"predicate", "action_sequence"}},
+			"PartitionInstance.Factoring": {"enum": []any{"checked_on_evaluated_prefixes"}},
+			"ConstantSubstitution.Basis":  {"enum": []any{"unread_by_evaluated_prefixes"}},
+			"DocPossibleStep.Kind":        {"enum": []any{"action", "model_step"}},
+			"DocFailure.Verdict":          {"enum": []any{"fail", "n/a"}},
+			"Change.Kind":                 {"enum": []any{"changed", "added", "removed"}},
 		},
 	}
 	return g.root(reflect.TypeFor[validate.Document](), validate.ReportFormat, schemas.ReportURL, "gotogether report",

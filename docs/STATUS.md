@@ -7,7 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Model possibility evidence (current branch): resolved goals distinguish state
+Partition scope and replay provenance (current branch): source actor identity
+and typed partition key/value now survive reports without parsing display names.
+Receipt-local tables retain original constants once, effective substitutions and
+evaluated-prefix justification; folded passes and merged reports keep correct
+references. JSON/TUI share this evidence independently of navigation cursors.
+Summaries distinguish actor identities from judgments and partitions. Clone,
+large-number round-trip and serialized-growth controls protect the shared data;
+the replay optimization and checking semantics remain unchanged.
+
+Model possibility evidence (merged PR #41): resolved goals distinguish state
 predicates from ordered action sequences. Predicate readiness can hold initially
 without executing a command. Report/2 carries structured evaluator transitions,
 identified actions and exact named Quint literals; unknown attribution remains
@@ -568,7 +577,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Native partition judgment scope and replay provenance | S–M | reproduced one actor reported as two actors; retain source actor and partition identity, original/effective constants and unread-constant justification together across summaries, JSON receipts and TUI without changing replay optimization |
+| 1 | Scaffold setup failure recovery | S–M | the library adoption log records populated destinations after dependency/model subprocess failures; review a concrete recovery path across init/new without overwriting user work or treating incomplete setup as success |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
@@ -648,11 +657,7 @@ or HTTPRoute weights); GR3's five design questions
 ## 6. Known issues and rough edges
 
 - **I35's list, reported not fixed** (HISTORY "I35: tutorials"): a
-  partitioned report's RESULT counts partitions as "actors" and its
-  instance line shows optimized replay constants; native original/effective
-  provenance remains to be separated. Model possibility goal semantics are now
-  explicit; internal arguments (`readPos`, `reads`) remain available rather than
-  hidden by heuristic name filters. A passing negated claim is not in the test's
+  passing negated claim is not in the test's
   summary line; hello's mutant report says "schedule 3" where its nav
   command says `schedule=1:2`; the quint cache grows unbounded (3.2 GB
   seen); `serve -steps DIR/` fails when DIR does not exist.

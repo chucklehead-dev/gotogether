@@ -110,7 +110,8 @@ func TestReceiptCompletionAndBudget(t *testing.T) {
 }
 
 func TestReceiptKeepsFoldedPartitions(t *testing.T) {
-	rep := &Report{Actors: []*Result{{Actor: "ledger acct=a", Partition: "acct=a", Conforms: Pass}, {Actor: "ledger acct=b", Partition: "acct=b", Conforms: Pass}}}
+	instance := &receipt.PartitionInstance{SourceActor: "ledger", Key: "acct", Factoring: "checked_on_evaluated_prefixes"}
+	rep := &Report{Actors: []*Result{{Actor: "ledger acct=a", SourceActor: "ledger", Partition: "acct=a", Conforms: Pass, partitionInstance: instance, partitionInfo: &receipt.PartitionInfo{Key: "acct", Value: "a"}}, {Actor: "ledger acct=b", SourceActor: "ledger", Partition: "acct=b", Conforms: Pass, partitionInstance: instance, partitionInfo: &receipt.PartitionInfo{Key: "acct", Value: "b"}}}}
 	d := &Document{}
 	d.AddReport(rep)
 	if len(d.Actors) != 0 || len(d.Partitions) != 1 || d.Receipt == nil || len(d.Receipt.Actors) != 2 {

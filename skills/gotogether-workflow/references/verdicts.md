@@ -385,6 +385,15 @@ literal arguments; `kind: model_step` means no domain action was attributed.
 Keep overall `found` separate from evaluator `search.found`: Quint may find a
 witness the evaluator did not. A bounded miss is not an impossibility proof.
 
+For partitioned judgments, read receipt `counts` as source actors, judgments and
+partition judgments separately. Follow `actors[].partitionInfo.instance` into
+that receipt's `partitionInstances` table. Original constants plus explicit
+replay substitutions describe the judging recipe; the unread/factoring basis
+covers evaluated prefixes of this run only. Folded passes keep provenance.
+Composition component IDs are local to each component history. In the TUI these
+are whole-run facts, independent of the current cursor. See
+[check receipts](../../../docs/check-receipts.md#partition-scope-and-replay-instances).
+
 Driven explorations include resolved run profiles and observed simulator limits
 in evidence and navigation JSON. The scheduler budget is cumulative across
 calls. Completing on its last permitted turn succeeds; a counter equal to the

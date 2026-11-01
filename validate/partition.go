@@ -3,6 +3,7 @@ package validate
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"runtime"
 	"slices"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/qeval"
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 )
 
 // A serial log of independent entities (charges, accounts) is judged
@@ -53,14 +55,16 @@ import (
 // A partitioned trace is a whole trace's parts, each one entity's steps
 // (splitTrace's), with their plans in the whole's instance.
 type partitioned struct {
-	whole *qtrace.Trace
-	parts []*qtrace.Trace
-	plans []*binding.Plan
+	whole    *qtrace.Trace
+	instance *receipt.PartitionInstance
+	parts    []*qtrace.Trace
+	plans    []*binding.Plan
 	// at are each part's steps' indices in whole.Steps
 	at [][]int
-	// constants are the whole's instance, listed once for every part's
-	// result (a day's instance lists every charge)
-	constants []string
+	// constants are the effective instance plus its historical grouping note.
+	// replayConstants is the pure effective list, shared by all results.
+	constants       []string
+	replayConstants []string
 	// consts are its values, for the Go evaluator (nil: it has none)
 	consts map[string]qeval.Value
 }
@@ -117,6 +121,7 @@ func (c *Checker) partition(t *qtrace.Trace) (*partitioned, error) {
 	if err != nil {
 		return nil, fmt.Errorf("actor %s: %w", pt.parts[0].Actor, err)
 	}
+	pt.instance = &receipt.PartitionInstance{SourceActor: t.Actor, Key: key, Factoring: "checked_on_evaluated_prefixes", OriginalConstants: maps.Clone(pt.plans[0].Constants)}
 	var unread []string
 	for k := range pt.plans[0].Constants {
 		if read[k] {
@@ -124,13 +129,16 @@ func (c *Checker) partition(t *qtrace.Trace) (*partitioned, error) {
 		}
 		if v, ok := own.Constants[k]; ok && v != pt.plans[0].Constants[k] {
 			unread = append(unread, k)
+			pt.instance.ReplaySubstitutions = append(pt.instance.ReplaySubstitutions, receipt.ConstantSubstitution{Name: k, Value: v, Basis: "unread_by_evaluated_prefixes"})
 			for _, p := range pt.plans {
 				p.Constants[k] = v
 			}
 		}
 	}
+	slices.SortFunc(pt.instance.ReplaySubstitutions, func(a, b receipt.ConstantSubstitution) int { return strings.Compare(a.Name, b.Name) })
 	slices.Sort(unread)
-	pt.constants = pt.plans[0].ConstantList()
+	pt.replayConstants = pt.plans[0].ConstantList()
+	pt.constants = slices.Clone(pt.replayConstants)
 	if len(unread) > 0 {
 		pt.constants = append(pt.constants, fmt.Sprintf("(%s read by no step or val of this run: every partition replayed with the first one's)", strings.Join(unread, ", ")))
 	}
@@ -342,11 +350,14 @@ func conflicts(pt *partitioned, key string, uses []map[qeval.Entry]*use) error {
 }
 
 // partitionResults are the results of pt's parts, newResult's each,
-// sharing the whole's instance list, and marked with their partition.
+// sharing the effective replay list and original-instance evidence.
 func (c *Checker) partitionResults(pt *partitioned) []*Result {
 	out := make([]*Result, len(pt.parts))
 	for i, p := range pt.parts {
-		out[i] = newResultWith(c.Binding, p, pt.plans[i], pt.constants)
+		out[i] = newResultWith(c.Binding, p, pt.plans[i], pt.replayConstants)
+		out[i].SourceActor = pt.whole.Actor
+		out[i].partitionInstance = pt.instance
+		out[i].partitionInfo = (&receipt.PartitionInfo{Key: c.Binding.Partition, Value: partitionValue(pt.whole, pt.at[i], p, c.Binding.Partition, snapshotFirst(c.Binding, pt.whole))}).Clone()
 		out[i].Partition = strings.TrimPrefix(p.Actor, nameOf(pt.whole.Actor)+" ")
 	}
 	return out
@@ -354,10 +365,29 @@ func (c *Checker) partitionResults(pt *partitioned) []*Result {
 
 // partitionOf is r's whole actor, when r is a partition's ("" else).
 func partitionOf(r *Result) string {
-	if r.Partition == "" {
+	if r.partitionInstance == nil {
 		return ""
 	}
-	return strings.TrimSuffix(r.Actor, " "+r.Partition)
+	return nameOf(r.SourceActor)
+}
+
+// partitionValue reads the source argument, preserving its type and avoiding
+// display-name parsing. A prepended snapshot need not name the partition.
+func partitionValue(whole *qtrace.Trace, at []int, part *qtrace.Trace, key string, snapshot bool) any {
+	for _, i := range at {
+		if snapshot && i == 0 {
+			continue
+		}
+		if v, ok := whole.Steps[i].Args[key]; ok {
+			return v
+		}
+	}
+	for _, step := range part.Pending {
+		if v, ok := step.Args[key]; ok {
+			return v
+		}
+	}
+	return nil
 }
 
 // foldPartitions is the line that says r's passing partitions, by their
@@ -379,7 +409,7 @@ func foldPartitions(rs []*Result) (lines []string, rest []*Result) {
 		}
 		f := folds[w]
 		if f == nil {
-			f = &fold{key: strings.SplitN(r.Partition, "=", 2)[0]}
+			f = &fold{key: r.partitionInfo.Key}
 			folds[w] = f
 			order = append(order, w)
 		}

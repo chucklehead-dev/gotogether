@@ -2510,6 +2510,7 @@ type DocInvariant struct
     field Verdict string `json:"verdict"`
     field Cause string `json:"cause,omitempty"`
 type DocPartition struct
+    field Instances []int `json:"instances,omitempty"`
     field Actor string `json:"actor"`
     field Key string `json:"key"`
     field Pass int `json:"pass"`
@@ -2746,6 +2747,7 @@ type Report struct
     method (*Report) WithoutRefs() *Report
 type Result struct
     field Choices *ChoiceSearch
+    field SourceActor string
     field Actor string
     field Partition string
     field Steps int
@@ -2769,6 +2771,7 @@ type Result struct
     method (*Result) Doc() DocActor
     method (*Result) JudgedBy() string
     method (*Result) OK() bool
+    method (*Result) PartitionInstance() *receipt.PartitionInstance
     method (*Result) PendingCause(p qtrace.Step) Cause
     method (*Result) Reason() string
     method (*Result) Receipt() receipt.Actor
@@ -3222,6 +3225,8 @@ type Actor struct
     field Choices *ChoiceSearch `json:"choices,omitempty"`
     field Diagnostics []diagnostic.Result `json:"diagnostics,omitempty"`
     field JudgedBy string `json:"judgedBy"`
+    field SourceActor string `json:"sourceActor,omitempty"`
+    field PartitionInfo *PartitionInfo `json:"partitionInfo,omitempty"`
     field Partition string `json:"partition,omitempty"`
     field Scope string `json:"scope"`
     field Actor string `json:"actor"`
@@ -3273,6 +3278,10 @@ type Composition struct
     method (*Composition) Clone() *Composition
     method (Composition) Problem() (Status, string)
     method (Composition) String() string
+type ConstantSubstitution struct
+    field Name string `json:"name"`
+    field Value string `json:"value"`
+    field Basis string `json:"basis"`
 type Effect struct
     field CandidateRecord string `json:"candidateRecord"`
     field Position int `json:"position"`
@@ -3284,6 +3293,30 @@ type History struct
     field Scope string `json:"scope"`
     field OtherExecutions Status `json:"otherExecutions"`
     field Actors []Actor `json:"actors"`
+    field PartitionInstances []PartitionInstance `json:"partitionInstances,omitempty"`
+    method (History) Counts() JudgmentCounts
+    method (History) MarshalJSON() ([]byte, error)
+type JudgmentCounts struct
+    field Actors int `json:"actors"`
+    field Judgments int `json:"judgments"`
+    field Partitions int `json:"partitions"`
+    field UnknownSourceJudgments int `json:"unknownSourceJudgments,omitempty"`
+type PartitionInfo struct
+    field Key string `json:"key"`
+    field Value any `json:"value"`
+    field Instance int `json:"instance,omitempty"`
+    method (*PartitionInfo) Clone() *PartitionInfo
+    method (*PartitionInfo) UnmarshalJSON(data []byte) error
+type PartitionInstance struct
+    field ID int `json:"id"`
+    field SourceActor string `json:"sourceActor"`
+    field Key string `json:"key"`
+    field Factoring string `json:"factoring"`
+    field OriginalConstants map[string]string `json:"originalConstants,omitempty"`
+    field ReplaySubstitutions []ConstantSubstitution `json:"replaySubstitutions,omitempty"`
+    method (*PartitionInstance) Clone() *PartitionInstance
+    method (PartitionInstance) ReplayConstants() map[string]string
+    method (PartitionInstance) String() string
 type Protocol struct
     embed Component
     field Configured bool `json:"configured"`
@@ -3310,7 +3343,10 @@ type Summary struct
     field Scope string `json:"scope"`
     field OtherExecutions Status `json:"otherExecutions"`
     field Actors []Actor `json:"actors"`
+    field PartitionInstances []PartitionInstance `json:"partitionInstances,omitempty"`
+    method (Summary) Counts() JudgmentCounts
     method (Summary) History() History
+    method (Summary) MarshalJSON() ([]byte, error)
     method (Summary) String() string
 
 == github.com/chucklehead-dev/gotogether/validate/runprofile
