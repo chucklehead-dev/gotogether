@@ -559,8 +559,17 @@ func (b *Binding) LintFindings(m *Model) []LintFinding {
 			if !want[arg] {
 				add("binding.parameter.unknown", name, "Use only parameters from the action signature.", fmt.Sprintf("action %s: %q is not a parameter; signature %s", name, arg, m.Signature(name)))
 			}
-			if _, err := parseTpl(tpl); err != nil {
+			if parsed, err := parseTpl(tpl); err != nil {
 				add("binding.template.invalid", name, "Correct the argument template syntax.", fmt.Sprintf("action %s arg %s: %v", name, arg, err))
+			} else {
+				for _, p := range ps {
+					if p.Name == arg {
+						if f := b.collectionTemplateFinding(name, p, parsed); f != nil {
+							errs = append(errs, *f)
+						}
+						break
+					}
+				}
 			}
 		}
 		if a.Expect != "" {

@@ -7,7 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Collection conversion correction (current branch): removing redundant argument
+Collection argument lint (current branch): the original plain-field mapping
+mistake from the large-count rehearsal now produces an early authored finding.
+Known collection arguments need conversion, so identity mappings recommend
+omission and other recorded JSON fields get a typed conversion example.
+Interned argument IDs get separate guidance; `.outcome` and general expressions
+remain supported. Native lint JSON retains code, severity, parameter symbol,
+confidence and fix without inventing YAML coordinates. This is static binding
+compatibility evidence, not a trace verdict or complete expression checker.
+
+Collection conversion correction (merged PR #36): removing redundant argument
 mappings from the large-count trial exposed a core default-path defect. Flat
 collection helpers decoded through float64 and converted through int64, changing
 recorded operations before Quint saw them. Defaults and explicit helpers now
@@ -50,7 +59,7 @@ checks. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
-format has one current version; all published core pins agree at 5b715d5cd0a1.
+format has one current version; all published core pins agree at 5d91415c776e.
 
 Captured-transition assertion follow-up (merged PR #32): qtest.TransitionsConform
 judges the existing native conformance facet for all judged actors or required
@@ -526,7 +535,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Independent-maintainer use or a concrete new contract blocker | S–M | the arithmetic handoff and omitted-mapping default path now have separate controls; use real authoring, evidence or resolution friction to choose a core improvement, rather than expanding adjacent numeric fixtures |
+| 1 | Independent-maintainer use or a concrete new contract blocker | S–M | the numeric conversion and collection-mapping authoring fixes now have controls; choose a new demonstrated adoption blocker before extending binding inference or adding adjacent numeric fixtures |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 

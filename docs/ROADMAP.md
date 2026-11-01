@@ -62,7 +62,9 @@ That frozen explicit-helper trial did not demonstrate a decoder defect. A later
 no-mapping variant exposed float64 rounding in flat collection defaults; the
 core now preserves exact integer literals through those defaults and helpers,
 with explicit refusal of fractional/exponent inputs. Frozen artifacts stay
-unchanged. Further capabilities
+unchanged. A follow-up static binding rule now diagnoses plain recorded-field
+templates for collection arguments, with omission/typed-conversion fixes and
+explicit outcome-expression exclusions. Further capabilities
 should follow independent use or a concrete contract blocker, rather than more
 adjacent numeric fixtures.
 

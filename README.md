@@ -332,6 +332,13 @@ it does not mean the findings passed. The CLI's Go scans are syntactic; binding
 checks inspect model metadata and templates. Neither establishes trace
 conformance. See [the executable lint walkthrough](docs/lint-onboarding.md).
 
+Lint also detects explicit plain-field templates used for known collection
+arguments, such as `groups: '{{.groups}}'` for `List[int]`. Remove a redundant
+mapping to use the model-aware default; convert a differently named JSON field
+with `toQuint`. The finding carries the parameter, model type and fix in native
+JSON. Mapped `.outcome` expressions and general template expressions are outside
+this narrow rule; it does not infer arbitrary expression or observation types.
+
 Go: 1.26.x. The core needs 1.26.1 (hegel-go's minimum); the gosim fork
 translates one release's standard library, 1.26's, and says so under
 another. Until the first tags, `@latest` is the newest commit.

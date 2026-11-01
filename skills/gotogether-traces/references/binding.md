@@ -34,7 +34,13 @@ Rules:
   `add`, `atLeast` (`{{ atLeast 5 (max "amount") }}`).
   Give a template only to map a field differently, e.g.
   `args: { o: '{{.outcome}}' }`. An action that needs nothing else can
-  be `name: {}`.
+  be `name: {}`. Lint rejects a plain recorded field used for a known collection
+  parameter (`binding.parameter.collection_literal`). Remove an identity
+  mapping for the default, or use the suggested typed conversion for a renamed
+  or observed JSON field. Interned fields are scalar IDs and need explicit
+  collection construction or a non-interned collection field. `.outcome` is
+  mapped Quint text and may legitimately contain a collection; general
+  expressions and `expect` types are not inferred by this rule.
 - A run that records two sides (a service's commits and its clients'
   calls) gives each side actors of its own (`acct`, `acct.clients`) and
   each a binding naming them: `actors: ['!*.clients']`, `actors:

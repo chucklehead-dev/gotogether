@@ -6018,3 +6018,19 @@ This cannot recover values already rounded by a producer, and does not extend
 any evaluator's numeric range. The frozen trial remains unchanged; a separate
 disposable binding omits argument mappings to exercise defaults through native
 validation, ITF and relocated replay.
+
+
+## 76. Diagnose collection argument templates before replay
+
+A plain recorded argument or observation prints as a scalar literal, even when
+its text contains JSON for a collection. The model's resolved collection shape
+and a single field-expression template suffice to diagnose this authored error
+without a trace. Identity mappings should be omitted so the model-aware default
+applies; renamed/observed JSON fields need conversion. Interned arguments render
+scalar IDs and need different guidance.
+
+The rule deliberately excludes mapped `.outcome` (already arbitrary Quint
+text), other reserved metadata, compound templates and unknown parameter
+shapes. It does not infer `expect` types. Existing lint findings carry the rule
+identity, model confidence and fix through Go, text and JSON. Metadata supplies
+no YAML coordinates, so those remain absent. No format or public API changed.

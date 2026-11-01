@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- Binding lint now rejects a plain recorded-field template used as a collection
+  argument. Structured findings recommend omitted mappings for matching names,
+  typed conversion for other fields, and explicit collection construction for
+  interned scalar IDs. Mapped `.outcome` expressions remain supported.
+
 - Default collection argument mappings and `toList`/`toSet`/`toMap` now
   preserve recorded integers without float64 rounding or int64 overflow,
   including nested tuples and map values. Fractions and exponent notation
