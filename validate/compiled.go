@@ -3,6 +3,8 @@ package validate
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -58,6 +60,7 @@ const compiledEvalDir = ".gotogether-compiled"
 // A CompiledModel is a binding's model compiled for the Go evaluator
 // (Compile), as its file holds it.
 type CompiledModel struct {
+	digest string // exact artifact bytes loaded, retained for judgment provenance
 	// Format is CompiledFormat.
 	Format string `json:"format"`
 	// Quint is `quint --version` of the quint that compiled it.
@@ -227,6 +230,8 @@ func LoadCompiled(path string) (*CompiledModel, error) {
 	if cm.Eval == nil || len(cm.IR) == 0 || len(cm.Typecheck) == 0 {
 		return nil, fmt.Errorf("compiled model %s holds no model (no typecheck, evaluation module or IR): compile it again (gotogether compile)", path)
 	}
+	digest := sha256.Sum256(data)
+	cm.digest = hex.EncodeToString(digest[:])
 	return &cm, nil
 }
 
@@ -265,10 +270,11 @@ func quintAtLeast(v string, min [3]int) bool {
 // compiledState is a compiled checker's: the artifact, its evaluator,
 // and what its loading noted (sources not checked).
 type compiledState struct {
-	path  string
-	model *CompiledModel
-	ev    *evaluator
-	notes []string
+	path    string
+	model   *CompiledModel
+	ev      *evaluator
+	notes   []string
+	sources []File // source files actually checked when this artifact was loaded
 }
 
 // noQuint is a compiled checker's quint: no binary, so a check that
@@ -307,6 +313,7 @@ func NewCompiledChecker(bindingPath, compiledPath string, opt Options) (*Checker
 		return nil, fmt.Errorf("compiled model %s is of module %s, the binding's is %s: %s", compiledPath, cm.Module, b.Module, recompile)
 	}
 	var notes []string
+	var checkedSources []File
 	for _, s := range cm.Sources {
 		p := filepath.Join(b.Dir, filepath.FromSlash(s.Path))
 		h, err := hashFile(p)
@@ -318,6 +325,8 @@ func NewCompiledChecker(bindingPath, compiledPath string, opt Options) (*Checker
 		case h != s.SHA256:
 			return nil, fmt.Errorf("compiled model %s is stale: %s changed since it was compiled (sha256 %s, the artifact's %s): %s",
 				compiledPath, s.Path, short12(h), short12(s.SHA256), recompile)
+		default:
+			checkedSources = append(checkedSources, File{Path: filepath.Clean(p), SHA256: h})
 		}
 	}
 	m, err := binding.ParseTypecheck(cm.Typecheck, b.Module)
@@ -343,7 +352,7 @@ func NewCompiledChecker(bindingPath, compiledPath string, opt Options) (*Checker
 		return nil, fmt.Errorf("compiled model %s: %w: %s", compiledPath, err, recompile)
 	}
 	opt.Quint = noQuint
-	cs := &compiledState{path: compiledPath, model: cm, ev: &evaluator{em: cm.Eval, m: qm}, notes: notes}
+	cs := &compiledState{path: compiledPath, model: cm, ev: &evaluator{em: cm.Eval, m: qm}, notes: notes, sources: checkedSources}
 	return &Checker{Binding: b, Model: m, Options: opt, scratch: &scratch{}, compiled: cs}, nil
 }
 
@@ -409,6 +418,7 @@ func (c *Checker) checkCompiled(ctx context.Context, steps []qtrace.Step) (*Repo
 				c.explainResult(p, r, o)
 				c.judgeWithin(part, r)
 				r.byEvaluator, r.compiled = true, true
+				r.compiledHash, r.compiledSources = cs.model.digest, cs.sources
 				judgeLost(c.Binding, r, part.Lost)
 				judgeAbsent(c.Binding, r, part.Lost, part.Gaps, nil, nil)
 				rep.Actors = append(rep.Actors, r)
@@ -432,6 +442,7 @@ func (c *Checker) checkCompiled(ctx context.Context, steps []qtrace.Step) (*Repo
 			c.judgeWithin(t, r)
 		}
 		r.byEvaluator, r.compiled = true, true
+		r.compiledHash, r.compiledSources = cs.model.digest, cs.sources
 		judgeLost(c.Binding, r, t.Lost)
 		judgeAbsent(c.Binding, r, t.Lost, t.Gaps, nil, nil)
 		rep.Actors = append(rep.Actors, r)

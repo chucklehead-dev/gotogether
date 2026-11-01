@@ -27,7 +27,7 @@ func Artifacts(a ...validate.Artifact) Option {
 	return option(optArtifacts, func(c *settings) { c.artifacts = append(c.artifacts, a...) })
 }
 
-// Manifest is the run's manifest (validate.Manifest, gotogether.run/2):
+// Manifest is the run's manifest (validate.Manifest, gotogether.run/3):
 // the tools, the instance it was checked against (the binding and spec
 // hashed, the constants and invariants), its step log hashed with its
 // losses, the verdict and failing step, and the driver and artifacts its

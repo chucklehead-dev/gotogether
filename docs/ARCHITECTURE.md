@@ -204,7 +204,7 @@ this build reads.
 | `gotogether.convert/1` | a span conversion rule file's optional `format:` key | the current only |
 | `gotogether.corpus/1` | an exploration's corpus entry in testdata | the current only |
 | `gotogether.choices/1` | encoded choices (`qenv.EncodeChoices`, a binary header) | the current only: another rule is another run |
-| `gotogether.run/2` | a validated run's manifest (`validate -manifest`) | the current only: written anew by every run |
+| `gotogether.run/3` | a validated run's manifest (`validate -manifest`; hashed compiled artifact selects evaluator-only replay) | the current only: written anew by every run |
 | `gotogether.evidence/2` | an exploration's evidence (`GOTOGETHER_EVIDENCE`) | the current only |
 | `gotogether.model/1` | a compiled model (`gotogether compile`) | the current only |
 | `gotogether.nav/2` | the run navigation protocol between a test binary and gotogether-nav | the current only |

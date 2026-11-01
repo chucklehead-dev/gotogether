@@ -6,6 +6,8 @@ package input
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -54,6 +56,7 @@ func Sniff(data []byte) Format {
 // File is one file's contents: steps (OTLP, step log, request log) or an
 // ITF trace.
 type File struct {
+	sha256 string // digest of the exact bytes parsed, independent of later path changes
 	Path   string
 	Format Format
 	Steps  []qtrace.Step
@@ -69,6 +72,12 @@ type File struct {
 	// that decides nothing (qdriver.Log.Warnings).
 	Warnings []string
 }
+
+// SHA256 is the digest of the exact bytes decoded by Read or ReadITF. It does
+// not reread Path: callers can detect a file changed after its judgment rather
+// than attaching a new file to an old result. A manually constructed File has
+// no captured digest.
+func (f *File) SHA256() string { return f.sha256 }
 
 // Distinct refuses two request logs naming one recorder: their records
 // would be numbered alike, and Reconstruct would find every one of the
@@ -90,6 +99,17 @@ func Distinct(files ...*File) error {
 
 // Read reads path. format may be "" or "auto" to detect it.
 func Read(path string, format Format) (*File, error) {
+	return read(path, format, nil)
+}
+
+// ReadITF reads an ITF input with model types to distinguish ambiguous Rust
+// numeric encodings from records. Its digest describes the same byte image that
+// ParseWith decodes, including when type inference followed an earlier read.
+func ReadITF(path string, types *itf.Schema) (*File, error) {
+	return read(path, ITF, types)
+}
+
+func read(path string, format Format, types *itf.Schema) (*File, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -99,7 +119,8 @@ func Read(path string, format Format) (*File, error) {
 			format = StepLog // its one line cut off: ReadJSONL says it is torn
 		}
 	}
-	in := &File{Path: path, Format: format}
+	digest := sha256.Sum256(data)
+	in := &File{Path: path, Format: format, sha256: hex.EncodeToString(digest[:])}
 	switch format {
 	case OTLP:
 		in.Steps, err = otelio.ReadSteps(bytes.NewReader(data))
@@ -117,7 +138,7 @@ func Read(path string, format Format) (*File, error) {
 			in.Steps, in.Recorder, in.Warnings = l.Steps(), l.Header.Recorder, l.Warnings()
 		}
 	case ITF:
-		in.ITF, err = itf.Parse(data)
+		in.ITF, err = itf.ParseWith(data, types)
 	default:
 		if strings.TrimSpace(string(data)) == "" {
 			return in, nil // an empty file holds no steps

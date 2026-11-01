@@ -333,6 +333,7 @@ const StepLog Format = "steps"
 const Unknown Format = ""
 func Distinct(files ...*File) error
 func Read(path string, format Format) (*File, error)
+func ReadITF(path string, types *itf.Schema) (*File, error)
 func Sniff(data []byte) Format
 type File struct
     field Path string
@@ -342,6 +343,7 @@ type File struct
     field Torn *qtrace.TornTail
     field Recorder string
     field Warnings []string
+    method (*File) SHA256() string
 type Format string
 var StepLogExample = fmt.Sprintf(`{%q:"deposit",%q:1,%q:"r",%q:5,%q:5}`, qtrace.KeyAction, qtrace.KeySeq, qtrace.KeyRecorder, qtrace.PrefixArg+"amount", qtrace.PrefixObs+"balance")
 
@@ -2328,7 +2330,7 @@ const FateKilled = "killed"
 const FateMalformed = "malformed"
 const FateSurvived = "survived"
 const FateUndecided = "undecided"
-const ManifestFormat = "gotogether.run/2"
+const ManifestFormat = "gotogether.run/3"
 const NotEvaluated Verdict = "n/a"
 const Pass Verdict = "pass"
 const ReportFormat = "gotogether.report/1"
@@ -2767,11 +2769,13 @@ type RunCheck struct
     field NoVars bool `json:"noVars,omitempty"`
     method (RunCheck) SearchOptions() SearchOptions
 type RunInput struct
+    field SHA256 string
     field Path string
     field Format string
     field Steps []qtrace.Step
     field Model *RunModel
 type RunModel struct
+    field Compiled *File `json:"compiled,omitempty"`
     field Binding *File `json:"binding,omitempty"`
     field Spec *File `json:"spec,omitempty"`
     field Imports []File `json:"imports,omitempty"`
@@ -2781,6 +2785,7 @@ type RunModel struct
     field Constants map[string]string `json:"constants,omitempty"`
     field Invariants []string `json:"invariants"`
 type RunRecord struct
+    field Compiled string
     field Composition *receipt.Composition
     field Options Options
     field Binding *binding.Binding

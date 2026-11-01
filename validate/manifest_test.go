@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -96,7 +97,7 @@ func TestManifestRoundTrip(t *testing.T) {
 	}
 	other := filepath.Join(moved, "evidence.json")
 	os.WriteFile(other, []byte(`{"format": "gotogether.evidence/2", "runs": 1}`), 0o644)
-	if _, err := ReadManifest(other); err == nil || !strings.Contains(err.Error(), `not a run manifest of "gotogether.run/2"`) || IsManifest(other) {
+	if _, err := ReadManifest(other); err == nil || !strings.Contains(err.Error(), `not a run manifest of "gotogether.run/3"`) || IsManifest(other) {
 		t.Errorf("another format: %v", err)
 	}
 }
@@ -453,5 +454,26 @@ func TestImportPaths(t *testing.T) {
 		"}\n"
 	if got := importPaths(src); strings.Join(got, " ") != "./a b.qnt sub/d" {
 		t.Errorf("imports %q", got)
+	}
+}
+
+// Older recipes cannot silently select a different judge. Evidence discovery
+// still recognizes them so the reader can name the unsupported format.
+func TestManifestRequiresCurrentEvaluationFormat(t *testing.T) {
+	t.Parallel()
+	for _, format := range []string{"gotogether.run/1", "gotogether.run/2"} {
+		t.Run(format, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "old.json")
+			body, _ := json.Marshal(map[string]string{"format": format})
+			if err := os.WriteFile(path, body, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := ReadManifest(path); !errors.Is(err, ErrManifestFormat) || !strings.Contains(err.Error(), ManifestFormat) {
+				t.Fatalf("old recipe wasn't refused with the current format: %v", err)
+			}
+			if !IsManifest(path) {
+				t.Fatal("evidence discovery hid an old recipe instead of allowing a useful reader error")
+			}
+		})
 	}
 }

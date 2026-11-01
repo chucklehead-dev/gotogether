@@ -373,7 +373,7 @@ shrunk.Expect(t, qtest.Violates("finishedOnce"), qtest.AtMostActions(2))
   `Reproduced`, `NotReproduced`, `Undecided`, `Diverged`, `Errors`, the
   original's `Baseline` rate and the minimal sequence's `Rate` ("8 of
   10"). Under `GOTOGETHER_EVIDENCE` the minimal run writes its manifest
-  (`gotogether.run/2`, driver `qtest.ShrinkActions` unless
+  (`gotogether.run/3`, driver `qtest.ShrinkActions` unless
   `qtest.Driver` is among `Opts`), with `actions.json` (the shrunk
   actions) and `shrink.json` (the counts) as hashed artifacts, each
   shrink's in a directory of its own: `validate -replay` judges it

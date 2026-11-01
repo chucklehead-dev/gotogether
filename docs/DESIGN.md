@@ -3843,7 +3843,7 @@ carries a user's name no pseudonym reaches (`KeepRefs` keeps them).
 
 **E4. Run manifests.** A failure did not travel: nothing said which
 binding, model, logs, tools and driver it was judged with, or whether
-they had changed. `gotogether.run/2` (`validate.Manifest`) records
+they had changed. `gotogether.run/3` (`validate.Manifest`) records
 gotogether's and quint's versions, the binding, spec and convert rules
 with their sha256, the instance (constants, invariants, backend), how it
 was judged (searches, the finish check, declared losses, watermarks),
@@ -5157,7 +5157,7 @@ adjusting it is a field per format):
 | `gotogether.convert/1` | a rule file's optional `format:` | the current only; unnamed protocols are refused |
 | `gotogether.corpus/1` | qtest's corpus entries | the current only |
 | `gotogether.choices/1` | qenv.EncodeChoices' header (`BytesVersion`) | the current only |
-| `gotogether.run/2` | validate's run manifest | the current only |
+| `gotogether.run/3` | validate's run manifest | the current only |
 | `gotogether.evidence/2` | qtest's evidence | the current only |
 | `gotogether.model/1` | a compiled model (gotogether compile, §64) | the current only |
 | `gotogether.report/1` | validate's and simulate's `-json` (validate.Document, §68) | the current only |
@@ -5311,6 +5311,43 @@ compiled for, which is a wrong answer that looks like one. Why not
 gzip: an artifact is 100-200 KB of JSON for the repository's models,
 and readable JSON is diffable in review.
 
+
+**Portable compiled judgments.** The single current `gotogether.run/3`
+manifest records `model.compiled` as a hashed executable dependency. Its presence
+selects evaluator-only replay; absence retains source/Quint replay. Runtime
+Quint/backend fields stay empty for compiled judgments, while compilation
+provenance remains inside the artifact. Creation, verification, export and replay
+perform no Quint or Node version probes or fallback. Unsupported operations keep
+their native error/no-verdict behavior.
+
+The actual loaded artifact digest and source-presence inventory travel privately
+with compiled results. Manifest creation rejects a different artifact or changed
+coverage instead of attaching an old verdict to freshly loaded data. Source hashes
+come from the artifact; the manifest records the subset present when judged.
+High-level input readers also retain fingerprints of the exact bytes parsed,
+including converted and schema-typed input paths. Judged.Manifest refuses changed
+or uncaptured inputs; it never attaches new bytes to an old verdict. Low-level
+RunRecord callers may supply expected RunInput.SHA256 fingerprints, or explicitly
+own provenance capture when they leave that field empty.
+This does not establish an atomic snapshot of all source-mode binding/spec or
+conversion-rule files; anchoring their actual load identities remains a separate
+follow-up. Artifact/input guards must not be described as compiler authenticity
+or a proof of a globally atomic capture.
+Previously present sources must remain present and identical; absent sources must
+remain absent. Their provenance stays disclosed as unchecked, not silently
+upgraded. Portable export preserves artifact bytes and all relative paths,
+including virtual absent-source paths when choosing the common copy root. It
+rejects inconsistent artifact-to-binding links, absolute references and file
+imports in binding defs that are not in the recorded graph. Existing exclusive
+staging/publication and input/artifact integrity checks remain in force.
+
+A compiled literal constant is baked into IR: changing only Binding.Constants
+cannot change its meaning. WithConstants therefore refuses such changes with
+recompilation guidance, while runtime parameter slots remain supported.
+WithInvariants can select compiled invariant wrappers; an unavailable wrapper is
+refused. A compiled ambiguous ITF input is refused before type inference, which
+would otherwise probe Quint. These bounds preserve native receipt/report facts
+rather than expanding the evaluator or claiming a finished/reconciled run.
 
 ## 65. Verdicts state their bounds (I9)
 
