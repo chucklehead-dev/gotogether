@@ -47,9 +47,37 @@ published dependency versions after native validation and bundled replay pass.
 No checkout replacements or module-cache edits are used for the faithful run.
 Any later source contrast must leave these frozen files unchanged.
 
-Current gate: real Goo execution, native representation checks, Quint/Rust
-validation and bundled replay pass. Source contrast and reproducible relocated
-replay controls are the next step after this baseline freeze.
+Freeze commit `ec382346` precedes the parent-planted source contrast. The contrast
+changes just the expiry-pruning boundary from `!now.Before(expires)` to
+`now.After(expires)` in a disposable copy of the pinned dependency. The unchanged
+model rejects the actual returned expired proof at sequence 10,
+`case:expired-at-boundary`. Source hashes and the exact edit are retained in each
+run's `reports/PROVENANCE.json`. Neither the external checkout nor the module
+cache is changed.
+
+## Reproduce
+
+Go with automatic Go 1.27 selection, Python 3 and Quint 0.33.0 are required.
+From the gotogether checkout:
+
+```sh
+mkdir -p "$PWD/bin"
+go build -o "$PWD/bin/gotogether" ./cmd/gotogether
+PATH="$PWD/bin:$PATH" internal/adoptiontest/goo-tail-membership/reproduce.sh
+```
+
+The script verifies the freeze, Go representation tests and five Quint model
+selftests. It records fresh actual API calls, validates with Quint/Rust and
+bundles the faithful run before preparing changed source. The source contrast
+must exit 1 with a native observed-state mismatch. Omitting one actual members
+observation must exit 2 as an evidence error. Both faithful and failing bundles
+then replay from another working directory after every original project path is
+removed. Fresh artifacts remain under `logs/run-*` (ignored by Git).
+
+Replay judges the captured observations; it does not execute Goo again. The
+model checks acceptance/refusal, atomic draft presence and preserved data, not
+the precise library rejection-error category. Raw error strings and categories
+remain available separately. No graph or exhaustive state exploration is claimed.
 
 Capacity/eviction, concurrent calls, arbitrary selectors, payload canonicalization,
 durable retention, custody, authorization and completeness remain outside scope.

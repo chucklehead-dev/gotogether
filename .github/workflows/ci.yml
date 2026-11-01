@@ -90,6 +90,7 @@ jobs:
           go build -o "$RUNNER_TEMP/read-adaptation-tools/gotogether" ./cmd/gotogether
           PATH="$RUNNER_TEMP/read-adaptation-tools:$PATH" internal/adoptiontest/goo-read/reproduce.sh
           PATH="$RUNNER_TEMP/read-adaptation-tools:$PATH" internal/adoptiontest/goo-counted-values/reproduce.sh
+          PATH="$RUNNER_TEMP/read-adaptation-tools:$PATH" internal/adoptiontest/goo-tail-membership/reproduce.sh
       - name: simulation code stays in the simulation
         if: matrix.part == 'core'
         run: go run ./cmd/gotogether lint -sim .

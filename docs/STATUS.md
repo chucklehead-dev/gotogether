@@ -7,7 +7,17 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Scaffold setup recovery (current branch): init/new retain generated files after
+Tail-membership adoption rehearsal (current branch): an independent two-slot
+model checks actual Goo capability ownership, read-anchored expiry, immutable
+member data and atomic selection. The 38-step faithful trace passes; a later
+parent-planted exact-expiry source contrast fails at sequence 10. Faithful and
+failing bundles replay after relocation, while missing observations remain
+evidence errors. See [scope and reproduction](../internal/adoptiontest/goo-tail-membership/README.md).
+Existing Goo coverage retains credit; this is agent-assisted, authored-history
+evidence, not independent adoption or a production defect. It required no new
+core API. Next: review GR10c's known down-process settlement boundary.
+
+Scaffold setup recovery (merged PR #43, 1608f52c): init/new retain generated files after
 failed dependency or model setup and print a shell-safe continuation from the
 failed stage through verification. Automatic execution and printed commands use
 GOWORK=off. Write-only flags print the full plan, including versioned dependency
@@ -586,7 +596,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Fresh end-to-end adoption exercise | S–M | setup recovery and native judgment scope now have controls; use a real contract and the published workflow to identify the next blocker before adding capabilities |
+| 1 | GR10c: down-process settlement | S | review the existing runtime boundary with a plain qenv reproducer; distinguish unavailable progress from settled model failure and preserve SettleCore's selected scope |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
@@ -616,6 +626,9 @@ candidate only if that evidence requires them. Broader peer or
 conformance shrink identities still need typed evidence and an adoption case.
 Further inventory/diagnostic expansion, cycles, clusters and platform facades
 wait for evidence. GR10c down-process settlement stays separate from GR10b.
+The fresh tail-membership exercise adds stateful external-library evidence
+without a new adapter; do not start another adjacent fixture in place of that
+known runtime review.
 
 The span round-trip and inventory trials retain explicit limits; they do not
 establish generic third-party HTTP inference or unaided onboarding. R5 is

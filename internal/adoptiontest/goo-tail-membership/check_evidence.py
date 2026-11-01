@@ -5,6 +5,7 @@ from collections import Counter
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import re
 import sys
 
 
@@ -22,6 +23,8 @@ def compact(value):
 
 
 def seconds(value):
+    fraction = re.search(r'T\d{2}:\d{2}:\d{2}[.,](\d+)', value)
+    require(not fraction or set(fraction.group(1)) <= {'0'}, 'subsecond native clock cannot use this bounded projection')
     at = datetime.fromisoformat(value.replace('Z', '+00:00'))
     require(at.microsecond == 0, 'subsecond native clock cannot use this bounded projection')
     delta = at - datetime(1970, 1, 1, tzinfo=timezone.utc)

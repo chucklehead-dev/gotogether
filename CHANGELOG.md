@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- A bounded external-library rehearsal models Goo tail-membership capabilities:
+  actual ownership/expiry/immutable-data observations, atomic selection, a frozen
+  baseline before a planted source defect, missing-evidence refusal and relocated
+  bundle replay. Raw responses and lossless projections remain separate; it adds
+  verification evidence without changing the runtime API.
+
 - Project setup failures from `gotogether init` and `grist new` retain the
   generated files and print shell-safe commands to resume the failed stage and
   remaining setup, then verify with `GOWORK=off`. Write-only modes include the
