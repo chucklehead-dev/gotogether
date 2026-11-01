@@ -519,6 +519,12 @@ distinct roots. JSON and TUI receipts disclose initialization, search completene
 selected-path confirmation separately; exhaustion and unsupported scopes give no
 verdict. See [model-choice witnesses](docs/model-choice-witnesses.md).
 
+Recorded-state navigation refuses conflicting records or ordering evidence in
+the selected actor, including at cursor zero and within a partition. Correct the
+capture before navigating it; CLI JSON emits no state node on this input error.
+Identical retry copies remain usable, and existing gap/snapshot policies apply.
+Model-only navigation needs no capture.
+
 On a terminal, `gotogether nav` opens the interactive navigator
 ([qnav](qnav)): here a failing run, at the choice before its failing
 step, then the run's option, whose step the model rejects, with why.

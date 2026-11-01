@@ -258,6 +258,11 @@ interactive navigator (`gotogether-nav`, the qnav module, which
 step's `why:` (gotogether-traces §4) names the condition the model found
 false.
 
+Recorded-state navigation refuses non-loss reconstruction errors in the selected
+actor, even at cursor zero or inside a partition. Correct conflicting capture
+evidence first; an input error produces no JSON state node. Identical retries
+remain usable, and existing loss/snapshot policies are unchanged.
+
 Every verdict, its expectation and its claims over many runs are in
 [`references/verdicts.md`](verdicts.md).
 

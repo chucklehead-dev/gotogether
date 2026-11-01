@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Collection argument lint (current branch): the original plain-field mapping
+Navigation reconstruction guard (current branch): observed-state navigation
+refuses non-loss errors in the selected whole actor, including conflicting
+recorder identities, ordering errors and partitions. Previously a discarded
+conflicting payload could silently determine the displayed state. CLI JSON and
+TUI fallback now return an input error without a node, including at cursor zero.
+Exact retries, unrelated clean actors, model-only navigation, valid model-failure
+prefixes and existing gap/snapshot policies retain their behavior.
+
+Collection argument lint (merged PR #37): the original plain-field mapping
 mistake from the large-count rehearsal now produces an early authored finding.
 Known collection arguments need conversion, so identity mappings recommend
 omission and other recorded JSON fields get a typed conversion example.
@@ -59,7 +67,7 @@ checks. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
-format has one current version; all published core pins agree at 5d91415c776e.
+format has one current version; all published core pins agree at c2cf31fa65ed.
 
 Captured-transition assertion follow-up (merged PR #32): qtest.TransitionsConform
 judges the existing native conformance facet for all judged actors or required
@@ -535,7 +543,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Independent-maintainer use or a concrete new contract blocker | S–M | the numeric conversion and collection-mapping authoring fixes now have controls; choose a new demonstrated adoption blocker before extending binding inference or adding adjacent numeric fixtures |
+| 1 | Simulation exact-step-budget boundary | S | a completed final turn currently returns ErrMaxSteps from Run/Settle; distinguish quiet completion from work requiring another turn, preserving stuck, horizon and deadline semantics without consuming extra choices |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
