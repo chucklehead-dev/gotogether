@@ -6233,9 +6233,11 @@ surviving core explicitly; no inferred retirement protocol is introduced.
 
 The terminal scenario-returned Unsettled is retained as typed execution metadata
 alongside its human reason. It carries the requested bound, pending tasks and
-down-process snapshots through evidence JSON and navigation. Indices are local
-to the simulation producing that error, never a guessed join to the execution's
-list of simulation calls. This is a terminal outcome, not a history of every
+down-process snapshots through evidence JSON and navigation. The same run-local
+observation collector supplies the originating simulation identity; it is never
+guessed from the last simulation call. Process indices are local to that
+simulation. Zero means no simulation identity was observed. This is a terminal
+outcome, not a history of every
 settlement attempt; swallowed errors and raw captured steps cannot recreate it.
 Cloning protects each evidence/navigation snapshot, and shared bounded text
 rendering preserves run attribution while JSON retains every identity.
@@ -6245,3 +6247,5 @@ unjudged; it cannot hide a real prefix-conformance failure. A genuinely availabl
 quiet system with an unfulfilled obligation still produces the model defect.
 Controls cover both cases, default/core scope, exact-bound recovery, duplicate
 process names, native behavior, structured JSON and cursor-independent TUI data.
+A two-simulation control returns an earlier failure after another simulation has
+run, preserving the original identity rather than attaching it to the last call.

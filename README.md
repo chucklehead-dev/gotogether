@@ -693,7 +693,8 @@ with captured down-process identities and writes no completion marker.
 `SettleCore` requires its explicitly selected processes to be up and ignores
 completion work outside that core; process-free clients still count. Use `Run`
 to observe permanent shutdown without claiming recovery. Execution evidence and
-navigation retain the requested settle bound, pending tasks and down processes
+navigation retain the observed simulation identity, requested settle bound,
+pending tasks and down processes
 as runtime facts, separate from the model's judgment.
 
 The app is written against seams: `qenv.DB` and `qenv.Txn` (an app's

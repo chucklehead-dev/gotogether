@@ -130,3 +130,57 @@ func TestReturnedSettlementObservationIsIndependent(t *testing.T) {
 		t.Fatal("determinism ignored changed process identity")
 	}
 }
+
+func TestSettlementIdentifiesOriginatingSimulationNotLastCall(t *testing.T) {
+	RequireQuint(t)
+	system := System{Binding: "../validate/testdata/funds.binding.yaml", Run: func(c qenv.Chooser) error {
+		bad := qenv.New(c)
+		defer bad.Close()
+		ready := false
+		worker := bad.Process("worker", false, func(ctx context.Context) {
+			qobs.Record(ctx, "deposit", nil, "amount", 10, "obs.balance", 10)
+			qobs.Record(ctx, "withdraw", nil, "amount", 10, "obs.balance", 0)
+			ready = true
+			qenv.Sleep(ctx, time.Hour)
+		})
+		if _, err := bad.RunUntil(time.Second, func() bool { return ready }); err != nil {
+			return err
+		}
+		worker.Crash()
+		unavailable := bad.Settle(time.Second)
+		// Both simulations own a process named worker at creation index 1.
+		// A later call on another Sim cannot identify the saved error's origin.
+		good := qenv.New(c)
+		defer good.Close()
+		good.Process("worker", false, func(context.Context) {})
+		if err := good.Run(time.Second); err != nil {
+			return err
+		}
+		return unavailable
+	}}
+	x := system.Explore(t, ExploreConfig{Seeds: 1, Parallel: 1})
+	x.Expect(t, None(Settles()))
+	data, err := json.Marshal(x.Evidence())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		Executions []runprofile.Execution `json:"executions"`
+	}
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Executions) != 1 {
+		t.Fatalf("missing execution: %s", data)
+	}
+	e := decoded.Executions[0]
+	if e.Settlement == nil || e.Settlement.Simulation != 1 || len(e.Simulations) < 3 || e.Simulations[len(e.Simulations)-1].Simulation != 2 {
+		t.Fatalf("settlement guessed the last simulation: %s", data)
+	}
+	if len(e.Settlement.DownProcesses) != 1 || e.Settlement.DownProcesses[0] != (runprofile.ProcessIdentity{Name: "worker", Incarnation: 1, Index: 1}) {
+		t.Fatalf("originating process identity changed: %+v", e.Settlement)
+	}
+	if !strings.Contains(e.String(), "; simulation 1") {
+		t.Fatalf("originating simulation hidden from human evidence: %s", e.String())
+	}
+}

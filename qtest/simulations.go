@@ -16,7 +16,7 @@ func (r *Run) hasExecution() bool {
 }
 
 func unsettledObservation(u *qenv.Unsettled) *runprofile.Settlement {
-	s := &runprofile.Settlement{After: u.After.String(), Tasks: append([]string{}, u.Tasks...), DownProcesses: []runprofile.ProcessIdentity{}}
+	s := &runprofile.Settlement{Simulation: u.Simulation, After: u.After.String(), Tasks: append([]string{}, u.Tasks...), DownProcesses: []runprofile.ProcessIdentity{}}
 	for _, p := range u.DownProcesses {
 		s.DownProcesses = append(s.DownProcesses, runprofile.ProcessIdentity{Name: p.Name, Incarnation: p.Incarnation, Index: p.Index})
 	}

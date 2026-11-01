@@ -1032,6 +1032,7 @@ type Txn interface
     Rollback()
     OnCommit(fn func())
 type Unsettled struct
+    field Simulation int
     field After time.Duration
     field Tasks []string
     field DownProcesses []ProcessIdentity
@@ -3446,6 +3447,7 @@ type Seeds struct
     field TopUpTo int `json:"topUpTo,omitempty"`
     field Steer int `json:"steer"`
 type Settlement struct
+    field Simulation int `json:"simulation,omitempty"`
     field After string `json:"after"`
     field Tasks []string `json:"tasks"`
     field DownProcesses []ProcessIdentity `json:"downProcesses"`

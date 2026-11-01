@@ -12,7 +12,8 @@ and adds a line here.
   requires its selected core up. Down processes return `Unsettled` with captured
   name/incarnation/creation-index identities and no completion marker.
   Outside-core blocked waits now follow the same scope as pending tasks.
-  Execution JSON and TUI retain typed terminal settlement evidence without
+  Execution JSON and TUI retain typed terminal settlement evidence and its
+  observed simulation identity without
   turning unavailable completion into an eventual-property failure.
 
 - A bounded external-library rehearsal models Goo tail-membership capabilities:

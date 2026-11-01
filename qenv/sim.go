@@ -1304,7 +1304,7 @@ func (s *Sim) settle(d time.Duration, core map[*Process]bool) error {
 	if err := s.Run(d); errors.Is(err, ErrStuck) {
 		// waits nothing will end: not settled, whether or not a daemon's
 		// timer keeps time moving (which makes the same stall Unsettled)
-		return &Unsettled{After: d, Tasks: s.pending(), DownProcesses: s.downProcesses(), Stuck: err}
+		return &Unsettled{After: d, Tasks: s.pending(), DownProcesses: s.downProcesses(), Stuck: err, Simulation: hooks.SimulationID(s.base, s)}
 	} else if err != nil {
 		return err
 	}
@@ -1313,7 +1313,7 @@ func (s *Sim) settle(d time.Duration, core map[*Process]bool) error {
 	}
 	pending, down := s.pending(), s.downProcesses()
 	if len(pending) > 0 || len(down) > 0 {
-		return &Unsettled{After: d, Tasks: pending, DownProcesses: down}
+		return &Unsettled{After: d, Tasks: pending, DownProcesses: down, Simulation: hooks.SimulationID(s.base, s)}
 	}
 	if r := qobs.From(s.base); r != nil {
 		r.Settled(s.base) // the run's eventual properties apply, if nothing is recorded after it
@@ -1337,6 +1337,9 @@ type ProcessIdentity struct {
 // Unsettled is a Settle that did not establish quiescence: tasks remain at work
 // or waiting, or processes required by the settlement scope remain down.
 type Unsettled struct {
+	// Simulation is the run-local observed simulation identity. Zero means no
+	// simulation observation collector was installed; it is not a global ID.
+	Simulation int
 	// After is the requested settlement bound, not measured elapsed time.
 	After time.Duration
 	Tasks []string

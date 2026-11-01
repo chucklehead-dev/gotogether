@@ -31,8 +31,10 @@ type ProcessIdentity struct {
 // lists down processes required by that attempt's scope; it makes no assertion
 // about business work held by killed tasks or processes outside a SettleCore.
 // After is the requested bound, not observed elapsed time. Process indices are
-// local to the Sim that returned this outcome, not indices into Simulations.
+// local to the originating Sim. Simulation joins it to Simulation.Simulation;
+// zero means that no run-local simulation observation ID was available.
 type Settlement struct {
+	Simulation    int               `json:"simulation,omitempty"`
 	After         string            `json:"after"`
 	Tasks         []string          `json:"tasks"`
 	DownProcesses []ProcessIdentity `json:"downProcesses"`
@@ -56,6 +58,9 @@ func (s *Settlement) String() string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "runtime did not settle (bound %s)", s.After)
+	if s.Simulation > 0 {
+		fmt.Fprintf(&b, "; simulation %d", s.Simulation)
+	}
 	if len(s.DownProcesses) > 0 {
 		b.WriteString("; required processes down:")
 		for _, p := range s.DownProcesses[:min(len(s.DownProcesses), 8)] {

@@ -17,7 +17,7 @@ of model judgments. Unavailable completion leaves eventual obligations unjudged;
 a genuinely available quiet system still exposes real obligation defects.
 Permanent Exit is shutdown, not recovery: use Run or a surviving SettleCore.
 
-Tail-membership adoption rehearsal (PR #44): an independent two-slot
+Tail-membership adoption rehearsal (merged PR #44, b0b2f124): an independent two-slot
 model checks actual Goo capability ownership, read-anchored expiry, immutable
 member data and atomic selection. The 38-step faithful trace passes; a later
 parent-planted exact-expiry source contrast fails at sequence 10. Faithful and
