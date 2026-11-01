@@ -96,3 +96,19 @@ func TestPartitionReceiptWireAndCursorScope(t *testing.T) {
 		t.Fatalf("wire scope used cursor counts: %+v", fields.Receipt.Counts)
 	}
 }
+
+func TestComponentPartitionScopeVisibleInNavigator(t *testing.T) {
+	history := &receipt.History{Status: receipt.Pass, Scope: "collected_history", OtherExecutions: receipt.NotChecked,
+		Actors:             []receipt.Actor{{Actor: "component acct=a", SourceActor: "component", Partition: "acct=a", PartitionInfo: &receipt.PartitionInfo{Key: "acct", Value: "a", Instance: 1}, Status: receipt.Pass}},
+		PartitionInstances: []receipt.PartitionInstance{{ID: 1, SourceActor: "component", Key: "acct", Factoring: "checked_on_evaluated_prefixes", OriginalConstants: map[string]string{"ACCTS": `Set("a", "b")`}, ReplaySubstitutions: []receipt.ConstantSubstitution{{Name: "ACCTS", Value: `Set("a")`, Basis: "unread_by_evaluated_prefixes"}}}},
+	}
+	node := &navproto.Node{Run: "run", Receipt: receipt.Summary{Status: receipt.Pass, Scope: "collected_history", OtherExecutions: receipt.NotChecked, Composition: &receipt.Composition{Local: []receipt.Component{{Target: "component", Status: receipt.Pass, Judgment: history}}}}}
+	m := New(Config{NoColor: true})
+	m.w, m.h = 100, 60
+	text := strings.Join(m.runScreen(&entry{r: node}).detail, "\n")
+	for _, want := range []string{"component component partition scope (instance IDs local to this history)", `original whole-history instance: ACCTS = Set("a", "b")`, `effective replay override: ACCTS = Set("a")`} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q: %s", want, text)
+		}
+	}
+}
