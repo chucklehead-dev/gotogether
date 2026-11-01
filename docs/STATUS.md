@@ -7,7 +7,17 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Tail-membership adoption rehearsal (current branch): an independent two-slot
+GR10c down-process settlement (current branch): ordinary deterministic Settle
+requires every registered process up, and SettleCore requires only its named
+core up. A required down process returns Unsettled with immutable local process
+identities and no settle marker. Outside-core blocked waits follow the same scope
+as pending tasks; process-free clients and global step limits remain relevant.
+Execution JSON/navigation/TUI carry the terminal runtime outcome independently
+of model judgments. Unavailable completion leaves eventual obligations unjudged;
+a genuinely available quiet system still exposes real obligation defects.
+Permanent Exit is shutdown, not recovery: use Run or a surviving SettleCore.
+
+Tail-membership adoption rehearsal (PR #44): an independent two-slot
 model checks actual Goo capability ownership, read-anchored expiry, immutable
 member data and atomic selection. The 38-step faithful trace passes; a later
 parent-planted exact-expiry source contrast fails at sequence 10. Faithful and
@@ -15,7 +25,7 @@ failing bundles replay after relocation, while missing observations remain
 evidence errors. See [scope and reproduction](../internal/adoptiontest/goo-tail-membership/README.md).
 Existing Goo coverage retains credit; this is agent-assisted, authored-history
 evidence, not independent adoption or a production defect. It required no new
-core API. Next: review GR10c's known down-process settlement boundary.
+core API. It supports rotating back to the known runtime settlement boundary.
 
 Scaffold setup recovery (merged PR #43, 1608f52c): init/new retain generated files after
 failed dependency or model setup and print a shell-safe continuation from the
@@ -596,7 +606,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | GR10c: down-process settlement | S | review the existing runtime boundary with a plain qenv reproducer; distinguish unavailable progress from settled model failure and preserve SettleCore's selected scope |
+| 1 | Independent use or a demonstrated contract blocker | S–M | the fresh stateful adoption exercise and GR10c controls are available; choose the next core/feature slice from actual friction, not another adjacent fixture |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
@@ -625,10 +635,11 @@ actual blocker or independent-maintainer use; outbound streams remain a
 candidate only if that evidence requires them. Broader peer or
 conformance shrink identities still need typed evidence and an adoption case.
 Further inventory/diagnostic expansion, cycles, clusters and platform facades
-wait for evidence. GR10c down-process settlement stays separate from GR10b.
+wait for evidence. GR10c down-process availability is distinct from GR10b's
+active-worker accounting; both now contribute to honest settlement.
 The fresh tail-membership exercise adds stateful external-library evidence
 without a new adapter; do not start another adjacent fixture in place of that
-known runtime review.
+known runtime correction.
 
 The span round-trip and inventory trials retain explicit limits; they do not
 establish generic third-party HTTP inference or unaided onboarding. R5 is

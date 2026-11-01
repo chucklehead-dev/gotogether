@@ -143,7 +143,7 @@ func (x *Exploration) Evidence() *Evidence {
 		e.Profiles = append(e.Profiles, x.profile.Clone())
 	}
 	for _, r := range x.Runs {
-		if r != nil && (len(r.simulations) > 0 || len(r.Phases) > 0) {
+		if r.hasExecution() {
 			e.Executions = append(e.Executions, r.execution(x.ref()+":"+r.ID()))
 		}
 		if r != nil && r.Report != nil && r.Report.Composition != nil {

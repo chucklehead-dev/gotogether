@@ -883,6 +883,10 @@ type Process struct
     method (*Process) ToReal(virtual time.Time) time.Time
     method (*Process) ToVirtual(real time.Time) time.Time
     method (*Process) Upgrade(version string, start func(ctx context.Context))
+type ProcessIdentity struct
+    field Name string
+    field Incarnation int
+    field Index int
 type Queue struct
     field Name string
     field Ordered bool
@@ -1030,6 +1034,7 @@ type Txn interface
 type Unsettled struct
     field After time.Duration
     field Tasks []string
+    field DownProcesses []ProcessIdentity
     field Stuck error
     method (*Unsettled) Error() string
     method (*Unsettled) Is(target error) bool
@@ -3356,6 +3361,7 @@ type Execution struct
     field Run string `json:"run"`
     field Simulations []Simulation `json:"simulations"`
     field Phases []Phase `json:"phases,omitempty"`
+    field Settlement *Settlement `json:"settlement,omitempty"`
     method (Execution) Clone() Execution
     method (Execution) PhasesString() string
     method (Execution) String() string
@@ -3376,6 +3382,10 @@ type Phase struct
     field Reason string `json:"reason,omitempty"`
     field Requirements []Requirement `json:"requirements"`
     method (Phase) Clone() Phase
+type ProcessIdentity struct
+    field Name string `json:"name"`
+    field Incarnation int `json:"incarnation"`
+    field Index int `json:"index"`
 type Profile struct
     field ID string `json:"id"`
     field Mutant string `json:"mutant,omitempty"`
@@ -3435,6 +3445,12 @@ type Seeds struct
     field Short bool `json:"short"`
     field TopUpTo int `json:"topUpTo,omitempty"`
     field Steer int `json:"steer"`
+type Settlement struct
+    field After string `json:"after"`
+    field Tasks []string `json:"tasks"`
+    field DownProcesses []ProcessIdentity `json:"downProcesses"`
+    method (*Settlement) Clone() *Settlement
+    method (*Settlement) String() string
 type Simulation struct
     field Operation string `json:"operation"`
     field Simulation int `json:"simulation"`

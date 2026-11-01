@@ -1092,14 +1092,16 @@ func WaitIdle(ctx context.Context, ready func() bool) {
 }
 
 // stuck lists the tasks waiting with no deadline that are neither daemons
-// nor in an idle wait ("": none).
+// nor in an idle wait ("": none). During SettleCore, only its required scope
+// contributes completion obligations; runnable work everywhere still consumes
+// the scheduler's global budget.
 func (s *Sim) stuck() string {
 	var lines []string
 	for _, t := range s.tasks {
 		if t.done || t.killed || !t.waiting || t.daemon || t.idle || !t.deadline.IsZero() {
 			continue
 		}
-		if t.proc != nil && t.proc.down {
+		if t.proc != nil && (t.proc.down || s.core != nil && !s.core[t.proc]) {
 			continue
 		}
 		lines = append(lines, "  "+t.name+": waiting")
@@ -1245,6 +1247,12 @@ func (s *Sim) run(d time.Duration, done func() bool) (err error) {
 // Faults stay off after it returns: what follows (a probe, an audit
 // through the doubles) runs on the settled system. ResumeFaults starts a
 // faulty phase again.
+//
+// Every registered process must also be up. A crashed process, including
+// one deliberately stopped with Exit, cannot certify whole-system recovery.
+// Restart it, use SettleCore for a surviving subset, or Run to observe shutdown
+// without claiming settlement. Returning from a process's main task is not a
+// crash and does not prevent settlement.
 func (s *Sim) Settle(d time.Duration) error { return s.settle(d, nil) }
 
 // PauseFaults disables subsequent fault choices and nemeses without healing
@@ -1270,6 +1278,8 @@ func (s *Sim) ResumeFaults() { s.faultsOff = false }
 // process makes one). The run's eventual properties then apply, as after
 // Settle: state them of what the core must finish. On the native
 // runtime, as Settle.
+// Every named core process must be up; down processes outside the core are
+// permitted and do not prevent settlement.
 func (s *Sim) SettleCore(d time.Duration, core ...*Process) error {
 	if len(core) == 0 {
 		panic("qenv: SettleCore with no core: Settle turns faults off everywhere")
@@ -1294,15 +1304,16 @@ func (s *Sim) settle(d time.Duration, core map[*Process]bool) error {
 	if err := s.Run(d); errors.Is(err, ErrStuck) {
 		// waits nothing will end: not settled, whether or not a daemon's
 		// timer keeps time moving (which makes the same stall Unsettled)
-		return &Unsettled{After: d, Tasks: s.pending(), Stuck: err}
+		return &Unsettled{After: d, Tasks: s.pending(), DownProcesses: s.downProcesses(), Stuck: err}
 	} else if err != nil {
 		return err
 	}
 	if s.nat != nil {
 		return nil // the native runtime runs in real time and cannot tell, as with ErrStuck: no eventual property is judged
 	}
-	if pending := s.pending(); len(pending) > 0 {
-		return &Unsettled{After: d, Tasks: pending}
+	pending, down := s.pending(), s.downProcesses()
+	if len(pending) > 0 || len(down) > 0 {
+		return &Unsettled{After: d, Tasks: pending, DownProcesses: down}
 	}
 	if r := qobs.From(s.base); r != nil {
 		r.Settled(s.base) // the run's eventual properties apply, if nothing is recorded after it
@@ -1313,11 +1324,26 @@ func (s *Sim) settle(d time.Duration, core map[*Process]bool) error {
 // ErrUnsettled is what an *Unsettled error is (errors.Is).
 var ErrUnsettled = errors.New("qenv: not settled")
 
-// Unsettled is a Settle whose time ran out before the system was quiet:
-// the tasks, not daemons, still at work or waiting then.
+// ProcessIdentity identifies one captured process incarnation without retaining
+// the mutable Process. A later restart does not change this identity.
+type ProcessIdentity struct {
+	Name        string
+	Incarnation int
+	// Index is the 1-based process creation index within this simulation.
+	// Names need not be unique; this index is not a global process identifier.
+	Index int
+}
+
+// Unsettled is a Settle that did not establish quiescence: tasks remain at work
+// or waiting, or processes required by the settlement scope remain down.
 type Unsettled struct {
+	// After is the requested settlement bound, not measured elapsed time.
 	After time.Duration
 	Tasks []string
+	// DownProcesses names crashed process incarnations required by this settle.
+	// SettleCore includes only named core processes; ordinary Settle includes all.
+	// The identities are sorted snapshots, independent of later restarts.
+	DownProcesses []ProcessIdentity
 	// Stuck is the ErrStuck error when no task could run and nothing was
 	// left to wake the waiting ones (Unwrap): a stall, judged as one.
 	Stuck error
@@ -1327,6 +1353,20 @@ type Unsettled struct {
 func (u *Unsettled) Unwrap() error { return u.Stuck }
 
 func (u *Unsettled) Error() string {
+	if len(u.DownProcesses) > 0 {
+		var names []string
+		for _, p := range u.DownProcesses {
+			names = append(names, fmt.Sprintf("%s#%d (process %d)", p.Name, p.Incarnation, p.Index))
+		}
+		message := fmt.Sprintf("qenv: not settled (bound %v): required processes down: %s (restart them or use SettleCore for an explicitly surviving subset)", u.After, strings.Join(names, ", "))
+		if len(u.Tasks) > 0 {
+			message += "; tasks still at work or waiting:\n  " + strings.Join(u.Tasks, "\n  ")
+		}
+		if u.Stuck != nil {
+			message += fmt.Sprintf("; %v", u.Stuck)
+		}
+		return message
+	}
 	if u.Stuck != nil {
 		return fmt.Sprintf("qenv: not settled: %v", u.Stuck)
 	}
@@ -1336,6 +1376,31 @@ func (u *Unsettled) Error() string {
 
 // Is reports whether target is ErrUnsettled.
 func (u *Unsettled) Is(target error) bool { return target == ErrUnsettled }
+
+// downProcesses lists unavailable process incarnations in the settlement scope.
+// Killed tasks cannot tell whether business work remains; availability is a
+// separate prerequisite, never an inference from those tasks.
+func (s *Sim) downProcesses() []ProcessIdentity {
+	if s.nat != nil {
+		return nil // the native runtime does not certify settlement
+	}
+	var out []ProcessIdentity
+	for i, p := range s.procs {
+		if p.down && (s.core == nil || s.core[p]) {
+			out = append(out, ProcessIdentity{Name: p.Name, Incarnation: p.Incarnation, Index: i + 1})
+		}
+	}
+	slices.SortFunc(out, func(a, b ProcessIdentity) int {
+		if order := cmp.Compare(a.Name, b.Name); order != 0 {
+			return order
+		}
+		if order := cmp.Compare(a.Incarnation, b.Incarnation); order != 0 {
+			return order
+		}
+		return cmp.Compare(a.Index, b.Index)
+	})
+	return out
+}
 
 // pending lists the tasks that keep the system from being quiet: live,
 // no daemon, not idle in a double's receive, of no crashed process.

@@ -63,7 +63,7 @@ func (r *MutationReport) retainExecution(x *Exploration) {
 		r.profiles = append(r.profiles, x.profile.Clone())
 	}
 	for _, run := range x.Runs {
-		if run != nil && (len(run.simulations) > 0 || len(run.Phases) > 0) {
+		if run.hasExecution() {
 			r.executions = append(r.executions, run.execution(x.ref()+":"+run.ID()))
 		}
 	}

@@ -480,7 +480,9 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 		err = cerr
 	}
 	var unsettled string
+	var settlement *runprofile.Settlement
 	if u, ok := errors.AsType[*qenv.Unsettled](err); ok { // a run outcome, judged by claims (Conforms, Settles), not a run that failed to run
+		settlement = unsettledObservation(u)
 		unsettled, err = u.Error(), nil
 	}
 	if is := r.Issues(); err == nil && len(is) > 0 {
@@ -500,6 +502,7 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	}
 	recorded := mem.Steps()
 	run := &Run{Steps: recorded, Recorded: recorded, Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr, Unsettled: unsettled, faults: faults, notes: notes.Lines(), simulations: simulationCalls(simulations.Calls())}
+	run.settlement = settlement
 	run.Phases = phases.Phases()
 	if sc, ok := qenv.As[*qenv.Script](ch); ok {
 		run.Unscripted, run.scripted, run.misnamed = sc.Remaining(), true, sc.Misnamed()
