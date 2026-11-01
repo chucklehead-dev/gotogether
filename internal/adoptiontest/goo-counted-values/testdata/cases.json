@@ -1,0 +1,6 @@
+[
+  {"name":"empty","total":"0","groups":[]},
+  {"name":"above-float-exactness","total":"9007199254740993","groups":["9007199254740993"]},
+  {"name":"max-uint64","total":"18446744073709551615","groups":["18446744073709551615"]},
+  {"name":"sum-beyond-uint64","total":"0","groups":["18446744073709551615","1"]}
+]
