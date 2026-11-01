@@ -43,3 +43,11 @@ this fixed executor's lists positionally; its claim is exact value preservation
 for these observations, not general output-order invariance. A later observer
 doc-comment update refreshed only its checksum: executable Go tokens match the
 original pre-contrast freeze exactly, and the model/binding remained unchanged.
+
+
+The native missing-state note previously promised that choosing Rust would show
+failure state. This trial demonstrates why that promise is too broad: Rust
+refuses this model's integer range. The core note now says Rust may report state
+if it supports the model. A real TypeScript replay with a MaxUint64 argument
+checks the conditional guidance in both native failure data and rendered text.
+This small diagnostic fix is the trial's one demonstrated toolkit improvement.

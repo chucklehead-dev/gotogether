@@ -5995,6 +5995,8 @@ contrast. Rust and Go-evaluator range refusals remain tool errors; they cannot
 stand in for source-defect evidence. Typed collection templates reuse the
 existing binding helpers. Missing TypeScript failure state stays unavailable,
 while native captured-record inspection identifies the offending observations.
-No compatibility format, core numeric extension or runtime adapter was needed.
+The missing-state hint now qualifies Rust guidance by model support instead of
+promising unavailable state. No compatibility format, core numeric extension or
+runtime adapter was needed.
 The bounded trial and original dependency/model/driver checksums are in
 internal/adoptiontest/goo-counted-values.

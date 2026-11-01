@@ -2,6 +2,7 @@ package validate
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -64,5 +65,35 @@ func TestAccountModel(t *testing.T) {
 				t.Errorf("%s: want conforming trace violating %s\n%s", tc.name, tc.inv, rep.Summary())
 			}
 		}
+	}
+}
+
+// TypeScript can judge a replay whose integers are outside Rust's supported
+// range. Missing-state guidance must not promise that Rust can replay it.
+func TestTypeScriptMissingStateGuidanceIsConditional(t *testing.T) {
+	t.Parallel()
+	skip.Quint(t)
+	c, err := NewChecker("testdata/account.yaml", Options{Backend: "typescript", Eval: "quint", Dir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	steps := accountSteps(3, 8)[:1]
+	steps[0].Args["amount"] = json.Number("18446744073709551615")
+	steps[0].Obs["balance"] = int64(0)
+	report, err := c.Check(t.Context(), steps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Actors) != 1 {
+		t.Fatalf("want one rejected actor: %s", report.Summary())
+	}
+	failure := report.Actors[0].Failure
+	if failure == nil || failure.Kind != "state" || failure.Index != 0 || failure.State != nil {
+		t.Fatalf("want real TypeScript state mismatch without ITF: %s", report.VerboseSummary())
+	}
+	const guidance = "QUINT_BACKEND=rust may report it if the Rust backend supports this model"
+	if !strings.Contains(failure.noState, guidance) || !strings.Contains(report.VerboseSummary(), guidance) {
+		t.Fatalf("missing conditional backend guidance: %s", report.VerboseSummary())
 	}
 }
