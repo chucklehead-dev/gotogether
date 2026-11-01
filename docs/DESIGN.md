@@ -6049,3 +6049,22 @@ usable. Gap and lost-prefix errors retain their existing snapshot/start policy;
 a valid model-failure prefix remains navigable. Refusal is an input error, not a
 model verdict or counterexample, and neither JSON nor TUI fallback can expose a
 node from that capture. No public API or output format changes are needed.
+
+
+## 78. A scheduling budget limits the next turn
+
+A counter equal to MaxSteps does not prove that execution was truncated. The
+scheduler first discovers runnable work and classifies quiet, stuck and
+out-of-horizon stops. Only work requiring another turn yields ErrMaxSteps at
+the cumulative limit. An in-bound deadline is guarded before advancing time,
+so failed calls do not move toward work they cannot schedule. The runnable
+guard precedes self-checks, nemeses and schedule choices. Current-time queue
+cleanup and read-only readiness checks still run to determine which case holds.
+
+The budget remains cumulative across calls: a quiet subsequent call succeeds,
+but newly spawned work needs a larger limit. RunUntil still checks completion
+at the boundary first. Settle keeps its pending-work and stuck classifications
+and writes completion only when quiet; daemon/core exemptions do not bypass
+runnable work. Native scheduling is unchanged. Existing simulation hooks carry
+the corrected StepLimitReached outcome into evidence JSON and TUI profiles
+without a format or API change. Runtime completion still proves no model claim.

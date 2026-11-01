@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- Simulation step limits now distinguish completed work from work needing another
+  turn. Completing on the final allowed turn succeeds; blocked waits and horizon
+  stops retain their own outcomes. True exhaustion still stops before another
+  task, fault choice or in-bound deadline advance. Execution JSON and TUI profiles
+  report `StepLimitReached` only for actual exhaustion.
+
 - Navigation refuses non-loss reconstruction errors in the selected actor,
   including conflicts hidden by partitioning or cursor zero. Conflicting captures
   return an input error instead of a model state in CLI JSON or the TUI.
