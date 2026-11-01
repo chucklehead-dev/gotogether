@@ -20,6 +20,8 @@ This trial adds the numeric boundary they do not reach with 140 generated facts:
 Individual counts fit uint64; the last sum is 2^64. The model uses unbounded
 integer addition and compares the public state with that arithmetic result.
 The model checks returned count multiplicities without assuming group order.
+The representation gate pins this fixed fixture/executor's observed list order;
+it does not establish arbitrary output-order preservation.
 This is a targeted regression and evidence-usability trial, not a production bug
 finding, exhaustive API proof or independent-maintainer adoption.
 
@@ -43,7 +45,10 @@ backend; reproduction also selects the Quint evaluation path explicitly.
 `FREEZE.sha256` retains the model, binding, observing driver, cases and exact
 published dependency pins. The freeze followed a successful native JSON → Quint
 → ITF → bundle/replay → native ITF reading gate. Commit `b67fe73a` records the
-freeze before creation of the source contrast. Never revise the frozen model to
+freeze before creation of the source contrast. A later comment-only observer
+documentation update refreshed its checksum; Go scanner tokens were verified
+identical to that original freeze. Model, binding and observing logic stayed
+unchanged. Never revise the frozen model to
 make a contrast fail or a faithful execution pass.
 
 The script works on disposable copies and leaves fresh results in `logs/run-*`.

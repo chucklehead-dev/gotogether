@@ -17,18 +17,21 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
+// Case supplies canonical decimal counts at the controlled HTTP boundary.
 type Case struct {
 	Name   string   `json:"name"`
 	Total  string   `json:"total"`
 	Groups []string `json:"groups"`
 }
 
+// Observation retains the public executor result and observed source-read count.
 type Observation struct {
 	Case   Case                             `json:"case"`
 	Result *exploration.CountedValuesResult `json:"result"`
 	Reads  int                              `json:"reads"`
 }
 
+// LoadCases reads authored source responses without classifying them.
 func LoadCases(path string) ([]Case, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -139,4 +142,5 @@ func Observe(ctx context.Context, cases []Case) ([]qtrace.Step, []Observation, e
 	return steps, observations, nil
 }
 
+// WriteTrace writes observations using the native step-log format.
 func WriteTrace(w io.Writer, steps []qtrace.Step) error { return qtrace.WriteJSONL(w, steps) }

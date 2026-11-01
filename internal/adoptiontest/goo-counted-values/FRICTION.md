@@ -36,3 +36,10 @@ an external temporary directory, normalizes only its inherited read-only
 directory permissions, retains source-hash provenance with the evidence, and
 cleans that temporary copy on exit. Frozen files and the module cache remain
 unchanged.
+
+
+The model compares group-count multisets. The frozen representation gate compares
+this fixed executor's lists positionally; its claim is exact value preservation
+for these observations, not general output-order invariance. A later observer
+doc-comment update refreshed only its checksum: executable Go tokens match the
+original pre-contrast freeze exactly, and the model/binding remained unchanged.
