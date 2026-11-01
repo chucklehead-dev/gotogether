@@ -1035,16 +1035,78 @@ func domainOf(typ string) string {
 	return map[string]string{"str": "STRS", "int": "INTS", "bool": "Bool"}[typ]
 }
 
-// draws are the nondet picks of one branch of a step: one per field name
-// and type (a name of two types is suffixed by the type), in first-use
-// order.
+// draws allocates branch-local picks in first-use order. Each logical field
+// and type shares one pick; no two distinct fields share a local name.
 type draws struct {
-	order []string
-	dom   map[string]string
-	by    map[[2]string]string // (param, type) -> pick
+	order      []string
+	dom        map[string]string
+	by         map[[2]string]string
+	reserved   map[string]bool
+	references map[string]bool
+	controls   map[string]string
 }
 
-func newDraws() *draws { return &draws{dom: map[string]string{}, by: map[[2]string]string{}} }
+func newDraws(reserved ...string) *draws {
+	d := &draws{dom: map[string]string{}, by: map[[2]string]string{}, reserved: map[string]bool{}, references: map[string]bool{}, controls: map[string]string{}}
+	for _, n := range reserved {
+		d.reserved[n] = true
+	}
+	return d
+}
+
+// libraryDrawNames matches declarations in the owned library's module body
+// (read-only).
+var libraryDrawNames = regexp.MustCompile(`(?m)^  (?:pure\s+)?(?:def|val|action|type|const)\s+([A-Za-z_][A-Za-z0-9_]*)`)
+
+// Keep branch locals clear of the symbols their expressions reference.
+// Only local draws are renamed; catalog-mapped parameters stay unchanged.
+func (g *gen) newDraws() *draws {
+	d := newDraws()
+	for n := range catalog.QuintTaken {
+		d.reserved[n] = true
+	}
+	// The vendored library is owned source with two-space module declarations.
+	// Derive imported symbols so adding a helper cannot silently reintroduce capture.
+	for _, match := range libraryDrawNames.FindAllSubmatch(Library, -1) {
+		n := string(match[1])
+		d.reserved[n] = true
+		d.references[n] = true
+	}
+	for n := range g.names {
+		d.reserved[n] = true
+		d.references[n] = true
+	}
+	for n := range g.defined {
+		d.reserved[n] = true
+		d.references[n] = true
+	}
+	for _, n := range strings.Fields("STRS INTS Bool req_ verdict_ trigger_ key_ ok_ known_") {
+		d.reserved[n] = true
+	}
+	for _, n := range []string{"STRS", "INTS", "Bool"} {
+		d.references[n] = true
+	}
+	return d
+}
+
+func (d *draws) allocate(preferred string) string { return d.allocateWith(preferred, d.reserved) }
+
+func (d *draws) allocateWith(preferred string, reserved map[string]bool) string {
+	available := func(n string) bool { _, used := d.dom[n]; return !used && !reserved[n] }
+	if available(preferred) {
+		return preferred
+	}
+	base := "arg_" + preferred
+	if available(base) {
+		return base
+	}
+	for i := 2; ; i++ {
+		n := fmt.Sprintf("%s_%d", base, i)
+		if available(n) {
+			return n
+		}
+	}
+}
 
 // add draws the picks of fs, returning them as fields named by the pick.
 func (d *draws) add(fs []field) []field {
@@ -1053,15 +1115,14 @@ func (d *draws) add(fs []field) []field {
 		k := [2]string{f.param, f.typ}
 		name, ok := d.by[k]
 		if !ok {
-			name = f.param
-			if prev, taken := d.dom[name]; taken && prev != domainOf(f.typ) {
-				name = f.param + "_" + f.typ
+			preferred := f.param
+			if _, used := d.dom[preferred]; used && !d.reserved[preferred] {
+				preferred += "_" + f.typ
 			}
+			name = d.allocate(preferred)
 			d.by[k] = name
-			if _, seen := d.dom[name]; !seen {
-				d.dom[name] = domainOf(f.typ)
-				d.order = append(d.order, name)
-			}
+			d.dom[name] = domainOf(f.typ)
+			d.order = append(d.order, name)
 		}
 		out[i] = f
 		out[i].param = name
@@ -1069,11 +1130,15 @@ func (d *draws) add(fs []field) []field {
 	return out
 }
 
-func (d *draws) pick(name, domain string) {
-	if _, seen := d.dom[name]; !seen {
-		d.dom[name] = domain
-		d.order = append(d.order, name)
+func (d *draws) pick(name, domain string) string {
+	if actual, ok := d.controls[name]; ok {
+		return actual
 	}
+	actual := d.allocateWith(name, d.references)
+	d.controls[name] = actual
+	d.dom[actual] = domain
+	d.order = append(d.order, actual)
+	return actual
 }
 
 // branch is call under its own picks: a block drawing them, or call
@@ -1093,13 +1158,13 @@ func (d *draws) branch(call string) string {
 
 // commandCall is the step's call of command c with its picks fs: its
 // rule's outcome and the reads that outcome needs.
-func commandCall(c CatalogBlock, fs []field, extra ...string) string {
+func commandCall(c CatalogBlock, fs []field, caller string, extra ...string) string {
 	if len(c.Rules) > 0 {
 		return fmt.Sprintf("{\n        val args_: %sArgs = %s\n        val verdict_ = %sRuled(log, args_)\n        val result_ = verdict_.outcome\n        %s\n      }",
-			upper(c.Quint), recordFrom(c, fs), c.Quint, applied(c.Quint, paramNames(fs, extra...)))
+			upper(c.Quint), recordFrom(c, fs, caller), c.Quint, applied(c.Quint, paramNames(fs, extra...)))
 	}
 	return fmt.Sprintf("{\n        val args_: %sArgs = %s\n        val result_ = %sOutcome(log, args_)\n        %s\n      }",
-		upper(c.Quint), recordFrom(c, fs), c.Quint, applied(c.Quint, paramNames(fs, extra...)))
+		upper(c.Quint), recordFrom(c, fs, caller), c.Quint, applied(c.Quint, paramNames(fs, extra...)))
 }
 
 // ownRefusals are c's refusals but those only its rules add.
@@ -1163,13 +1228,13 @@ var idList = func() string { // read-only
 }()
 
 // recordFrom is c's arguments' record from the picks fs.
-func recordFrom(c CatalogBlock, fs []field) string {
+func recordFrom(c CatalogBlock, fs []field, caller string) string {
 	orig, _ := scalarFields(c.Args)
 	parts := make([]string, 0, len(fs)+1)
 	for i, f := range fs {
 		parts = append(parts, orig[i].json+": "+f.param)
 	}
-	return "{ " + strings.Join(append(parts, "caller: caller"), ", ") + " }"
+	return "{ " + strings.Join(append(parts, "caller: "+caller), ", ") + " }"
 }
 
 func (g *gen) storeStep(b *strings.Builder) {
@@ -1177,52 +1242,52 @@ func (g *gen) storeStep(b *strings.Builder) {
 	var calls []string
 	for _, c := range g.c.Commands {
 		fs, _ := scalarFields(c.Args)
-		d := newDraws()
+		d := g.newDraws()
 		ps := d.add(fs)
-		d.pick("caller", "STRS")
-		d.pick("id", "nextID(answered)")
+		caller := d.pick("caller", "STRS")
+		id := d.pick("id", "nextID(answered)")
 		reads := fmt.Sprintf("triplesOf(%sNeeds(args_, result_))", c.Quint)
 		if len(c.Rules) > 0 {
 			reads = fmt.Sprintf("triplesOf(%sNeeds(args_, if (verdict_.decided == \"ok\") \"ok\" else result_).union(verdict_.needs))", c.Quint)
 		}
-		calls = append(calls, d.branch(commandCall(c, ps, "id", "caller", "log.length()", reads, "result_")))
+		calls = append(calls, d.branch(commandCall(c, ps, caller, id, caller, "log.length()", reads, "result_")))
 	}
 	for _, q := range g.c.Queries {
 		fs, _ := scalarFields(q.Args)
-		d := newDraws()
+		d := g.newDraws()
 		calls = append(calls, d.branch(q.Quint+"("+paramNames(d.add(fs), "log.length()")+")"))
 	}
 	for _, p := range g.c.Processors {
 		next := fmt.Sprintf("nextOf(log, checkpoints.get(%q), %q)", p.Name, p.On)
-		d := newDraws()
+		d := g.newDraws()
 		switch {
 		case p.Shape == "emits":
 			calls = append(calls, fmt.Sprintf("%s(%s)", p.Quint, next))
 		case p.Guarantee == AtLeastOnce:
 			calls = append(calls, fmt.Sprintf("%sSkip(%s)", p.Quint, next))
-			d.pick("key_", "KEYS")
-			d.pick("ok_", "Bool")
-			calls = append(calls, d.branch(fmt.Sprintf("%sEffect(%s, key_, ok_)", p.Quint, next)))
-			d = newDraws()
-			d.pick("ok_", "Bool")
-			calls = append(calls, d.branch(fmt.Sprintf("%s(%s, ok_)", p.Quint, next)))
+			key := d.pick("key_", "KEYS")
+			ok := d.pick("ok_", "Bool")
+			calls = append(calls, d.branch(fmt.Sprintf("%sEffect(%s, %s, %s)", p.Quint, next, key, ok)))
+			d = g.newDraws()
+			ok = d.pick("ok_", "Bool")
+			calls = append(calls, d.branch(fmt.Sprintf("%s(%s, %s)", p.Quint, next, ok)))
 		default:
 			calls = append(calls, fmt.Sprintf("%sSkip(%s)", p.Quint, next))
 			calls = append(calls, fmt.Sprintf("%s(%s, false)", p.Quint, next))
-			d.pick("trigger_", "1.to(log.length() + 1)")
-			d.pick("key_", "KEYS")
-			d.pick("ok_", "Bool")
-			calls = append(calls, d.branch(fmt.Sprintf("%sEffect(trigger_, key_, ok_)", p.Quint)))
-			d = newDraws()
-			d.pick("trigger_", "1.to(log.length() + 1)")
-			d.pick("ok_", "Bool")
-			d.pick("known_", "Bool")
-			calls = append(calls, d.branch(fmt.Sprintf("%sOutcome(trigger_, ok_, known_, \"lost\")", p.Quint)))
+			trigger := d.pick("trigger_", "1.to(log.length() + 1)")
+			key := d.pick("key_", "KEYS")
+			ok := d.pick("ok_", "Bool")
+			calls = append(calls, d.branch(fmt.Sprintf("%sEffect(%s, %s, %s)", p.Quint, trigger, key, ok)))
+			d = g.newDraws()
+			trigger = d.pick("trigger_", "1.to(log.length() + 1)")
+			ok = d.pick("ok_", "Bool")
+			known := d.pick("known_", "Bool")
+			calls = append(calls, d.branch(fmt.Sprintf("%sOutcome(%s, %s, %s, \"lost\")", p.Quint, trigger, ok, known)))
 		}
 	}
 	for _, s := range g.c.Sites {
 		fs, _ := scalarFields(s.Fields)
-		d := newDraws()
+		d := g.newDraws()
 		calls = append(calls, d.branch(applied(s.Quint, paramNames(d.add(fs)))))
 	}
 	calls = append(calls, g.callSteps()...)
@@ -1266,19 +1331,19 @@ func (g *gen) callsModule(b *strings.Builder) {
 	var calls []string
 	for _, c := range g.c.Commands {
 		fs, _ := scalarFields(c.Args)
-		d := newDraws()
+		d := g.newDraws()
 		ps := d.add(fs)
-		d.pick("caller", "STRS")
-		d.pick("id", "nextID(answered)")
-		outcome := fmt.Sprintf("%sOutcome(log, %s)", c.Quint, recordFrom(c, ps))
+		caller := d.pick("caller", "STRS")
+		id := d.pick("id", "nextID(answered)")
+		outcome := fmt.Sprintf("%sOutcome(log, %s)", c.Quint, recordFrom(c, ps, caller))
 		if len(c.Rules) > 0 {
-			outcome = fmt.Sprintf("%sRuled(log, %s).outcome", c.Quint, recordFrom(c, ps))
+			outcome = fmt.Sprintf("%sRuled(log, %s).outcome", c.Quint, recordFrom(c, ps, caller))
 		}
-		calls = append(calls, d.branch(fmt.Sprintf("%s(%s)", c.Quint, paramNames(ps, "id", "caller", outcome))))
+		calls = append(calls, d.branch(fmt.Sprintf("%s(%s)", c.Quint, paramNames(ps, id, caller, outcome))))
 	}
 	for _, q := range g.c.Queries {
 		fs, _ := scalarFields(q.Args)
-		d := newDraws()
+		d := g.newDraws()
 		calls = append(calls, d.branch(applied(q.Quint, paramNames(d.add(fs)))))
 	}
 	b.WriteString("    any {\n")
@@ -1488,7 +1553,7 @@ func (g *gen) possibles(calls bool) []string {
 	var out []string
 	for _, c := range g.c.Commands {
 		for _, o := range append([]string{"ok"}, c.Refuses...) {
-			out = append(out, fmt.Sprintf("    - name: %s.%s\n      when: '%s'\n", c.Quint, o, commandCan(c, o)))
+			out = append(out, fmt.Sprintf("    - name: %s.%s\n      when: '%s'\n", c.Quint, o, g.commandCan(c, o)))
 		}
 	}
 	for _, q := range g.c.Queries {
@@ -1526,14 +1591,14 @@ func (g *gen) possibles(calls bool) []string {
 // commandCan is the predicate that the model's step can take command c
 // with outcome o: an identity left, and some arguments in the domains the
 // step draws them from with o their outcome (its rules' verdict too).
-func commandCan(c CatalogBlock, o string) string {
+func (g *gen) commandCan(c CatalogBlock, o string) string {
 	fs, _ := scalarFields(c.Args)
-	d := newDraws()
+	d := g.newDraws()
 	ps := d.add(fs)
-	d.pick("caller", "STRS")
-	outcome := fmt.Sprintf("%sOutcome(log, %s)", c.Quint, recordFrom(c, ps))
+	caller := d.pick("caller", "STRS")
+	outcome := fmt.Sprintf("%sOutcome(log, %s)", c.Quint, recordFrom(c, ps, caller))
 	if len(c.Rules) > 0 {
-		outcome = fmt.Sprintf("%sRuled(log, %s).outcome", c.Quint, recordFrom(c, ps))
+		outcome = fmt.Sprintf("%sRuled(log, %s).outcome", c.Quint, recordFrom(c, ps, caller))
 	}
 	pred := fmt.Sprintf("%s == %q", outcome, o)
 	for i := len(d.order) - 1; i >= 0; i-- {

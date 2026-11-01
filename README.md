@@ -190,6 +190,8 @@ testing, where Quint traces drive the implementation). It adds:
   from the app's catalog (`<app> model`), so the app writes only its rules
   and invariants in Quint, and `gristsim.System` explores it under
   crashes, lost answers and isolation levels like any other system.
+  Generated local draws avoid action-name collisions, so a command named
+  `order` can keep an `order` argument; regeneration preserves the public names.
   Named [workload phases](docs/grist-workload-phases.md) require actual outcomes
   and bounded query observations before random clients start.
   `<app> model -check` reports model-maintenance problems together without writing;

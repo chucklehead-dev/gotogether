@@ -8,6 +8,13 @@ and adds a line here.
 
 ## Unreleased
 
+- Grist's model generator now allocates local draws without shadowing the
+  actions and helpers they call. Commands such as `order` with an `order`
+  argument, or a command named `caller`, retain their public names. Store/client
+  branches and outcome reachability predicates share the allocation; recorded
+  fields and binding identities stay unchanged. Regenerate affected model files
+  with the app's `model` command.
+
 - Simulation step limits now distinguish completed work from work needing another
   turn. Completing on the final allowed turn succeeds; blocked waits and horizon
   stops retain their own outcomes. True exhaustion still stops before another

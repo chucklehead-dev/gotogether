@@ -7,7 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Simulation step-budget boundary (current branch): quiet completion on the last
+Grist generated draws (current branch): the documented order/order collision
+no longer requires renaming a command to place. Argument and framework locals
+avoid action/helper/domain/temporary names and colliding type suffixes, while
+keeping public action/parameter names, recorded fields and binding identities.
+Store/client and query/site branches share allocation with command reachability
+predicates. Native Quint tests cover the original catalog shape and related
+caller/imported-helper collisions. Handwritten rules/invariants remain untouched;
+affected generated files should be regenerated through the app's model command.
+
+Simulation step-budget boundary (merged PR #39): quiet completion on the last
 permitted turn now succeeds instead of returning ErrMaxSteps. Stuck and horizon
 outcomes remain distinct, and actual exhaustion stops before another task,
 fault choice or in-bound deadline advance. Limits remain cumulative across
@@ -629,13 +638,6 @@ or HTTPRoute weights); GR3's five design questions
 (nothing released, crashes per step, the global recorder opt-in, MIT).
 
 ## 6. Known issues and rough edges
-
-- **Generator name shadowing:** a command named `order` with an argument
-  named `order` generates a model-only step whose local draw shadows
-  the action; Quint typecheck fails (`order(order, ...)`, str versus
-  operator). The composition fixture uses `place` instead. Fix the
-  generator's local-name allocation; this is a loud typecheck failure,
-  not a validated counterexample or a reason to loosen a model.
 
 - **I35's list, reported not fixed** (HISTORY "I35: tutorials"): a
   partitioned report's RESULT counts partitions as "actors" and its

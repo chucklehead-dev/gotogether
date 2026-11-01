@@ -137,6 +137,12 @@ simulate`) draws arguments from. Read models' folds are yours (Go
 closures cannot be translated): write a def over the generated
 selection (`totalsEvents(log, c).foldl(0, (s, e) => s + counterIncrementedBy(e))`).
 
+Model-only draws use local aliases when needed to avoid shadowing the actions
+and helpers they call. Keep domain names such as command `order` and field
+`order`, or command `caller`; regenerate with the app's `model` command rather
+than renaming the command to work around a draw collision. Public action and
+parameter names, recorded fields and rule record labels stay unchanged.
+
 `go run ./cmd/<app> model` names every missing hole with a stub to
 start from. A new block's holes are missing until written; a changed
 argument list changes nothing in a hole (it takes the record).

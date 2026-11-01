@@ -1177,6 +1177,15 @@ calling the dependency; an effect cannot mutate its success evidence or be
 reclassified as NotApplied by a later projection failure. Processor projection
 fault text is kept in the failed trigger's step for normal report output.
 
+**Generated local draws keep application vocabulary.** A command named
+`order` may also take an `order` field, and a command may be named `caller`.
+Model-only branches choose separate locals when argument or framework draws
+would shadow an action, helper or temporary; queries, sites and outcome
+reachability predicates use the same allocation. This changes local names,
+not recorded JSON fields, public action signatures, rule record labels or
+binding identities. Regenerate affected files through the app's `model`
+command; handwritten rules and invariants remain application-owned.
+
 **The model's state is one tenant's log**: `var log: List[Event]` and
 `var checkpoints: str -> int`, each tenant's trace its own instance.
 Read models are defs over the log (`counterNames(log)`), not variables:

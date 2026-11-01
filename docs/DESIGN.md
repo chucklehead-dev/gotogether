@@ -6068,3 +6068,27 @@ and writes completion only when quiet; daemon/core exemptions do not bypass
 runnable work. Native scheduling is unchanged. Existing simulation hooks carry
 the corrected StepLimitReached outcome into evidence JSON and TUI profiles
 without a format or API change. Runtime completion still proves no model claim.
+
+
+## 79. Generated draws have their own namespace
+
+A valid catalog command named order with an order argument produced a local
+nondet order and then attempted to call that string as the action. An adoption
+fixture renamed its command to place to pass typechecking. Fixed framework
+picks and imported operators had the same problem: caller could shadow its
+action, and an argument named triplesOf could shadow the reads helper.
+
+The generator allocates both argument and control draws against referenced
+symbols, with extra reservations keeping fields clear of framework locals.
+It retains safe spellings and chooses deterministic aliases on collision.
+Distinct field/type identities cannot accidentally share a pick through a
+colliding suffix. Consumers use the allocated identifiers structurally, without
+rewriting record labels or public names. Store/client branches, query/site
+branches, declared-call responses and the existential predicates used for
+command reachability share this allocation.
+
+External action, parameter and binding names do not change; regeneration never
+rewrites handwritten model files. Native Quint typechecking and executable
+command witnesses test actual catalog vocabulary. This fixes generated draws,
+not arbitrary handwritten Quint parameters or lambda binders, and does not
+establish application rules.
