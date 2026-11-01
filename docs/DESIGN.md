@@ -6179,3 +6179,31 @@ The maintained x/mod parser avoids a second handwritten Go module grammar.
 Its dependency affects selected versions even in examples that only replace the
 core; root dependency changes therefore require standalone module tidy checks,
 including examples, rather than workspace builds alone.
+
+## 83. A stateful adoption exercise keeps opaque proof and model facts separate
+
+Goo's tail-membership bank provides a distinct external contract after the strict
+reader and arithmetic trials: scoped immutable observation capabilities whose
+expiry is anchored to the original read, with all-or-nothing selection. Existing
+native/Hegel tests retain credit. A separate model author reads only the public
+contract; the observer calls the real API and retains full input, capabilities,
+errors, requested references and returned drafts. Two snapshot slots and authored
+histories bound the experiment; no exhaustive or concurrent proof follows.
+
+The model derives ownership, expiry and expected immutable member data from the
+trusted issue inputs. An opaque native basis is observed at issuance only to
+check its later identity, not to supply the expected temporal verdict. Transport
+checks tie native token aliases and row handles to their actual requests and
+preserve multiplicity. JSON record bytes use lossless base64 because Quint has
+no quote escapes in strings; native responses remain intact. Whole-second model
+time is explicit: subsecond output is refused before projection, including in
+the independent checker rather than silently truncating nanosecond fractions.
+
+Freeze commit ec382346 precedes the parent-planted source contrast. Changing only
+the exact-expiry pruning predicate makes native resolution return expired proof;
+the unchanged model rejects it at sequence 10. A missing members observation is
+an evidence error. Faithful and failing bundled captures preserve their verdicts
+after original paths are removed; replay checks those captures rather than
+rerunning Goo. Disposable source copies leave both external checkout and module
+cache unchanged. This demonstrates a bounded workflow, not a production defect
+or independent-maintainer adoption, and requires no new core API or format.

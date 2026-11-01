@@ -9,11 +9,11 @@ Standing decisions, with the maintainer:
 - Crashes are considered at every scheduling step (`NemesisEvery` is
   opt-in); `qenv.Service`'s crash window is on by default.
 - The global recorder is opt-in (`qtest.Global()`).
-- qhegel becomes a module of its own before any tag, so the core needs
-  only OTel and yaml.v3.
+- Heavy integrations stay in separate modules; the core keeps its small
+  recording, YAML, platform and CLI module-parser dependencies.
 - MIT license.
 
-Current order (reviewed 2026-10-31): this is a prerelease library.
+Current order (reviewed 2026-11-01): this is a prerelease library.
 Correctness and usable core contracts come before release machinery. The bounded
 composition, Goo lifecycle, declared-call span, workload-phase and diagnostic
 experiments have answered their initial questions; rotate away from inventory
@@ -99,9 +99,18 @@ Scaffold setup recovery now addresses the documented populated-directory failure
 init/new retain files and print the failed and remaining setup steps plus
 verification, using shell-safe arguments and GOWORK=off. Write-only output uses
 the same complete plan; module/Go preflight and quoted replacement paths avoid
-predictable setup failures. The next step is a fresh end-to-end adoption exercise
-against a real contract. Choose further capabilities from observed friction;
-these agent-assisted rehearsals do not establish independent adoption.
+predictable setup failures. A fresh [tail-membership capability exercise](../internal/adoptiontest/goo-tail-membership/README.md)
+now checks a distinct stateful contract: two snapshot slots, read-anchored expiry,
+ownership, immutable payload/provenance and atomic multi-reference resolution.
+The model/observer freeze precedes a planted exact-expiry defect; native mismatch,
+missing-evidence refusal and relocated replay preserve separate facts. The full
+native outputs remain alongside lossless model projections. Existing Goo tests
+retain credit, and the authored histories do not establish exhaustive verification
+or independent adoption. No new core API was needed. Rotate back to GR10c's
+documented down-process settlement boundary: first reproduce it in plain qenv,
+review what ordinary Settle promises versus SettleCore's selected scope, then
+carry any justified runtime facts through existing outputs. Do not infer pending
+business work from killed goroutines or weaken eventual properties.
 
 S11's skipped middle-snapshot gap is implemented in PR #15:
 later snapshots check the whole replayed state and cannot reset it. The first

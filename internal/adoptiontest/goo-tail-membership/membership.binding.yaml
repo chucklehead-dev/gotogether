@@ -1,0 +1,33 @@
+format: gotogether.binding/2
+spec: model/membership.qnt
+module: membership
+actions:
+  reset: {}
+  advance:
+    args:
+      now: '{{.now}}'
+  issue:
+    args:
+      slot: '{{.slot}}'
+      observed: '{{.observed}}'
+      connection: '{{toQuint "str" .connection}}'
+      selector: '{{toQuint "str" .selector}}'
+      members: '{{toQuint "List[Member]" .members}}'
+      observedBasis: '{{toQuint "str" .obs.basis}}'
+    expect: >-
+      accepted == ({{toQuint "str" .obs.status}} == "ok") and
+      (if (accepted) expiry == {{.obs.expires}} else true)
+  resolve:
+    args:
+      slots: '{{toQuint "List[int]" .slots}}'
+      memberKeys: '{{toQuint "List[str]" .keys}}'
+      connection: '{{toQuint "str" .connection}}'
+      selector: '{{toQuint "str" .selector}}'
+    expect: >-
+      accepted == ({{toQuint "str" .obs.status}} == "ok") and
+      accepted == {{.obs.hasDraft}} and
+      expectedConnection == {{toQuint "str" .obs.connection}} and
+      expectedSelector == {{toQuint "str" .obs.selector}} and
+      sameMembers(expectedMembers, {{toQuint "List[Member]" .obs.members}})
+invariants: [bounded, atomic]
+eventually: []

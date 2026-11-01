@@ -1,0 +1,449 @@
+[
+  {
+    "action": "reset",
+    "name": "delayed-read-clock"
+  },
+  {
+    "action": "advance",
+    "name": "issue-delayed-sixty",
+    "now": 60
+  },
+  {
+    "action": "issue",
+    "name": "delayed-live",
+    "slot": 0,
+    "observed": 0,
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test",
+    "bodies": [
+      "first",
+      "second"
+    ],
+    "limited": true
+  },
+  {
+    "action": "resolve",
+    "name": "before-mutation",
+    "refs": [
+      {
+        "slot": 0,
+        "row": 0
+      },
+      {
+        "slot": 0,
+        "row": 1
+      }
+    ],
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test"
+  },
+  {
+    "action": "mutateInput",
+    "name": "alter-caller-input",
+    "slot": 0
+  },
+  {
+    "action": "resolve",
+    "name": "after-input-mutation",
+    "refs": [
+      {
+        "slot": 0,
+        "row": 1
+      },
+      {
+        "slot": 0,
+        "row": 0
+      }
+    ],
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test"
+  },
+  {
+    "action": "mutateDraft",
+    "name": "alter-returned-draft"
+  },
+  {
+    "action": "resolve",
+    "name": "after-draft-mutation",
+    "refs": [
+      {
+        "slot": 0,
+        "row": 0
+      },
+      {
+        "slot": 0,
+        "row": 1
+      }
+    ],
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test"
+  },
+  {
+    "action": "advance",
+    "name": "one-second-before-expiry",
+    "now": 119
+  },
+  {
+    "action": "resolve",
+    "name": "still-live",
+    "refs": [
+      {
+        "slot": 0,
+        "row": 0
+      }
+    ],
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test"
+  },
+  {
+    "action": "advance",
+    "name": "exact-read-expiry",
+    "now": 120
+  },
+  {
+    "action": "resolve",
+    "name": "expired-at-boundary",
+    "refs": [
+      {
+        "slot": 0,
+        "row": 0
+      }
+    ],
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test"
+  },
+  {
+    "action": "issue",
+    "name": "delayed-issue-at-expiry",
+    "slot": 1,
+    "observed": 0,
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test",
+    "bodies": [
+      "first",
+      "second"
+    ],
+    "limited": false
+  },
+  {
+    "action": "reset",
+    "name": "mixed-bank"
+  },
+  {
+    "action": "issue",
+    "name": "old-batch",
+    "slot": 0,
+    "observed": 0,
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test",
+    "bodies": [
+      "first",
+      "second"
+    ],
+    "limited": false
+  },
+  {
+    "action": "advance",
+    "name": "second-read-time",
+    "now": 60
+  },
+  {
+    "action": "issue",
+    "name": "new-batch",
+    "slot": 1,
+    "observed": 60,
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test",
+    "bodies": [
+      "third",
+      "fourth"
+    ],
+    "limited": false
+  },
+  {
+    "action": "resolve",
+    "name": "both-live",
+    "refs": [
+      {
+        "slot": 0,
+        "row": 0
+      },
+      {
+        "slot": 1,
+        "row": 1
+      }
+    ],
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test"
+  },
+  {
+    "action": "advance",
+    "name": "older-expired",
+    "now": 120
+  },
+  {
+    "action": "resolve",
+    "name": "mixed-expired-first",
+    "refs": [
+      {
+        "slot": 0,
+        "row": 0
+      },
+      {
+        "slot": 1,
+        "row": 1
+      }
+    ],
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test"
+  },
+  {
+    "action": "resolve",
+    "name": "mixed-expired-last",
+    "refs": [
+      {
+        "slot": 1,
+        "row": 1
+      },
+      {
+        "slot": 0,
+        "row": 0
+      }
+    ],
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test"
+  },
+  {
+    "action": "resolve",
+    "name": "newer-remains-live",
+    "refs": [
+      {
+        "slot": 1,
+        "row": 1
+      }
+    ],
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test"
+  },
+  {
+    "action": "advance",
+    "name": "newer-exact-expiry",
+    "now": 180
+  },
+  {
+    "action": "resolve",
+    "name": "newer-expired",
+    "refs": [
+      {
+        "slot": 1,
+        "row": 1
+      }
+    ],
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test"
+  },
+  {
+    "action": "reset",
+    "name": "scope-and-occurrence"
+  },
+  {
+    "action": "issue",
+    "name": "scope-issued",
+    "slot": 0,
+    "observed": 0,
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test",
+    "bodies": [
+      "first",
+      "second"
+    ],
+    "limited": false
+  },
+  {
+    "action": "resolve",
+    "name": "wrong-connection",
+    "refs": [
+      {
+        "slot": 0,
+        "row": 0
+      }
+    ],
+    "connection": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "selector": "test"
+  },
+  {
+    "action": "resolve",
+    "name": "wrong-selector",
+    "refs": [
+      {
+        "slot": 0,
+        "row": 0
+      }
+    ],
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "other"
+  },
+  {
+    "action": "resolve",
+    "name": "duplicate-ref",
+    "refs": [
+      {
+        "slot": 0,
+        "row": 0
+      },
+      {
+        "slot": 0,
+        "row": 0
+      }
+    ],
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test"
+  },
+  {
+    "action": "resolve",
+    "name": "forged-row",
+    "refs": [
+      {
+        "slot": 0,
+        "row": -1
+      }
+    ],
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test"
+  },
+  {
+    "action": "resolve",
+    "name": "mixed-forged",
+    "refs": [
+      {
+        "slot": 0,
+        "row": 0
+      },
+      {
+        "slot": 0,
+        "row": -1
+      }
+    ],
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test"
+  },
+  {
+    "action": "issue",
+    "name": "same-occurrences-new-token",
+    "slot": 1,
+    "observed": 0,
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test",
+    "bodies": [
+      "first",
+      "second"
+    ],
+    "limited": false
+  },
+  {
+    "action": "resolve",
+    "name": "duplicate-across-tokens",
+    "refs": [
+      {
+        "slot": 0,
+        "row": 0
+      },
+      {
+        "slot": 1,
+        "row": 0
+      }
+    ],
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test"
+  },
+  {
+    "action": "resolve",
+    "name": "distinct-across-tokens",
+    "refs": [
+      {
+        "slot": 0,
+        "row": 0
+      },
+      {
+        "slot": 1,
+        "row": 1
+      }
+    ],
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test"
+  },
+  {
+    "action": "resolve",
+    "name": "valid-after-invalid",
+    "refs": [
+      {
+        "slot": 0,
+        "row": 0
+      },
+      {
+        "slot": 0,
+        "row": 1
+      }
+    ],
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test"
+  },
+  {
+    "action": "reset",
+    "name": "connection-isolation"
+  },
+  {
+    "action": "issue",
+    "name": "first-owner",
+    "slot": 0,
+    "observed": 0,
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test",
+    "bodies": [
+      "first",
+      "second"
+    ],
+    "limited": false
+  },
+  {
+    "action": "issue",
+    "name": "second-owner",
+    "slot": 1,
+    "observed": 0,
+    "connection": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "selector": "other",
+    "bodies": [
+      "fifth",
+      "sixth"
+    ],
+    "limited": false
+  },
+  {
+    "action": "resolve",
+    "name": "mixed-owners",
+    "refs": [
+      {
+        "slot": 0,
+        "row": 0
+      },
+      {
+        "slot": 1,
+        "row": 0
+      }
+    ],
+    "connection": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "selector": "test"
+  },
+  {
+    "action": "resolve",
+    "name": "second-owner-valid",
+    "refs": [
+      {
+        "slot": 1,
+        "row": 1
+      }
+    ],
+    "connection": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "selector": "other"
+  }
+]
