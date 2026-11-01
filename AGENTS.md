@@ -195,11 +195,15 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   picks, the field, and the fix (see `connect`'s "anonymous action" and
   "no mbt::actionTaken" errors). Tests assert on these messages, so keep
   them stable.
-- Keep the core free of heavy dependencies: OTel and yaml.v3 only. Hegel
+- Keep the core free of heavy dependencies: OTel, yaml.v3, x/sys and the
+  CLI's x/mod module-path validation/parser. Hegel
   (and purego, which it loads) is qhegel's, a module of its own, so a
   program that records steps does not depend on it; a core test that
   needs Hegel lives in internal/hegelprops, a module of its own that
   replaces the core with the checkout. Orchestrion stays in examples.
+- After changing root dependencies, tidy affected published and example
+  modules with GOWORK=off and check their diffs. Even a CLI-only dependency
+  can change the selected module graph of consumers that replace the root.
 - Any `//quint:action` expression may only use parameters, the receiver
   and named results. Methods called only from annotations (like
   `Publisher.actor`) look unused to linters: mark them, don't delete them.

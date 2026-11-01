@@ -6174,3 +6174,8 @@ Failure-stage and continuation tests cover retained edits, remaining-step order,
 workspace isolation and paths containing shell punctuation. This makes the
 existing starter workflow recoverable; it does not infer application contracts
 or establish independent adoption.
+
+The maintained x/mod parser avoids a second handwritten Go module grammar.
+Its dependency affects selected versions even in examples that only replace the
+core; root dependency changes therefore require standalone module tidy checks,
+including examples, rather than workspace builds alone.
