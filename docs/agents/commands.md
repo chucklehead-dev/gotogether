@@ -94,6 +94,16 @@ AGENTS.md has the general requirements.
   it), `GOTOGETHER_QEVAL_FUZZ_SHRINK=0` reports it unshrunk, and
   `GOTOGETHER_KEEP=/dir` keeps each batch's module, IR and the backends'
   reports.
+  The joint-action extension (`TestMultiVariableDifferentialAgainstQuint`) uses
+  the same batch/seed settings and `GOTOGETHER_QEVAL_MULTI_SIZE` cases per batch
+  (16 per push; 32 in nightly). It compares full two-integer successor tuples,
+  never independent coordinates. Fixed analytical controls run under `-short`;
+  generated batches require full mode. Reproduce a generated joint batch with
+  `GOTOGETHER_QEVAL_FUZZ_SEED=17 GOTOGETHER_QEVAL_MULTI_SIZE=32 go test -count=1 -run '^TestMultiVariableDifferentialAgainstQuint$' -v ./internal/qeval`.
+  Kept joint batches include case descriptions, module/IR, native ITF and backend
+  reports. They are bounded cases rather than automatic shrinking outputs.
+  Complete finite sets come from separately rendered pure relation oracles;
+  native action execution contributes sampled membership checks only.
   validate keeps quint's typechecks and the evaluation modules' compiles
   across processes, by content (quint's version, the spec's and its
   imports' paths and contents, every .qnt beside them, the arguments),

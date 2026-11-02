@@ -13,7 +13,7 @@ Standing decisions, with the maintainer:
   recording, YAML, platform and CLI module-parser dependencies.
 - MIT license.
 
-Current order (reviewed 2026-11-01): this is a prerelease library.
+Current order (reviewed 2026-11-02): this is a prerelease library.
 Correctness and usable core contracts come before release machinery. The bounded
 composition, Goo lifecycle, declared-call span, workload-phase and diagnostic
 experiments have answered their initial questions; rotate away from inventory
@@ -278,9 +278,16 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   backends, shrunk; two batches per push, 80 a night. It found a let
   evaluated eagerly, exists/forall stopping at the evaluator's own first
   witness, and setToMap keeping one of a key's two values by the
-  evaluator's order, all fixed. Left: actions of more than one variable
-  and of a model's own step (TestAgreesWithQuint covers the repository's
-  models). quint's Rust backend writing integers of 16 characters or more
+  evaluator's order, all fixed. A bounded two-integer-variable extension now
+  compares complete joint successor sets against independent pure Quint relation
+  expressions on both backends, plus sampled native action witnesses. Analytical
+  controls cover correlated/independent draws, simultaneous old-state reads and
+  propagation through two named actions; fabricated wrong relations demonstrate
+  why coordinate projections or counts alone are insufficient. Generated batches
+  retain exact rerun settings and artifacts; their small cases are not automatically
+  shrunk. Abnormal tool exits remain tool failures in both harnesses. Left: broader
+  typed state vectors and generation from a model's own step (TestAgreesWithQuint
+  covers the repository's models). quint's Rust backend writing integers of 16 characters or more
   into ITF as bignumber.js objects, which the toolkit's ITF reader took
   for records: resolved (HISTORY "I11's note"): read by the model's types
   (itf.ParseWith, binding.Model.Schema) in validate, connect and the CLI,

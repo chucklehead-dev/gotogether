@@ -189,10 +189,15 @@ jobs:
     # ROADMAP I11): each batch a module of 200 well-typed random vals and
     # actions over the builtins the evaluator supports, judged by the
     # evaluator and by `quint test` on rust and typescript. A difference
-    # where the evaluator answered is a bug, shrunk and named by its batch
+    # where the evaluator answered is a bug, named by its batch; the original
+    # single-variable cases shrink, while joint cases retain their bounded
+    # actions, pure relation and exact rerun settings
     # (GOTOGETHER_QEVAL_FUZZ_SEED=n reruns it). The push tier runs batches 1
     # and 2 of 100 entries; this one 80 of 200 (16000 entries) at seeds
-    # offset by date, about 70 CPU s a batch.
+    # offset by date, about 70 CPU s a batch. Joint two-variable action
+    # relations add 32 bounded cases per nightly batch (16 per push), plus
+    # independent fixed controls. Native action witnesses remain samples;
+    # complete finite relations are compared with pure Quint set oracles.
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -209,13 +214,14 @@ jobs:
         env:
           GOTOGETHER_QEVAL_FUZZ: "80"
           GOTOGETHER_QEVAL_FUZZ_SIZE: "200"
+          GOTOGETHER_QEVAL_MULTI_SIZE: "32"
           GOTOGETHER_KEEP: ${{ runner.temp }}/qeval
         run: |
           export GOTOGETHER_SEED_OFFSET=$(( $(date -u +%s) / 86400 * 1000 ))
           echo "batches $((GOTOGETHER_SEED_OFFSET + 1))..$((GOTOGETHER_SEED_OFFSET + GOTOGETHER_QEVAL_FUZZ))"
           mkdir -p "$GOTOGETHER_KEEP"
           set -o pipefail
-          go test -count=1 -timeout 110m -run '^TestDifferential' -v ./internal/qeval | tee "$GOTOGETHER_KEEP/differential.log"
+          go test -count=1 -timeout 110m -run '^Test(Differential|MultiVariable)' -v ./internal/qeval | tee "$GOTOGETHER_KEEP/differential.log"
       - name: keep the batches (each one's module, quint's IR and both backends' reports) and the log
         if: failure()
         uses: actions/upload-artifact@v4

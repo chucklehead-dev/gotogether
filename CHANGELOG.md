@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- Evaluator differential checks now cover complete joint successor sets for two
+  integer variables, including correlated choices, simultaneous updates and
+  two-action state propagation. Both Quint backends judge finite relation oracles;
+  sampled action witnesses remain separate. Existing and new differential tests
+  reject abnormal tool exits rather than counting printed results as agreement.
+
 - Deterministic `Settle` requires all registered processes up; `SettleCore`
   requires its selected core up. Down processes return `Unsettled` with captured
   name/incarnation/creation-index identities and no completion marker.

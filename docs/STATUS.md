@@ -7,7 +7,17 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-GR10c down-process settlement (current branch): ordinary deterministic Settle
+Joint-state differential coverage (current branch): I11 now checks complete
+successor pairs for two integer state variables, including correlated choices,
+simultaneous cross-reads and two-action state propagation. Independent analytical
+controls reject fabricated products, missing combinations and sequential-update
+mistakes. Pure finite relation oracles run on both native Quint backends; sampled
+action witnesses are additional membership checks, not completeness proofs.
+Abnormal native process exits cannot count as agreement in either differential
+harness. The generated fragment remains bounded; no new runtime API or general
+model-step generator is introduced.
+
+GR10c down-process settlement (merged PR #45, 59a10d90): ordinary deterministic Settle
 requires every registered process up, and SettleCore requires only its named
 core up. A required down process returns Unsettled with immutable local process
 identities and no settle marker. Outside-core blocked waits follow the same scope

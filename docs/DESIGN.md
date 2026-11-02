@@ -6249,3 +6249,37 @@ Controls cover both cases, default/core scope, exact-bound recovery, duplicate
 process names, native behavior, structured JSON and cursor-independent TUI data.
 A two-simulation control returns an earlier failure after another simulation has
 run, preserving the original identity rather than attaching it to the last call.
+
+## 85. Differential action checks preserve the joint successor relation
+
+I11's generated actions assigned one variable. That cannot expose a checker
+which independently accepts each coordinate but combines them incorrectly:
+`{(0,0),(1,1)}` and its full Cartesian product have the same coordinate sets.
+The bounded extension compares sets of complete `(x,y)` tuples, retaining
+correlation through guards, alternatives, shared/independent draws, simultaneous
+old-state reads and a second named action evaluated from each first post-state.
+It does not add interpretation of Quint's run-language `.then` operator.
+
+An independent analytical matrix supplies concrete asymmetric swap and
+correlation cases. Fabricated wrong results retain coordinate projections, and
+one also retains cardinality, proving that those shortcuts cannot replace the
+joint comparison. Generated actions use a small finite affine-integer grammar;
+their separate pure-set rendering substitutes old state and expands choices.
+Each native Quint backend evaluates that pure expression to the complete finite
+reference relation. Native action runs supply sampled tuple-membership checks,
+not an exhaustive enumeration proof. Missing oracle states, unsupported Go
+evaluation in this declared fragment and unexpected native errors fail the test;
+disabled draws do not acquire invented state witnesses.
+
+The fixture covers two integer variables and at most two named actions. Wider
+typed vectors and a model's own step remain separate work. Exact seed/size reruns,
+case descriptions, compiled IR, native reports and ITF make disagreements
+reviewable; this small fragment does not claim automatic shrinking. Per-push
+and nightly coverage share the same corpus controls without increasing peak
+Quint subprocess concurrency.
+
+Tool completion remains independent of printed model results. Both differential
+harnesses reject startup failures, signals and unexpected exit codes even after
+complete-looking output. Exit 1 is accepted only for reported native failed or
+disabled runs, which each semantic check still classifies. Process-level negative
+controls keep a broken tool from being reported as evaluator agreement.
