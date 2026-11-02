@@ -123,7 +123,7 @@ func runPanics(t *testing.T, s *qenv.Sim) (msg string) {
 		}
 		msg = fmt.Sprint(r)
 	}()
-	_ = s.Run(time.Second)
+	_ = s.Run(time.Second) //qenv:ok this helper requires Run to panic, not return an outcome
 	return ""
 }
 
