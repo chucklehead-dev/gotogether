@@ -27,7 +27,7 @@ func (x *Exploration) failedEvidence(origins []origin) *Evidence {
 		} else {
 			e.RunErrors[name] = "not judged: exploration stopped before model validation; see test diagnostics"
 		}
-		if len(r.simulations) > 0 || len(r.Phases) > 0 {
+		if r.hasExecution() {
 			e.Executions = append(e.Executions, r.execution(name))
 		}
 	}

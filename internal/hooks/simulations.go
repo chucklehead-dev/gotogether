@@ -70,3 +70,15 @@ func (s *Simulations) Calls() []Simulation {
 	defer s.mu.Unlock()
 	return append([]Simulation(nil), s.calls...)
 }
+
+// SimulationID returns an already observed instance's run-local identity.
+// It does not create an observation. Zero means no identity was collected.
+func SimulationID(ctx context.Context, identity any) int {
+	s, _ := ctx.Value(simulationsKey{}).(*Simulations)
+	if s == nil {
+		return 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ids[identity]
+}

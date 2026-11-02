@@ -479,7 +479,7 @@ func (e *engine) navNode(b *navBase, req navproto.Request) (*navproto.Node, erro
 		p.Replay = node.Run + " node=" + node.ID
 		node.Profile = &p
 	}
-	if len(r.simulations) > 0 || len(r.Phases) > 0 {
+	if r.hasExecution() {
 		execution := r.execution(node.Run)
 		node.Execution = &execution
 	}

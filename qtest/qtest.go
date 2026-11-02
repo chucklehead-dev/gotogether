@@ -332,11 +332,12 @@ type Run struct {
 	// settle (a qenv.Unsettled from Sim.Settle): no error of the run, an
 	// outcome the claims judge. It makes the run's report not OK, so
 	// Conforms does not hold of it; Settles states it alone.
-	Unsettled string
-	adjusted  *validate.Report // the report adjust made: it is not made again
-	Report    *validate.Report
-	StepLog   string            // Record's native step log (JSONL)
-	ITF       map[string]string // Record's: actor -> model-level ITF written in-process
+	Unsettled  string
+	settlement *runprofile.Settlement
+	adjusted   *validate.Report // the report adjust made: it is not made again
+	Report     *validate.Report
+	StepLog    string            // Record's native step log (JSONL)
+	ITF        map[string]string // Record's: actor -> model-level ITF written in-process
 	// keep copies the run's files (Record's, Validate's) out of the
 	// test's temporary directory when a report names them; nil when they
 	// are kept already (GOTOGETHER_KEEP, a Dir option)

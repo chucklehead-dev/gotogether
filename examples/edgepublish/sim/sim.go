@@ -157,9 +157,6 @@ func RunOn(s *qenv.Sim, cfg Config) error {
 	if err := s.Settle(5 * time.Minute); err != nil {
 		return err
 	}
-	if e.proc.Down() {
-		return nil // crashed during the settle's start: nothing to close
-	}
 	s.Spawn("close", func(ctx context.Context) { _ = e.current.Close(ctx) })
 	return s.Settle(time.Minute)
 }

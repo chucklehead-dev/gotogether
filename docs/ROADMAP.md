@@ -106,11 +106,14 @@ The model/observer freeze precedes a planted exact-expiry defect; native mismatc
 missing-evidence refusal and relocated replay preserve separate facts. The full
 native outputs remain alongside lossless model projections. Existing Goo tests
 retain credit, and the authored histories do not establish exhaustive verification
-or independent adoption. No new core API was needed. Rotate back to GR10c's
-documented down-process settlement boundary: first reproduce it in plain qenv,
-review what ordinary Settle promises versus SettleCore's selected scope, then
-carry any justified runtime facts through existing outputs. Do not infer pending
-business work from killed goroutines or weaken eventual properties.
+or independent adoption. No new core API was needed. GR10c now addresses the
+documented down-process settlement boundary: ordinary Settle requires all
+registered processes up; SettleCore applies that requirement and pending-task
+accounting only to its selected processes plus process-free clients. Blocked
+outside-core waits follow the same scope, while scheduling and global step
+limits remain unchanged. Typed execution facts retain down-process identities
+without inferring business work from killed goroutines or weakening eventual
+properties. Choose further work from independent use or a concrete blocker.
 
 S11's skipped middle-snapshot gap is implemented in PR #15:
 later snapshots check the whole replayed state and cannot reset it. The first
@@ -1317,18 +1320,17 @@ Then, in order, each item reviewed before the next:
   plain qenv, grist's simulated/SQL stores and simlog, including native signal
   semantics and old-behavior ablation. This closes the daemon/settlement
   classification gap without a separate worker lifecycle DSL.
-- **GR10c. `Settle` naming down processes (S, qenv-level).** From P7's
-  review, proposed, not built. qenv counts no task of a down process as
-  pending, so a plain `Settle` (not `SettleCore`, which faults outside
-  its core by design) over a simulation that left a node down for good
-  records a settle, and that node's triggers have their obligations
-  judged, violated by right: a down node handles nothing. gristsim's
-  supervisor restarts every node, so no grist run meets it today; a
-  simulation of one's own does, and quorumkv's node down for good under
-  `SettleCore` is the shape. Settle could name the processes down at the
-  settle in its record (`qobs.Settled`) or its result, so a binding's
-  `eventually` vals are judged knowing them, or the settle reported
-  `Unsettled` while a process that has work is down.
+- **GR10c. `Settle` naming down processes (S, qenv-level). Implemented.**
+  Down-process availability is independent of killed-task bookkeeping: ordinary
+  deterministic Settle requires every registered process up, while SettleCore
+  requires its explicit core up and preserves process-free client obligations.
+  Required down processes yield Unsettled snapshots and no settle marker; exact
+  bound recovery remains permitted. Blocked outside-core tasks now follow the
+  same completion scope without changing scheduler/global-budget semantics.
+  JSON and TUI share typed terminal execution facts. Genuine available-system
+  obligation defects remain model failures, and native settlement certification
+  is unchanged. Permanent Exit callers use Run for shutdown or an explicit
+  surviving core; no retirement inference or worker lifecycle DSL is added.
 - **Slice 3's rest**: gristpure, gristhegel, leases, screens and
   Datastar (upcasting and snapshots built in H7, rolling versions in
   I22; rewriting the index at boot dropped: a tag that changes is a new

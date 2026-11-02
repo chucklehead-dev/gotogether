@@ -8,6 +8,14 @@ and adds a line here.
 
 ## Unreleased
 
+- Deterministic `Settle` requires all registered processes up; `SettleCore`
+  requires its selected core up. Down processes return `Unsettled` with captured
+  name/incarnation/creation-index identities and no completion marker.
+  Outside-core blocked waits now follow the same scope as pending tasks.
+  Execution JSON and TUI retain typed terminal settlement evidence and its
+  observed simulation identity without
+  turning unavailable completion into an eventual-property failure.
+
 - A bounded external-library rehearsal models Goo tail-membership capabilities:
   actual ownership/expiry/immutable-data observations, atomic selection, a frozen
   baseline before a planted source defect, missing-evidence refusal and relocated

@@ -1362,9 +1362,11 @@ tier's `Settle` waits for every processor to reach its last trigger and
 fails the test instead of recording a settle that did not happen, and a
 run whose settle finds work pending is `Unsettled`, which
 `qtest.Settles()` judges, not a violation. A simulation of one's own
-that leaves a node down for good (one outside `SettleCore`'s core, a
-process not restarted) must not record its settle as one: qenv counts no
-task of a down process as pending, so its triggers would be judged.
+that leaves a required node down for good now returns `Unsettled`, naming the
+captured process incarnation, rather than recording a completion marker.
+`SettleCore` permits failed nodes outside its explicitly surviving core; state
+its eventual obligations for that core. Availability is checked separately from
+task bookkeeping and does not infer what work a killed goroutine held.
 
 A hand-written eventual val that is exactly an obligation is removed (a
 val of a generated name is the generator's error): counters'
@@ -1396,9 +1398,9 @@ relays and tenant watchers use scoped idle waits only after successful no-work
 reads. Handlers, dependencies, retries, callbacks, failed readiness reads and
 operator-resume pauses remain active. A settle shorter than that work returns
 Unsettled and writes no settle marker; an adequate bound permits recovery.
-A node left down for good outside
-`SettleCore`'s core has its triggers judged by a plain `Settle`, which
-names no down process (ROADMAP's GR10c). A variant judges a call's
+A plain `Settle` requires all registered processes up; `SettleCore` requires
+its named core up. Typed runtime evidence preserves required down-process
+identities independently of model conclusions (ROADMAP's GR10c). A variant judges a call's
 obligation only where one of its own vals reads the call's served
 records (H4, `TestCallObligationsFollowSiteClaims`): a `real` variant
 holds only what the real tier can judge (docs/grist-instrumentation.md
