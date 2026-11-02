@@ -149,7 +149,7 @@ checks. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
-format has one current version; all published core pins agree at 6f0bfa75bbfa.
+format has one current version; all published core pins agree at c6d1114e5f70.
 
 Captured-transition assertion follow-up (merged PR #32): qtest.TransitionsConform
 judges the existing native conformance facet for all judged actors or required
@@ -625,7 +625,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Independent use or a demonstrated contract blocker | S–M | the fresh stateful adoption exercise and GR10c controls are available; choose the next core/feature slice from actual friction, not another adjacent fixture |
+| 1 | I12: shared Quint admission lifecycle | M | the existing cap covers only validation tests within one binary; establish one shared capacity policy and precise command/lease ownership before implementing cross-binary admission |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 

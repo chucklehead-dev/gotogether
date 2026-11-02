@@ -1,19 +1,44 @@
 # qanalysis
 
 gotogether's checks as `golang.org/x/tools/go/analysis` passes, and
-the static action map. Its own module: the core depends only on OTel,
-yaml.v3 and Hegel.
+the static action map. Its own module keeps x/tools out of the core.
 
 | Analyzer | Reports | Same as |
 |---|---|---|
-| `quintsim` | in files importing qenv, and a grist application's non-test files (importing grist; each fix grist's: an event's `Meta.Time`, a command's arguments, a processor): `go` statements, the wall clock and math/rand's functions, called or as values (`now := time.Now`; by type: dot imports too), steps recorded with `context.Background()`; with a context in scope, fixes: `go f()` to `qenv.Go`, `time.Now()`/`time.Sleep` to qenv's | `gotogether lint -sim` |
+| `quintsim` | in files importing qenv, and a grist application's non-test files (importing grist; each fix grist's: an event's `Meta.Time`, a command's arguments, a processor): `go` statements, the wall clock and math/rand's functions, called or as values (`now := time.Now`; by type: dot imports too), steps recorded with `context.Background()`; with a context in scope, fixes: `go f()` to `qenv.Go`, `time.Now()`/`time.Sleep` to qenv's; typed discarded-runtime-error checks and propagation fixes (below) | shared syntax rules with `gotogether lint -sim`; additional typed checks |
 | `quintweave` | unmarked `go` statements, sync method values, embedded sync types (for packages woven by qenv/weave); fixes: `//qenv:go` above a function literal's `go`, a method value called from a function literal | `gotogether lint -weave` |
 | `quintctx` | `context.Background()` or `TODO()` in a function with a `context.Context` parameter or a test's `t` (fix: pass it, or `t.Context()`); not in closures, not a nil parameter's default; `//quintctx:ok` exempts a line | |
 | `quintraw` | a grist effect (the function given to `grist.Effect`, its closures, a package function named there) calling `net/http`'s client, a gRPC `ClientConn` or `database/sql` directly, past the declared calls grist records (fix: `grist.NewCall`, `Call.Do`); `//grist:raw <reason>` on the line or the one above exempts it | |
 | `quintaction` | `//quint:action` without `action:`; expressions using locals (only parameters, the receiver and named results are in scope on return); with `-binding`: actions not in the model, fields the binding uses but the annotation does not record, literal `qobs.Record` actions not in the model; fixes: a local every return returns in one place named as that result, a misspelled parameter spelled, a misspelled action (directive or `Record`) named as the model's nearest, a missing field recorded from the parameter or named result of its name | `gotogether lint -binding -src` |
 
-The first two wrap package `qlint`, so the CLI and the analyzers find the
-same things.
+The first two share package `qlint`. Type information lets `quintsim` resolve
+additional cases precisely, including discarded runtime errors below; the
+syntax-only `gotogether lint -sim` check does not guess receiver types.
+
+## sim-runtime-result
+
+`quintsim` diagnoses discarded error results from the actual `qenv.Sim.Run`,
+`RunUntil`, `Settle` and `SettleCore` methods, including blank error-result slots
+and calls made with `go` or `defer`. Ignoring those results can hide interrupted,
+bounded or unsettled runs. Same-named methods on other types are excluded.
+Aliases, promoted methods and direct method expressions are resolved by type;
+calls through assigned method-value aliases or interface dispatch are outside
+this direct check. An assigned error is not proof that every control-flow path
+handles it. Generic errcheck also diagnoses ignored errors when installed.
+
+For a direct discarded call in a function returning only `error`, `-fix` can
+propagate the result with `if err := ...; err != nil { return err }`. Discarded
+`RunUntil` results use `_, err`. Retained outputs, void/multiple-result functions,
+headers/post clauses, `go`/`defer`, and shadowed `nil` get a diagnostic without a
+speculative fix. Source comments and existing `//qenv:ok` line exemptions remain.
+
+Native `quintvet -json` diagnostics carry the stable category
+`sim-runtime-result`, original source position and safe suggested edits. JSON
+mode may exit zero while reporting findings; read the diagnostic data rather
+than interpreting zero as clean analysis. Existing golangci-lint/editor workflows
+use the same analyzer.
+
+## Running the analyzers
 
 ```sh
 go install github.com/chucklehead-dev/gotogether/qanalysis/cmd/quintvet@latest
