@@ -7,7 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Joint-state differential coverage (current branch): I11 now checks complete
+Discarded runtime-result tooling (current branch): typed quintsim findings now
+identify ignored error results from qenv.Sim runtime methods. They preserve
+real method identity across aliases/promoted calls, keep unrelated Run/Settle
+methods clean, and offer propagation fixes only in safe sole-error functions.
+The native analyzer JSON carries stable rule categories; real-tool acceptance
+checks the SDK, fix application and corrected code. This typed check requires
+quintvet/go vet or the existing golangci plugin; syntax-only CLI lint does not
+guess receiver types. No new analyzer mode or output format is introduced.
+
+Joint-state differential coverage (merged PR #46, 70b2b7c1): I11 now checks complete
 successor pairs for two integer state variables, including correlated choices,
 simultaneous cross-reads and two-action state propagation. Independent analytical
 controls reject fabricated products, missing combinations and sequential-update
