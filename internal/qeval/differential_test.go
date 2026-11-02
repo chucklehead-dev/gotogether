@@ -579,8 +579,8 @@ func (b *gbatch) quintTest(ctx context.Context, dir, file, be string, seed uint6
 			res[i].val = v
 		}
 	}
-	if err != nil && !strings.Contains(string(text), "passing") && !strings.Contains(string(text), "failed") {
-		return nil, fmt.Errorf("quint test --backend %s: %v\n%s", be, err, firstLines(string(text), 20))
+	if exitErr := differentialNativeExit(err, res); exitErr != nil {
+		return nil, fmt.Errorf("quint test --backend %s: %v\n%s", be, exitErr, firstLines(string(text), 20))
 	}
 	return res, nil
 }
