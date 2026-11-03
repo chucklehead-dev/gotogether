@@ -22,7 +22,7 @@ func TestCancelledSQLLockWaitReturnsPromptly(t *testing.T) {
 	for _, mode := range []string{"update", "for update", "commit"} {
 		t.Run(mode, func(t *testing.T) {
 			for seed := uint64(0); seed < 10; seed++ {
-				run := func(c qenv.Chooser) (time.Duration, error, int64, int) {
+				run := func(c qenv.Chooser) (time.Duration, int64, int, error) {
 					commits := 0
 					w := newWorld(t, c, qenv.ReadCommitted, qsql.Options{OnCommit: func(context.Context, []qsql.Change) { commits++ }})
 					if mode == "commit" {
@@ -125,16 +125,16 @@ func TestCancelledSQLLockWaitReturnsPromptly(t *testing.T) {
 					}
 					balance := w.balance(t, "alice")
 					w.s.Close()
-					return ended, got, balance, commits
+					return ended, balance, commits, got
 				}
 				log := &qenv.ChoiceLog{C: qenv.NewSeeded(seed)}
-				ended, got, balance, commits := run(log)
+				ended, balance, commits, got := run(log)
 				if ended != time.Second || !errors.Is(got, sql.ErrTxDone) || balance != 100 || commits != 0 {
 					t.Fatalf("seed%d: ended%v error%v balance%d commits%d; want1s ErrTxDone 100 0", seed, ended, got, balance, commits)
 				}
 				replay := qenv.Replay(log.Choices)
 				replayed := &qenv.ChoiceLog{C: replay}
-				end2, err2, balance2, commits2 := run(replayed)
+				end2, balance2, commits2, err2 := run(replayed)
 				if replay.Err() != nil || replay.Left() != 0 || !reflect.DeepEqual(replayed.Choices, log.Choices) || end2 != ended || !errors.Is(err2, sql.ErrTxDone) || balance2 != balance || commits2 != commits {
 					t.Fatalf("seed%d replay: %v %v balance%d commits%d choices%v", seed, end2, err2, balance2, commits2, replay.Err())
 				}

@@ -423,8 +423,7 @@ func (a *multiAction) has(kind string) bool {
 }
 func multiGenerate(seed uint64, count int) []multiCase {
 	r := rand.New(rand.NewPCG(seed, seed^0x49c219ad))
-	var term func([]string) multiTerm
-	term = func(names []string) multiTerm {
+	term := func(names []string) multiTerm {
 		return multiTerm{name: names[r.IntN(len(names))], scale: r.IntN(5) - 2, offset: r.IntN(7) - 3}
 	}
 	var action func(int, []string) *multiAction

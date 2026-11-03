@@ -95,6 +95,7 @@ func shellQuote(value string) string {
 // CheckGo checks executable availability before automatic setup writes files.
 func CheckGo() error {
 	if _, err := exec.LookPath("go"); err != nil {
+		//lint:ignore ST1005 Go names the required tool, not a capitalized sentence
 		return fmt.Errorf("Go is required for automatic setup: %w", err)
 	}
 	return nil

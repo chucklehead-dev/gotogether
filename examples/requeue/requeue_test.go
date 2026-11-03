@@ -53,7 +53,7 @@ func TestFaithfulConforms(t *testing.T) {
 // the cycle shape nor transition conformance claims settlement or eventual success.
 var stormCycle = qtest.Satisfies("the storm's hot cycle (advance, create)", func(r *validate.Report) error {
 	if len(r.Actors) == 0 {
-		return fmt.Errorf("%w: no actor supplied hot-cycle evidence", qtest.NoVerdict)
+		return fmt.Errorf("%w: no actor supplied hot-cycle evidence", qtest.ErrNoVerdict)
 	}
 	for _, a := range r.Actors {
 		var steps []string

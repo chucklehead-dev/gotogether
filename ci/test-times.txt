@@ -4,7 +4,7 @@
 # costing more than twice its line. CPU, not wall: CI runs a module's
 # packages at once on four cores, where a package's wall time is its
 # neighbours' too (binding: 107 s alone, 287-324 s in the full run; its
-# CPU 165-193 s). Lines are the most of three runs on a 4-core machine
+# CPU 165-193 s). Original baselines are the most of three runs on a 4-core machine
 # (alone, the core's full parallel run, examples four at a time under
 # outside load), within 15% of each other. A deliberate change of a
 # package's cost sets its line from the sorted file the job prints, with
@@ -31,6 +31,15 @@ examples/wallet 119
 examples/webjobs 125 # 67.5 and 124.5 CPU s on CI (runs 459 and 460, the same code: 460's a slow runner, its counters 439 against 253): its within bindings' passing runs decided by the Go evaluator (7543f3d), quint judging a fifth (f7cd68c); 179, 132 and 106 in runs 442-444, when quint judged them all; 13 checks under -short (the client per mutant, a cmd/webjobs overlay build each, TestShrink is full mode)
 binding 385 # 217 and 384 CPU s, 130 and 241 s wall on CI (runs 431 and 434; 332 CPU s and 439 s wall in run 427, before b7606ee ran TestEvalModuleCompiles in parallel, a typecheck per spec, and d6640dc)
 cmd/gotogether 412 # 411.1 CPU s in PR15 run 41165098703; 373.9 in green PR14 run 41162327623. CLI coverage grew from 28 tests at c405eb342 (the 200 baseline) to 97; the new checkpoint JSON test costs 2.3 CPU s. The existing 2x regression factor is unchanged.
+# Initial grist -short baselines: two standalone 4-CPU runs on 2026-11-03,
+# PostgreSQL 16 enabled, GOTOGETHER_CHECK/STRICT=1 and EVAL_SAMPLE=1/5.
+# The final run uses SDK 4352dc2c275e, all test Quint launches admitted, and
+# fresh validation/scratch caches. Budgets round up the larger CPU observation;
+# validate these initial samples against CI rather than claiming three-run calibration.
+grist 180 # initial 176.0 CPU s/101.0 s wall; final 161.7/99.4
+grist/gristsim 200 # initial 190.8 CPU s/158.5 s wall; final 185.4/153.7
+grist/gristtest 70 # initial 69.3 CPU s/80.2 s wall; final 64.7/72.9
+grist/model 11 # initial 10.6 CPU s/9.3 s wall; final 9.6/10.8
 internal/qeval 531 # 531 CPU s on CI (run 524, its validate 980): TestDifferentialAgainstQuint's two push batches of generated expressions (I11), each three quint processes, added to TestAgreesWithQuint, which runs quint on every model of the repository; 473 in run 523 before them (its validate 1080), 340 and 358 in runs 447 and 460
 internal/simdeps 20 # 14.3 CPU s on CI (run 348), under 4 here with a warm build cache
 qenv/internal/profile 15 # 10.9 CPU s on CI (run 348)

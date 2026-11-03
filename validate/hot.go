@@ -134,7 +134,7 @@ func (c *Checker) hotCycle(e *evaluator, t *qtrace.Trace) (*HotCycle, error) {
 		ps := last[keys[j]]
 		// the latest earlier position of the same state (a change between:
 		// j's state is not its predecessor's)
-		for x := slices.Index(ps, j) - 1; x >= 0; x-- {
+		if x := slices.Index(ps, j) - 1; x >= 0 {
 			i := ps[x]
 			var vals []string
 			for k, ev := range evs {
@@ -143,7 +143,7 @@ func (c *Checker) hotCycle(e *evaluator, t *qtrace.Trace) (*HotCycle, error) {
 				}
 			}
 			if len(vals) == 0 {
-				break // an earlier one has a true val between too
+				continue // no earlier visit can be hot after a true val in this interval
 			}
 			h := &HotCycle{Vals: vals, From: i, To: j}
 			for _, call := range plan.Calls[i:j] {

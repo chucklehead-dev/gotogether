@@ -8,6 +8,14 @@ and adds a line here.
 
 ## Unreleased
 
+- The absent-verdict sentinel is now `qtest.ErrNoVerdict`; update callers from
+  `qtest.NoVerdict`. There is no prerelease compatibility alias. Pinned
+  staticcheck runs the core's default checks, including tests, outside the
+  runtime dependency graph. Grist gains a measured short-test CPU budget per
+  push and a full PostgreSQL-backed nightly tier. Remaining literal Quint test
+  launches in the core and grist now use shared admission and cancellation;
+  an architecture check guards against direct `os/exec` regressions.
+
 - CLI help shows argument types for value flags. A tutorial freshness guard
   checks prompted shell commands against the real CLI's command and flag help,
   including wrapped and chained invocations, without executing the examples.

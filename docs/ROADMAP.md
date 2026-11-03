@@ -363,9 +363,15 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
 - **I15. The suite's own guards (S). Partly done** (d0afb10): shuffled
   -short tests (`-shuffle=on -count=2`), the race job widened to qtest,
   qhistory, qsweep, qnemesis, qload, qshrink and internal/qeval, qhegel
-  capturing at fd 1. Left: an `io.Writer` option asked of hegel-go, the
-  pinned staticcheck job, grist's -short tier in ci/test-times.txt, the
-  `GOTOOLCHAIN=go1.25` build. What it was: The race job widened to qtest
+  capturing at fd 1. Pinned staticcheck v0.8.2 now runs the core's default
+  checks, including tests, outside the runtime module graph. Grist's per-push
+  PostgreSQL tier uses -short with measured descendant-CPU budgets; a dedicated
+  full nightly tier retains the non-short integration/model coverage and removes
+  the unrelated global 500-seed override. Remaining literal Quint test launches
+  in the core and grist now share admission and cancellation, with a source
+  guard against direct os/exec regressions.
+  Left: an `io.Writer` option asked of hegel-go and the Go-floor decision/build
+  (the current declared floor remains unchanged). What it was: The race job widened to qtest
   (whose explorations run seeds in parallel), qhistory, qsweep,
   qnemesis, qload, qshrink and internal/qeval (all pass today, about 4
   CPU minutes); qhegel's capture of Hegel's output by assigning

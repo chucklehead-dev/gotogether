@@ -14,8 +14,8 @@ import (
 )
 
 // validateSteps writes steps to a log and validates it with args,
-// returning the exit code, the error and the output.
-func validateSteps(t *testing.T, steps []qtrace.Step, args ...string) (int, error, string) {
+// returning the exit code, the output and the error.
+func validateSteps(t *testing.T, steps []qtrace.Step, args ...string) (int, string, error) {
 	t.Helper()
 	dir := t.TempDir()
 	log := filepath.Join(dir, "run.jsonl")
@@ -28,7 +28,7 @@ func validateSteps(t *testing.T, steps []qtrace.Step, args ...string) (int, erro
 	}
 	f.Close()
 	code, out, verr := validated(append(append([]string{"-dir", filepath.Join(dir, "out")}, args...), log))
-	return code, verr, string(out)
+	return code, string(out), verr
 }
 
 // -require-finish is qtest.Finishes' judgment: the CLI and the claim agree
@@ -67,7 +67,7 @@ func TestValidateRequireFinish(t *testing.T) {
 	} {
 		t.Run(x.name, func(t *testing.T) {
 			t.Parallel()
-			code, err, out := validateSteps(t, x.steps, append([]string{"-binding", funds, "-require-finish"}, x.args...)...)
+			code, out, err := validateSteps(t, x.steps, append([]string{"-binding", funds, "-require-finish"}, x.args...)...)
 			if err != nil || code != x.code {
 				t.Errorf("exit %d, %v, want %d:\n%s", code, err, x.code, out)
 			}
@@ -84,13 +84,13 @@ func TestValidateRequireFinish(t *testing.T) {
 		t.Errorf("Finishes holds of a run whose resolved call was never answered:\n%s", run.Report.Summary())
 	}
 	// no eventual val: refused with Finishes' fix
-	_, err, out := validateSteps(t, []qtrace.Step{dep("", 1, 5, 5), settle(2)}, "-binding", "../../validate/testdata/account.yaml", "-require-finish")
+	_, out, err := validateSteps(t, []qtrace.Step{dep("", 1, 5, 5), settle(2)}, "-binding", "../../validate/testdata/account.yaml", "-require-finish")
 	if err == nil || !strings.Contains(err.Error(), "add the journey's end as an eventual val on a ghost flag") {
 		t.Errorf("a binding with no eventual val: %v:\n%s", err, out)
 	}
 	// -require-settle, the old name, still checks the finish, and says
 	// it is deprecated for -require-finish
-	code, err, out := validateSteps(t, []qtrace.Step{dep("", 1, 5, 5)}, "-binding", funds, "-require-settle")
+	code, out, err := validateSteps(t, []qtrace.Step{dep("", 1, 5, 5)}, "-binding", funds, "-require-settle")
 	if err != nil || code != 1 || !strings.Contains(out, "warning: -require-settle is deprecated") || !strings.Contains(out, "say -require-finish") ||
 		!strings.Contains(out, "incomplete (no settle) (-require-finish)") {
 		t.Errorf("-require-settle: exit %d, %v:\n%s", code, err, out)

@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Tutorial command freshness (current branch): prompted tutorial shell commands
+Pinned suite guards (current branch): the core passes default staticcheck
+v0.8.2 checks, including tests, with the tool outside its dependency graph.
+Grist's PostgreSQL-backed short suite has descendant-CPU budgets per push;
+the full suite runs nightly. Remaining literal Quint test launches in the core
+and grist now use shared admission/cancellation, guarded by a source check.
+The absent-verdict sentinel is qtest.ErrNoVerdict;
+callers and published module pins advance together without a compatibility alias.
+
+Tutorial command freshness (merged PR #49, 435e655f): prompted tutorial shell commands
 are checked against actual CLI help, including wrapped/chained invocations and
 flag/value boundaries. Value flags now show argument types in help. The guard
 does not run examples or validate quoted output; full replay remains separate.
@@ -163,7 +171,7 @@ checks. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
-format has one current version; all published core pins agree at eca11bc7c65f.
+format has one current version; all published core pins agree at 4352dc2c275e.
 
 Captured-transition assertion follow-up (merged PR #32): qtest.TransitionsConform
 judges the existing native conformance facet for all judged actors or required
@@ -589,10 +597,9 @@ four, L more; agent-days in practice).
    two managed commands per user sharing a Unix cache directory. Abrupt
    owner death can still orphan evaluator grandchildren; do not claim a bound
    on those workers without a separate supervision design.
-4. **I15's rest (S).** A pinned staticcheck job; grist in
-   ci/test-times.txt with a -short tier per push and the full run
-   nightly; a `GOTOOLCHAIN=go1.25` build of the core (the Go-floor
-   decision needs it); ask hegel-go for an `io.Writer` option.
+4. **I15's rest (S).** Pinned static analysis and grist's measured short/full
+   tiers are implemented. The Go-floor decision and corresponding build check
+   remain separate; ask hegel-go for an `io.Writer` option.
 5. **I19's incremental invariants.** A log whose entities interact
    cannot be partitioned and is still judged at the sum of its states;
    judging only the entries a step changed would make entry-wise
@@ -641,7 +648,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I15: pinned static analysis and measured grist test costs | S | broaden routine feedback without weakening existing checks or CPU budgets |
+| 1 | I35: one executable onboarding walkthrough | S-M | command freshness is guarded; a bounded real replay can identify remaining output or setup friction before expanding tutorial automation |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 

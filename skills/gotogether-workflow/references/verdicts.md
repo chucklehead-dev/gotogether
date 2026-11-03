@@ -170,7 +170,7 @@ nothing, so each fails with `want ...; TestX#1 has no runs, so the claim
 has no verdict`, as `qtest.Runs()` with none does. `TakesEach()` of no
 takes, or a catalog's `Exercised` that excepts every block, panics: it
 would hold of any runs. A `Satisfies` function returns an error wrapping
-`qtest.NoVerdict` for a run it cannot judge.
+`qtest.ErrNoVerdict` for a run it cannot judge.
 
 `Takes` and `Exercised` say the runs exercised what the model and the
 environment offer: an exploration whose runs never take `cancel` conforms

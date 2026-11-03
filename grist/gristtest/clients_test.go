@@ -15,7 +15,7 @@ import (
 // a try (the step's refused field, an int in process or an int64 read
 // back), erring or left pending; qtest.Not(NoClientErrors()) its negation. A
 // report with no client actor holds neither: it has no verdict for them
-// (qtest.NoVerdict, whose claims qtest's TestSatisfies checks).
+// (qtest.ErrNoVerdict, whose claims qtest's TestSatisfies checks).
 func TestNoClientErrors(t *testing.T) {
 	call := func(args map[string]any, err string) binding.Call {
 		return binding.Call{Action: "createCounter", Step: &qtrace.Step{Action: "createCounter", Args: args, Error: err}}

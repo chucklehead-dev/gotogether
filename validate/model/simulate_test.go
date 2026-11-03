@@ -2,7 +2,6 @@ package model
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -10,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -47,7 +47,7 @@ func TestActionsOfDropsStutters(t *testing.T) {
 // pass.
 func replayInQuint(t *testing.T, file string) {
 	t.Helper()
-	cmd := exec.Command("quint", "test", "--main", "simulate", "--match", "gtg_", "--max-samples", "20", file)
+	cmd := quintcmd.Command(t.Context(), "quint", "", "test", "--main", "simulate", "--match", "gtg_", "--max-samples", "20", file)
 	cmd.Dir = filepath.Dir(file)
 	if b, err := cmd.CombinedOutput(); err != nil {
 		src, _ := os.ReadFile(file)
@@ -146,7 +146,7 @@ func agreeGraph(t *testing.T, path string, states, depth int) int {
 	for _, v := range r.Invariants {
 		argv := backendArgs([]string{"run", file, "--main", "simulate", "--invariant", v.Name,
 			"--max-steps", strconv.Itoa(steps), "--max-samples", strconv.Itoa(samples), "--seed", "1"})
-		cmd := exec.Command("quint", argv...)
+		cmd := quintcmd.Command(t.Context(), "quint", "", argv...)
 		cmd.Dir = dir
 		out, err := cmd.CombinedOutput()
 		violated := strings.Contains(string(out), "[violation]")
@@ -176,7 +176,7 @@ func agreeGraph(t *testing.T, path string, states, depth int) int {
 	}
 	if !exact {
 		// a path whose actions choose inside: quint's draws are its own
-		cmd := exec.Command("quint", "test", "--main", "simulate", "--match", "gtg_", "--max-samples", "20", file)
+		cmd := quintcmd.Command(t.Context(), "quint", "", "test", "--main", "simulate", "--match", "gtg_", "--max-samples", "20", file)
 		cmd.Dir = dir
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Logf("a counterexample choosing inside its actions does not replay in every sample of quint's: %s", out)

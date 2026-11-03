@@ -375,7 +375,7 @@ func (r *ChoiceLog) Name(name string) {
 // goroutine's run records into (qrun), the same for every choice of a run.
 func (r *ChoiceLog) progress() int {
 	if r.steps == nil {
-		r.steps = qobs.From(nil)
+		r.steps = qobs.From(context.Background())
 	}
 	if r.steps == nil {
 		return 0

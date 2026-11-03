@@ -92,7 +92,7 @@ func TestNot(t *testing.T) {
 	few := Satisfies("few issues", func(r *validate.Report) error {
 		switch {
 		case r.Issues == nil:
-			return fmt.Errorf("%w: none recorded", NoVerdict)
+			return fmt.Errorf("%w: none recorded", ErrNoVerdict)
 		case len(r.Issues) > 2:
 			return fmt.Errorf("%d issues", len(r.Issues))
 		}
@@ -180,7 +180,7 @@ func TestSatisfies(t *testing.T) {
 	// negation's Some alike
 	judged := Satisfies("issues judged", func(r *validate.Report) error {
 		if r.Issues == nil {
-			return fmt.Errorf("%w: no issues recorded", NoVerdict)
+			return fmt.Errorf("%w: no issues recorded", ErrNoVerdict)
 		}
 		return nil
 	})

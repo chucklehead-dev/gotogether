@@ -344,7 +344,7 @@ func (s *Sim) beyondCore(owner *Process) bool {
 	if owner != nil && !s.core[owner] {
 		return true
 	}
-	t := taskOf(nil)
+	t := taskOf(context.Background())
 	return t != nil && t.sim == s && t.proc != nil && !s.core[t.proc]
 }
 
@@ -365,7 +365,7 @@ func (s *Sim) ToVirtual(real time.Time) time.Time {
 	if s.nat != nil {
 		return real // the library's clock is the simulation's
 	}
-	return s.now.Add(real.Sub(time.Now())) //qenv:ok translating the real clock at a seam (ToVirtual)
+	return s.now.Add(time.Until(real)) //qenv:ok translating the real clock at a seam (ToVirtual)
 }
 
 // ToReal translates a virtual time into the real clock's frame (the inverse
@@ -933,7 +933,7 @@ func (p *Process) Crash() {
 	}
 	p.termCancels = nil // its incarnation's, which no task of it reads again
 	if p.sim.nat != nil {
-		t := taskOf(nil)
+		t := taskOf(context.Background())
 		self := t != nil && t.proc == p && t.sim == p.sim
 		if p.machine != nil {
 			p.machine.Crash() // before the hooks, which may restart it
@@ -954,7 +954,7 @@ func (p *Process) Crash() {
 	// A task of the process crashing it dies here too: hand control back
 	// and stay frozen until Close, like the others, rather than run on to
 	// its next scheduling point.
-	if t := taskOf(nil); t != nil && t.proc == p && t.sim == p.sim {
+	if t := taskOf(context.Background()); t != nil && t.proc == p && t.sim == p.sim {
 		if !t.handBack() {
 			panic(killed{})
 		}
@@ -1007,7 +1007,7 @@ func (p *Process) as(version string, start func(ctx context.Context)) {
 // version. A task of the process cannot upgrade it (it stops in its own
 // crash): Upgrade panics there with the fix.
 func (p *Process) Upgrade(version string, start func(ctx context.Context)) {
-	if t := taskOf(nil); t != nil && t.proc == p && t.sim == p.sim {
+	if t := taskOf(context.Background()); t != nil && t.proc == p && t.sim == p.sim {
 		panic(fmt.Sprintf("qenv: %s upgrades itself: a task of a process stops in its own crash, before it could restart; "+
 			"upgrade it from another process's task (a supervisor's), or register the rollout with Sim.Upgrades", p.Name))
 	}
@@ -1409,7 +1409,7 @@ func (s *Sim) downProcesses() []ProcessIdentity {
 // no daemon, not idle in a double's receive, of no crashed process.
 func (s *Sim) pending() []string {
 	var out []string
-	self := taskOf(nil) // a task settling the simulation is not its pending work
+	self := taskOf(context.Background()) // a task settling the simulation is not its pending work
 	for _, t := range s.tasks {
 		if t == self || t.done || t.killed || t.daemon || t.proc != nil && (t.proc.down || s.core != nil && !s.core[t.proc]) {
 			continue

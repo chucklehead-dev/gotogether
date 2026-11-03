@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -13,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/itf"
 )
@@ -107,7 +107,7 @@ func agree(t *testing.T, b *binding.Binding, refused bool) bool {
 	}
 	irPath := filepath.Join(dir, "ir.json")
 	f, _ := os.Create(irPath)
-	cmd := exec.Command("quint", "compile", "--target", "json", "--main", "diff", mod)
+	cmd := quintcmd.Command(t.Context(), "quint", "", "compile", "--target", "json", "--main", "diff", mod)
 	var stderr strings.Builder
 	cmd.Dir, cmd.Stdout, cmd.Stderr = dir, f, &stderr
 	err = cmd.Run()
@@ -120,7 +120,7 @@ func agree(t *testing.T, b *binding.Binding, refused bool) bool {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run := exec.Command("quint", "run", "--main", "diff", "--mbt", "--max-samples", "4", "--n-traces", "4", "--max-steps", "15",
+	run := quintcmd.Command(t.Context(), "quint", "", "run", "--main", "diff", "--mbt", "--max-samples", "4", "--n-traces", "4", "--max-steps", "15",
 		"--seed", "7", "--out-itf", filepath.Join(dir, "t_{seq}.itf.json"), mod)
 	run.Dir = dir
 	if b, err := run.CombinedOutput(); err != nil && !strings.Contains(string(b), "violation") {

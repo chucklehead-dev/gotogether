@@ -3,11 +3,11 @@ package qeval
 import (
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/itf"
 )
@@ -24,7 +24,7 @@ func compile(t testing.TB, file, main, init, step string) *Model {
 	}
 	// to stdout, a file: --out writes the modules unflattened, and a pipe
 	// loses what quint has not written when it exits
-	cmd := exec.Command("quint", "compile", "--target", "json", "--main", main, "--init", init, "--step", step, abs)
+	cmd := quintcmd.Command(t.Context(), "quint", "", "compile", "--target", "json", "--main", main, "--init", init, "--step", step, abs)
 	cmd.Dir, cmd.Stdout = filepath.Dir(abs), f
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
@@ -111,7 +111,7 @@ func TestEdgesAgreeWithQuint(t *testing.T) {
 		dir := t.TempDir()
 		out := filepath.Join(dir, "t.itf.json")
 		abs, _ := filepath.Abs("testdata/edges.qnt")
-		cmd := exec.Command("quint", "run", "--backend", backend, "--max-steps", "0", "--max-samples", "1", "--out-itf", out, abs)
+		cmd := quintcmd.Command(t.Context(), "quint", "", "run", "--backend", backend, "--max-steps", "0", "--max-samples", "1", "--out-itf", out, abs)
 		cmd.Dir = filepath.Dir(abs)
 		if b, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("quint run (%s): %v\n%s", backend, err, b)
@@ -216,7 +216,7 @@ func TestSetFoldsAgreeWithQuintOrAreRefused(t *testing.T) {
 		dir := t.TempDir()
 		out := filepath.Join(dir, "t.itf.json")
 		abs, _ := filepath.Abs("testdata/folds.qnt")
-		cmd := exec.Command("quint", "run", "--backend", backend, "--max-steps", "0", "--max-samples", "1", "--out-itf", out, abs)
+		cmd := quintcmd.Command(t.Context(), "quint", "", "run", "--backend", backend, "--max-steps", "0", "--max-samples", "1", "--out-itf", out, abs)
 		cmd.Dir = filepath.Dir(abs)
 		if b, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("quint run (%s): %v\n%s", backend, err, b)

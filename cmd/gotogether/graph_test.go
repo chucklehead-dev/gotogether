@@ -2,12 +2,12 @@ package main
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 )
 
@@ -97,7 +97,7 @@ func TestSimulateGraph(t *testing.T) {
 // pass.
 func replayInQuint(t *testing.T, file string) {
 	t.Helper()
-	cmd := exec.Command("quint", "test", "--main", "simulate", "--match", "gtg_", "--max-samples", "20", file)
+	cmd := quintcmd.Command(t.Context(), "quint", "", "test", "--main", "simulate", "--match", "gtg_", "--max-samples", "20", file)
 	cmd.Dir = filepath.Dir(file)
 	if b, err := cmd.CombinedOutput(); err != nil {
 		src, _ := os.ReadFile(file)

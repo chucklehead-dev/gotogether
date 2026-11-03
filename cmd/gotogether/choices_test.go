@@ -15,7 +15,7 @@ func TestChoicesValidateFlagRecordsPolicy(t *testing.T) {
 	skip.Quint(t)
 	manifest := filepath.Join(t.TempDir(), "run.json")
 	steps := []qtrace.Step{{Action: "deposit", Recorder: "r", Seq: 1, Time: time.Unix(1, 0), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}}}
-	code, err, out := validateSteps(t, steps, "-binding", "../../validate/testdata/account.yaml", "-choice-limit", "7", "-manifest", manifest)
+	code, out, err := validateSteps(t, steps, "-binding", "../../validate/testdata/account.yaml", "-choice-limit", "7", "-manifest", manifest)
 	if err != nil || code != 0 {
 		t.Fatalf("validate: code %d, %v\n%s", code, err, out)
 	}

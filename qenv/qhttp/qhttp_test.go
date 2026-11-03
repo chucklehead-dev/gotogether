@@ -623,8 +623,8 @@ func TestBodyReadOnTheTask(t *testing.T) {
 // lateArrival runs a request delayed in the network (it arrives at half
 // the timeout) to a server that crashes and restarts meanwhile, and whose
 // restarted start function calls Handle late: the request finds no one
-// listening. It returns the client's error and how often the handler ran.
-func lateArrival(t *testing.T, faults ...qenv.Scripted) (error, int) {
+// listening. It returns how often the handler ran and the client's error.
+func lateArrival(t *testing.T, faults ...qenv.Scripted) (int, error) {
 	sc := &qenv.Script{Faults: append(faults, qenv.Scripted{Kind: "rpc.api.delay", Name: "slow"})}
 	s := qenv.New(sc)
 	var srv *qhttp.Server
@@ -654,14 +654,14 @@ func lateArrival(t *testing.T, faults ...qenv.Scripted) (error, int) {
 	if m := sc.Misnamed(); len(m) > 0 {
 		t.Fatalf("the script made none of %v", m)
 	}
-	return err, applied
+	return applied, err
 }
 
 // A request that was sent and finds no one listening is a reset, outcome
 // unknown, not a refusal (which says nothing was sent), nor served by the
 // last incarnation's handler.
 func TestLateArrivalAtRestartedServer(t *testing.T) {
-	err, applied := lateArrival(t)
+	applied, err := lateArrival(t)
 	if !errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNREFUSED) || applied != 0 {
 		t.Errorf("got %v with the handler run %d times, want a reset and no effect", err, applied)
 	}
@@ -675,7 +675,7 @@ func TestLateArrivalAtRestartedServer(t *testing.T) {
 // incarnation: a refusal would tell the client it is safe to retry what
 // already took effect.
 func TestLateArrivalAfterItsDuplicateWasProcessed(t *testing.T) {
-	err, applied := lateArrival(t, qenv.Scripted{Kind: "rpc.api.request", Name: "duplicate"})
+	applied, err := lateArrival(t, qenv.Scripted{Kind: "rpc.api.request", Name: "duplicate"})
 	if applied != 1 || errors.Is(err, syscall.ECONNREFUSED) || !errors.Is(err, syscall.ECONNRESET) {
 		t.Errorf("got %v with the handler run %d times, want a reset after the duplicate's effect", err, applied)
 	}

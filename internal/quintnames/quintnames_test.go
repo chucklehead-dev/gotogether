@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 )
 
@@ -120,7 +121,7 @@ func TestReservedRefusedByQuint(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(sub, "m.qnt"), []byte(b.String()), 0o644); err != nil {
 			return "", err
 		}
-		cmd := exec.Command("quint", "parse", "m.qnt")
+		cmd := quintcmd.Command(t.Context(), "quint", "", "parse", "m.qnt")
 		cmd.Dir = sub
 		out, err := cmd.CombinedOutput()
 		return string(out), err

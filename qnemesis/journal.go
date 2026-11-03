@@ -309,7 +309,6 @@ func (j *Journal) Unreproducible(sim ...*qenv.Sim) []string {
 	tolerance := func(d time.Duration) time.Duration { return max(PauseTolerance, d/10) }
 	cut := map[[2]string]bool{}
 	paused := map[string]time.Time{}
-	var pauses []time.Duration
 	for _, e := range j.Entries {
 		fam, names, _ := parse(e.Kind)
 		pairs := e.Links
@@ -339,7 +338,6 @@ func (j *Journal) Unreproducible(sim ...*qenv.Sim) []string {
 		case "resume":
 			if t, ok := paused[names[0]]; ok && e.Event == "end" {
 				d := e.Time.Sub(t)
-				pauses = append(pauses, d)
 				if stall == 0 || d-stall > tolerance(stall) || stall-d > tolerance(stall) {
 					why := "the simulation's pauses are off (Sim.Stalls.Pause 0)"
 					if stall > 0 {

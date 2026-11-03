@@ -2,12 +2,12 @@ package qeval
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 )
 
@@ -21,7 +21,7 @@ func compileFile(t testing.TB, path, main string) *Model {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("quint", "compile", "--target", "json", "--main", main, abs)
+	cmd := quintcmd.Command(t.Context(), "quint", "", "compile", "--target", "json", "--main", main, abs)
 	var stderr strings.Builder
 	cmd.Dir, cmd.Stdout, cmd.Stderr = filepath.Dir(abs), f, &stderr
 	err = cmd.Run()

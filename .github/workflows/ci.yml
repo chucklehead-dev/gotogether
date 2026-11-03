@@ -26,6 +26,17 @@ env:
   GOTOGETHER_EVAL_SAMPLE: "1/5"
 
 jobs:
+  staticcheck:
+    # A pinned analyzer, outside the runtime module graph; all default checks.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: staticcheck (core, including tests)
+        run: ci/staticcheck.sh
+
   test:
     # one job ran every part in turn: its parts run side by side. The
     # core's variants (self-checks, the TypeScript backend), its race
@@ -630,8 +641,12 @@ jobs:
         run: ../ci/install-quint.sh
       - name: gofmt, vet, lint -sim
         run: test -z "$(gofmt -l . | tee /dev/stderr)" && go vet ./... && go run -C .. ./cmd/gotogether lint -sim grist
-      - name: test (GOTOGETHER_CHECK, quint required)
-        run: GOTOGETHER_CHECK=1 GOTOGETHER_STRICT=1 go test -count=1 -timeout 30m ./...
+      - name: short tests and descendant CPU budget (GOTOGETHER_CHECK, quint required)
+        run: |
+          go build -C .. -o "$RUNNER_TEMP/cputime" ./internal/cputime
+          GOTOGETHER_CHECK=1 GOTOGETHER_STRICT=1 GOTOGETHER_CPU_TIMES="$RUNNER_TEMP/grist-cpu.txt" go test -short -count=1 -timeout 30m -exec "$RUNNER_TEMP/cputime" ./...
+          sort -k2,2nr "$RUNNER_TEMP/grist-cpu.txt"
+          ../ci/time-budget.sh < "$RUNNER_TEMP/grist-cpu.txt"
 
   payd:
     # its own job: an unmodified net/http + database/sql service in qenv
