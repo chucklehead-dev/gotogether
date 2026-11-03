@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Logical transaction capacity (current branch): Store.MaxTransactions bounds
+Native PostgreSQL admission evidence (current branch): a restricted login
+role's connection quota is exhausted by an observed idle physical session.
+Append preserves native pgx 53300, transient NotCommitted classification and
+unchanged heads/events/steps/markers. Closing the holder pool permits exactly
+one batch through the same writer pool. This role-quota test is distinct from
+logical transaction admission and server-global pool-sizing proof. Virtual
+physical-session modeling remains deferred pending a faithful ownership model.
+
+Logical transaction capacity (PR #52): Store.MaxTransactions bounds
 active transactions with deterministic immediate refusal. DB.Begin now returns
 (Txn, error), with direct caller migration and typed known-not-applied evidence.
 Leases release exactly once across commit, rollback, conflict, crash and reset;
@@ -666,7 +674,8 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I25: physical-session capacity feasibility | M | logical transaction admission is implemented; idle sessions and nondeterministic pool callbacks require a separate contract before claiming max_connections or pool-sizing fidelity |
+| 1 | G9: bounded COUNT(*) support in qsql | S-M | an explicit query-subset gap for unmodified services; define empty/filter/transaction visibility semantics and check against the existing SQLite differential harness |
+| deferred | I25: virtual physical-session capacity | M | native role-quota refusal/recovery is checked; nondeterministic pool callbacks and idle-session ownership still prevent a faithful virtual max_connections claim |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 

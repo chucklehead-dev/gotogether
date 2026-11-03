@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- The native PostgreSQL test tier now exercises an idle physical session
+  exhausting a restricted login role's connection quota: native `53300`,
+  known-not-committed append refusal without effects, and recovery through the
+  same writer pool after the holder pool closes.
+
 - `qenv.DB.Begin` and `Store.Begin` now return `(Txn, error)`; migrate callers
   directly and check admission before using a transaction. `Store.MaxTransactions`
   bounds active logical transactions, with typed known-not-applied refusal and

@@ -28,8 +28,15 @@ AGENTS.md has the general requirements.
   runs into testdata/runs; `WEBJOBS_TIME_LIMIT=10s` shortens a live run;
   `WEBJOBS_JOURNEYS=dir` keeps the journeys.
 - grist (its own module): `cd grist && GOTOGETHER_CHECK=1
-  GOTOGETHER_STRICT=1 go test ./...` (as CI; `TestNewIsGreen`, full mode,
-  scaffolds a module with `grist new` and tests it). A grist app's
+  GOTOGETHER_STRICT=1 go test -short ./...` (per-push CI; full mode runs nightly).
+  The PostgreSQL tier uses `GRIST_POSTGRES=<pgx dsn>` pointing to a disposable
+  server; CI supplies PostgreSQL 16. `TestPostgresRoleConnectionCapacity`
+  creates and removes a restricted login role and private schema, so its fixture
+  administrator needs permission to create roles and schemas and inspect other
+  roles' session state (superuser or suitable `pg_read_all_stats` access). It checks native
+  idle-session admission refusal and recovery, separately from logical Store
+  transaction limits. `TestNewIsGreen`, full mode,
+  scaffolds a module with `grist new` and tests it. A grist app's
   generated model and bindings: `go run ./cmd/<app> model` in its
   module (`-init` writes a first model/<app>.qnt), or `GRIST_UPDATE=1 go
   test -run TestGenerated`; grist's own golden files:

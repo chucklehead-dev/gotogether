@@ -578,7 +578,12 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   reset, preserves warm/cold SQL replay, and is checked against an independent
   native Quint admission/release model. Idle pooled connections are not counted;
   this does not validate physical max_connections or the pool-sizing rule.
-  Those require a separate feasibility/ownership contract; (6) slice 5's DSN reopen on an
+  The native PostgreSQL tier now separately tests a restricted login role's
+  physical session quota, including an idle holder, native 53300 refusal,
+  NotCommitted/no-effects evidence and same-pool recovery. This is a role quota,
+  not proof of server-global max_connections sizing. Virtual physical sessions
+  remain deferred: pool callbacks and idle ownership need a faithful contract
+  before a new simulation API is justified; (6) slice 5's DSN reopen on an
   authentication failure. The
   DSN from a file or the environment (a flag shows in `ps` and the pod
   spec; slice 5's first part); structured lifecycle logs (the drain

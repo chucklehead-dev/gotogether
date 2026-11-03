@@ -341,6 +341,11 @@ say, and the building found:
   `Store.Connections` (`max_connections`) is left. `Store.MaxTransactions`
   separately bounds active logical transactions with known admission refusal;
   it excludes idle pooled sessions and does not validate that sizing rule.
+  The native PostgreSQL tier separately checks a restricted role's physical
+  connection quota, including an idle session: admission refusal is native
+  `53300`, transient and NotCommitted, and releasing the holder permits recovery.
+  This is real-backend contract evidence, not virtual-session simulation or a
+  proof of the server-global pool-sizing rule.
 - The connection pool is an option (`-db-pool`), and the sizing rule
   `replicas_max × pool ≤ max_connections - reserve` is linted.
 
