@@ -329,7 +329,7 @@ func TestRunPanicNotTheTasks(t *testing.T) {
 			s := qenv.New(c)
 			defer s.Close()
 			s.Spawn("checker", func(ctx context.Context) { panicInTask() })
-			_ = s.Run(time.Second)
+			_ = s.Run(time.Second) //qenv:ok this probe recovers the task panic before raising the scenario's own
 		}()
 		panic("the scenario's own")
 	}}

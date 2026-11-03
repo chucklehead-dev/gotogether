@@ -42,7 +42,7 @@ func TestQueueChecksAfterEachOperation(t *testing.T) {
 			})
 			got := func() (msg string) {
 				defer func() { msg = fmt.Sprint(recover()) }()
-				s.Run(time.Minute)
+				s.Run(time.Minute) //qenv:ok asserting the queue self-check's panic, not a run outcome
 				return ""
 			}()
 			if want := "after " + c.op + ": message 2 was lost"; !strings.Contains(got, want) {

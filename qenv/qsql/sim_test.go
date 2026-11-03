@@ -631,7 +631,7 @@ func TestHangOnAFullPool(t *testing.T) {
 	var msg string
 	func() {
 		defer func() { msg = fmt.Sprint(recover()) }()
-		w.s.Run(time.Minute)
+		w.s.Run(time.Minute) //qenv:ok asserting the full-pool watchdog panic and its stack
 	}()
 	for _, want := range []string{"task blocked ran", "SetMaxOpenConns", "database/sql.(*DB).conn"} {
 		if !strings.Contains(msg, want) {

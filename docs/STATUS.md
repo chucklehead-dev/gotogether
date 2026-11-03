@@ -7,7 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Joint-state differential coverage (current branch): I11 now checks complete
+Discarded runtime-result tooling (current branch): typed quintsim findings now
+identify ignored error results from qenv.Sim runtime methods. They preserve
+real method identity across aliases/promoted calls, keep unrelated Run/Settle
+methods clean, and offer propagation fixes only in safe sole-error functions.
+The native analyzer JSON carries stable rule categories; real-tool acceptance
+checks the SDK, fix application and corrected code. This typed check requires
+quintvet/go vet or the existing golangci plugin; syntax-only CLI lint does not
+guess receiver types. No new analyzer mode or output format is introduced.
+
+Joint-state differential coverage (merged PR #46, 70b2b7c1): I11 now checks complete
 successor pairs for two integer state variables, including correlated choices,
 simultaneous cross-reads and two-action state propagation. Independent analytical
 controls reject fabricated products, missing combinations and sequential-update
@@ -140,7 +149,7 @@ checks. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
-format has one current version; all published core pins agree at 6f0bfa75bbfa.
+format has one current version; all published core pins agree at c6d1114e5f70.
 
 Captured-transition assertion follow-up (merged PR #32): qtest.TransitionsConform
 judges the existing native conformance facet for all judged actors or required
@@ -616,7 +625,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Independent use or a demonstrated contract blocker | S–M | the fresh stateful adoption exercise and GR10c controls are available; choose the next core/feature slice from actual friction, not another adjacent fixture |
+| 1 | I12: shared Quint admission lifecycle | M | the existing cap covers only validation tests within one binary; establish one shared capacity policy and precise command/lease ownership before implementing cross-binary admission |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 

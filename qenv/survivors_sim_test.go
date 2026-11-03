@@ -71,7 +71,9 @@ func TestSimLogsWhatHappens(t *testing.T) {
 		}, "fault.sv.log=1"},
 		{"panic", qenv.Nominal{}, qenv.Stalls{}, func(t *testing.T, s *qenv.Sim) {
 			s.Spawn("bomber", func(ctx context.Context) { panic("boom") })
-			if msg := svRecover(func() { _ = s.Run(time.Second) }); msg != "boom" {
+			if msg := svRecover(func() {
+				_ = s.Run(time.Second) //qenv:ok asserting task panic propagation and logging
+			}); msg != "boom" {
 				t.Fatalf("Run re-raised %q, want the task's own boom", msg)
 			}
 		}, "task bomber panicked: boom"},
@@ -275,7 +277,7 @@ func TestSchedulerRefusesAnOptionOutOfRange(t *testing.T) {
 				}
 			})
 			s.Spawn("two", svYields(1))
-			_ = s.Run(time.Second)
+			_ = s.Run(time.Second) //qenv:ok asserting the invalid chooser's panic
 		})
 		if !strings.Contains(got, c.want) {
 			t.Errorf("%s: panicked with %q, want %q", c.name, got, c.want)
@@ -669,12 +671,12 @@ func TestStallsAreFixedByTheFirstProcess(t *testing.T) {
 			s.Process("a", false, svYields(1))
 			s.Stalls = qenv.Stalls{Pause: time.Second}
 			s.Process("b", false, svYields(1))
-			_ = s.Run(time.Second)
+			_ = s.Run(time.Second) //qenv:ok asserting invalid stall configuration panics
 		}},
 		{"before Run", func(s *qenv.Sim) {
 			s.Process("a", false, svYields(1))
 			s.Stalls = qenv.Stalls{Pause: time.Second}
-			_ = s.Run(time.Second)
+			_ = s.Run(time.Second) //qenv:ok asserting changed-stall validation at Run
 		}},
 	} {
 		s := qenv.New(qenv.Nominal{})

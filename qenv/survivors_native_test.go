@@ -218,7 +218,7 @@ func TestNativeTaskPanic(t *testing.T) {
 		})
 		got := func() (r any) {
 			defer func() { r = recover() }()
-			_ = s.Run(10 * time.Millisecond)
+			_ = s.Run(10 * time.Millisecond) //qenv:ok asserting native task panic propagation
 			return nil
 		}()
 		s.Close()

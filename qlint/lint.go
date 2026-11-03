@@ -17,7 +17,7 @@ import (
 	"strings"
 )
 
-// A Finding is code in a simulation that escapes it.
+// A Finding identifies code that escapes a simulation or hides its runtime outcome.
 type Finding struct {
 	// Code identifies the rule independently of its message or source spelling.
 	Code string
@@ -163,8 +163,12 @@ func SimFile(fset *token.FileSet, f *ast.File) []Finding { return simFile(fset, 
 // SimFileTyped is SimFile with the file's type information: a function
 // is known by the object its name denotes, not by its package's import
 // name (a dot import's Now(), a function value through it).
+// It also finds discarded errors from statically resolved qenv.Sim runtime
+// methods, including in files that obtain the type without importing qenv.
 func SimFileTyped(fset *token.FileSet, f *ast.File, info *types.Info) []Finding {
-	return simFile(fset, f, info, false)
+	out := append(simFile(fset, f, info, false), runtimeResults(fset, f, info)...)
+	sortFindings(out)
+	return out
 }
 
 // simFile is SimFile (SimFileTyped with info); with all, of any file: the

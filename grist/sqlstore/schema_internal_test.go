@@ -113,7 +113,9 @@ func TestMigrationsLocked(t *testing.T) {
 		sim.Spawn("check", func(ctx context.Context) {
 			db.QueryRowContext(ctx, `SELECT version FROM grist_schema WHERE id = $1`, 1).Scan(&version)
 		})
-		sim.Run(time.Minute)
+		if err := sim.Run(time.Minute); err != nil {
+			t.Fatal(err)
+		}
 		return errs, version
 	}
 	for seed := uint64(1); seed <= 20; seed++ {

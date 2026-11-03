@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- Typed `quintsim` checks diagnose discarded error results from `qenv.Sim.Run`,
+  `RunUntil`, `Settle` and `SettleCore`. Safe propagation fixes are offered in
+  functions returning only `error`; native analyzer JSON retains stable rule
+  categories and source/fix data. Method-name lookalikes remain excluded.
+
 - Evaluator differential checks now cover complete joint successor sets for two
   integer variables, including correlated choices, simultaneous updates and
   two-action state propagation. Both Quint backends judge finite relation oracles;

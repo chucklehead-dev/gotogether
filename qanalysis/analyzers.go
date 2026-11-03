@@ -6,10 +6,10 @@
 // They run in a multichecker (cmd/quintvet, also usable as `go vet
 // -vettool`) and in golangci-lint as a module plugin (package golangci).
 //
-// Sim and Weave wrap the checks of `gotogether lint -sim` and `-weave`
-// (package qlint), so the CLI and the analyzers report the same findings.
-// This is its own module because the core keeps to OTel, yaml.v3 and
-// Hegel, and x/tools is none of them.
+// Sim and Weave share the checks of `gotogether lint -sim` and `-weave`
+// (package qlint). Type information lets Sim resolve additional checks that
+// the syntax-only CLI cannot establish.
+// This is its own module to keep x/tools out of the core.
 package qanalysis
 
 import (
@@ -39,17 +39,22 @@ var All = []*analysis.Analyzer{Sim, Weave, Action, Ctx, Raw}
 // System's Run closure lives in one. With the package's types it knows a
 // function by what its name denotes, so it finds what the CLI's syntactic
 // check cannot: a function value or call through a dot import, and no
-// false finding for a local variable that shadows an import's name.
+// false finding for a local variable that shadows an import's name. It also
+// reports discarded errors from statically resolved qenv.Sim runtime methods.
 // Where a context is in scope it suggests the fix (simFixes): a `go`
 // statement started with qenv.Go, time.Now and time.Sleep as qenv's.
 var Sim = &analysis.Analyzer{
 	Name: "quintsim",
-	Doc:  "report code that escapes a qenv simulation (go statements, the wall clock, steps recorded with context.Background)",
+	Doc:  "report code that escapes a qenv simulation and discarded qenv.Sim runtime errors",
 	URL:  "https://github.com/chucklehead-dev/gotogether/tree/main/qanalysis",
 	Run: func(pass *analysis.Pass) (any, error) {
 		for _, f := range pass.Files {
 			for _, x := range qlint.SimFileTyped(pass.Fset, f, pass.TypesInfo) {
-				pass.Report(analysis.Diagnostic{Pos: x.At, Message: x.What + ": " + x.Fix, SuggestedFixes: simFixes(pass, f, x.At)})
+				fixes := simFixes(pass, f, x.At)
+				if x.Code == "sim-runtime-result" {
+					fixes = runtimeResultFixes(pass, f, x.At)
+				}
+				pass.Report(analysis.Diagnostic{Pos: x.At, Category: x.Code, Message: x.What + ": " + x.Fix, SuggestedFixes: fixes})
 			}
 		}
 		return nil, nil

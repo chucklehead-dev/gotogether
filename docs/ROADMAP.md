@@ -314,6 +314,12 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   test that a cancelled check leaves no evaluator. Then (M) one slot
   limiter per machine (a token directory with flock) instead of
   `quintSlots` per test binary.
+  Review confirms that admission must cover the command lifecycle for compile,
+  typecheck and run as well as validation tests. Shared token files require one
+  consistent capacity policy across binaries; different capacities must not
+  silently create independent pools. Host-local same-user coordination also
+  requires a shared directory. These policy/lifecycle decisions remain open;
+  no machine-wide guarantee is claimed by the current process-local limiter.
 - **I13. Formats and ABIs versioned (S each, policy: For the
   maintainer). Done** on the recommended policy (DESIGN §63, HISTORY
   "I13 and I14"): one table, internal/formats; `gotogether.steps/1` as a
@@ -740,6 +746,14 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   function with a ctx, or a test's check without `t.Context()`); gopls
   use documented (the golangci plugin, or quintvet in a pre-commit
   hook); JSON Schemas for binding and convert YAML.
+  The typed quintsim pass now also reports discarded qenv.Sim runtime-error
+  results, preserving exact method identity and a stable diagnostic category.
+  Propagation fixes are limited to direct statements in sole-error functions;
+  arbitrary control-flow handling remains the author's responsibility. Native
+  tool JSON and real SDK fix acceptance cover this workflow. Generic errcheck
+  also covers ignored errors when installed; quintsim supplies the framework
+  explanation through the existing tool/plugin. Syntax-only CLI lint does not
+  infer receiver types, and method-value/interface dataflow remains outside scope.
 
 ### Performance
 

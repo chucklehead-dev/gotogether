@@ -89,7 +89,9 @@ func TestRunChecksOnlyWithCheck(t *testing.T) {
 		s.Check = check
 		s.Spawn("q", func(context.Context) {})
 		s.lastNow = s.now.Add(time.Second) // time went backwards
-		got := svCatch(func() { _ = s.Run(time.Second) })
+		got := svCatch(func() {
+			_ = s.Run(time.Second) //qenv:ok only the scheduler self-check panic is under test
+		})
 		s.lastNow = time.Time{}
 		if caught := strings.Contains(fmt.Sprint(got), "time went backwards"); caught != check {
 			t.Errorf("Check %v: Run panicked with %v", check, got)

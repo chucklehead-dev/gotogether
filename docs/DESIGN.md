@@ -6283,3 +6283,37 @@ harnesses reject startup failures, signals and unexpected exit codes even after
 complete-looking output. Exit 1 is accepted only for reported native failed or
 disabled runs, which each semantic check still classifies. Process-level negative
 controls keep a broken tool from being reported as evaluator agreement.
+
+## 86. Typed runtime-result diagnostics make error propagation discoverable
+
+An ignored Sim.Run or Settle error can hide an interrupted, bounded or
+unsettled scenario. The existing quintsim analyzer now reports syntactically
+discarded error results from the actual qenv.Sim Run, RunUntil, Settle and
+SettleCore methods. The shared typed qlint check uses method/receiver identity,
+including aliases and promoted/method-expression calls. Similar method names on
+grist or custom simulators are not evidence of the same API contract.
+
+The finding has stable code sim-runtime-result and the original call location.
+It covers statement/go/defer calls and blank error-result slots in assignments
+or declarations. Retaining a RunUntil boolean does not handle its error, while
+retaining its error is not diagnosed merely because the boolean is ignored.
+This is a direct discard check, not proof of arbitrary error-handling control
+flow. Assigned method-value aliases and interface dispatch remain outside scope.
+The syntax-only CLI does not guess concrete receiver types; native go/analysis
+tools provide the typed check through the existing analyzer and plugin.
+
+Suggested fixes propagate the result only from direct statement positions in
+the nearest function returning exactly error. They preserve the call once and
+its source comments. Void or multiple-result functions, retained outputs,
+initializers/post clauses, go/defer and shadowed nil do not get speculative
+returns. Existing qenv:ok line exemptions remain available for intentional code.
+Generic errcheck also diagnoses ignored errors when installed; this integration
+adds the framework explanation and bounded fixes to the toolkit's default typed
+workflow without another analyzer mode or output format.
+
+The wrapper carries qlint's rule code in native Diagnostic.Category. Real-tool
+acceptance checks the JSON category, position and edit against an actual SDK,
+applies the fix and builds/runs the corrected consumer. Native JSON mode can
+exit successfully while reporting findings, so the acceptance reads diagnostics
+rather than treating exit zero as a clean analysis. Compiled golden fixes and
+negative receiver/scope cases protect the mechanical transformation.

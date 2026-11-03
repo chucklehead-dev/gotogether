@@ -201,7 +201,7 @@ func TestClocksChecked(t *testing.T) {
 	panics("set them before creating processes", func(s *qenv.Sim) {
 		s.Process("a", false, func(context.Context) {})
 		s.Clocks = qenv.Clocks{Skew: time.Second}
-		_ = s.Run(time.Second)
+		_ = s.Run(time.Second) //qenv:ok asserting the changed-clock configuration panic
 	})
 }
 

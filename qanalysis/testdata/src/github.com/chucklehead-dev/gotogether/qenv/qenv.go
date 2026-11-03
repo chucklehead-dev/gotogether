@@ -10,6 +10,13 @@ import (
 // Sim is a simulation.
 type Sim struct{}
 
+type Process struct{}
+
+func (*Sim) Run(time.Duration) error                           { return nil }
+func (*Sim) RunUntil(time.Duration, func() bool) (bool, error) { return false, nil }
+func (*Sim) Settle(time.Duration) error                        { return nil }
+func (*Sim) SettleCore(time.Duration, ...*Process) error       { return nil }
+
 // Context is the simulation's context.
 func (*Sim) Context() context.Context { return context.Background() }
 
