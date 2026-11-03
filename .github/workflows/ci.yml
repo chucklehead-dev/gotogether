@@ -110,8 +110,11 @@ jobs:
         # qtest's explorations run seeds in parallel goroutines, qnemesis
         # drives real processes; all passed the detector when added
         # (eleventh review, M5)
+        # Match the core's 30-minute package alarm. Race instrumentation and
+        # shared Quint admission can exceed Go's implicit 10-minute wall limit
+        # while native checks continue making progress. CPU budgets stay separate.
         run: |
-          go test -race -short -count=1 ./qobs/ ./qtrace/ ./validate/ ./qrun/ ./otelio/ ./convert/ ./binding/ ./itf/ \
+          go test -race -short -count=1 -timeout 30m ./qobs/ ./qtrace/ ./validate/ ./qrun/ ./otelio/ ./convert/ ./binding/ ./itf/ \
             ./qtest/ ./qhistory/ ./qsweep/ ./qnemesis/ ./qload/ ./qshrink/ ./internal/qeval/ ./internal/quintcmd/ ./qenv/qsql/
           go test -race -short -count=1 -run 'Native|Synctest|Signal|Store.*Capacity' ./qenv/
           # Hegel's output captured at descriptor 1, os.Stdout never assigned

@@ -194,3 +194,8 @@ AGENTS.md has the general requirements.
   seconds the job printed (each budgeted job prints its file sorted, CPU
   second column) with the reason after `#`; a laptop's numbers differ
   from CI's by its cores' speed, not by what runs beside the tests.
+  The core and broad race commands use an explicit 30-minute per-package
+  wall-time alarm (the twice-shuffled suite uses 40 minutes). This hang guard
+  is separate from CPU regression budgets: instrumentation and waiting for
+  shared Quint admission can cross Go's default 10-minute wall-time alarm
+  while individual native checks keep progressing.
