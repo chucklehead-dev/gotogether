@@ -93,9 +93,10 @@ func TestSQLiteModeChecked(t *testing.T) {
 	}
 }
 
-// postgresDSN is GRIST_POSTGRES, a PostgreSQL to test against (pgx's
-// DSN): none in CI; a scratch server is two commands (initdb, then
-// postgres -k on a directory of its own).
+// postgresDSN is GRIST_POSTGRES, a disposable PostgreSQL fixture (pgx's DSN).
+// CI supplies PostgreSQL 16. The role-capacity test additionally creates and
+// removes a restricted login role and schema through the fixture administrator,
+// and inspects its session state (requiring suitable statistics visibility).
 func postgresDSN(t *testing.T) string {
 	dsn := os.Getenv("GRIST_POSTGRES")
 	if dsn == "" {

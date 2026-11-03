@@ -28,8 +28,15 @@ AGENTS.md has the general requirements.
   runs into testdata/runs; `WEBJOBS_TIME_LIMIT=10s` shortens a live run;
   `WEBJOBS_JOURNEYS=dir` keeps the journeys.
 - grist (its own module): `cd grist && GOTOGETHER_CHECK=1
-  GOTOGETHER_STRICT=1 go test ./...` (as CI; `TestNewIsGreen`, full mode,
-  scaffolds a module with `grist new` and tests it). A grist app's
+  GOTOGETHER_STRICT=1 go test -short ./...` (per-push CI; full mode runs nightly).
+  The PostgreSQL tier uses `GRIST_POSTGRES=<pgx dsn>` pointing to a disposable
+  server; CI supplies PostgreSQL 16. `TestPostgresRoleConnectionCapacity`
+  creates and removes a restricted login role and private schema, so its fixture
+  administrator needs permission to create roles and schemas and inspect other
+  roles' session state (superuser or suitable `pg_read_all_stats` access). It checks native
+  idle-session admission refusal and recovery, separately from logical Store
+  transaction limits. `TestNewIsGreen`, full mode,
+  scaffolds a module with `grist new` and tests it. A grist app's
   generated model and bindings: `go run ./cmd/<app> model` in its
   module (`-init` writes a first model/<app>.qnt), or `GRIST_UPDATE=1 go
   test -run TestGenerated`; grist's own golden files:
@@ -187,3 +194,8 @@ AGENTS.md has the general requirements.
   seconds the job printed (each budgeted job prints its file sorted, CPU
   second column) with the reason after `#`; a laptop's numbers differ
   from CI's by its cores' speed, not by what runs beside the tests.
+  The core and broad race commands use an explicit 30-minute per-package
+  wall-time alarm (the twice-shuffled suite uses 40 minutes). This hang guard
+  is separate from CPU regression budgets: instrumentation and waiting for
+  shared Quint admission can cross Go's default 10-minute wall-time alarm
+  while individual native checks keep progressing.

@@ -6452,3 +6452,25 @@ Runtime controls cover reset, crash, conflict, unknown commit and cancellation;
 nonempty scheduling replay and warm/cold SQL pools preserve captured choices and
 outcomes. These checks establish the stated logical contract, not physical
 database connection fidelity.
+
+## 92. Physical session admission is checked on PostgreSQL
+
+The SQL bridge deliberately keeps chooser draws out of database/sql's pool
+callbacks. Counting logical transactions cannot establish physical connection
+capacity because idle sessions still consume it. A new virtual-session API is
+therefore deferred until its ownership and scheduling semantics can be faithful.
+The existing static pool-sizing rule remains arithmetic over declared limits.
+
+The native PostgreSQL tier now checks a real restricted LOGIN role with
+CONNECTION LIMIT 1. It authenticates as that role and observes a pooled session
+idle outside any transaction. A separate writer pool's append must preserve a
+concrete pgx 53300 error, transient NotCommitted classification, and no changes
+to heads, events, steps or markers. Closing the entire holder pool and observing
+server-side release lets that same writer commit exactly one batch. This proves
+the role-quota contract, not the server-global max_connections/reserved-slot rule.
+
+The fixture uses a private role/schema, initializes through one physical session,
+and synchronizes on observed session state rather than performance thresholds.
+Its administrator needs role/schema creation and session-statistics visibility;
+cleanup uses a fresh context after the test context ends. No runtime dependency,
+wire format or simulated SQLSTATE is added.
