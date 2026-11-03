@@ -783,7 +783,7 @@ type Coverage struct
     method (*Coverage) Unreached() []*PointCoverage
     method (*Coverage) Untried() []PairCoverage
 type DB interface
-    Begin(ctx context.Context) Txn
+    Begin(ctx context.Context) (Txn, error)
 type Delivery struct
     field ID int
     field Body any
@@ -988,9 +988,10 @@ type Stalls struct
 type Store struct
     field Name string
     field Iso Isolation
+    field MaxTransactions int
     field CommitFaults bool
     method (*Store) Backup()
-    method (*Store) Begin(ctx context.Context) Txn
+    method (*Store) Begin(ctx context.Context) (Txn, error)
     method (*Store) Changed() *Signal
     method (*Store) Commits() int
     method (*Store) FailOver(lose int, readOnly time.Duration) int
@@ -1021,6 +1022,12 @@ type TimeProfile = profile.Profile
     method (*Profile) Total() time.Duration
     method (*Profile) Waited(task string, start time.Time, now func() time.Time) func()
     method (*Profile) WriteTo(w io.Writer) (int64, error)
+type TransactionCapacityError struct
+    field Store string
+    field Limit int
+    field Active int
+    method (*TransactionCapacityError) Error() string
+    method (*TransactionCapacityError) Unwrap() error
 type Txn interface
     Get(key string) (any, bool)
     GetForUpdate(key string) (any, bool, error)
@@ -1054,6 +1061,7 @@ var ErrNoSpace = errors.New("qenv: no space left on device")
 var ErrOverloaded = errors.New("qenv: service overloaded (request rejected)")
 var ErrStuck = errors.New("qenv: stuck")
 var ErrTimeout = errors.New("qenv: call timed out (outcome unknown)")
+var ErrTransactionCapacity = errors.New("qenv: transaction capacity exhausted")
 var ErrUnavailable = errors.New("qenv: store unavailable (failing over, or the connection was reset by a failover or a restore); nothing applied: retry")
 var ErrUnknownOutcome = errors.New("qenv: commit outcome unknown (connection lost)")
 var ErrUnsettled = errors.New("qenv: not settled")

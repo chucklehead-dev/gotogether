@@ -58,9 +58,19 @@ func OpenBoltWAL(dir string) (*BoltWAL, error) {
 func (w *BoltWAL) Close() error { return w.db.Close() }
 
 // Begin starts a write transaction, waiting for any other to end.
-func (w *BoltWAL) Begin(context.Context) qenv.Txn {
+func (w *BoltWAL) Begin(ctx context.Context) (qenv.Txn, error) {
+	if ctx != nil && ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	tx, err := w.db.Begin(true)
-	return &boltTxn{tx: tx, err: err}
+	if err != nil {
+		return nil, err
+	}
+	if ctx != nil && ctx.Err() != nil {
+		_ = tx.Rollback()
+		return nil, ctx.Err()
+	}
+	return &boltTxn{tx: tx}, nil
 }
 
 // Read is key's committed value.

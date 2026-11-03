@@ -46,7 +46,7 @@ func TestNativeCrashReleasesAndRedelivers(t *testing.T) {
 	p = s.Process("worker", false, func(ctx context.Context) {
 		for {
 			d := q.Receive(ctx)
-			tx := st.Begin(ctx)
+			tx := mustBegin(t, st, ctx)
 			if _, _, err := tx.GetForUpdate("job"); err != nil {
 				t.Error(err)
 			}

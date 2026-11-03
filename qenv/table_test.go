@@ -140,7 +140,7 @@ func TestTableWrongTypePanics(t *testing.T) {
 		var caught string
 		s.Spawn("t", func(ctx context.Context) {
 			defer func() { caught = fmt.Sprint(recover()) }()
-			tx := st.Begin(ctx)
+			tx := mustBegin(t, st, ctx)
 			defer tx.Rollback()
 			read(tx)
 		})
@@ -164,7 +164,7 @@ func TestTableEdges(t *testing.T) {
 	errs := qenv.NewTable[error]("err/")
 	accts := qenv.NewTable[int]("acct/")
 	s.Spawn("t", func(ctx context.Context) {
-		tx := st.Begin(ctx)
+		tx := mustBegin(t, st, ctx)
 		defer tx.Rollback()
 		errs.Put(tx, "x", nil)
 		if v, ok := errs.Get(tx, "x"); !ok || v != nil {

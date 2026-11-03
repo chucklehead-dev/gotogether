@@ -29,9 +29,16 @@ func (m *MemDB) Load(key string, val any) {
 }
 
 // Begin implements qenv.DB: it holds the store until the transaction ends.
-func (m *MemDB) Begin(context.Context) qenv.Txn {
+func (m *MemDB) Begin(ctx context.Context) (qenv.Txn, error) {
+	if ctx != nil && ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	m.mu.Lock()
-	return &memTx{db: m, writes: map[string]*any{}}
+	if ctx != nil && ctx.Err() != nil {
+		m.mu.Unlock()
+		return nil, ctx.Err()
+	}
+	return &memTx{db: m, writes: map[string]*any{}}, nil
 }
 
 type memTx struct {

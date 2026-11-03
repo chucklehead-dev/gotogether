@@ -46,7 +46,11 @@ func TestKinesisConforms(t *testing.T) {
 		t.Fatalf("the projection is incomplete after the timeout")
 	}
 	for _, k := range res.Keys {
-		if got := pipeline.Total(context.Background(), res.Projection, k); got != 1+2+3 {
+		got, err := pipeline.Total(context.Background(), res.Projection, k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != 1+2+3 {
 			t.Errorf("%s: total %d, want 6", k, got)
 		}
 	}

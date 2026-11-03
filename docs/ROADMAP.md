@@ -571,7 +571,14 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   across resume, while retaining native completion evidence. This admission
   fence cannot revoke an already-issued transaction/call or fence an unobserved
   restore; (5)
-  `qenv.Store.Connections`; (6) slice 5's DSN reopen on an
+  `qenv.Store.Connections` for physical session capacity. A bounded foundation
+  is now built separately: `Store.MaxTransactions` limits active logical
+  transactions through fallible `DB.Begin`, returning typed known-not-applied
+  refusal without waiting. It releases leases on transaction end, crash and
+  reset, preserves warm/cold SQL replay, and is checked against an independent
+  native Quint admission/release model. Idle pooled connections are not counted;
+  this does not validate physical max_connections or the pool-sizing rule.
+  Those require a separate feasibility/ownership contract; (6) slice 5's DSN reopen on an
   authentication failure. The
   DSN from a file or the environment (a flag shows in `ps` and the pod
   spec; slice 5's first part); structured lifecycle logs (the drain

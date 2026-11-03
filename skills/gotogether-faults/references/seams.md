@@ -20,7 +20,16 @@ shrinking removes faults.
   Scan, Commit, Rollback, OnCommit). In production, an adapter over
   `database/sql` implements them. `qenv.Retry(ctx, db, n, fn)` begins,
   runs fn and commits, again on a conflict: fn returns nil to commit and
-  never calls Commit itself.
+  never calls Commit itself. `Begin(ctx)` returns `(qenv.Txn, error)`; check
+  the error before using the transaction and defer Rollback after success.
+  Retry returns admission errors before invoking fn. Configure a Store's
+  `MaxTransactions` to bound active logical transactions (`0` unlimited):
+  full admission returns `qenv.ErrTransactionCapacity`, with Store/Limit/Active
+  values captured in `*qenv.TransactionCapacityError`, without
+  reads, writes or commit hooks. It refuses immediately rather than queuing.
+  A successful raw transaction remains caller-owned after context cancellation;
+  commit/rollback, crash or reset release its lease. This is not a physical
+  pooled-connection limit.
 - **GetForUpdate or Get:** a row a transaction reads and then writes
   from what it read (a balance debited, a stock decremented, a "done"
   record checked before acting) is read with `GetForUpdate`, as SELECT

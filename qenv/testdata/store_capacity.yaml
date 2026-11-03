@@ -1,0 +1,12 @@
+spec: store_capacity.qnt
+module: store_capacity
+constants:
+  LIMIT: '1'
+actions:
+  begin:
+    args: { id: '{{.id}}', admitted: '{{.admitted}}' }
+    expect: 'active.size() == {{.obs.active}}'
+  finish:
+    args: { id: '{{.id}}' }
+    expect: 'active.size() == {{.obs.active}}'
+invariants: [bounded]

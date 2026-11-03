@@ -10,9 +10,25 @@ import (
 	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
+// mustBegin admits fixture transactions on unlimited stores. A task panic is
+// re-raised by Run; Fatal from a simulated goroutine would strand its scheduler.
+// Tests of admission failures call Begin directly and inspect its error.
+func mustBegin(t testing.TB, db qenv.DB, ctx context.Context) qenv.Txn {
+	t.Helper()
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		t.Errorf("fixture Begin: %v", err)
+		panic(err)
+	}
+	return tx
+}
+
 // put commits key=val in its own transaction.
 func put(ctx context.Context, st *qenv.Store, key string, val any) error {
-	tx := st.Begin(ctx)
+	tx, err := st.Begin(ctx)
+	if err != nil {
+		return err
+	}
 	defer tx.Rollback()
 	tx.Put(key, val)
 	return tx.Commit()
@@ -49,7 +65,7 @@ func TestFailoverLosesTail(t *testing.T) {
 			st.Failovers(qenv.Failover{LoseTail: 2, ReadOnly: 5 * time.Second})
 		}
 		s.Spawn("client", func(ctx context.Context) {
-			open := st.Begin(ctx)
+			open := mustBegin(t, st, ctx)
 			open.Get("z")
 			open.Put("open", true)
 			for i := 1; i <= 5; i++ {
@@ -104,7 +120,7 @@ func TestFailoverReleasesLocks(t *testing.T) {
 	st := qenv.NewStore(s, "db", qenv.ReadCommitted)
 	var holderErr, waiterErr, freshErr error
 	s.Spawn("holder", func(ctx context.Context) {
-		tx := st.Begin(ctx)
+		tx := mustBegin(t, st, ctx)
 		if _, _, err := tx.GetForUpdate("k"); err != nil {
 			t.Error(err)
 		}
@@ -113,14 +129,14 @@ func TestFailoverReleasesLocks(t *testing.T) {
 	})
 	s.Spawn("waiter", func(ctx context.Context) {
 		qenv.Sleep(ctx, 100*time.Millisecond)
-		tx := st.Begin(ctx)
+		tx := mustBegin(t, st, ctx)
 		_, _, waiterErr = tx.GetForUpdate("k")
 		tx.Rollback()
 	})
 	s.Spawn("operator", func(ctx context.Context) {
 		qenv.Sleep(ctx, 200*time.Millisecond)
 		st.FailOver(0, 0)
-		tx := st.Begin(ctx)
+		tx := mustBegin(t, st, ctx)
 		_, _, freshErr = tx.GetForUpdate("k")
 		tx.Rollback()
 	})
@@ -151,7 +167,7 @@ func TestRestoreNemesis(t *testing.T) {
 			for i := 1; i <= 6; i++ {
 				// a read-modify-write of one counter: after the restore a
 				// version the old history saw overwritten is current again
-				tx := st.Begin(ctx)
+				tx := mustBegin(t, st, ctx)
 				v, _, _ := tx.GetForUpdate("n")
 				n, _ := v.(int)
 				tx.Put("n", n+1)
@@ -193,7 +209,7 @@ func TestBackupRestore(t *testing.T) {
 		st.Backup()
 		put(ctx, st, "b", 2)
 		put(ctx, st, "a", 3)
-		open := st.Begin(ctx)
+		open := mustBegin(t, st, ctx)
 		open.Put("c", 4)
 		if !st.Restore() {
 			t.Error("Restore after Backup did not restore")

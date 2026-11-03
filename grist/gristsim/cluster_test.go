@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/gristsim"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
@@ -116,5 +117,88 @@ func TestClusterNotHTTP(t *testing.T) {
 	err := gristsim.Run(qenv.NewSeeded(1), app(), gristsim.Config{HTTP: true, Cluster: &gristsim.Cluster{}})
 	if err == nil || !strings.Contains(err.Error(), "not built yet") {
 		t.Errorf("Cluster with HTTP: %v, want the refusal", err)
+	}
+}
+
+// startupRouteFirst keeps targeting the canceled endpoint while its view lags.
+type startupRouteFirst struct{ qenv.Chooser }
+
+func (c startupRouteFirst) Choose(kind string, n int) int {
+	if kind == "fault.route.notes.lag" {
+		return n - 1 // retain the canceled incarnation until the endpoint lag expires
+	}
+	if kind == "route.notes" {
+		return 0 // keep targeting the canceled incarnation while its route is stale
+	}
+	return c.Chooser.Choose(kind, n)
+}
+
+// A signal can arrive before a node's initial tenant read. If the app's
+// dependencies tie work to the signal, Start returns cancellation; the drain
+// already registered by Start must still finish and let the replacement start.
+func TestClusterTerminationDuringStartup(t *testing.T) {
+	var signaled bool
+	servedBeforeReplacement := 0
+	var log []string
+	cfg := gristsim.Config{Check: true, Nodes: 2, Clients: 1, Ops: 2, Tenants: []string{"t1"}, Send: []string{"note"},
+		Cluster: &gristsim.Cluster{EndpointLag: 3 * time.Second}, Log: func(line string) { log = append(log, line) },
+		Setup: func(_ *qenv.Sim, _ grist.Store) func(context.Context) context.Context {
+			return func(ctx context.Context) context.Context {
+				if p := qenv.ProcessOf(ctx); p != nil && p.Name == "node" && p.Incarnation == 1 {
+					if !signaled {
+						signaled = true
+						p.Terminate()
+					} else {
+						// Setup is applied again when this incarnation serves a
+						// request. Its failed Start never opened that listener.
+						servedBeforeReplacement++
+					}
+				}
+				return qenv.Terminating(ctx)
+			}
+		}}
+	sink := &qobs.MemorySink{}
+	// Nominal scheduling starts the node before the first client call; only
+	// the router's lag is forced so later calls target its stale endpoint.
+	c := qenv.WithContext(startupRouteFirst{qenv.Nominal{}}, qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink)))
+	if err := gristsim.Run(c, app(), cfg); err != nil {
+		t.Fatal(err)
+	}
+	if !signaled || count(log, "terminate node") != 1 || count(log, "exit node") != 1 || count(log, "kill ") != 0 {
+		t.Fatalf("interrupted startup did not drain and recover: signaled=%v\n%s", signaled, strings.Join(log, "\n"))
+	}
+	refused := 0
+	for _, step := range sink.Steps() {
+		if step.Args["refused"] != nil {
+			refused++
+		}
+	}
+	if servedBeforeReplacement != 0 || refused == 0 {
+		t.Fatalf("canceled startup's stale endpoint: %d requests served, %d calls with refused tries; want none served and some refused", servedBeforeReplacement, refused)
+	}
+}
+
+// A canceled setup context without a termination is still a startup error.
+func TestClusterCanceledStartupWithoutTerminationFails(t *testing.T) {
+	var failure any
+	func() {
+		defer func() { failure = recover() }()
+		cfg := gristsim.Config{Check: true, Nodes: 2, Clients: 1, Ops: 1, Cluster: &gristsim.Cluster{},
+			Setup: func(_ *qenv.Sim, _ grist.Store) func(context.Context) context.Context {
+				return func(ctx context.Context) context.Context {
+					ctx, cancel := context.WithCancel(ctx)
+					cancel()
+					return ctx
+				}
+			}}
+		sink := &qobs.MemorySink{}
+		base := qenv.NewSeeded(1)
+		base.Rates = qenv.NoFaults
+		c := qenv.WithContext(base, qobs.WithRecorder(context.Background(), qobs.NewRecorder(sink)))
+		_ = gristsim.Run(c, app(), cfg)
+	}()
+	message, ok := failure.(string)
+	if !ok || !strings.Contains(message, "could not start: context canceled") {
+		t.Fatalf("startup error was hidden: %v", failure)
 	}
 }

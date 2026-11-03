@@ -704,7 +704,17 @@ puts real clients behind them. An HTTP service needs no seam: `qenv/qhttp` serve
 `http.Handler` and gives its `http.Client` a Transport, both unmodified,
 with requests and responses as wire bytes over a `qenv.Service`. Nor does a
 `database/sql` one: `qenv/qsql` opens a `*sql.DB` over a Store. Steps are recorded where effects happen:
-`Txn.OnCommit`, a fake API server's interceptor, the provider. Then:
+`Txn.OnCommit`, a fake API server's interceptor, the provider.
+
+`qenv.DB.Begin(ctx)` returns `(qenv.Txn, error)`: handle admission errors before
+using the transaction and arrange `Rollback` after success. A Store's
+`MaxTransactions` bounds active logical transactions (`0` is unlimited).
+Saturation returns `qenv.ErrTransactionCapacity` with a
+`qenv.TransactionCapacityError` snapshot and no effects; it does not wait.
+This counts transactions, not idle pooled connections, and does not validate
+PostgreSQL's physical `max_connections` sizing rule.
+
+Explore the app and check its observations against the model:
 
 ```go
 sys := qtest.System{Binding: "checkout.binding.yaml", Run: func(c qenv.Chooser) error {

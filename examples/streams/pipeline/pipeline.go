@@ -100,7 +100,10 @@ func outboxKey(key string, n int) string { return fmt.Sprintf("outbox/%s/%06d", 
 // removed are written twice: the consumers deduplicate).
 func Publish(ctx context.Context, w simlog.Writer, db qenv.DB) error {
 	for {
-		tx := db.Begin(ctx)
+		tx, err := db.Begin(ctx)
+		if err != nil {
+			return err
+		}
 		rows := tx.Scan("outbox/")
 		tx.Rollback()
 		if len(rows) == 0 {
@@ -228,23 +231,29 @@ func (c *Consumer) apply(ctx context.Context, r Event) error {
 }
 
 // Total is the projection's total for key: the sum of the values applied.
-func Total(ctx context.Context, db qenv.DB, key string) int {
-	tx := db.Begin(ctx)
+func Total(ctx context.Context, db qenv.DB, key string) (int, error) {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
 	defer tx.Rollback()
 	if v, ok := tx.Get("total/" + key); ok {
-		return v.(int)
+		return v.(int), nil
 	}
-	return 0
+	return 0, nil
 }
 
 // Version is the projection's version of key: the last n applied.
-func Version(ctx context.Context, db qenv.DB, key string) int {
-	tx := db.Begin(ctx)
+func Version(ctx context.Context, db qenv.DB, key string) (int, error) {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
 	defer tx.Rollback()
 	if v, ok := tx.Get("ver/" + key); ok {
-		return v.(int)
+		return v.(int), nil
 	}
-	return 0
+	return 0, nil
 }
 
 // Keys are n keys "k1".."kn".

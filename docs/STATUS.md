@@ -7,7 +7,17 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Executable hello transcripts (current branch): prove-it's first sampled and
+Logical transaction capacity (current branch): Store.MaxTransactions bounds
+active transactions with deterministic immediate refusal. DB.Begin now returns
+(Txn, error), with direct caller migration and typed known-not-applied evidence.
+Leases release exactly once across commit, rollback, conflict, crash and reset;
+reset preserves stale transactions' ErrUnavailable. SQL pool callbacks draw no
+choices, refused grist appends are NotCommitted, and refused history attempts
+are empty Aborted entries. A native Quint set model checks capacities 1/2 and
+rejects actual unlimited-mode ablations at forced full attempts. This does not
+model idle pooled connections or complete the physical max_connections proposal.
+
+Executable hello transcripts (merged PR #51, 564fa9e3): prove-it's first sampled and
 complete-graph commands run against the CLI in an isolated copy with fresh
 caches. Literal tutorial output is compared with only graph elapsed time
 normalized; counts, claims, witnesses, complete output and native exit status
@@ -178,7 +188,7 @@ checks. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
-format has one current version; all published core pins agree at 4352dc2c275e.
+format has one current version; all published core pins agree at da8e99e1560f.
 
 Captured-transition assertion follow-up (merged PR #32): qtest.TransitionsConform
 judges the existing native conformance facet for all judged actors or required
@@ -656,7 +666,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I25: deterministic store connection-capacity contract | S-M | Store.Connections is a max-concurrency sizing proposal; resolve deterministic admission, wait/error behavior and transaction lifetime semantics before implementation |
+| 1 | I25: physical-session capacity feasibility | M | logical transaction admission is implemented; idle sessions and nondeterministic pool callbacks require a separate contract before claiming max_connections or pool-sizing fidelity |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 

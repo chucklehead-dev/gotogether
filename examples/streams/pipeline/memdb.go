@@ -22,9 +22,16 @@ type MemDB struct {
 func NewMemDB() *MemDB { return &MemDB{rows: map[string]any{}} }
 
 // Begin implements qenv.DB; the transaction holds the store until it ends.
-func (db *MemDB) Begin(context.Context) qenv.Txn {
+func (db *MemDB) Begin(ctx context.Context) (qenv.Txn, error) {
+	if ctx != nil && ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	db.mu.Lock()
-	return &memTx{db: db, writes: map[string]any{}, deleted: map[string]bool{}}
+	if ctx != nil && ctx.Err() != nil {
+		db.mu.Unlock()
+		return nil, ctx.Err()
+	}
+	return &memTx{db: db, writes: map[string]any{}, deleted: map[string]bool{}}, nil
 }
 
 type memTx struct {

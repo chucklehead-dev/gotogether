@@ -31,7 +31,14 @@
 // transaction or statement ran, which database/sql retries on another
 // connection) with Options.BadConn.
 //
-// Errors are *Error, with PostgreSQL's SQLSTATE (the SQLState method that
+// Store.MaxTransactions bounds logical transactions, including autocommit
+// statements, independently of database/sql's pool. Admission refusal returns
+// the Store's *qenv.TransactionCapacityError directly (errors.Is with
+// qenv.ErrTransactionCapacity): no statement ran. It is not driver.ErrBadConn
+// or a PostgreSQL connection-count SQLSTATE; idle pooled connections do not
+// consume this logical transaction capacity.
+//
+// SQL-specific errors are *Error, with PostgreSQL's SQLSTATE (the SQLState method that
 // retry loops look for with errors.As): 40001 for a serialization failure
 // (qenv.ErrConflict), 40P01 for a deadlock, 23505 for a duplicate key
 // (a key another transaction committed, at every level, as PostgreSQL's
