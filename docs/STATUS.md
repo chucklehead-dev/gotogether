@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Native PostgreSQL admission evidence (current branch): a restricted login
+Bounded qsql COUNT(*) (current branch): single-table counts accept an optional
+AS alias and the existing WHERE subset. Empty matches return one int64 zero;
+NULL-valued rows count, own writes are visible, and Store predicate reads retain
+isolation checks. SQLite differential coverage and forced in-range/adjacent
+phantom controls check these boundaries. Other aggregates, grouping, joins and
+count locking/ordering/limits remain explicit errors. This finishes a bounded
+G9 slice; rotate away from SQL depth next.
+
+Native PostgreSQL admission evidence (PR #53): a restricted login
 role's connection quota is exhausted by an observed idle physical session.
 Append preserves native pgx 53300, transient NotCommitted classification and
 unchanged heads/events/steps/markers. Closing the holder pool permits exactly
@@ -15,7 +23,7 @@ one batch through the same writer pool. This role-quota test is distinct from
 logical transaction admission and server-global pool-sizing proof. Virtual
 physical-session modeling remains deferred pending a faithful ownership model.
 
-Logical transaction capacity (PR #52): Store.MaxTransactions bounds
+Logical transaction capacity (merged PR #52, cbf419a4): Store.MaxTransactions bounds
 active transactions with deterministic immediate refusal. DB.Begin now returns
 (Txn, error), with direct caller migration and typed known-not-applied evidence.
 Leases release exactly once across commit, rollback, conflict, crash and reset;
@@ -674,10 +682,25 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | G9: bounded COUNT(*) support in qsql | S-M | an explicit query-subset gap for unmodified services; define empty/filter/transaction visibility semantics and check against the existing SQLite differential harness |
+| 1 | G11: installed-skills portability | S-M | rotate from storage work to general onboarding: install outside the checkout, resolve all shipped links including repository references, and make guidance usable in an ordinary consumer project |
+| 2 | I7: existing two-recorder example and clock assumptions | S-M | use current APIs to demonstrate how declared skew affects justified ordering and verdicts, keeping assumptions visible in JSON/TUI; no new clock API without evidence |
+| 3 | Non-SQL installed-module adoption trial | M | exercise MBT or request-log validation outside the checkout; fix a demonstrated blocker rather than adding another adapter |
 | deferred | I25: virtual physical-session capacity | M | native role-quota refusal/recovery is checked; nondeterministic pool callbacks and idle-session ownership still prevent a faithful virtual max_connections claim |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
+
+Balance general framework work with facet depth. The recent logical-capacity,
+native PostgreSQL quota and bounded COUNT(*) slices all improve services, but
+are still consecutive storage work. Finish this bounded query contract, then
+prioritize installation/discovery and general trace reasoning. A fresh temporary
+skills install confirms the next blocker: conventions.md keeps a repository
+link to ../../../docs/lint-onboarding.md that is absent in the consumer
+project. The current link guard skips these escaping repository targets. Fix
+installation output and check real installed files, retaining local and
+cross-skill links; the existing force refresh is sufficient for that slice.
+Further SQL
+syntax, virtual physical sessions and evaluator redesign need fresh adoption
+evidence; a useful adjacent implementation is not by itself the next priority.
 
 The counted-values trial is now implemented in
 [internal/adoptiontest/goo-counted-values](../internal/adoptiontest/goo-counted-values/README.md).

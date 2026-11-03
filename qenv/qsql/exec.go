@@ -706,6 +706,20 @@ func (t *tx) query(s *selectStmt, args []any) (*result, error) {
 	if s.join != nil {
 		return t.joinQuery(s, tb, args)
 	}
+	if s.count {
+		cs, none, err := t.conds(tb, s.where, args)
+		if err != nil {
+			return nil, err
+		}
+		var n int64
+		if !none {
+			// Use the same reads as an ordinary SELECT: key lookups and
+			// range scans carry their Store dependencies, including empty
+			// ranges whose later phantoms must fail Serializable commit.
+			n = int64(len(t.find(tb, cs)))
+		}
+		return &result{cols: []string{s.countAs}, rows: [][]any{{n}}, affected: 1}, nil
+	}
 	cols := s.cols
 	if cols == nil {
 		cols = tb.colNames()

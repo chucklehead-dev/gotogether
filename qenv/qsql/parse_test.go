@@ -135,7 +135,6 @@ func TestParseErrors(t *testing.T) {
 		{`UPDATE t SET a = excluded.a`, `the qualifier excluded.`},
 		{`UPDATE t SET a = 1 RETURNING a + 1`, `an expression after RETURNING a`},
 		{`CREATE TABLE t (a INTEGER, PRIMARY KEY (a), PRIMARY KEY (a))`, `a second PRIMARY KEY`},
-		{`SELECT count(*) FROM t`, `the function count(...)`},
 		{`SELECT a FROM t WHERE a = 1.5`, `the number "1."`},
 		{`INSERT INTO t (a) SELECT a FROM u`, `INSERT ... "SELECT"`},
 		{`CREATE TABLE t (a INTEGER, b TEXT, UNIQUE (a, b))`, `the table constraint "UNIQUE"`},

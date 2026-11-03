@@ -55,6 +55,14 @@ rows := qsql.Table(st, "accounts") // committed rows, for final-state checks
   PostgreSQL (SQLite takes the existing row's). A table's name has no `/`
   or `!` and no `_qsql` prefix (they are its keys' separators and qsql's
   schemas).
+- **Counting rows:** `SELECT COUNT(*) [AS total] FROM t [WHERE ...]` uses
+  the same supported filters and Store read dependencies as an ordinary SELECT.
+  It returns one `int64` value, zero for an empty match, including NULL-valued
+  rows and the transaction's own writes. Without AS the result column is `count`.
+  A count does not lock the matching rows: serializable protects its predicate
+  at commit; snapshot isolation can permit a concurrent insert. COUNT(column),
+  DISTINCT, mixed projections, joins, GROUP BY/HAVING, ORDER BY, LIMIT and
+  FOR UPDATE on a count are refused explicitly.
 - **Anomalies are the Store's level's** and every commit is judged by its
   history checker under `GOTOGETHER_CHECK=1`. Read committed loses an
   update written as read-then-write (`SELECT balance`, then `SET balance =
@@ -107,6 +115,7 @@ rows := qsql.Table(st, "accounts") // committed rows, for final-state checks
   process (the Store is none's): a core settle draws them for a task
   outside the core and leaves them nominal for one inside it, as for any
   fault a task makes.
-- Not simulated: joins, aggregates, OR, ranges on a non-key column,
+- Not simulated: joins other than the key lookup above, aggregates other than
+  the bounded COUNT(*) form above, OR, ranges on a non-key column,
   ORDER BY a non-key column not fixed by equality, expressions in RETURNING, DEFAULT,
   savepoints, `LastInsertId`, schema changes after CREATE TABLE.

@@ -3553,6 +3553,17 @@ so by calling `qenv.ScanPrefix`. A KeyRange's From and To are whole
 keys, not suffixes after its prefix (a choice documented rather than
 changed: qsql builds them from whole encoded keys).
 
+The bounded COUNT(*) form reuses that same row lookup and predicate scan,
+including the transaction's own writes; it does not count committed Store keys
+through an inspection API. It returns one int64 value even when no row matches.
+An optional AS names the result (otherwise `count`, as in PostgreSQL). This
+first aggregate is deliberately single-table, with the existing WHERE subset:
+no COUNT(column), DISTINCT, mixed projection, grouping, aggregate joins, ORDER BY,
+LIMIT or FOR UPDATE. Unsupported shapes fail before execution. SQLite
+differential checks compare values, while forced isolation controls check
+that a Serializable predicate conflicts with an in-range insertion, not an
+adjacent one. No session-pool choices or new aggregate API are introduced.
+
 ## 52. A real deployment's nemesis (S13)
 
 A simulation proves what qenv's doubles allow; a team's question is also
