@@ -8,6 +8,10 @@ and adds a line here.
 
 ## Unreleased
 
+- CLI help shows argument types for value flags. A tutorial freshness guard
+  checks prompted shell commands against the real CLI's command and flag help,
+  including wrapped and chained invocations, without executing the examples.
+
 - Quint commands share a two-command admission limit on supported Unix platforms
   for the same user sharing the cache directory. Waiting respects cancellation;
   every compile, typecheck, run and validation command participates. Other

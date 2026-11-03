@@ -7,7 +7,12 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Shared Quint admission (current branch): all core Quint launches participate in
+Tutorial command freshness (current branch): prompted tutorial shell commands
+are checked against actual CLI help, including wrapped/chained invocations and
+flag/value boundaries. Value flags now show argument types in help. The guard
+does not run examples or validate quoted output; full replay remains separate.
+
+Shared Quint admission (merged PR #48, 3380b2fa): all core Quint launches participate in
 one lifecycle limit, including compile and typecheck. Two fixed slots coordinate
 the same user sharing a cache directory on supported Unix platforms;
 other platforms use two process-local slots. Constructors take no permit,
@@ -573,10 +578,9 @@ four, L more; agent-days in practice).
    are implemented on this branch. History/hidden/partition/snapshot/resume/within integration,
    broader IR rendering and tighter enumeration resource bounds remain; select
    further work from adopter evidence. See [the scope](model-choice-witnesses.md).
-2. **I35's rest.** (1) a test that every `gotogether` line in a
-   tutorial names a real command and flags (as cmd/gotogether's
-   TestCommandNeeds); (2) `ci/tutorials.sh` running each `$` line and
-   diffing the quoted output, `[...]` a wildcard; (3) the designer's
+2. **I35's rest.** Command/flag freshness is checked. Remaining:
+   (1) `ci/tutorials.sh` running each `$` line and diffing the quoted
+   output, `[...]` a wildcard; (2) the designer's
    pages: wallet-grist's three scenarios with a too-strict model mutant,
    a migrate-payments front page with stage times, wallet to wallet-grist
    as the migration skill's second walk-through, kind for grist (waits
@@ -637,8 +641,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I35: tutorial command and flag freshness | S | compare documented commands with the real CLI; start with a bounded guard before full output snapshots |
-| 2 | I15: pinned static analysis and measured grist test costs | S | broaden routine feedback without weakening existing checks or CPU budgets |
+| 1 | I15: pinned static analysis and measured grist test costs | S | broaden routine feedback without weakening existing checks or CPU budgets |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 

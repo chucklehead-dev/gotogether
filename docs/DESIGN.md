@@ -6354,3 +6354,17 @@ Queued cancellation, failed starts, abnormal exits, repeated command methods,
 output ownership and the real Rust cancellation test protect release semantics.
 CPU regression budgets stay unchanged; reduced concurrency can increase wall
 time, so timeout changes require measured evidence.
+
+## 88. Tutorial command freshness uses native help
+
+Tutorial shell inputs can outlive a command or flag rename. The CLI test suite
+now inspects those inputs and obtains supported flags from fixed native `-h`
+requests. It does not run tutorial commands, expand substitutions or depend on
+Quint, model files or quoted output. Command dispatch and flag declarations stay
+the source of truth; no parallel command/flag table is maintained by the guard.
+
+Value flags show standard Go argument names in help, making their syntax useful
+to both readers and this check. Inspection respects quoting, shell separators,
+wrappers and Go's flag/value/positional boundaries. Unsupported shell constructs
+fail explicitly. Diagnostic output and prose remain outside this bounded check;
+full executable tutorial replay and output freshness remain separate work.

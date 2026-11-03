@@ -718,14 +718,16 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   Fixes found on the way: `-out` makes its directory and its replay
   command names the path given; "1 in 1 state"; no empty artifacts dir
   on a refused `-compiled`; grist's clean stop logs no error.
-  Left: (1) a test that every `gotogether` line of a tutorial's
-  console/sh blocks names a real command and flags (re-exec the test
-  binary with `GOTOGETHER_MAIN=1` and `<cmd> -h`, parse `^  -name`, as
-  cmd/gotogether's TestCommandNeeds does); (2) the commands run by CI
+  Command freshness is now checked against real command help for prompted
+  tutorial shell invocations, including wrappers, chains and flag values.
+  Help shows standard argument types so readers and the guard can distinguish
+  value flags from booleans. This does not execute tutorial actions or verify
+  their quoted output, model semantics or external tools.
+  Left: (1) the commands run by CI
   (the outputs drift with report wording: a ci/tutorials.sh running
   each `$` line in its example and diffing the quoted lines, `[...]`
   matching anything);
-  (3) the designer's remaining pages: wallet-grist's three scenarios
+  (2) the designer's remaining pages: wallet-grist's three scenarios
   with a too-strict model mutant, a migrate-payments front page with
   each stage's time, wallet to wallet-grist as the migration skill's
   second walk-through, kind for grist (GR10 slice 9); run-side
