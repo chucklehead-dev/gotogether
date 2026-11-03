@@ -90,7 +90,11 @@ func commandFlags(name string) *flag.FlagSet {
 			if !isZeroValue(f) && !strings.Contains(f.Usage, "(default") {
 				def = fmt.Sprintf(" (default %s)", f.DefValue)
 			}
-			fmt.Fprintf(w, "  -%s\n    \t%s%s\n", f.Name, f.Usage, def)
+			value, usage := flag.UnquoteUsage(f)
+			if value != "" {
+				value = " " + value
+			}
+			fmt.Fprintf(w, "  -%s%s\n    \t%s%s\n", f.Name, value, usage, def)
 		})
 	}
 	return fset
