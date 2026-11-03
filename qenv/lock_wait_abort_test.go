@@ -41,7 +41,7 @@ func TestStoreEndedLockWaits(t *testing.T) {
 					var ended time.Duration
 					hooks := 0
 					s.Spawn("holder", func(ctx context.Context) {
-						tx := st.Begin(ctx)
+						tx := mustBegin(t, st, ctx)
 						if _, _, err := tx.GetForUpdate("k"); err != nil {
 							t.Error(err)
 							return
@@ -52,7 +52,7 @@ func TestStoreEndedLockWaits(t *testing.T) {
 					})
 					s.Spawn("waiter", func(ctx context.Context) {
 						qenv.Wait(ctx, func() bool { return held })
-						waiter = st.Begin(ctx)
+						waiter = mustBegin(t, st, ctx)
 						waiter.Put("discarded", 99)
 						waiter.OnCommit(func() { hooks++ })
 						if commit {
@@ -132,7 +132,7 @@ func TestStoreResetLockWaitsPastFreshHolder(t *testing.T) {
 			var ended time.Duration
 			hooks := 0
 			s.Spawn("holder", func(ctx context.Context) {
-				tx := st.Begin(ctx)
+				tx := mustBegin(t, st, ctx)
 				if _, _, err := tx.GetForUpdate("k"); err != nil {
 					t.Error(err)
 					return
@@ -143,7 +143,7 @@ func TestStoreResetLockWaitsPastFreshHolder(t *testing.T) {
 			})
 			s.Spawn("waiter", func(ctx context.Context) {
 				qenv.Wait(ctx, func() bool { return held })
-				tx := st.Begin(ctx)
+				tx := mustBegin(t, st, ctx)
 				tx.Put("discarded", 99)
 				tx.OnCommit(func() { hooks++ })
 				if commit {
@@ -158,7 +158,7 @@ func TestStoreResetLockWaitsPastFreshHolder(t *testing.T) {
 			s.Spawn("reset", func(ctx context.Context) {
 				qenv.Sleep(ctx, time.Second)
 				st.FailOver(0, 0)
-				fresh := st.Begin(ctx)
+				fresh := mustBegin(t, st, ctx)
 				if _, _, err := fresh.GetForUpdate("k"); err != nil {
 					t.Error(err)
 					return

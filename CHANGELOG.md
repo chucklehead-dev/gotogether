@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- `qenv.DB.Begin` and `Store.Begin` now return `(Txn, error)`; migrate callers
+  directly and check admission before using a transaction. `Store.MaxTransactions`
+  bounds active logical transactions, with typed known-not-applied refusal and
+  exactly-once lease release. SQL and history adapters preserve that evidence.
+  This does not model idle pooled connections or PostgreSQL `max_connections`.
+
 - The hello tutorial's sampled and complete-graph transcripts are replayed
   against the native CLI in an isolated copy, with only elapsed time normalized.
   Their stale possibility wording is refreshed. Setup now states the tested

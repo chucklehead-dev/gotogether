@@ -24,7 +24,11 @@ func TestNativeStoreEndedLockWaits(t *testing.T) {
 			var waiter *tx
 			var got error
 			s.Spawn("holder", func(ctx context.Context) {
-				holder := st.Begin(ctx)
+				holder, err := st.Begin(ctx)
+				if err != nil {
+					t.Error(err)
+					return
+				}
 				if _, _, err := holder.GetForUpdate("k"); err != nil {
 					t.Error(err)
 					return
@@ -35,7 +39,12 @@ func TestNativeStoreEndedLockWaits(t *testing.T) {
 			})
 			s.Spawn("waiter", func(ctx context.Context) {
 				Wait(ctx, func() bool { return held })
-				waiter = st.Begin(ctx).(*tx)
+				begun, err := st.Begin(ctx)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				waiter = begun.(*tx)
 				if commit {
 					waiter.Put("k", 50)
 					got = waiter.Commit()

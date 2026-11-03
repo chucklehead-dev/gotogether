@@ -68,7 +68,7 @@ func deadlockThroughCommit(t *testing.T, s *qenv.Sim, d time.Duration) {
 	st.Load("b", 10)
 	var t1, t2 error
 	s.Spawn("t1", func(ctx context.Context) {
-		tx := st.Begin(ctx)
+		tx := mustBegin(t, st, ctx)
 		if _, _, err := tx.GetForUpdate("a"); err != nil {
 			t1 = err
 			return
@@ -84,7 +84,7 @@ func deadlockThroughCommit(t *testing.T, s *qenv.Sim, d time.Duration) {
 		t1 = tx.Commit()
 	})
 	s.Spawn("t2", func(ctx context.Context) {
-		tx := st.Begin(ctx)
+		tx := mustBegin(t, st, ctx)
 		if _, _, err := tx.GetForUpdate("b"); err != nil {
 			t2 = err
 			return
@@ -111,7 +111,7 @@ func TestCommitWaitsForAllLocks(t *testing.T) {
 	st.Load("a", 10)
 	st.Load("b", 10)
 	s.Spawn("holder", func(ctx context.Context) { // holds b until 20ms
-		tx := st.Begin(ctx)
+		tx := mustBegin(t, st, ctx)
 		if _, _, err := tx.GetForUpdate("b"); err != nil {
 			t.Error(err)
 			return
@@ -123,7 +123,7 @@ func TestCommitWaitsForAllLocks(t *testing.T) {
 	})
 	s.Spawn("writer", func(ctx context.Context) { // writes a and b, waits for b
 		qenv.Sleep(ctx, 5*time.Millisecond)
-		tx := st.Begin(ctx)
+		tx := mustBegin(t, st, ctx)
 		tx.Put("a", 100)
 		tx.Put("b", 1)
 		if err := tx.Commit(); err != nil {
@@ -132,7 +132,7 @@ func TestCommitWaitsForAllLocks(t *testing.T) {
 	})
 	s.Spawn("incrementer", func(ctx context.Context) { // locks a at 10ms until 40ms
 		qenv.Sleep(ctx, 10*time.Millisecond)
-		tx := st.Begin(ctx)
+		tx := mustBegin(t, st, ctx)
 		v, _, err := tx.GetForUpdate("a")
 		if err != nil {
 			t.Error(err)

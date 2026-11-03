@@ -93,7 +93,10 @@ func (cn *conn) BeginTx(ctx context.Context, o driver.TxOptions) (_ driver.Tx, e
 	if err := cn.c.fault(ctx); err != nil {
 		return nil, err
 	}
-	t := cn.c.begin(ctx, o.ReadOnly)
+	t, err := cn.c.begin(ctx, o.ReadOnly)
+	if err != nil {
+		return nil, err
+	}
 	t.cn = cn
 	if ctx.Done() != nil {
 		cn.c.live[t] = true
@@ -280,7 +283,10 @@ func (cn *conn) run(ctx context.Context, st statement, nargs []driver.NamedValue
 	if err := cn.c.fault(ctx); err != nil {
 		return nil, err
 	}
-	t := cn.c.begin(ctx, false)
+	t, err := cn.c.begin(ctx, false)
+	if err != nil {
+		return nil, err
+	}
 	t.cn = cn
 	r, err := t.exec(st, args)
 	if err != nil {
@@ -314,12 +320,19 @@ type tx struct {
 	ended    bool              // committed or rolled back in the Store
 }
 
-func (c *connector) begin(ctx context.Context, readOnly bool) *tx {
+func (c *connector) begin(ctx context.Context, readOnly bool) (*tx, error) {
+	txn, err := c.st.Begin(ctx)
+	if err != nil {
+		if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
+			return nil, canceled(ctx.Err())
+		}
+		return nil, sqlError(c.st.Name, err)
+	}
 	c.mu.Lock()
 	c.txs++
 	id := c.txs
 	c.mu.Unlock()
-	t := &tx{c: c, id: id, ctx: ctx, txn: c.st.Begin(ctx), readOnly: readOnly, created: map[string]*table{}, read: map[string]bool{}}
+	t := &tx{c: c, id: id, ctx: ctx, txn: txn, readOnly: readOnly, created: map[string]*table{}, read: map[string]bool{}}
 	if p := qenv.ProcessOf(ctx); p != nil {
 		t.proc, t.inc = p, p.Incarnation
 	}
@@ -331,7 +344,7 @@ func (c *connector) begin(ctx context.Context, readOnly bool) *tx {
 			c.opt.OnCommit(t.ctx, t.changes)
 		}
 	})
-	return t
+	return t, nil
 }
 
 // crashed reports whether its process crashed since it began: the Store

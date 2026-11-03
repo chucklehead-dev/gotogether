@@ -38,7 +38,11 @@ func TestCancelledSQLLockWaitReturnsPromptly(t *testing.T) {
 					w.s.Spawn("holder", func(ctx context.Context) {
 						if mode == "commit" {
 							qenv.Wait(ctx, func() bool { return prepared })
-							tx := w.st.Begin(ctx)
+							tx, err := w.st.Begin(ctx)
+							if err != nil {
+								t.Error(err)
+								return
+							}
 							keys := w.st.Keys("users!email/")
 							if len(keys) != 1 {
 								t.Errorf("old index keys: %v", keys)
@@ -187,7 +191,11 @@ func TestResetSQLLockWaitReturnsUnavailable(t *testing.T) {
 				qenv.Wait(ctx, func() bool { return started })
 				qenv.Sleep(ctx, time.Second)
 				w.st.FailOver(0, 0)
-				fresh := w.st.Begin(ctx)
+				fresh, err := w.st.Begin(ctx)
+				if err != nil {
+					t.Error(err)
+					return
+				}
 				var key string
 				for _, k := range w.st.Keys("accounts/") {
 					v, _ := w.st.Read(k)

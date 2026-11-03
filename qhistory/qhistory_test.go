@@ -178,7 +178,12 @@ func runTxn(ctx context.Context, db qenv.DB, t *qhistory.Txn) { runTxnAs(ctx, db
 // write it back longer: not the database's atomic append, and two of them
 // at once lose one.
 func runTxnAs(ctx context.Context, db qenv.DB, t *qhistory.Txn, lockless bool) {
-	tx := db.Begin(ctx)
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		t.Outcome = qhistory.Aborted
+		t.Ops = nil // admission refused: none of the planned operations ran
+		return
+	}
 	for i := range t.Ops {
 		o := &t.Ops[i]
 		switch o.Kind {

@@ -106,7 +106,7 @@ func TestStoreStatementsAreSchedulingPoints(t *testing.T) {
 			st := qenv.NewStore(s, "db", qenv.Serializable)
 			st.Load("k", 1)
 			return func(ctx context.Context) func() {
-				tx := st.Begin(ctx)
+				tx := mustBegin(t, st, ctx)
 				return func() { op(tx) }
 			}
 		}) {
@@ -115,7 +115,7 @@ func TestStoreStatementsAreSchedulingPoints(t *testing.T) {
 	}
 	if !interleaved(t, func(s *qenv.Sim) func(context.Context) func() {
 		st := qenv.NewStore(s, "db", qenv.Serializable)
-		return func(ctx context.Context) func() { return func() { st.Begin(ctx) } }
+		return func(ctx context.Context) func() { return func() { mustBegin(t, st, ctx).Rollback() } }
 	}) {
 		t.Error("Begin ran without letting another task run")
 	}
@@ -284,7 +284,7 @@ func TestStoreTxnUsedAfterEnd(t *testing.T) {
 	s.Spawn("t", func(ctx context.Context) {
 		for name, op := range ops {
 			for _, end := range []string{"commit", "rollback"} {
-				tx := st.Begin(ctx)
+				tx := mustBegin(t, st, ctx)
 				if end == "commit" {
 					if err := tx.Commit(); err != nil {
 						t.Fatal(err)
@@ -310,7 +310,7 @@ func TestStoreDelete(t *testing.T) {
 	st.Load("k", 1)
 	st.Load("j", 1)
 	s.Spawn("t", func(ctx context.Context) {
-		tx := st.Begin(ctx)
+		tx := mustBegin(t, st, ctx)
 		tx.Delete("k")
 		if _, ok := tx.Get("k"); ok {
 			t.Error("the transaction reads the key it deleted")
@@ -348,7 +348,7 @@ func TestStoreScan(t *testing.T) {
 		if err := qenv.Retry(ctx, st, 1, func(tx qenv.Txn) error { tx.Delete("a/05"); return nil }); err != nil {
 			t.Fatal(err)
 		}
-		tx := st.Begin(ctx)
+		tx := mustBegin(t, st, ctx)
 		defer tx.Rollback()
 		tx.Put("a/01", "new")
 		tx.Delete("a/02")
@@ -424,7 +424,7 @@ func TestRetryAttemptsAndRollback(t *testing.T) {
 		if err != boom {
 			t.Errorf("Retry: %v, want the function's error", err)
 		}
-		tx := st.Begin(ctx)
+		tx := mustBegin(t, st, ctx)
 		if _, _, err := tx.GetForUpdate("l"); err != nil {
 			t.Error(err)
 		}
@@ -469,7 +469,7 @@ func TestConflictEndsTheTransaction(t *testing.T) {
 		var err1 error
 		free := false
 		s.Spawn("t1", func(ctx context.Context) {
-			tx := st.Begin(ctx)
+			tx := mustBegin(t, st, ctx)
 			if c.after == nil { // the lock is taken first; the commit conflicts
 				if _, _, err := tx.GetForUpdate("l"); err != nil {
 					t.Fatal(err)
@@ -484,7 +484,7 @@ func TestConflictEndsTheTransaction(t *testing.T) {
 				err1 = tx.Commit()
 			}
 			lock := map[bool]string{true: "k", false: "l"}[c.after != nil]
-			tx2 := st.Begin(ctx)
+			tx2 := mustBegin(t, st, ctx)
 			if _, _, err := tx2.GetForUpdate(lock); err != nil {
 				t.Errorf("%s: %v", c.name, err)
 			}
@@ -517,7 +517,7 @@ func TestSerializableScanIgnoresOtherKeys(t *testing.T) {
 	st.Load("q/1", 1)
 	var err error
 	s.Spawn("t1", func(ctx context.Context) {
-		tx := st.Begin(ctx)
+		tx := mustBegin(t, st, ctx)
 		tx.Scan("p/")
 		tx.Put("z", 1)
 		qenv.Sleep(ctx, 10*time.Millisecond)
@@ -566,7 +566,7 @@ func TestWriteSkewThroughGetForUpdate(t *testing.T) {
 		st.Load("x", 0)
 		st.Load("y", 0)
 		s.Spawn("t2", func(ctx context.Context) {
-			tx := st.Begin(ctx)
+			tx := mustBegin(t, st, ctx)
 			tx.Get("y")
 			qenv.Sleep(ctx, 10*time.Millisecond)
 			tx.Put("x", 2)
@@ -574,7 +574,7 @@ func TestWriteSkewThroughGetForUpdate(t *testing.T) {
 		})
 		s.Spawn("t1", func(ctx context.Context) {
 			qenv.Sleep(ctx, time.Millisecond)
-			tx := st.Begin(ctx)
+			tx := mustBegin(t, st, ctx)
 			if _, _, err := tx.GetForUpdate("x"); err != nil {
 				errs[0] = err
 				return
@@ -606,7 +606,7 @@ func TestPhantomWriteSkew(t *testing.T) {
 		errs = [2]error{}
 		st.Load("x", 0)
 		s.Spawn("t2", func(ctx context.Context) {
-			tx := st.Begin(ctx)
+			tx := mustBegin(t, st, ctx)
 			qenv.Sleep(ctx, 10*time.Millisecond)
 			seen = tx.Scan("q/")
 			tx.Put("p/1", 1)
@@ -614,7 +614,7 @@ func TestPhantomWriteSkew(t *testing.T) {
 		})
 		s.Spawn("t1", func(ctx context.Context) {
 			qenv.Sleep(ctx, time.Millisecond)
-			tx := st.Begin(ctx)
+			tx := mustBegin(t, st, ctx)
 			tx.Scan("p/")
 			tx.Put("q/1", 1)
 			errs[0] = tx.Commit()

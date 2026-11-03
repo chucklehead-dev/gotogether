@@ -21,11 +21,13 @@ func TestCommitFaults(t *testing.T) {
 		st := qenv.NewStore(s, "db", qenv.Serializable)
 		st.CommitFaults = faults
 		s.Spawn("client", func(ctx context.Context) {
-			tx := st.Begin(ctx)
+			tx := mustBegin(t, st, ctx)
 			tx.Put("k", 1)
 			tx.OnCommit(func() { hooked = true })
 			err = tx.Commit()
-			_, applied = st.Begin(ctx).Get("k")
+			read := mustBegin(t, st, ctx)
+			_, applied = read.Get("k")
+			read.Rollback()
 		})
 		if e := s.Run(time.Minute); e != nil {
 			t.Fatal(e)
@@ -64,18 +66,18 @@ func TestChangedWakesEveryClient(t *testing.T) {
 	s.Spawn("writer", func(ctx context.Context) {
 		qenv.Sleep(ctx, time.Millisecond)
 		versions = append(versions, st.Version())
-		tx := st.Begin(ctx)
+		tx := mustBegin(t, st, ctx)
 		tx.Get("k")
 		tx.Commit() // read-only: nothing applied, nobody woken
 		versions = append(versions, st.Version())
-		tx = st.Begin(ctx)
+		tx = mustBegin(t, st, ctx)
 		tx.Put("k", 1)
 		if err := tx.Commit(); !errors.Is(err, qenv.ErrUnknownOutcome) {
 			t.Errorf("a commit under a certain commit fault: %v, want ErrUnknownOutcome", err)
 		}
 		versions = append(versions, st.Version())
 		qenv.Sleep(ctx, time.Millisecond)
-		tx = st.Begin(ctx)
+		tx = mustBegin(t, st, ctx)
 		tx.Put("k", 2)
 		tx.Commit()
 		versions = append(versions, st.Version())

@@ -51,12 +51,33 @@ var ErrDeadlock = fmt.Errorf("%w: deadlock (lock waits form a cycle); lock rows 
 // not have committed, and the caller cannot tell.
 var ErrUnknownOutcome = errors.New("qenv: commit outcome unknown (connection lost)")
 
+// ErrTransactionCapacity is a Store refusing to admit a transaction because
+// MaxTransactions is already held. Nothing was read or applied; end an active
+// transaction before retrying. It is not an unknown commit outcome.
+var ErrTransactionCapacity = errors.New("qenv: transaction capacity exhausted")
+
+// TransactionCapacityError describes a refused admission. Its values capture
+// the Store's capacity at that attempt and do not change as transactions end.
+// The capacity counts active logical transactions, not pooled connections.
+type TransactionCapacityError struct {
+	Store  string
+	Limit  int
+	Active int
+}
+
+func (e *TransactionCapacityError) Error() string {
+	return fmt.Sprintf("qenv: store %s transaction capacity exhausted (active %d, limit %d); commit or roll back an active transaction before retrying", e.Store, e.Active, e.Limit)
+}
+
+// Unwrap lets errors.Is identify ErrTransactionCapacity.
+func (e *TransactionCapacityError) Unwrap() error { return ErrTransactionCapacity }
+
 // DB is the seam of a transactional store. *Store implements it in a
 // simulation; in production an adapter over database/sql (or a client of
 // any transactional store) implements it, and the code under test sees no
 // difference.
 type DB interface {
-	Begin(ctx context.Context) Txn
+	Begin(ctx context.Context) (Txn, error)
 }
 
 // Txn is a transaction of a DB.
@@ -97,6 +118,11 @@ type Txn interface {
 type Store struct {
 	Name string
 	Iso  Isolation
+	// MaxTransactions bounds active logical transactions across every client
+	// of this Store. Zero is unlimited; negative values are configuration errors.
+	// A full Store refuses Begin immediately with ErrTransactionCapacity.
+	// This does not model physical connections or idle SQL pool sessions.
+	MaxTransactions int
 	// CommitFaults enables the fault kind "store.<name>.commit": a commit that is applied
 	// but reported as ErrUnknownOutcome, a connection lost after the
 	// database committed. Off by default, unlike qenv.Service's crash
@@ -107,13 +133,14 @@ type Store struct {
 	// code that claims to handle it.
 	CommitFaults bool
 
-	sim   *Sim
-	hist  *history.History // under Sim.Check: the committed history, checked against Iso
-	rows  map[string][]version
-	seq   int64
-	locks map[string]*tx
-	open  map[*tx]bool
-	txs   int64
+	sim    *Sim
+	hist   *history.History // under Sim.Check: the committed history, checked against Iso
+	rows   map[string][]version
+	seq    int64
+	locks  map[string]*tx
+	open   map[*tx]bool
+	txs    int64
+	active int // transaction admission leases, including when capacity is unlimited
 
 	commit  FaultKind // "store.<name>.commit"
 	changed Signal    // notified at every commit that wrote, and every Load: Changed
@@ -166,18 +193,19 @@ func NewStore(s *Sim, name string, iso Isolation) *Store {
 
 // tx is a transaction. It is used by one task.
 type tx struct {
-	st     *Store
-	ctx    context.Context
-	proc   *Process
-	id     int64
-	snap   int64
-	reads  map[string]bool
-	scans  []KeyRange
-	writes map[string]*version
-	order  []string // write order, for determinism
-	locked []string
-	hooks  []func()
-	done   bool
+	st       *Store
+	ctx      context.Context
+	proc     *Process
+	id       int64
+	snap     int64
+	reads    map[string]bool
+	scans    []KeyRange
+	writes   map[string]*version
+	order    []string // write order, for determinism
+	locked   []string
+	hooks    []func()
+	done     bool
+	admitted bool // owns one Store admission lease until end or reset
 	// under Check: what the transaction read, for the history
 	seen    []history.Read
 	scanned []history.Scan
@@ -189,13 +217,36 @@ type tx struct {
 	reset bool
 }
 
-// Begin starts a transaction.
-func (st *Store) Begin(ctx context.Context) Txn {
+// Begin starts a transaction, or refuses admission without effects when
+// MaxTransactions is full or ctx is canceled. Admission makes no fault choice
+// and never waits for capacity. A successful transaction belongs to its caller
+// until Commit, Rollback, a process crash or a store reset; later cancellation
+// alone does not release it. Always arrange Rollback after a successful Begin.
+func (st *Store) Begin(ctx context.Context) (Txn, error) {
+	if st.MaxTransactions < 0 {
+		return nil, fmt.Errorf("qenv: store %s MaxTransactions is %d: set it to zero (unlimited) or a positive limit", st.Name, st.MaxTransactions)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	Yield(ctx)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if st.MaxTransactions < 0 {
+		return nil, fmt.Errorf("qenv: store %s MaxTransactions is %d: set it to zero (unlimited) or a positive limit", st.Name, st.MaxTransactions)
+	}
+	if st.MaxTransactions > 0 && st.active >= st.MaxTransactions {
+		return nil, &TransactionCapacityError{Store: st.Name, Limit: st.MaxTransactions, Active: st.active}
+	}
 	st.txs++
-	tx := &tx{st: st, ctx: ctx, proc: ProcessOf(ctx), id: st.txs, snap: st.seq, reads: map[string]bool{}, writes: map[string]*version{}}
+	tx := &tx{st: st, ctx: ctx, proc: ProcessOf(ctx), id: st.txs, snap: st.seq, reads: map[string]bool{}, writes: map[string]*version{}, admitted: true}
+	st.active++
 	st.open[tx] = true
-	return tx
+	return tx, nil
 }
 
 func (tx *tx) check() {
@@ -530,7 +581,17 @@ func (tx *tx) Rollback() {
 	}
 }
 
+// releaseAdmission is separate from ending the transaction: a reset frees the
+// server-side capacity while the caller must still observe ErrUnavailable.
+func (tx *tx) releaseAdmission() {
+	if tx.admitted {
+		tx.admitted = false
+		tx.st.active--
+	}
+}
+
 func (tx *tx) end() {
+	tx.releaseAdmission()
 	tx.done = true
 	for _, k := range tx.locked {
 		if tx.st.locks[k] == tx {
@@ -578,12 +639,16 @@ func (st *Store) Keys(prefix string) []string {
 }
 
 // Retry runs fn in a new transaction until it commits without
-// ErrConflict, at most attempts times. Other errors (including
-// ErrUnknownOutcome) are returned as they are.
+// ErrConflict, at most attempts times. Admission errors are returned before fn
+// runs, without retrying. Other errors (including ErrUnknownOutcome) are
+// returned as they are.
 func Retry(ctx context.Context, db DB, attempts int, fn func(tx Txn) error) error {
 	for i := 0; i < attempts; i++ {
-		tx := db.Begin(ctx)
-		err := fn(tx)
+		tx, err := db.Begin(ctx)
+		if err != nil {
+			return err
+		}
+		err = fn(tx)
 		if err == nil {
 			err = tx.Commit()
 		}

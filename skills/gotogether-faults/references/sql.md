@@ -77,6 +77,14 @@ rows := qsql.Table(st, "accounts") // committed rows, for final-state checks
 - **TxOptions**: `LevelDefault` or any level the Store meets
   (RepeatableRead and Snapshot are snapshot isolation); a stronger one
   fails with the `NewStore` to write.
+- **Logical transaction capacity**: `Store.MaxTransactions` admits only that
+  many active transactions; zero is unlimited. BeginTx and autocommit operations
+  return typed `qenv.ErrTransactionCapacity` before effects when full. The error
+  has no invented SQLSTATE and is not `driver.ErrBadConn`, so database/sql does
+  not transparently retry it. Commit/rollback, failed statements, crash/reset
+  and the cancellation reaper release capacity. Idle physical connections and
+  streaming result lifetimes are not counted; this does not prove the
+  `max_connections` pool-sizing rule or fix a blocked SetMaxOpenConns pool.
 - **database/sql's goroutines.** A cancelled context's rollback, which
   database/sql runs from a goroutine of its own, is done by the
   database's reaper task at the run's next step, so the Store's state does

@@ -65,7 +65,10 @@ if err != nil || !rep.OK() {
   rep, err := qhistory.Check(qhistory.Serializable, h.WithOps())
   ```
 
-  Every attempt (each of `qenv.Retry`'s) is a transaction: a read the
+  A refused Begin is recorded as an empty Aborted attempt, preserving invocation
+  order without inventing Unknown effects; `WithOps` excludes it. Admission
+  errors are returned to the caller. Every admitted attempt (each of
+  `qenv.Retry`'s) is a transaction: a read the
   list it returned, a Put the append of its last element, a commit's
   `ErrUnknownOutcome` left Unknown (a Rollback after the commit records
   nothing), any other failure Aborted.

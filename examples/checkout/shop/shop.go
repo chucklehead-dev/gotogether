@@ -253,7 +253,14 @@ func (s *Shop) RunRelay(ctx context.Context) {
 		every = 100 * time.Millisecond
 	}
 	for {
-		tx := s.DB.Begin(ctx)
+		tx, err := s.DB.Begin(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			qenv.Sleep(ctx, every)
+			continue // admission refused: leave the outbox intact and retry later
+		}
 		rows := tx.Scan("outbox/")
 		tx.Rollback()
 		for _, r := range rows {
@@ -317,7 +324,10 @@ func (s *Shop) consumePayments(ctx context.Context, in Inbox) {
 }
 
 func (s *Shop) pay(ctx context.Context, id string) error {
-	tx := s.DB.Begin(ctx)
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
 	o, ok := orders.Get(tx, id)
 	_, cancelledRow := tx.Get("cancel/" + id)
 	tx.Rollback()
@@ -328,7 +338,7 @@ func (s *Shop) pay(ctx context.Context, id string) error {
 		return nil
 	}
 	attempt := 0
-	err := s.retry(ctx, func() error {
+	err = s.retry(ctx, func() error {
 		attempt++
 		key := "cap:" + id
 		if s.Mutation == NoIdempotencyKey {

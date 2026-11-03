@@ -9,16 +9,16 @@ import (
 	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
-// A History is the transactions a recording DB (Record) began, in the
-// order they began, each with the reads and appends it made on the
+// A History is the transaction attempts of a recording DB (Record), in
+// invocation order, each with the reads and appends it made on the
 // workload's lists and its outcome as its client saw it.
 type History struct {
 	mu   sync.Mutex
 	txns []Txn
 }
 
-// Txns is the history: every transaction begun, those that touched no
-// list included (with no operations), for Check.
+// Txns is the history: every transaction attempt, those that touched no
+// list included (with no operations), for Check. A refused Begin is Aborted.
 func (h *History) Txns() []Txn {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -49,6 +49,7 @@ type Lists func(key string, val any) (name string, list []int, ok bool)
 // Record wraps db so that its transactions are recorded in h as a
 // list-append workload (Elle's) sees them, for Check to judge against an
 // isolation level as it would a real database's:
+//   - a failed Begin is Aborted, with no operations: admission refused it;
 //   - a Get or a successful GetForUpdate of a list's key is a Read of the
 //     list it returned;
 //   - a Put of a list's key is an Append of its last element: the
@@ -76,14 +77,21 @@ type recordingDB struct {
 	lists Lists
 }
 
-func (r *recordingDB) Begin(ctx context.Context) qenv.Txn {
+func (r *recordingDB) Begin(ctx context.Context) (qenv.Txn, error) {
 	// the transaction's index first: Begin yields, and another
 	// transaction may begin meanwhile
 	r.h.mu.Lock()
 	i := len(r.h.txns)
 	r.h.txns = append(r.h.txns, Txn{ID: i + 1})
 	r.h.mu.Unlock()
-	return &recordedTxn{Txn: r.db.Begin(ctx), r: r, i: i}
+	txn, err := r.db.Begin(ctx)
+	if err != nil {
+		r.h.mu.Lock()
+		r.h.txns[i].Outcome = Aborted
+		r.h.mu.Unlock()
+		return nil, err
+	}
+	return &recordedTxn{Txn: txn, r: r, i: i}, nil
 }
 
 // recordedTxn is one transaction, its operations on lists recorded as it

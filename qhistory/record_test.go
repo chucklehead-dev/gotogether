@@ -25,8 +25,8 @@ func lists(key string, val any) (string, []int, bool) {
 // fakeDB's transactions commit with err.
 type fakeDB struct{ err error }
 
-func (d fakeDB) Begin(context.Context) qenv.Txn {
-	return &fakeTxn{err: d.err, vals: map[string]any{"l/x": []int{1}}}
+func (d fakeDB) Begin(context.Context) (qenv.Txn, error) {
+	return &fakeTxn{err: d.err, vals: map[string]any{"l/x": []int{1}}}, nil
 }
 
 type fakeTxn struct {
@@ -57,7 +57,10 @@ func TestRecordOutcomes(t *testing.T) {
 	} {
 		var h qhistory.History
 		db := qhistory.Record(fakeDB{c.err}, &h, lists)
-		tx := db.Begin(context.Background())
+		tx, err := db.Begin(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
 		v, _ := tx.Get("l/x")
 		tx.Put("l/x", append(v.([]int), 2))
 		tx.Put("other", 3)
@@ -145,5 +148,90 @@ func TestRecordStore(t *testing.T) {
 		if lost := !rep.OK(); lost != (iso == qenv.ReadCommitted) {
 			t.Errorf("%v: Check at serializable: %v; history %+v", iso, rep, h.Txns())
 		}
+	}
+}
+
+// Begin errors are known refusals, never phantom transactions of unknown outcome.
+// Reserving their invocation before Begin yields keeps later attempts' IDs stable.
+func TestRecordBeginRefusalKeepsInvocationOrder(t *testing.T) {
+	sim := qenv.New(qenv.Nominal{})
+	defer sim.Close()
+	var h qhistory.History
+	refused := errors.New("admission refused")
+	secondBegan := false
+	calls := 0
+	db := qhistory.Record(beginDB{begin: func(ctx context.Context) (qenv.Txn, error) {
+		calls++
+		if calls == 1 {
+			qenv.Wait(ctx, func() bool { return secondBegan })
+			return nil, refused
+		}
+		secondBegan = true
+		return &fakeTxn{vals: map[string]any{}}, nil
+	}}, &h, lists)
+	sim.Spawn("refused", func(ctx context.Context) {
+		tx, err := db.Begin(ctx)
+		if tx != nil || !errors.Is(err, refused) {
+			t.Errorf("refused Begin = %v, %v", tx, err)
+		}
+	})
+	sim.Spawn("admitted", func(ctx context.Context) {
+		tx, err := db.Begin(ctx)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		tx.Rollback()
+	})
+	if err := sim.Run(time.Second); err != nil {
+		t.Fatal(err)
+	}
+	got := h.Txns()
+	if len(got) != 2 || got[0].ID != 1 || got[1].ID != 2 || got[0].Outcome != qhistory.Aborted || got[1].Outcome != qhistory.Aborted || len(got[0].Ops) != 0 || len(h.WithOps()) != 0 {
+		t.Fatalf("refused and admitted attempts: %+v", got)
+	}
+}
+
+type beginDB struct {
+	begin func(context.Context) (qenv.Txn, error)
+}
+
+func (d beginDB) Begin(ctx context.Context) (qenv.Txn, error) { return d.begin(ctx) }
+
+func TestRecordCapacityRefusalThenRecovery(t *testing.T) {
+	sim := qenv.New(qenv.Nominal{})
+	defer sim.Close()
+	st := qenv.NewStore(sim, "db", qenv.Serializable)
+	st.MaxTransactions = 1
+	var h qhistory.History
+	db := qhistory.Record(st, &h, lists)
+	sim.Spawn("client", func(ctx context.Context) {
+		holder, err := st.Begin(ctx)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer holder.Rollback()
+		if tx, err := db.Begin(ctx); tx != nil || !errors.Is(err, qenv.ErrTransactionCapacity) {
+			t.Errorf("capacity refusal: %v, %v", tx, err)
+		}
+		holder.Rollback()
+		tx, err := db.Begin(ctx)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer tx.Rollback()
+		tx.Put("l/x", []int{1})
+		if err := tx.Commit(); err != nil {
+			t.Error(err)
+		}
+	})
+	if err := sim.Run(time.Second); err != nil {
+		t.Fatal(err)
+	}
+	got := h.Txns()
+	if len(got) != 2 || got[0].Outcome != qhistory.Aborted || len(got[0].Ops) != 0 || got[1].ID != 2 || got[1].Outcome != qhistory.Committed || len(h.WithOps()) != 1 {
+		t.Fatalf("capacity refusal/recovery history: %+v", got)
 	}
 }

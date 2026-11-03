@@ -207,6 +207,7 @@ func (st *Store) reset() {
 	}
 	slices.SortFunc(txs, func(a, b *tx) int { return cmp.Compare(a.id, b.id) })
 	for _, tx := range txs {
+		tx.releaseAdmission()
 		tx.reset = true
 		for _, k := range tx.locked {
 			if st.locks[k] == tx {

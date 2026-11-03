@@ -82,7 +82,13 @@ func Run(ctx context.Context, cfg Config, w simlog.Writer, newReader func(i int)
 	for time.Now().Before(deadline) && !res.Complete {
 		res.Complete = true
 		for _, k := range res.Keys {
-			if pipeline.Version(ctx, res.Projection, k) < cfg.Events {
+			version, err := pipeline.Version(ctx, res.Projection, k)
+			if err != nil {
+				stop()
+				wg.Wait()
+				return nil, err
+			}
+			if version < cfg.Events {
 				res.Complete = false
 			}
 		}

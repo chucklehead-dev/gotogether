@@ -64,7 +64,7 @@ func rangeRace(t *testing.T, r qenv.KeyRange, key string, broken bool) (caught s
 	st.Load("e/a/01", 1)
 	inserted := false
 	s.Spawn("scanner", func(ctx context.Context) {
-		tx := st.Begin(ctx)
+		tx := mustBegin(t, st, ctx)
 		if got := tx.ScanRange(r); len(got) != 0 {
 			t.Errorf("the range is empty; the scan returned %v", got)
 		}
@@ -73,7 +73,7 @@ func rangeRace(t *testing.T, r qenv.KeyRange, key string, broken bool) (caught s
 		scanErr = tx.Commit()
 	})
 	s.Spawn("inserter", func(ctx context.Context) {
-		tx := st.Begin(ctx)
+		tx := mustBegin(t, st, ctx)
 		tx.Get("cfg")
 		tx.Put(key, 1)
 		if err := tx.Commit(); err != nil {
@@ -100,7 +100,7 @@ func TestScanPrefix(t *testing.T) {
 		st.Load(k, k)
 	}
 	s.Spawn("reader", func(ctx context.Context) {
-		tx := st.Begin(ctx)
+		tx := mustBegin(t, st, ctx)
 		defer tx.Rollback()
 		for _, r := range []qenv.KeyRange{{Prefix: "a/", From: "a/2"}, {Prefix: "a/", From: "0", To: "a/3"}, {Prefix: "a/", To: "z"}} {
 			got, want := qenv.ScanPrefix(tx, r), tx.ScanRange(r)
@@ -119,7 +119,7 @@ func TestScanPrefix(t *testing.T) {
 		var scanErr error
 		inserted := false
 		s.Spawn("scanner", func(ctx context.Context) {
-			tx := st.Begin(ctx)
+			tx := mustBegin(t, st, ctx)
 			r := qenv.KeyRange{Prefix: "e/a/", From: "e/a/5"}
 			if prefix {
 				qenv.ScanPrefix(tx, r)
@@ -131,7 +131,7 @@ func TestScanPrefix(t *testing.T) {
 			scanErr = tx.Commit()
 		})
 		s.Spawn("inserter", func(ctx context.Context) {
-			tx := st.Begin(ctx)
+			tx := mustBegin(t, st, ctx)
 			tx.Put("e/a/2", 1) // beside the range
 			if err := tx.Commit(); err != nil {
 				t.Errorf("the inserter: %v", err)
