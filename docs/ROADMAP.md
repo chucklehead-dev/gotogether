@@ -297,12 +297,13 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
 
 ### Adoption: stability
 
-- **I12. quint's processes die with their check (S, then M). S half
-  done** (6fcfdfb): every quint invocation through
+- **I12. quint's processes die with their check (S, then M). Cancellation
+  and shared admission implemented; abrupt-owner supervision remains open.**
+  The S half (6fcfdfb) routes every quint invocation through
   `internal/quintcmd.Command` (its own process group, killed whole on
   cancel, a WaitDelay), qtest's and connect's checks under
-  `t.Context()`. Left: the M half, one slot limiter per machine (a token
-  directory with flock) instead of `quintSlots` per test binary. What it
+  `t.Context()`. The M admission slice replaces `quintSlots` per test binary
+  with shared token locks, scoped precisely below. What it
   was:
   `exec.CommandContext` kills node, not the Rust evaluator it spawns:
   a cancelled check leaves a CPU-bound `quint_evaluator` with ppid 1
@@ -312,14 +313,18 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   argv, `cmd.Dir`, the backend, the slot), `t.Context()` through qtest's
   and validate's checks in place of `context.Background()`, and a Linux
   test that a cancelled check leaves no evaluator. Then (M) one slot
-  limiter per machine (a token directory with flock) instead of
+  shared slot limiter (a token directory with flock) instead of
   `quintSlots` per test binary.
-  Review confirms that admission must cover the command lifecycle for compile,
-  typecheck and run as well as validation tests. Shared token files require one
-  consistent capacity policy across binaries; different capacities must not
-  silently create independent pools. Host-local same-user coordination also
-  requires a shared directory. These policy/lifecycle decisions remain open;
-  no machine-wide guarantee is claimed by the current process-local limiter.
+  The shared-admission slice covers compile, typecheck and run as well as
+  validation tests. One fixed capacity of two avoids per-binary CPU-count
+  policies and independent pools with different capacities. Unix token files
+  coordinate the same user sharing a cache directory; other platforms
+  retain a process-local bound. Construction takes no slot, Start acquires it
+  with cancellation, and start failure or Wait releases it. Lock files are
+  persistent identities, never stale files to delete. This bounds managed
+  commands; arbitrary owner death and orphan evaluator grandchildren still
+  require a separate supervision design. No machine-wide or memory bound is
+  claimed across users, private cache directories or containers.
 - **I13. Formats and ABIs versioned (S each, policy: For the
   maintainer). Done** on the recommended policy (DESIGN §63, HISTORY
   "I13 and I14"): one table, internal/formats; `gotogether.steps/1` as a

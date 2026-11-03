@@ -15,8 +15,8 @@ import (
 //
 // A group of its own is out of the terminal's foreground group: a Ctrl-C
 // reaches the test binary, not quint. On Linux the kernel then kills the
-// leader (orphanGuard); a quint run is bounded, and the evaluator ends
-// with its run.
+// leader (orphanGuard). That does not guarantee cleanup of an evaluator
+// grandchild after abrupt owner death; group cancellation below does.
 func group(cmd *exec.Cmd) {
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}

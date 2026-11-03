@@ -25,7 +25,7 @@ const WaitDelay = 5 * time.Second
 // args, in dir: argv, never a shell. ctx's cancellation kills quint and
 // everything it started (its process group, on unix). The caller passes
 // absolute paths, or paths relative to dir, the spec's directory.
-func Command(ctx context.Context, quint, dir string, args ...string) *exec.Cmd {
+func Command(ctx context.Context, quint, dir string, args ...string) *Cmd {
 	if quint == "" {
 		quint = "quint"
 	}
@@ -36,5 +36,89 @@ func Command(ctx context.Context, quint, dir string, args ...string) *exec.Cmd {
 	cmd.Dir = dir
 	cmd.WaitDelay = WaitDelay
 	group(cmd)
-	return cmd
+	return &Cmd{commandState: (*commandState)(cmd), ctx: ctx}
+}
+
+// commandState promotes exec.Cmd configuration fields without exposing its
+// methods, so every launch passes through admission.
+type commandState exec.Cmd
+
+// Cmd is a single-use Quint command. Like exec.Cmd, a successful Start must
+// be followed by Wait. Constructing a command does not reserve a slot.
+// On supported Unix systems, two managed commands may run across processes
+// of the same user sharing os.UserCacheDir(). Other systems use a process-local bound.
+// This does not bound orphan workers after an owner's abrupt death.
+type Cmd struct {
+	*commandState
+	ctx     context.Context
+	release func()
+}
+
+func (c *Cmd) raw() *exec.Cmd { return (*exec.Cmd)(c.commandState) }
+func (c *Cmd) admit() error {
+	if c.Process != nil {
+		return nil
+	} // exec reports repeated use itself.
+	release, err := acquire(c.ctx)
+	if err != nil {
+		return err
+	}
+	c.release = release
+	return nil
+}
+func (c *Cmd) free() {
+	if c.release != nil {
+		c.release()
+		c.release = nil
+	}
+}
+
+// Start waits for admission before launching Quint. Cancellation while waiting
+// starts no process. A launch failure returns its permit immediately.
+func (c *Cmd) Start() error {
+	if err := c.admit(); err != nil {
+		return err
+	}
+	err := c.raw().Start()
+	if err != nil && c.Process == nil {
+		c.free()
+	}
+	return err
+}
+
+// Wait releases admission after exec finishes waiting and collecting output.
+func (c *Cmd) Wait() error {
+	err := c.raw().Wait()
+	c.free()
+	return err
+}
+
+func (c *Cmd) Run() error {
+	if err := c.Start(); err != nil {
+		return err
+	}
+	return c.Wait()
+}
+
+func (c *Cmd) Output() ([]byte, error) {
+	if err := c.admit(); err != nil {
+		return nil, err
+	}
+	// Preserve exec's stderr capture and ExitError semantics.
+	if c.Process != nil {
+		return c.raw().Output()
+	}
+	defer c.free()
+	return c.raw().Output()
+}
+
+func (c *Cmd) CombinedOutput() ([]byte, error) {
+	if err := c.admit(); err != nil {
+		return nil, err
+	}
+	if c.Process != nil {
+		return c.raw().CombinedOutput()
+	}
+	defer c.free()
+	return c.raw().CombinedOutput()
 }

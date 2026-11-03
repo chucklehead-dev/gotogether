@@ -7,7 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Discarded runtime-result tooling (current branch): typed quintsim findings now
+Shared Quint admission (current branch): all core Quint launches participate in
+one lifecycle limit, including compile and typecheck. Two fixed slots coordinate
+the same user sharing a cache directory on supported Unix platforms;
+other platforms use two process-local slots. Constructors take no permit,
+queued cancellation launches no child, and failed starts or completed waits
+release admission. Kernel locks recover permits on owner death, but this does
+not prove cleanup of orphan evaluator grandchildren. Cross-process, command
+semantics, failure, cancellation and real-evaluator tests cover these boundaries.
+
+Discarded runtime-result tooling (PR #47): typed quintsim findings now
 identify ignored error results from qenv.Sim runtime methods. They preserve
 real method identity across aliases/promoted calls, keep unrelated Run/Settle
 methods clean, and offer propagation fixes only in safe sole-error functions.
@@ -572,8 +581,10 @@ four, L more; agent-days in practice).
    a migrate-payments front page with stage times, wallet to wallet-grist
    as the migration skill's second walk-through, kind for grist (waits
    on GR10 slice 9); run-side hot cycles and strong fairness when built.
-3. **I12's M half.** One quint slot limiter per machine (a token
-   directory with flock) in place of per-binary `quintSlots`.
+3. **I12's remaining supervision boundary.** Shared admission now coordinates
+   two managed commands per user sharing a Unix cache directory. Abrupt
+   owner death can still orphan evaluator grandchildren; do not claim a bound
+   on those workers without a separate supervision design.
 4. **I15's rest (S).** A pinned staticcheck job; grist in
    ci/test-times.txt with a -short tier per push and the full run
    nightly; a `GOTOOLCHAIN=go1.25` build of the core (the Go-floor
@@ -615,7 +626,8 @@ four, L more; agent-days in practice).
     - 11, sharding (M-L, after grist slice 3's leases).
 11. **Small leftovers**, one line each in ROADMAP: I1's library
     upcaster-fix example; I2's `examples/shards`; I7's kvstore two-host
-    example; I11's multi-variable actions; I23's PostgreSQL benchmark in
+    example; I11's broader typed-state/model-step generation beyond the
+    completed bounded two-integer joint-state corpus; I23's PostgreSQL benchmark in
     CI; I27's grist/README.md (after grist's tag); I36's gopls note;
     I37/I40's goroutine-id lookups (19-26 µs on Thread and
     Background paths); I39's label allocations (for I50); I41's nested
@@ -625,7 +637,8 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I12: shared Quint admission lifecycle | M | the existing cap covers only validation tests within one binary; establish one shared capacity policy and precise command/lease ownership before implementing cross-binary admission |
+| 1 | I35: tutorial command and flag freshness | S | compare documented commands with the real CLI; start with a bounded guard before full output snapshots |
+| 2 | I15: pinned static analysis and measured grist test costs | S | broaden routine feedback without weakening existing checks or CPU budgets |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 

@@ -6317,3 +6317,40 @@ applies the fix and builds/runs the corrected consumer. Native JSON mode can
 exit successfully while reporting findings, so the acceptance reads diagnostics
 rather than treating exit zero as a clean analysis. Compiled golden fixes and
 negative receiver/scope cases protect the mechanical transformation.
+
+## 87. Quint admission belongs to the command lifecycle
+
+The validation-only process-local semaphore left compile, typecheck and run
+commands unbounded, and separate Go test binaries multiplied its capacity.
+Admission now lives in internal/quintcmd. Its private exec.Cmd representation
+promotes configuration fields while exposing only methods that preserve the
+permit lifecycle. Construction holds nothing; Start acquires cancellably,
+failed starts release immediately, and Wait releases after process and output
+collection. Output and CombinedOutput retain exec's native capture and exit
+error behavior. A caller using Start must still call Wait.
+
+Two fixed slots replace CPU-count-derived per-binary capacity. This conservative
+default responds to observed concurrent evaluator memory pressure; it is not a
+memory reservation or a memory-safety guarantee. Supported Unix systems use
+kernel flock locks in a private, user-owned directory under os.UserCacheDir().
+The cache directory keeps admission shared when test binaries use private
+temporary directories; a subprocess regression covers this distinction. Every
+participant uses the same capacity and stable token names. Token files are never
+deleted or age-stolen: replacing an inode would split the pool. Insecure paths
+and lock failures return errors. Platforms without this implementation retain
+an explicitly process-local two-slot limit. No fairness guarantee is made.
+
+Coordination requires the same user and shared user cache directory. Different
+users, isolated containers and private cache directories have independent
+pools. Kernel locks release on abrupt owner death, which recovers admission;
+it does not prove the owner's evaluator grandchildren stopped. Existing process
+group cancellation kills the normal command tree; Linux's parent-death signal
+protects the direct leader only. Stronger orphan-worker supervision remains
+separate work. Tests distinguish these guarantees instead of calling the pool
+machine-wide.
+
+Cross-process saturation and owner-death tests exercise real kernel locks.
+Queued cancellation, failed starts, abnormal exits, repeated command methods,
+output ownership and the real Rust cancellation test protect release semantics.
+CPU regression budgets stay unchanged; reduced concurrency can increase wall
+time, so timeout changes require measured evidence.
