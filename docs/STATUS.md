@@ -7,7 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Discarded runtime-result tooling (current branch): typed quintsim findings now
+Shared Quint admission (current branch): all core Quint launches participate in
+one lifecycle limit, including compile and typecheck. Two fixed slots coordinate
+the same user sharing a cache directory on supported Unix platforms;
+other platforms use two process-local slots. Constructors take no permit,
+queued cancellation launches no child, and failed starts or completed waits
+release admission. Kernel locks recover permits on owner death, but this does
+not prove cleanup of orphan evaluator grandchildren. Cross-process, command
+semantics, failure, cancellation and real-evaluator tests cover these boundaries.
+
+Discarded runtime-result tooling (merged PR #47, dc65946e): typed quintsim findings now
 identify ignored error results from qenv.Sim runtime methods. They preserve
 real method identity across aliases/promoted calls, keep unrelated Run/Settle
 methods clean, and offer propagation fixes only in safe sole-error functions.
@@ -149,7 +158,7 @@ checks. Literal
 constant overrides that would misjudge frozen IR now require recompilation;
 unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
 JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
-format has one current version; all published core pins agree at c6d1114e5f70.
+format has one current version; all published core pins agree at eca11bc7c65f.
 
 Captured-transition assertion follow-up (merged PR #32): qtest.TransitionsConform
 judges the existing native conformance facet for all judged actors or required
@@ -528,7 +537,7 @@ review" on.
 | I9 | verdicts state their bounds | 99009ca |
 | I10 | a fault site declared in a run is the run's | 64b99ce |
 | I11 | differential tests of qeval against quint; Rust integers read by type | 54326d3, ca859ac |
-| I12 (S half) | quint in its own process group, killed on cancel; `t.Context()` | 6fcfdfb |
+| I12 (cancellation and admission) | process-group cancellation, `t.Context()`, two shared managed-command slots per user cache | 6fcfdfb, eca11bc7 |
 | I13 | formats and the woven ABI versioned; `gotogether doctor` | 83bca60 |
 | I14 | one core version (`ci/bump-core.sh`, the consumer job) | e93b353 |
 | I15 (part) | shuffled tests, wider race job, qhegel captures at fd 1 | d0afb10 |
@@ -572,8 +581,10 @@ four, L more; agent-days in practice).
    a migrate-payments front page with stage times, wallet to wallet-grist
    as the migration skill's second walk-through, kind for grist (waits
    on GR10 slice 9); run-side hot cycles and strong fairness when built.
-3. **I12's M half.** One quint slot limiter per machine (a token
-   directory with flock) in place of per-binary `quintSlots`.
+3. **I12's remaining supervision boundary.** Shared admission now coordinates
+   two managed commands per user sharing a Unix cache directory. Abrupt
+   owner death can still orphan evaluator grandchildren; do not claim a bound
+   on those workers without a separate supervision design.
 4. **I15's rest (S).** A pinned staticcheck job; grist in
    ci/test-times.txt with a -short tier per push and the full run
    nightly; a `GOTOOLCHAIN=go1.25` build of the core (the Go-floor
@@ -615,7 +626,8 @@ four, L more; agent-days in practice).
     - 11, sharding (M-L, after grist slice 3's leases).
 11. **Small leftovers**, one line each in ROADMAP: I1's library
     upcaster-fix example; I2's `examples/shards`; I7's kvstore two-host
-    example; I11's multi-variable actions; I23's PostgreSQL benchmark in
+    example; I11's broader typed-state/model-step generation beyond the
+    completed bounded two-integer joint-state corpus; I23's PostgreSQL benchmark in
     CI; I27's grist/README.md (after grist's tag); I36's gopls note;
     I37/I40's goroutine-id lookups (19-26 µs on Thread and
     Background paths); I39's label allocations (for I50); I41's nested
@@ -625,7 +637,8 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I12: shared Quint admission lifecycle | M | the existing cap covers only validation tests within one binary; establish one shared capacity policy and precise command/lease ownership before implementing cross-binary admission |
+| 1 | I35: tutorial command and flag freshness | S | compare documented commands with the real CLI; start with a bounded guard before full output snapshots |
+| 2 | I15: pinned static analysis and measured grist test costs | S | broaden routine feedback without weakening existing checks or CPU budgets |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
@@ -674,8 +687,9 @@ there). **Open:**
 - **Tags and v0.1 (R5).** v0.1.0 of every published module once I1-I10,
   I12-I14 and I16-I18 are in; tag order gosim, core, qweave, qhegel,
   qanalysis, qgosim, then grist, qnav and the doubles, `<dir>/v0.1.0`.
-  Left before then: nothing of the list (whether I12's M half
-  and I15's rest must come first is the maintainer's call).
+  The original cancellation and admission slices are implemented. Whether I12's
+  remaining abrupt-owner supervision boundary and I15's rest must come first
+  is the maintainer's call; no tags are requested by this development slice.
 - **The "grist" name.** A codename since grist.md §10.5; recommended:
   keep it and drop "codename", or rename in one commit before an
   adopter. A trademark check is the maintainer's.

@@ -101,7 +101,7 @@ jobs:
         # (eleventh review, M5)
         run: |
           go test -race -short -count=1 ./qobs/ ./qtrace/ ./validate/ ./qrun/ ./otelio/ ./convert/ ./binding/ ./itf/ \
-            ./qtest/ ./qhistory/ ./qsweep/ ./qnemesis/ ./qload/ ./qshrink/ ./internal/qeval/
+            ./qtest/ ./qhistory/ ./qsweep/ ./qnemesis/ ./qload/ ./qshrink/ ./internal/qeval/ ./internal/quintcmd/
           go test -race -short -count=1 -run 'Native|Synctest|Signal' ./qenv/
           # Hegel's output captured at descriptor 1, os.Stdout never assigned
           (cd qhegel && go test -race -count=1 -run '^TestCaptureStdoutAtTheDescriptor$' .)

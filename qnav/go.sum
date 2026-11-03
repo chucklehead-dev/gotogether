@@ -24,8 +24,8 @@ github.com/charmbracelet/x/termios v0.1.1 h1:o3Q2bT8eqzGnGPOYheoYS8eEleT5ZVNYNy8
 github.com/charmbracelet/x/termios v0.1.1/go.mod h1:rB7fnv1TgOPOyyKRJ9o+AsTU/vK5WHJ2ivHeut/Pcwo=
 github.com/charmbracelet/x/windows v0.2.2 h1:IofanmuvaxnKHuV04sC0eBy/smG6kIKrWG2/jYn2GuM=
 github.com/charmbracelet/x/windows v0.2.2/go.mod h1:/8XtdKZzedat74NQFn0NGlGL4soHB0YQZrETF96h75k=
-github.com/chucklehead-dev/gotogether v0.0.0-20261102232511-c6d1114e5f70 h1:EyJ1crJxJtq3vmPTe3fMf4atJVLrBGpvH5BEJf16DJQ=
-github.com/chucklehead-dev/gotogether v0.0.0-20261102232511-c6d1114e5f70/go.mod h1:le+c/JMFdfnyc2ta7aX/NYiNWgWkA+b4mOc2H5Mi7pE=
+github.com/chucklehead-dev/gotogether v0.0.0-20261103000743-eca11bc7c65f h1:Mwt+ede1QLXu6nDCuqGRr0WoSYqt44vsnS+mo9XvE0o=
+github.com/chucklehead-dev/gotogether v0.0.0-20261103000743-eca11bc7c65f/go.mod h1:le+c/JMFdfnyc2ta7aX/NYiNWgWkA+b4mOc2H5Mi7pE=
 github.com/clipperhouse/displaywidth v0.11.0 h1:lBc6kY44VFw+TDx4I8opi/EtL9m20WSEFgwIwO+UVM8=
 github.com/clipperhouse/displaywidth v0.11.0/go.mod h1:bkrFNkf81G8HyVqmKGxsPufD3JhNl3dSqnGhOoSD/o0=
 github.com/clipperhouse/uax29/v2 v2.7.0 h1:+gs4oBZ2gPfVrKPthwbMzWZDaAFPGYK72F0NJv2v7Vk=

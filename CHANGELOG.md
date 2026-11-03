@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- Quint commands share a two-command admission limit on supported Unix platforms
+  for the same user sharing the cache directory. Waiting respects cancellation;
+  every compile, typecheck, run and validation command participates. Other
+  platforms retain a process-local limit. This bounds managed commands, not
+  orphaned evaluator grandchildren after a forcibly killed owner.
+
 - Typed `quintsim` checks diagnose discarded error results from `qenv.Sim.Run`,
   `RunUntil`, `Settle` and `SettleCore`. Safe propagation fixes are offered in
   functions returning only `error`; native analyzer JSON retains stable rule
