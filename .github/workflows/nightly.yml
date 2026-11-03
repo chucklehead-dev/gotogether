@@ -23,6 +23,42 @@ env:
   GOTOGETHER_HEGEL_SEED: random
 
 jobs:
+  grist-full:
+    # Per-push grist uses -short and a CPU budget; keep all integration and
+    # generated-model branches here with the same PostgreSQL contract tier.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 15
+    env:
+      GRIST_POSTGRES: "host=localhost port=5432 user=postgres password=postgres dbname=postgres sslmode=disable"
+      GOTOGETHER_EVAL_SAMPLE: "1/5"
+    defaults:
+      run:
+        working-directory: grist
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: grist/go.mod
+          cache-dependency-path: grist/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install quint
+        run: ../ci/install-quint.sh
+      - name: full grist suite with PostgreSQL
+        # The fresh-seed example job's global 500-seed override is unrelated
+        # to these package-sized integration tests.
+        run: env -u GOTOGETHER_SEEDS GOTOGETHER_CHECK=1 GOTOGETHER_STRICT=1 go test -count=1 -timeout 30m ./...
+
   fresh-seeds:
     runs-on: ubuntu-latest
     timeout-minutes: 300

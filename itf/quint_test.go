@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 )
 
@@ -75,7 +75,7 @@ func TestQuintStrings(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := filepath.Join(dir, "out.itf.json")
-	cmd := exec.Command("quint", "run", "--max-samples=1", "--max-steps=0", "--out-itf="+out, spec)
+	cmd := quintcmd.Command(t.Context(), "quint", "", "run", "--max-samples=1", "--max-steps=0", "--out-itf="+out, spec)
 	cmd.Dir = dir
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("quint run: %v\n%s", err, b)

@@ -22,7 +22,7 @@ import (
 // longer than the router's lag, a disruption budget). A refusal the
 // model explains is no error (Conforms judges those). The run must be
 // judged with the clients' binding (System.WithBinding): a report with
-// no client actor has no verdict for it (qtest.NoVerdict), so no claim
+// no client actor has no verdict for it (qtest.ErrNoVerdict), so no claim
 // holds by such runs, None(NoClientErrors()) included, and the failure
 // names the fix. Over runs it takes its quantifier: All(NoClientErrors())
 // of a faithful system, and of a mutant whose clients retry some run's
@@ -43,7 +43,7 @@ func judgesClients(r *validate.Report) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("%w: the report judges no client's calls (actor <app>/<tenant>/clients): judge the run with the clients' binding (System.WithBinding)", qtest.NoVerdict)
+	return fmt.Errorf("%w: the report judges no client's calls (actor <app>/<tenant>/clients): judge the run with the clients' binding (System.WithBinding)", qtest.ErrNoVerdict)
 }
 
 // clientError is r's first client call refused a try, erring or left

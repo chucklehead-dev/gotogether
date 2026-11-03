@@ -6368,3 +6368,30 @@ to both readers and this check. Inspection respects quoting, shell separators,
 wrappers and Go's flag/value/positional boundaries. Unsupported shell constructs
 fail explicitly. Diagnostic output and prose remain outside this bounded check;
 full executable tutorial replay and output freshness remain separate work.
+
+## 89. Suite guards use pinned tools and measured test tiers
+
+The core runs default staticcheck checks, including tests, with honnef.co/go/tools
+v0.8.2 installed outside the runtime module graph. Genuine dead code and private
+helper/style findings are corrected. Explicit nil-context contract tests and
+identifier-specific diagnostic capitalization carry narrow reasons; no global
+check class is disabled. Goroutine fallback remains the same when internal
+callers pass Background instead of nil. The public absent-verdict error follows
+Go naming as ErrNoVerdict, with callers and module pins updated directly for this
+prerelease; its unjudged-result semantics are unchanged.
+
+Grist's push tier retains PostgreSQL, scheduler checks, strict tool requirements
+and the existing evaluator sampling policy, using -short and descendant-inclusive
+CPU accounting. Initial budgets are measured on a four-CPU executor, then checked
+against the existing two-times regression factor. Cold-cache remeasurement covers
+the final shared-admission paths rather than estimating CPU from wall time.
+A dedicated full nightly tier preserves integration/model branches omitted by
+-short and clears the separate examples' global 500-seed override. Changing the
+test tier does not justify relaxing existing package budgets or assertions.
+
+The calibration audit exposed older test-only Quint launches bypassing the
+central command layer in grist and the core. Those now use the same cancellable
+admission path as runtime commands. An architecture test rejects direct literal
+quint launches through os/exec, including its context form. This is a bounded
+source guard, not proof about dynamically computed executable names or shell
+scripts; it closes the concrete regression path without a new runtime API.

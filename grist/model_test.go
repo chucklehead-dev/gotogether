@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/grist/internal/gen"
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 
 	"github.com/chucklehead-dev/gotogether/grist"
 )
@@ -382,8 +383,7 @@ func requireQuint(t *testing.T) {
 
 func quint(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("quint", args...)
-	cmd.Dir = dir
+	cmd := quintcmd.Command(t.Context(), "quint", dir, args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("quint %v: %v\n%s", args, err, out)
 	}

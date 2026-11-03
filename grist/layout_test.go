@@ -2,7 +2,6 @@ package grist_test
 
 import (
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -10,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/grist/internal/gen"
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 
 	"github.com/chucklehead-dev/gotogether/grist"
 )
@@ -149,8 +149,8 @@ func TestModelsLoadInREPL(t *testing.T) {
 		for _, module := range []string{m.q, m.q + "Calls"} {
 			t.Run(m.app+"::"+module, func(t *testing.T) {
 				t.Parallel()
-				cmd := exec.Command("quint", "-r", m.app+".qnt::"+module)
-				cmd.Dir, cmd.Stdin = m.dir, strings.NewReader("init\n")
+				cmd := quintcmd.Command(t.Context(), "quint", m.dir, "-r", m.app+".qnt::"+module)
+				cmd.Stdin = strings.NewReader("init\n")
 				out, err := cmd.CombinedOutput()
 				// the REPL exits 0 whatever it refused: its output says
 				if err != nil || strings.Contains(string(out), "rror [") || strings.Contains(string(out), "error:") || !strings.Contains(string(out), ">>> true") {

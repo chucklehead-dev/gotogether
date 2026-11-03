@@ -2,7 +2,6 @@ package binding
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -11,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/internal/memo"
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
@@ -112,7 +112,7 @@ func TestEvalModuleCompiles(t *testing.T) {
 				}
 				ir := filepath.Join(dir, "ir.json")
 				f, _ := os.Create(ir)
-				cmd := exec.Command("quint", "compile", "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, qnt)
+				cmd := quintcmd.Command(t.Context(), "quint", "", "compile", "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, qnt)
 				var stderr strings.Builder
 				cmd.Dir, cmd.Stdout, cmd.Stderr = dir, f, &stderr
 				err = cmd.Run()

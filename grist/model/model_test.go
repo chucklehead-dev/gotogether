@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 )
 
 // requireQuint skips without quint on PATH, or fails under
@@ -28,8 +30,7 @@ func requireQuint(t *testing.T) {
 // quint runs quint with args in dir, failing the test with its output.
 func quint(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("quint", args...)
-	cmd.Dir = dir
+	cmd := quintcmd.Command(t.Context(), "quint", dir, args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("quint %v: %v\n%s", args, err, out)
 	}
