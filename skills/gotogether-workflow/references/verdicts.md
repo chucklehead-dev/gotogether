@@ -392,7 +392,7 @@ replay substitutions describe the judging recipe; the unread/factoring basis
 covers evaluated prefixes of this run only. Folded passes keep provenance.
 Composition component IDs are local to each component history. In the TUI these
 are whole-run facts, independent of the current cursor. See
-[check receipts](../../../docs/check-receipts.md#partition-scope-and-replay-instances).
+[check receipts](https://github.com/chucklehead-dev/gotogether/blob/main/docs/check-receipts.md#partition-scope-and-replay-instances).
 
 Driven explorations include resolved run profiles and observed simulator limits
 in evidence and navigation JSON. The scheduler budget is cumulative across
@@ -402,7 +402,7 @@ blocked work retain their own outcomes. Actual exhaustion stops before another
 turn or in-bound deadline advance. Inspect the effective seed range, fault policy,
 primary validation policy and limits before comparing runs. Custom choosers do
 not imply the System rates were used; navigation uses fixed choices and nominal
-continuation. See [run profiles](../../../docs/run-profiles.md).
+continuation. See [run profiles](https://github.com/chucklehead-dev/gotogether/blob/main/docs/run-profiles.md).
 
 
 For model-authored outstanding-intent diagnostics, inspect each item's evidence
@@ -414,7 +414,7 @@ projected and native captures are distinct choices. For agent inspection use
 Match rules belong in the
 binding's `diagnosticEvidence`, with explicit model-action string-argument
 selectors. Counterfactual model branches have no captured evidence. See
-[diagnostic evidence](../../../docs/model-diagnostics-prototype.md#exact-evidence-links).
+[diagnostic evidence](https://github.com/chucklehead-dev/gotogether/blob/main/docs/model-diagnostics-prototype.md#exact-evidence-links).
 
 ## Export integrity is not a model verdict
 

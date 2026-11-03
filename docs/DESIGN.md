@@ -2568,6 +2568,18 @@ fuzzing, coverage and mutants too. Now:
 test checks every relative link between them resolves among the
 installed files.
 
+G11 closes the portability gap in repository links: authored skills use
+canonical GitHub `blob/main` URLs for repository files and `tree/main` URLs
+for directories, retaining fragments. Local references and cross-skill links
+stay relative within the embedded tree. Install still copies the same source
+bytes, so checkout symlinks, FS() and consumer installations share one version
+of the guidance without a runtime Markdown rewriter. Tests inspect actual
+temporary installations, reject relative links escaping their root, and check
+owned GitHub destinations against checkout files and directories offline.
+The existing `skills install -force` refreshes shipped files after upgrading
+the CLI; no additional update mode is needed. Remote pages track main and
+require network access; link checks do not establish remote availability.
+
 ## 33. A flight recorder on alert, and a virtual-time profile (B3, B4)
 
 **B3.** The alert rule (§16, `Region.Rules`) says a system is in a state

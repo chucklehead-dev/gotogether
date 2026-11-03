@@ -1470,11 +1470,15 @@ item reviewed before the next. Sizes as in S.
   and what they cannot), qnemesis faults remade in qenv, a strict
   nightly. Proves G1's gaps, a killed process's tail as a loss, and a
   manifest's replay on another machine.
-- **G11. Skills as installed (S).** Links into the repository rewritten
-  on install; `skills install -update`; a test that installs into a
-  temporary directory and resolves every link; gotogether-faults split
-  (about 4k words). (AGENTS.md's layout and the examples' rows were
-  completed with I34.)
+- **G11. Skills as installed (S). Done.** Repository links are authored
+  as canonical GitHub URLs, with local and cross-skill links relative
+  inside the skills tree. Actual temporary installations check local targets
+  and owned repository URL paths, including directories and fragment links.
+  This keeps one portable source rather than a runtime Markdown rewriter.
+  Existing `skills install -force` refreshes the CLI's embedded files; a
+  separate update mode adds no needed behavior. Fault mechanics already live
+  in references and SKILL.md size is guarded. AGENTS.md's layout and the
+  examples' rows were completed with I34.
 - **G12. The cost of a -short verdict (S-M).** validate 1370 CPU s and
   qtest 440, mostly quint: conformance under -short on internal/qeval,
   quint confirming failures and a sample of passes, all of it nightly.

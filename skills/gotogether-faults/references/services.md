@@ -11,7 +11,7 @@ binding. Run it for real and validate its step log (`run-demo.sh`).
 
 Read this before simulating a service whose API is HTTP, or a client
 that calls one (a payments processor, a webhook): the handler and the
-client stay as they are. [examples/payd](../../../examples/payd) is a
+client stay as they are. [examples/payd](https://github.com/chucklehead-dev/gotogether/tree/main/examples/payd) is a
 service and its SDK done so: steps recorded by a RoundTripper around the
 SDK's transport and in a processor double, none in the service.
 

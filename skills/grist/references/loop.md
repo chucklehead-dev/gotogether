@@ -152,18 +152,18 @@ that the application's eventual model or implementation is correct.
    `Peers`, including peers of peers; shared peers run once, list order
    does not matter. Cycles and colliding service/dependency names are
    errors; per-peer clusters, rollouts and custom doubles are not built.
-   See [the composition experiment](../../../docs/grist-composition.md).
+   See [the composition experiment](https://github.com/chucklehead-dev/gotogether/blob/main/docs/grist-composition.md).
    A combined system model takes `gristtest.ProtocolSteps(run.Recorded,
    apps...)`: native command commits ordered by each store and peer-call
    causes, one actor `protocol/<tenant>`, one deterministic extension.
-   [inventory-grist](../../../examples/inventory-grist/README.md) is a
+   [inventory-grist](https://github.com/chucklehead-dev/gotogether/blob/main/examples/inventory-grist/README.md) is a
    three-service adoption rehearsal with cancellation and a combined model.
    A processor reads only its trigger prefix: arbitrate a cancellation race
    in a conditioned command at the owner. Treat a handled business refusal
    explicitly as an answered effect; return transport/unknown errors for
    retry. Use named prerequisite phases to require actual call outcomes and bounded
    query observations before starting later work; select each phase's fault policy
-   explicitly. See [workload phases](../../../docs/grist-workload-phases.md).
+   explicitly. See [workload phases](https://github.com/chucklehead-dev/gotogether/blob/main/docs/grist-workload-phases.md).
    Use `gristtest.CheckProtocolOrders` with a positive limit and a callback
    that judges each ordering as supplied (`validate.Checker.Check`).
    Check errors first, then Counterexample, then Exhaustive; a limit hit
