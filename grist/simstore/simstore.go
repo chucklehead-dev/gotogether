@@ -105,7 +105,10 @@ func (s *Store) CreateTenant(ctx context.Context, t string) error {
 
 // Tenants implements store.Store.
 func (s *Store) Tenants(ctx context.Context) ([]string, error) {
-	tx := s.db.Begin(ctx)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
 	defer tx.Rollback()
 	var out []string
 	for _, kv := range tx.Scan("tenants/") {
@@ -149,7 +152,10 @@ func positions(tx qenv.Txn, t string, q store.Selector, after, at store.Position
 
 // Read implements store.Store.
 func (s *Store) Read(ctx context.Context, t string, q store.Selector, at store.Position) ([]store.Stored, store.Position, error) {
-	tx := s.db.Begin(ctx)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
 	defer tx.Rollback()
 	h, ok := head(tx, t)
 	if !ok {
@@ -187,7 +193,10 @@ func (s *Store) ReadEvent(ctx context.Context, t string, position store.Position
 	if position <= 0 {
 		return store.Stored{}, false, store.Permanent(fmt.Errorf("grist: ReadEvent position %d must be positive: give an event position starting at 1", position))
 	}
-	tx := s.db.Begin(ctx)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return store.Stored{}, false, err
+	}
 	defer tx.Rollback()
 	if _, ok := head(tx, t); !ok {
 		return store.Stored{}, false, store.ErrUnknownTenant
@@ -204,7 +213,10 @@ func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Posi
 	if err := b.CheckRetainedIDs(); err != nil {
 		return 0, err
 	}
-	tx := s.db.Begin(ctx)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return 0, store.NotCommitted(err)
+	}
 	defer tx.Rollback()
 	v, ok, err := tx.GetForUpdate(headKey(t)) // the tenant's lock
 	if err != nil {
@@ -306,7 +318,10 @@ func (s *Store) Append(ctx context.Context, t string, b store.Batch) (store.Posi
 
 // Marker implements store.Store.
 func (s *Store) Marker(ctx context.Context, t, id string) (store.Marker, bool, error) {
-	tx := s.db.Begin(ctx)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return store.Marker{}, false, err
+	}
 	defer tx.Rollback()
 	if _, ok := head(tx, t); !ok {
 		return store.Marker{}, false, store.ErrUnknownTenant
@@ -322,7 +337,10 @@ func (s *Store) Marker(ctx context.Context, t, id string) (store.Marker, bool, e
 
 // Steps implements store.StepLog.
 func (s *Store) Steps(ctx context.Context, t string, after int64, limit int) ([]store.StepRow, error) {
-	tx := s.db.Begin(ctx)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
 	defer tx.Rollback()
 	if _, ok := head(tx, t); !ok {
 		return nil, store.ErrUnknownTenant
@@ -344,7 +362,10 @@ func (s *Store) Steps(ctx context.Context, t string, after int64, limit int) ([]
 
 // Checkpoint implements store.Store.
 func (s *Store) Checkpoint(ctx context.Context, t, processor string) (store.Position, error) {
-	tx := s.db.Begin(ctx)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
 	defer tx.Rollback()
 	if _, ok := head(tx, t); !ok {
 		return 0, store.ErrUnknownTenant
@@ -360,7 +381,10 @@ func (s *Store) Heads(ctx context.Context) (map[string]store.Position, error) {
 	if err != nil {
 		return nil, err
 	}
-	tx := s.db.Begin(ctx)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
 	defer tx.Rollback()
 	out := map[string]store.Position{}
 	for _, t := range ts {
@@ -379,7 +403,10 @@ func (s *Store) Wait(ctx context.Context, t string, p store.Position) error {
 
 // StepCount implements store.StepLog.
 func (s *Store) StepCount(ctx context.Context, t string) (int64, error) {
-	tx := s.db.Begin(ctx)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
 	defer tx.Rollback()
 	if _, ok := head(tx, t); !ok {
 		return 0, store.ErrUnknownTenant
@@ -476,7 +503,10 @@ func (s *Store) PruneSnapshots(ctx context.Context, t, name, key, keep string, b
 
 // GetSnapshot implements store.SnapshotStore.
 func (s *Store) GetSnapshot(ctx context.Context, t, name, key, fingerprint string) (store.Snapshot, bool, error) {
-	tx := s.db.Begin(ctx)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return store.Snapshot{}, false, err
+	}
 	defer tx.Rollback()
 	if _, ok := head(tx, t); !ok {
 		return store.Snapshot{}, false, store.ErrUnknownTenant

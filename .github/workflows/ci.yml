@@ -112,8 +112,8 @@ jobs:
         # (eleventh review, M5)
         run: |
           go test -race -short -count=1 ./qobs/ ./qtrace/ ./validate/ ./qrun/ ./otelio/ ./convert/ ./binding/ ./itf/ \
-            ./qtest/ ./qhistory/ ./qsweep/ ./qnemesis/ ./qload/ ./qshrink/ ./internal/qeval/ ./internal/quintcmd/
-          go test -race -short -count=1 -run 'Native|Synctest|Signal' ./qenv/
+            ./qtest/ ./qhistory/ ./qsweep/ ./qnemesis/ ./qload/ ./qshrink/ ./internal/qeval/ ./internal/quintcmd/ ./qenv/qsql/
+          go test -race -short -count=1 -run 'Native|Synctest|Signal|Store.*Capacity' ./qenv/
           # Hegel's output captured at descriptor 1, os.Stdout never assigned
           (cd qhegel && go test -race -count=1 -run '^TestCaptureStdoutAtTheDescriptor$' .)
       - name: the race detector on grist's real tier (Main, the platform, calls over HTTP, two pods)

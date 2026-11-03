@@ -77,6 +77,9 @@ func (e *TransactionCapacityError) Unwrap() error { return ErrTransactionCapacit
 // any transactional store) implements it, and the code under test sees no
 // difference.
 type DB interface {
+	// Begin admits a transaction, or returns nil and an error without doing
+	// transactional work. After success the caller owns the transaction and
+	// must arrange Rollback, including when Commit returns an error.
 	Begin(ctx context.Context) (Txn, error)
 }
 
@@ -118,9 +121,11 @@ type Txn interface {
 type Store struct {
 	Name string
 	Iso  Isolation
-	// MaxTransactions bounds active logical transactions across every client
-	// of this Store. Zero is unlimited; negative values are configuration errors.
+	// MaxTransactions bounds admission of active logical transactions across
+	// every client of this Store. Zero is unlimited; negative values are errors.
 	// A full Store refuses Begin immediately with ErrTransactionCapacity.
+	// Lowering the limit does not abort existing transactions; it applies to
+	// future admissions until the existing holders release their leases.
 	// This does not model physical connections or idle SQL pool sessions.
 	MaxTransactions int
 	// CommitFaults enables the fault kind "store.<name>.commit": a commit that is applied
@@ -582,7 +587,7 @@ func (tx *tx) Rollback() {
 }
 
 // releaseAdmission is separate from ending the transaction: a reset frees the
-// server-side capacity while the caller must still observe ErrUnavailable.
+// admission lease while the caller must still observe ErrUnavailable.
 func (tx *tx) releaseAdmission() {
 	if tx.admitted {
 		tx.admitted = false

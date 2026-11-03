@@ -338,7 +338,9 @@ say, and the building found:
   handled, needs its own model step). `store.<name>.failover` is
   `qenv.Store.Failovers`, `nemesis.restore.<store>` `Store.Restores`, a
   scenario's incident at its k-th commit `gristsim.Managed.LoseAfter`;
-  `Store.Connections` (`max_connections`) is left.
+  `Store.Connections` (`max_connections`) is left. `Store.MaxTransactions`
+  separately bounds active logical transactions with known admission refusal;
+  it excludes idle pooled sessions and does not validate that sizing rule.
 - The connection pool is an option (`-db-pool`), and the sizing rule
   `replicas_max × pool ≤ max_connections - reserve` is linted.
 

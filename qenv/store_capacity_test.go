@@ -199,23 +199,40 @@ func TestStoreCapacityChoicesReplay(t *testing.T) {
 		st := NewStore(s, "db", Serializable)
 		st.MaxTransactions = 1
 		var outcomes []string
-		s.Spawn("client", func(ctx context.Context) {
-			held := capacityBegin(t, st, ctx)
-			_, err := st.Begin(ctx)
-			if !errors.Is(err, ErrTransactionCapacity) {
-				t.Fatalf("forced capacity refusal missing: %v", err)
+		held, refused, released := false, false, false
+		s.Spawn("holder", func(ctx context.Context) {
+			tx := capacityBegin(t, st, ctx)
+			held = true
+			Wait(ctx, func() bool { return refused })
+			tx.Rollback()
+			released = true
+		})
+		s.Spawn("contender", func(ctx context.Context) {
+			Wait(ctx, func() bool { return held })
+			tx, err := st.Begin(ctx)
+			if tx != nil || !errors.Is(err, ErrTransactionCapacity) {
+				t.Fatalf("forced capacity refusal missing: transaction=%v error=%v", tx, err)
 			}
 			outcomes = append(outcomes, err.Error())
-			held.Rollback()
-			capacityBegin(t, st, ctx).Rollback()
+			refused = true
+			Wait(ctx, func() bool { return released })
+			tx = capacityBegin(t, st, ctx)
+			tx.Rollback()
+			outcomes = append(outcomes, "recovered after release")
 		})
 		if err := s.Run(time.Second); err != nil {
 			t.Fatal(err)
+		}
+		if len(outcomes) != 2 || st.active != 0 {
+			t.Fatalf("capacity scenario did not complete: outcomes=%v active=%d", outcomes, st.active)
 		}
 		return outcomes
 	}
 	log := &ChoiceLog{C: NewSeeded(7)}
 	want := run(log)
+	if len(log.Choices) == 0 {
+		t.Fatal("capacity replay exercised no scheduling choices")
+	}
 	replay := Replay(log.Choices)
 	got := run(replay)
 	if replay.Err() != nil || replay.Left() != 0 || !reflect.DeepEqual(got, want) {

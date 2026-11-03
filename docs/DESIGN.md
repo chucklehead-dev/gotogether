@@ -6411,3 +6411,44 @@ controls prove those changes fail. Existing native JSON graph/bound tests retain
 separate semantic coverage. Installation and later mutating or service-based
 tutorial sections are not claimed as replayed. Further walkthroughs should
 follow observed friction rather than grow a general Markdown shell interpreter.
+
+## 91. Logical transaction admission is explicit and fallible
+
+The physical max_connections proposal cannot be implemented honestly by counting
+active transactions: idle SQL pool sessions also consume physical connections,
+and pool callbacks run on nondeterministic goroutines. The bounded first slice
+therefore names its abstraction Store.MaxTransactions. Zero means unlimited;
+positive limits refuse new logical transactions immediately when full. Lowering
+a limit leaves existing holders alone and constrains future admission. There is
+no capacity queue, random connection fault or physical pool-sizing claim.
+
+DB.Begin now returns (Txn, error). Failure returns no transaction and does no
+transactional work; success transfers ownership to the caller, who arranges
+Rollback even if Commit fails. ErrTransactionCapacity identifies known refusal,
+and TransactionCapacityError captures Store, Limit and Active at that attempt.
+Retry returns admission errors before running its callback. Store.Begin checks
+cancellation on both sides of its scheduling seam; later raw transaction
+cancellation alone does not revoke ownership. This is a direct prerelease API
+migration, with no infallible alternate path or compatibility alias.
+
+Each admitted transaction owns an idempotent lease. Commit (including conflict
+or unknown outcome), rollback and process crash release it. Reset releases it
+without making the stale transaction done: its next lock/commit must still
+return ErrUnavailable. A stale rollback cannot free a newer holder's capacity.
+The lease counter is separate from the open-transaction map for this reason.
+
+The SQL bridge admits only at logical BeginTx/autocommit seams. It installs no
+SQL transaction state or commit hooks after refused admission and returns the
+typed capacity error without inventing SQLSTATE or ErrBadConn retry semantics.
+Its existing cancellation reaper releases canceled transactions. Streaming row
+and idle connection lifetimes are outside the logical budget. History records
+refused attempts as empty Aborted entries while preserving invocation order;
+grist marks refused appends NotCommitted before any effects.
+
+A separate native Quint set model checks fixed capacities 1 and 2, forced
+saturation, release/recovery and stale cleanup. Actual unlimited-mode ablations
+under the same full-capacity prefixes fail at the over-capacity admission.
+Runtime controls cover reset, crash, conflict, unknown commit and cancellation;
+nonempty scheduling replay and warm/cold SQL pools preserve captured choices and
+outcomes. These checks establish the stated logical contract, not physical
+database connection fidelity.
