@@ -297,6 +297,7 @@ func (s *shrinker) judgeHistory(ctx context.Context, steps []qtrace.Step) (*vali
 		return nil, fmt.Errorf("encoding composition history after Judge: %w", err)
 	}
 	if !bytes.Equal(before, after) {
+		//lint:ignore ST1005 Judge names the configured callback
 		return nil, fmt.Errorf("Judge changed the captured history while assessing composition")
 	}
 	expected := fmt.Sprintf("sha256:%x", sha256.Sum256(before))
@@ -338,7 +339,7 @@ func (s *shrinker) resetErr(ctx context.Context) error {
 		return nil
 	}
 	if err := s.reset.Reset(ctx); err != nil {
-		return fmt.Errorf("Reset (%s): %w", s.resetter(), err)
+		return fmt.Errorf("calling Reset (%s): %w", s.resetter(), err)
 	}
 	return nil
 }

@@ -108,11 +108,7 @@ type simLog struct {
 // when none runs.
 var simCapture *simLog
 
-// simPrintf prints a line of simulate's report: to os.Stdout (as its
-// tests capture it), unless -json, and to the running command's log.
-func simPrintf(format string, a ...any) { simPrint(fmt.Sprintf(format, a...)) }
-
-// simPrint is simPrintf of s, as it is.
+// simPrint prints simulate's text to its log and, unless -json, stdout.
 func simPrint(s string) {
 	if l := simCapture; l != nil {
 		l.text.WriteString(s)

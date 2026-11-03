@@ -141,11 +141,11 @@ func genStep(r *rand.Rand) Step {
 	value := func() any {
 		for {
 			v := genValue(r)
-			switch v.(type) {
+			switch v := v.(type) {
 			case string, int64, bool, nil:
 				return v
 			case float64:
-				if f := v.(float64); !math.IsNaN(f) && !math.IsInf(f, 0) {
+				if !math.IsNaN(v) && !math.IsInf(v, 0) {
 					return v
 				}
 			}

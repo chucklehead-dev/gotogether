@@ -1,6 +1,7 @@
 package qenv
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -84,7 +85,7 @@ func (s *Script) progress() int {
 	if s.Progress != nil {
 		return s.Progress()
 	}
-	if r := qobs.From(nil); r != nil {
+	if r := qobs.From(context.Background()); r != nil {
 		return r.Count()
 	}
 	return 1 << 30 // no recorder to wait for

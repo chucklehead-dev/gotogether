@@ -268,7 +268,7 @@ func TestMaxSpace(t *testing.T) {
 	for i := range 22 {
 		fs = append(fs, qsweep.Bool(fmt.Sprint("f", i)))
 	}
-	if 1<<21 != qsweep.MaxSpace {
+	if qsweep.MaxSpace != 1<<21 {
 		t.Fatalf("MaxSpace is %d: change the factors", qsweep.MaxSpace)
 	}
 	first := func(r qsweep.Row) bool { return !r.On("f0") && !r.On("f1") && !r.On("f20") && r.FaultsOff() == nil }

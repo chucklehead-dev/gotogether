@@ -216,8 +216,7 @@ func TestQueueCutRedeliversEitherWay(t *testing.T) {
 		broker := s.Process("broker", false, func(context.Context) {})
 		q := qenv.NewQueue(s, "jobs", broker)
 		took := false
-		var c *qenv.Process
-		c = s.Process("consumer", false, func(ctx context.Context) {
+		c := s.Process("consumer", false, func(ctx context.Context) {
 			q.Publish(ctx, 1)
 			q.Receive(ctx)
 			took = true

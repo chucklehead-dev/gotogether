@@ -473,21 +473,6 @@ func (h *hiddenSearch) failure(o hiddenOutcome) *Failure {
 	return f
 }
 
-// filter keeps the states ok keeps.
-func filter(states []qeval.State, ok func(qeval.State) (bool, error)) ([]qeval.State, error) {
-	var out []qeval.State
-	for _, s := range states {
-		keep, err := ok(s)
-		if err != nil {
-			return nil, err
-		}
-		if keep {
-			out = append(out, s)
-		}
-	}
-	return out, nil
-}
-
 // witness is the start of a path that passes every check: o's first
 // final state in which, of a settled trace, every eventual val holds
 // (eventual reports which); -1 with no starts.

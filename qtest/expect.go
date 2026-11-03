@@ -482,7 +482,7 @@ func HasIssue(kind string) Expectation {
 // judges what no other expectation names: a framework's claim over its
 // steps (grist's gristtest.NoClientErrors over its clients' calls). Its
 // error says why a run misses it, and a failure prints it; an error
-// wrapping NoVerdict says the report cannot judge it (what it judges was
+// wrapping ErrNoVerdict says the report cannot judge it (what it judges was
 // not recorded, or not by this binding), and no claim holds by such a
 // run: None(e) would otherwise hold of reports that judge nothing. Over
 // runs Some, All or None quantify it, as any expectation but Conforms,
@@ -492,7 +492,7 @@ func Satisfies(desc string, f func(r *validate.Report) error) Expectation {
 		switch err := f(r); {
 		case err == nil:
 			return yes
-		case errors.Is(err, NoVerdict):
+		case errors.Is(err, ErrNoVerdict):
 			return unknown
 		}
 		return no
@@ -506,10 +506,10 @@ func Satisfies(desc string, f func(r *validate.Report) error) Expectation {
 		}}
 }
 
-// NoVerdict is what a Satisfies function's error wraps when the report
-// cannot judge its expectation (fmt.Errorf("%w: ...", NoVerdict)): the
+// ErrNoVerdict is what a Satisfies function's error wraps when the report
+// cannot judge its expectation (fmt.Errorf("%w: ...", ErrNoVerdict)): the
 // run is unjudged for it, not missing it.
-var NoVerdict = errors.New("no verdict")
+var ErrNoVerdict = errors.New("no verdict")
 
 // Not: the run misses e, a claim of its own where e's negation means
 // one thing (grist's gristtest.NoClientErrors: some client call refused,

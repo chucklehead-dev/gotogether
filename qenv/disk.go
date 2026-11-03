@@ -116,7 +116,7 @@ func (d *Disk) ReadFile(name string) ([]byte, bool) {
 	out := append([]byte(nil), f.data...)
 	// only a task's read is faulted: a test inspecting the disk after
 	// the run reads it as it is
-	if len(out) > 0 && taskOf(nil) != nil && d.sim.FaultOf(d.read) == "corrupt" {
+	if len(out) > 0 && taskOf(context.Background()) != nil && d.sim.FaultOf(d.read) == "corrupt" {
 		out[len(out)/2] ^= 0xff
 	}
 	return out, true

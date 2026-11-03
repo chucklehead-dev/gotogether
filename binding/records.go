@@ -184,14 +184,10 @@ func recordedFields(r RecordCall) []string {
 	return out
 }
 
-// lintReservedFields finds the steps that record a field under a name
+// lintReservedFindings finds the steps that record a field under a name
 // Quint keeps for itself (item, to) whose model's parameter is renamed
 // (item_) and not mapped: the parameter would read a field item_ no
 // step records. The fix is the mapping.
-func (b *Binding) lintReservedFields(m *Model, recs []RecordCall) []string {
-	return lintMessages(b.lintReservedFindings(m, recs))
-}
-
 func (b *Binding) lintReservedFindings(m *Model, recs []RecordCall) []LintFinding {
 	var errs []LintFinding
 	for _, r := range recs {

@@ -190,7 +190,7 @@ func (p *pbuf) varint(x uint64) {
 	p.b = append(p.b, byte(x))
 }
 
-func (p *pbuf) uint(field int, x uint64) { p.varint(uint64(field)<<3 | 0); p.varint(x) }
+func (p *pbuf) uint(field int, x uint64) { p.varint(uint64(field) << 3); p.varint(x) }
 func (p *pbuf) int(field int, x int64)   { p.uint(field, uint64(x)) }
 func (p *pbuf) bytes(field int, b []byte) {
 	p.varint(uint64(field)<<3 | 2)

@@ -13,7 +13,7 @@ import (
 // write is there, the caller was told it may not be, and OnCommit's hook
 // (the step's linearization point) ran. Off, the default, it never is.
 func TestCommitFaults(t *testing.T) {
-	run := func(faults bool) (err error, applied, hooked bool) {
+	run := func(faults bool) (applied, hooked bool, err error) {
 		c := qenv.NewSeeded(1)
 		c.Rates = qenv.Rates{Kinds: map[string]float64{"store.db.commit": 1}}
 		s := qenv.New(c)
@@ -30,12 +30,12 @@ func TestCommitFaults(t *testing.T) {
 		if e := s.Run(time.Minute); e != nil {
 			t.Fatal(e)
 		}
-		return err, applied, hooked
+		return applied, hooked, err
 	}
-	if err, applied, hooked := run(true); !errors.Is(err, qenv.ErrUnknownOutcome) || !applied || !hooked {
+	if applied, hooked, err := run(true); !errors.Is(err, qenv.ErrUnknownOutcome) || !applied || !hooked {
 		t.Errorf("with CommitFaults at rate 1: err %v, applied %v, hook ran %v; want ErrUnknownOutcome, applied, ran", err, applied, hooked)
 	}
-	if err, applied, _ := run(false); err != nil || !applied {
+	if applied, _, err := run(false); err != nil || !applied {
 		t.Errorf("without CommitFaults: err %v, applied %v; want a plain commit", err, applied)
 	}
 }

@@ -30,12 +30,12 @@ func TestRangeScanPhantom(t *testing.T) {
 		{"e/b/07", false},
 	} {
 		// the store keeps its level: the scanner aborts for a phantom only
-		err, _ := rangeRace(t, r, c.key, false)
+		_, err := rangeRace(t, r, c.key, false)
 		if c.phantom != errors.Is(err, qenv.ErrConflict) {
 			t.Errorf("an insert of %s during a scan of %+v: the scanner's commit returned %v (phantom: %v)", c.key, r, err, c.phantom)
 		}
 		// the store broken, the history checker sees the same
-		_, caught := rangeRace(t, r, c.key, true)
+		caught, _ := rangeRace(t, r, c.key, true)
 		if c.phantom != strings.Contains(caught, "committed a history its level forbids: G2") {
 			t.Errorf("a broken store, an insert of %s during a scan of %+v: the checker said %q (phantom: %v)", c.key, r, caught, c.phantom)
 		}
@@ -44,9 +44,9 @@ func TestRangeScanPhantom(t *testing.T) {
 
 // rangeRace runs a scanner (scans r, empty, then writes "cfg" after the
 // inserter has committed) and an inserter (reads "cfg", writes key) at
-// Serializable under Check, and returns the scanner's commit error and
-// the checker's panic, if any.
-func rangeRace(t *testing.T, r qenv.KeyRange, key string, broken bool) (scanErr error, caught string) {
+// Serializable under Check, and returns the checker's panic, if any, and
+// the scanner's commit error.
+func rangeRace(t *testing.T, r qenv.KeyRange, key string, broken bool) (caught string, scanErr error) {
 	t.Helper()
 	defer func() {
 		if p := recover(); p != nil {
@@ -84,7 +84,7 @@ func rangeRace(t *testing.T, r qenv.KeyRange, key string, broken bool) (scanErr 
 	if err := s.Run(time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	return scanErr, ""
+	return "", scanErr
 }
 
 // ScanPrefix, an adapter's ScanRange without range reads, filters its

@@ -20,6 +20,7 @@ func TestGet(t *testing.T) {
 		t.Fatal("found outside a run")
 	}
 	s := qenv.New(qenv.WithContext(qenv.Nominal{}, qrun.With(context.Background(), name, "run")))
+	//lint:ignore SA1012 explicitly test the nil-context goroutine fallback contract
 	if v, _ := qrun.Get(nil, name); v != "run" {
 		t.Errorf("the creator's run: %q", v)
 	}
@@ -38,6 +39,7 @@ func TestGet(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.Close()
+	//lint:ignore SA1012 explicitly test the nil-context goroutine fallback contract
 	if _, ok := qrun.Get(nil, name); ok {
 		t.Error("found after the run")
 	}
@@ -47,10 +49,12 @@ func TestGet(t *testing.T) {
 // goroutines, and a simulation created in it inherits it.
 func TestStart(t *testing.T) {
 	end := qrun.Start(qrun.With(context.Background(), name, "started"))
+	//lint:ignore SA1012 explicitly test the nil-context goroutine fallback contract
 	if v, _ := qrun.Get(nil, name); v != "started" {
 		t.Errorf("the started run: %q", v)
 	}
 	other := make(chan bool)
+	//lint:ignore SA1012 explicitly test the nil-context goroutine fallback contract
 	go func() { _, ok := qrun.Get(nil, name); other <- ok }() //qenv:ok outside the run on purpose
 	if <-other {
 		t.Error("found on another goroutine")
@@ -66,6 +70,7 @@ func TestStart(t *testing.T) {
 	}
 	s.Close()
 	end()
+	//lint:ignore SA1012 explicitly test the nil-context goroutine fallback contract
 	if _, ok := qrun.Get(nil, name); ok {
 		t.Error("found after end")
 	}
