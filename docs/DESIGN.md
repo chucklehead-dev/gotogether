@@ -6395,3 +6395,19 @@ admission path as runtime commands. An architecture test rejects direct literal
 quint launches through os/exec, including its context form. This is a bounded
 source guard, not proof about dynamically computed executable names or shell
 scripts; it closes the concrete regression path without a new runtime API.
+
+## 90. Executable tutorial coverage starts with a bounded transcript
+
+The command-name guard cannot detect stale quoted results. Prove-it's first
+hello sample and complete-graph outputs still used older possibility wording.
+Two marked excerpts now supply both the argv and expected output for native CLI
+replay in a copied model/binding workspace, with spaces in its path and fresh
+application caches. The helper accepts only those two command forms and does
+not execute a shell or arbitrary documentation commands.
+
+Only graph elapsed time is normalized. Counts, proof scope, witness arguments,
+truncation, extra output and unsuccessful native exits remain observable; pure
+controls prove those changes fail. Existing native JSON graph/bound tests retain
+separate semantic coverage. Installation and later mutating or service-based
+tutorial sections are not claimed as replayed. Further walkthroughs should
+follow observed friction rather than grow a general Markdown shell interpreter.

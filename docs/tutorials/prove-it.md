@@ -14,17 +14,28 @@ Go evaluator visits every reachable state of the binding's instance
 (its constants fixed), so "holds" means *no reachable state breaks
 it*: a proof, for that instance.
 
-Every command below was run on this repository, and its output is
-pasted as it came, but for paths shortened and long state lines cut
-(`[...]`).
+The first two hello transcripts below are replayed by the CLI test suite in
+an isolated copy of the example. Their output is checked verbatim except for
+the graph’s elapsed time. Later commands were run when written, with paths
+shortened and long state lines cut (`[...]`); they are not yet replayed by
+this guard.
 
 ## Before you start
 
+Use Go ≥ 1.26.1 and Node.js 22 (including npm). These transcripts use
+Quint 0.33.0, the version tested in CI. The installer fetches both Quint
+and its matching Rust evaluator.
+
 ```sh
 git clone https://github.com/chucklehead-dev/gotogether && cd gotogether
-npm install -g @informalsystems/quint     # quint ≥ 0.32
-go install ./cmd/gotogether               # the CLI, from this checkout
+QUINT_VERSION=0.33.0 ci/install-quint.sh
+tutorial_bin="$(mktemp -d)"
+GOWORK=off GOBIN="$tutorial_bin" go install ./cmd/gotogether
+export PATH="$tutorial_bin:$PATH"
 ```
+
+This puts the checkout’s CLI on PATH for this shell session. The replay
+guard covers the two simulation commands, not these installation steps.
 
 ## 1. Sampled, then every state (hello)
 
@@ -33,17 +44,19 @@ request once. Its model has one invariant, `exactlyOnce`
 (`count == applied.size()`), and its binding says the model guarantees
 it (`simulate.holds`). Sample it first:
 
+<!-- tutorial-check: hello-sampled -->
 ```console
 $ cd examples/hello
 $ gotogether simulate -binding hello.binding.yaml
 simulate hello.binding.yaml: hello(REQUESTS = 1.to(3)), 1000 traces of 30 steps, seed 1
   holds   exactlyOnce: none of 1000 sampled traces of up to 30 steps violates it (a sample, no proof: a violation that 1 trace in 334 shows is missed at most 5% of the time by 1000 traces, a rarer one more often; -graph searches every state)
-  possible a retry recognised: reached by apply(id = 1), replay(id = 1) (the Go evaluator's search)
-  possible done: reached by apply(id = 1), apply(id = 2), apply(id = 3), done (the Go evaluator's search)
+  possible a retry recognised: action sequence executed by apply(id = 1), replay(id = 1) (the Go evaluator's search)
+  possible done: action sequence executed by apply(id = 1), apply(id = 2), apply(id = 3), done (the Go evaluator's search)
 ```
 
 "A sample, no proof". Now every state:
 
+<!-- tutorial-check: hello-graph -->
 ```console
 $ gotogether simulate -graph -binding hello.binding.yaml
 simulate hello.binding.yaml: hello(REQUESTS = 1.to(3)), its state graph by the Go evaluator (at most 100000 states)
@@ -52,8 +65,8 @@ simulate hello.binding.yaml: hello(REQUESTS = 1.to(3)), its state graph by the G
   holds   exactlyOnce: no reachable state violates it (the whole graph, 8 states)
   quiet   1 reachable state only a stutter leaves (every edge back to itself), so no deadlock there
   covered apply 12 in 7 states, replay 12 in 7 states, done 1 in 1 state
-  possible a retry recognised: reached by apply(id = 1), replay(id = 1) (the Go evaluator's search)
-  possible done: reached by apply(id = 1), apply(id = 2), apply(id = 3), done (the Go evaluator's search)
+  possible a retry recognised: action sequence executed by apply(id = 1), replay(id = 1) (the Go evaluator's search)
+  possible done: action sequence executed by apply(id = 1), apply(id = 2), apply(id = 3), done (the Go evaluator's search)
 ```
 
 Read it line by line:

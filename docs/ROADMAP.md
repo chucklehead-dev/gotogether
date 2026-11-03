@@ -728,11 +728,14 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   tutorial shell invocations, including wrappers, chains and flag values.
   Help shows standard argument types so readers and the guard can distinguish
   value flags from booleans. This does not execute tutorial actions or verify
-  their quoted output, model semantics or external tools.
-  Left: (1) the commands run by CI
-  (the outputs drift with report wording: a ci/tutorials.sh running
-  each `$` line in its example and diffing the quoted lines, `[...]`
-  matching anything);
+  their quoted output, model semantics or external tools. A separate bounded
+  replay now checks prove-it's first two hello transcripts against actual CLI
+  output, correcting stale possible-action wording. It copies the model and
+  binding, preserves native exit status, and normalizes only graph elapsed time.
+  Installation and later sections remain outside this first executable slice.
+  Left: (1) selected executable walkthroughs where setup/output friction warrants
+  coverage. Prefer explicit commands and isolated workspaces to a generic shell
+  interpreter or broad output wildcards that can hide changed claims;
   (2) the designer's remaining pages: wallet-grist's three scenarios
   with a too-strict model mutant, a migrate-payments front page with
   each stage's time, wallet to wallet-grist as the migration skill's
