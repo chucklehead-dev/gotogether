@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- qsql supports single-table `SELECT COUNT(*) [AS alias]` with its existing
+  WHERE subset. Counts include NULL-valued rows, return zero for empty matches,
+  and retain transaction visibility and predicate-conflict checks. Other
+  aggregate shapes and count locking/ordering/limit clauses remain explicit errors.
+
 - The native PostgreSQL test tier now exercises an idle physical session
   exhausting a restricted login role's connection quota: native `53300`,
   known-not-committed append refusal without effects, and recovery through the

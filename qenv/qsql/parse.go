@@ -13,6 +13,7 @@ const subset = "qsql runs one table at a time (and a join that looks a second ta
 	"CREATE TABLE [IF NOT EXISTS] t (col TYPE [PRIMARY KEY] [UNIQUE] [NOT NULL], ... [, PRIMARY KEY (col, ...)]) with TEXT, INTEGER, BIGINT, BOOLEAN, BLOB, BYTEA, TIMESTAMP; " +
 	"INSERT INTO t [(cols)] VALUES (...)[, (...)] [ON CONFLICT [(cols)] DO NOTHING | ON CONFLICT (cols) DO UPDATE SET col = ? | col = excluded.col | col = t.col + ?, ... [WHERE t.col ...]] [RETURNING cols|*]; " +
 	"SELECT cols|* FROM t [WHERE col = ? AND ... [AND k > ? AND k <= ? | AND k BETWEEN ? AND ?]] [ORDER BY key cols [ASC|DESC]] [LIMIT n] [FOR UPDATE]; " +
+	"SELECT COUNT(*) [AS name] FROM t [WHERE ...] (one aggregate, no other projections or clauses); " +
 	"SELECT t.col, u.col, ... FROM t [INNER] JOIN u ON u.key1 = t.col AND ... [WHERE t.col ...] [ORDER BY t.key ...] [LIMIT n] (every column qualified; ON fixes all of u's PRIMARY KEY by t's columns; WHERE and ORDER BY on t's); " +
 	"UPDATE t SET col = ? | col = col + ? | col = col - ?, ... [WHERE ...] [RETURNING cols|*]; " +
 	"DELETE FROM t [WHERE ...] [RETURNING cols|*]; " +
@@ -199,6 +200,8 @@ type selectStmt struct {
 	n         int
 	table     string
 	cols      []string // nil: *
+	count     bool     // sole COUNT(*) projection; cols is unused
+	countAs   string   // aggregate result column name (default: count)
 	where     []cond
 	orderBy   []orderTerm
 	limit     *expr
@@ -649,9 +652,30 @@ func (p *parser) names() ([]string, error) {
 
 func (p *parser) selectStmt() (statement, error) {
 	s := &selectStmt{}
+	countSyntax := func(t token) error {
+		return syntaxErr(p.q, t.pos, fmt.Sprintf("%s in a COUNT(*) query (write SELECT COUNT(*) [AS name] FROM t [WHERE ...], with no other projections or clauses)", t))
+	}
 	var sel []qualified // the columns as written: table "" if unqualified
 	star := p.punct("*")
-	if !star {
+	if !star && isKw(p.peek(), "count") && p.toks[p.i+1].kind == tPunct && p.toks[p.i+1].text == "(" {
+		p.i += 2
+		if !p.punct("*") {
+			return nil, countSyntax(p.peek())
+		}
+		if !p.punct(")") {
+			return nil, countSyntax(p.peek())
+		}
+		s.count, s.countAs = true, "count"
+		if p.kw("as") {
+			var err error
+			if s.countAs, err = p.name("a result column name after COUNT(*) AS"); err != nil {
+				return nil, err
+			}
+		}
+		if !isKw(p.peek(), "from") {
+			return nil, countSyntax(p.peek())
+		}
+	} else if !star {
 		for {
 			n, err := p.name("a column name or *")
 			if err != nil {
@@ -680,6 +704,16 @@ func (p *parser) selectStmt() (statement, error) {
 	var err error
 	if s.table, err = p.name("a table name"); err != nil {
 		return nil, err
+	}
+	if s.count {
+		if s.where, err = p.where(s.table); err != nil {
+			return nil, err
+		}
+		if t := p.peek(); t.kind != tEOF && !(t.kind == tPunct && t.text == ";") {
+			return nil, countSyntax(t)
+		}
+		s.n = p.max
+		return s, nil
 	}
 	at := p.peek()
 	if p.kw("inner") && !isKw(p.peek(), "join") {

@@ -14,7 +14,7 @@ import (
 )
 
 // qsql's keys of several columns, ranges, ORDER BY with LIMIT, upserts,
-// RETURNING and joins by a key (what grist's sqlstore issues,
+// RETURNING, COUNT(*) and joins by a key (what grist's sqlstore issues,
 // docs/grist.md §2.10)
 // against SQLite: random statements over small tables run on both, and
 // every result (rows, rows affected, whether it failed) agrees. Rows
@@ -32,7 +32,7 @@ func TestQsqlAgainstSQLite(t *testing.T) {
 		}
 		return int64(r.IntN(5) - 1)
 	}
-	ranged, joined := 0, 0
+	ranged, joined, counted := 0, 0, 0
 	for round := range 30 {
 		s := qenv.New(qenv.Nominal{})
 		st := qenv.NewStore(s, "db", qenv.Serializable)
@@ -65,6 +65,7 @@ func TestQsqlAgainstSQLite(t *testing.T) {
 				t.Fatalf("round %d: %s %q:\nqsql   %q (%v)\nsqlite %q (%v)", round, stmt, args, got, gerr, want, werr)
 			}
 		}
+		both(true, "SELECT COUNT(*) AS total FROM t") // empty input still returns one zero
 		for range 120 {
 			switch r.IntN(10) {
 			case 0, 1, 2: // inserts, plain or DO NOTHING, one row or several, RETURNING
@@ -138,6 +139,11 @@ func TestQsqlAgainstSQLite(t *testing.T) {
 				if len(where) > 0 {
 					clause = " WHERE " + strings.Join(where, " AND ")
 				}
+				// Reuse every generated predicate without changing the random
+				// statement sequence. This covers empty inputs, NULL rows,
+				// composite-key intervals and additional non-key equalities.
+				both(true, "SELECT COUNT(*) AS total FROM t"+clause, args...)
+				counted++
 				// in a join every column is qualified: t's here
 				qualified := clause
 				for _, col := range []string{"a", "b", "c", "v"} {
@@ -185,8 +191,8 @@ func TestQsqlAgainstSQLite(t *testing.T) {
 		lite.Close()
 		s.Close()
 	}
-	if ranged < 300 || joined < 200 {
-		t.Fatalf("only %d statements had a range and %d a join", ranged, joined)
+	if ranged < 300 || joined < 200 || counted < 1500 {
+		t.Fatalf("only %d statements had a range, %d a join and %d a count", ranged, joined, counted)
 	}
 }
 

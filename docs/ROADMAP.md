@@ -1455,8 +1455,10 @@ item reviewed before the next. Sizes as in S.
   differentially. The outbox claim and the conditional debit need them.
   Ranges on a key column, ORDER BY the key with LIMIT, RETURNING and
   upserts are done (grist's slice 2, against SQLite in examples/payd);
-  ranges on other columns, SKIP LOCKED, COUNT and a transaction's own
-  isolation are open.
+  single-table `COUNT(*) [AS alias]` with supported WHERE filters is also done,
+  including empty results, own writes and predicate-conflict controls. Other
+  aggregates, ranges on other columns, SKIP LOCKED and a transaction's own
+  isolation remain open.
 - **G10. The reviewers' example: examples/shopfront (M-L).** A Go
   storefront on a real database, its steps through an OTel collector
   that drops some, driven by Playwright from another host and by a Go
