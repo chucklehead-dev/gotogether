@@ -16,7 +16,7 @@ release admission. Kernel locks recover permits on owner death, but this does
 not prove cleanup of orphan evaluator grandchildren. Cross-process, command
 semantics, failure, cancellation and real-evaluator tests cover these boundaries.
 
-Discarded runtime-result tooling (PR #47): typed quintsim findings now
+Discarded runtime-result tooling (merged PR #47, dc65946e): typed quintsim findings now
 identify ignored error results from qenv.Sim runtime methods. They preserve
 real method identity across aliases/promoted calls, keep unrelated Run/Settle
 methods clean, and offer propagation fixes only in safe sole-error functions.
@@ -537,7 +537,7 @@ review" on.
 | I9 | verdicts state their bounds | 99009ca |
 | I10 | a fault site declared in a run is the run's | 64b99ce |
 | I11 | differential tests of qeval against quint; Rust integers read by type | 54326d3, ca859ac |
-| I12 (S half) | quint in its own process group, killed on cancel; `t.Context()` | 6fcfdfb |
+| I12 (cancellation and admission) | process-group cancellation, `t.Context()`, two shared managed-command slots per user cache | 6fcfdfb, eca11bc7 |
 | I13 | formats and the woven ABI versioned; `gotogether doctor` | 83bca60 |
 | I14 | one core version (`ci/bump-core.sh`, the consumer job) | e93b353 |
 | I15 (part) | shuffled tests, wider race job, qhegel captures at fd 1 | d0afb10 |
@@ -687,8 +687,9 @@ there). **Open:**
 - **Tags and v0.1 (R5).** v0.1.0 of every published module once I1-I10,
   I12-I14 and I16-I18 are in; tag order gosim, core, qweave, qhegel,
   qanalysis, qgosim, then grist, qnav and the doubles, `<dir>/v0.1.0`.
-  Left before then: nothing of the list (whether I12's M half
-  and I15's rest must come first is the maintainer's call).
+  The original cancellation and admission slices are implemented. Whether I12's
+  remaining abrupt-owner supervision boundary and I15's rest must come first
+  is the maintainer's call; no tags are requested by this development slice.
 - **The "grist" name.** A codename since grist.md §10.5; recommended:
   keep it and drop "codename", or rename in one commit before an
   adopter. A trademark check is the maintainer's.

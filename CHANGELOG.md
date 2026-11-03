@@ -8,8 +8,8 @@ and adds a line here.
 
 ## Unreleased
 
-- Quint commands share a two-command admission limit across Unix processes of
-  the same user sharing the cache directory. Waiting respects cancellation;
+- Quint commands share a two-command admission limit on supported Unix platforms
+  for the same user sharing the cache directory. Waiting respects cancellation;
   every compile, typecheck, run and validation command participates. Other
   platforms retain a process-local limit. This bounds managed commands, not
   orphaned evaluator grandchildren after a forcibly killed owner.
