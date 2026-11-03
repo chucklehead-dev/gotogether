@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- The hello tutorial's sampled and complete-graph transcripts are replayed
+  against the native CLI in an isolated copy, with only elapsed time normalized.
+  Their stale possibility wording is refreshed. Setup now states the tested
+  prerequisites and selects the checkout CLI explicitly for the shell session.
+
 - The absent-verdict sentinel is now `qtest.ErrNoVerdict`; update callers from
   `qtest.NoVerdict`. There is no prerelease compatibility alias. Pinned
   staticcheck runs the core's default checks, including tests, outside the

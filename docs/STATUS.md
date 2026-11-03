@@ -7,7 +7,14 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Pinned suite guards (current branch): the core passes default staticcheck
+Executable hello transcripts (current branch): prove-it's first sampled and
+complete-graph commands run against the CLI in an isolated copy with fresh
+caches. Literal tutorial output is compared with only graph elapsed time
+normalized; counts, claims, witnesses, complete output and native exit status
+remain checked. Stale possibility wording and missing setup prerequisites are
+corrected. Installation and the later tutorial sections are not replayed here.
+
+Pinned suite guards (merged PR #50, eefab5fc): the core passes default staticcheck
 v0.8.2 checks, including tests, with the tool outside its dependency graph.
 Grist's PostgreSQL-backed short suite has descendant-CPU budgets per push;
 the full suite runs nightly. Remaining literal Quint test launches in the core
@@ -553,7 +560,7 @@ review" on.
 | I12 (cancellation and admission) | process-group cancellation, `t.Context()`, two shared managed-command slots per user cache | 6fcfdfb, eca11bc7 |
 | I13 | formats and the woven ABI versioned; `gotogether doctor` | 83bca60 |
 | I14 | one core version (`ci/bump-core.sh`, the consumer job) | e93b353 |
-| I15 (part) | shuffled tests, wider race job, qhegel captures at fd 1 | d0afb10 |
+| I15 (part) | shuffled tests, wider race job, qhegel fd capture, pinned staticcheck and measured grist short/full tiers | d0afb10, eefab5fc |
 | I16 | explicit quantifiers | 03fa005 |
 | I17 | `model.Simulate`, model claims, `qtest.Possible` a claim, `gotogether.binding/2`'s one search bound | c40570f, 55d2504 |
 | I18 | validate split: `validate/model`, `validate/navproto`; `qtrace.Record`, the knob rule (DESIGN §71) | 263333b and I18's rest |
@@ -586,9 +593,10 @@ four, L more; agent-days in practice).
    are implemented on this branch. History/hidden/partition/snapshot/resume/within integration,
    broader IR rendering and tighter enumeration resource bounds remain; select
    further work from adopter evidence. See [the scope](model-choice-witnesses.md).
-2. **I35's rest.** Command/flag freshness is checked. Remaining:
-   (1) `ci/tutorials.sh` running each `$` line and diffing the quoted
-   output, `[...]` a wildcard; (2) the designer's
+2. **I35's rest.** Command/flag freshness and prove-it's first two hello
+   transcripts are checked. Expand explicit isolated walkthroughs only where
+   repeated setup/output friction warrants it; avoid a general shell runner or
+   wildcards that can hide changed verdicts. Remaining designer's
    pages: wallet-grist's three scenarios with a too-strict model mutant,
    a migrate-payments front page with stage times, wallet to wallet-grist
    as the migration skill's second walk-through, kind for grist (waits
@@ -648,7 +656,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I35: one executable onboarding walkthrough | S-M | command freshness is guarded; a bounded real replay can identify remaining output or setup friction before expanding tutorial automation |
+| 1 | I25: deterministic store connection-capacity contract | S-M | Store.Connections is a max-concurrency sizing proposal; resolve deterministic admission, wait/error behavior and transaction lifetime semantics before implementation |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
