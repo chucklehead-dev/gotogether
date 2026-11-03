@@ -2,6 +2,7 @@ package gristsim
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -112,8 +113,19 @@ func startCluster(w *workload, st grist.Store, relay *grist.Relay, deps func(con
 		nodeCtx, stop := context.WithCancel(ctx)
 		var drainer drainhook.Node
 		hook := func(n drainhook.Node) { drainer = n }
-		if err := w.release(p).Start(drainhook.With(deps(nodeCtx), hook), st, grist.WithRelay(relay)); err != nil {
-			panic(fmt.Sprintf("gristsim: %s could not start: %v", p.Name, err))
+		startupCtx := drainhook.With(deps(nodeCtx), hook)
+		if err := w.release(p).Start(startupCtx, st, grist.WithRelay(relay)); err != nil {
+			// SIGTERM can interrupt startup's store reads when the app ties
+			// its work context to the signal. The node already handed us its
+			// drain before those reads: finish that lifecycle rather than
+			// turning cancellation into a harness panic. Other startup errors
+			// remain failures, including errors returned after cancellation.
+			if !p.Terminating() || startupCtx.Err() == nil || !errors.Is(err, startupCtx.Err()) || drainer == nil {
+				panic(fmt.Sprintf("gristsim: %s could not start: %v", p.Name, err))
+			}
+			// Main listens only after Start succeeds. A lagging router may
+			// still pick this incarnation, but it never opened an API listener.
+			as.closed = true
 		}
 		qenv.Go(ctx, "drain", func(ctx context.Context) {
 			term := qenv.Terminating(ctx)

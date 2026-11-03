@@ -13,6 +13,8 @@ and adds a line here.
   bounds active logical transactions, with typed known-not-applied refusal and
   exactly-once lease release. SQL and history adapters preserve that evidence.
   This does not model idle pooled connections or PostgreSQL `max_connections`.
+  A gristsim node terminated during startup drains its registered lifecycle
+  after canceled store reads, while keeping its unstarted API closed.
 
 - The hello tutorial's sampled and complete-graph transcripts are replayed
   against the native CLI in an isolated copy, with only elapsed time normalized.
