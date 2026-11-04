@@ -2243,8 +2243,14 @@ into an 834-byte corpus entry that replays to the same steps and the same
 rejection.
 
 **`System.Fuzz(f, seeds...)`** (at the System's Rates since Z4). Each fuzz input is one run on
-`FromBytes(input)`, judged by the model. `go test` runs the corpus and the
-seeds; `go test -fuzz` explores, guided by coverage of the code under
+raw byte entropy, judged by the model. Generated inputs and saved Go fuzz
+corpus bytes do not probe serialized headers: every byte can affect the run.
+Explicit seeds are EncodeChoices recordings, validated and decoded once
+before their payload enters the fuzzer. Invalid versions fail setup with
+re-encoding guidance; persisted FromBytes replay keeps its version checks.
+This separates two inputs by construction after a streams fuzz run mutated
+a byte prefix into an unsupported replay version. `go test` runs the corpus
+and seeds; `go test -fuzz` explores, guided by coverage of the code under
 test. Seeds and Hegel are random and shrinking respectively; neither is
 guided by coverage.
 

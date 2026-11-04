@@ -1,7 +1,9 @@
 package qtest
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate/receipt"
 	"slices"
@@ -169,24 +171,60 @@ func (s System) Sweep(t *testing.T, sw SweepConfig) *SweepResult {
 }
 
 // Fuzz explores the system with Go's coverage-guided fuzzer: each input is
-// one run, its bytes the run's choices (qenv.FromBytes at the system's
-// Rates: schedules, faults), the model the oracle. Without -fuzz, go test
+// one run, its bytes raw choice entropy at the system's Rates (schedules,
+// faults), the model the oracle. Generated inputs never probe a choice-tape
+// header: any byte sequence is entropy. Without -fuzz, go test
 // runs the seeds and the corpus in testdata/fuzz as regression tests. Seed
 // it with runs worth keeping: a shrunk Hegel failure, once fixed, is
-// qenv.EncodeChoices(v.Choices, sys.FaultRates()). The empty input, every choice
-// nominal, is always a seed. Inputs that repeat a run's steps take its
-// verdict without quint.
+// qenv.EncodeChoices(v.Choices, sys.FaultRates()). These explicit seeds must
+// be encoded choice tapes; they are validated and decoded once before their
+// payloads enter the fuzz corpus. Invalid versions fail setup, not a model run.
+// The saved fuzz corpus contains raw entropy, not encoded tapes. The empty
+// input, every choice nominal, is always a seed. Inputs that repeat a run's
+// steps take its verdict without quint.
 //
 //	func FuzzShop(f *testing.F) { sys.Fuzz(f) }
 func (s System) Fuzz(f *testing.F, seeds ...[]byte) {
 	f.Helper()
-	f.Add([]byte{})
-	for _, sd := range seeds {
-		f.Add(sd)
-	}
 	rates := s.FaultRates()
+	f.Add([]byte{})
+	for i, sd := range seeds {
+		payload, err := fuzzSeedPayload(sd, rates)
+		if err != nil {
+			f.Fatalf("qtest: fuzz seed %d: %v", i+1, err)
+		}
+		f.Add(payload)
+	}
 	f.Fuzz(func(t *testing.T, data []byte) {
-		cfg := ExploreConfig{Seeds: 1, Parallel: 1, Chooser: func(uint64) qenv.Chooser { return qenv.FromBytes(data, rates) }}
+		cfg := ExploreConfig{Seeds: 1, Parallel: 1, Chooser: func(uint64) qenv.Chooser { return fuzzBytes(data, rates) }}
 		explore(t, s.Binding, exploreSpec{ExploreConfig: cfg, opts: s.opts(), rates: rates, fuzz: true}, s.Run).Expect(t, Conforms())
 	})
+}
+
+// fuzzBytes interprets every input byte as entropy, even when its prefix looks
+// like a serialized choice tape. Fuzzing the tape's version is not a system fault.
+func fuzzBytes(data []byte, rates qenv.Rates) *qenv.Bytes {
+	return &qenv.Bytes{Rates: rates, Next: func(n int) []byte {
+		n = min(n, len(data))
+		out := data[:n]
+		data = data[n:]
+		return out
+	}}
+}
+
+// Explicit seeds are recordings, unlike arbitrary generated corpus inputs.
+// Let the persisted-tape decoder retain its version checks and diagnostics.
+func fuzzSeedPayload(data []byte, rates qenv.Rates) ([]byte, error) {
+	decoded := qenv.FromBytes(data, rates)
+	if err := decoded.Err(); err != nil {
+		return nil, err
+	}
+	header, err := qenv.EncodeChoices(nil, rates)
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.HasPrefix(data, header) {
+		return nil, errors.New("explicit seeds must be encoded choice tapes: use qenv.EncodeChoices(choices, sys.FaultRates()); generated fuzz corpus files contain raw entropy")
+	}
+	return decoded.Next(len(data)), nil
 }

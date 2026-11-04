@@ -7,7 +7,13 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Portable installed skills (current branch): 15 repository-relative links
+Fuzz input framing (PR #55): generated Go fuzz inputs are raw entropy, so
+mutating bytes into a replay-header prefix cannot create a spurious format
+failure. Explicit seeds are encoded recordings, validated and decoded once
+before mutation. Persisted replay version checks remain intact. The streams
+CI failure exposed this framework boundary; the stream model was unchanged.
+
+Portable installed skills (PR #55): 15 repository-relative links
 now use the existing canonical GitHub main URLs, preserving fragments. Local
 and cross-skill references remain relative inside the installed tree. Source
 and actual installation checks cover link destinations, including directory
