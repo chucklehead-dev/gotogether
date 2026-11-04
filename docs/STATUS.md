@@ -15,7 +15,7 @@ original trees before replay. A real hello completion-contract change supplies
 a scope control: equal observed state sequences do not replace named-action or
 finish claims. See [the historical review](../internal/adoptiontest/model-review/README.md).
 
-Finite model-behavior comparison (PR #60): `model-diff` compares two
+Finite model-behavior comparison (merged PR #60, 1aafa1b4): `model-diff` compares two
 complete finite Go-evaluator graphs on explicit named variables, preserving
 every transition. Whole-prefix inclusion retains hidden-state nondeterminism;
 separate product and work bounds remain inconclusive. Typed report data separates
