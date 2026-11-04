@@ -38,7 +38,10 @@ review tool; they did not establish an adopter blocker. A pinned historical hell
 completion change now exercises that workflow: state-sequence equivalence leaves
 named completion obligations separate. Its replay-ergonomics gap is addressed by
 portable confirmed-source artifacts and an original-hash source snapshot helper.
-Rotate away from comparison semantics before adding mappings or liveness.
+Recording identity consolidation rotates back to the shared runtime: duplicate
+background lookup is removed without caching ownership or clocks, and filtered
+non-events stop claiming thread ownership. Further capability should follow an
+actual usage blocker before expanding comparison mappings or liveness.
 Keep frozen baseline pins for reproducibility, not as legacy support promises.
 Further adapters, adjacent fixtures and per-pair clock APIs need usage evidence.
 
@@ -845,7 +848,10 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   task's step found from its context before its goroutine (a step
   recorded in a simulation 26.8 → 3.9 µs), the goroutines' simulations
   in 64 shards. Left: a step recorded with context.Background() still
-  reads the goroutine's id (26 µs here), as does every woven call.
+  reads the goroutine's id, as does every woven call. The bounded recording
+  consolidation now shares that ID across fresh run/site lookups within one
+  event (local background median 17.0 → 7.2 µs, 6 → 5 allocations); it does not
+  remove the lookup or cache task ownership. See performance.md.
 - **I41. Benchmarks in the nightly (M). Done** (65bfb9d, 79a03cb).
   Benchmarks of Record, MarshalLine, ReadJSONL, Reconstruct, the
   goroutine lookup, nemesis steps and a step in a simulation; the

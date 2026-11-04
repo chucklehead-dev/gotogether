@@ -572,3 +572,48 @@ Proposed, and not yet in CI:
   variable, since a suite's cost is its process count; a test that
   starts many more processes than before is a regression a CPU budget
   twice as high lets through.
+
+
+## Recording identity consolidation (2026-11-04)
+
+A step recorded with `context.Background()` in a simulation resolved the run's
+recorder and later its recording site through two independent stack-header
+reads. The operation now carries the lazily read goroutine ID between those
+lookups. Ownership, clock and discard state are still resolved at the original
+phase; only the stable ID is reused. The original caller context reaches
+attribute processing and the sink. Completion starts a fresh lookup, even when
+`Call.Done` runs on another task.
+
+Sequentially interleaved runs compared `7e4400e9` with this change on Linux/amd64,
+Go 1.26.1, an AMD EPYC 9V74 host. Three pairs used one CPU and exactly 10,000
+recordings per case. Medians (shared-host timings, not a production guarantee):
+
+| RecordInSim | Before ns/op | After ns/op | Before B/op | After B/op | Before/after allocs/op |
+|---|---:|---:|---:|---:|---:|
+| Explicit context | 1,569 | 1,472 | 2,463 | 2,463 | 4 / 4 |
+| Background | 17,026 | 7,219 | 2,527 | 2,495 | 6 / 5 |
+
+The background median is about 58% lower; one 32-byte allocation disappears.
+The explicit-context control has the same allocation count and no clear timing
+regression. Two longer 100,000-operation pairs also leave ordinary buffered
+recording at 1,052 B/8 allocations and threaded recording at 1,084 B/9 allocations;
+those timing controls show no clear slowdown. Shorter ordinary-recorder runs
+were too load-sensitive to support a timing claim. Reproduce each simulation
+side in its checkout with:
+
+```sh
+GOWORK=off go test ./qenv -run '^$' -bench '^BenchmarkRecordInSim$' -benchtime=10000x -cpu=1 -count=1
+```
+
+The correctness controls exercise a formatter that changes the current simulation
+before stamping, late discard during normalization, cross-task invocation and
+completion, recorder/site precedence and original sink context/span. Resolving
+the site before record normalization makes the freshness controls fail. Invoke
+retains its existing pre-normalization site phase; Record and Done retain their
+post-normalization phase.
+
+This review also found a separate false-issue bug: ownership checks preceded
+`when` filtering and could attribute a non-event to another goroutine. Validation
+now follows accepted filtering and discard decisions, and checks a context thread
+only when that identity survives explicit overrides. Accepted cross-goroutine
+misuse still fails. The per-step goroutine lookup required by `qobs.Thread` remains.

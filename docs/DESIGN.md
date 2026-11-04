@@ -6598,3 +6598,26 @@ The historical hello completion change is an explicit scope control. Its new
 state language stays equivalent. Its named completion and occurrence obligations
 still matter. The exact historical bindings/models are retained without adding
 bounds or modifying their contract to fit comparison.
+
+
+## 95. Recording shares identity, not ownership snapshots
+
+Run lookup and recording-site lookup can both need a goroutine ID. A recording
+operation carries the lazily read ID as an integer through the internal runtime
+hooks; the simulation resolver has priority over the explicit-start fallback.
+No identity is stored in a reusable context or Call. Done begins its own lookup
+and can complete on another goroutine while keeping the original recorder.
+
+User attribute normalization can run code. A formatter can enter a nested
+simulation or change discard state between recorder selection and stamping.
+Record/Done therefore keep site lookup after normalization; Invoke retains its
+existing pre-normalization phase. The site resolver reads current ownership and
+discard state using the stable ID, and original caller context remains
+unchanged for metadata and sinks. Reusing an earlier run context or Site would
+change these semantics.
+
+Thread ownership is checked only once the event survives its filter and discard
+phase, and only for the emitted context-thread identity. Non-events do not claim
+or change a thread's owner. Manual thread strings and OTel spans retain their
+existing policy; accepted misuse remains an issue in the same recorder reports.
+The optimization changes no public API or trace format.

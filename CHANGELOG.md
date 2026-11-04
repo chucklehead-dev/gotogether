@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- Recording reuses a goroutine identity within an operation while resolving
+  ownership and timing at their original phases. Background recording in a
+  simulation avoids a duplicate lookup and allocation. Filtered, interrupted,
+  or overridden-thread events no longer claim an unused `qobs.Thread`; accepted
+  misuse is still reported. Public recording APIs and trace formats are unchanged.
+
 - `model-diff -out` publishes source-confirmed native witness modules, copied
   model sources and hashed typed replay metadata with the current report JSON.
   Source snapshots preserve relative imports; stale sources, unsupported absolute
