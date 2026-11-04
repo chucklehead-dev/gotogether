@@ -99,7 +99,7 @@ func TestScenariosPossible(t *testing.T) {
 // it: `gotogether simulate` prints FAIL for the binding's possible.
 func TestDraftForbidsPartialCapture(t *testing.T) {
 	qtest.RequireQuint(t)
-	c, err := validate.NewChecker(draftBinding, validate.Options{})
+	c, err := validate.NewChecker(t.Context(), draftBinding, validate.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestDraftLacksRecordedLookup(t *testing.T) {
 		t.Fatal(err)
 	}
 	missing := func(bind string) []string {
-		c, err := validate.NewChecker(bind, validate.Options{})
+		c, err := validate.NewChecker(t.Context(), bind, validate.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -82,7 +82,7 @@ func componentAssessment(checker *validate.Checker) func(context.Context, []qtra
 
 func TestComponentShrinkRealRerunsKeepConsumerObligation(t *testing.T) {
 	RequireQuint(t)
-	checker, err := validate.NewChecker(componentConsumerBinding, validate.Options{Dir: t.TempDir(), Eval: "go", NoITF: true})
+	checker, err := validate.NewChecker(t.Context(), componentConsumerBinding, validate.Options{Dir: t.TempDir(), Eval: "go", NoITF: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestComponentShrinkRealRerunsKeepConsumerObligation(t *testing.T) {
 
 func TestComponentFailureDoesNotDriftAcrossTargetsOrProperties(t *testing.T) {
 	RequireQuint(t)
-	checker, err := validate.NewChecker(componentConsumerBinding, validate.Options{Dir: t.TempDir(), Eval: "go", NoITF: true})
+	checker, err := validate.NewChecker(t.Context(), componentConsumerBinding, validate.Options{Dir: t.TempDir(), Eval: "go", NoITF: true})
 	if err != nil {
 		t.Fatal(err)
 	}

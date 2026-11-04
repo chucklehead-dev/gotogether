@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Installed LRU MBT and configuration preflight (current branch): a consumer
+Model-loading cancellation (current branch): binding loading and automatic trace
+schema recovery take a caller context, as do checker construction and lint
+inspection. Cache waiters can cancel independently; a live waiter retries after
+an owner's canceled load. Subprocess and cache-lock waits use the same lifecycle.
+Cancellation remains an operational error, not a model counterexample. The
+context-free model-analysis and go/analysis entrypoints remain explicit lifecycle
+boundaries; this does not claim cancellation coverage for every toolkit API.
+
+Installed LRU MBT and configuration preflight (merged PR #58, c6f5476b): a consumer
 outside the workspace uses published SDK and simplelru modules, a separately
 authored finite model, and actual API observations. Sampled traces and five
 forced cases pass. A parent-planted Get-nonpromotion change in a disposable
@@ -727,7 +735,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Consolidate model-loading cancellation | M | source review found hidden background contexts in model loading, including post-generation trace-schema recovery; reproduce cancellation through the caller lifecycle, then thread ownership directly |
+| 1 | Choose the next general framework capability from usage evidence | M | model-loading cancellation consolidates the LRU workflow lessons; assess an existing open capability against independent adopter friction before expanding adjacent fixtures |
 | alongside | Further adoption-driven capability | M | the bounded LRU MBT trial now supplies installed non-SQL evidence; choose the next facet from independent usage or a new demonstrated blocker rather than adjacent fixtures |
 | deferred | I25: virtual physical-session capacity | M | native role-quota refusal/recovery is checked; nondeterministic pool callbacks and idle-session ownership still prevent a faithful virtual max_connections claim |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |

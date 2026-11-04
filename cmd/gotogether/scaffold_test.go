@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"io"
 	"io/fs"
@@ -24,7 +25,7 @@ func TestScaffoldSystem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := binding.LoadModel("quint", b.SpecPath(), b.Module)
+	m, err := binding.LoadModel(t.Context(), "quint", b.SpecPath(), b.Module)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +81,7 @@ func TestScaffoldSystemSettles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := binding.LoadModel("quint", b.SpecPath(), b.Module)
+	m, err := binding.LoadModel(t.Context(), "quint", b.SpecPath(), b.Module)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +134,7 @@ func TestScaffoldFailedLeavesNoFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := filepath.Join(dir, "m.binding.yaml")
-	if err := scaffold([]string{"-spec", spec, "-module", "m", "-quint", filepath.Join(dir, "no-quint"), "-out", out}); err == nil {
+	if err := scaffold(t.Context(), []string{"-spec", spec, "-module", "m", "-quint", filepath.Join(dir, "no-quint"), "-out", out}); err == nil {
 		t.Fatal("scaffold without quint succeeded")
 	}
 	if _, err := os.Lstat(out); err == nil {
@@ -210,13 +211,13 @@ func TestScaffoldIntoSubdirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Chdir(dir)
-	if err := scaffold([]string{"-spec", "model/account.qnt", "-module", "account", "-invariants", "nonNegative,underLimit", "-holds", "nonNegative,underLimit", "-out", "sub/b.yaml"}); err == nil {
+	if err := scaffold(t.Context(), []string{"-spec", "model/account.qnt", "-module", "account", "-invariants", "nonNegative,underLimit", "-holds", "nonNegative,underLimit", "-out", "sub/b.yaml"}); err == nil {
 		t.Fatal("scaffold into a missing directory succeeded")
 	}
 	if err := os.Mkdir("sub", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := scaffold([]string{"-spec", "model/account.qnt", "-module", "account", "-invariants", "nonNegative,underLimit", "-holds", "nonNegative,underLimit", "-out", "sub/b.yaml"}); err != nil {
+	if err := scaffold(t.Context(), []string{"-spec", "model/account.qnt", "-module", "account", "-invariants", "nonNegative,underLimit", "-holds", "nonNegative,underLimit", "-out", "sub/b.yaml"}); err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile("sub/b.yaml")
@@ -227,7 +228,7 @@ func TestScaffoldIntoSubdirectory(t *testing.T) {
 	if err := os.WriteFile("sub/b.yaml", []byte(set), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code, out := capture(t, func() (int, error) { return lint([]string{"-binding", "sub/b.yaml"}) }); code != 0 {
+	if code, out := capture(t, func() (int, error) { return lint(t.Context(), []string{"-binding", "sub/b.yaml"}) }); code != 0 {
 		t.Errorf("lint from the working directory: exit %d:\n%s", code, out)
 	}
 }
@@ -256,7 +257,7 @@ func TestBindingSpecNotFound(t *testing.T) {
 	for name, run := range map[string]func() (int, error){
 		"simulate": func() (int, error) { return simulate([]string{"-binding", "sub/b.yaml"}) },
 		"validate": func() (int, error) {
-			code, _, err := validated([]string{"-binding", "sub/b.yaml", "run.jsonl"})
+			code, _, err := validated(t, []string{"-binding", "sub/b.yaml", "run.jsonl"})
 			return code, err
 		},
 	} {
@@ -276,7 +277,7 @@ func TestBindingSpecNotFound(t *testing.T) {
 		}
 	}
 	// what the model cache and every other caller of LoadModel see
-	if _, err := binding.LoadModel("quint", resolved, "stock"); err == nil || !strings.Contains(err.Error(), "the spec "+resolved+" does not exist") || strings.Contains(err.Error(), "chdir") {
+	if _, err := binding.LoadModel(t.Context(), "quint", resolved, "stock"); err == nil || !strings.Contains(err.Error(), "the spec "+resolved+" does not exist") || strings.Contains(err.Error(), "chdir") {
 		t.Errorf("LoadModel: %v", err)
 	}
 }
@@ -293,7 +294,7 @@ func TestScaffoldBindingChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := filepath.Join(dir, "account.binding.yaml")
-	if err := scaffold([]string{"-spec", spec, "-module", "account", "-invariants", "nonNegative,underLimit", "-holds", "nonNegative,underLimit", "-out", p}); err != nil {
+	if err := scaffold(t.Context(), []string{"-spec", spec, "-module", "account", "-invariants", "nonNegative,underLimit", "-holds", "nonNegative,underLimit", "-out", p}); err != nil {
 		t.Fatal(err)
 	}
 	src, _ := os.ReadFile(p)
@@ -302,7 +303,7 @@ func TestScaffoldBindingChecks(t *testing.T) {
 			t.Errorf("the skeleton lacks %q:\n%s", want, src)
 		}
 	}
-	code, out := capture(t, func() (int, error) { return lint([]string{"-binding", p}) })
+	code, out := capture(t, func() (int, error) { return lint(t.Context(), []string{"-binding", p}) })
 	if code != 1 || !strings.Contains(out, "constant LIMIT: no value (type int): give it a Quint expression (LIMIT: '3')") {
 		t.Errorf("lint of the skeleton: exit %d:\n%s", code, out)
 	}
@@ -310,7 +311,7 @@ func TestScaffoldBindingChecks(t *testing.T) {
 	if err := os.WriteFile(p, []byte(set), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code, out := capture(t, func() (int, error) { return lint([]string{"-binding", p}) }); code != 0 {
+	if code, out := capture(t, func() (int, error) { return lint(t.Context(), []string{"-binding", p}) }); code != 0 {
 		t.Errorf("lint with LIMIT set: exit %d:\n%s", code, out)
 	}
 	// The author selected underLimit as a guarantee, but it can fail in the
@@ -371,12 +372,12 @@ func TestScaffoldReservedName(t *testing.T) {
 		}
 		return spec
 	}
-	_, err := binding.LoadModel("quint", write("item"), "stock")
+	_, err := binding.LoadModel(t.Context(), "quint", write("item"), "stock")
 	if err == nil || !strings.Contains(err.Error(), "item is a Quint built-in's name, which no identifier may take: rename it (item_, say); a parameter named after a step's field takes the field through the binding (args: item_: '{{.item}}')") {
 		t.Fatalf("a parameter named item: %v", err)
 	}
 	var out strings.Builder
-	if err := scaffoldTo(&out, "", write("item_"), "stock", false, false, "", "", "quint"); err != nil {
+	if err := scaffoldTo(t.Context(), &out, "", write("item_"), "stock", false, false, "", "", "quint"); err != nil {
 		t.Fatal(err)
 	}
 	if want := "      item_: '{{.item}}'   # str; the step's field item, a name quint keeps for a built-in (QNT101)\n"; !strings.Contains(out.String(), want) {
@@ -384,5 +385,18 @@ func TestScaffoldReservedName(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "      # qty: '{{.qty}}'   # int\n") {
 		t.Errorf("an ordinary parameter's default is no longer commented:\n%s", out.String())
+	}
+}
+
+func TestScaffoldCanceledLeavesNoFile(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	out := filepath.Join(t.TempDir(), "binding.yaml")
+	err := scaffold(ctx, []string{"-spec", "../../binding/testdata/typed.qnt", "-module", "typed", "-quint", "quint-must-not-start", "-out", out, "-no-properties"})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("scaffold canceled: %v", err)
+	}
+	if _, err := os.Lstat(out); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("canceled scaffold created output: %v", err)
 	}
 }

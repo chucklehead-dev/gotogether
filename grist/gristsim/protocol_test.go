@@ -130,7 +130,7 @@ func TestProtocolOrdersConcurrentHistory(t *testing.T) {
 	}
 	const serial = "testdata/protocol/serial.binding.yaml"
 	qtest.Validate(t, serial, canonical).Expect(t, qtest.Conforms(), qtest.Settles())
-	checker, err := validate.NewChecker(serial, validate.Options{NoITF: true})
+	checker, err := validate.NewChecker(t.Context(), serial, validate.Options{NoITF: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestProtocolOrdersConcurrentHistory(t *testing.T) {
 			t.Fatalf("counterexample lost identity: %+v", s)
 		}
 	}
-	faithful, err := validate.NewChecker("testdata/protocol/chain.binding.yaml", validate.Options{NoITF: true})
+	faithful, err := validate.NewChecker(t.Context(), "testdata/protocol/chain.binding.yaml", validate.Options{NoITF: true})
 	if err != nil {
 		t.Fatal(err)
 	}

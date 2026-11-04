@@ -99,7 +99,7 @@ func Compile(bindingPath string, opt Options) (*CompiledModel, error) {
 	if quint == "" {
 		quint = "quint"
 	}
-	qv := quintVersion(quint)
+	qv := quintVersion(context.Background(), quint)
 	if qv == "" {
 		return nil, fmt.Errorf("compile: %s --version failed: compiling needs quint (npm i -g @informalsystems/quint; gotogether doctor says what is installed)", quint)
 	}

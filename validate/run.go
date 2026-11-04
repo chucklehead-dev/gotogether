@@ -73,7 +73,10 @@ func (m mode) context() context.Context {
 
 // NewChecker loads a binding file, typechecks its model and lints the
 // binding against it.
-func NewChecker(bindingPath string, opt Options) (*Checker, error) {
+func NewChecker(ctx context.Context, bindingPath string, opt Options) (*Checker, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if opt.ChoiceLimit < 0 {
 		return nil, fmt.Errorf("choice limit must be nonnegative (0 uses the default)")
 	}
@@ -85,7 +88,7 @@ func NewChecker(bindingPath string, opt Options) (*Checker, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := loadModel(opt.Quint, b.SpecPath(), b.Module)
+	m, err := loadModel(ctx, opt.Quint, b.SpecPath(), b.Module)
 	if err != nil {
 		return nil, err
 	}
@@ -173,13 +176,13 @@ var cached memo.Map[string, *Checker] // process-wide: absolute binding path, qu
 // process (the model is typechecked and the binding linted once), with
 // o's other options (Dir, NoITF) on the copy it returns: qtest and
 // qhegel share it.
-func Cached(bindingPath string, o Options) (*Checker, error) {
+func Cached(ctx context.Context, bindingPath string, o Options) (*Checker, error) {
 	abs, err := filepath.Abs(bindingPath)
 	if err != nil {
 		return nil, err
 	}
 	key := abs + "|" + o.Quint + "|" + o.Backend
-	c, err := cached.Do(key, func() (*Checker, error) { return NewChecker(abs, o) })
+	c, err := cached.DoContext(ctx, key, func() (*Checker, error) { return NewChecker(ctx, abs, o) })
 	if err != nil {
 		return nil, err
 	}

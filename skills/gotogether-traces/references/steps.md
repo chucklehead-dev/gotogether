@@ -163,7 +163,7 @@ templates (collections, outcomes, ITF), or setting up the analyzers
     references/partial-logs.md, "Absent steps".
 
   On a miss, the failure message is the report.
-- In code: `validate.NewChecker(binding, opts).Check(ctx, steps)`. Use
+- In code: `validate.NewChecker(ctx, binding, opts).Check(ctx, steps)`. Use
   `CheckBatch` for many runs: the evaluator passes what it can, and the
   rest share one quint process per chunk.
 - From files: `gotogether validate -binding b.yaml FILE...`. FILE may be

@@ -41,7 +41,7 @@ func TestSnapshotStart(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
 	pass, fail, plain := snapshotRuns()
-	c, err := NewChecker("testdata/snapshot.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/snapshot.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestSnapshotStart(t *testing.T) {
 func TestSnapshotStartHidden(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/gossip_snapshot.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/gossip_snapshot.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +173,7 @@ func TestSnapshotStartHidden(t *testing.T) {
 func TestSnapshotAlone(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/snapshot.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/snapshot.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

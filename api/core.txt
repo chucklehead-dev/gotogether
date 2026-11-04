@@ -6,7 +6,7 @@ func LintRecords(m *Model, recs []RecordCall) []string
 func LintSourceFindings(bs []Bound, anns []Annotation, recs []RecordCall) []LintFinding
 func LintSources(bs []Bound, anns []Annotation, recs []RecordCall) (errs, warns []string)
 func Load(path string) (*Binding, error)
-func LoadModel(quint, spec, module string) (*Model, error)
+func LoadModel(ctx context.Context, quint, spec, module string) (*Model, error)
 func ObsComparisons(expect string) []ObsComparison
 func ParseStepPattern(s string) (StepPattern, error)
 func ParseTypecheck(data []byte, module string) (*Model, error)
@@ -211,7 +211,7 @@ type TraceReader struct
     field Quint string
     field Spec string
     field Module string
-    method (*TraceReader) Read(path string) (*itf.Trace, error)
+    method (*TraceReader) Read(ctx context.Context, path string) (*itf.Trace, error)
 type Within struct
     field After string `yaml:"after"`
     field Holds string `yaml:"holds"`
@@ -224,7 +224,7 @@ func GenerateRun(ctx context.Context, c Config) ([]string, Config, error)
 func MustPick[T any](s *Step, name string) T
 func OptPick[T any](s *Step, name string) (*T, error)
 func Pick[T any](s *Step, name string) (T, error)
-func ReadTraces(c Config, files []string) ([]*itf.Trace, error)
+func ReadTraces(ctx context.Context, c Config, files []string) ([]*itf.Trace, error)
 func Replay(tr *itf.Trace, d Driver, opt ReplayOptions) error
 func Run(t testing.TB, c Config, newDriver func() Driver)
 func Skip(*Step) error
@@ -445,7 +445,7 @@ const CheckPass CheckStatus = "pass"
 const Error Severity = "error"
 const Info Severity = "info"
 const Warning Severity = "warning"
-func Inspect(o Options) *Report
+func Inspect(ctx context.Context, o Options) *Report
 type Check struct
     field Name string `json:"name"`
     field Target string `json:"target"`
@@ -2352,7 +2352,7 @@ const Pass Verdict = "pass"
 const ReportFormat = "gotogether.report/2"
 const Uncollected Cause = "uncollected"
 func CacheDir() string
-func Cached(bindingPath string, o Options) (*Checker, error)
+func Cached(ctx context.Context, bindingPath string, o Options) (*Checker, error)
 func CaptureModelSources(spec string) (*SourceGuard, error)
 func Compile(bindingPath string, opt Options) (*CompiledModel, error)
 func CurrentTools(o Options) Tools
@@ -2361,7 +2361,7 @@ func Finishable(b *binding.Binding) error
 func ITFModel(tr *itf.Trace, opt ITFOptions) (*RunModel, error)
 func IsManifest(path string) bool
 func LoadCompiled(path string) (*CompiledModel, error)
-func NewChecker(bindingPath string, opt Options) (*Checker, error)
+func NewChecker(ctx context.Context, bindingPath string, opt Options) (*Checker, error)
 func NewCompiledChecker(bindingPath, compiledPath string, opt Options) (*Checker, error)
 func NewDocument(command string) *Document
 func NewManifest(r RunRecord) (*Manifest, error)

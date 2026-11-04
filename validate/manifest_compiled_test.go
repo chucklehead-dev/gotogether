@@ -281,7 +281,7 @@ func TestCompiledConstantOverrideRecipe(t *testing.T) {
 	if _, err := subset.WithConstants(map[string]string{"LIMIT": "100"}); err != nil {
 		t.Fatalf("unchanged constant after subset: %v", err)
 	}
-	source, err := NewChecker(bp, Options{})
+	source, err := NewChecker(t.Context(), bp, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

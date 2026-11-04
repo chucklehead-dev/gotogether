@@ -12,7 +12,7 @@ import (
 func navReconstructionChecker(t *testing.T, file string) *Checker {
 	t.Helper()
 	skip.Quint(t)
-	c, err := NewChecker(file, Options{Dir: t.TempDir(), NoITF: true})
+	c, err := NewChecker(t.Context(), file, Options{Dir: t.TempDir(), NoITF: true})
 	if err != nil {
 		t.Fatal(err)
 	}

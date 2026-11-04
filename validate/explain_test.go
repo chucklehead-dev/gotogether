@@ -32,7 +32,7 @@ func limiterRun(clients ...string) []qtrace.Step {
 func TestRejectionNamesTheConjunct(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/limiter.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/limiter.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestRejectionNamesTheConjunct(t *testing.T) {
 func TestRejectionUnexplainedUnderQuint(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/limiter.yaml", Options{Dir: t.TempDir(), Eval: "quint"})
+	c, err := NewChecker(t.Context(), "testdata/limiter.yaml", Options{Dir: t.TempDir(), Eval: "quint"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestRejectionReadsAsGrist(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	c, err := NewChecker(filepath.Join(dir, "shop.binding.yaml"), Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), filepath.Join(dir, "shop.binding.yaml"), Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -133,7 +133,7 @@ func agree(t *testing.T, b *binding.Binding, refused bool) bool {
 	// by the model's types where quint's Rust backend's integers need them
 	reader := &binding.TraceReader{Spec: mod, Module: "diff"}
 	for _, tp := range traces {
-		tr, err := reader.Read(tp)
+		tr, err := reader.Read(t.Context(), tp)
 		if err != nil {
 			t.Fatal(err)
 		}

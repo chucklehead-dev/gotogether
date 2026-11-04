@@ -23,7 +23,7 @@ func TestInspectionCollectionTemplateIsActionableAuthoredFinding(t *testing.T) {
 	for _, field := range []string{".values", ".args.values", ".payload", ".obs.values"} {
 		t.Run(field, func(t *testing.T) {
 			path := lintFile(t, dir, "bad.yaml", fmt.Sprintf("format: gotogether.binding/2\nspec: collections.qnt\nmodule: collections\nactions:\n  accept:\n    args:\n      values: '{{%s}}'\n", field))
-			r := Inspect(Options{Bindings: []string{path}})
+			r := Inspect(t.Context(), Options{Bindings: []string{path}})
 			if r.ExitCode() != 1 || !r.Complete() {
 				t.Fatalf("authored collection template must be a completed finding, not tool failure: %+v", r)
 			}
@@ -87,7 +87,7 @@ func TestInspectionCollectionTemplateSupportedFixesAreClean(t *testing.T) {
 		"  accept:\n    args:\n      values: '{{toQuint \"List[int]\" .payload}}'\n",
 	} {
 		path := lintFile(t, dir, "fixed.yaml", "format: gotogether.binding/2\nspec: collections.qnt\nmodule: collections\nactions:\n"+action)
-		r := Inspect(Options{Bindings: []string{path}})
+		r := Inspect(t.Context(), Options{Bindings: []string{path}})
 		if r.ExitCode() != 0 || !r.Complete() || len(r.Findings) != 0 {
 			t.Fatalf("supported conversion workflow should be clean: %+v", r)
 		}

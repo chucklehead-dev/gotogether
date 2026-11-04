@@ -91,7 +91,7 @@ func TestInitBindingFits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := binding.LoadModel("quint", b.SpecPath(), b.Module)
+	m, err := binding.LoadModel(t.Context(), "quint", b.SpecPath(), b.Module)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func TestScaffoldSystemHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := binding.LoadModel("quint", b.SpecPath(), b.Module)
+	m, err := binding.LoadModel(t.Context(), "quint", b.SpecPath(), b.Module)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +197,7 @@ func TestScaffoldSystemHTTP(t *testing.T) {
 
 // scaffold -http without -system says what it is a shape of.
 func TestScaffoldHTTPNeedsSystem(t *testing.T) {
-	err := scaffoldTo(io.Discard, "", "m.qnt", "m", false, true, "", "", "quint")
+	err := scaffoldTo(t.Context(), io.Discard, "", "m.qnt", "m", false, true, "", "", "quint")
 	if err == nil || !strings.Contains(err.Error(), "scaffold -system -http") {
 		t.Errorf("scaffold -http alone: %v", err)
 	}

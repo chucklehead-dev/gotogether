@@ -110,7 +110,7 @@ func shrinkTo(out io.Writer, args []string) (int, error) {
 		quintDir = filepath.Join(work, "quint")
 	}
 	opts := validate.Options{Quint: *quint, Backend: *backend, Dir: quintDir, ChoiceLimit: *choiceLimit}
-	c, err := validate.NewChecker(*bpath, opts)
+	c, err := validate.NewChecker(ctx, *bpath, opts)
 	if err != nil {
 		return 2, err
 	}

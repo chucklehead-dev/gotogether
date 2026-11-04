@@ -32,7 +32,7 @@ func TestUsedFieldsPreservesEvidenceThroughSanitizing(t *testing.T) {
 	if err := os.WriteFile(path, raw, 0600); err != nil {
 		t.Fatal(err)
 	}
-	c, err := validate.NewChecker(path, validate.Options{Dir: t.TempDir()})
+	c, err := validate.NewChecker(t.Context(), path, validate.Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -50,7 +50,7 @@ func TestInitLibraryBindingUsesExplicitProperties(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := binding.LoadModel("quint", b.SpecPath(), b.Module)
+	m, err := binding.LoadModel(t.Context(), "quint", b.SpecPath(), b.Module)
 	if err != nil {
 		t.Fatal(err)
 	}

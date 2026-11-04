@@ -34,7 +34,7 @@ func gossipStep(seq int, node string, value int, seen []int) qtrace.Step {
 // report says the evaluator judged it.
 func TestHiddenActions(t *testing.T) {
 	skip.Quint(t)
-	c, err := NewChecker("testdata/gossip.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/gossip.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestHiddenActions(t *testing.T) {
 func TestHiddenDepthCutIsNoVerdict(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/ticks.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/ticks.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,7 +310,7 @@ func TestHiddenLint(t *testing.T) {
 		os.WriteFile(filepath.Join(dir, "gossip.qnt"), src, 0o644)
 		b := "spec: gossip.qnt\nmodule: gossip\nactions:\n  write: {}\n  read: {}\n" + x.yaml + "\n"
 		os.WriteFile(filepath.Join(dir, "b.yaml"), []byte(b), 0o644)
-		if _, err := NewChecker(filepath.Join(dir, "b.yaml"), Options{}); err == nil || !strings.Contains(err.Error(), x.want) {
+		if _, err := NewChecker(t.Context(), filepath.Join(dir, "b.yaml"), Options{}); err == nil || !strings.Contains(err.Error(), x.want) {
 			t.Errorf("%s: %v, want %q", x.yaml, err, x.want)
 		}
 	}

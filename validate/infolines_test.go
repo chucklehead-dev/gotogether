@@ -20,7 +20,7 @@ import (
 func TestLinearizeHintOnlyWhereItApplies(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/account.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/account.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

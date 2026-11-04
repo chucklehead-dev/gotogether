@@ -42,7 +42,7 @@ func TestSnapshotCheckpointConstrainsSearchedStates(t *testing.T) {
 			if err := os.WriteFile(path, []byte(binding), 0600); err != nil {
 				t.Fatal(err)
 			}
-			c, err := NewChecker(path, Options{Dir: filepath.Join(dir, "out")})
+			c, err := NewChecker(t.Context(), path, Options{Dir: filepath.Join(dir, "out")})
 			if err != nil {
 				t.Fatal(err)
 			}

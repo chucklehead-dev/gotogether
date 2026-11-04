@@ -14,7 +14,7 @@ import (
 
 func TestTerminalDiagnosticEntry(t *testing.T) {
 	requireQuint(t)
-	checker, err := validate.NewChecker(filepath.Join(root, "validate/testdata/diagnostic/binding.yaml"), validate.Options{Dir: t.TempDir()})
+	checker, err := validate.NewChecker(t.Context(), filepath.Join(root, "validate/testdata/diagnostic/binding.yaml"), validate.Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

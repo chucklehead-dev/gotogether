@@ -29,7 +29,7 @@ func sourceFixture(t *testing.T) string {
 func TestSourceCheckerRefusesChangedDependencyAndAllowsRestore(t *testing.T) {
 	skip.Quint(t)
 	path := sourceFixture(t)
-	c, err := NewChecker(path, Options{NoITF: true})
+	c, err := NewChecker(t.Context(), path, Options{NoITF: true})
 	if err != nil {
 		t.Fatal(err)
 	}

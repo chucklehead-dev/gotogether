@@ -59,7 +59,7 @@ func TestSnapshotCheckpoints(t *testing.T) {
 	}
 	for _, mode := range []string{"go", "quint", "shadow"} {
 		t.Run(mode, func(t *testing.T) {
-			c, err := NewChecker("testdata/snapshot.yaml", Options{Dir: t.TempDir(), Eval: mode})
+			c, err := NewChecker(t.Context(), "testdata/snapshot.yaml", Options{Dir: t.TempDir(), Eval: mode})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -139,7 +139,7 @@ func TestSnapshotCheckpointAfterLostTail(t *testing.T) {
 	}, qtrace.Lost{Recorder: "a", After: 1})
 	for _, mode := range []string{"go", "quint", "shadow"} {
 		t.Run(mode, func(t *testing.T) {
-			c, err := NewChecker("testdata/snapshot.yaml", Options{Dir: t.TempDir(), Eval: mode})
+			c, err := NewChecker(t.Context(), "testdata/snapshot.yaml", Options{Dir: t.TempDir(), Eval: mode})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -166,7 +166,7 @@ func TestSnapshotCheckpointCannotBecomeStart(t *testing.T) {
 	}
 	for _, mode := range []string{"go", "quint", "shadow"} {
 		t.Run(mode, func(t *testing.T) {
-			c, err := NewChecker("testdata/snapshot.yaml", Options{Dir: t.TempDir(), Eval: mode})
+			c, err := NewChecker(t.Context(), "testdata/snapshot.yaml", Options{Dir: t.TempDir(), Eval: mode})
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -492,7 +492,7 @@ func evaluate(ctx context.Context, ms replay.ModuleSpec, runs [][]binding.Call, 
 	pattern := filepath.Join(opt.Dir, file+"_{test}.itf.json")
 	for j, i := range detailed {
 		errs[i] = fill(gs[j], out, qnt, pattern, ms.Invariants, ms.Eventually, res[i], func(path string) (*itf.Trace, error) {
-			return readQuintITF(opt.Quint, ms.Spec, ms.Module, path)
+			return readQuintITF(ctx, opt.Quint, ms.Spec, ms.Module, path)
 		})
 		if withITF.Backend == "typescript" { // its failing tests write no ITF: say so where the state would be
 			for _, f := range res[i].failures() {

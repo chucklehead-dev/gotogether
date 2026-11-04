@@ -19,6 +19,7 @@ import (
 // validateRun is one validate command: what its flags ask for (a
 // cli.Check), and how its report is printed (a replay's too).
 type validateRun struct {
+	ctx                                  context.Context
 	choiceLimit                          int
 	binding, dir, backend, quint, format string
 	spec, module, instance               string // an ITF input's
@@ -54,12 +55,14 @@ type validateRun struct {
 	doc     *validate.Document
 }
 
-func runValidate(args []string) (int, error) { return validateTo(os.Stdout, args) }
+func runValidate(ctx context.Context, args []string) (int, error) {
+	return validateTo(ctx, os.Stdout, args)
+}
 
 // validateTo is the validate command, its report written to out.
-func validateTo(out io.Writer, args []string) (int, error) {
+func validateTo(ctx context.Context, out io.Writer, args []string) (int, error) {
 	fset := commandFlags("validate")
-	v := validateRun{out: out, doc: validate.NewDocument("validate")}
+	v := validateRun{ctx: ctx, out: out, doc: validate.NewDocument("validate")}
 	v.machine.flags(fset)
 	fset.StringVar(&v.binding, "binding", "", "binding file (optional for ITF written by gotogether)")
 	fset.StringVar(&v.dir, "dir", "", "where to write generated modules and ITF (default: a new temp dir, printed)")
@@ -169,7 +172,7 @@ func (v0 *validateRun) replayManifest(path string, fset *flag.FlagSet) (int, err
 	get := func(name string) string { return fset.Lookup(name).Value.String() }
 	v := v0
 	v.verbose, v.history, v.manifest, v.withITF = get("v") == "true", get("history"), get("manifest"), get("itf") == "true"
-	r, err := cli.Replay(context.Background(), m, validate.Options{Quint: get("quint"), Backend: get("backend"), Dir: get("dir"), NoITF: get("itf") != "true"})
+	r, err := cli.Replay(v.ctx, m, validate.Options{Quint: get("quint"), Backend: get("backend"), Dir: get("dir"), NoITF: get("itf") != "true"})
 	if r == nil && err != nil {
 		return 2, fmt.Errorf("validate -replay %s: %w", path, err)
 	}
@@ -207,7 +210,7 @@ func (v *validateRun) run() (int, error) {
 		NoVars: v.novars, Invariants: v.invariants, Search: v.search, LostPrefix: fields(v.lostPrefix), LostSuffix: fields(v.lostSuffix),
 		CompleteThrough: v.completeThrough, RequireFinish: v.requireFinish, RunInfo: v.runInfo, Compiled: v.compiled,
 		Options: validate.Options{Quint: v.quint, Backend: v.backend, Dir: v.dir, NoITF: !v.withITF, ChoiceLimit: v.choiceLimit}}
-	j, err := chk.Judge(context.Background())
+	j, err := chk.Judge(v.ctx)
 	return v.report(j, err)
 }
 
@@ -396,7 +399,7 @@ func (v *validateRun) mutate(c *validate.Checker, steps []qtrace.Step, ok bool) 
 	if v.mutateLimit > 0 {
 		opts = append(opts, qtrace.MutateLimit(v.mutateLimit))
 	}
-	rep, err := c.MutateSteps(context.Background(), steps, v.search, nil, opts...)
+	rep, err := c.MutateSteps(v.ctx, steps, v.search, nil, opts...)
 	if err != nil {
 		return fmt.Errorf("validate -mutate-steps: %w", err)
 	}

@@ -80,7 +80,7 @@ func TestDiagnosticPrototype(t *testing.T) {
 	skip.Quint(t)
 	for _, mode := range []string{"go", "quint"} {
 		t.Run(mode, func(t *testing.T) {
-			c, err := NewChecker("testdata/diagnostic/binding.yaml", Options{Dir: t.TempDir(), Eval: mode})
+			c, err := NewChecker(t.Context(), "testdata/diagnostic/binding.yaml", Options{Dir: t.TempDir(), Eval: mode})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -126,7 +126,7 @@ func TestDiagnosticPrototype(t *testing.T) {
 
 func TestDiagnosticUnavailablePreservesVerdict(t *testing.T) {
 	skip.Quint(t)
-	c, err := NewChecker("testdata/diagnostic/binding.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/diagnostic/binding.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestDiagnosticUnavailablePreservesVerdict(t *testing.T) {
 
 func TestDiagnosticSearchCacheBoundary(t *testing.T) {
 	skip.Quint(t)
-	c, err := NewChecker("testdata/diagnostic/binding.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/diagnostic/binding.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestDiagnosticSearchCacheBoundary(t *testing.T) {
 
 func TestDiagnosticOutputLimits(t *testing.T) {
 	skip.Quint(t)
-	c, err := NewChecker("testdata/diagnostic/binding.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/diagnostic/binding.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +327,7 @@ func TestDiagnosticEvaluationFailureDoesNotChangeVerdict(t *testing.T) {
 			if err := os.WriteFile(path, binding, 0644); err != nil {
 				t.Fatal(err)
 			}
-			c, err := NewChecker(path, Options{Dir: t.TempDir()})
+			c, err := NewChecker(t.Context(), path, Options{Dir: t.TempDir()})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -377,5 +377,5 @@ func checkerFixtureVariant(t *testing.T, path string, fields map[string]any) (*C
 	if err := os.WriteFile(variant, raw, 0600); err != nil {
 		t.Fatal(err)
 	}
-	return NewChecker(variant, Options{Dir: t.TempDir()})
+	return NewChecker(t.Context(), variant, Options{Dir: t.TempDir()})
 }

@@ -58,7 +58,7 @@ simulate:
 		t.Fatal(err)
 	}
 	o.Dir = t.TempDir()
-	c, err := NewChecker(path, o)
+	c, err := NewChecker(t.Context(), path, o)
 	if err != nil {
 		t.Fatal(err)
 	}

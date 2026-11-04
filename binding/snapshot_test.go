@@ -14,7 +14,7 @@ import (
 // trace starts in it from no state): lint says which, and the fix.
 func TestLintSnapshot(t *testing.T) {
 	skip.Quint(t)
-	m, err := LoadModel("quint", "testdata/snapshot.qnt", "snap")
+	m, err := LoadModel(t.Context(), "quint", "testdata/snapshot.qnt", "snap")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestLintSnapshot(t *testing.T) {
 // no step of the binding's: lint says which, and the fix.
 func TestLintResume(t *testing.T) {
 	skip.Quint(t)
-	m, err := LoadModel("quint", "testdata/snapshot.qnt", "snap")
+	m, err := LoadModel(t.Context(), "quint", "testdata/snapshot.qnt", "snap")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestLintResume(t *testing.T) {
 // with hidden actions, a resume or a restart: lint says which.
 func TestLintPartition(t *testing.T) {
 	skip.Quint(t)
-	m, err := LoadModel("quint", "testdata/snapshot.qnt", "snap")
+	m, err := LoadModel(t.Context(), "quint", "testdata/snapshot.qnt", "snap")
 	if err != nil {
 		t.Fatal(err)
 	}

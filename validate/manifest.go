@@ -575,7 +575,7 @@ func NewManifest(r RunRecord) (*Manifest, error) {
 func emptyManifest(o Options) *Manifest {
 	backend := o.envBackend()
 	return &Manifest{Session: os.Getenv("GOTOGETHER_SESSION"), Format: ManifestFormat, Created: time.Now().UTC().Truncate(time.Second),
-		Tools: Tools{Gotogether: toolkitVersion(), Quint: quintVersion(o.Quint), Backend: backend}}
+		Tools: Tools{Gotogether: toolkitVersion(), Quint: quintVersion(context.Background(), o.Quint), Backend: backend}}
 }
 
 // CurrentTools are the tools a run judged with o would be judged with
@@ -918,15 +918,19 @@ var quintVersions memo.Map[string, string]
 
 // quintVersion is `quint --version` of the binary (default "quint"),
 // or "" if it does not run.
-func quintVersion(bin string) string {
+func quintVersion(ctx context.Context, bin string) string {
 	if bin == "" {
 		bin = "quint"
 	}
-	return quintVersions.Once(bin, func() string {
-		out, err := quintcmd.Command(context.Background(), bin, "", "--version").Output()
+	v, _ := quintVersions.DoContext(ctx, bin, func() (string, error) {
+		out, err := quintcmd.Command(ctx, bin, "", "--version").Output()
 		if err != nil {
-			return ""
+			if ctx.Err() != nil {
+				return "", ctx.Err()
+			}
+			return "", err
 		}
-		return strings.TrimSpace(string(out))
+		return strings.TrimSpace(string(out)), nil
 	})
+	return v
 }

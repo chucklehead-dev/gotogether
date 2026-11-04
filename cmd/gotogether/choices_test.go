@@ -26,7 +26,7 @@ func TestChoicesValidateFlagRecordsPolicy(t *testing.T) {
 	if m.Check.ChoiceLimit != 7 {
 		t.Fatalf("recorded CLI limit: %d", m.Check.ChoiceLimit)
 	}
-	if _, _, err := validated([]string{"-replay", manifest, "-choice-limit", "7"}); err == nil || !strings.Contains(err.Error(), "-choice-limit: the manifest says") {
+	if _, _, err := validated(t, []string{"-replay", manifest, "-choice-limit", "7"}); err == nil || !strings.Contains(err.Error(), "-choice-limit: the manifest says") {
 		t.Fatalf("CLI replay policy override: %v", err)
 	}
 }

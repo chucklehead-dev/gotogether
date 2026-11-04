@@ -14,7 +14,7 @@ func TestAntecedents(t *testing.T) {
 		{"../examples/checkout/model/checkout.qnt", "checkout", "settledCorrectly", "settled"},
 		{"../examples/hello/model/hello.qnt", "hello", "exactlyOnce", ""},
 	} {
-		m, err := LoadModel("quint", c.spec, c.module)
+		m, err := LoadModel(t.Context(), "quint", c.spec, c.module)
 		if err != nil {
 			t.Fatal(err)
 		}

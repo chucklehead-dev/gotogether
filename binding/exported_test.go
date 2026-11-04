@@ -14,7 +14,7 @@ import (
 // model the one exporting it).
 func TestLoadModelFollowsExports(t *testing.T) {
 	skip.Quint(t)
-	m, err := LoadModel("quint", "testdata/exported.qnt", "exported")
+	m, err := LoadModel(t.Context(), "quint", "testdata/exported.qnt", "exported")
 	if err != nil {
 		t.Fatal(err)
 	}

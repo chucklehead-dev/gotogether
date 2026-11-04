@@ -85,7 +85,7 @@ func TestTwoLogsOneRecorder(t *testing.T) {
 `
 	}
 	first, second := write("first.jsonl", req("5")), write("second.jsonl", req("6"))
-	code, out, err := validated([]string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out"), first, second})
+	code, out, err := validated(t, []string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out"), first, second})
 	for _, want := range []string{"first.jsonl and " + second + ` are request logs of one recorder "ui"`, "its own recorder"} {
 		if code != 2 || err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("exit %d, error %v lacks %q:\n%s", code, err, want, out)

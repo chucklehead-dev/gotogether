@@ -180,7 +180,7 @@ func quintPossibles(quint, dir, file string, cs []*possibleCheck, steps, samples
 		// by the module's types where quint's Rust backend's integers need them
 		traces := &binding.TraceReader{Quint: quint, Spec: file, Module: "simulate"}
 		for _, f := range files {
-			tr, err := traces.Read(f)
+			tr, err := traces.Read(context.Background(), f)
 			if err != nil {
 				return 0, fmt.Errorf("simulate: %s: %w", f, err)
 			}

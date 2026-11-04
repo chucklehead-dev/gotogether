@@ -90,7 +90,7 @@ func witnessOracle(steps []qtrace.Step, positive, nonpositive bool) (conforms, s
 
 func TestWitnessAgainstBruteForce(t *testing.T) {
 	skip.Quint(t)
-	c, err := NewChecker("testdata/witness/binding.yaml", Options{Dir: t.TempDir(), Eval: "go", NoITF: true})
+	c, err := NewChecker(t.Context(), "testdata/witness/binding.yaml", Options{Dir: t.TempDir(), Eval: "go", NoITF: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestWitnessUsesOneJointPropertyPath(t *testing.T) {
 		{"joint.yaml", true, true},
 	} {
 		t.Run(tc.binding, func(t *testing.T) {
-			c, err := NewChecker("testdata/witness/"+tc.binding, Options{Dir: t.TempDir(), Eval: "shadow"})
+			c, err := NewChecker(t.Context(), "testdata/witness/"+tc.binding, Options{Dir: t.TempDir(), Eval: "shadow"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -178,7 +178,7 @@ func TestWitnessUsesOneJointPropertyPath(t *testing.T) {
 
 func TestWitnessKeepsPropertyHistoryWhenStatesMerge(t *testing.T) {
 	skip.Quint(t)
-	c, err := NewChecker("testdata/witness/merged-history.yaml", Options{Dir: t.TempDir(), Eval: "shadow"})
+	c, err := NewChecker(t.Context(), "testdata/witness/merged-history.yaml", Options{Dir: t.TempDir(), Eval: "shadow"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func TestWitnessBacktracksAcrossObservedSteps(t *testing.T) {
 	history := witnessHistory(witnessObserved("pick", 1), witnessObserved("finish", 2, 1))
 	for _, eval := range []string{"go", "quint", "shadow"} {
 		t.Run(eval, func(t *testing.T) {
-			c, err := NewChecker("testdata/witness/binding.yaml", Options{Dir: t.TempDir(), Eval: eval})
+			c, err := NewChecker(t.Context(), "testdata/witness/binding.yaml", Options{Dir: t.TempDir(), Eval: eval})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -264,7 +264,7 @@ func TestWitnessEventuallyUsesTheInvariantPath(t *testing.T) {
 	history := witnessHistory(witnessObserved("donePick", 2))
 	for _, binding := range []string{"eventual-conflict.yaml", "eventual-joint.yaml"} {
 		t.Run(binding, func(t *testing.T) {
-			c, err := NewChecker("testdata/witness/"+binding, Options{Dir: t.TempDir(), Eval: "shadow"})
+			c, err := NewChecker(t.Context(), "testdata/witness/"+binding, Options{Dir: t.TempDir(), Eval: "shadow"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -290,7 +290,7 @@ func TestWitnessEventuallyUsesTheInvariantPath(t *testing.T) {
 func TestWitnessLimitIsNotARejection(t *testing.T) {
 	skip.Quint(t)
 	history := witnessHistory(witnessObserved("pick", 1), witnessObserved("finish", 2, 1))
-	c, err := NewChecker("testdata/witness/binding.yaml", Options{Dir: t.TempDir(), ChoiceLimit: 1})
+	c, err := NewChecker(t.Context(), "testdata/witness/binding.yaml", Options{Dir: t.TempDir(), ChoiceLimit: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +318,7 @@ func TestWitnessLimitIsNotARejection(t *testing.T) {
 
 func TestWitnessUnsupportedPinIsNotConfirmation(t *testing.T) {
 	skip.Quint(t)
-	c, err := NewChecker("testdata/witness/unsupported.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/witness/unsupported.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -343,7 +343,7 @@ func TestWitnessUnsupportedPinIsNotConfirmation(t *testing.T) {
 
 func TestWitnessDoesNotPromoteAssumedOrLostInput(t *testing.T) {
 	skip.Quint(t)
-	c, err := NewChecker("testdata/witness/binding.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/witness/binding.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

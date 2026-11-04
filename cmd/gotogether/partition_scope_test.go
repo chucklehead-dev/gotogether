@@ -45,7 +45,7 @@ func TestValidatePartitionScopeCounts(t *testing.T) {
 				if asJSON {
 					argv = append([]string{"-json"}, argv...)
 				}
-				code, out, err := validated(argv)
+				code, out, err := validated(t, argv)
 				if code != wantCode || err != nil {
 					t.Fatalf("exit %d %v: %s", code, err, out)
 				}
@@ -75,7 +75,7 @@ func TestValidatePartitionScopeCounts(t *testing.T) {
 
 func TestPartitionScopeMixedSummary(t *testing.T) {
 	skip.Quint(t)
-	checker, err := validate.NewChecker("../../validate/testdata/ledger.yaml", validate.Options{Dir: t.TempDir(), NoITF: true})
+	checker, err := validate.NewChecker(t.Context(), "../../validate/testdata/ledger.yaml", validate.Options{Dir: t.TempDir(), NoITF: true})
 	if err != nil {
 		t.Fatal(err)
 	}

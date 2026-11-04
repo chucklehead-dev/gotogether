@@ -66,7 +66,7 @@ func TestEvaluatorDecidesPasses(t *testing.T) {
 	pass, fail := accountSteps(3, 7), accountSteps(3, 8)
 	ctx := context.Background()
 	for _, eval := range []string{"go", "quint"} {
-		c, err := NewChecker("testdata/account.yaml", Options{Quint: bin, Dir: t.TempDir(), Eval: eval})
+		c, err := NewChecker(t.Context(), "testdata/account.yaml", Options{Quint: bin, Dir: t.TempDir(), Eval: eval})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -118,7 +118,7 @@ func TestEvaluatorITFIsQuints(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	itfOf := func(eval string, steps []qtrace.Step) string {
-		c, err := NewChecker("testdata/account.yaml", Options{Dir: t.TempDir(), Eval: eval})
+		c, err := NewChecker(t.Context(), "testdata/account.yaml", Options{Dir: t.TempDir(), Eval: eval})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -147,7 +147,7 @@ func TestShadowCatchesAWrongPass(t *testing.T) {
 	ctx := context.Background()
 	fail := accountSteps(3, 8)
 	for _, eval := range []string{"shadow", "go"} {
-		c, err := NewChecker("testdata/account.yaml", Options{Dir: t.TempDir(), Eval: eval, NoITF: true})
+		c, err := NewChecker(t.Context(), "testdata/account.yaml", Options{Dir: t.TempDir(), Eval: eval, NoITF: true})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -188,7 +188,7 @@ func TestEvaluatorDecidesWithin(t *testing.T) {
 	bin, log := countingQuint(t)
 	ctx := context.Background()
 	for _, eval := range []string{"go", "quint"} {
-		c, err := NewChecker("testdata/within.yaml", Options{Quint: bin, Dir: t.TempDir(), Eval: eval})
+		c, err := NewChecker(t.Context(), "testdata/within.yaml", Options{Quint: bin, Dir: t.TempDir(), Eval: eval})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -254,7 +254,7 @@ func TestShadowCatchesAWrongWithin(t *testing.T) {
 	ctx := context.Background()
 	late := withinSteps(5)
 	for _, eval := range []string{"go", "shadow"} {
-		c, err := NewChecker("testdata/within.yaml", Options{Dir: t.TempDir(), Eval: eval})
+		c, err := NewChecker(t.Context(), "testdata/within.yaml", Options{Dir: t.TempDir(), Eval: eval})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -287,7 +287,7 @@ func TestSampleCatchesAWrongPass(t *testing.T) {
 	defer hooks.TamperEval.Store(0)
 	bin, log := countingQuint(t)
 	ctx := context.Background()
-	c, err := NewChecker("testdata/account.yaml", Options{Quint: bin, Dir: t.TempDir(), Eval: "go", NoITF: true})
+	c, err := NewChecker(t.Context(), "testdata/account.yaml", Options{Quint: bin, Dir: t.TempDir(), Eval: "go", NoITF: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +324,7 @@ func TestSampleRaisedForUnconfirmed(t *testing.T) {
 	needQuint(t)
 	t.Setenv("GOTOGETHER_EVAL", "")
 	t.Setenv("GOTOGETHER_EVAL_SAMPLE", "1/50")
-	c, err := NewChecker("testdata/rr.yaml", Options{})
+	c, err := NewChecker(t.Context(), "testdata/rr.yaml", Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

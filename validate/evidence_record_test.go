@@ -9,7 +9,7 @@ import (
 
 func TestNavigatorRecordInspection(t *testing.T) {
 	skip.Quint(t)
-	c, err := NewChecker("testdata/diagnostic/binding.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/diagnostic/binding.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

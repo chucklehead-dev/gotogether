@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -9,9 +10,11 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 
 	"github.com/chucklehead-dev/gotogether/validate/diagnostic"
 	"github.com/chucklehead-dev/gotogether/validate/navproto"
@@ -112,7 +115,9 @@ func nav(out io.Writer, args []string) (int, error) {
 	if *bind == "" {
 		return 2, fmt.Errorf("nav: give -binding (a model), with -run a step log, or -run an exploration's run ('TestX#2:seed=17')")
 	}
-	c, err := validate.NewChecker(*bind, validate.Options{Quint: *quint})
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	c, err := validate.NewChecker(ctx, *bind, validate.Options{Quint: *quint})
 	if err != nil {
 		return 2, err
 	}

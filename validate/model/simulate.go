@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"os"
@@ -305,7 +306,7 @@ func simulate(bpath string, b *binding.Binding, checker *modelChecker, opt Simul
 		// the possibles need the model's actions (a name alone is a step
 		// if it is one) and its evaluator, as the graph does
 		if checker == nil {
-			c, err := validate.NewChecker(bpath, validate.Options{Quint: opt.Quint})
+			c, err := validate.NewChecker(context.Background(), bpath, validate.Options{Quint: opt.Quint})
 			if err != nil {
 				return nil, err
 			}

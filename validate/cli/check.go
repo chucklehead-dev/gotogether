@@ -217,7 +217,7 @@ func (chk Check) Judge(ctx context.Context) (*Judged, error) {
 			if chk.Compiled != "" {
 				return nil, fmt.Errorf("-compiled %s: an ambiguous ITF input needs Quint type inference (%w): validate it without -compiled", chk.Compiled, validate.ErrNeedsQuint)
 			}
-			in, typesSource, err = chk.readITFByTypes(f, b, a, err)
+			in, typesSource, err = chk.readITFByTypes(ctx, f, b, a, err)
 		}
 		if err != nil {
 			return nil, err
@@ -279,7 +279,7 @@ func (chk Check) Judge(ctx context.Context) (*Judged, error) {
 		if chk.Compiled != "" {
 			c, err = validate.NewCompiledChecker(chk.Binding, chk.Compiled, opts)
 		} else {
-			c, err = validate.NewChecker(chk.Binding, opts)
+			c, err = validate.NewChecker(ctx, chk.Binding, opts)
 		}
 		if err != nil {
 			return j, err
@@ -575,7 +575,7 @@ func markComplete(steps []qtrace.Step, specs []string) ([]qtrace.Step, error) {
 // one (a bignumber.js object) from a record of fields s, e and c: the
 // binding's model, else -spec's -module. Without either, the read's error
 // stands (err, which names the fix).
-func (chk Check) readITFByTypes(path string, b *binding.Binding, a *itf.AmbiguousError, err error) (*input.File, *validate.SourceGuard, error) {
+func (chk Check) readITFByTypes(ctx context.Context, path string, b *binding.Binding, a *itf.AmbiguousError, err error) (*input.File, *validate.SourceGuard, error) {
 	spec, module := chk.Spec, chk.Module
 	if b != nil {
 		spec, module = b.SpecPath(), b.Module
@@ -587,9 +587,9 @@ func (chk Check) readITFByTypes(path string, b *binding.Binding, a *itf.Ambiguou
 	if captureErr != nil {
 		return nil, nil, captureErr
 	}
-	m, merr := binding.LoadModel(chk.Options.Quint, spec, module)
+	m, merr := binding.LoadModel(ctx, chk.Options.Quint, spec, module)
 	if merr != nil {
-		return nil, nil, fmt.Errorf("%s: %w (the model's types, which tell: %v)", path, a, merr)
+		return nil, nil, fmt.Errorf("%s: %w (the model's types, which tell: %w)", path, a, merr)
 	}
 	in, rerr := input.ReadITF(path, m.Schema())
 	if rerr != nil {

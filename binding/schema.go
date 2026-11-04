@@ -2,6 +2,7 @@ package binding
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -161,15 +162,19 @@ type TraceReader struct {
 	schema              *itf.Schema
 }
 
-// Read reads the trace at path.
-func (r *TraceReader) Read(path string) (*itf.Trace, error) {
+// Read reads the trace at path. If the trace requires the model's types, ctx
+// bounds its typecheck. A failed typecheck leaves the reader available to retry.
+func (r *TraceReader) Read(ctx context.Context, path string) (*itf.Trace, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	tr, err := itf.ReadFileWith(path, r.schema)
 	if _, ok := errors.AsType[*itf.AmbiguousError](err); !ok || r.schema != nil {
 		return tr, err
 	}
-	m, merr := LoadModel(r.Quint, r.Spec, r.Module)
+	m, merr := LoadModel(ctx, r.Quint, r.Spec, r.Module)
 	if merr != nil {
-		return nil, fmt.Errorf("%w (typechecking the model for its types: %v)", err, merr)
+		return nil, fmt.Errorf("%w (typechecking the model for its types: %w)", err, merr)
 	}
 	r.schema = m.Schema()
 	return itf.ReadFileWith(path, r.schema)

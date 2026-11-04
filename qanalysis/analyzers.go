@@ -13,6 +13,7 @@
 package qanalysis
 
 import (
+	"context"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -258,7 +259,8 @@ func loadBinding(path, quint string) (*binding.Binding, *binding.Model, error) {
 	}
 	l := &loaded{}
 	if l.b, l.err = binding.Load(abs); l.err == nil {
-		l.m, l.err = binding.LoadModel(quint, l.b.SpecPath(), l.b.Module)
+		// go/analysis supplies no caller context; this is the analysis lifecycle boundary.
+		l.m, l.err = binding.LoadModel(context.Background(), quint, l.b.SpecPath(), l.b.Module)
 	}
 	if l.err != nil {
 		l.err = fmt.Errorf("quintaction: -binding %s: %w", path, l.err)

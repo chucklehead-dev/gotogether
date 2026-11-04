@@ -16,7 +16,7 @@ import (
 func clockReceiptChecker(t *testing.T, file string) *Checker {
 	t.Helper()
 	skip.Quint(t)
-	c, err := NewChecker(file, Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), file, Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

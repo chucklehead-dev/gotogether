@@ -12,7 +12,7 @@ import (
 // has, and the args: fix, not text/template's "map has no entry for key".
 func TestMissingFieldMessage(t *testing.T) {
 	skip.Quint(t)
-	m, err := LoadModel("quint", "testdata/procarg.qnt", "procarg")
+	m, err := LoadModel(t.Context(), "quint", "testdata/procarg.qnt", "procarg")
 	if err != nil {
 		t.Fatal(err)
 	}

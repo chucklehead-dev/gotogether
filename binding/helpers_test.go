@@ -12,7 +12,7 @@ import (
 // and lint once offered sameY as a step to record).
 func TestModelHelpers(t *testing.T) {
 	skip.Quint(t)
-	m, err := LoadModel("quint", "testdata/helpers.qnt", "helpers")
+	m, err := LoadModel(t.Context(), "quint", "testdata/helpers.qnt", "helpers")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestModelHelpers(t *testing.T) {
 // dispatcher through them; never an action by itself, nor through step.
 func TestModelCalledBy(t *testing.T) {
 	skip.Quint(t)
-	m, err := LoadModel("quint", "testdata/parts.qnt", "parts")
+	m, err := LoadModel(t.Context(), "quint", "testdata/parts.qnt", "parts")
 	if err != nil {
 		t.Fatal(err)
 	}

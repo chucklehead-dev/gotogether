@@ -112,7 +112,7 @@ func (m *Map[K, V]) Once(k K, f func() V) V                 // kept whatever it 
 func (m *Map[K, V]) Do(k K, f func() (V, error)) (V, error) // an error is retried next call
 
 var models memo.Map[string, *binding.Model]
-return models.Do(key, func() (*binding.Model, error) { return binding.LoadModel(quint, spec, module) })
+return models.DoContext(ctx, key, func() (*binding.Model, error) { return binding.LoadModel(ctx, quint, spec, module) })
 ```
 
 Buys: no assertions, single-flight computation (callers for one key wait

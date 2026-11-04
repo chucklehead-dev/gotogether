@@ -97,7 +97,7 @@ func TestEvalModuleCompiles(t *testing.T) {
 			}
 			t.Run(strings.TrimPrefix(p, "../"), func(t *testing.T) {
 				t.Parallel()
-				m, err := models.Do(b.SpecPath()+"\x00"+b.Module, func() (*Model, error) { return LoadModel("", b.SpecPath(), b.Module) })
+				m, err := models.Do(b.SpecPath()+"\x00"+b.Module, func() (*Model, error) { return LoadModel(t.Context(), "", b.SpecPath(), b.Module) })
 				if err != nil {
 					t.Skipf("model: %v", err)
 				}

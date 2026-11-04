@@ -32,7 +32,7 @@ type absentRun struct {
 // must reach its order's check.
 func checkAbsent(t *testing.T, bind string, rows []absentRun, searches ...SearchOptions) []*Report {
 	t.Helper()
-	c, err := NewChecker(bind, Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), bind, Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,7 +388,7 @@ func TestWatermarkReachesSettle(t *testing.T) {
 func TestGapFailureWins(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/gapinv.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/gapinv.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -437,7 +437,7 @@ func TestGapFailureWins(t *testing.T) {
 func TestGapLinearizedOtherThread(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/funds.binding.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/funds.binding.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -470,7 +470,7 @@ func TestGapLinearizedOtherThread(t *testing.T) {
 func TestGapFailures(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/funds.binding.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/funds.binding.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -299,8 +299,12 @@ func (m *Model) ActionNames() []string {
 	return slices.Sorted(maps.Keys(m.Actions))
 }
 
-// LoadModel typechecks spec with the quint CLI and extracts module.
-func LoadModel(quint, spec, module string) (*Model, error) {
+// LoadModel typechecks spec with the quint CLI and extracts module. The caller's
+// context bounds both waiting for Quint admission and the typecheck subprocess.
+func LoadModel(ctx context.Context, quint, spec, module string) (*Model, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if quint == "" {
 		quint = "quint"
 	}
@@ -314,8 +318,11 @@ func LoadModel(quint, spec, module string) (*Model, error) {
 	}
 	tmp.Close()
 	defer os.Remove(tmp.Name())
-	cmd := quintcmd.Command(context.Background(), quint, filepath.Dir(spec), "typecheck", filepath.Base(spec), "--out", tmp.Name())
+	cmd := quintcmd.Command(ctx, quint, filepath.Dir(spec), "typecheck", filepath.Base(spec), "--out", tmp.Name())
 	if out, err := cmd.CombinedOutput(); err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("quint typecheck %s: %w", spec, ctx.Err())
+		}
 		// with --out, quint writes its errors there, not to its output: a
 		// refused model once said only "exit status 1"
 		out = append(out, typecheckErrors(tmp.Name())...)

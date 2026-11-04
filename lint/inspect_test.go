@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -37,7 +38,7 @@ func TestInspectionKeepsIndependentFindingsAfterSchemaFailure(t *testing.T) {
 import "github.com/chucklehead-dev/gotogether/qenv"
 func run() { go func() {}() }
 `)
-	r := Inspect(Options{Bindings: []string{bad}, Simulation: dir, Source: dir})
+	r := Inspect(t.Context(), Options{Bindings: []string{bad}, Simulation: dir, Source: dir})
 	if r.ExitCode() != 1 || r.Complete() {
 		t.Fatalf("schema failure should remain an incomplete authored finding, not operational error: %+v", r)
 	}
@@ -73,7 +74,7 @@ func TestInspectionMissingInputIsOperationalButOtherTargetsRun(t *testing.T) {
 	dir := t.TempDir()
 	missing := filepath.Join(dir, "missing.yaml")
 	lintFile(t, dir, "app.go", "package app\n")
-	r := Inspect(Options{Bindings: []string{missing}, Weave: dir})
+	r := Inspect(t.Context(), Options{Bindings: []string{missing}, Weave: dir})
 	if r.ExitCode() != 2 || r.Complete() {
 		t.Fatalf("missing file must be operational and incomplete: %+v", r)
 	}
@@ -93,7 +94,7 @@ import "github.com/chucklehead-dev/gotogether/qobs"
 func emit() { qobs.Record(nil, "flipit", nil) }
 `)
 	path := "../qtest/testdata/flip.yaml"
-	r := Inspect(Options{Bindings: []string{path}, Source: dir, Quint: missingTool})
+	r := Inspect(t.Context(), Options{Bindings: []string{path}, Source: dir, Quint: missingTool})
 	if r.ExitCode() != 2 || r.Complete() {
 		t.Fatalf("missing Quint must not look clean: %+v", r)
 	}
@@ -116,7 +117,7 @@ func emit() { qobs.Record(nil, "flipit", nil) }
 
 func TestInspectionSourceNeedsBindingAndNoTargetsIsInvalid(t *testing.T) {
 	for _, o := range []Options{{}, {Source: t.TempDir()}} {
-		r := Inspect(o)
+		r := Inspect(t.Context(), o)
 		if r.ExitCode() != 2 || r.Complete() {
 			t.Fatalf("invalid request looked successful: %+v", r)
 		}
@@ -126,7 +127,7 @@ func TestInspectionSourceNeedsBindingAndNoTargetsIsInvalid(t *testing.T) {
 func TestInspectionMalformedGoIsIncompleteAuthoredFinding(t *testing.T) {
 	dir := t.TempDir()
 	lintFile(t, dir, "bad.go", "package app\nfunc broken(\n")
-	r := Inspect(Options{Simulation: dir})
+	r := Inspect(t.Context(), Options{Simulation: dir})
 	if r.ExitCode() != 1 || r.Complete() {
 		t.Fatalf("syntax failure must block a complete scan without claiming unavailable tools: %+v", r)
 	}
@@ -136,7 +137,7 @@ func TestInspectionMalformedGoIsIncompleteAuthoredFinding(t *testing.T) {
 }
 
 func TestInspectionJSONUsesDerivedReadiness(t *testing.T) {
-	r := Inspect(Options{Simulation: t.TempDir()})
+	r := Inspect(t.Context(), Options{Simulation: t.TempDir()})
 	if !r.Complete() || r.ExitCode() != 0 {
 		t.Fatalf("empty valid scope: %+v", r)
 	}
@@ -170,7 +171,7 @@ import (
 )
 func run() { go func(){}(); _ = time.Now(); _ = rand.Int() }
 `)
-	r := Inspect(Options{Simulation: dir, Weave: dir})
+	r := Inspect(t.Context(), Options{Simulation: dir, Weave: dir})
 	codes := map[string]bool{}
 	for _, f := range r.Findings {
 		codes[f.Code] = true
@@ -188,7 +189,7 @@ func run() { go func(){}(); _ = time.Now(); _ = rand.Int() }
 func TestInspectionMissingModelIsOperational(t *testing.T) {
 	dir := t.TempDir()
 	path := lintFile(t, dir, "binding.yaml", "spec: missing.qnt\nmodule: missing\nactions:\n  act: {}\n")
-	r := Inspect(Options{Bindings: []string{path}})
+	r := Inspect(t.Context(), Options{Bindings: []string{path}})
 	if r.ExitCode() != 2 || r.Complete() {
 		t.Fatalf("missing model input should be operational: %+v", r)
 	}
@@ -207,7 +208,7 @@ func TestInspectionModelTypeFailureIsAuthoredNotToolFailure(t *testing.T) {
  }
 `)
 	path := lintFile(t, dir, "binding.yaml", "spec: bad.qnt\nmodule: bad\nactions:\n  act: {}\n")
-	r := Inspect(Options{Bindings: []string{path}, Simulation: dir})
+	r := Inspect(t.Context(), Options{Bindings: []string{path}, Simulation: dir})
 	if r.ExitCode() != 1 || r.Complete() {
 		t.Fatalf("authored Quint type error should block dependencies with exit1: %+v", r)
 	}
@@ -220,16 +221,31 @@ func TestInspectionModelTypeFailureIsAuthoredNotToolFailure(t *testing.T) {
 }
 
 func TestInspectionLimitsFollowRequestedSourceScope(t *testing.T) {
-	r := Inspect(Options{Source: t.TempDir()})
+	r := Inspect(t.Context(), Options{Source: t.TempDir()})
 	if r.Scope != "selected_static_checks" || len(r.Limits) != 3 {
 		t.Fatalf("source scope exclusions missing: %+v", r)
 	}
-	r = Inspect(Options{Simulation: t.TempDir()})
+	r = Inspect(t.Context(), Options{Simulation: t.TempDir()})
 	if len(r.Limits) != 2 {
 		t.Fatalf("simulation scope should not invent recording inventory claim: %+v", r.Limits)
 	}
-	r = Inspect(Options{Conversions: []string{"missing.yaml"}})
+	r = Inspect(t.Context(), Options{Conversions: []string{"missing.yaml"}})
 	if len(r.Limits) != 1 {
 		t.Fatalf("conversion scope should not imply Go syntax inspection: %+v", r.Limits)
+	}
+}
+
+func TestInspectionCancellationIsOperational(t *testing.T) {
+	dir := t.TempDir()
+	lintFile(t, dir, "m.qnt", "module m { var n: int action act = n' = n }")
+	path := lintFile(t, dir, "binding.yaml", "spec: m.qnt\nmodule: m\nactions:\n  act: {}\n")
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	r := Inspect(ctx, Options{Bindings: []string{path}, Quint: "missing-quint-must-not-be-launched"})
+	if r.ExitCode() != 2 || r.Complete() {
+		t.Fatalf("canceled inspection should be operational: %+v", r)
+	}
+	if c := lintCheck(t, r, "binding.model", path); !c.Operational || !strings.Contains(c.Reason, "context canceled") {
+		t.Fatalf("canceled model: %+v", c)
 	}
 }

@@ -51,7 +51,7 @@ module checkpoint {
 			}
 			for _, mode := range []string{"go", "quint", "shadow"} {
 				t.Run(mode, func(t *testing.T) {
-					c, err := NewChecker(bindingPath, Options{Dir: t.TempDir(), Eval: mode})
+					c, err := NewChecker(t.Context(), bindingPath, Options{Dir: t.TempDir(), Eval: mode})
 					if err != nil {
 						t.Fatal(err)
 					}

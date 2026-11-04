@@ -31,7 +31,7 @@ func op(action string, kv ...any) []any { return append([]any{action}, kv...) }
 func ledgerChecker(t *testing.T, file string) *Checker {
 	t.Helper()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/"+file, Options{Dir: t.TempDir(), NoITF: true})
+	c, err := NewChecker(t.Context(), "testdata/"+file, Options{Dir: t.TempDir(), NoITF: true})
 	if err != nil {
 		t.Fatal(err)
 	}

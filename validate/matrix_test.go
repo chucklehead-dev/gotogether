@@ -230,7 +230,7 @@ func TestVerdictMatrix(t *testing.T) {
 		}
 	}
 	for _, f := range features {
-		c, err := NewChecker(f.binding, Options{Dir: t.TempDir()})
+		c, err := NewChecker(t.Context(), f.binding, Options{Dir: t.TempDir()})
 		if err != nil {
 			t.Fatal(err)
 		}

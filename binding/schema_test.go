@@ -15,7 +15,7 @@ import (
 // (#bigint) reads; a Model made by hand has none, and refuses it.
 func TestSchemaReadsRustIntegers(t *testing.T) {
 	skip.Quint(t)
-	m, err := LoadModel("quint", "../itf/testdata/bignumber.qnt", "bignumber")
+	m, err := LoadModel(t.Context(), "quint", "../itf/testdata/bignumber.qnt", "bignumber")
 	if err != nil {
 		t.Fatal(err)
 	}

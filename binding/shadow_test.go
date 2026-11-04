@@ -12,7 +12,7 @@ import (
 // replayed as apply(4). The step's own number stays .step.seq.
 func TestArgumentNamedLikeAStepField(t *testing.T) {
 	skip.Quint(t)
-	m, err := LoadModel("quint", "testdata/seqarg.qnt", "seqarg")
+	m, err := LoadModel(t.Context(), "quint", "testdata/seqarg.qnt", "seqarg")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestArgumentNamedLikeAStepField(t *testing.T) {
 // (.args.process), not the actor's incarnation, which it once silently was.
 func TestParameterNamedProcess(t *testing.T) {
 	skip.Quint(t)
-	m, err := LoadModel("quint", "testdata/procarg.qnt", "procarg")
+	m, err := LoadModel(t.Context(), "quint", "testdata/procarg.qnt", "procarg")
 	if err != nil {
 		t.Fatal(err)
 	}

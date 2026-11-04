@@ -57,7 +57,7 @@ func TestLostSuffixOtherRecorder(t *testing.T) {
 		{"a lost withdrawal", lostA(acct("a", 1, 10, "deposit", 5, 5), settle),
 			"", "eventual vals not judged (funded): recorder a lost its tail after seq 1"},
 	}
-	c, err := NewChecker("testdata/funds.binding.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/funds.binding.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestLostSuffixOtherRecorder(t *testing.T) {
 func TestLostSuffixWithin(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/within.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/within.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +185,7 @@ func TestLostSuffixKey(t *testing.T) {
 func TestLostSuffixSettleBoundsNothing(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/funds.binding.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/funds.binding.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
