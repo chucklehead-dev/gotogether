@@ -23,7 +23,10 @@ func traces(t *testing.T) []string {
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not installed")
 	}
-	c := connect.Config{Spec: "../model/edgePublish.qnt", Main: "currentDesign", Dir: t.TempDir()}.FromEnv()
+	c, err := (connect.Config{Spec: "../model/edgePublish.qnt", Main: "currentDesign", Dir: t.TempDir()}).FromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if c.MaxSamples == 0 {
 		c.MaxSamples = 5
 	}

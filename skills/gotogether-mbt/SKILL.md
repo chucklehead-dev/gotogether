@@ -44,6 +44,7 @@ compared with the model's. The Go counterpart of quint-connect.
 | `an anonymous action was taken` | an inline `all {}` in `step` | name it (gotogether-model) |
 | `unknown nondet pick "x"` | the pick is named otherwise | rename the `nondet` after the parameter |
 | `the trace has no mbt::actionTaken` | a `quint test` trace | `connect.Run`, or `NondetPath` |
+| `QUINT_MAX_SAMPLES="many"` or another numeric configuration error | invalid selected environment value or explicit field; generation did not start | correct the named value; check the error from `Config.FromEnv()` |
 | a fault left in `Script.Remaining()` | the program could not follow its trace | where it stopped short |
 | `reproduce with QUINT_SEED=0x...` | the failing trace | rerun with it, `QUINT_VERBOSE=2` |
 

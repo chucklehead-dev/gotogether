@@ -8,6 +8,17 @@ and adds a line here.
 
 ## Unreleased
 
+- An installed-module LRU rehearsal drives the real cache from an independent
+  finite model. Sampled and forced traces pass; a frozen native trace rejects
+  a parent-planted Get-promotion defect in an isolated source copy. This is
+  bounded adoption evidence, not a discovered upstream defect.
+
+- `connect.Config.FromEnv` now returns `(Config, error)`. Invalid selected
+  numeric environment values, negative budgets and verbosity outside 0–2 fail
+  before trace generation or selected-directory changes. Explicit nonzero
+  fields still take precedence; zero budgets keep their defaults. Migrate
+  callers directly and check the error.
+
 - History-search receipts retain typed clock evidence, including effective
   bounds with zero edges, source, completed-step constraints and scoped
   conditional negative judgments. JSON and existing navigation/TUI receipt

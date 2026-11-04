@@ -104,6 +104,8 @@ jobs:
           PATH="$RUNNER_TEMP/read-adaptation-tools:$PATH" internal/adoptiontest/goo-read/reproduce.sh
           PATH="$RUNNER_TEMP/read-adaptation-tools:$PATH" internal/adoptiontest/goo-counted-values/reproduce.sh
           PATH="$RUNNER_TEMP/read-adaptation-tools:$PATH" internal/adoptiontest/goo-tail-membership/reproduce.sh
+          LRU_RUN_DIR="$RUNNER_TEMP/lru-mbt" internal/adoptiontest/lru-mbt/reproduce.sh
+          internal/adoptiontest/lru-mbt/contrast/reproduce.sh "$RUNNER_TEMP/lru-mbt"
       - name: simulation code stays in the simulation
         if: matrix.part == 'core'
         run: go run ./cmd/gotogether lint -sim .

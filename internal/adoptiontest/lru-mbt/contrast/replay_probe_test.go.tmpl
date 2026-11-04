@@ -1,0 +1,57 @@
+package lrumbt
+
+import (
+	"encoding/json"
+	"errors"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/chucklehead-dev/gotogether/connect"
+	"github.com/chucklehead-dev/gotogether/itf"
+)
+
+// This parent-authored probe replays the captured faithful model trace.
+// A compile, trace-read, driver, or comparison-type error is not a counterexample.
+func TestCapturedReplay(t *testing.T) {
+	trace, err := itf.ReadFile(os.Getenv("LRU_CAPTURED_TRACE"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = connect.Replay(trace, &cacheDriver{}, connect.ReplayOptions{StatePath: []string{"observed"}, NondetPath: []string{"last"}})
+	result := struct {
+		Verdict string   `json:"verdict"`
+		States  int      `json:"traceStates"`
+		Kind    string   `json:"kind,omitempty"`
+		Action  string   `json:"action,omitempty"`
+		Step    int      `json:"step,omitempty"`
+		Diff    []string `json:"diff,omitempty"`
+	}{Verdict: "pass", States: len(trace.States)}
+	switch os.Getenv("LRU_REPLAY_EXPECT") {
+	case "pass":
+		if err != nil {
+			t.Fatalf("faithful replay: %v", err)
+		}
+	case "state":
+		var mismatch *connect.StepError
+		if !errors.As(err, &mismatch) || mismatch.Kind != "state" || mismatch.Err != nil || mismatch.Step == nil || mismatch.Step.Action != "Get" || mismatch.Step.Index != 3 || len(mismatch.Diff) == 0 {
+			t.Fatalf("want a concrete Get recency mismatch at step 3, got %T: %v", err, err)
+		}
+		for _, difference := range mismatch.Diff {
+			if !strings.HasPrefix(difference, ".Keys[") {
+				t.Fatalf("unexpected difference for Get-promotion contrast: %s", difference)
+			}
+		}
+		result.Verdict, result.Kind, result.Action = "state_mismatch", mismatch.Kind, mismatch.Step.Action
+		result.Step, result.Diff = mismatch.Step.Index, mismatch.Diff
+	default:
+		t.Fatal("LRU_REPLAY_EXPECT must be pass or state")
+	}
+	b, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(os.Getenv("LRU_REPLAY_RESULT"), append(b, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}

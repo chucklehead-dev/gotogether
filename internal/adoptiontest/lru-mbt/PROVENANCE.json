@@ -1,0 +1,26 @@
+{
+  "purpose": "Agent-assisted installed-module model-based testing rehearsal",
+  "library": {
+    "module": "github.com/hashicorp/golang-lru/v2",
+    "version": "v2.0.7",
+    "commit": "d8515860cebc7b25ff2d29fada3f10a43611c28b",
+    "sum": "h1:a+bsQ5rvGLjzHuww6tVxozPZFVghXaHOwFs4luLUK2k="
+  },
+  "sdk": {
+    "module": "github.com/chucklehead-dev/gotogether",
+    "version": "v0.0.0-20261104015126-5fa07d7d103a",
+    "commit": "5fa07d7d103a731c66aff9d24565dcd4777c3144",
+    "sum": "h1:v6XVJ/suUniHc56r4/9x/jk3tU2W6c9W2mePp2r0x8s="
+  },
+  "model": {
+    "path": "model/lru.qnt",
+    "sha256": "b4f0e3aa4794675bc2d706c57290a55724b00277e935ea74abf930d77ace1410",
+    "author_scope": "Agreed public sequential contract; no implementation, native tests, observing driver or contrast read"
+  },
+  "claims": {
+    "independent_maintainer_adoption": false,
+    "exhaustive_verification": false,
+    "production_library_bug_found": false
+  },
+  "configuration_lesson": "Published SDK rejects malformed environment values before trace generation; independently probed through Config.FromEnv."
+}

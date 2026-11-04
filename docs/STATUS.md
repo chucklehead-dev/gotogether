@@ -7,7 +7,19 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Typed history clock evidence (current branch): linearization receipts retain
+Installed LRU MBT and configuration preflight (current branch): a consumer
+outside the workspace uses published SDK and simplelru modules, a separately
+authored finite model, and actual API observations. Sampled traces and five
+forced cases pass. A parent-planted Get-nonpromotion change in a disposable
+module copy produces a typed recency mismatch at Get step 3, with baseline and
+frozen files unchanged. Existing upstream coverage retains credit; this is
+agent-assisted installed-workflow evidence, not independent adoption or an
+upstream production defect. See internal/adoptiontest/lru-mbt/FRICTION.md.
+The rehearsal found a real SDK usability issue: malformed numeric environment
+values silently selected defaults. Config.FromEnv now returns (Config, error),
+validates budgets/verbosity before trace effects, and migrates callers directly.
+
+Typed history clock evidence (merged PR #57, 294d48d9): linearization receipts retain
 an effective bound and source even with zero clock edges. Actor/partition facts
 count imposed completed-step pairs, participating recorders and closest gap.
 Conclusive model failures are marked as checked under those assumptions; no
@@ -715,10 +727,18 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Non-SQL installed-module adoption trial | M | exercise MBT or request-log validation outside the checkout; fix a demonstrated blocker rather than adding another adapter |
+| 1 | Consolidate model-loading cancellation | M | source review found hidden background contexts in model loading, including post-generation trace-schema recovery; reproduce cancellation through the caller lifecycle, then thread ownership directly |
+| alongside | Further adoption-driven capability | M | the bounded LRU MBT trial now supplies installed non-SQL evidence; choose the next facet from independent usage or a new demonstrated blocker rather than adjacent fixtures |
 | deferred | I25: virtual physical-session capacity | M | native role-quota refusal/recovery is checked; nondeterministic pool callbacks and idle-session ownership still prevent a faithful virtual max_connections claim |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
+
+Use a tick, tock, consolidate cadence: general-purpose capabilities, focused
+feature or contract depth, then structural/usability/performance work selected
+from evidence. These are priorities rather than a fixed quota. The LRU rehearsal
+rotates to non-SQL MBT and its strict-config fix closes actual setup friction.
+Keep one current API/format; baseline pins preserve reproducible evidence, not
+legacy compatibility or a promise to support old consumer workflows.
 
 Balance general framework work with facet depth. Logical capacity, native
 PostgreSQL quotas and bounded COUNT(*) were consecutive storage slices.
@@ -729,8 +749,9 @@ that at the source, shared by checkout and installed guidance. The bounded
 clock example now makes existing assumptions concrete and exposes two output
 gaps. Shared receipts now retain clock assumptions; searched-history cursor
 navigation is a larger separate feature requiring adoption evidence. Rotate
-to a non-SQL consumer workflow. Further SQL syntax, virtual physical sessions
-and evaluator redesign need fresh adoption evidence.
+to observed consolidation work after the non-SQL consumer trial. Further SQL
+syntax, virtual physical sessions and evaluator redesign need fresh adoption
+evidence.
 
 The counted-values trial is now implemented in
 [internal/adoptiontest/goo-counted-values](../internal/adoptiontest/goo-counted-values/README.md).
