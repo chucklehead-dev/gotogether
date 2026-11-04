@@ -199,3 +199,10 @@ AGENTS.md has the general requirements.
   is separate from CPU regression budgets: instrumentation and waiting for
   shared Quint admission can cross Go's default 10-minute wall-time alarm
   while individual native checks keep progressing.
+
+
+When adding a CLI command, run `go test ./cmd/gotogether -run
+'TestUsage|TestCommandHelp|TestUnknownCommand'` as one shell command. The whole
+command overview has a separate compactness/discovery contract; checking only a
+new command's `-h` misses that regression. Keep the overview compact instead of
+raising its line budget when commands are added.

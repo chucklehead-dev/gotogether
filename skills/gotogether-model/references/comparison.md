@@ -19,3 +19,15 @@ model merely to remove a witness: decide whether the changed behavior belongs in
 the contract, then check the implementation against that decision.
 
 Full scope: https://github.com/chucklehead-dev/gotogether/blob/main/docs/model-comparison.md.
+
+Use `-out review` to keep confirmed native witness modules and hashed source
+copies alongside `report.json`. The destination must be fresh. Replay paths and
+`args` in each witness's typed `replay` object are relative to that directory:
+change into it and pass the argument vector to Quint. The artifact confirms only
+source admission; exporting does not strengthen target exclusion or equivalence.
+An unconfirmed candidate receives no replay artifact.
+
+The exact historical hello completion change is a scope control: adding `done`
+and occurrence claims leaves `applied,count` state sequences equivalent because
+an existing action already stuttered at completion. Retain those action/finish
+checks; do not treat state-language equivalence as approval of a changed contract.

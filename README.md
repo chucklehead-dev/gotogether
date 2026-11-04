@@ -178,7 +178,8 @@ testing, where Quint traces drive the implementation). It adds:
   to do (`possible`);
 - **model behavior comparison** (`gotogether model-diff`): compare two finite
   instances on explicit observed variables, with added/removed sequence witnesses,
-  native source replay and explicit inconclusive bounds ([scope](docs/model-comparison.md));
+  native source replay, portable confirmed-witness exports and explicit inconclusive
+  bounds ([scope](docs/model-comparison.md));
 - **property-based and state-machine testing with
   [Hegel](https://github.com/hegeldev/hegel-go)**, judged and shrunk by
   the model;

@@ -79,3 +79,23 @@ func TestComparisonDocumentPreservesUnknownAndPartialResults(t *testing.T) {
 		t.Fatalf("equivalence not projected: %+v", d)
 	}
 }
+
+func TestComparisonDocumentOwnsPortableReplay(t *testing.T) {
+	r := comparisonForDocument()
+	r.Artifacts = "/tmp/exported-comparison"
+	r.Added.Witness.Replay = &ComparisonReplay{Module: validate.File{Path: "added/replay.qnt", SHA256: "module-hash"},
+		Sources: []validate.File{{Path: "added/sources/model.qnt", SHA256: "source-hash"}},
+		Main:    "simulate", Run: "gtg_comparison_witness", Seed: "2",
+		Args: []string{"test", "added/replay.qnt", "--main", "simulate", "--match", "^gtg_comparison_witness$", "--seed", "2", "--max-samples", "1"}}
+	d := r.Doc()
+	got := d.Comparison.Added.Witness.Replay
+	if d.Artifacts != r.Artifacts || got == nil || got.Module.Path != "added/replay.qnt" || got.Sources[0].SHA256 != "source-hash" || got.Seed != "2" || len(got.Args) == 0 {
+		t.Fatalf("portable replay not projected: %+v", d)
+	}
+	r.Added.Witness.Replay.Module.Path = "changed"
+	r.Added.Witness.Replay.Sources[0].Path = "changed"
+	r.Added.Witness.Replay.Args[1] = "changed"
+	if got.Module.Path != "added/replay.qnt" || got.Sources[0].Path != "added/sources/model.qnt" || got.Args[1] != "added/replay.qnt" {
+		t.Fatal("portable replay report shares mutable native evidence")
+	}
+}

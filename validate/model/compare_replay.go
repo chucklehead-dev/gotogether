@@ -72,6 +72,11 @@ func ConfirmComparison(ctx context.Context, comparison *Comparison) error {
 			comparison.Status = "inconclusive"
 			return fmt.Errorf("model comparison %s source replay: %w", one.name, err)
 		}
+		if one.dir.Witness.Native == "confirmed" {
+			one.dir.Reason = "source admission natively confirmed; exclusion is the complete target graph result"
+		} else {
+			one.dir.Reason = "complete-graph difference lacks native source confirmation"
+		}
 		if err := verify(); err != nil {
 			comparison.Status = "inconclusive"
 			return err
@@ -109,6 +114,7 @@ func confirmBehavior(ctx context.Context, source *GraphResult, witness *Behavior
 		}
 	}
 	witness.Native, witness.NativeReason = "unconfirmed", ""
+	witness.confirmedSeed, witness.Replay = "", nil
 	witness.NativeAttempts, witness.NativeSeed = 0, ""
 	dir, err := os.MkdirTemp("", "gotogether-comparison-*")
 	if err != nil {
@@ -144,6 +150,7 @@ func confirmBehavior(ctx context.Context, source *GraphResult, witness *Behavior
 				return fmt.Errorf("quint returned success without confirming %s: %s", runName, out)
 			}
 			witness.Native, witness.NativeSeed = "confirmed", seed
+			witness.confirmedSeed = seed
 			witness.NativeReason = "native source execution matched every concrete state; target exclusion is the complete graph result"
 			return nil
 		}

@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Finite model-behavior comparison (current branch): `model-diff` compares two
+Portable comparison replays (current branch): confirmed source witnesses can
+be exported with their captured model bytes, hashes, exact argument vector and
+current report JSON. Fresh output ownership excludes other report writers;
+publication is atomic and refuses overwrite. Native relocation tests remove the
+original trees before replay. A real hello completion-contract change supplies
+a scope control: equal observed state sequences do not replace named-action or
+finish claims. See [the historical review](../internal/adoptiontest/model-review/README.md).
+
+Finite model-behavior comparison (merged PR #60, 1aafa1b4): `model-diff` compares two
 complete finite Go-evaluator graphs on explicit named variables, preserving
 every transition. Whole-prefix inclusion retains hidden-state nondeterminism;
 separate product and work bounds remain inconclusive. Typed report data separates
@@ -745,7 +753,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Validate the bounded comparison workflow on a real model change | M | the first I42 slice supplies finite prefix comparison; choose contract depth from actual model-review friction, with neither general refinement nor adjacent fixtures assumed |
+| 1 | Reassess the next cross-facet capability from adoption evidence | M | a real hello model review now exercises I42 and portable witness evidence; rotate away from comparison semantics unless new usage demonstrates a blocker |
 | alongside | Further adoption-driven capability | M | the bounded LRU MBT trial now supplies installed non-SQL evidence; choose the next facet from independent usage or a new demonstrated blocker rather than adjacent fixtures |
 | deferred | I25: virtual physical-session capacity | M | native role-quota refusal/recovery is checked; nondeterministic pool callbacks and idle-session ownership still prevent a faithful virtual max_connections claim |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |

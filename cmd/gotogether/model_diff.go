@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -26,12 +28,23 @@ func modelDiff(ctx context.Context, stdout io.Writer, args []string) (int, error
 	work := fs.Int("work", 1000000, "maximum target candidate operations in each directional trace-inclusion search")
 	depth := fs.Int("depth", 0, "maximum model-graph path depth (default: binding's simulate.search.depth, else unbounded)")
 	constants := fs.String("const", "", "constant expressions NAME=expr,... applied to both instances over each binding's configured constants")
+	out := fs.String("out", "", "export report.json and portable confirmed source replays into a fresh directory; cannot combine with -report or GOTOGETHER_REPORT_DIR")
 	quint := fs.String("quint", "quint", "Quint binary for model loading and source witness confirmation")
 	fs.Parse(args)
 	var text io.Writer = stdout
 	doc := validate.NewDocument("model-diff")
 	if err := reports.resolve(&text); err != nil {
+		if *out != "" {
+			return modelDiffExportError(reports, doc, stdout, err)
+		}
 		return reports.write(doc, stdout, 2, err)
+	}
+	// Export refusal must not flow through generic report writers: they may
+	// target the very evidence directory this preflight is protecting.
+	if *out != "" {
+		if err := modelDiffOutput(*out, reports); err != nil {
+			return modelDiffExportError(reports, doc, stdout, err)
+		}
 	}
 	fields, err := comparisonFields(*observe)
 	var constantValues []string
@@ -82,6 +95,9 @@ func modelDiff(ctx context.Context, stdout io.Writer, args []string) (int, error
 	if err == nil {
 		err = model.ConfirmComparison(ctx, comparison)
 	}
+	if err == nil && *out != "" {
+		err = model.ExportComparison(ctx, comparison, *out)
+	}
 	if comparison != nil {
 		doc = comparison.Doc()
 		doc.Comparison.Before.Binding = *before
@@ -98,8 +114,49 @@ func modelDiff(ctx context.Context, stdout io.Writer, args []string) (int, error
 			doc.Verdict = "no verdict"
 		}
 		writeModelComparison(text, doc.Comparison)
+		if doc.Artifacts != "" {
+			fmt.Fprintf(text, "  exported report and source replay artifacts: %s\n", filepath.Join(doc.Artifacts, "report.json"))
+		}
 	}
 	return reports.write(doc, stdout, code, err)
+}
+
+// modelDiffExportError reports preflight refusal without running any file writer.
+// In particular neither -report nor the environment report directory may mutate
+// a refused export destination while trying to describe that refusal.
+func modelDiffExportError(reports machineReports, doc *validate.Document, stdout io.Writer, err error) (int, error) {
+	doc.Exit, doc.Verdict, doc.Error = 2, "error", err.Error()
+	if reports.json {
+		if _, writeErr := stdout.Write(doc.JSON()); writeErr != nil {
+			return 2, writeErr
+		}
+	}
+	return 2, err
+}
+
+// modelDiffOutput refuses an existing destination before launching Quint and
+// prevents generic report writes from overwriting the owned export tree.
+func modelDiffOutput(dir string, reports machineReports) error {
+	root, err := filepath.Abs(dir)
+	if err != nil {
+		return fmt.Errorf("model-diff -out: %w", err)
+	}
+	if _, err := os.Lstat(root); err == nil {
+		return fmt.Errorf("model-diff -out %s already exists: choose a fresh directory", dir)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("model-diff -out %s: %w", dir, err)
+	}
+	// The export owns its report.json and every file under its root. Keeping
+	// generic file writers out of this workflow removes aliasing/collision paths
+	// entirely; -json remains available for stdout and standalone -report works
+	// when no export is requested.
+	if len(reports.files) != 0 {
+		return fmt.Errorf("model-diff: -out cannot be combined with -report; the export owns report.json (use -json for stdout)")
+	}
+	if os.Getenv("GOTOGETHER_REPORT_DIR") != "" {
+		return fmt.Errorf("model-diff: -out cannot be combined with GOTOGETHER_REPORT_DIR; the export owns report.json (use -json for stdout)")
+	}
+	return nil
 }
 
 // comparisonFields requires explicit observation ownership: empty or repeated
@@ -216,6 +273,9 @@ func writeModelComparison(out io.Writer, comparison *validate.DocComparison) {
 		fmt.Fprintln(out)
 		if witness := direction.data.Witness; witness != nil {
 			fmt.Fprintf(out, "    source native replay: %s; target exclusion: %s\n", witness.Native, witness.ExclusionBasis)
+			if witness.Replay != nil {
+				fmt.Fprintf(out, "    exported replay: %s (main=%s run=%s seed=%s)\n", witness.Replay.Module.Path, witness.Replay.Main, witness.Replay.Run, witness.Replay.Seed)
+			}
 			if witness.NativeReason != "" {
 				fmt.Fprintf(out, "    %s\n", witness.NativeReason)
 			}

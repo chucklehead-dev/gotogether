@@ -1,0 +1,21 @@
+# How the counter's recorded steps become calls of model/hello.qnt's
+# actions. Both take the step's id (the default), so only the observed
+# count needs saying.
+spec: model/hello.qnt
+module: hello
+
+constants:
+  REQUESTS: '1.to(3)'
+
+actions:
+  apply:
+    expect: 'count == {{.obs.count}}'
+  replay:
+    expect: 'count == {{.obs.count}}'
+
+invariants: [exactlyOnce]
+
+# The model on its own (gotogether simulate): which invariants the design
+# guarantees, which it allows to fail and the code must not.
+simulate:
+  holds: [exactlyOnce]
