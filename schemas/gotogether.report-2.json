@@ -1369,12 +1369,591 @@
       "type": "array"
     },
     "command": {
-      "description": "\"validate\", \"simulate\"",
+      "description": "\"validate\", \"simulate\", \"model-diff\"",
       "enum": [
         "validate",
-        "simulate"
+        "simulate",
+        "model-diff"
       ],
       "type": "string"
+    },
+    "comparison": {
+      "additionalProperties": false,
+      "description": "Comparison is finite model-behavior comparison, absent for validation and simulation.",
+      "properties": {
+        "added": {
+          "additionalProperties": false,
+          "description": "Added is behavior admitted after but not before; Removed is the reverse.",
+          "properties": {
+            "cut": {
+              "type": "string"
+            },
+            "explored": {
+              "description": "Explored counts the product nodes examined, not observations or model states.",
+              "type": "integer"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "status": {
+              "enum": [
+                "included",
+                "witness",
+                "bounded",
+                "inconclusive"
+              ],
+              "type": "string"
+            },
+            "witness": {
+              "additionalProperties": false,
+              "properties": {
+                "exclusionBasis": {
+                  "enum": [
+                    "complete_target_graph"
+                  ],
+                  "type": "string"
+                },
+                "native": {
+                  "description": "Native is not_run, confirmed or unconfirmed, independently of ExclusionBasis.",
+                  "enum": [
+                    "not_run",
+                    "confirmed",
+                    "unconfirmed"
+                  ],
+                  "type": "string"
+                },
+                "nativeAttempts": {
+                  "description": "NativeAttempts counts source replay samples, NativeSeed the confirming seed.",
+                  "type": "integer"
+                },
+                "nativeReason": {
+                  "type": "string"
+                },
+                "nativeSeed": {
+                  "type": "string"
+                },
+                "observed": {
+                  "description": "Observed is the exact projected state sequence as named Quint literals.",
+                  "items": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  "type": "array"
+                },
+                "source": {
+                  "additionalProperties": false,
+                  "description": "Source is the concrete source-model path, including full states and choices.",
+                  "properties": {
+                    "replay": {
+                      "type": "string"
+                    },
+                    "sampled": {
+                      "description": "Sampled lists transitions whose original call has multiple successors.",
+                      "items": {
+                        "type": "integer"
+                      },
+                      "type": "array"
+                    },
+                    "steps": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "call": {
+                            "type": "string"
+                          },
+                          "picks": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "type": "array"
+                          },
+                          "state": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "call",
+                          "state"
+                        ],
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "steps",
+                    "replay"
+                  ],
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "observed",
+                "native",
+                "nativeAttempts",
+                "exclusionBasis"
+              ],
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "work": {
+              "description": "Work counts target candidates examined; Cut names a reached pairs or work cap.",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "status",
+            "explored",
+            "work"
+          ],
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "after": {
+          "additionalProperties": false,
+          "properties": {
+            "binding": {
+              "type": "string"
+            },
+            "bound": {
+              "additionalProperties": false,
+              "properties": {
+                "depth": {
+                  "type": "integer"
+                },
+                "states": {
+                  "type": "integer"
+                }
+              },
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "complete": {
+              "type": "boolean"
+            },
+            "constants": {
+              "description": "Constants are the effective configured Quint expressions for the compared finite instance, not a claim that arbitrary expressions were reduced.",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "type": "array"
+            },
+            "cut": {
+              "type": "string"
+            },
+            "depth": {
+              "type": "integer"
+            },
+            "module": {
+              "type": "string"
+            },
+            "spec": {
+              "type": "string"
+            },
+            "starts": {
+              "type": "integer"
+            },
+            "states": {
+              "type": "integer"
+            },
+            "stopped": {
+              "type": "string"
+            },
+            "transitions": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "complete",
+            "states",
+            "starts",
+            "transitions",
+            "depth",
+            "bound"
+          ],
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "basis": {
+          "description": "Basis identifies the complete Go graph/product analysis, not native equivalence proof.",
+          "enum": [
+            "complete_go_graph_product"
+          ],
+          "type": "string"
+        },
+        "before": {
+          "additionalProperties": false,
+          "properties": {
+            "binding": {
+              "type": "string"
+            },
+            "bound": {
+              "additionalProperties": false,
+              "properties": {
+                "depth": {
+                  "type": "integer"
+                },
+                "states": {
+                  "type": "integer"
+                }
+              },
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "complete": {
+              "type": "boolean"
+            },
+            "constants": {
+              "description": "Constants are the effective configured Quint expressions for the compared finite instance, not a claim that arbitrary expressions were reduced.",
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "type": "array"
+            },
+            "cut": {
+              "type": "string"
+            },
+            "depth": {
+              "type": "integer"
+            },
+            "module": {
+              "type": "string"
+            },
+            "spec": {
+              "type": "string"
+            },
+            "starts": {
+              "type": "integer"
+            },
+            "states": {
+              "type": "integer"
+            },
+            "stopped": {
+              "type": "string"
+            },
+            "transitions": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "complete",
+            "states",
+            "starts",
+            "transitions",
+            "depth",
+            "bound"
+          ],
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "observe": {
+          "description": "Observe names the model variables retained at every state, including init.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pairLimit": {
+          "description": "PairLimit bounds each directional product search, not model exploration.",
+          "type": "integer"
+        },
+        "removed": {
+          "additionalProperties": false,
+          "properties": {
+            "cut": {
+              "type": "string"
+            },
+            "explored": {
+              "description": "Explored counts the product nodes examined, not observations or model states.",
+              "type": "integer"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "status": {
+              "enum": [
+                "included",
+                "witness",
+                "bounded",
+                "inconclusive"
+              ],
+              "type": "string"
+            },
+            "witness": {
+              "additionalProperties": false,
+              "properties": {
+                "exclusionBasis": {
+                  "enum": [
+                    "complete_target_graph"
+                  ],
+                  "type": "string"
+                },
+                "native": {
+                  "description": "Native is not_run, confirmed or unconfirmed, independently of ExclusionBasis.",
+                  "enum": [
+                    "not_run",
+                    "confirmed",
+                    "unconfirmed"
+                  ],
+                  "type": "string"
+                },
+                "nativeAttempts": {
+                  "description": "NativeAttempts counts source replay samples, NativeSeed the confirming seed.",
+                  "type": "integer"
+                },
+                "nativeReason": {
+                  "type": "string"
+                },
+                "nativeSeed": {
+                  "type": "string"
+                },
+                "observed": {
+                  "description": "Observed is the exact projected state sequence as named Quint literals.",
+                  "items": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  "type": "array"
+                },
+                "source": {
+                  "additionalProperties": false,
+                  "description": "Source is the concrete source-model path, including full states and choices.",
+                  "properties": {
+                    "replay": {
+                      "type": "string"
+                    },
+                    "sampled": {
+                      "description": "Sampled lists transitions whose original call has multiple successors.",
+                      "items": {
+                        "type": "integer"
+                      },
+                      "type": "array"
+                    },
+                    "steps": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "call": {
+                            "type": "string"
+                          },
+                          "picks": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "type": "array"
+                          },
+                          "state": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "call",
+                          "state"
+                        ],
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "steps",
+                    "replay"
+                  ],
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "observed",
+                "native",
+                "nativeAttempts",
+                "exclusionBasis"
+              ],
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "work": {
+              "description": "Work counts target candidates examined; Cut names a reached pairs or work cap.",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "status",
+            "explored",
+            "work"
+          ],
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "scope": {
+          "enum": [
+            "finite_observation_traces"
+          ],
+          "type": "string"
+        },
+        "status": {
+          "description": "Status is equivalent, different or inconclusive. Equivalent applies only to the explicit instances and observation projection.",
+          "enum": [
+            "equivalent",
+            "different",
+            "inconclusive"
+          ],
+          "type": "string"
+        },
+        "workLimit": {
+          "description": "WorkLimit bounds target initial-state and successor candidates examined per direction.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "scope",
+        "basis",
+        "status",
+        "observe",
+        "pairLimit",
+        "workLimit",
+        "before",
+        "after",
+        "added",
+        "removed"
+      ],
+      "type": [
+        "object",
+        "null"
+      ]
     },
     "error": {
       "type": "string"

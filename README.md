@@ -176,6 +176,9 @@ testing, where Quint traces drive the implementation). It adds:
   Quint run; deadlocks; actions never enabled; each eventual val's fair
   cycles, a lasso that keeps it false forever), and what it must be able
   to do (`possible`);
+- **model behavior comparison** (`gotogether model-diff`): compare two finite
+  instances on explicit observed variables, with added/removed sequence witnesses,
+  native source replay and explicit inconclusive bounds ([scope](docs/model-comparison.md));
 - **property-based and state-machine testing with
   [Hegel](https://github.com/hegeldev/hegel-go)**, judged and shrunk by
   the model;

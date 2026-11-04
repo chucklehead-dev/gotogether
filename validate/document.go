@@ -34,6 +34,8 @@ const ReportFormat = "gotogether.report/2"
 // -json): gotogether.report/2. A field added later is optional; a field
 // changed or removed is a new major.
 type Document struct {
+	// Comparison is finite model-behavior comparison, absent for validation and simulation.
+	Comparison *DocComparison `json:"comparison,omitempty"`
 	// SkipReason identifies an intentionally unperformed model check.
 	SkipReason string `json:"skipReason,omitempty"`
 	// Graph is the native model-state exploration scope; absent for sampling or history validation.
@@ -41,7 +43,7 @@ type Document struct {
 	// Receipt describes the history judgment, including folded partitions.
 	Receipt *receipt.Summary `json:"receipt,omitempty"`
 	Format  string           `json:"format"`  // ReportFormat
-	Command string           `json:"command"` // "validate", "simulate"
+	Command string           `json:"command"` // "validate", "simulate", "model-diff"
 	// Verdict is "pass", "fail", "no verdict" (every failure has none:
 	// lost or dropped steps, a search's budget) or "error" (the tool
 	// failed: Error says how); Exit the command's exit status.
@@ -595,6 +597,22 @@ func (d *Document) JUnit() []byte {
 		}
 		add(jc)
 	}
+	if comparison := d.Comparison; comparison != nil {
+		for _, direction := range []struct {
+			name  string
+			value DocComparisonDirection
+		}{{"added", comparison.Added}, {"removed", comparison.Removed}} {
+			jc := junitCase{Name: direction.name, ClassName: "model-diff"}
+			detail := comparisonDetail(direction.name, direction.value)
+			switch {
+			case comparisonConfirmed(direction.value):
+				jc.Failure = &junitMsg{Message: firstLine(detail), Type: "model-behavior-difference", Body: detail}
+			case direction.value.Status != "included":
+				jc.Skipped = &junitMsg{Message: "no verdict: " + firstLine(detail), Body: detail}
+			}
+			add(jc)
+		}
+	}
 	if d.Error != "" {
 		s.Errors++
 	}
@@ -638,14 +656,16 @@ func (d *Document) SARIF() []byte {
 		ShortDescription message `json:"shortDescription"`
 	}
 	rules := map[string]string{
-		"rejects":     "a recorded step the model cannot take from the state reached",
-		"mismatch":    "the state after a recorded step differs from what it observed",
-		"violates":    "an invariant of the model is false after a recorded step",
-		"within":      "a bounded response not met in time",
-		"error":       "quint could not evaluate a step",
-		"no-verdict":  "a failure that may depend on lost or dropped steps: no verdict",
-		"simulate":    "the model on its own does not show what its binding says",
-		"tool-failed": "the command could not judge the run",
+		"rejects":                 "a recorded step the model cannot take from the state reached",
+		"mismatch":                "the state after a recorded step differs from what it observed",
+		"violates":                "an invariant of the model is false after a recorded step",
+		"within":                  "a bounded response not met in time",
+		"error":                   "quint could not evaluate a step",
+		"no-verdict":              "a failure that may depend on lost or dropped steps: no verdict",
+		"simulate":                "the model on its own does not show what its binding says",
+		"model-diff":              "a native-confirmed source behavior is absent from the complete target graph",
+		"model-diff-inconclusive": "finite model behavior comparison could not establish inclusion or confirm a difference",
+		"tool-failed":             "the command could not judge the run",
 	}
 	at := func(uri string, line int) []location {
 		if uri == "" {
@@ -692,6 +712,22 @@ func (d *Document) SARIF() []byte {
 	for _, c := range d.Checks {
 		if c.Verdict == "fail" {
 			results = append(results, result{RuleID: "simulate", Level: "error", Message: message{Text: c.Name + ": " + c.Detail}, Locations: at(d.Binding, 0)})
+		}
+	}
+	if comparison := d.Comparison; comparison != nil {
+		for _, direction := range []struct {
+			name, binding string
+			value         DocComparisonDirection
+		}{{"added", comparison.After.Binding, comparison.Added}, {"removed", comparison.Before.Binding, comparison.Removed}} {
+			if direction.value.Status == "included" {
+				continue
+			}
+			id, level := "model-diff-inconclusive", "warning"
+			if comparisonConfirmed(direction.value) {
+				id, level = "model-diff", "error"
+			}
+			results = append(results, result{RuleID: id, Level: level, Message: message{Text: comparisonDetail(direction.name, direction.value)}, Locations: at(direction.binding, 0),
+				Props: map[string]any{"direction": direction.name, "scope": comparison.Scope, "basis": comparison.Basis, "observe": comparison.Observe, "pairLimit": comparison.PairLimit, "workLimit": comparison.WorkLimit, "evidence": direction.value}})
 		}
 	}
 	if d.Error != "" {

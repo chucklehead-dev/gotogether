@@ -1,0 +1,9 @@
+spec: constants.qnt
+module: constants
+constants:
+  LIMIT: "1"
+actions:
+  advance: {}
+simulate:
+  constants:
+    LIMIT: "2"

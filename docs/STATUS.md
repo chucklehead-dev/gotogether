@@ -7,7 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Model-loading cancellation (current branch): binding loading and automatic trace
+Finite model-behavior comparison (current branch): `model-diff` compares two
+complete finite Go-evaluator graphs on explicit named variables, preserving
+every transition. Whole-prefix inclusion retains hidden-state nondeterminism;
+separate product and work bounds remain inconclusive. Typed report data separates
+source-native replay from complete-target-graph exclusion. A finite non-storage
+handshake checks early acknowledgments, tightened behavior and hidden updates.
+See [scope and evidence](model-comparison.md). No general refinement, stutter
+abstraction or native exhaustive equivalence is claimed.
+
+Model-loading cancellation (merged PR #59, d13a6cb0): binding loading and automatic trace
 schema recovery take a caller context, as do checker construction and lint
 inspection. Cache waiters can cancel independently; a live waiter retries after
 an owner's canceled load. Subprocess and cache-lock waits use the same lifecycle.
@@ -736,7 +745,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Scope I42: finite model-behavior comparison | M | next general-framework candidate: projected added/removed behavior with native-replayed witnesses and explicit unsupported/incomplete outcomes; recent model/source contrasts motivate review tooling, not a discovered product defect |
+| 1 | Validate the bounded comparison workflow on a real model change | M | the first I42 slice supplies finite prefix comparison; choose contract depth from actual model-review friction, with neither general refinement nor adjacent fixtures assumed |
 | alongside | Further adoption-driven capability | M | the bounded LRU MBT trial now supplies installed non-SQL evidence; choose the next facet from independent usage or a new demonstrated blocker rather than adjacent fixtures |
 | deferred | I25: virtual physical-session capacity | M | native role-quota refusal/recovery is checked; nondeterministic pool callbacks and idle-session ownership still prevent a faithful virtual max_connections claim |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
