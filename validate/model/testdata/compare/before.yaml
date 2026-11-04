@@ -1,0 +1,6 @@
+spec: before.qnt
+module: before
+actions:
+  send: {}
+  retry: {}
+  ack: {}

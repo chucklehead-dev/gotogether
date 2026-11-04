@@ -57,3 +57,5 @@ judges Hegel's runs (`qhegel`), and it replays recorded runs
 Do not decide by reading the spec what it allows: run `gotogether
 simulate`, and walk states with `gotogether nav -binding m.binding.yaml
 -json` (`-follow` takes branches).
+
+When reviewing a model change or mutant, read [references/comparison.md](references/comparison.md) for finite behavior comparison and its evidence limits.

@@ -64,7 +64,7 @@ func main() {
 		usage()
 	}
 	ctx := context.Background()
-	if os.Args[1] == "scaffold" || os.Args[1] == "steps" || os.Args[1] == "lint" || os.Args[1] == "validate" {
+	if os.Args[1] == "scaffold" || os.Args[1] == "steps" || os.Args[1] == "lint" || os.Args[1] == "validate" || os.Args[1] == "model-diff" {
 		var stop context.CancelFunc
 		ctx, stop = signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 		defer stop()
@@ -92,6 +92,8 @@ func main() {
 		err = runSkills(os.Args[2:])
 	case "cover":
 		err = runCover(os.Args[2:])
+	case "model-diff":
+		code, err = modelDiff(ctx, os.Stdout, os.Args[2:])
 	case "simulate":
 		code, err = simulate(os.Args[2:])
 	case "evidence":
@@ -127,10 +129,7 @@ func usage() {
 }
 
 func usageTo(w io.Writer) {
-	fmt.Fprint(w, `gotogether checks Go code against a Quint model. A new HTTP service: init, below; code you have:
-  gotogether scaffold -spec model.qnt -module M -invariants safe -out m.binding.yaml    (choose property names; set constants)
-  gotogether lint -binding m.binding.yaml && gotogether simulate -binding m.binding.yaml
-  gotogether scaffold -system -binding m.binding.yaml -out system_test.go    (-http: an HTTP service on qenv/qhttp)
+	fmt.Fprint(w, `gotogether checks Go code against a Quint model.
 grist generates a model and bindings: go run github.com/chucklehead-dev/gotogether/grist/cmd/grist@latest new <name> (docs/grist.md)
 commands (gotogether <command> -h: what it does, an example, every flag):
 `)

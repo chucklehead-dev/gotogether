@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- `model-diff` compares complete finite model instances on an explicit observed
+  projection, using whole-prefix trace inclusion. Typed report data retains
+  added/removed witnesses, graph and product bounds, and separate native source
+  admission evidence. Unsupported or incomplete work remains inconclusive.
+
 - Model loading, trace-schema recovery, checker construction and lint inspection
   now require a caller context. Cancellation stops queued or running typechecks,
   remains detectable with `errors.Is`, and does not poison later cache callers.

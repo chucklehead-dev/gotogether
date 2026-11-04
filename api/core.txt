@@ -2479,6 +2479,53 @@ type DocCheck struct
     field Kind string `json:"kind"`
     field Verdict string `json:"verdict"`
     field Detail string `json:"detail,omitempty"`
+type DocComparison struct
+    field Scope string `json:"scope"`
+    field Basis string `json:"basis"`
+    field Status string `json:"status"`
+    field Observe []string `json:"observe"`
+    field PairLimit int `json:"pairLimit"`
+    field WorkLimit int `json:"workLimit"`
+    field Before DocComparisonGraph `json:"before"`
+    field After DocComparisonGraph `json:"after"`
+    field Added DocComparisonDirection `json:"added"`
+    field Removed DocComparisonDirection `json:"removed"`
+type DocComparisonDirection struct
+    field Status string `json:"status"`
+    field Reason string `json:"reason,omitempty"`
+    field Explored int `json:"explored"`
+    field Work int `json:"work"`
+    field Cut string `json:"cut,omitempty"`
+    field Witness *DocComparisonWitness `json:"witness,omitempty"`
+type DocComparisonGraph struct
+    field Binding string `json:"binding,omitempty"`
+    field Spec string `json:"spec,omitempty"`
+    field Module string `json:"module,omitempty"`
+    field Constants []NamedValue `json:"constants,omitempty"`
+    field Complete bool `json:"complete"`
+    field Cut string `json:"cut,omitempty"`
+    field Stopped string `json:"stopped,omitempty"`
+    field States int `json:"states"`
+    field Starts int `json:"starts"`
+    field Transitions int `json:"transitions"`
+    field Depth int `json:"depth"`
+    field Bound DocGraphBound `json:"bound"`
+type DocComparisonPath struct
+    field Steps []DocComparisonStep `json:"steps"`
+    field Replay string `json:"replay"`
+    field Sampled []int `json:"sampled,omitempty"`
+type DocComparisonStep struct
+    field Call string `json:"call"`
+    field Picks []NamedValue `json:"picks,omitempty"`
+    field State []NamedValue `json:"state"`
+type DocComparisonWitness struct
+    field Observed [][]NamedValue `json:"observed"`
+    field Source *DocComparisonPath `json:"source,omitempty"`
+    field Native string `json:"native"`
+    field NativeReason string `json:"nativeReason,omitempty"`
+    field NativeAttempts int `json:"nativeAttempts"`
+    field NativeSeed string `json:"nativeSeed,omitempty"`
+    field ExclusionBasis string `json:"exclusionBasis"`
 type DocFailure struct
     field Check string `json:"check"`
     field Kind string `json:"kind"`
@@ -2579,6 +2626,7 @@ type DocRecord struct
     field SpanID string `json:"spanId,omitempty"`
     field Text string `json:"text"`
 type Document struct
+    field Comparison *DocComparison `json:"comparison,omitempty"`
     field SkipReason string `json:"skipReason,omitempty"`
     field Graph *DocGraph `json:"graph,omitempty"`
     field Receipt *receipt.Summary `json:"receipt,omitempty"`
@@ -2991,7 +3039,10 @@ type Result struct
     method (Result) String() string
 
 == github.com/chucklehead-dev/gotogether/validate/model
+const ComparisonReplayAttempts = 8
 const DefaultSearchStates = 100000
+func Compare(ctx context.Context, before, after *GraphResult, opt CompareOptions) (*Comparison, error)
+func ConfirmComparison(ctx context.Context, comparison *Comparison) error
 func For(c *validate.Checker) *Analyzer
 func New(bindingPath string, opt validate.Options) (*Analyzer, error)
 func Simulate(bindingPath string, opt SimulateOptions) (*Report, error)
@@ -3005,6 +3056,20 @@ type Analyzer struct
     method (*Analyzer) Graph(cfg GraphSearch) (*GraphResult, error)
     method (*Analyzer) Possible(ps []binding.Possible, cfg PossibleSearch) ([]PossibleResult, error)
     method (*Analyzer) Simulate(opt SimulateOptions) (*Report, error)
+type BehaviorInclusion struct
+    field Status string
+    field Reason string
+    field Explored int
+    field Work int
+    field Cut string
+    field Witness *BehaviorWitness
+type BehaviorWitness struct
+    field Observed [][]validate.NamedValue
+    field Source *Counterexample
+    field Native string
+    field NativeReason string
+    field NativeAttempts int
+    field NativeSeed string
 type Bound struct
     field Kind string
     field States int
@@ -3014,6 +3079,34 @@ type Bound struct
     field Stopped string
     method (Bound) Proves() bool
     method (Bound) String() string
+type CompareOptions struct
+    field Observe []string
+    field Pairs int
+    field Work int
+type Comparison struct
+    field Status string
+    field Basis string
+    field Observe []string
+    field PairLimit int
+    field WorkLimit int
+    field Before ComparisonGraph
+    field After ComparisonGraph
+    field Added BehaviorInclusion
+    field Removed BehaviorInclusion
+    method (*Comparison) Doc() *validate.Document
+type ComparisonGraph struct
+    field Binding string
+    field Spec string
+    field Module string
+    field Constants []validate.NamedValue
+    field Complete bool
+    field Cut string
+    field Stopped string
+    field States int
+    field Starts int
+    field Transitions int
+    field Depth int
+    field Bound GraphBound
 type Counterexample struct
     field Steps []GraphStep
     field Replay string

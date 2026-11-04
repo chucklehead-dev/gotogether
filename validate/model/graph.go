@@ -93,9 +93,11 @@ type GraphResult struct {
 
 	// graph is the explored graph, for what builds on it; e the
 	// evaluator that explored it
-	graph *qeval.Graph
-	e     *evalshare.Eval
-	keys  map[string]bool // its states' keys, made by Lacks
+	graph         *qeval.Graph
+	e             *evalshare.Eval
+	keys          map[string]bool // its states' keys, made by Lacks
+	checker       *modelChecker   // resolved instance, for comparison witness confirmation
+	sourceChecker *modelChecker   // original source guard, before instance overrides
 }
 
 // Lacks is the first state of tr, a trace quint sampled of the same
@@ -298,7 +300,7 @@ func (c *modelChecker) Graph(cfg GraphSearch) (*GraphResult, error) {
 	}
 	g, err := e.Model.Explore(consts, e.Module.Init, step, bound, label)
 	r := &GraphResult{States: len(g.States), Starts: g.Starts, Transitions: g.Edges(), Complete: g.Complete, Cut: g.Cut,
-		Bound: GraphBound{bound.States, bound.Depth}, graph: g, e: e}
+		Bound: GraphBound{bound.States, bound.Depth}, graph: g, e: e, checker: cc, sourceChecker: c}
 	if err != nil {
 		var u *qeval.Unsupported
 		var ee *qeval.EvalError

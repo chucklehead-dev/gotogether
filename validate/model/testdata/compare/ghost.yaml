@@ -1,0 +1,6 @@
+spec: ghost.qnt
+module: ghost
+actions:
+  send: {}
+  retry: {}
+  ack: {}

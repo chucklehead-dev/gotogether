@@ -6530,3 +6530,38 @@ and synchronizes on observed session state rather than performance thresholds.
 Its administrator needs role/schema creation and session-statistics visibility;
 cleanup uses a fresh context after the test context ends. No runtime dependency,
 wire format or simulated SQLSTATE is added.
+
+## 93. Finite model changes compare whole observed prefixes
+
+I42 starts with two explicit finite instances and a required shared variable
+projection (`model-diff`, validate/model.Compare), rather than implicit all-state
+comparison or general refinement mappings. Every transition contributes an
+observation, including stutters. Hidden state updated alongside an existing
+transition can disappear under projection; a new hidden-only transition cannot.
+Action names, fairness and infinite-run properties are outside this language.
+
+Projected edge sets are insufficient when hidden state is nondeterministic. The
+inclusion search retains a concrete source state and the set of all target states
+compatible with the entire observation prefix. BFS yields a shortest source path
+when that set becomes empty. The product's parent chain is essential: replacing
+it with the ordinary graph's shortest path can erase the distinguishing prefix
+when the same source state recurs with a different target set. Both directional
+inclusions close before equivalence is reported. Both input graphs must be
+complete supported graphs; graph truncation and product/resource bounds retain
+explicit inconclusive data. Canonical typed value keys define observation
+equality; display strings do not.
+
+Native replay confirms source admission, with original init and step and every
+full state asserted. Bounded seeded attempts can miss a nondeterministic path;
+that remains unconfirmed, never evidence of target rejection. Exclusion rests on
+the complete target Go graph/product, recorded separately from native evidence.
+Raw graph witnesses remain inconclusive until a source witness is confirmed.
+Equality is for these instances under the Go evaluator, not a claim that Quint
+exhaustively established equivalence. Source guards detect persistent changes
+between loading and replay; they do not provide an atomic filesystem snapshot.
+
+The current report document carries typed comparison scope, basis, instances,
+projection, directional search extent and witness evidence. Text and other
+supported renderings project those facts. No alternate compatibility format or
+new comparison-specific wire protocol is introduced. See
+[the user-facing scope](model-comparison.md).

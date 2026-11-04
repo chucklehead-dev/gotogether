@@ -17,7 +17,7 @@ type command struct{ purpose, example, short string }
 
 // helpOrder is the order gotogether help lists the commands in: a
 // newcomer's first ones first. Read-only.
-var helpOrder = []string{"init", "scaffold", "lint", "simulate", "validate", "bundle", "nav", "evidence", "steps", "shrink", "itf", "convert", "cover", "compile", "skills", "doctor"}
+var helpOrder = []string{"init", "scaffold", "lint", "simulate", "model-diff", "validate", "bundle", "nav", "evidence", "steps", "shrink", "itf", "convert", "cover", "compile", "skills", "doctor"}
 
 var commands = map[string]command{
 	"init": {"write a new project, green as written: a synchronous library with observed-call tests, or an HTTP service (its handler recording each step, a client that retries a refused connection), its model and binding, a test in a simulation on qenv/qhttp (the server's process before the client), one over a real socket through qobshttp, and a mutant the tests catch",
@@ -29,6 +29,9 @@ var commands = map[string]command{
 	"simulate": {"run the model alone with the binding's invariants: which it guarantees (simulate.holds), which it lets fail (simulate.allows), and what it must be able to do (simulate.possible)",
 		"gotogether simulate -binding stock.binding.yaml -graph\n  gotogether simulate -binding stock.binding.yaml   (sampled by quint, for a model too big to enumerate)",
 		"what does the model alone allow? invariants held or broken, scenarios possible; -graph: every reachable state, a proof for a small model"},
+	"model-diff": {"compare two complete finite model graphs on explicit observed variables: added or removed state sequences, preserving every transition; native source replay confirms witnesses, complete target graphs establish exclusion (no stutter hiding, fairness or general refinement claim)",
+		"gotogether model-diff -before old.binding.yaml -after new.binding.yaml -observe phase,attempts -json",
+		"what observed behavior did a model change add or remove? shortest witnessed state sequences for finite instances"},
 	"evidence": {"sum up a suite's explorations (written under GOTOGETHER_EVIDENCE): each test's verdicts, and what no test tried",
 		"GOTOGETHER_EVIDENCE=ev go test ./... && gotogether evidence ev",
 		"what did a suite's explorations try, and what did no test try?"},
@@ -121,7 +124,7 @@ func isZeroValue(f *flag.Flag) bool {
 
 // commandNames are main's commands, for the unknown command's
 // did-you-mean.
-var commandNames = []string{"init", "scaffold", "simulate", "evidence", "lint", "steps", "validate", "bundle", "shrink", "nav", "itf", "convert", "cover", "compile", "skills", "doctor", "help", "version"}
+var commandNames = []string{"init", "scaffold", "simulate", "model-diff", "evidence", "lint", "steps", "validate", "bundle", "shrink", "nav", "itf", "convert", "cover", "compile", "skills", "doctor", "help", "version"}
 
 // unknownCommand says that name is no command, with the nearest one if
 // it is a likely misspelling, and where the list is: the whole usage

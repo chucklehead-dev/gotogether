@@ -24,16 +24,18 @@ Use a tick, tock, consolidate cadence: general framework capability, bounded
 feature or contract depth, and evidence-driven structural/usability/performance
 work. The installed LRU MBT rehearsal now covers a non-SQL consumer workflow
 and an isolated source contrast; the configuration typo it exposed is fixed by
-strict preflight and direct API migration. The consolidation slice now threads caller-owned cancellation through model
-loading, checker construction, lint inspection and trace-schema recovery, with
+strict preflight and direct API migration. The consolidation slice threads
+caller-owned cancellation through model loading, checker construction, lint inspection and trace-schema recovery, with
 independently cancelable cache waits and retry after a canceled owner. Context-free
 model-analysis, metadata, evaluator compilation and go/analysis boundaries remain
-explicit; broader lifecycle
-migration needs its own evidence and scope. Rotate next toward a general framework
-capability. The next candidate is a bounded I42 model-behavior comparison:
-first define finite graph/projection support, refusal conditions and native-replayed
-added/removed behavior witnesses using a non-storage model. The recent model/source
-contrasts motivate this review tool; they do not establish an adopter blocker.
+explicit; broader lifecycle migration needs its own evidence and scope.
+The next general framework tick is the first bounded I42 model-behavior
+comparison: complete finite
+Go-evaluator graphs on explicit observations, with whole-prefix inclusion,
+separate resource bounds and native-replayed source witnesses. A non-storage
+handshake checks the contract. The recent model/source contrasts motivated this
+review tool; they did not establish an adopter blocker. Next depth should come
+from reviewing a real model change, before adding mapping or liveness semantics.
 Keep frozen baseline pins for reproducibility, not as legacy support promises.
 Further adapters, adjacent fixtures and per-pair clock APIs need usage evidence.
 
@@ -855,7 +857,9 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
 
 ### Bold ideas (each its own decision before it starts)
 
-- **I42. A model diff and refinement (M each).** Two models, or a model
+- **I42. A model diff and refinement (M each).** The first finite observed-prefix
+  comparison slice is built (`model-diff`; [scope](model-comparison.md)).
+  General refinement mappings and stutter abstraction remain open. Two models, or a model
   and its mutant, compared on the projection a binding observes ("v2
   admits these traces v1 forbade"): migrations and model changes in a
   PR reviewed like code, "never loosen a check" made mechanical; then
