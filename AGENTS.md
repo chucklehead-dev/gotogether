@@ -170,6 +170,13 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   (`npm i -g @informalsystems/quint`, then `QUINT_VERSION=0.33.0
   ci/install-quint.sh` for the Rust evaluator). Tests that need quint
   skip without it.
+- Before pushing, run `ci/preflight.sh`: the same repository-contract gate CI
+  uses before installing native tools. It checks formatting, source/API/schema
+  contracts, docs/skills and the complete CLI help/tutorial surface. It uses the
+  module's go.mod with read-only resolution and clears regeneration/report/helper
+  flags rather than rewriting snapshots. It requires Go and Bash, not Quint.
+  Continue with the tests and vet appropriate to the change; full, shuffled,
+  native and race coverage remain in CI.
 - `go vet ./... && gofmt -l .`: both must be clean.
 - `go test -short ./...` takes a few minutes (validate's and qtest's
   quint processes most of it). `go test ./...` adds the

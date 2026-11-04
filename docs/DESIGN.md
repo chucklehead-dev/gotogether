@@ -6621,3 +6621,25 @@ phase, and only for the emitted context-thread identity. Non-events do not claim
 or change a thread's owner. Manual thread strings and OTel spans retain their
 existing policy; accepted misuse remains an issue in the same recorder reports.
 The optimization changes no public API or trace format.
+
+
+## 96. Repository contracts gate expensive CI work
+
+Help length and package-state scope failures were discovered inside long native
+suites despite focused feature tests passing. `ci/preflight.sh` is the shared
+local/CI entry point for formatting and repository source contracts. The CI
+`repository contracts` job needs Go, runs that script, and gates every other job;
+`action-compiled` additionally keeps its artifact dependency on `action`.
+
+The script owns the guard roster and CLI selector. Source tests discover all
+help/tutorial guard tests by AST, require their selection, and reject selection
+from unaudited files before the CLI test stage runs. Workflow guards reject
+missing dependencies or job conditions that bypass success gating. Ordinary
+full and shuffled suites retain their tests and coverage.
+
+Snapshot updater flags, persistent report destinations and child-helper modes
+are cleared for checking. Otherwise an inherited environment can regenerate
+files or make a help error-path subprocess write into the checkout. Formatting
+only lists differences. This makes the preflight nonwriting for repository and
+persistent report data while allowing normal Go cache/download activity. It is
+native-tool-independent; cold compilation still has a cost.

@@ -1054,3 +1054,14 @@ More in [DESIGN.md](docs/DESIGN.md) §5 and §9.
 MIT (LICENSE). `examples/twophase/model` vendors Choreo, under the
 Apache License 2.0 (its `LICENSE.choreo`); the gosim fork is MIT, as
 upstream gosim.
+
+
+## Working on gotogether
+
+Run `ci/preflight.sh` before pushing repository changes. It checks formatting,
+package-state scope, API/schema/format metadata, docs, skills, simulation lint,
+and complete CLI help/tutorial freshness using Go and Bash. The same command is
+CI's dependency gate before native tool installation and model suites. A cold
+Go build or dependency download can still take time. The script does not update
+snapshots or write persistent reports; full and race tests remain relevant to
+the code changed. See [developer commands](docs/agents/commands.md).

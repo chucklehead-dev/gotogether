@@ -26,7 +26,20 @@ env:
   GOTOGETHER_EVAL_SAMPLE: "1/5"
 
 jobs:
+  preflight:
+    name: repository contracts
+    # Cheap source/format contracts fail before tool installation or model runs.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: repository contracts (no native tools)
+        run: ci/preflight.sh
+
   staticcheck:
+    needs: preflight
     # A pinned analyzer, outside the runtime module graph; all default checks.
     runs-on: ubuntu-latest
     steps:
@@ -38,6 +51,7 @@ jobs:
         run: ci/staticcheck.sh
 
   test:
+    needs: preflight
     # one job ran every part in turn: its parts run side by side. The
     # core's variants (self-checks, the TypeScript backend), its race
     # detector and the examples' demos are parts of their own, so none
@@ -65,9 +79,6 @@ jobs:
           go install github.com/Shopify/toxiproxy/v2/cmd/server@v2.12.0
           mv "$(go env GOPATH)/bin/server" "$(go env GOPATH)/bin/toxiproxy-server"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - name: gofmt
-        if: matrix.part == 'core'
-        run: test -z "$(gofmt -l . | tee /dev/stderr)"
       - name: vet
         if: matrix.part == 'core'
         run: go vet ./...
@@ -250,6 +261,7 @@ jobs:
         run: go run -C qweave ./cmd/qweave -C ../examples/checkout -cover -coverpkg github.com/chucklehead-dev/gotogether/examples/checkout go test -count=1 -run TestCodeCoverage -v .
 
   workspace:
+    needs: preflight
     # the published modules on the core as it is in this checkout (go.work),
     # not at the commit they pin: a change to the core that breaks qhegel,
     # qweave, qanalysis or qgosim fails here, before the bump
@@ -279,6 +291,7 @@ jobs:
   # PR github.sha is an ephemeral merge commit that go get cannot fetch.
   # Publication checks use the pushed head; other jobs test the merge checkout.
   consumable:
+    needs: preflight
     # what a user gets: the commands install at this commit, and a program
     # that records steps pulls in no Hegel
     runs-on: ubuntu-latest
@@ -303,6 +316,7 @@ jobs:
           if grep -E 'hegel|purego' go.mod go.sum; then echo "the core pulls in Hegel"; exit 1; fi
 
   consumer:
+    needs: preflight
     # a user's module built from outside the repository (ci/consumer, an
     # order-sync service on simgrpc, simlog and kafkalog, explored with
     # qtest.System and qhegel): no replace, no workspace, the published
@@ -342,6 +356,7 @@ jobs:
           go vet ./... && go test -count=1 ./...
 
   doubles:
+    needs: preflight
     # the published doubles whose dependencies the core does not take
     # (gRPC, client-go and controller-runtime, franz-go, the AWS SDK):
     # each a module of its own, tested on its own go.mod and pinned core,
@@ -371,6 +386,7 @@ jobs:
           go test -race -count=1 ./...
 
   edgepublish:
+    needs: preflight
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -404,6 +420,7 @@ jobs:
         run: OUT=$RUNNER_TEMP/demo ./run-demo.sh
 
   qweave:
+    needs: preflight
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -420,6 +437,7 @@ jobs:
         run: go test -count=1 ./...
 
   qnav:
+    needs: preflight
     # the interactive navigator, a module of its own (Charm's libraries):
     # its screens driven by key messages, hello's run through a session of
     # its test binary
@@ -444,6 +462,7 @@ jobs:
         run: go test -count=1 ./internal/... ./cmd/...
 
   qnav-tapes:
+    needs: preflight
     # the navigator's VHS tapes in a real terminal (vhs drives ttyd in a
     # headless browser, ffmpeg encodes): their text against the goldens,
     # and the rendered GIFs and screenshots as an artifact
@@ -477,6 +496,7 @@ jobs:
           path: qnav/tapes/media
 
   gosim:
+    needs: preflight
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -498,6 +518,7 @@ jobs:
         run: go test -p 1 -short -count=1 -timeout 30m ./...
 
   quorumkv:
+    needs: preflight
     # its own job: its mutants' explorations are linearized, each candidate
     # order a quint replay, about twenty minutes in all
     runs-on: ubuntu-latest
@@ -525,6 +546,7 @@ jobs:
           ../../ci/time-budget.sh < "$RUNNER_TEMP/cpu.txt"
 
   raftkv:
+    needs: preflight
     # its own job: etcd's raft library on qenv, histories linearized whole
     # and searched exhaustively over clock drifts, about six minutes
     runs-on: ubuntu-latest
@@ -552,6 +574,7 @@ jobs:
           ../../ci/time-budget.sh < "$RUNNER_TEMP/cpu.txt"
 
   raftkv-real:
+    needs: preflight
     # raftkv's real tier: three raftkv-node processes on localhost under
     # qnemesis (crashes, pauses, isolated nodes through toxiproxy, lost
     # client responses, every node cut off), judged by the simulation's
@@ -587,6 +610,7 @@ jobs:
           path: ${{ runner.temp }}/real
 
   wallet:
+    needs: preflight
     # its own job: linearized explorations and resolved pending calls,
     # under the store's own history check
     runs-on: ubuntu-latest
@@ -616,6 +640,7 @@ jobs:
         run: ./run-demo.sh && MUTANT=writeSkew ./run-demo.sh
 
   grist:
+    needs: preflight
     # its own module (published like qhegel): the framework's stores
     # against the contract suite (PostgreSQL 16 among them, a service
     # container: GRIST_POSTGRES), its commands and processors on a
@@ -657,6 +682,7 @@ jobs:
           ../ci/time-budget.sh < "$RUNNER_TEMP/grist-cpu.txt"
 
   payd:
+    needs: preflight
     # its own job: an unmodified net/http + database/sql service in qenv
     # through qsql and qhttp, its mutants built as go test -overlay
     # binaries, and the same service on SQLite
@@ -687,6 +713,7 @@ jobs:
         run: ./run-demo.sh && MUTANT=precheck ./run-demo.sh
 
   maelstrom:
+    needs: preflight
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -715,6 +742,7 @@ jobs:
           retention-days: 14
 
   fleetrollout:
+    needs: preflight
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -748,6 +776,7 @@ jobs:
           if TRACE=../sktrace/testdata/cronjob.sktrace MUTANT=ignoreObservedGeneration ./kwok-demo.sh; then echo "mutant passed"; exit 1; fi
 
   crossdb:
+    needs: preflight
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -778,6 +807,7 @@ jobs:
           if MUTANT=noClientToken DROP=0.3 N=6 kind/demo.sh; then echo "mutant passed"; exit 1; fi
 
   grpcledger:
+    needs: preflight
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -809,6 +839,7 @@ jobs:
           MUTANT=noDedupe ./run-demo.sh
 
   action:
+    needs: preflight
     # the Action (.github/actions/gotogether) as an adopter uses it, on
     # hello: quint pinned and cached, the CLI built from the action's own
     # source, doctor strict, a validation and a compile; a mutant's runs
@@ -852,7 +883,7 @@ jobs:
     # the compiled model judged by the Go evaluator alone: the Action with
     # compiled: 'true' installs neither Node nor quint, and quint must be
     # nowhere (DESIGN §64)
-    needs: action
+    needs: [preflight, action]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -882,6 +913,7 @@ jobs:
         run: test "${{ steps.mutant.outcome }}" = failure && test "${{ steps.mutant.outputs.result }}" = FAIL
 
   image:
+    needs: preflight
     # the pinned image (ci/image/Dockerfile) builds, doctor inside finds no
     # skew, and it validates hello; it is pushed nowhere (docs/ci.md)
     runs-on: ubuntu-latest
@@ -897,6 +929,7 @@ jobs:
             'go run ./cmd/hello-sim -seeds 3 -out /tmp/runs && gotogether validate -binding hello.binding.yaml /tmp/runs/*.jsonl'
 
   streams:
+    needs: preflight
     runs-on: ubuntu-latest
     defaults:
       run:

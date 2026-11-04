@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Recording identity and ownership (current branch): background recording reuses
+Repository-contract preflight (current branch): one Go/Bash command checks
+nonwriting formatting, source/state/API/schema/format contracts, docs, skills,
+simulation lint and complete CLI help/tutorial freshness before CI fanout.
+Updater/report/helper flags are cleared; source guards enforce roster, selector
+containment and dependencies. Full/shuffle/native suites remain intact. Actual
+missing-state-scope and oversized-help controls fail early without invoking Quint.
+See [developer commands](agents/commands.md).
+
+Recording identity and ownership (PR #62): background recording reuses
 one operation's goroutine ID across fresh run/site lookups. Local CPU-1 paired
 medians improve from 17.0 to 7.2 µs, with one fewer allocation; explicit-context
 allocations stay unchanged. Filtered, discarded and overridden-thread events no

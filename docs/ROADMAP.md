@@ -42,6 +42,10 @@ Recording identity consolidation rotates back to the shared runtime: duplicate
 background lookup is removed without caching ownership or clocks, and filtered
 non-events stop claiming thread ownership. Further capability should follow an
 actual usage blocker before expanding comparison mappings or liveness.
+Two late repository-contract failures (help length and process-state scope) also
+justify a shared non-native preflight gate before CI fanout. It preserves full
+coverage while shortening feedback; this is evidence-driven consolidation, not
+a new product capability or a reason to expand adjacent fixtures.
 Keep frozen baseline pins for reproducibility, not as legacy support promises.
 Further adapters, adjacent fixtures and per-pair clock APIs need usage evidence.
 
