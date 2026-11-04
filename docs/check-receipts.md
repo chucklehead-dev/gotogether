@@ -45,7 +45,8 @@ for the whole nominal run, not the model state at the current cursor.
   `closestGap` is absent with zero constraints. Each actor or partition has its
   own evidence. `conditional` marks a conclusive model failure checked under
   those constraints; passes, exhausted searches, tool and unjudged results are
-  false. It does not prove that weakening the bound changes the verdict, or
+  false; false makes no claim of clock independence. It does not prove that
+  weakening the bound changes the verdict, or
   establish measured synchronization. Pending-only placement does not emit this
   completed-step linearization evidence.
 - `assumedEffects` describes calls marked ambiguous in the checked candidate:

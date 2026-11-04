@@ -23,10 +23,10 @@ github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UF
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/chucklehead-dev/gosim v0.0.0-20261022204023-f3a3ad889291 h1:DvcMPcI4w5gq/aRuMpMpIJqWXHcs8Ie+hCZ1ssw7NB0=
 github.com/chucklehead-dev/gosim v0.0.0-20261022204023-f3a3ad889291/go.mod h1:+koXM0aoNcZJ528MVgPc/+kYFezTerAZmpmBqseu77o=
-github.com/chucklehead-dev/gotogether v0.0.0-20261103213547-da8e99e1560f h1:FkhcalJNgcmEfX8gdgJUAGneNA7LIChW7z8g6+qaSko=
-github.com/chucklehead-dev/gotogether v0.0.0-20261103213547-da8e99e1560f/go.mod h1:le+c/JMFdfnyc2ta7aX/NYiNWgWkA+b4mOc2H5Mi7pE=
-github.com/chucklehead-dev/gotogether/qweave v0.0.0-20261103213547-da8e99e1560f h1:bUddfcE0pNj87wiw1XNMCIehkpAk6XExLYppEkYYWiY=
-github.com/chucklehead-dev/gotogether/qweave v0.0.0-20261103213547-da8e99e1560f/go.mod h1:IHgPJz9szu0EMbdpZoEDLMJYVtURbE5/8BNue/cQmdk=
+github.com/chucklehead-dev/gotogether v0.0.0-20261104012051-1e87dffd6a1c h1:GS+9z++olX6RG7o+7FZAQcQr2kLD5gfNfEQkHQ8FWNY=
+github.com/chucklehead-dev/gotogether v0.0.0-20261104012051-1e87dffd6a1c/go.mod h1:le+c/JMFdfnyc2ta7aX/NYiNWgWkA+b4mOc2H5Mi7pE=
+github.com/chucklehead-dev/gotogether/qweave v0.0.0-20261104012051-1e87dffd6a1c h1:83opRHA2BIbAxNuHOPSeqKmxh6b1GrOBKPwmkMZktKU=
+github.com/chucklehead-dev/gotogether/qweave v0.0.0-20261104012051-1e87dffd6a1c/go.mod h1:IHgPJz9szu0EMbdpZoEDLMJYVtURbE5/8BNue/cQmdk=
 github.com/cloudflare/circl v1.5.0 h1:hxIWksrX6XN5a1L2TI/h53AGPhNHoUBo+TD1ms9+pys=
 github.com/cloudflare/circl v1.5.0/go.mod h1:uddAzsPgqdMAYatqJ0lsjX1oECcQLIlRpzZh3pJrofs=
 github.com/creack/pty v1.1.23 h1:4M6+isWdcStXEf15G/RbrMPOQj1dZ7HPZCGwE4kOeP0=

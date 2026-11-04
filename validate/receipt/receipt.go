@@ -63,6 +63,7 @@ type ClockEvidence struct {
 	ClosestGap string `json:"closestGap,omitempty"`
 	// Conditional marks a conclusive model failure checked under clock constraints.
 	// It does not establish that weakening the bound would change the verdict.
+	// False makes no claim of clock independence.
 	Conditional bool `json:"conditional"`
 }
 
