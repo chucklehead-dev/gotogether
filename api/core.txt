@@ -244,7 +244,7 @@ type Config struct
     field StatePath []string
     field NondetPath []string
     field Verbose int
-    method (Config) FromEnv() Config
+    method (Config) FromEnv() (Config, error)
 type Driver interface
     Step(s *Step) error
 type DriverFunc func(s *Step) error

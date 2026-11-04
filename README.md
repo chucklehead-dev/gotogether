@@ -399,6 +399,12 @@ Each trace gets a fresh driver. See
 [skills/gotogether-mbt](skills/gotogether-mbt/SKILL.md) for the TDD
 loop.
 
+Numeric configuration fails before trace generation if a selected environment
+value is malformed, a budget is negative, or verbosity is outside 0–2.
+`Config.FromEnv()` returns `(Config, error)`; check the error when resolving
+configuration yourself. Explicit nonzero fields take precedence, and zero
+budgets retain the documented defaults.
+
 ## 2. Hegel and the model (`qhegel`)
 
 **Hegel drives, the model judges.**

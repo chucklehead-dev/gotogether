@@ -47,7 +47,8 @@ type Config struct {
 	NondetPath []string
 
 	// Verbose: 0 quiet, 1 logs every step (action and picks), 2 also the
-	// model state. Default $QUINT_VERBOSE. Failures always show the step.
+	// model state. Values outside 0–2 are invalid. Default $QUINT_VERBOSE.
+	// Failures always show the step.
 	Verbose int
 }
 
@@ -60,31 +61,53 @@ type Config struct {
 //	QUINT_MAX_STEPS    MaxSteps
 //	QUINT_BACKEND      Backend
 //	QUINT_BIN          Quint
-func (c Config) FromEnv() Config {
+//
+// Explicit nonzero numeric fields take precedence. Selected environment values
+// must be integers; budgets are nonnegative (0 uses the default), and Verbose
+// is 0, 1 or 2. Invalid explicit values also return an error.
+func (c Config) FromEnv() (Config, error) {
 	if c.Seed == "" {
 		c.Seed = os.Getenv("QUINT_SEED")
 	}
-	envInt := func(dst *int, name string) {
-		if *dst == 0 {
-			if n, err := strconv.Atoi(os.Getenv(name)); err == nil {
-				*dst = n
+	for _, number := range []struct {
+		value *int
+		field string
+		env   string
+		max   int // -1: no upper bound
+		want  string
+	}{
+		{&c.MaxSamples, "MaxSamples", "QUINT_MAX_SAMPLES", -1, "want a nonnegative integer (0 uses the default)"},
+		{&c.MaxSteps, "MaxSteps", "QUINT_MAX_STEPS", -1, "want a nonnegative integer (0 uses the default)"},
+		{&c.Verbose, "Verbose", "QUINT_VERBOSE", 2, "want 0 (quiet), 1 (steps), or 2 (state)"},
+	} {
+		source := fmt.Sprintf("Config.%s=%d", number.field, *number.value)
+		if raw := os.Getenv(number.env); *number.value == 0 && raw != "" {
+			source = fmt.Sprintf("%s=%q", number.env, raw)
+			n, err := strconv.Atoi(raw)
+			if err != nil {
+				return c, fmt.Errorf("connect: %s: %s", source, number.want)
 			}
+			*number.value = n
+		}
+		if *number.value < 0 || number.max >= 0 && *number.value > number.max {
+			return c, fmt.Errorf("connect: %s: %s", source, number.want)
 		}
 	}
-	envInt(&c.Verbose, "QUINT_VERBOSE")
-	envInt(&c.MaxSamples, "QUINT_MAX_SAMPLES")
-	envInt(&c.MaxSteps, "QUINT_MAX_STEPS")
 	if c.Backend == "" {
 		c.Backend = os.Getenv("QUINT_BACKEND")
 	}
 	if c.Quint == "" {
 		c.Quint = os.Getenv("QUINT_BIN")
 	}
-	return c
+	return c, nil
 }
 
 func (c Config) resolve() (Config, error) {
-	c = c.FromEnv()
+	var err error
+	c, err = c.FromEnv()
+	if err != nil {
+		return c, err
+	}
 	if c.Spec == "" {
 		return c, errors.New("connect: Config.Spec is required")
 	}

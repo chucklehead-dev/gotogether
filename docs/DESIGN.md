@@ -591,6 +591,15 @@ a first path element that still carries its qualifier is matched too.
 `NondetPath` reads the action and its picks from a sum-type variable, as
 quint-connect's `Config.nondet` does.
 
+Model-driver configuration is resolved before trace-directory setup or cleanup
+and before Quint starts. Config.FromEnv returns a configuration and error;
+selected nonempty numeric environment values must parse and fit the budget or
+verbosity domain, and explicit numeric values are validated too. Nonzero
+explicit fields retain precedence; zero budgets retain defaults and verbosity
+is 0–2. The installed-consumer rehearsal found that a misspelled samples value
+previously launched 100 traces silently. Direct caller migration replaces that
+behavior rather than adding a lenient compatibility path.
+
 ### 9.2 Hegel (`qhegel`)
 
 hegel-go (v0.9.x) runs its engine in-process (libhegel, through purego),
