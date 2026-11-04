@@ -243,9 +243,10 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   recorder offset: default 1ms fails conditionally, declared 5ms admits
   the faithful order, and a planted stale replica still fails. Exact native
   log regeneration and JSON issues are checked; this is not real-host
-  synchronization evidence. Follow-up: direct history JSON omits configured
-  skew when no clock edge remains, and navigation/TUI lacks searched-order
-  evidence. Define shared clock-search evidence before claiming output parity.
+  synchronization evidence. Typed receipts now retain effective bounds even
+  with zero edges, recorder identities and imposed completed-step-pair
+  constraints, shared by JSON and existing navigation/TUI receipt views.
+  Searched-history cursor navigation remains separate and needs an adoption case.
 - **I8. Liveness says what it checks (S). Done.** DESIGN §62 and
   the reports: the check is □◇P (P at quiescence), not ◇P, since a
   lasso's prefix may pass through states where the val holds; "no lasso

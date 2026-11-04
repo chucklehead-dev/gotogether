@@ -7,23 +7,32 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Clock-assumption example (current branch): kvstore records real Store
+Typed history clock evidence (current branch): linearization receipts retain
+an effective bound and source even with zero clock edges. Actor/partition facts
+count imposed completed-step pairs, participating recorders and closest gap.
+Conclusive model failures are marked as checked under those assumptions; no
+minimal-proof or synchronization measurement is claimed. Report JSON and
+existing navigation/TUI receipts share cloned data. Pending-only placement and
+searched-history cursor navigation remain separate. Module tidiness now runs
+before expensive core tests after a late dependency-download failure forced a
+full-job retry.
+
+Clock-assumption example (merged PR #56, 49e9e2bd): kvstore records real Store
 observations under authored intervals and a synthetic 5ms recorder offset.
 The default 1ms assumption forces a misleading order; a declared 5ms bound
 admits the faithful history. A planted stale replica still fails at both
 bounds. Tests regenerate exact native logs, and CLI/JSON checks preserve
 the existing conditional issue text. This is not measured host/NTP evidence.
-Direct history JSON does not retain a configured skew when it creates no
-clock edges, and the TUI does not navigate searched history orders. Those
-are concrete output gaps, not features supplied by this example.
+The example exposed missing zero-edge bound provenance; typed receipts now
+supply it. Recorded-history TUI navigation still does not search orders.
 
-Fuzz input framing (PR #55): generated Go fuzz inputs are raw entropy, so
+Fuzz input framing (merged PR #55, 066d77c4): generated Go fuzz inputs are raw entropy, so
 mutating bytes into a replay-header prefix cannot create a spurious format
 failure. Explicit seeds are encoded recordings, validated and decoded once
 before mutation. Persisted replay version checks remain intact. The streams
 CI failure exposed this framework boundary; the stream model was unchanged.
 
-Portable installed skills (PR #55): 15 repository-relative links
+Portable installed skills (merged PR #55, 066d77c4): 15 repository-relative links
 now use the existing canonical GitHub main URLs, preserving fragments. Local
 and cross-skill references remain relative inside the installed tree. Source
 and actual installation checks cover link destinations, including directory
@@ -706,8 +715,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | History-search clock evidence | S-M | the example exposed missing configured-skew provenance in direct history JSON and absent searched-order evidence in navigation/TUI; define one shared evidence contract before changing output |
-| 2 | Non-SQL installed-module adoption trial | M | exercise MBT or request-log validation outside the checkout; fix a demonstrated blocker rather than adding another adapter |
+| 1 | Non-SQL installed-module adoption trial | M | exercise MBT or request-log validation outside the checkout; fix a demonstrated blocker rather than adding another adapter |
 | deferred | I25: virtual physical-session capacity | M | native role-quota refusal/recovery is checked; nondeterministic pool callbacks and idle-session ownership still prevent a faithful virtual max_connections claim |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
@@ -719,8 +727,9 @@ a demonstrated consumer defect: a repository-relative documentation link
 resolved outside the installed tree. Portable authored URLs and guards solve
 that at the source, shared by checkout and installed guidance. The bounded
 clock example now makes existing assumptions concrete and exposes two output
-gaps. Address those through a shared evidence contract, then rotate to a
-non-SQL consumer workflow rather than expanding clock APIs or SQL syntax. Further SQL syntax, virtual physical sessions
+gaps. Shared receipts now retain clock assumptions; searched-history cursor
+navigation is a larger separate feature requiring adoption evidence. Rotate
+to a non-SQL consumer workflow. Further SQL syntax, virtual physical sessions
 and evaluator redesign need fresh adoption evidence.
 
 The counted-values trial is now implemented in

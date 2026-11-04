@@ -1091,6 +1091,36 @@
                   "budgetExhausted": {
                     "type": "boolean"
                   },
+                  "clock": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "closestGap": {
+                        "type": "string"
+                      },
+                      "conditional": {
+                        "type": "boolean"
+                      },
+                      "constraints": {
+                        "type": "integer"
+                      },
+                      "recorders": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "skew": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string"
+                      }
+                    },
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
                   "goal": {
                     "type": "string"
                   },
@@ -1841,6 +1871,36 @@
                   "budgetExhausted": {
                     "type": "boolean"
                   },
+                  "clock": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "closestGap": {
+                        "type": "string"
+                      },
+                      "conditional": {
+                        "type": "boolean"
+                      },
+                      "constraints": {
+                        "type": "integer"
+                      },
+                      "recorders": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "skew": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string"
+                      }
+                    },
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
                   "goal": {
                     "type": "string"
                   },
@@ -2220,6 +2280,36 @@
                               "properties": {
                                 "budgetExhausted": {
                                   "type": "boolean"
+                                },
+                                "clock": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "closestGap": {
+                                      "type": "string"
+                                    },
+                                    "conditional": {
+                                      "type": "boolean"
+                                    },
+                                    "constraints": {
+                                      "type": "integer"
+                                    },
+                                    "recorders": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "skew": {
+                                      "type": "string"
+                                    },
+                                    "source": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
                                 },
                                 "goal": {
                                   "type": "string"
@@ -2707,6 +2797,36 @@
                               "properties": {
                                 "budgetExhausted": {
                                   "type": "boolean"
+                                },
+                                "clock": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "closestGap": {
+                                      "type": "string"
+                                    },
+                                    "conditional": {
+                                      "type": "boolean"
+                                    },
+                                    "constraints": {
+                                      "type": "integer"
+                                    },
+                                    "recorders": {
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "skew": {
+                                      "type": "string"
+                                    },
+                                    "source": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
                                 },
                                 "goal": {
                                   "type": "string"
@@ -3223,6 +3343,36 @@
                             "properties": {
                               "budgetExhausted": {
                                 "type": "boolean"
+                              },
+                              "clock": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "closestGap": {
+                                    "type": "string"
+                                  },
+                                  "conditional": {
+                                    "type": "boolean"
+                                  },
+                                  "constraints": {
+                                    "type": "integer"
+                                  },
+                                  "recorders": {
+                                    "items": {
+                                      "type": "string"
+                                    },
+                                    "type": "array"
+                                  },
+                                  "skew": {
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "type": "string"
+                                  }
+                                },
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
                               },
                               "goal": {
                                 "type": "string"

@@ -83,9 +83,11 @@ carry their start as the invocation. See the
 [kvstore clock exercise](https://github.com/chucklehead-dev/gotogether/blob/main/examples/kvstore/README.md#two-recorders-with-different-clocks)
 for actual observations with authored clock intervals and a stale-replica
 control. Establish the bound independently; choosing a bound to get a pass
-is not evidence of synchronization. Keep the invocation: direct history JSON
-can omit the bound when no clock edge remains, and the TUI does not yet
-navigate searched history orders.
+is not evidence of synchronization. Inspect `receipt.actors[].search.clock`
+for the effective bound even with zero edges, its source and imposed completed-
+step constraints. Conditional negative judgments assume that bound; counts are
+not minimal proofs. Existing navigation receipts retain these whole-run facts,
+while recorded-history TUI navigation does not yet search candidate orders.
 In a simulation, steps carry its virtual time, and an exploration takes
 the same options: a simulated client history is linearized run by run.
 

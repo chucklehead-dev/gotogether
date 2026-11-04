@@ -79,8 +79,7 @@ func (r *Result) Receipt() receipt.Actor {
 		a.Actor = "default"
 	}
 	if a.Search != nil {
-		q := *a.Search
-		a.Search = &q
+		a.Search = a.Search.Clone()
 		a.Ordering = "searched"
 	}
 	for idx, c := range r.Calls {
@@ -143,6 +142,12 @@ func (r *Result) Receipt() receipt.Actor {
 		if r.Failure == nil || r.Failure.Kind != "error" {
 			a.Reason = "evaluation error while checking model properties"
 		}
+	}
+	if c := a.Search; c != nil && c.Clock != nil {
+		// A reconstruction/tool problem or an unfinished search is not a
+		// negative model proof. Final receipt classification includes losses
+		// and errors that were unknown when the search first produced evidence.
+		c.Clock.Conditional = a.Status == receipt.Fail && hasFailure && !hasError && !c.BudgetExhausted && r.noVerdict == "" && c.Clock.Constraints > 0
 	}
 	return a
 }

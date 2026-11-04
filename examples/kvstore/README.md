@@ -141,11 +141,14 @@ the write; it is a planted service-contract defect, not a defect discovered in
 the exact native JSONL, so recorded return values cannot silently become stale
 handwritten examples. No new model, clock API or fault mechanism is needed.
 
-Add `-json` to inspect the native report: its issue text retains the conditional
-clock assumption. The direct validation document does not record a configured
-skew when it creates no cross-recorder order; retain the invocation to explain
-that case. The current navigation/TUI receipt does not carry the named recorder
-and closest-gap evidence, so this example does not claim output parity there.
+Add `-json` to inspect `receipt.actors[].search.clock`: it retains the effective
+bound even when the 5ms case creates no clock edge. It includes the bound's
+source, imposed completed-step-pair count, participating recorders and closest
+gap, with conditionality for conclusive negative model judgments. A count is
+not a minimal proof or evidence of measured synchronization. Existing
+navigation/TUI receipts carry the same whole-run facts; recorded-history
+navigation still does not search orders or map a selected candidate to cursor
+states.
 
 ## Tests (`kvstore_test.go`, `clock_assumptions_test.go`)
 

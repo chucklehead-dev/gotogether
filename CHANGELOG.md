@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- History-search receipts retain typed clock evidence, including effective
+  bounds with zero edges, source, completed-step constraints and scoped
+  conditional negative judgments. JSON and existing navigation/TUI receipt
+  views share cloned data. Module tidiness now precedes expensive core tests
+  so dependency-resolution failures fail earlier.
+
 - The kvstore example demonstrates conditional clock assumptions with actual
   Store observations and authored two-recorder intervals. A declared 5ms
   bound admits the faithful history while a planted stale replica still fails;
