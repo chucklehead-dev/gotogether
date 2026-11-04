@@ -95,3 +95,68 @@ func TestClockBoundVisibleBeyondActorDetailCap(t *testing.T) {
 		}
 	}
 }
+
+func TestComponentClockReceiptWireAndCursorScope(t *testing.T) {
+	for _, kind := range []string{"local", "peer", "protocol"} {
+		for _, tc := range []struct {
+			name   string
+			status receipt.Status
+			clock  receipt.ClockEvidence
+			want   []string
+		}{
+			{"conditional failure", receipt.Fail, receipt.ClockEvidence{Skew: "1ms", Source: "default", Constraints: 1, Recorders: []string{"component-a", "component-b"}, ClosestGap: "2ms", Conditional: true}, []string{"clock skew 1ms", "component-a", "component-b", "closest gap 2ms", "negative conclusion assumes clocks within 1ms"}},
+			{"zero-edge pass", receipt.Pass, receipt.ClockEvidence{Skew: "5ms", Source: "configured"}, []string{"clock skew 5ms", "configured", "0 cross-recorder clock constraints"}},
+		} {
+			t.Run(kind+"/"+tc.name, func(t *testing.T) {
+				component := receipt.Component{Target: "clock-component", Status: tc.status, Applicable: true,
+					Judgment: &receipt.History{Status: tc.status, Scope: "collected_history", OtherExecutions: receipt.NotChecked,
+						Actors: []receipt.Actor{{Actor: "component-actor", Status: tc.status, Scope: "collected_history", Ordering: "searched", Search: &receipt.Search{Mode: "linearize", Goal: "one_conforming_history", Clock: &tc.clock}}}},
+				}
+				composition := &receipt.Composition{History: "sha256:clock-history", Protocol: receipt.Protocol{Component: receipt.Component{Status: receipt.NotChecked}}}
+				switch kind {
+				case "local":
+					composition.Local = []receipt.Component{component}
+				case "peer":
+					composition.Peers = []receipt.Component{component}
+				case "protocol":
+					composition.Protocol = receipt.Protocol{Component: component, Configured: true}
+				}
+				original := navproto.Node{Run: "component clock history", Receipt: receipt.Summary{Status: tc.status, Scope: "collected_history", OtherExecutions: receipt.NotChecked, Composition: composition}, Model: []navproto.ActorState{{Actor: "cursor", State: []navproto.NamedValue{{Name: "value", Value: "0"}}}}}
+				wire, err := json.Marshal(original)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var node navproto.Node
+				if err := json.Unmarshal(wire, &node); err != nil {
+					t.Fatal(err)
+				}
+				if !reflect.DeepEqual(node.Receipt, original.Receipt) {
+					t.Fatalf("component clock data changed across navigation JSON: %s", wire)
+				}
+				before, err := json.Marshal(node.Receipt)
+				if err != nil {
+					t.Fatal(err)
+				}
+				m := New(Config{NoColor: true})
+				m.w, m.h = 120, 80
+				for _, at := range []int{0, 8} {
+					node.At = at
+					node.Model[0].State[0].Value = "999"
+					detail := strings.Join(m.runScreen(&entry{r: &node}).detail, "\n")
+					for _, want := range append(append([]string{"whole-run judgment · independent of cursor", "clock-component"}, tc.want...), "component-actor") {
+						if !strings.Contains(detail, want) {
+							t.Fatalf("cursor %d lost %s component clock evidence %q:\n%s", at, kind, want, detail)
+						}
+					}
+				}
+				after, err := json.Marshal(node.Receipt)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(before) != string(after) {
+					t.Fatalf("cursor movement rewrote component clock evidence:\nbefore %s\nafter %s", before, after)
+				}
+			})
+		}
+	}
+}
