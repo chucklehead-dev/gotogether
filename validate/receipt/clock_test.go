@@ -47,3 +47,29 @@ func TestCompositionCloneSnapshotsClockEvidence(t *testing.T) {
 		t.Fatal("component clock snapshots alias one another or source")
 	}
 }
+
+func TestCompositionRendersComponentClockEvidence(t *testing.T) {
+	negative := &History{Actors: []Actor{{Actor: "shared-actor", Search: &Search{Clock: &ClockEvidence{Skew: "1ms", Source: "default", Constraints: 1, Recorders: []string{"host-a", "host-b"}, ClosestGap: "2ms", Conditional: true}}}}}
+	zero := &History{Actors: []Actor{{Actor: "shared-actor", Search: &Search{Clock: &ClockEvidence{Skew: "5ms", Source: "configured"}}}}}
+	c := Composition{
+		Local:    []Component{{Target: "ledger", Status: Fail, Applicable: true, Judgment: negative}},
+		Peers:    []Component{{Target: "ledger->bank", Status: Pass, Applicable: true, Judgment: zero}},
+		Protocol: Protocol{Component: Component{Target: "protocol", Status: Fail, Applicable: true, Judgment: negative}, Configured: true, Checked: 1, Limit: 1, Exhaustive: true},
+	}
+	text := c.String()
+	for _, want := range []string{
+		"component ledger actor shared-actor: clock skew 1ms (default); 1 cross-recorder clock constraints; recorders host-a, host-b; closest gap 2ms; negative conclusion assumes clocks within 1ms",
+		"component ledger->bank actor shared-actor: clock skew 5ms (configured); 0 cross-recorder clock constraints",
+		"component protocol actor shared-actor: clock skew 1ms (default); 1 cross-recorder clock constraints; recorders host-a, host-b; closest gap 2ms; negative conclusion assumes clocks within 1ms",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("component clock scope missing %q:\n%s", want, text)
+		}
+	}
+	// An unnamed protocol still has a useful identity, and passing components
+	// retain their effective bound even when it imposes no clock constraints.
+	c.Protocol.Component = Component{Status: Pass, Applicable: true, Judgment: zero}
+	if text := c.String(); !strings.Contains(text, "component system protocol actor shared-actor: clock skew 5ms (configured); 0 cross-recorder clock constraints") {
+		t.Fatalf("unnamed passing protocol lost its clock bound:\n%s", text)
+	}
+}

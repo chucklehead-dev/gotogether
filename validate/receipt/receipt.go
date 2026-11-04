@@ -217,14 +217,7 @@ func (s Summary) String() string {
 			}
 			b.WriteByte('\n')
 			if c := q.Clock; c != nil {
-				fmt.Fprintf(&b, "    clock skew %s (%s); %d cross-recorder clock constraints", c.Skew, c.Source, c.Constraints)
-				if c.Constraints > 0 {
-					fmt.Fprintf(&b, "; recorders %s; closest gap %s", strings.Join(c.Recorders, ", "), c.ClosestGap)
-				}
-				if c.Conditional {
-					fmt.Fprintf(&b, "; negative conclusion assumes clocks within %s", c.Skew)
-				}
-				b.WriteByte('\n')
+				fmt.Fprintf(&b, "    %s\n", clockText(c))
 			}
 		}
 		kinds := map[string]map[Status]int{}
@@ -259,6 +252,20 @@ func (s Summary) String() string {
 		b.WriteString(s.Composition.String())
 	} else {
 		b.WriteString("  limit: other executions were not checked\n")
+	}
+	return b.String()
+}
+
+// clockText is shared by primary and component receipts so the same clock
+// assumptions remain visible wherever a judgment is rendered.
+func clockText(c *ClockEvidence) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "clock skew %s (%s); %d cross-recorder clock constraints", c.Skew, c.Source, c.Constraints)
+	if c.Constraints > 0 {
+		fmt.Fprintf(&b, "; recorders %s; closest gap %s", strings.Join(c.Recorders, ", "), c.ClosestGap)
+	}
+	if c.Conditional {
+		fmt.Fprintf(&b, "; negative conclusion assumes clocks within %s", c.Skew)
 	}
 	return b.String()
 }

@@ -135,7 +135,7 @@ func (c Composition) String() string {
 			}
 		}
 	}
-	details := func(v Component) {
+	details := func(kind string, v Component) {
 		if v.Judgment == nil {
 			return
 		}
@@ -146,6 +146,13 @@ func (c Composition) String() string {
 			}
 		}
 		for _, a := range v.Judgment.Actors {
+			if a.Search != nil && a.Search.Clock != nil {
+				target := v.Target
+				if target == "" {
+					target = kind
+				}
+				fmt.Fprintf(&b, "    component %s actor %s: %s\n", target, a.Actor, clockText(a.Search.Clock))
+			}
 			if a.Choices != nil {
 				fmt.Fprintf(&b, "    actor %s: %s\n", a.Actor, a.Choices.String())
 			}
@@ -158,12 +165,12 @@ func (c Composition) String() string {
 		}
 	}
 	for _, v := range c.Local {
-		details(v)
+		details("local model", v)
 	}
 	for _, v := range c.Peers {
-		details(v)
+		details("peer agreement", v)
 	}
-	details(c.Protocol.Component)
+	details("system protocol", c.Protocol.Component)
 	b.WriteString("  limit: other executions were not checked\n")
 	return b.String()
 }
