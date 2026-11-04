@@ -263,8 +263,11 @@ func comparisonDirection(r *GraphResult, vars, names []string, result tracecompa
 			}
 		} else {
 			w.Source.Replay += ".then(step)"
-			if len(r.graph.Out[result.Path[index-1]]) > 1 {
-				w.Source.Sampled = append(w.Source.Sampled, index)
+			for _, edge := range r.graph.Out[result.Path[index-1]] {
+				if edge.To != id {
+					w.Source.Sampled = append(w.Source.Sampled, index)
+					break
+				}
 			}
 		}
 		w.Source.Replay += ".expect(and { " + strings.Join(checks, ", ") + " })"
