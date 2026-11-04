@@ -11,10 +11,12 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"regexp"
 	"strconv"
 	"strings"
@@ -87,7 +89,10 @@ func run(args []string) error {
 	if *bind == "" {
 		return errors.New("give -binding (a model), with -run a step log, or -run an exploration's run ('TestX#2:seed=17')")
 	}
-	ch, err := validate.NewChecker(*bind, validate.Options{Quint: *quint})
+	// Model loading owns a cancellable signal context before the TUI starts.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ch, err := validate.NewChecker(ctx, *bind, validate.Options{Quint: *quint})
+	stop()
 	if err != nil {
 		return err
 	}

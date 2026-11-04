@@ -151,7 +151,7 @@ func StoredLogs(t testing.TB, app *grist.App, cfg StoredLogsConfig) []StoredLogR
 		if options.Dir == "" {
 			options.Dir = t.TempDir() // returned document artifact paths live for the test
 		}
-		checker, err := validate.NewChecker(cfg.Binding, options)
+		checker, err := validate.NewChecker(ctx, cfg.Binding, options)
 		if err != nil {
 			fail("model", receipt.Error, err)
 			continue

@@ -13,7 +13,7 @@ import (
 // verdict, and where a trace starts decides every state after it. A
 // whole case is still keyed.
 func TestCaseKeysLost(t *testing.T) {
-	c, err := validate.NewChecker("../validate/testdata/snapshot.yaml", validate.Options{})
+	c, err := validate.NewChecker(t.Context(), "../validate/testdata/snapshot.yaml", validate.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestCaseKeysLost(t *testing.T) {
 // instance's (the case checker reconstructed every actor, and planned
 // the left-out one's).
 func TestCaseKeysActors(t *testing.T) {
-	c, err := validate.NewChecker("../validate/testdata/snapshot.yaml", validate.Options{})
+	c, err := validate.NewChecker(t.Context(), "../validate/testdata/snapshot.yaml", validate.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

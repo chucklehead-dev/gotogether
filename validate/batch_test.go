@@ -21,7 +21,7 @@ import (
 func TestCheckBatchMatchesCheck(t *testing.T) {
 	t.Parallel()
 	needQuint(t)
-	c, err := NewChecker("testdata/account.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/account.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestCheckBatchMatchesCheck(t *testing.T) {
 func TestCheckerScratchRemovedByClose(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/account.yaml", Options{})
+	c, err := NewChecker(t.Context(), "testdata/account.yaml", Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

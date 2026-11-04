@@ -70,7 +70,7 @@ func TestSummaryRejectedAtTheFirstStep(t *testing.T) {
 // listed as never taken, where a dispatcher's own step still is.
 func TestSummaryLeavesOutParts(t *testing.T) {
 	RequireQuint(t)
-	m, err := binding.LoadModel("quint", "../binding/testdata/parts.qnt", "parts")
+	m, err := binding.LoadModel(t.Context(), "quint", "../binding/testdata/parts.qnt", "parts")
 	if err != nil {
 		t.Fatal(err)
 	}

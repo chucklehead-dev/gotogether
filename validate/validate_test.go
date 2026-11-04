@@ -16,7 +16,7 @@ import (
 func TestAccountModel(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/account.yaml", Options{Backend: "typescript", Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/account.yaml", Options{Backend: "typescript", Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestAccountModel(t *testing.T) {
 func TestTypeScriptMissingStateGuidanceIsConditional(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/account.yaml", Options{Backend: "typescript", Eval: "quint", Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/account.yaml", Options{Backend: "typescript", Eval: "quint", Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

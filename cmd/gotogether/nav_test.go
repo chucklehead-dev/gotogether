@@ -36,7 +36,7 @@ func TestNavFromValidate(t *testing.T) {
 	}
 	f.Close()
 	bind := "../../validate/testdata/limiter.yaml"
-	code, out, err := validated([]string{"-binding", bind, "-dir", filepath.Join(dir, "out"), log})
+	code, out, err := validated(t, []string{"-binding", bind, "-dir", filepath.Join(dir, "out"), log})
 	if err != nil || code != 1 {
 		t.Fatalf("exit %d, %v:\n%s", code, err, out)
 	}

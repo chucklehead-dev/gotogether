@@ -20,7 +20,7 @@ import (
 func TestWithin(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/within.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/within.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestWithin(t *testing.T) {
 		}
 	}
 	// a val the evaluator does not compute: not judged, said, no failure
-	rc, err := NewChecker("testdata/within_refused.yaml", Options{Dir: t.TempDir()})
+	rc, err := NewChecker(t.Context(), "testdata/within_refused.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestWithin(t *testing.T) {
 func TestWithinIntervals(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/within.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/within.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,11 +155,11 @@ func TestWithinIntervals(t *testing.T) {
 // verdict), not otherwise; and the evaluator's mode. It was tested only
 // from qhegel, which CI tests on an older core.
 func TestKeyCoversWhatJudges(t *testing.T) {
-	withBound, err := NewChecker("testdata/within.yaml", Options{Dir: t.TempDir()})
+	withBound, err := NewChecker(t.Context(), "testdata/within.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	without, err := NewChecker("testdata/account.yaml", Options{Dir: t.TempDir()})
+	without, err := NewChecker(t.Context(), "testdata/account.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

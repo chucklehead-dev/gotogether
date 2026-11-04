@@ -44,7 +44,7 @@ func TestCacheAcrossProcesses(t *testing.T) {
 	spec := filepath.Join(dir, "m.qnt")
 	typechecks := func() (int, *binding.Model) {
 		t.Helper()
-		m, err := typecheck(bin, spec, "m") // a process's first load: the cache's, not the memo's
+		m, err := typecheck(t.Context(), bin, spec, "m") // a process's first load: the cache's, not the memo's
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -58,7 +58,7 @@ func TestCacheAcrossProcesses(t *testing.T) {
 	}
 	compiles := func() int {
 		t.Helper()
-		c, err := NewChecker(filepath.Join(dir, "b.yaml"), Options{Quint: bin})
+		c, err := NewChecker(t.Context(), filepath.Join(dir, "b.yaml"), Options{Quint: bin})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -98,7 +98,7 @@ func TestCacheAcrossProcesses(t *testing.T) {
 	if err := os.WriteFile(other, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := typecheck(other, spec, "m"); err != nil {
+	if _, err := typecheck(t.Context(), other, spec, "m"); err != nil {
 		t.Fatal(err)
 	}
 	if n := processes(t, log, "typecheck"); n != 1 {
@@ -136,7 +136,7 @@ func TestCacheLockOneAsks(t *testing.T) {
 		wg.Add(1)
 		go func() { // as processes: the cache's lock is a file
 			defer wg.Done()
-			_, errs[i] = typecheck(bin, spec, "account")
+			_, errs[i] = typecheck(t.Context(), bin, spec, "account")
 		}()
 	}
 	wg.Wait()

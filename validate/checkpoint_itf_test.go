@@ -33,7 +33,7 @@ func TestCheckpointITFRoleRoundTrip(t *testing.T) {
 	skip.Quint(t)
 	for _, mode := range []string{"go", "quint"} {
 		t.Run(mode, func(t *testing.T) {
-			c, err := NewChecker("testdata/snapshot.yaml", Options{Dir: t.TempDir(), Eval: mode})
+			c, err := NewChecker(t.Context(), "testdata/snapshot.yaml", Options{Dir: t.TempDir(), Eval: mode})
 			if err != nil {
 				t.Fatal(err)
 			}

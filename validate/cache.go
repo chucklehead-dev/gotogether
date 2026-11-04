@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -57,12 +58,15 @@ func cacheRoot() string {
 // cacheKey is the key of quint's kind output for spec with args, or
 // false when there is none (the cache off, quint's version unknown, a
 // file the spec imports unreadable).
-func cacheKey(quint, kind, spec string, args ...string) (string, bool) {
+func cacheKey(ctx context.Context, quint, kind, spec string, args ...string) (string, bool) {
+	if ctx.Err() != nil {
+		return "", false
+	}
 	if cacheRoot() == "" {
 		return "", false
 	}
-	v := quintVersion(quint) // (manifest.go's, asked once a binary)
-	if v == "" {
+	v := quintVersion(ctx, quint) // (manifest.go's, asked once a binary)
+	if v == "" || ctx.Err() != nil {
 		return "", false
 	}
 	files, ok := specFilesAll(spec)
@@ -76,6 +80,9 @@ func cacheKey(quint, kind, spec string, args ...string) (string, bool) {
 	}
 	for _, f := range files {
 		fmt.Fprintf(h, "%s=%s\x00", f.Path, f.SHA256)
+	}
+	if ctx.Err() != nil {
+		return "", false
 	}
 	return hex.EncodeToString(h.Sum(nil)), true
 }
@@ -201,15 +208,21 @@ const lockWait = 3 * time.Minute
 // entry); when another process held it and wrote the entry meanwhile,
 // the entry. A lock it cannot take in lockWait, or at all, is no lock:
 // the caller asks quint.
-func cacheLock(kind, key string) (unlock func(), data []byte, ok bool) {
+func cacheLock(ctx context.Context, kind, key string) (unlock func(), data []byte, ok bool) {
 	path := cachePath(kind, key)
 	lock := path + ".lock"
 	none := func() {}
+	if ctx.Err() != nil {
+		return none, nil, false
+	}
 	if os.MkdirAll(filepath.Dir(path), 0o755) != nil {
 		return none, nil, false
 	}
 	deadline := time.Now().Add(lockWait)
 	for time.Now().Before(deadline) {
+		if ctx.Err() != nil {
+			return none, nil, false
+		}
 		f, err := os.OpenFile(lock, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 		if err == nil {
 			f.Close()
@@ -229,7 +242,13 @@ func cacheLock(kind, key string) (unlock func(), data []byte, ok bool) {
 			os.Remove(lock) // its holder died
 			continue
 		}
-		time.Sleep(100 * time.Millisecond)
+		timer := time.NewTimer(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return none, nil, false
+		case <-timer.C:
+		}
 	}
 	return none, nil, false
 }

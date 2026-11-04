@@ -27,7 +27,7 @@ func validateSteps(t *testing.T, steps []qtrace.Step, args ...string) (int, stri
 		t.Fatal(err)
 	}
 	f.Close()
-	code, out, verr := validated(append(append([]string{"-dir", filepath.Join(dir, "out")}, args...), log))
+	code, out, verr := validated(t, append(append([]string{"-dir", filepath.Join(dir, "out")}, args...), log))
 	return code, string(out), verr
 }
 
@@ -109,7 +109,7 @@ func TestValidateRequireFinish(t *testing.T) {
 		t.Fatalf("itf wrote %v", itfs)
 	}
 	for _, args := range [][]string{{"-binding", funds, "-require-finish"}, {"-binding", "../../validate/testdata/funds_complete.yaml"}} {
-		code, out, err := validated(append(append([]string{"-dir", filepath.Join(t.TempDir(), "out")}, args...), itfs[0]))
+		code, out, err := validated(t, append(append([]string{"-dir", filepath.Join(t.TempDir(), "out")}, args...), itfs[0]))
 		if err != nil || code != 1 || !strings.Contains(string(out), "a finished run can't be judged from an ITF trace") {
 			t.Errorf("%v on an ITF trace: exit %d, %v:\n%s", args, code, err, fmt.Sprint(string(out)))
 		}

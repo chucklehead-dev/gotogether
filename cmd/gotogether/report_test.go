@@ -34,7 +34,7 @@ func TestValidateJSON(t *testing.T) {
 	reports := filepath.Join(dir, "reports")
 	t.Setenv("GOTOGETHER_REPORT_DIR", reports)
 	junit, sarif := filepath.Join(dir, "r.xml"), filepath.Join(dir, "r.sarif")
-	code, out, err := validated([]string{"-json", "-report", "junit=" + junit, "-report", "sarif=" + sarif,
+	code, out, err := validated(t, []string{"-json", "-report", "junit=" + junit, "-report", "sarif=" + sarif,
 		"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out"), log})
 	if err != nil || code != 1 {
 		t.Fatalf("exit %d, %v:\n%s", code, err, out)
@@ -62,7 +62,7 @@ func TestValidateJSON(t *testing.T) {
 		t.Errorf("GOTOGETHER_REPORT_DIR: %v %v", es, err)
 	}
 	// a -report of no known format is refused, naming them
-	if code, _, err := validated([]string{"-report", "html=x", "-binding", "../../validate/testdata/account.yaml", log}); code != 2 || err == nil ||
+	if code, _, err := validated(t, []string{"-report", "html=x", "-binding", "../../validate/testdata/account.yaml", log}); code != 2 || err == nil ||
 		!strings.Contains(err.Error(), "json, junit, sarif") {
 		t.Errorf("-report html=x: exit %d, %v", code, err)
 	}

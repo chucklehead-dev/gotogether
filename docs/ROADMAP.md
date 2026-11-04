@@ -24,9 +24,16 @@ Use a tick, tock, consolidate cadence: general framework capability, bounded
 feature or contract depth, and evidence-driven structural/usability/performance
 work. The installed LRU MBT rehearsal now covers a non-SQL consumer workflow
 and an isolated source contrast; the configuration typo it exposed is fixed by
-strict preflight and direct API migration. The next consolidation candidate is
-caller-owned cancellation through model loading and trace-schema recovery:
-first prove the lifecycle failure, then remove hidden background ownership.
+strict preflight and direct API migration. The consolidation slice now threads caller-owned cancellation through model
+loading, checker construction, lint inspection and trace-schema recovery, with
+independently cancelable cache waits and retry after a canceled owner. Context-free
+model-analysis, metadata, evaluator compilation and go/analysis boundaries remain
+explicit; broader lifecycle
+migration needs its own evidence and scope. Rotate next toward a general framework
+capability. The next candidate is a bounded I42 model-behavior comparison:
+first define finite graph/projection support, refusal conditions and native-replayed
+added/removed behavior witnesses using a non-storage model. The recent model/source
+contrasts motivate this review tool; they do not establish an adopter blocker.
 Keep frozen baseline pins for reproducibility, not as legacy support promises.
 Further adapters, adjacent fixtures and per-pair clock APIs need usage evidence.
 

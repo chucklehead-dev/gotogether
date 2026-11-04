@@ -44,7 +44,7 @@ func TestValidateCheckpointJSON(t *testing.T) {
 			if err = f.Close(); err != nil {
 				t.Fatal(err)
 			}
-			code, out, _ := validated([]string{"-json", "-binding", "../../validate/testdata/snapshot.yaml", "-dir", filepath.Join(dir, "out"), log})
+			code, out, _ := validated(t, []string{"-json", "-binding", "../../validate/testdata/snapshot.yaml", "-dir", filepath.Join(dir, "out"), log})
 			var d validate.Document
 			if err = json.Unmarshal(out, &d); err != nil {
 				t.Fatalf("status %d: %v\n%s", code, err, out)

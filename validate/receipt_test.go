@@ -47,7 +47,7 @@ func TestReceiptVerdictCategories(t *testing.T) {
 // the selected pending effect, without presenting it as observed behavior.
 func TestReceiptHistorySearch(t *testing.T) {
 	skip.Quint(t)
-	c, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/blind.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

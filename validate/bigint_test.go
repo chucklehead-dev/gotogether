@@ -29,7 +29,7 @@ func TestRustIntegersReadByType(t *testing.T) {
 	}
 	ctx := context.Background()
 	for _, eval := range []string{"shadow", "quint"} {
-		c, err := NewChecker("testdata/bigint.yaml", Options{Dir: t.TempDir(), Eval: eval, Backend: "rust"})
+		c, err := NewChecker(t.Context(), "testdata/bigint.yaml", Options{Dir: t.TempDir(), Eval: eval, Backend: "rust"})
 		if err != nil {
 			t.Fatal(err)
 		}

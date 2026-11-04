@@ -87,7 +87,7 @@ func TestCompiledAgreesWithQuint(t *testing.T) {
 		}},
 	} {
 		bp, cp := compiledCopy(t, m.binding, m.spec)
-		q, err := NewChecker(bp, Options{Dir: t.TempDir(), Eval: "quint"})
+		q, err := NewChecker(t.Context(), bp, Options{Dir: t.TempDir(), Eval: "quint"})
 		if err != nil {
 			t.Fatal(err)
 		}

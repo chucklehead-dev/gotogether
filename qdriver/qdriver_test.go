@@ -244,7 +244,7 @@ func TestNestedValues(t *testing.T) {
 		t.Errorf("obs %v", done.Obs)
 	}
 	skip.Quint(t)
-	m, err := binding.LoadModel("quint", "../binding/testdata/typed.qnt", "typed")
+	m, err := binding.LoadModel(t.Context(), "quint", "../binding/testdata/typed.qnt", "typed")
 	if err != nil {
 		t.Fatal(err)
 	}

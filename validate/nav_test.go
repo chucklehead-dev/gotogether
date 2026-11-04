@@ -29,7 +29,7 @@ func TestNavBranchesAgainstBruteForce(t *testing.T) {
 		{"testdata/account.yaml", map[string][]qeval.Value{"deposit": ints(1, 100), "withdraw": ints(1, 100)}},
 	} {
 		t.Run(tc.binding, func(t *testing.T) {
-			c, err := NewChecker(tc.binding, Options{Dir: t.TempDir()})
+			c, err := NewChecker(t.Context(), tc.binding, Options{Dir: t.TempDir()})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -137,7 +137,7 @@ func stateAt(t *testing.T, n *Navigator, path []string) qeval.State {
 func TestNavNodeJSON(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/limiter.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/limiter.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,7 +196,7 @@ func TestNavNodeJSON(t *testing.T) {
 func TestNavFold(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/ticks.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/ticks.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func TestNavFold(t *testing.T) {
 func TestNavFollowError(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/limiter.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/limiter.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +266,7 @@ func TestNavFollowError(t *testing.T) {
 func TestNavWhyNoForeignPick(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("../examples/hello/hello.binding.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "../examples/hello/hello.binding.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

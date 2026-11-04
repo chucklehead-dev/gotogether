@@ -60,7 +60,7 @@ func TestSourceInferenceBoundaries(t *testing.T) {
 				if !ok {
 					t.Fatalf("expected ambiguous trace: %v", original)
 				}
-				_, _, err = check.readITFByTypes(trace, b, a, original)
+				_, _, err = check.readITFByTypes(t.Context(), trace, b, a, original)
 				if err == nil || !strings.Contains(err.Error(), "changed") {
 					t.Fatalf("source edit during inference accepted: %v", err)
 				}

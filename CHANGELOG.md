@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- Model loading, trace-schema recovery, checker construction and lint inspection
+  now require a caller context. Cancellation stops queued or running typechecks,
+  remains detectable with `errors.Is`, and does not poison later cache callers.
+  Migrate directly to the context-taking APIs; no context-free aliases remain.
+
 - An installed-module LRU rehearsal drives the real cache from an independent
   finite model. Sampled and forced traces pass; a frozen native trace rejects
   a parent-planted Get-promotion defect in an isolated source copy. This is

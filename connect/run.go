@@ -275,7 +275,7 @@ func replayAll(t testing.TB, c Config, files []string, newDriver func() Driver, 
 	t.Logf("connect: %s %s: %d traces, seed %s", what, c.Spec, len(files), c.Seed)
 	traces := &traceReader{c: c}
 	for i, f := range files {
-		tr, err := traces.read(f)
+		tr, err := traces.read(t.Context(), f)
 		if err != nil {
 			t.Fatalf("connect: %s: %v", f, err)
 		}

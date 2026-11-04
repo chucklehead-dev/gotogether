@@ -156,14 +156,14 @@ func compileEval(c *Checker, make func(path string) (*binding.EvalModule, error)
 	}
 	// quint's IR of the module, kept across processes by its content and
 	// the model's (cache.go)
-	key, cached := cacheKey(c.Options.Quint, "compile", c.Binding.SpecPath(), "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, em.Text)
+	key, cached := cacheKey(context.Background(), c.Options.Quint, "compile", c.Binding.SpecPath(), "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, em.Text)
 	if cached {
 		if data, ok := cacheGet("compile", key); ok {
 			if m, err := qeval.Load(data); err == nil {
 				return &evaluator{em: em, m: m}
 			}
 		}
-		unlock, data, ok := cacheLock("compile", key)
+		unlock, data, ok := cacheLock(context.Background(), "compile", key)
 		defer unlock()
 		if ok {
 			if m, err := qeval.Load(data); err == nil {
@@ -218,7 +218,7 @@ func compileEval(c *Checker, make func(path string) (*binding.EvalModule, error)
 		return &evaluator{err: err}
 	}
 	if cached {
-		if current, valid := cacheKey(c.Options.Quint, "compile", c.Binding.SpecPath(), "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, em.Text); valid && current == key {
+		if current, valid := cacheKey(context.Background(), c.Options.Quint, "compile", c.Binding.SpecPath(), "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, em.Text); valid && current == key {
 			cachePut("compile", key, data)
 		} else {
 			return &evaluator{err: fmt.Errorf("model source %s changed during compile: validate anew", c.Binding.SpecPath())}

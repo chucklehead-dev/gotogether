@@ -8,6 +8,7 @@
 package model
 
 import (
+	"context"
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
@@ -22,7 +23,7 @@ type Analyzer struct {
 // New is an Analyzer of the binding file at bindingPath, with its own
 // checker (validate.NewChecker's options); Close it.
 func New(bindingPath string, opt validate.Options) (*Analyzer, error) {
-	c, err := validate.NewChecker(bindingPath, opt)
+	c, err := validate.NewChecker(context.Background(), bindingPath, opt)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +74,7 @@ type modelChecker struct{ *validate.Checker }
 
 // newChecker is validate.NewChecker's checker with the analyses.
 func newChecker(bindingPath string, opt validate.Options) (*modelChecker, error) {
-	c, err := validate.NewChecker(bindingPath, opt)
+	c, err := validate.NewChecker(context.Background(), bindingPath, opt)
 	if err != nil {
 		return nil, err
 	}

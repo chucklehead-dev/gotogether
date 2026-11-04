@@ -22,7 +22,7 @@ func TestCaseKeysWithin(t *testing.T) {
 		binding string
 		apart   bool
 	}{{"../validate/testdata/within.yaml", true}, {"../validate/testdata/blind.yaml", false}} {
-		c, err := validate.NewChecker(x.binding, validate.Options{})
+		c, err := validate.NewChecker(t.Context(), x.binding, validate.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}

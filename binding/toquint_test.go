@@ -20,7 +20,7 @@ import (
 func typedModel(t *testing.T) *Model {
 	t.Helper()
 	skip.Quint(t)
-	m, err := LoadModel("quint", "testdata/typed.qnt", "typed")
+	m, err := LoadModel(t.Context(), "quint", "testdata/typed.qnt", "typed")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -467,7 +467,7 @@ func TestActors(t *testing.T) {
 // parameter defaults to the field as it is.
 func TestToQuintScopes(t *testing.T) {
 	skip.Quint(t)
-	m, err := LoadModel("quint", "testdata/twomods.qnt", "twomods")
+	m, err := LoadModel(t.Context(), "quint", "testdata/twomods.qnt", "twomods")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -102,7 +102,7 @@ func TestFinishesNamesTheMissingPart(t *testing.T) {
 func TestFinishesOverLostTails(t *testing.T) {
 	t.Parallel()
 	RequireQuint(t)
-	c, err := validate.NewChecker("testdata/journey.yaml", validate.Options{Dir: t.TempDir()})
+	c, err := validate.NewChecker(t.Context(), "testdata/journey.yaml", validate.Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

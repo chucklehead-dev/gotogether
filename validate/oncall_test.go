@@ -44,7 +44,7 @@ func oncallRun(ops ...string) []qtrace.Step {
 func TestOnCallViolationReport(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/oncall.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/oncall.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestOnCallViolationReport(t *testing.T) {
 func TestOnCallRejectionReport(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/oncall.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/oncall.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

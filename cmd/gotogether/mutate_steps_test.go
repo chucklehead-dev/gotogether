@@ -40,7 +40,7 @@ func TestValidateMutateSteps(t *testing.T) {
 		return p
 	}
 	good := write("good.jsonl", step(1, "deposit", 5, 5), step(2, "withdraw", 2, 3))
-	code, out, err := validated([]string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out"), "-mutate-steps", "-mutate-ops", "drop,corrupt", good})
+	code, out, err := validated(t, []string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out"), "-mutate-steps", "-mutate-ops", "drop,corrupt", good})
 	if err != nil || code != 0 {
 		t.Fatalf("exit %d, %v:\n%s", code, err, out)
 	}
@@ -57,7 +57,7 @@ func TestValidateMutateSteps(t *testing.T) {
 		}
 	}
 	bad := write("bad.jsonl", step(1, "deposit", 5, 6))
-	code, out, err = validated([]string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out2"), "-mutate-steps", bad})
+	code, out, err = validated(t, []string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out2"), "-mutate-steps", bad})
 	if want := "mutate-steps: none judged: the run does not pass"; err != nil || code != 1 || !strings.Contains(string(out), want) {
 		t.Errorf("exit %d, %v; output lacks %q:\n%s", code, err, want, out)
 	}
@@ -68,7 +68,7 @@ func TestValidateMutateSteps(t *testing.T) {
 		{[]string{"-mutate-limit", "3"}, "-mutate-ops and -mutate-limit narrow -mutate-steps: add -mutate-steps"},
 		{[]string{"-mutate-steps", "-mutate-ops", "drop,delete"}, `"delete" is no mutation; the ops are drop, dup, swap, corrupt, retime, reactor`},
 	} {
-		code, _, err := validated(append(append([]string{"-binding", "../../validate/testdata/account.yaml"}, x.args...), good))
+		code, _, err := validated(t, append(append([]string{"-binding", "../../validate/testdata/account.yaml"}, x.args...), good))
 		if code != 2 || err == nil || !strings.Contains(err.Error(), x.says) {
 			t.Errorf("%v: exit %d, %v; want one saying %q", x.args, code, err, x.says)
 		}

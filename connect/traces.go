@@ -1,6 +1,7 @@
 package connect
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -15,12 +16,16 @@ import (
 // its type tells from a record of fields s, e and c: at the first trace
 // that holds one, the model (c.Spec's c.Main, else the module named as
 // its file) is typechecked, once, and its types read every trace
-// (binding.Model.Schema, itf.ReadFileWith).
-func ReadTraces(c Config, files []string) ([]*itf.Trace, error) {
+// (binding.Model.Schema, itf.ReadFileWith). ctx cancels model typechecking
+// and stops reading further traces.
+func ReadTraces(ctx context.Context, c Config, files []string) ([]*itf.Trace, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	r := &traceReader{c: c}
 	out := make([]*itf.Trace, 0, len(files))
 	for _, f := range files {
-		tr, err := r.read(f)
+		tr, err := r.read(ctx, f)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", f, err)
 		}
@@ -36,7 +41,7 @@ type traceReader struct {
 	r *binding.TraceReader
 }
 
-func (r *traceReader) read(path string) (*itf.Trace, error) {
+func (r *traceReader) read(ctx context.Context, path string) (*itf.Trace, error) {
 	if r.r == nil {
 		module := r.c.Main
 		if module == "" { // quint's default main module: the file's name
@@ -44,5 +49,5 @@ func (r *traceReader) read(path string) (*itf.Trace, error) {
 		}
 		r.r = &binding.TraceReader{Quint: r.c.Quint, Spec: r.c.Spec, Module: module}
 	}
-	return r.r.Read(path)
+	return r.r.Read(ctx, path)
 }

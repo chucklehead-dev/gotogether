@@ -18,7 +18,7 @@ import (
 func TestSanitizedRunConforms(t *testing.T) {
 	qtest.RequireQuint(t)
 	run := qtest.Record(t, "bank.binding.yaml", func(*qobs.Recorder) { payday(New(accounts)) }, qtest.Global())
-	ch, err := validate.NewChecker("bank.binding.yaml", validate.Options{})
+	ch, err := validate.NewChecker(t.Context(), "bank.binding.yaml", validate.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

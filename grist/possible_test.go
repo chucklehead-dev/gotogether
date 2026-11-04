@@ -51,7 +51,7 @@ func TestGeneratedPossibles(t *testing.T) {
 		return dir
 	}
 	search := func(t *testing.T, dir string) map[string]model.PossibleResult {
-		c, err := validate.NewChecker(filepath.Join(dir, "shop.binding.yaml"), validate.Options{})
+		c, err := validate.NewChecker(t.Context(), filepath.Join(dir, "shop.binding.yaml"), validate.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}

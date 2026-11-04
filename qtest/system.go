@@ -133,7 +133,7 @@ func (s System) FollowTraces(t testing.TB, trace connect.Config, faults FaultMap
 	if err != nil {
 		t.Fatal(err)
 	}
-	trs, err := connect.ReadTraces(rc, files)
+	trs, err := connect.ReadTraces(t.Context(), rc, files)
 	if err != nil {
 		t.Fatal(err)
 	}

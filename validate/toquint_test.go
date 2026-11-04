@@ -21,7 +21,7 @@ import (
 func TestTypedFieldsChecked(t *testing.T) {
 	t.Parallel()
 	needQuint(t)
-	c, err := NewChecker("testdata/typed.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/typed.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestActorsMatchNone(t *testing.T) {
 	if err := os.WriteFile(path, []byte("spec: "+spec+"\nmodule: account\nconstants: { LIMIT: '100' }\nactors: ['*.clients']\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	c, err := NewChecker(path, Options{Dir: dir})
+	c, err := NewChecker(t.Context(), path, Options{Dir: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestActorsMatchNone(t *testing.T) {
 func TestStringsAsQuintWritesThem(t *testing.T) {
 	t.Parallel()
 	needQuint(t)
-	c, err := NewChecker("testdata/typed.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/typed.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestStringsAsQuintWritesThem(t *testing.T) {
 	}
 	// a parameter of type str, its default template: the replay's
 	// comment naming the step keeps a newline out of the code
-	c, err = NewChecker("testdata/strs.yaml", Options{Dir: t.TempDir()})
+	c, err = NewChecker(t.Context(), "testdata/strs.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

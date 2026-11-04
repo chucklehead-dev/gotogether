@@ -450,7 +450,7 @@ func TestSpanIdentityCorruption(t *testing.T) {
 	}
 	// Validate's malformed-input behavior is asserted separately from semantic
 	// failures below; no mutation-score credit is taken for missing parameters.
-	checker, err := validate.NewChecker(commits, validate.Options{Dir: t.TempDir()})
+	checker, err := validate.NewChecker(t.Context(), commits, validate.Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

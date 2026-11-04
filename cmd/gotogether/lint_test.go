@@ -38,7 +38,7 @@ func pay(ctx context.Context) {
 	}
 	stdout := os.Stdout
 	os.Stdout = w
-	code, err := lint([]string{"-binding", "../../examples/bank/bank.binding.yaml", "-src", dir})
+	code, err := lint(t.Context(), []string{"-binding", "../../examples/bank/bank.binding.yaml", "-src", dir})
 	os.Stdout = stdout
 	w.Close()
 	out, _ := io.ReadAll(r)
@@ -71,7 +71,7 @@ func TestLintInternalChoice(t *testing.T) {
 	}
 	stdout := os.Stdout
 	os.Stdout = w
-	code, err := lint([]string{"-binding", "../../qtest/testdata/flip.yaml"})
+	code, err := lint(t.Context(), []string{"-binding", "../../qtest/testdata/flip.yaml"})
 	os.Stdout = stdout
 	w.Close()
 	out, _ := io.ReadAll(r)
@@ -101,7 +101,7 @@ func lintOut(t *testing.T, args ...string) (int, string) {
 	}
 	stdout := os.Stdout
 	os.Stdout = w
-	code, err := lint(args)
+	code, err := lint(t.Context(), args)
 	os.Stdout = stdout
 	w.Close()
 	out, _ := io.ReadAll(r)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,7 +10,7 @@ import (
 	lintcheck "github.com/chucklehead-dev/gotogether/lint"
 )
 
-func lint(args []string) (int, error) {
+func lint(ctx context.Context, args []string) (int, error) {
 	fs := commandFlags("lint")
 	bindings := fs.String("binding", "", "binding files, comma-separated; source actions are checked against their union")
 	source := fs.String("src", "", "Go source tree: action annotations and literal Record calls (syntactic inspection)")
@@ -25,7 +26,7 @@ func lint(args []string) (int, error) {
 		}
 		return strings.Split(value, ",")
 	}
-	report := lintcheck.Inspect(lintcheck.Options{Bindings: split(*bindings), Source: *source, Simulation: *simulation, Weave: *weave, Conversions: split(*conversions), Quint: *quint})
+	report := lintcheck.Inspect(ctx, lintcheck.Options{Bindings: split(*bindings), Source: *source, Simulation: *simulation, Weave: *weave, Conversions: split(*conversions), Quint: *quint})
 	if fs.NArg() > 0 {
 		reason := "unexpected positional arguments: " + strings.Join(fs.Args(), " ")
 		report.Checks = append(report.Checks, lintcheck.Check{Name: "request.arguments", Status: lintcheck.CheckBlocked, Reason: reason, Operational: true})

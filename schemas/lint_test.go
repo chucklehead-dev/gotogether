@@ -47,7 +47,7 @@ func TestLintReportValidates(t *testing.T) {
 	}
 	// A schema failure produces a finding plus a blocked dependent check;
 	// inspect real output rather than a hand-constructed DTO approximation.
-	r := lintcheck.Inspect(lintcheck.Options{Conversions: []string{p}})
+	r := lintcheck.Inspect(t.Context(), lintcheck.Options{Conversions: []string{p}})
 	data, err := json.Marshal(r)
 	if err != nil {
 		t.Fatal(err)

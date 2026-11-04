@@ -28,7 +28,7 @@ func hotRun(actions ...string) []qtrace.Step {
 func TestMarkHot(t *testing.T) {
 	skip.Quint(t)
 	t.Parallel()
-	c, err := NewChecker("testdata/hot.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/hot.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

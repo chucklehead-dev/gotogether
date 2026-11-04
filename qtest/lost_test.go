@@ -17,7 +17,7 @@ import (
 func TestClaimsOverLostTails(t *testing.T) {
 	t.Parallel()
 	RequireQuint(t)
-	c, err := validate.NewChecker("../validate/testdata/funds.binding.yaml", validate.Options{Dir: t.TempDir()})
+	c, err := validate.NewChecker(t.Context(), "../validate/testdata/funds.binding.yaml", validate.Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestClaimsOverLostTails(t *testing.T) {
 func TestPendingOverLostTails(t *testing.T) {
 	t.Parallel()
 	RequireQuint(t)
-	c, err := validate.NewChecker("../validate/testdata/funds.binding.yaml", validate.Options{Dir: t.TempDir()})
+	c, err := validate.NewChecker(t.Context(), "../validate/testdata/funds.binding.yaml", validate.Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestPendingOverLostTails(t *testing.T) {
 func TestUnknownClaimsEverywhere(t *testing.T) {
 	t.Parallel()
 	RequireQuint(t)
-	c, err := validate.NewChecker("../validate/testdata/funds.binding.yaml", validate.Options{Dir: t.TempDir()})
+	c, err := validate.NewChecker(t.Context(), "../validate/testdata/funds.binding.yaml", validate.Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

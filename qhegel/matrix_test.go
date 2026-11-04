@@ -66,7 +66,7 @@ func TestCaseCheckerVerdictMatrix(t *testing.T) {
 		{"hidden", "gossip.yaml", seq(gossip("a", 1, nil), gossip("b", 0, []int{1})), seq(gossip("a", 1, nil), gossip("b", 0, []int{9})),
 			seq(gossip("a", 1, nil), gossip("b", 0, []int{9}), gossip("c", 2, nil)), false},
 	} {
-		c, err := validate.NewChecker(td+x.binding, validate.Options{Dir: t.TempDir()})
+		c, err := validate.NewChecker(t.Context(), td+x.binding, validate.Options{Dir: t.TempDir()})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -96,7 +96,7 @@ func TestCaseCheckerCachesNoRefs(t *testing.T) {
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not on PATH")
 	}
-	c, err := validate.NewChecker("../validate/testdata/account.yaml", validate.Options{Dir: t.TempDir()})
+	c, err := validate.NewChecker(t.Context(), "../validate/testdata/account.yaml", validate.Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

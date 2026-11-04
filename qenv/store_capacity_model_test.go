@@ -20,7 +20,7 @@ import (
 // separate runtime controls in store_capacity_test.go.
 func TestStoreCapacityAgainstQuint(t *testing.T) {
 	skip.Quint(t)
-	base, err := validate.NewChecker("testdata/store_capacity.yaml", validate.Options{Eval: "quint", Backend: "rust", Dir: t.TempDir()})
+	base, err := validate.NewChecker(t.Context(), "testdata/store_capacity.yaml", validate.Options{Eval: "quint", Backend: "rust", Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

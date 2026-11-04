@@ -12,7 +12,7 @@ import (
 // the parameter's type, aliases included (gcounter's Vec is str -> int).
 func TestDefaultArgs(t *testing.T) {
 	skip.Quint(t)
-	m, err := LoadModel("quint", "../examples/glomers/model/gcounter.qnt", "gcounter")
+	m, err := LoadModel(t.Context(), "quint", "../examples/glomers/model/gcounter.qnt", "gcounter")
 	if err != nil {
 		t.Fatal(err)
 	}

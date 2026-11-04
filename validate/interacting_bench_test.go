@@ -38,7 +38,7 @@ func BenchmarkInteractingValidation(b *testing.B) {
 						ops = append(ops, op("transfer", "acct", a, "dest", z, "amount", 1))
 					}
 					steps := ledgerLog(ops...)
-					c, err := NewChecker("testdata/ledger_whole.yaml", Options{Dir: b.TempDir(), NoITF: true})
+					c, err := NewChecker(b.Context(), "testdata/ledger_whole.yaml", Options{Dir: b.TempDir(), NoITF: true})
 					if err != nil {
 						b.Fatal(err)
 					}

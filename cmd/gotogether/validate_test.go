@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -40,7 +42,7 @@ func TestValidateResultLine(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.Close()
-	code, out, err := validated([]string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out"), log})
+	code, out, err := validated(t, []string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out"), log})
 	if err != nil || code != 1 {
 		t.Fatalf("exit %d, %v:\n%s", code, err, out)
 	}
@@ -56,7 +58,7 @@ func TestValidateResultLine(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.Close()
-	code, out, err = validated([]string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out2"), log})
+	code, out, err = validated(t, []string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out2"), log})
 	if want := "RESULT: PASS (1 actor conforms to the model and satisfies its 2 invariants)"; err != nil || code != 0 || !strings.Contains(string(out), want) {
 		t.Errorf("exit %d, %v; output lacks %q:\n%s", code, err, want, out)
 	}
@@ -90,7 +92,7 @@ func TestValidateLinearize(t *testing.T) {
 		code  int
 	}{{nil, 1}, {[]string{"-linearize"}, 0}, {[]string{"-history", filepath.Join(dir, "h.svg")}, 1}} {
 		args := append(append([]string{"-binding", "../../validate/testdata/account.yaml", "-dir", filepath.Join(dir, "out")}, c.flags...), log)
-		code, out, err := validated(args)
+		code, out, err := validated(t, args)
 		if err != nil || code != c.code {
 			t.Errorf("%v: exit %d, %v, want %d:\n%s", c.flags, code, err, c.code, out)
 		}
@@ -219,7 +221,7 @@ func matrixRow(t *testing.T, bind string, flags []string, pass, fail []qtrace.St
 		f.Close()
 		manifest := filepath.Join(dir, fmt.Sprintf("run%d.manifest.json", run.code))
 		args := append(append([]string{"-binding", td + bind, "-dir", filepath.Join(dir, "out"), "-manifest", manifest}, flags...), log)
-		code, out, err := validated(args)
+		code, out, err := validated(t, args)
 		if err != nil || code != run.code || run.code == 1 && !strings.Contains(string(out), says) {
 			t.Errorf("exit %d, %v, want %d (saying %q):\n%s", code, err, run.code, says, out)
 		}
@@ -295,7 +297,7 @@ func TestValidateLost(t *testing.T) {
 		{"torn", []string{torn}, 0, "its recorders' tails are lost after their last steps: eventual vals not judged", "account.yaml"},
 	} {
 		args := append([]string{"-binding", "../../validate/testdata/" + c.binding, "-dir", filepath.Join(dir, "out")}, c.args...)
-		code, b, err := validated(args)
+		code, b, err := validated(t, args)
 		out := string(b)
 		if err != nil {
 			out += err.Error()
@@ -366,7 +368,7 @@ func TestValidateResume(t *testing.T) {
 	if code != 0 || !strings.Contains(out, "the steps pass from balance = 3, ops = 0, a state resumeAny admits (quint confirms)") {
 		t.Errorf("validate: exit %d:\n%s", code, out)
 	}
-	_, out = capture(t, func() (int, error) { return 0, steps([]string{log}) })
+	_, out = capture(t, func() (int, error) { return 0, steps(t.Context(), []string{log}) })
 	if !strings.Contains(out, "lost: recorder r lost seqs 1..2") {
 		t.Errorf("steps:\n%s", out)
 	}
@@ -407,7 +409,7 @@ func TestValidateManifest(t *testing.T) {
 		t.Errorf("manifest: %+v", m)
 	}
 	// a flag the manifest decides
-	if _, _, err := validated([]string{"-replay", manifest, "-linearize"}); err == nil || !strings.Contains(err.Error(), "-linearize: the manifest says") {
+	if _, _, err := validated(t, []string{"-replay", manifest, "-linearize"}); err == nil || !strings.Contains(err.Error(), "-linearize: the manifest says") {
 		t.Errorf("-replay -linearize: %v", err)
 	}
 	// a verdict that is not the manifest's: exit 1, saying both
@@ -438,7 +440,7 @@ func TestValidateManifest(t *testing.T) {
 	}
 	// a changed log: refused, naming it, with the fix
 	os.WriteFile(log, []byte(strings.Replace(b.String(), `"quint.obs.balance":6`, `"quint.obs.balance":5`, 1)), 0o644)
-	if _, _, err := validated([]string{"-replay", manifest}); err == nil || !strings.Contains(err.Error(), "the input "+log+" changed since the run was judged") {
+	if _, _, err := validated(t, []string{"-replay", manifest}); err == nil || !strings.Contains(err.Error(), "the input "+log+" changed since the run was judged") {
 		t.Errorf("a changed log: %v", err)
 	}
 }
@@ -529,29 +531,29 @@ func TestValidateManifestITF(t *testing.T) {
 	if code != 0 || !strings.Contains(out, "reproduced: PASS") {
 		t.Errorf("replay: exit %d:\n%s", code, out)
 	}
-	if _, _, err := validated([]string{"-replay", manifest, "-backend", "typescript"}); err == nil || !strings.Contains(err.Error(), "verdicts depend on it: drop -backend") {
+	if _, _, err := validated(t, []string{"-replay", manifest, "-backend", "typescript"}); err == nil || !strings.Contains(err.Error(), "verdicts depend on it: drop -backend") {
 		t.Errorf("another backend: %v", err)
 	}
 	f, _ := os.OpenFile(filepath.Join(dir, "account.qnt"), os.O_APPEND|os.O_WRONLY, 0)
 	f.WriteString("\n")
 	f.Close()
-	if _, _, err := validated([]string{"-replay", manifest}); err == nil || !strings.Contains(err.Error(), "is not the one the run was judged on") {
+	if _, _, err := validated(t, []string{"-replay", manifest}); err == nil || !strings.Contains(err.Error(), "is not the one the run was judged on") {
 		t.Errorf("a changed spec: %v", err)
 	}
 }
 
 // validated runs the validate command with its report in a buffer, so
 // its tests run in parallel (capture swaps the process's stdout).
-func validated(args []string) (int, []byte, error) {
+func validated(t *testing.T, args []string) (int, []byte, error) {
 	var b bytes.Buffer
-	code, err := validateTo(&b, args)
+	code, err := validateTo(t.Context(), &b, args)
 	return code, b.Bytes(), err
 }
 
 // vcapture is validated for a run that must not fail with an error.
 func vcapture(t *testing.T, args []string) (int, string) {
 	t.Helper()
-	code, out, err := validated(args)
+	code, out, err := validated(t, args)
 	if err != nil {
 		t.Fatalf("%v:\n%s", err, out)
 	}
@@ -586,7 +588,7 @@ func TestValidateTempDir(t *testing.T) {
 	step := qtrace.Step{Action: "deposit", Actor: "a", Recorder: "a", Thread: "a", Seq: 1,
 		Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}}
 	write(step)
-	if code, out, err := validated([]string{log}); code != 2 || err == nil || !strings.Contains(err.Error(), "recorded steps need -binding") || strings.Contains(string(out), "artifacts") {
+	if code, out, err := validated(t, []string{log}); code != 2 || err == nil || !strings.Contains(err.Error(), "recorded steps need -binding") || strings.Contains(string(out), "artifacts") {
 		t.Errorf("no -binding: exit %d, %v:\n%s", code, err, out)
 	}
 	if l := left(); len(l) > 0 {
@@ -624,5 +626,22 @@ func TestValidateTempDir(t *testing.T) {
 	l := left()
 	if code != 1 || len(l) != 1 || !strings.Contains(out, l[0]) {
 		t.Errorf("a failing run: exit %d, left %v:\n%s", code, l, out)
+	}
+}
+
+func TestValidateCanceledModelLoading(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	log := filepath.Join(t.TempDir(), "steps.jsonl")
+	if err := os.WriteFile(log, []byte(`{"quint.action":"deposit","quint.actor":"a","quint.recorder":"a","quint.seq":1,"quint.arg.amount":5,"quint.obs.balance":5}`+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	code, err := validateTo(ctx, &out, []string{"-binding", "../../validate/testdata/account.yaml", "-quint", "quint-must-not-start", log})
+	if code != 2 || !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled validate: code=%d err=%v output=%s", code, err, &out)
+	}
+	if strings.Contains(out.String(), "RESULT: PASS") || strings.Contains(out.String(), "RESULT: FAIL") {
+		t.Fatalf("cancellation became model verdict: %s", &out)
 	}
 }

@@ -69,7 +69,7 @@ func localChecks(t *testing.T, steps []qtrace.Step, inventoryOK bool) {
 }
 func protocolCheck(t *testing.T, steps []qtrace.Step, limit int) gristtest.ProtocolSearch {
 	t.Helper()
-	checker, err := validate.NewChecker(protocol, validate.Options{NoITF: true})
+	checker, err := validate.NewChecker(t.Context(), protocol, validate.Options{NoITF: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func compositionChecks(t *testing.T) gristtest.Composition {
 	t.Helper()
 	checker := func(binding string) *validate.Checker {
 		t.Helper()
-		c, err := validate.NewChecker(binding, validate.Options{Dir: t.TempDir()})
+		c, err := validate.NewChecker(t.Context(), binding, validate.Options{Dir: t.TempDir()})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -357,7 +357,7 @@ func TestProtocolCorrelation(t *testing.T) {
 	cfg.Alphabet = []string{"a"}
 	e := gristsim.System(commits, App, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 1, Chooser: quiet})
 	e.Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
-	checker, err := validate.NewChecker(protocol, validate.Options{NoITF: true})
+	checker, err := validate.NewChecker(t.Context(), protocol, validate.Options{NoITF: true})
 	if err != nil {
 		t.Fatal(err)
 	}

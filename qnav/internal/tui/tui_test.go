@@ -32,7 +32,7 @@ const root = "../../.."
 // navOf is a model navigator of binding from init.
 func navOf(t *testing.T, binding string) *validate.Navigator {
 	t.Helper()
-	c, err := validate.NewChecker(filepath.Join(root, binding), validate.Options{Dir: t.TempDir()})
+	c, err := validate.NewChecker(t.Context(), filepath.Join(root, binding), validate.Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,7 +300,7 @@ func TestGristRejection(t *testing.T) {
 	if _, err := os.Stat(bind); err != nil {
 		t.Skip("no examples/counters beside the module")
 	}
-	c, err := validate.NewChecker(bind, validate.Options{Dir: t.TempDir()})
+	c, err := validate.NewChecker(t.Context(), bind, validate.Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

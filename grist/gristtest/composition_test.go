@@ -60,7 +60,7 @@ invariants: [sane]
 			t.Fatal(err)
 		}
 	}
-	c, err := validate.NewChecker(filepath.Join(dir, "binding.yaml"), validate.Options{NoITF: true})
+	c, err := validate.NewChecker(t.Context(), filepath.Join(dir, "binding.yaml"), validate.Options{NoITF: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ actions:
 			t.Fatal(err)
 		}
 	}
-	checker, err := validate.NewChecker(filepath.Join(dir, "binding.yaml"), validate.Options{NoITF: true})
+	checker, err := validate.NewChecker(t.Context(), filepath.Join(dir, "binding.yaml"), validate.Options{NoITF: true})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -128,7 +128,7 @@ func checkJobqueueIncidentFrame(t *testing.T, dir string) diagnostic.RecordRef {
 	if err != nil {
 		t.Fatal(err)
 	}
-	checker, err := validate.NewChecker(filepath.Join(dir, "jobqueue.binding.yaml"), validate.Options{Dir: t.TempDir()})
+	checker, err := validate.NewChecker(t.Context(), filepath.Join(dir, "jobqueue.binding.yaml"), validate.Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func checkJobqueueIncidentFrame(t *testing.T, dir string) diagnostic.RecordRef {
 // Snapshot checkpoints compare replayed state; they are not disabled calls.
 func TestFailingSnapshotCheckpoint(t *testing.T) {
 	requireQuint(t)
-	checker, err := validate.NewChecker(filepath.Join(root, "validate/testdata/snapshot.yaml"), validate.Options{Dir: t.TempDir()})
+	checker, err := validate.NewChecker(t.Context(), filepath.Join(root, "validate/testdata/snapshot.yaml"), validate.Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -48,7 +48,7 @@ func TestCompileThenValidate(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.Close()
-	code, got, err := validated([]string{"-binding", bind, "-compiled", model, "-quint", "/nonexistent/quint", "-dir", filepath.Join(dir, "out"), log})
+	code, got, err := validated(t, []string{"-binding", bind, "-compiled", model, "-quint", "/nonexistent/quint", "-dir", filepath.Join(dir, "out"), log})
 	if err != nil || code != 1 {
 		t.Fatalf("exit %d, %v:\n%s", code, err, got)
 	}
@@ -57,12 +57,12 @@ func TestCompileThenValidate(t *testing.T) {
 			t.Errorf("output lacks %q:\n%s", want, got)
 		}
 	}
-	code, got, err = validated([]string{"-binding", bind, "-compiled", model, "-linearize", log})
+	code, got, err = validated(t, []string{"-binding", bind, "-compiled", model, "-linearize", log})
 	if code != 2 || err == nil || !strings.Contains(err.Error(), "needs quint") {
 		t.Fatalf("unsupported search: exit %d, %v:\n%s", code, err, got)
 	}
 	manifest := filepath.Join(dir, "compiled-run.json")
-	code, got, err = validated([]string{"-binding", bind, "-compiled", model, "-quint", "/nonexistent/quint", "-manifest", manifest, log})
+	code, got, err = validated(t, []string{"-binding", bind, "-compiled", model, "-quint", "/nonexistent/quint", "-manifest", manifest, log})
 	if code != 1 || err != nil {
 		t.Fatalf("compiled manifest: exit %d, %v:\n%s", code, err, got)
 	}
@@ -70,14 +70,14 @@ func TestCompileThenValidate(t *testing.T) {
 	if err != nil || m.Model.Compiled == nil || m.Tools.Quint != "" || m.Tools.Backend != "" {
 		t.Fatalf("recorded judge: %+v (%v)", m, err)
 	}
-	code, got, err = validated([]string{"-replay", manifest, "-quint", "/nonexistent/quint"})
+	code, got, err = validated(t, []string{"-replay", manifest, "-quint", "/nonexistent/quint"})
 	if code != 1 || err != nil || !strings.Contains(string(got), "manifest's verdict, reproduced") {
 		t.Fatalf("compiled replay: exit %d, %v:\n%s", code, err, got)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "account.qnt"), append(mustRead(t, filepath.Join(dir, "account.qnt")), "\n// edited\n"...), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code, got, err = validated([]string{"-binding", bind, "-compiled", model, "-dir", filepath.Join(dir, "out-stale"), log})
+	code, got, err = validated(t, []string{"-binding", bind, "-compiled", model, "-dir", filepath.Join(dir, "out-stale"), log})
 	if code != 2 || err == nil || !strings.Contains(err.Error(), "is stale") || !strings.Contains(err.Error(), "gotogether compile -binding") {
 		t.Errorf("a stale artifact: exit %d, %v:\n%s", code, err, got)
 	}
@@ -85,7 +85,7 @@ func TestCompileThenValidate(t *testing.T) {
 	// directory: nothing was written there
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
-	code, got, _ = validated([]string{"-binding", bind, "-compiled", model, log})
+	code, got, _ = validated(t, []string{"-binding", bind, "-compiled", model, log})
 	if left, _ := os.ReadDir(tmp); code != 2 || strings.Contains(string(got), "artifacts") || len(left) > 0 {
 		t.Errorf("a stale artifact without -dir: exit %d, %d entries left in TMPDIR:\n%s", code, len(left), got)
 	}

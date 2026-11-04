@@ -33,6 +33,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
 	"go/parser"
@@ -40,9 +41,11 @@ import (
 	"io"
 	"maps"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/binding"
@@ -60,19 +63,25 @@ func main() {
 	if len(os.Args) < 2 {
 		usage()
 	}
+	ctx := context.Background()
+	if os.Args[1] == "scaffold" || os.Args[1] == "steps" || os.Args[1] == "lint" || os.Args[1] == "validate" {
+		var stop context.CancelFunc
+		ctx, stop = signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+		defer stop()
+	}
 	var err error
 	code := 0
 	switch os.Args[1] {
 	case "init":
 		err = runInit(os.Stdout, os.Stderr, os.Args[2:])
 	case "scaffold":
-		err = scaffold(os.Args[2:])
+		err = scaffold(ctx, os.Args[2:])
 	case "lint":
-		code, err = lint(os.Args[2:])
+		code, err = lint(ctx, os.Args[2:])
 	case "steps":
-		err = steps(os.Args[2:])
+		err = steps(ctx, os.Args[2:])
 	case "validate":
-		code, err = runValidate(os.Args[2:])
+		code, err = runValidate(ctx, os.Args[2:])
 	case "bundle":
 		err = bundleTo(os.Stdout, os.Args[2:])
 	case "itf":
@@ -165,7 +174,7 @@ func packageIn(dir string) string {
 	return "app"
 }
 
-func scaffold(args []string) error {
+func scaffold(ctx context.Context, args []string) error {
 	fset := commandFlags("scaffold")
 	spec := fset.String("spec", "", "Quint spec")
 	module := fset.String("module", "", "the model's module (its name after `module` in the spec)")
@@ -194,7 +203,7 @@ func scaffold(args []string) error {
 	// rendered whole before a file is made: a failed scaffold (a model
 	// quint rejects) once left an empty file its retry refused
 	var buf bytes.Buffer
-	if err := scaffoldTo(&buf, *out, *spec, *module, *system, *http, *bpath, *pkg, *quint, properties); err != nil {
+	if err := scaffoldTo(ctx, &buf, *out, *spec, *module, *system, *http, *bpath, *pkg, *quint, properties); err != nil {
 		return err
 	}
 	return writeOut(*out, buf.Bytes())
@@ -203,7 +212,7 @@ func scaffold(args []string) error {
 // scaffoldTo writes the scaffold of a binding (or with system, of a
 // qtest.System test) to w, its paths relative to out's directory, where
 // the file is read from (the working directory without out).
-func scaffoldTo(w io.Writer, out, spec, module string, system, http bool, bpath, pkg, quint string, propertyOptions ...scaffoldProperties) error {
+func scaffoldTo(ctx context.Context, w io.Writer, out, spec, module string, system, http bool, bpath, pkg, quint string, propertyOptions ...scaffoldProperties) error {
 	var properties scaffoldProperties
 	if len(propertyOptions) > 0 {
 		properties = propertyOptions[0]
@@ -225,7 +234,7 @@ func scaffoldTo(w io.Writer, out, spec, module string, system, http bool, bpath,
 		if err := b.CheckSpec(); err != nil {
 			return err
 		}
-		m, err := binding.LoadModel(quint, b.SpecPath(), b.Module)
+		m, err := binding.LoadModel(ctx, quint, b.SpecPath(), b.Module)
 		if err != nil {
 			return err
 		}
@@ -240,7 +249,7 @@ func scaffoldTo(w io.Writer, out, spec, module string, system, http bool, bpath,
 	if spec == "" || module == "" {
 		return fmt.Errorf("scaffold needs -spec and -module (or -system -binding b.yaml)")
 	}
-	m, err := binding.LoadModel(quint, spec, module)
+	m, err := binding.LoadModel(ctx, quint, spec, module)
 	if err != nil {
 		return err
 	}
@@ -311,7 +320,7 @@ func readSteps(files []string, rules *convert.Rules) ([]qtrace.Step, error) {
 	return all, input.Distinct(read...)
 }
 
-func steps(args []string) error {
+func steps(ctx context.Context, args []string) error {
 	fset := commandFlags("steps")
 	conv := fset.String("convert", "", "convert OTLP/JSON spans with this rule file")
 	out := fset.String("out", "", "write the selected, sanitized steps to this step log instead of listing them")
@@ -355,7 +364,7 @@ func steps(args []string) error {
 		if err := b.CheckSpec(); err != nil {
 			return err
 		}
-		m, err := binding.LoadModel(*quint, b.SpecPath(), b.Module)
+		m, err := binding.LoadModel(ctx, *quint, b.SpecPath(), b.Module)
 		if err != nil {
 			return err
 		}

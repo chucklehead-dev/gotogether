@@ -16,7 +16,7 @@ func TestLoadModelWrapsQuintsError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = binding.LoadModel("quint-not-installed-anywhere", spec, "bank")
+	_, err = binding.LoadModel(t.Context(), "quint-not-installed-anywhere", spec, "bank")
 	if !errors.Is(err, exec.ErrNotFound) {
 		t.Errorf("%v, want a wrapped exec.ErrNotFound", err)
 	}

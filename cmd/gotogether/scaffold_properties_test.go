@@ -78,7 +78,7 @@ func TestScaffoldInvalidPropertySelectionLeavesNoFile(t *testing.T) {
 	for _, flags := range [][]string{nil, {"-invariants", "missing"}, {"-invariants", "safe", "-eventually", "safe"}, {"-invariants", "safe", "-holds", "done"}} {
 		out := filepath.Join(t.TempDir(), "roles.binding.yaml")
 		args := append([]string{"-spec", spec, "-module", "roles", "-out", out}, flags...)
-		if err := scaffold(args); err == nil {
+		if err := scaffold(t.Context(), args); err == nil {
 			t.Fatalf("accepted invalid selection: %v", flags)
 		}
 		if _, err := os.Stat(out); !os.IsNotExist(err) {
@@ -87,7 +87,7 @@ func TestScaffoldInvalidPropertySelectionLeavesNoFile(t *testing.T) {
 	}
 	// -system takes the existing binding as its sole property registration.
 	out := filepath.Join(t.TempDir(), "system_test.go")
-	err := scaffold([]string{"-system", "-binding", "missing.yaml", "-out", out, "-invariants", ""})
+	err := scaffold(t.Context(), []string{"-system", "-binding", "missing.yaml", "-out", out, "-invariants", ""})
 	if err == nil || !strings.Contains(err.Error(), "uses the binding's property selections") {
 		t.Fatalf("system mode accepted property overrides: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestScaffoldSelectedCompletionIsNotASafetyInvariant(t *testing.T) {
 	skip.Quint(t)
 	spec := scaffoldRoleSpec(t)
 	out := filepath.Join(t.TempDir(), "roles.binding.yaml")
-	if err := scaffold([]string{"-spec", spec, "-module", "roles", "-out", out, "-invariants", "safe", "-eventually", "done"}); err != nil {
+	if err := scaffold(t.Context(), []string{"-spec", spec, "-module", "roles", "-out", out, "-invariants", "safe", "-eventually", "done"}); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(out)
@@ -118,7 +118,7 @@ func TestScaffoldSelectedCompletionIsNotASafetyInvariant(t *testing.T) {
 		t.Fatalf("unselected predicate disappeared: %s", data)
 	}
 	classified := filepath.Join(t.TempDir(), "classified.binding.yaml")
-	if err := scaffold([]string{"-spec", spec, "-module", "roles", "-out", classified, "-invariants", "safe", "-eventually", "done", "-holds", "safe"}); err != nil {
+	if err := scaffold(t.Context(), []string{"-spec", spec, "-module", "roles", "-out", classified, "-invariants", "safe", "-eventually", "done", "-holds", "safe"}); err != nil {
 		t.Fatal(err)
 	}
 	classifiedBinding, err := binding.Load(classified)
@@ -129,7 +129,7 @@ func TestScaffoldSelectedCompletionIsNotASafetyInvariant(t *testing.T) {
 		t.Fatalf("explicit model classification changed runtime role: %+v", classifiedBinding)
 	}
 	conformanceOnly := filepath.Join(t.TempDir(), "conformance.binding.yaml")
-	if err := scaffold([]string{"-spec", spec, "-module", "roles", "-out", conformanceOnly, "-no-properties"}); err != nil {
+	if err := scaffold(t.Context(), []string{"-spec", spec, "-module", "roles", "-out", conformanceOnly, "-no-properties"}); err != nil {
 		t.Fatal(err)
 	}
 	only, err := binding.Load(conformanceOnly)
@@ -145,7 +145,7 @@ func TestScaffoldSelectedCompletionIsNotASafetyInvariant(t *testing.T) {
 	if err = os.WriteFile(out, data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	checker, err := validate.NewChecker(out, validate.Options{Dir: t.TempDir(), Eval: "go"})
+	checker, err := validate.NewChecker(t.Context(), out, validate.Options{Dir: t.TempDir(), Eval: "go"})
 	if err != nil {
 		t.Fatal(err)
 	}

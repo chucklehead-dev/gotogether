@@ -39,7 +39,7 @@ func lostHead(ops ...[2]int64) []qtrace.Step {
 func TestResumeLostPrefix(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/resume.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/resume.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestResumeLostPrefix(t *testing.T) {
 // state), is the evaluator's error, never a verdict.
 func TestResumeFailConfirmedByQuint(t *testing.T) {
 	skip.Quint(t)
-	c, err := NewChecker("testdata/resume.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/resume.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestResumeFailConfirmedByQuint(t *testing.T) {
 func TestResumeWithin(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/within_resume.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/within_resume.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestResumeWithin(t *testing.T) {
 func TestResumeAgainstBruteForce(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/resume_small.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/resume_small.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +254,7 @@ func TestResumeAgainstBruteForce(t *testing.T) {
 func TestResumeCapIsNoVerdict(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/resume_cap.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/resume_cap.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +274,7 @@ func TestResumeCapIsNoVerdict(t *testing.T) {
 func TestResumeHidden(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/gossip_resume.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/gossip_resume.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +299,7 @@ func TestResumeHidden(t *testing.T) {
 func TestResumeRecurringStates(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/ev_counter.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/ev_counter.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -340,7 +340,7 @@ func TestHiddenOnePath(t *testing.T) {
 		{"testdata/ev_together.yaml", []qtrace.Step{{Action: "inc", Recorder: "r", Seq: 3, Time: time.Unix(3, 0)}, func() qtrace.Step { s := settled; s.Seq = 4; return s }()}},
 		{"testdata/ev_hidden.yaml", []qtrace.Step{{Action: "tick", Recorder: "r", Seq: 1, Time: time.Unix(1, 0)}, func() qtrace.Step { s := settled; s.Seq = 2; return s }()}},
 	} {
-		c, err := NewChecker(x.binding, Options{Dir: t.TempDir()})
+		c, err := NewChecker(t.Context(), x.binding, Options{Dir: t.TempDir()})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -180,7 +180,7 @@ func TestLinearizeMergesPrefixesOfOneState(t *testing.T) {
 	if testing.Short() {
 		t.Skip("searches a few hundred orders with quint")
 	}
-	c, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/blind.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +248,7 @@ func TestCompleteSearchAgainstWholeOrders(t *testing.T) {
 	}
 	hooks.CompleteSearchOnly.Store(true)
 	defer hooks.CompleteSearchOnly.Store(false)
-	c, err := NewChecker("testdata/procs.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/procs.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -362,7 +362,7 @@ func TestAnnotateKeepsCollidingNames(t *testing.T) {
 // caller checks. No quint process runs for it, so it needs no quint here.
 func TestLinearizeForcedOrderIsNotSearched(t *testing.T) {
 	t.Parallel()
-	c, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/blind.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		skip.Quint(t) // the binding loads its model with quint: without it, a skip
 		t.Fatal(err)
@@ -404,7 +404,7 @@ func TestEvaluatorAgreesAndIsConfirmed(t *testing.T) {
 		Invoked: at(20), Time: at(30), Args: map[string]any{"amount": int64(7)}, Obs: map[string]any{"balance": int64(0)}})
 	search := func(mode string) *search {
 		t.Setenv("GOTOGETHER_EVAL", mode)
-		c, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
+		c, err := NewChecker(t.Context(), "testdata/blind.yaml", Options{Dir: t.TempDir()})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -443,7 +443,7 @@ func TestEvaluatorAgreesAndIsConfirmed(t *testing.T) {
 	// a search cut short is no verdict, and stays the evaluator's: quint
 	// searched it again at the same budget, for the same no verdict
 	t.Setenv("GOTOGETHER_EVAL", "go")
-	c, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/blind.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -507,7 +507,7 @@ func TestJudgeAgreesWithQuint(t *testing.T) {
 	}
 	compared := 0
 	for path, gen := range histories {
-		c, err := NewChecker(strings.Split(path, "#")[0], Options{Dir: t.TempDir()})
+		c, err := NewChecker(t.Context(), strings.Split(path, "#")[0], Options{Dir: t.TempDir()})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -680,7 +680,7 @@ func TestConfirmByCheck(t *testing.T) {
 		t.Run(x.name, func(t *testing.T) {
 			opt := x.opt
 			run := func(steps []qtrace.Step) (*Checker, *search, *Report) {
-				c, err := NewChecker(x.binding, Options{Dir: t.TempDir()})
+				c, err := NewChecker(t.Context(), x.binding, Options{Dir: t.TempDir()})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -784,7 +784,7 @@ func TestConfirmByCheckBeyondConformance(t *testing.T) {
 			{Action: "deposit", Recorder: "c", Seq: 2, Time: ms(2), Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(95)}}}},
 	} {
 		t.Run(x.name, func(t *testing.T) {
-			c, err := NewChecker(x.binding, Options{Dir: t.TempDir()})
+			c, err := NewChecker(t.Context(), x.binding, Options{Dir: t.TempDir()})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -845,7 +845,7 @@ func TestConfirmByCheckBeyondConformance(t *testing.T) {
 func TestConfirmSeesThroughMark(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
-	c, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/blind.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -881,7 +881,7 @@ func TestConfirmByCheckByKey(t *testing.T) {
 		op("read", "b", map[string]any{"key": "a"}, map[string]any{"value": int64(9)}),
 		op("write", "c", map[string]any{"key": "b", "value": int64(2)}, nil),
 	}
-	c, err := NewChecker("../qtest/testdata/registers.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "../qtest/testdata/registers.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -931,7 +931,7 @@ func TestShadowMode(t *testing.T) {
 		{"resolve", "testdata/account.yaml", SearchOptions{ResolvePending: true}, pending},
 	} {
 		t.Run(x.name, func(t *testing.T) {
-			c, err := NewChecker(x.binding, Options{Dir: t.TempDir()})
+			c, err := NewChecker(t.Context(), x.binding, Options{Dir: t.TempDir()})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -961,7 +961,7 @@ func TestShadowChecksRuns(t *testing.T) {
 		{Action: "deposit", Recorder: "c", Seq: 1, Time: ms(1), Args: map[string]any{"amount": int64(10)}, Obs: map[string]any{"balance": int64(10)}},
 		{Action: "withdraw", Recorder: "c", Seq: 2, Time: ms(2), Args: map[string]any{"amount": int64(3)}, Obs: map[string]any{"balance": int64(7)}},
 	}
-	c, err := NewChecker("testdata/account.yaml", Options{Dir: t.TempDir()})
+	c, err := NewChecker(t.Context(), "testdata/account.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1015,7 +1015,7 @@ func TestSettledAsCountsRecordedSteps(t *testing.T) {
 // temporary directory of the batch's, never the working directory.
 func TestJudgeBatchOfAHandMadeChecker(t *testing.T) {
 	skip.Quint(t)
-	nc, err := NewChecker("testdata/blind.yaml", Options{Dir: t.TempDir()})
+	nc, err := NewChecker(t.Context(), "testdata/blind.yaml", Options{Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

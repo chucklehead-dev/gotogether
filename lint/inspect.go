@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"maps"
@@ -30,7 +31,7 @@ type Options struct {
 // including phases blocked by bad inputs. Independent targets continue after a
 // failure. It scans syntax and typechecks Quint models; it does not run Go code,
 // Quint tests, model search, or conformance validation.
-func Inspect(o Options) *Report {
+func Inspect(ctx context.Context, o Options) *Report {
 	r := &Report{Format: formats.Lint.Name(), Scope: "selected_static_checks", Limits: []string{"trace conformance and application behavior were not checked"}, Checks: []Check{}, Findings: []Diagnostic{}, Evidence: []Evidence{}}
 	if o.Source != "" || o.Simulation != "" || o.Weave != "" {
 		r.Limits = append(r.Limits, "Go source checks inspect syntax without resolving types; typed qanalysis checks are separate")
@@ -138,7 +139,7 @@ func Inspect(o Options) *Report {
 			continue
 		}
 		r.pass(x.spec)
-		m, err := binding.LoadModel(o.Quint, b.SpecPath(), b.Module)
+		m, err := binding.LoadModel(ctx, o.Quint, b.SpecPath(), b.Module)
 		if err != nil {
 			operational := modelOperational(err)
 			r.fail(x.model, "binding.model", err, b.SpecPath(), "correct the model/module or make the selected Quint executable available", "model", operational)
@@ -245,7 +246,7 @@ func modelOperational(err error) bool {
 	var missing *exec.Error
 	var path *os.PathError
 	var exit *exec.ExitError
-	return errors.As(err, &missing) || errors.As(err, &path) || (errors.As(err, &exit) && exit.ExitCode() < 0)
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.As(err, &missing) || errors.As(err, &path) || (errors.As(err, &exit) && exit.ExitCode() < 0)
 }
 
 func (r *Report) scanFailure(at int, code string, err error, path string) {
