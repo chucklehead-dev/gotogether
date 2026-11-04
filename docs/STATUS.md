@@ -7,6 +7,13 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
+Report delivery status (current branch): shared machine reports attempt independent
+file destinations, retain original and delivery errors, and emit stdout JSON last.
+Delivery failure is command error/exit 2 while native graph/check/actor evidence
+remains intact. Successfully written reports are refreshed once after a later
+failure, including stdout failure. Delivery is best effort, not a transaction;
+refresh failures are explicit and may leave earlier bytes. No schema/API change.
+
 Repository-contract preflight (current branch): one Go/Bash command checks
 nonwriting formatting, source/state/API/schema/format contracts, docs, skills,
 simulation lint and complete CLI help/tutorial freshness before CI fanout.

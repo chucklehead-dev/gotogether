@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -70,15 +71,29 @@ func (m *machineReports) write(d *validate.Document, stdout io.Writer, code int,
 	case d.Verdict == "":
 		d.Verdict = "fail"
 	}
-	if m.json {
-		if _, werr := stdout.Write(d.JSON()); werr != nil && err == nil {
-			return 2, werr
+	// Destinations are independent writes, not a multi-file transaction.
+	// Finish file delivery before stdout so an agent sees the command's final
+	// operational status, including a later destination's failure.
+	recordError := func(werr error) {
+		if werr == nil {
+			return
 		}
+		err = errors.Join(err, werr)
+		code, d.Exit, d.Verdict, d.Error = 2, 2, "error", err.Error()
 	}
+	type deliveredReport struct {
+		path   string
+		render func(*validate.Document) []byte
+	}
+	var delivered []deliveredReport
+	deliveryFailed := false
 	for _, f := range m.files {
 		format, file, _ := strings.Cut(f, "=")
-		if werr := os.WriteFile(file, reportFormats[format](d), 0o644); werr != nil && err == nil {
-			return 2, fmt.Errorf("-report %s: %w", f, werr)
+		if werr := os.WriteFile(file, reportFormats[format](d), 0o644); werr != nil {
+			recordError(fmt.Errorf("-report %s: %w", f, werr))
+			deliveryFailed = true
+		} else {
+			delivered = append(delivered, deliveredReport{file, reportFormats[format]})
 		}
 	}
 	if dir := os.Getenv("GOTOGETHER_REPORT_DIR"); dir != "" {
@@ -87,8 +102,30 @@ func (m *machineReports) write(d *validate.Document, stdout io.Writer, code int,
 		if werr == nil {
 			werr = os.WriteFile(filepath.Join(dir, name), d.JSON(), 0o644)
 		}
-		if werr != nil && err == nil {
-			return 2, fmt.Errorf("GOTOGETHER_REPORT_DIR=%s: %w", dir, werr)
+		if werr != nil {
+			recordError(fmt.Errorf("GOTOGETHER_REPORT_DIR=%s: %w", dir, werr))
+			deliveryFailed = true
+		} else {
+			delivered = append(delivered, deliveredReport{filepath.Join(dir, name), (*validate.Document).JSON})
+		}
+	}
+	// Refresh successful destinations once to reflect later delivery failures.
+	// A refresh can itself fail, leaving earlier bytes unchanged; its errors are
+	// joined too; no retry loop or cross-destination atomicity is promised.
+	refresh := func() {
+		for _, report := range delivered {
+			if werr := os.WriteFile(report.path, report.render(d), 0o644); werr != nil {
+				recordError(fmt.Errorf("refresh report %s: %w", report.path, werr))
+			}
+		}
+	}
+	if deliveryFailed {
+		refresh()
+	}
+	if m.json {
+		if _, werr := stdout.Write(d.JSON()); werr != nil {
+			recordError(fmt.Errorf("-json stdout: %w", werr))
+			refresh()
 		}
 	}
 	return code, err

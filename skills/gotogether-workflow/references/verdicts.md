@@ -61,6 +61,13 @@ alert), `why.expected`, `changes`, the `state` whole. `-report
 junit=FILE`, `-report sarif=FILE` write the CI renderings beside the
 text; `GOTOGETHER_REPORT_DIR` makes every validate and simulate write
 its JSON there (the Action's job summary reads it).
+Report delivery failure is command `error`/exit 2; native checks and actor results
+retain their model verdicts. Fix the named output destination and rerun before
+claiming pipeline success. Independent destinations are attempted, saved reports
+are refreshed once after a later failure, and stdout JSON is emitted last.
+Delivery is best effort: failed refresh or stdout writes remain errors, and a
+failed refresh may leave earlier bytes unchanged.
+
 
 | Verdict (`reason`) | Severity | First look | Then |
 |---|---|---|---|

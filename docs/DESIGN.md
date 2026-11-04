@@ -6643,3 +6643,22 @@ files or make a help error-path subprocess write into the checkout. Formatting
 only lists differences. This makes the preflight nonwriting for repository and
 persistent report data while allowing normal Go cache/download activity. It is
 native-tool-independent; cold compilation still has a cost.
+
+
+## 97. Report delivery and command status
+
+A native passing graph is still passing evidence when a requested report cannot
+be written, but the command did not complete successfully. Reproducing `simulate
+-json -graph` with a directory as a report file exposed stdout claiming pass/0
+while the process exited 2. The shared writer also hid delivery errors behind an
+existing tool error and skipped later independent destinations.
+
+Keep the current document contract: top-level verdict/error/exit describe the
+command, while native checks, actors, graph scope and comparison data retain
+their original meaning. Attempt independent destinations and join delivery and
+original errors. Emit stdout JSON after file attempts. On a delivery failure,
+refresh successful destinations once with operational error/2; on stdout failure,
+refresh saved destinations too. There is no transaction across paths. A refresh
+can fail, leaving earlier bytes unchanged; that error is returned and included in
+any remaining writable output. Do not retry indefinitely or erase model evidence.
+Export-preflight refusal still forbids file writes before this writer is reached.
