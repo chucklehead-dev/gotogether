@@ -221,3 +221,7 @@ The CLI selector is contained to the two audited help/tutorial guard files, and
 source tests fail if a new guard is omitted or an unaudited test is selected.
 This closes the late-feedback gap exposed by #60's help length and #62's missing
 process-state comment. It does not make native/model or race checks optional.
+
+The gate defers CI fanout. Before merging, verify that the workflow finished
+successfully at the exact PR head and all expected checks passed; the currently
+visible early subset alone is not evidence that the whole run completed.

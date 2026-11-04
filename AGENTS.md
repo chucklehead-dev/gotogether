@@ -170,6 +170,9 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   (`npm i -g @informalsystems/quint`, then `QUINT_VERSION=0.33.0
   ci/install-quint.sh` for the Rust evaluator). Tests that need quint
   skip without it.
+- Merge only after the CI workflow has finished successfully for the exact PR
+  head and all expected checks have passed. The repository-contract gate defers
+  fanout, so a successful early subset is not a complete green run.
 - Before pushing, run `ci/preflight.sh`: the same repository-contract gate CI
   uses before installing native tools. It checks formatting, source/API/schema
   contracts, docs/skills and the complete CLI help/tutorial surface. It uses the

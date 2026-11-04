@@ -15,7 +15,7 @@ containment and dependencies. Full/shuffle/native suites remain intact. Actual
 missing-state-scope and oversized-help controls fail early without invoking Quint.
 See [developer commands](agents/commands.md).
 
-Recording identity and ownership (PR #62): background recording reuses
+Recording identity and ownership (merged PR #62, 2ec17ac9): background recording reuses
 one operation's goroutine ID across fresh run/site lookups. Local CPU-1 paired
 medians improve from 17.0 to 7.2 µs, with one fewer allocation; explicit-context
 allocations stay unchanged. Filtered, discarded and overridden-thread events no
