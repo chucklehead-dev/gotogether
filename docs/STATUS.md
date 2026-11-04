@@ -12,8 +12,9 @@ schema recovery take a caller context, as do checker construction and lint
 inspection. Cache waiters can cancel independently; a live waiter retries after
 an owner's canceled load. Subprocess and cache-lock waits use the same lifecycle.
 Cancellation remains an operational error, not a model counterexample. The
-context-free model-analysis and go/analysis entrypoints remain explicit lifecycle
-boundaries; this does not claim cancellation coverage for every toolkit API.
+context-free model-analysis, metadata/manifest construction, evaluator compilation
+and go/analysis entrypoints remain explicit lifecycle boundaries; this does not
+claim cancellation coverage for every toolkit API.
 
 Installed LRU MBT and configuration preflight (merged PR #58, c6f5476b): a consumer
 outside the workspace uses published SDK and simplelru modules, a separately
@@ -735,7 +736,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Choose the next general framework capability from usage evidence | M | model-loading cancellation consolidates the LRU workflow lessons; assess an existing open capability against independent adopter friction before expanding adjacent fixtures |
+| 1 | Scope I42: finite model-behavior comparison | M | next general-framework candidate: projected added/removed behavior with native-replayed witnesses and explicit unsupported/incomplete outcomes; recent model/source contrasts motivate review tooling, not a discovered product defect |
 | alongside | Further adoption-driven capability | M | the bounded LRU MBT trial now supplies installed non-SQL evidence; choose the next facet from independent usage or a new demonstrated blocker rather than adjacent fixtures |
 | deferred | I25: virtual physical-session capacity | M | native role-quota refusal/recovery is checked; nondeterministic pool callbacks and idle-session ownership still prevent a faithful virtual max_connections claim |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |

@@ -3,7 +3,7 @@ module github.com/chucklehead-dev/gotogether/qenv/kubesim
 go 1.26.1
 
 require (
-	github.com/chucklehead-dev/gotogether v0.0.0-20261104015126-5fa07d7d103a
+	github.com/chucklehead-dev/gotogether v0.0.0-20261104031945-d95dadf0f5bf
 	k8s.io/api v0.37.0
 	k8s.io/apimachinery v0.37.0
 	k8s.io/client-go v0.37.0
