@@ -6565,3 +6565,36 @@ projection, directional search extent and witness evidence. Text and other
 supported renderings project those facts. No alternate compatibility format or
 new comparison-specific wire protocol is introduced. See
 [the user-facing scope](model-comparison.md).
+
+
+## 94. Exported comparison replays retain compared source bytes
+
+A confirmed run expression alone is not a runnable review artifact: its instance
+imports and constants must be reconstructed after a temporary module is removed.
+`model-diff -out` publishes the current report, generated witness modules and
+source copies under one fresh directory. Module/source hashes and a relative
+Quint argument vector preserve the exact run and successful seed. Source admission
+and complete-target-graph exclusion remain distinct facts; exporting does not
+strengthen either result or save a graph proof.
+
+The snapshot guard comes from the checker's original captured source inventory,
+not a new read of the current tree. Each copied file must match its original hash.
+A transient source change therefore cannot be exported under an earlier native
+confirmation merely because the original files were restored before a later
+boundary check. Relative imports keep their lexical tree relationships, absolute
+imports are refused, and symlinks become regular copied bytes. SourceGuard.Export
+is reusable by other model tooling without creating a manifest or inventing a
+validation run.
+
+Publication stages and verifies before an exclusive directory publish. Failure
+leaves both the selected destination and comparison result unchanged. `-out`
+owns all writes to its evidence directory: generic report-file flags and the
+report-directory environment variable are refused, with a stdout-only error
+path. This avoids lexical/symlink aliases and secondary writers overwriting the
+very report that export promised to preserve. Stdout JSON remains available.
+
+The historical hello completion change is an explicit scope control. Its new
+`done` action stutters in a state where replay already stuttered, so its projected
+state language stays equivalent. Its named completion and occurrence obligations
+still matter. The exact historical bindings/models are retained without adding
+bounds or modifying their contract to fit comparison.

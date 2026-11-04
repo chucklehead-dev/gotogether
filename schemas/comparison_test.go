@@ -86,3 +86,27 @@ func TestComparisonReportRejectsUnstructuredEvidence(t *testing.T) {
 		}
 	}
 }
+
+func TestComparisonReportPortableReplay(t *testing.T) {
+	d := comparisonDocument()
+	d.Artifacts = "."
+	d.Comparison.Added.Witness.Replay = &validate.DocComparisonReplay{Module: validate.File{Path: "added/replay.qnt", SHA256: "module-hash"},
+		Sources: []validate.File{{Path: "added/sources/model.qnt", SHA256: "source-hash"}},
+		Main:    "simulate", Run: "gtg_comparison_witness", Seed: "2",
+		Args: []string{"test", "added/replay.qnt", "--main", "simulate", "--match", "^gtg_comparison_witness$", "--seed", "2", "--max-samples", "1"}}
+	if ps, err := schemas.Check(schemas.Report(), d.JSON()); err != nil || len(ps) != 0 {
+		t.Fatalf("portable replay schema: %v %v", err, ps)
+	}
+	var decoded validate.Document
+	if err := json.Unmarshal(d.JSON(), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	r := decoded.Comparison.Added.Witness.Replay
+	if decoded.Artifacts != "." || r.Module.Path != "added/replay.qnt" || r.Sources[0].SHA256 != "source-hash" || r.Args[1] != r.Module.Path || r.Seed != "2" {
+		t.Fatalf("portable source evidence lost: %+v", r)
+	}
+	bad := strings.Replace(string(d.JSON()), `"args": [`, `"extra": true, "args": [`, 1)
+	if ps, err := schemas.Check(schemas.Report(), []byte(bad)); err == nil && len(ps) == 0 {
+		t.Fatal("unknown replay metadata accepted")
+	}
+}

@@ -20,6 +20,7 @@ func (r *Comparison) Doc() *validate.Document {
 		Before: comparisonGraphDoc(r.Before), After: comparisonGraphDoc(r.After),
 		Added: comparisonDirectionDoc(r.Added), Removed: comparisonDirectionDoc(r.Removed)}
 	d.Comparison = c
+	d.Artifacts = r.Artifacts
 	switch r.Status {
 	case "equivalent":
 		d.Verdict, d.Exit = "pass", 0
@@ -44,6 +45,10 @@ func comparisonDirectionDoc(d BehaviorInclusion) validate.DocComparisonDirection
 	w := d.Witness
 	out.Witness = &validate.DocComparisonWitness{Native: w.Native, NativeReason: w.NativeReason,
 		NativeAttempts: w.NativeAttempts, NativeSeed: w.NativeSeed, ExclusionBasis: "complete_target_graph"}
+	if w.Replay != nil {
+		out.Witness.Replay = &validate.DocComparisonReplay{Module: w.Replay.Module,
+			Sources: slices.Clone(w.Replay.Sources), Main: w.Replay.Main, Run: w.Replay.Run, Seed: w.Replay.Seed, Args: slices.Clone(w.Replay.Args)}
+	}
 	for _, state := range w.Observed {
 		out.Witness.Observed = append(out.Witness.Observed, slices.Clone(state))
 	}

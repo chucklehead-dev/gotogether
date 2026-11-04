@@ -201,6 +201,7 @@ func reportSchema(t *testing.T) []byte {
 			"DocComparisonWitness":   {"required": []string{"observed", "native", "nativeAttempts", "exclusionBasis"}},
 			"DocComparisonPath":      {"required": []string{"steps", "replay"}},
 			"DocComparisonStep":      {"required": []string{"call", "state"}},
+			"DocComparisonReplay":    {"required": []string{"module", "sources", "main", "run", "seed", "args"}},
 		},
 		fields: map[string]map[string]any{
 			"Document.Verdict":                    {"enum": []any{"pass", "fail", "no verdict", "error"}},

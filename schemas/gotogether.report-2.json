@@ -1454,6 +1454,73 @@
                   },
                   "type": "array"
                 },
+                "replay": {
+                  "additionalProperties": false,
+                  "description": "Replay paths resolve from Document.Artifacts, or the exported report directory.",
+                  "properties": {
+                    "args": {
+                      "description": "Args is the Quint argument vector; execute from Document.Artifacts.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "main": {
+                      "type": "string"
+                    },
+                    "module": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "sha256": {
+                          "type": "string"
+                        }
+                      },
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "run": {
+                      "type": "string"
+                    },
+                    "seed": {
+                      "type": "string"
+                    },
+                    "sources": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "sha256": {
+                            "type": "string"
+                          }
+                        },
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "module",
+                    "sources",
+                    "main",
+                    "run",
+                    "seed",
+                    "args"
+                  ],
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
                 "source": {
                   "additionalProperties": false,
                   "description": "Source is the concrete source-model path, including full states and choices.",
@@ -1811,6 +1878,73 @@
                     "type": "array"
                   },
                   "type": "array"
+                },
+                "replay": {
+                  "additionalProperties": false,
+                  "description": "Replay paths resolve from Document.Artifacts, or the exported report directory.",
+                  "properties": {
+                    "args": {
+                      "description": "Args is the Quint argument vector; execute from Document.Artifacts.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "main": {
+                      "type": "string"
+                    },
+                    "module": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "sha256": {
+                          "type": "string"
+                        }
+                      },
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "run": {
+                      "type": "string"
+                    },
+                    "seed": {
+                      "type": "string"
+                    },
+                    "sources": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "sha256": {
+                            "type": "string"
+                          }
+                        },
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "module",
+                    "sources",
+                    "main",
+                    "run",
+                    "seed",
+                    "args"
+                  ],
+                  "type": [
+                    "object",
+                    "null"
+                  ]
                 },
                 "source": {
                   "additionalProperties": false,

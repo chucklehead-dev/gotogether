@@ -25,17 +25,20 @@ feature or contract depth, and evidence-driven structural/usability/performance
 work. The installed LRU MBT rehearsal now covers a non-SQL consumer workflow
 and an isolated source contrast; the configuration typo it exposed is fixed by
 strict preflight and direct API migration. The consolidation slice threads
-caller-owned cancellation through model loading, checker construction, lint inspection and trace-schema recovery, with
+caller-owned cancellation through model loading, checker construction, lint
+inspection and trace-schema recovery, with
 independently cancelable cache waits and retry after a canceled owner. Context-free
 model-analysis, metadata, evaluator compilation and go/analysis boundaries remain
 explicit; broader lifecycle migration needs its own evidence and scope.
-The next general framework tick is the first bounded I42 model-behavior
-comparison: complete finite
-Go-evaluator graphs on explicit observations, with whole-prefix inclusion,
+The general framework tick is the first bounded I42 model-behavior comparison:
+complete finite Go-evaluator graphs on explicit observations, with whole-prefix inclusion,
 separate resource bounds and native-replayed source witnesses. A non-storage
 handshake checks the contract. The recent model/source contrasts motivated this
-review tool; they did not establish an adopter blocker. Next depth should come
-from reviewing a real model change, before adding mapping or liveness semantics.
+review tool; they did not establish an adopter blocker. A pinned historical hello
+completion change now exercises that workflow: state-sequence equivalence leaves
+named completion obligations separate. Its replay-ergonomics gap is addressed by
+portable confirmed-source artifacts and an original-hash source snapshot helper.
+Rotate away from comparison semantics before adding mappings or liveness.
 Keep frozen baseline pins for reproducibility, not as legacy support promises.
 Further adapters, adjacent fixtures and per-pair clock APIs need usage evidence.
 

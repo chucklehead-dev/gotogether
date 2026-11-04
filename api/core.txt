@@ -2405,6 +2405,7 @@ type Checker struct
     field Binding *binding.Binding
     field Model *binding.Model
     field Options Options
+    method (*Checker) CapturedModelSources() (*SourceGuard, error)
     method (*Checker) Check(ctx context.Context, steps []qtrace.Step) (*Report, error)
     method (*Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProcess int) (reports []*Report, errs []error)
     method (*Checker) Close() error
@@ -2514,6 +2515,13 @@ type DocComparisonPath struct
     field Steps []DocComparisonStep `json:"steps"`
     field Replay string `json:"replay"`
     field Sampled []int `json:"sampled,omitempty"`
+type DocComparisonReplay struct
+    field Module File `json:"module"`
+    field Sources []File `json:"sources"`
+    field Main string `json:"main"`
+    field Run string `json:"run"`
+    field Seed string `json:"seed"`
+    field Args []string `json:"args"`
 type DocComparisonStep struct
     field Call string `json:"call"`
     field Picks []NamedValue `json:"picks,omitempty"`
@@ -2526,6 +2534,7 @@ type DocComparisonWitness struct
     field NativeAttempts int `json:"nativeAttempts"`
     field NativeSeed string `json:"nativeSeed,omitempty"`
     field ExclusionBasis string `json:"exclusionBasis"`
+    field Replay *DocComparisonReplay `json:"replay,omitempty"`
 type DocFailure struct
     field Check string `json:"check"`
     field Kind string `json:"kind"`
@@ -2896,7 +2905,11 @@ type SearchOptions struct
     field ResolveBudget int
     field Skew time.Duration
 type SourceGuard struct
+    method (*SourceGuard) Export(ctx context.Context, dir string) (*SourceSnapshot, error)
     method (*SourceGuard) Verify() error
+type SourceSnapshot struct
+    field Spec File
+    field Files []File
 type StepMutants struct
     field Original *Judgment
     field Mutants []StepMutation
@@ -3043,6 +3056,7 @@ const ComparisonReplayAttempts = 8
 const DefaultSearchStates = 100000
 func Compare(ctx context.Context, before, after *GraphResult, opt CompareOptions) (*Comparison, error)
 func ConfirmComparison(ctx context.Context, comparison *Comparison) error
+func ExportComparison(ctx context.Context, comparison *Comparison, dir string) error
 func For(c *validate.Checker) *Analyzer
 func New(bindingPath string, opt validate.Options) (*Analyzer, error)
 func Simulate(bindingPath string, opt SimulateOptions) (*Report, error)
@@ -3070,6 +3084,7 @@ type BehaviorWitness struct
     field NativeReason string
     field NativeAttempts int
     field NativeSeed string
+    field Replay *ComparisonReplay
 type Bound struct
     field Kind string
     field States int
@@ -3084,6 +3099,7 @@ type CompareOptions struct
     field Pairs int
     field Work int
 type Comparison struct
+    field Artifacts string
     field Status string
     field Basis string
     field Observe []string
@@ -3107,6 +3123,13 @@ type ComparisonGraph struct
     field Transitions int
     field Depth int
     field Bound GraphBound
+type ComparisonReplay struct
+    field Module validate.File
+    field Sources []validate.File
+    field Main string
+    field Run string
+    field Seed string
+    field Args []string
 type Counterexample struct
     field Steps []GraphStep
     field Replay string

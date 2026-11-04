@@ -31,6 +31,8 @@ type CompareOptions struct {
 // This is not action equivalence, stutter abstraction, refinement or liveness.
 // Native confirmation of witnesses is separate from complete-graph exclusion.
 type Comparison struct {
+	// Artifacts locates exported replay paths; empty until successful publication.
+	Artifacts      string
 	Status         string
 	Basis          string
 	Observe        []string
@@ -43,6 +45,7 @@ type Comparison struct {
 	before, after  *GraphResult
 	added, removed *BehaviorWitness
 	equivalent     bool
+	descriptor     [32]byte
 }
 
 // ComparisonGraph records an inclusion input's instance and search extent.
@@ -80,8 +83,23 @@ type BehaviorWitness struct {
 	NativeReason   string
 	NativeAttempts int
 	NativeSeed     string
-	replay         string
-	evidence       [32]byte
+	// Replay is the published, portable native source witness and its source files.
+	Replay        *ComparisonReplay
+	confirmedSeed string
+	replay        string
+	evidence      [32]byte
+}
+
+// ComparisonReplay is a confirmed source witness exported with its model sources.
+// Module and Sources paths are slash-separated and relative to Comparison.Artifacts.
+// Main, Run and Seed are the exact native invocation selection; this replay
+// confirms source admission only, not target exclusion or comparison equivalence.
+type ComparisonReplay struct {
+	Module          validate.File
+	Sources         []validate.File
+	Main, Run, Seed string
+	// Args is the exact Quint argument vector, relative to the exported root.
+	Args []string
 }
 
 // Compare checks both inclusions of finite projected state sequences, preserving
@@ -140,6 +158,7 @@ func Compare(ctx context.Context, before, after *GraphResult, opt CompareOptions
 	}
 	r := &Comparison{Status: "inconclusive", Basis: "complete_go_graph_product", Observe: slices.Clone(opt.Observe), PairLimit: opt.Pairs, WorkLimit: opt.Work,
 		Before: comparisonExtent(before), After: comparisonExtent(after), before: before, after: after}
+	defer func() { r.descriptor = comparisonDescriptor(r) }()
 	if !before.graph.Complete || !after.graph.Complete || before.graph.Cut != "" || after.graph.Cut != "" {
 		r.Added = BehaviorInclusion{Status: "inconclusive", Reason: "comparison requires two complete supported state graphs"}
 		r.Removed = r.Added

@@ -8,6 +8,13 @@ and adds a line here.
 
 ## Unreleased
 
+- `model-diff -out` publishes source-confirmed native witness modules, copied
+  model sources and hashed typed replay metadata with the current report JSON.
+  Source snapshots preserve relative imports; stale sources, unsupported absolute
+  imports and existing destinations are refused. A real historical hello review
+  demonstrates the boundary between state-language equivalence and completion
+  obligations.
+
 - `model-diff` compares complete finite model instances on an explicit observed
   projection, using whole-prefix trace inclusion. Typed report data retains
   added/removed witnesses, graph and product bounds, and separate native source

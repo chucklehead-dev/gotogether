@@ -59,3 +59,42 @@ Text and `-json` derive from the same comparison result. JSON uses the current
 format. Exit 0 means equivalent for the explicit instances, 1 means a difference
 with source replay evidence, and 2 means inconclusive or an operational error.
 Inspect per-direction statuses and native replay evidence, not just the exit code.
+
+## Keeping a confirmed witness
+
+Add `-out review` to publish a fresh directory containing `report.json`, a Quint
+module for each source-confirmed witness, and its copied model sources. Export
+refuses an existing destination. With `-out`, use `-json` for stdout; separate
+`-report` destinations and `GOTOGETHER_REPORT_DIR` are refused so a second writer
+cannot overwrite exported evidence. Without `-out`, the usual report renderings
+remain available. Source guards and hashes are checked before
+publication; failure leaves no partially published evidence directory.
+
+The witness's typed `replay` object carries the module hash, copied source hashes
+and exact Quint argument vector. Paths in that object are relative to the export
+directory. Choose a Quint executable, change into the exported directory, and
+execute that argument vector. It retains the seed that actually reproduced the
+full source path. The original source tree can then be removed and the directory
+relocated without reconstructing instance imports or constants.
+
+Only source-confirmed witnesses receive replay artifacts. An equivalent or
+inconclusive comparison still exports its report; unconfirmed candidates are not
+upgraded by being written to disk. This preserves native source admission, not
+the target graph or a new proof of target exclusion. The report's original binding
+and model identities remain provenance; rerunning the entire comparison requires
+its original inputs. Absolute model imports and incomplete captured source
+inventories are refused for portable replay.
+
+## A real model change outside this equivalence
+
+The [historical hello review](../internal/adoptiontest/model-review/README.md)
+uses exact bindings and models from before and after commit `5ead7582`. That
+change added a `done` action and occurrence claims after mutation testing exposed
+a client that stopped before applying every request. Both eight-state instances
+have the same observed `applied,count` sequences, with 24 and 25 transitions.
+The new completed-state stutter was already possible through `replay`.
+
+An equivalent result is therefore correct and does not approve the completion
+contract change. Retain action-occurrence and completion checks when reviewing
+such changes. The rehearsal checks the explicit scope and preserves the original
+sources; it does not alter a guard or add a bound to make historical models fit.

@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
@@ -144,5 +147,173 @@ func TestModelDiffConstantExpressionsPreserveQuotedCommas(t *testing.T) {
 	want := []string{`LABEL="a,b"`, `SET=Set("[", "x\"y,z")`, `ROW={ names: ["a,b", "c"] }`}
 	if err != nil || !slices.Equal(got, want) {
 		t.Fatalf("constant expressions = %q, %v; want %q", got, err, want)
+	}
+}
+
+// A selected export is owned evidence: an existing destination or a generic
+// report writer targeting that directory must fail before model subprocesses.
+func TestModelDiffExportPreflight(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Quint uses POSIX shell")
+	}
+	quint := filepath.Join(t.TempDir(), "quint")
+	if err := os.WriteFile(quint, []byte("#!/bin/sh\n: > \"$0.started\"\nexit 1\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	existing := t.TempDir()
+	sentinel := filepath.Join(existing, "evidence")
+	if err := os.WriteFile(sentinel, []byte("keep"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	fresh := filepath.Join(t.TempDir(), "new-evidence")
+	for name, args := range map[string][]string{
+		"existing":                  {"-out", existing},
+		"existing report collision": {"-out", existing, "-report", "json=" + sentinel},
+		"report collision":          {"-out", fresh, "-report", "json=" + filepath.Join(fresh, "report.json")},
+		"unrelated report":          {"-out", fresh, "-report", "json=" + filepath.Join(existing, "other-report.json")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var output bytes.Buffer
+			base := []string{"-before", "old.yaml", "-after", "new.yaml", "-observe", "phase", "-quint", quint, "-json"}
+			code, err := modelDiff(t.Context(), &output, append(base, args...))
+			if code != 2 || err == nil {
+				t.Fatalf("exit=%d error=%v", code, err)
+			}
+			var d validate.Document
+			if err := json.Unmarshal(output.Bytes(), &d); err != nil {
+				t.Fatal(err)
+			}
+			if d.Verdict != "error" || !strings.Contains(d.Error, "-out") || d.Comparison != nil {
+				t.Fatalf("missing operational report: %+v", d)
+			}
+			if _, err := os.Stat(quint + ".started"); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("invalid export launched Quint: %v", err)
+			}
+		})
+	}
+	if b, err := os.ReadFile(sentinel); err != nil || string(b) != "keep" {
+		t.Fatalf("existing evidence changed: %q %v", b, err)
+	}
+	if _, err := os.Stat(fresh); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("invalid export created destination: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(existing, "other-report.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("refused unrelated report was written: %v", err)
+	}
+}
+
+func TestModelDiffExportReplayRelocates(t *testing.T) {
+	t.Setenv("GOTOGETHER_REPORT_DIR", "")
+	skip.Quint(t)
+	original := filepath.Join(t.TempDir(), "original")
+	if err := os.MkdirAll(original, 0755); err != nil {
+		t.Fatal(err)
+	}
+	const fixture = "../../validate/model/testdata/compare/"
+	for _, name := range []string{"before.qnt", "before.yaml", "after.qnt", "after.yaml"} {
+		b, err := os.ReadFile(fixture + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(original, name), b, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	export := filepath.Join(t.TempDir(), "comparison")
+	var output bytes.Buffer
+	code, err := modelDiff(t.Context(), &output, []string{"-before", filepath.Join(original, "before.yaml"), "-after", filepath.Join(original, "after.yaml"), "-observe", "phase,retries", "-out", export, "-json"})
+	if code != 1 || err != nil {
+		t.Fatalf("exit=%d error=%v\n%s", code, err, &output)
+	}
+	var stdoutDoc validate.Document
+	if err := json.Unmarshal(output.Bytes(), &stdoutDoc); err != nil {
+		t.Fatal(err)
+	}
+	if stdoutDoc.Artifacts != export {
+		t.Fatalf("stdout artifact root=%q, want %q", stdoutDoc.Artifacts, export)
+	}
+	wire, err := os.ReadFile(filepath.Join(export, "report.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var d validate.Document
+	if err := json.Unmarshal(wire, &d); err != nil {
+		t.Fatal(err)
+	}
+	if d.Artifacts != "." || d.Comparison.Status != "different" || d.Exit != 1 {
+		t.Fatalf("nonportable exported report: %+v", d)
+	}
+	replay := d.Comparison.Added.Witness.Replay
+	if replay == nil || replay.Module.Path == "" || len(replay.Sources) == 0 || len(replay.Args) == 0 || replay.Seed != d.Comparison.Added.Witness.NativeSeed {
+		t.Fatalf("missing native replay artifact: %+v", replay)
+	}
+	if err := os.RemoveAll(original); err != nil {
+		t.Fatal(err)
+	}
+	moved := filepath.Join(t.TempDir(), "relocated")
+	if err := os.Rename(export, moved); err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range append([]validate.File{replay.Module}, replay.Sources...) {
+		if filepath.IsAbs(file.Path) || strings.Contains(file.Path, "\\") {
+			t.Fatalf("nonportable path %q", file.Path)
+		}
+		b, err := os.ReadFile(filepath.Join(moved, filepath.FromSlash(file.Path)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := fmt.Sprintf("%x", sha256.Sum256(b)); got != file.SHA256 {
+			t.Fatalf("artifact %s hash=%s want %s", file.Path, got, file.SHA256)
+		}
+	}
+	cmd := quintcmd.Command(t.Context(), "quint", moved, replay.Args...)
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("relocated replay: %v\n%s", err, b)
+	}
+}
+
+func TestModelDiffExportRefusalCannotCreateEnvironmentReports(t *testing.T) {
+	fresh := filepath.Join(t.TempDir(), "refused")
+	t.Setenv("GOTOGETHER_REPORT_DIR", fresh)
+	var output bytes.Buffer
+	code, err := modelDiff(t.Context(), &output, []string{"-before", "old.yaml", "-after", "new.yaml", "-observe", "phase", "-out", fresh, "-json"})
+	if code != 2 || err == nil {
+		t.Fatalf("exit=%d error=%v", code, err)
+	}
+	var d validate.Document
+	if err := json.Unmarshal(output.Bytes(), &d); err != nil {
+		t.Fatal(err)
+	}
+	if d.Verdict != "error" || !strings.Contains(d.Error, "GOTOGETHER_REPORT_DIR") {
+		t.Fatalf("lost export refusal: %+v", d)
+	}
+	if _, err := os.Stat(fresh); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("refused export created environment reports: %v", err)
+	}
+}
+
+func TestModelDiffExportRejectsAliasedReportWriter(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink support varies on Windows")
+	}
+	root := t.TempDir()
+	fresh, alias := filepath.Join(root, "evidence"), filepath.Join(root, "alias")
+	if err := os.Symlink(fresh, alias); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	code, err := modelDiff(t.Context(), &output, []string{"-before", "old.yaml", "-after", "new.yaml", "-observe", "phase", "-out", fresh, "-report", "json=" + filepath.Join(alias, "report.json"), "-json"})
+	if code != 2 || err == nil || !strings.Contains(err.Error(), "cannot be combined with -report") {
+		t.Fatalf("exit=%d error=%v", code, err)
+	}
+	var d validate.Document
+	if err := json.Unmarshal(output.Bytes(), &d); err != nil {
+		t.Fatal(err)
+	}
+	if d.Verdict != "error" || d.Comparison != nil {
+		t.Fatalf("aliased writer bypassed preflight: %+v", d)
+	}
+	if _, err := os.Stat(fresh); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("aliased report created refused evidence directory: %v", err)
 	}
 }

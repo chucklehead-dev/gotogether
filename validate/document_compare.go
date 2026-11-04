@@ -76,6 +76,21 @@ type DocComparisonWitness struct {
 	NativeAttempts int    `json:"nativeAttempts"`
 	NativeSeed     string `json:"nativeSeed,omitempty"`
 	ExclusionBasis string `json:"exclusionBasis"`
+	// Replay paths resolve from Document.Artifacts, or the exported report directory.
+	Replay *DocComparisonReplay `json:"replay,omitempty"`
+}
+
+// DocComparisonReplay is a published source witness with copied model sources.
+// File paths are slash-separated relative to Document.Artifacts. An exported
+// report sets that root to ".", preserving paths when its directory is moved.
+type DocComparisonReplay struct {
+	Module  File   `json:"module"`
+	Sources []File `json:"sources"`
+	Main    string `json:"main"`
+	Run     string `json:"run"`
+	Seed    string `json:"seed"`
+	// Args is the Quint argument vector; execute from Document.Artifacts.
+	Args []string `json:"args"`
 }
 
 // DocComparisonPath is a concrete model path and its exact-state Quint replay.
@@ -112,6 +127,9 @@ func comparisonDetail(name string, direction DocComparisonDirection) string {
 			for _, v := range state {
 				fmt.Fprintf(&b, " %s = %s", v.Name, v.Value)
 			}
+		}
+		if w.Replay != nil {
+			fmt.Fprintf(&b, "\nexported source replay: %s (main=%s run=%s seed=%s)", w.Replay.Module.Path, w.Replay.Main, w.Replay.Run, w.Replay.Seed)
 		}
 		if w.Source != nil && w.Source.Replay != "" {
 			fmt.Fprintf(&b, "\nsource replay: %s", w.Source.Replay)
