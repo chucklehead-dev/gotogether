@@ -417,6 +417,8 @@ func NotesOf(ctx context.Context) *Notes {
 
 // Process-wide: installed by qenv.
 var resolver atomic.Pointer[func(int64) (context.Context, int64, bool)]
+
+// Process-wide: qrun installs the explicit-start fallback.
 var fallbackResolver atomic.Pointer[func(int64) (context.Context, int64, bool)]
 
 // SetResolver installs how the calling goroutine's run context is found:
