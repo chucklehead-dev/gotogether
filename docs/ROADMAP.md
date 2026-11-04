@@ -13,12 +13,22 @@ Standing decisions, with the maintainer:
   recording, YAML, platform and CLI module-parser dependencies.
 - MIT license.
 
-Current order (reviewed 2026-11-02): this is a prerelease library.
+Current order (reviewed 2026-11-04): this is a prerelease library.
 Correctness and usable core contracts come before release machinery. The bounded
 composition, Goo lifecycle, declared-call span, workload-phase and diagnostic
 experiments have answered their initial questions; rotate away from inventory
 and further diagnostic breadth. Breaking changes are allowed, without parallel
 legacy formats.
+
+Use a tick, tock, consolidate cadence: general framework capability, bounded
+feature or contract depth, and evidence-driven structural/usability/performance
+work. The installed LRU MBT rehearsal now covers a non-SQL consumer workflow
+and an isolated source contrast; the configuration typo it exposed is fixed by
+strict preflight and direct API migration. The next consolidation candidate is
+caller-owned cancellation through model loading and trace-schema recovery:
+first prove the lifecycle failure, then remove hidden background ownership.
+Keep frozen baseline pins for reproducibility, not as legacy support promises.
+Further adapters, adjacent fixtures and per-pair clock APIs need usage evidence.
 
 The bounded completion-accounting slice (GR10b) is built: distinguish idle
 background workers from workers holding work, tested in plain qenv and a second

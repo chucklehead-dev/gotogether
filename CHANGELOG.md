@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- An installed-module LRU rehearsal drives the real cache from an independent
+  finite model. Sampled and forced traces pass; a frozen native trace rejects
+  a parent-planted Get-promotion defect in an isolated source copy. This is
+  bounded adoption evidence, not a discovered upstream defect.
+
 - `connect.Config.FromEnv` now returns `(Config, error)`. Invalid selected
   numeric environment values, negative budgets and verbosity outside 0–2 fail
   before trace generation or selected-directory changes. Explicit nonzero

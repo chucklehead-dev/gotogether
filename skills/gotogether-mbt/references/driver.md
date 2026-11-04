@@ -6,7 +6,7 @@ From the gotogether-mbt skill (its SKILL.md says when to read this).
 numeric fields override their environment variables. Selected nonempty values
 must parse without overflow; budgets are nonnegative (zero uses defaults), and
 verbosity is 0–2. Invalid configuration fails before starting Quint or creating
-the selected trace directory, and existing trace files remain intact. Correct
+the caller-selected trace directory, and existing trace files remain intact. Correct
 the named field or variable rather than treating this as a model verdict.
 
 ## Model-based testing: Quint drives Go (package `connect`)
