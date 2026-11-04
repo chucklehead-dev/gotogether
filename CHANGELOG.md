@@ -8,6 +8,17 @@ and adds a line here.
 
 ## Unreleased
 
+- `System.Fuzz` treats generated inputs and saved Go fuzz corpus bytes as raw
+  choice entropy, including prefixes that resemble replay headers. Explicit
+  seed arguments must be `EncodeChoices` tapes; their payload is decoded once
+  before fuzzing and invalid versions fail setup. Persisted replay validation
+  is unchanged.
+
+- Installed agent skills now link repository documentation and examples through
+  portable GitHub URLs, retaining local and cross-skill links within the
+  installation. Refresh shipped guidance after upgrading the CLI with
+  `gotogether skills install -force`. Actual-install checks guard link targets.
+
 - qsql supports single-table `SELECT COUNT(*) [AS alias]` with its existing
   WHERE subset. Counts include NULL-valued rows, return zero for empty matches,
   and retain transaction visibility and predicate-conflict checks. Other

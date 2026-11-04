@@ -7,7 +7,22 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Bounded qsql COUNT(*) (current branch): single-table counts accept an optional
+Fuzz input framing (PR #55): generated Go fuzz inputs are raw entropy, so
+mutating bytes into a replay-header prefix cannot create a spurious format
+failure. Explicit seeds are encoded recordings, validated and decoded once
+before mutation. Persisted replay version checks remain intact. The streams
+CI failure exposed this framework boundary; the stream model was unchanged.
+
+Portable installed skills (PR #55): 15 repository-relative links
+now use the existing canonical GitHub main URLs, preserving fragments. Local
+and cross-skill references remain relative inside the installed tree. Source
+and actual installation checks cover link destinations, including directory
+and fragment links; the CLI's existing force flag refreshes embedded guidance.
+Install keeps copying the portable source directly, with no Markdown rewriter,
+new dependency, format or update mode. Remote links require network access
+and track main; offline path checks do not prove hosted availability.
+
+Bounded qsql COUNT(*) (merged PR #54, 308a6b93): single-table counts accept an optional
 AS alias and the existing WHERE subset. Empty matches return one int64 zero;
 NULL-valued rows count, own writes are visible, and Store predicate reads retain
 isolation checks. SQLite differential coverage and forced in-range/adjacent
@@ -15,7 +30,7 @@ phantom controls check these boundaries. Other aggregates, grouping, joins and
 count locking/ordering/limits remain explicit errors. This finishes a bounded
 G9 slice; rotate away from SQL depth next.
 
-Native PostgreSQL admission evidence (PR #53): a restricted login
+Native PostgreSQL admission evidence (merged PR #53, c9101506): a restricted login
 role's connection quota is exhausted by an observed idle physical session.
 Append preserves native pgx 53300, transient NotCommitted classification and
 unchanged heads/events/steps/markers. Closing the holder pool permits exactly
@@ -682,25 +697,21 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | G11: installed-skills portability | S-M | rotate from storage work to general onboarding: install outside the checkout, resolve all shipped links including repository references, and make guidance usable in an ordinary consumer project |
-| 2 | I7: existing two-recorder example and clock assumptions | S-M | use current APIs to demonstrate how declared skew affects justified ordering and verdicts, keeping assumptions visible in JSON/TUI; no new clock API without evidence |
-| 3 | Non-SQL installed-module adoption trial | M | exercise MBT or request-log validation outside the checkout; fix a demonstrated blocker rather than adding another adapter |
+| 1 | I7: existing two-recorder example and clock assumptions | S-M | use current APIs to demonstrate how declared skew affects justified ordering and verdicts, keeping assumptions visible in JSON/TUI; no new clock API without evidence |
+| 2 | Non-SQL installed-module adoption trial | M | exercise MBT or request-log validation outside the checkout; fix a demonstrated blocker rather than adding another adapter |
 | deferred | I25: virtual physical-session capacity | M | native role-quota refusal/recovery is checked; nondeterministic pool callbacks and idle-session ownership still prevent a faithful virtual max_connections claim |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
 | alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
 
-Balance general framework work with facet depth. The recent logical-capacity,
-native PostgreSQL quota and bounded COUNT(*) slices all improve services, but
-are still consecutive storage work. Finish this bounded query contract, then
-prioritize installation/discovery and general trace reasoning. A fresh temporary
-skills install confirms the next blocker: conventions.md keeps a repository
-link to ../../../docs/lint-onboarding.md that is absent in the consumer
-project. The current link guard skips these escaping repository targets. Fix
-installation output and check real installed files, retaining local and
-cross-skill links; the existing force refresh is sufficient for that slice.
-Further SQL
-syntax, virtual physical sessions and evaluator redesign need fresh adoption
-evidence; a useful adjacent implementation is not by itself the next priority.
+Balance general framework work with facet depth. Logical capacity, native
+PostgreSQL quotas and bounded COUNT(*) were consecutive storage slices.
+Installed-skills portability rotates back to general onboarding and fixes
+a demonstrated consumer defect: a repository-relative documentation link
+resolved outside the installed tree. Portable authored URLs and guards solve
+that at the source, shared by checkout and installed guidance. Next use the
+existing trace-ordering APIs to make clock assumptions concrete, then try a
+non-SQL consumer workflow. Further SQL syntax, virtual physical sessions
+and evaluator redesign need fresh adoption evidence.
 
 The counted-values trial is now implemented in
 [internal/adoptiontest/goo-counted-values](../internal/adoptiontest/goo-counted-values/README.md).

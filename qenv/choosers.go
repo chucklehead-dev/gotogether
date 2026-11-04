@@ -197,14 +197,17 @@ func Swarm(c Chooser, kinds ...string) Chooser { return choice.Swarm(c, kinds...
 // whole run: a sweep's row says which kinds are on (qtest.System.Sweep).
 func Without(c Chooser, kinds ...string) Chooser { return choice.Without(c, kinds...) }
 
-// FromBytes makes choices from data (a fuzz input, a corpus entry) at the
-// given rates. An encoded run's header (EncodeChoices) is skipped; one of
-// another version makes every choice nominal and is reported by Err.
+// FromBytes makes choices from a replay byte stream at the given rates.
+// An encoded run's header (EncodeChoices) is skipped; one of another version
+// makes every choice nominal and is reported by Err. For arbitrary generated
+// fuzz inputs, System.Fuzz uses raw Bytes entropy without interpreting headers.
 func FromBytes(data []byte, rates Rates) *Bytes { return choice.FromBytes(data, rates) }
 
 // EncodeChoices is the byte stream from which Bytes, at the given rates,
 // makes the recorded choices again: a recorded run, or a shrunk Hegel
-// failure (qhegel.Violation.Choices), as a fuzz corpus entry. A fault
+// failure (qhegel.Violation.Choices), as a replay or explicit System.Fuzz seed.
+// System.Fuzz decodes the seed before mutation; saved Go fuzz corpus inputs
+// are raw entropy rather than encoded tapes. A fault
 // of a kind whose rate is 0 cannot be encoded, and neither can entropy
 // chunks; both are reported. The bytes start with a header naming the
 // byte rule's version (BytesVersion).

@@ -11,13 +11,13 @@ validate` reads it beside the server's steps:
 gotogether validate -binding app.binding.yaml server.jsonl requests.jsonl
 ```
 
-- Playwright: [adapters/playwright](../../../adapters/playwright) writes
+- Playwright: [adapters/playwright](https://github.com/chucklehead-dev/gotogether/tree/main/adapters/playwright) writes
   the log from a page's routed requests and responses (copy one file).
 - Bombadil: package `qdriver/bombadil` reads its `trace.jsonl` (with a
   page that logs its requests) and makes the log, or the steps.
 - Anything else: write the protocol yourself (below); it is JSONL.
 
-[examples/webjobs](../../../examples/webjobs) is the whole case: a web
+[examples/webjobs](https://github.com/chucklehead-dev/gotogether/tree/main/examples/webjobs) is the whole case: a web
 app explored by Bombadil (recorded runs checked offline, live runs
 nightly) and driven by Playwright (`TestPlaywright`), both through the
 request log.
@@ -180,7 +180,7 @@ header; its response when Playwright reports it, with `answer`'s fields
 (code 0 and the error for a failed request). `log.watch('#result',
 map)` writes a step each time the element's text changes; `log.close()`
 waits for the answers being read. The adapter's
-[README](../../../adapters/playwright/README.md) has a test; its golden
+[README](https://github.com/chucklehead-dev/gotogether/blob/main/adapters/playwright/README.md) has a test; its golden
 test feeds recorded events through it without a browser.
 
 ## Your own driver

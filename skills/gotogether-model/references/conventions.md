@@ -15,7 +15,7 @@ Before judging recorded runs, inspect the binding and its recording sites with
 locations where known and actionable fixes. `complete` means the selected checks
 ran, not that they passed. Binding lint checks metadata/templates; the CLI's Go
 scan is syntactic. Use trace validation to establish conformance for a recorded
-run. See [the executable walkthrough](../../../docs/lint-onboarding.md).
+run. See [the executable walkthrough](https://github.com/chucklehead-dev/gotogether/blob/main/docs/lint-onboarding.md).
 
 ## Conventions (check every one)
 
@@ -73,7 +73,7 @@ run. See [the executable walkthrough](../../../docs/lint-onboarding.md).
    default expansion limit is 20,000 (`ChoiceLimit` / `-choice-limit`). Exhaustion,
    compiled-only checking and unsupported scopes yield no verdict. Other workflows
    may still require deterministic named actions; see
-   [the scope contract](../../../docs/model-choice-witnesses.md).
+   [the scope contract](https://github.com/chucklehead-dev/gotogether/blob/main/docs/model-choice-witnesses.md).
 
 ## Keep replays cheap
 

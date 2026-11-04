@@ -4,6 +4,12 @@ From the gotogether-start skill (its SKILL.md says when to read this).
 
 ## The first hour
 
+Install guidance with `gotogether skills install` in your project. After upgrading
+the CLI, `gotogether skills install -force` refreshes its shipped skill files
+(overwriting local edits to those files). Local and cross-skill links stay within
+the installation; repository documentation and examples open on GitHub `main`
+and need network access.
+
 The `examples/...` paths in these skills are in the gotogether repository
 (https://github.com/chucklehead-dev/gotogether/tree/main/examples), not in
 your project: clone it to read and run them. A new HTTP service starts from `gotogether init -kind http NAME` (below);

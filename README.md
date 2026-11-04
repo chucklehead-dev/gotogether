@@ -988,7 +988,14 @@ Code. Install them into your own project, or for your user:
 gotogether skills install                     # .agents/skills and .claude/skills
 gotogether skills install -target all         # also .github/skills and .cursor/skills
 gotogether skills install -user               # under $HOME instead of the project
+gotogether skills install -force              # refresh installed guidance after upgrading gotogether
 ```
+
+Local references and cross-skill links work inside the installed skills tree.
+Links to repository documentation and examples use GitHub URLs, so they also
+work outside this checkout; those pages track `main` and require network access.
+`-force` overwrites the shipped skill files with the CLI's embedded guidance;
+review local edits before refreshing.
 
 Repository guidance for agents is in [AGENTS.md](AGENTS.md); `CLAUDE.md`
 imports it. How the toolkit is put together (its modules, layers, the

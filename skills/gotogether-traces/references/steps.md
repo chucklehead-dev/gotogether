@@ -356,4 +356,4 @@ witness, and the separate initialization action/expression), or the text/TUI
 receipt, before treating an outcome as decided. Cursor model exploration can
 still refuse an ambiguous start; that does not erase the whole-run receipt. Manifest
 replay retains the exact effective limit. See
-[the scope and evidence contract](../../../docs/model-choice-witnesses.md).
+[the scope and evidence contract](https://github.com/chucklehead-dev/gotogether/blob/main/docs/model-choice-witnesses.md).
