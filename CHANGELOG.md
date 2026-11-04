@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- The kvstore example demonstrates conditional clock assumptions with actual
+  Store observations and authored two-recorder intervals. A declared 5ms
+  bound admits the faithful history while a planted stale replica still fails;
+  native fixtures and JSON issue checks keep the example reproducible.
+
 - `System.Fuzz` treats generated inputs and saved Go fuzz corpus bytes as raw
   choice entropy, including prefixes that resemble replay headers. Explicit
   seed arguments must be `EncodeChoices` tapes; their payload is decoded once

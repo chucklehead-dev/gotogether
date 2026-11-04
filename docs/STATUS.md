@@ -7,6 +7,16 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
+Clock-assumption example (current branch): kvstore records real Store
+observations under authored intervals and a synthetic 5ms recorder offset.
+The default 1ms assumption forces a misleading order; a declared 5ms bound
+admits the faithful history. A planted stale replica still fails at both
+bounds. Tests regenerate exact native logs, and CLI/JSON checks preserve
+the existing conditional issue text. This is not measured host/NTP evidence.
+Direct history JSON does not retain a configured skew when it creates no
+clock edges, and the TUI does not navigate searched history orders. Those
+are concrete output gaps, not features supplied by this example.
+
 Fuzz input framing (PR #55): generated Go fuzz inputs are raw entropy, so
 mutating bytes into a replay-header prefix cannot create a spurious format
 failure. Explicit seeds are encoded recordings, validated and decoded once
@@ -685,8 +695,7 @@ four, L more; agent-days in practice).
     - 10, the canary gate (S-M), an Argo Rollouts AnalysisTemplate.
     - 11, sharding (M-L, after grist slice 3's leases).
 11. **Small leftovers**, one line each in ROADMAP: I1's library
-    upcaster-fix example; I2's `examples/shards`; I7's kvstore two-host
-    example; I11's broader typed-state/model-step generation beyond the
+    upcaster-fix example; I2's `examples/shards`; I11's broader typed-state/model-step generation beyond the
     completed bounded two-integer joint-state corpus; I23's PostgreSQL benchmark in
     CI; I27's grist/README.md (after grist's tag); I36's gopls note;
     I37/I40's goroutine-id lookups (19-26 µs on Thread and
@@ -697,7 +706,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | I7: existing two-recorder example and clock assumptions | S-M | use current APIs to demonstrate how declared skew affects justified ordering and verdicts, keeping assumptions visible in JSON/TUI; no new clock API without evidence |
+| 1 | History-search clock evidence | S-M | the example exposed missing configured-skew provenance in direct history JSON and absent searched-order evidence in navigation/TUI; define one shared evidence contract before changing output |
 | 2 | Non-SQL installed-module adoption trial | M | exercise MBT or request-log validation outside the checkout; fix a demonstrated blocker rather than adding another adapter |
 | deferred | I25: virtual physical-session capacity | M | native role-quota refusal/recovery is checked; nondeterministic pool callbacks and idle-session ownership still prevent a faithful virtual max_connections claim |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
@@ -708,9 +717,10 @@ PostgreSQL quotas and bounded COUNT(*) were consecutive storage slices.
 Installed-skills portability rotates back to general onboarding and fixes
 a demonstrated consumer defect: a repository-relative documentation link
 resolved outside the installed tree. Portable authored URLs and guards solve
-that at the source, shared by checkout and installed guidance. Next use the
-existing trace-ordering APIs to make clock assumptions concrete, then try a
-non-SQL consumer workflow. Further SQL syntax, virtual physical sessions
+that at the source, shared by checkout and installed guidance. The bounded
+clock example now makes existing assumptions concrete and exposes two output
+gaps. Address those through a shared evidence contract, then rotate to a
+non-SQL consumer workflow rather than expanding clock APIs or SQL syntax. Further SQL syntax, virtual physical sessions
 and evaluator redesign need fresh adoption evidence.
 
 The counted-values trial is now implemented in

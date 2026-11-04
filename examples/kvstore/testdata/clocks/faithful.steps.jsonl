@@ -1,0 +1,3 @@
+{"quint.format":"gotogether.steps/1"}
+{"quint.action":"write","quint.actor":"kv","quint.arg.key":"a","quint.arg.value":"x","quint.invoked_unix_nano":100002000000,"quint.obs.revision":1,"quint.outcome":"ok","quint.process":"kv-service","quint.recorder":"host-a","quint.seq":1,"quint.time_unix_nano":100003000000}
+{"quint.action":"read","quint.actor":"kv","quint.arg.key":"a","quint.invoked_unix_nano":100005000000,"quint.obs.found":false,"quint.obs.revision":0,"quint.obs.value":"","quint.obs.version":0,"quint.outcome":"ok","quint.process":"kv-service","quint.recorder":"host-b","quint.seq":1,"quint.time_unix_nano":100006000000}
