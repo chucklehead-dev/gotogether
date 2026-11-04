@@ -129,10 +129,7 @@ func usage() {
 }
 
 func usageTo(w io.Writer) {
-	fmt.Fprint(w, `gotogether checks Go code against a Quint model. A new HTTP service: init, below; code you have:
-  gotogether scaffold -spec model.qnt -module M -invariants safe -out m.binding.yaml    (choose property names; set constants)
-  gotogether lint -binding m.binding.yaml && gotogether simulate -binding m.binding.yaml
-  gotogether scaffold -system -binding m.binding.yaml -out system_test.go    (-http: an HTTP service on qenv/qhttp)
+	fmt.Fprint(w, `gotogether checks Go code against a Quint model.
 grist generates a model and bindings: go run github.com/chucklehead-dev/gotogether/grist/cmd/grist@latest new <name> (docs/grist.md)
 commands (gotogether <command> -h: what it does, an example, every flag):
 `)
