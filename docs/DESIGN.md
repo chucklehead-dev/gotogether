@@ -3265,6 +3265,18 @@ judge it by 1 ms again. Production hosts under NTP differ by more than
 1 ms; a skew per pair of recorders is ROADMAP G8's (review 11, F5;
 `TestSoundClockSkewNamed`).
 
+The bounded kvstore example records actual Store observations and authors
+only their intervals, with one recorder 5ms ahead. The faithful missing read
+precedes the write in the actual call sequence; clock ordering under 1ms
+forces the opposite order, while a declared 5ms bound admits it. A separate
+empty replica supplies the stale-read control after the write and still
+fails under both bounds. Tests regenerate the native logs and check JSON
+conditional issue text; this is neither a deployment nor measured NTP proof.
+It also exposes output limits: direct history JSON does not always retain
+the requested skew when no clock edge remains, and TUI navigation does not
+carry searched-order evidence. A shared evidence contract is the next step,
+not a per-pair clock API or a claim that the current outputs are equivalent.
+
 A review found two pending calls on either side of a quiet settle
 unordered (the first, if it took effect, did so before the settle, and
 so before the second): a forbidden order passed a ghost history; and an

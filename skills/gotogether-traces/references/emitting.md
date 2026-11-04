@@ -79,7 +79,13 @@ no order says which orders it took from clocks and the closest gap
 ("it assumes the clocks within 1ms"), true only if they are. Give the
 hosts' real bound with `qtest.ClockSkew(5*time.Millisecond)` (CLI
 `-skew 5ms`), or order keys. Converted spans
-carry their start as the invocation.
+carry their start as the invocation. See the
+[kvstore clock exercise](https://github.com/chucklehead-dev/gotogether/blob/main/examples/kvstore/README.md#two-recorders-with-different-clocks)
+for actual observations with authored clock intervals and a stale-replica
+control. Establish the bound independently; choosing a bound to get a pass
+is not evidence of synchronization. Keep the invocation: direct history JSON
+can omit the bound when no clock edge remains, and the TUI does not yet
+navigate searched history orders.
 In a simulation, steps carry its virtual time, and an exploration takes
 the same options: a simulated client history is linearized run by run.
 

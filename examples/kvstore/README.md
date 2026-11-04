@@ -104,12 +104,57 @@ checked alone*); the two rotation mutants show only there.
   catches the mutant it was built with. A failing run's reproduce and
   navigate lines name the mutant.
 
-## Tests (`kvstore_test.go`)
+## Two recorders with different clocks
+
+A negative linearizability verdict can depend on the bound assumed for the
+recorders' clocks. Run the deterministic example from this directory:
+
+```sh
+go test -run 'TestTwoRecorderClockAssumptions|TestClockHistoryFixturesMatchStore' -v .
+gotogether validate -binding kv.binding.yaml -linearize testdata/clocks/faithful.steps.jsonl
+gotogether validate -binding kv.binding.yaml -skew 5ms testdata/clocks/faithful.steps.jsonl
+gotogether validate -binding kv.binding.yaml -skew 5ms testdata/clocks/stale.steps.jsonl
+```
+
+The first validation exits 1 with a read mismatch, conditional on clocks being
+within the default 1ms. Its issue names `host-a`, `host-b`, the 1ms assumption
+and the closest 2ms gap. With the stated 5ms pairwise clock bound, the same
+faithful observations conform (exit 0). The stale-replica control still fails
+(exit 1): its 7ms recorded gap exceeds that bound. A larger bound permits more
+orders; choosing one just to obtain a pass does not establish the real clocks'
+bound or repair a stale service. `-skew` implies `-linearize`.
+
+These logs contain observations from actual `kv.Store` calls. Only their
+intervals are authored for repeatability, with `host-b`'s synthetic clock 5ms
+ahead of `host-a`'s. Both recorder streams observe the same `kv-service` model
+incarnation. This is a clock-assumption exercise, not a deployment on two hosts
+or a measurement of NTP behavior:
+
+| Case | True operation intervals | Recorded intervals | Consequence |
+|---|---|---|---|
+| faithful | missing read 0–1ms, write 2–3ms | read 5–6ms, write 2–3ms | 1ms wrongly forces write-before-read; 5ms allows the actual read-before-write order |
+| stale replica | write 2–3ms, missing read from an empty replica 5–6ms | write 2–3ms, read 10–11ms | the 7ms gap forces write-before-read under both stated bounds |
+
+The stale fixture deliberately routes its read to a separate empty store after
+the write; it is a planted service-contract defect, not a defect discovered in
+`kv.Store`. The fixture test regenerates both logs from the calls and compares
+the exact native JSONL, so recorded return values cannot silently become stale
+handwritten examples. No new model, clock API or fault mechanism is needed.
+
+Add `-json` to inspect the native report: its issue text retains the conditional
+clock assumption. The direct validation document does not record a configured
+skew when it creates no cross-recorder order; retain the invocation to explain
+that case. The current navigation/TUI receipt does not carry the named recorder
+and closest-gap evidence, so this example does not claim output parity there.
+
+## Tests (`kvstore_test.go`, `clock_assumptions_test.go`)
 
 | Test | Direction | Shows |
 |---|---|---|
 | `TestServiceUnderLoadConforms` | 8 concurrent clients; the handlers' steps recorded into the run (`qobshttp.Handler`, in parallel) and checked (`qtest`) | a concurrent run is a serial behaviour of the model, which took every block of the service's catalog (`catalog.Exercised()`: each CAS and delete by outcome) |
 | `TestServiceSpansConform` | the same load; plain spans converted and checked | spans plus `kv.op` give the same verdict |
+| `TestTwoRecorderClockAssumptions` | actual Store observations, authored two-recorder intervals and a stale-replica control | the default 1ms negative verdict states its assumption; a declared 5ms admits the faithful order while the control still fails |
+| `TestClockHistoryFixturesMatchStore` | native JSONL regenerated from actual calls | the shipped clock examples preserve the implementation's observed return values |
 | `TestClientHistoryLinearizes` | 4 clients record their own operations, with invocation times (`kv.LoadRecorded`) | in recording order the faithful store is rejected; `qtest.Linearize()` finds the order the intervals allow |
 | `TestRotatedLogConformsAlone` | 4 clients, the log rotated every 40 operations; the last file alone | judged from its head's snapshot it conforms; without the head, the lost prefix's error |
 | `TestModelDrivesService` | model traces drive the HTTP API (`connect.Run`) | store and revision match the model after every request |

@@ -231,16 +231,21 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   I45's.
 - **I7. Real time across recorders named in the verdict (S). Done**
   (the verdict names the orders by clocks and the skew; one skew for
-  the history, `qtest.ClockSkew`, `validate -skew`; left: the kvstore
-  example, and a skew per pair, G8). Two recorders with neither `Call` nor order keys are
+  the history, `qtest.ClockSkew`, `validate -skew`; the bounded kvstore
+  example is done; a skew per pair remains G8). Two recorders with neither `Call` nor order keys are
   ordered by wall time within `RealTimeSlack` (1 ms), and a
   `NotLinearizable` proof is then true only under that clock
   assumption, which quint's re-check cannot touch. The verdict names
   the cross-recorder edges it used ("assumes clocks of a and b within
   1 ms"). A declared skew per pair stays G8's, with the adopter's
-  production case (NTP skew well over 1 ms). Example: kvstore on two
-  hosts 5 ms apart, a false "not linearizable" before, the assumption
-  named after.
+  production case (NTP skew well over 1 ms). The kvstore example uses
+  actual Store observations with authored intervals and a synthetic 5ms
+  recorder offset: default 1ms fails conditionally, declared 5ms admits
+  the faithful order, and a planted stale replica still fails. Exact native
+  log regeneration and JSON issues are checked; this is not real-host
+  synchronization evidence. Follow-up: direct history JSON omits configured
+  skew when no clock edge remains, and navigation/TUI lacks searched-order
+  evidence. Define shared clock-search evidence before claiming output parity.
 - **I8. Liveness says what it checks (S). Done.** DESIGN §62 and
   the reports: the check is □◇P (P at quiescence), not ◇P, since a
   lasso's prefix may pass through states where the val holds; "no lasso
