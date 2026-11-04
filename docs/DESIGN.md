@@ -6621,3 +6621,44 @@ phase, and only for the emitted context-thread identity. Non-events do not claim
 or change a thread's owner. Manual thread strings and OTel spans retain their
 existing policy; accepted misuse remains an issue in the same recorder reports.
 The optimization changes no public API or trace format.
+
+
+## 96. Repository contracts gate expensive CI work
+
+Help length and package-state scope failures were discovered inside long native
+suites despite focused feature tests passing. `ci/preflight.sh` is the shared
+local/CI entry point for formatting and repository source contracts. The CI
+`repository contracts` job needs Go, runs that script, and gates every other job;
+`action-compiled` additionally keeps its artifact dependency on `action`.
+
+The script owns the guard roster and CLI selector. Source tests discover all
+help/tutorial guard tests by AST, require their selection, and reject selection
+from unaudited files before the CLI test stage runs. Workflow guards reject
+missing dependencies or job conditions that bypass success gating. Ordinary
+full and shuffled suites retain their tests and coverage.
+
+Snapshot updater flags, persistent report destinations and child-helper modes
+are cleared for checking. Otherwise an inherited environment can regenerate
+files or make a help error-path subprocess write into the checkout. Formatting
+only lists differences. This makes the preflight nonwriting for repository and
+persistent report data while allowing normal Go cache/download activity. It is
+native-tool-independent; cold compilation still has a cost.
+
+
+## 97. Report delivery and command status
+
+A native passing graph is still passing evidence when a requested report cannot
+be written, but the command did not complete successfully. Reproducing `simulate
+-json -graph` with a directory as a report file exposed stdout claiming pass/0
+while the process exited 2. The shared writer also hid delivery errors behind an
+existing tool error and skipped later independent destinations.
+
+Keep the current document contract: top-level verdict/error/exit describe the
+command, while native checks, actors, graph scope and comparison data retain
+their original meaning. Attempt independent destinations and join delivery and
+original errors. Emit stdout JSON after file attempts. On a delivery failure,
+refresh successful destinations once with operational error/2; on stdout failure,
+refresh saved destinations too. There is no transaction across paths. A refresh
+can fail, leaving earlier bytes unchanged; that error is returned and included in
+any remaining writable output. Do not retry indefinitely or erase model evidence.
+Export-preflight refusal still forbids file writes before this writer is reached.

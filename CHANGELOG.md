@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- Shared CLI reports now expose delivery failures as command error/exit 2,
+  preserve native model evidence and original errors, attempt independent outputs,
+  and refresh successful reports after a later failure. Stdout JSON is emitted
+  last; delivery remains best effort with explicit refresh failures.
+
 - Recording reuses a goroutine identity within an operation while resolving
   ownership and timing at their original phases. Background recording in a
   simulation avoids a duplicate lookup and allocation. Filtered, interrupted,

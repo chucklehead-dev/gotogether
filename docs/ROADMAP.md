@@ -42,6 +42,16 @@ Recording identity consolidation rotates back to the shared runtime: duplicate
 background lookup is removed without caching ownership or clocks, and filtered
 non-events stop claiming thread ownership. Further capability should follow an
 actual usage blocker before expanding comparison mappings or liveness.
+Two late repository-contract failures (help length and process-state scope) also
+justify a shared non-native preflight gate before CI fanout. It preserves full
+coverage while shortening feedback; this is evidence-driven consolidation, not
+a new product capability or a reason to expand adjacent fixtures.
+A subsequent cross-facet reporting correction follows a reproduced CLI failure:
+stdout JSON claimed pass/exit 0 before a requested report failed and the command
+exited 2. Shared delivery now keeps operational status and native evidence
+separate, attempts independent outputs, joins errors and refreshes saved reports
+before final stdout. This improves existing agent/CI contracts without another
+format, adapter or adjacent comparison fixture.
 Keep frozen baseline pins for reproducibility, not as legacy support promises.
 Further adapters, adjacent fixtures and per-pair clock APIs need usage evidence.
 

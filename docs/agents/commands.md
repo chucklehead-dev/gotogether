@@ -206,3 +206,22 @@ When adding a CLI command, run `go test ./cmd/gotogether -run
 command overview has a separate compactness/discovery contract; checking only a
 new command's `-h` misses that regression. Keep the overview compact instead of
 raising its line budget when commands are added.
+
+
+Run `ci/preflight.sh` before pushing. It resolves the checkout from the script's
+location, so an absolute path works from another directory. The command runs
+nonwriting formatting and repository-contract checks without Quint or native
+services. It deliberately ignores updater flags, persistent report destinations
+and child-test helper modes; use the explicit update commands separately when
+changing snapshots. Go build-cache and dependency downloads behave normally.
+
+CI runs that same script in `repository contracts`; every other CI job depends
+on its success. Full and twice-shuffled suites still run their ordinary tests.
+The CLI selector is contained to the two audited help/tutorial guard files, and
+source tests fail if a new guard is omitted or an unaudited test is selected.
+This closes the late-feedback gap exposed by #60's help length and #62's missing
+process-state comment. It does not make native/model or race checks optional.
+
+The gate defers CI fanout. Before merging, verify that the workflow finished
+successfully at the exact PR head and all expected checks passed; the currently
+visible early subset alone is not evidence that the whole run completed.
