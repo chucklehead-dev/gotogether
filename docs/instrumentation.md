@@ -97,6 +97,10 @@ func (p *Publisher) insertTable(ctx context.Context, b *batch, rows []byte) erro
   - `order.<domain>`: a domain clock.
 - `//quint:thread` on a function with a `context.Context` parameter puts the
   steps recorded under that context in program order.
+- `qobs.Thread` ownership applies to accepted events carrying that thread.
+  Filtered calls and interrupted work do not establish its program order. An
+  explicit thread override prevents validation of an unused context tag; manual
+  thread strings and span identities retain their policy.
 - A plain `go build` ignores both directives.
 
 ## Applying this to a new project

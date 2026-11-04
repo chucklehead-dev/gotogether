@@ -71,35 +71,41 @@ func init() {
 		ctx, ok := owners.ended[id]
 		return ctx, ok
 	})
-	hooks.SetSite(func(ctx context.Context) hooks.Site {
+	hooks.SetSite(func(ctx context.Context, id int64) hooks.Site {
 		if live.Load() == 0 {
-			return hooks.Site{} // the per-step check costs an atomic load
+			return hooks.Site{GoroutineID: id} // the per-step check costs an atomic load
 		}
 		// the context's task first, as taskOf finds it: a task's step costs
 		// no goroutine lookup
 		if ctx != nil {
 			if t, ok := ctx.Value(ctxKey{}).(*task); ok {
-				return hooks.Site{Clock: t.sim, Discard: t.killed}
+				return hooks.Site{Clock: t.sim, Discard: t.killed, GoroutineID: id}
 			}
 		}
-		if o, ok := ownerOf(goid()); ok {
+		if id == 0 {
+			id = goid()
+		}
+		if o, ok := ownerOf(id); ok {
 			// true time: a process's clock may be skewed, a step's time is the run's
-			return hooks.Site{Clock: o.s, Discard: o.t != nil && o.t.killed}
+			return hooks.Site{Clock: o.s, Discard: o.t != nil && o.t.killed, GoroutineID: id}
 		}
-		return hooks.Site{}
+		return hooks.Site{GoroutineID: id}
 	})
-	hooks.SetResolver(func() (context.Context, bool) {
+	hooks.SetResolver(func(id int64) (context.Context, int64, bool) {
 		if live.Load() == 0 {
-			return nil, false
+			return nil, id, false
 		}
-		o, ok := ownerOf(goid())
+		if id == 0 {
+			id = goid()
+		}
+		o, ok := ownerOf(id)
 		if !ok {
-			return nil, false
+			return nil, id, false
 		}
 		if o.t != nil {
-			return o.t.ctx, true
+			return o.t.ctx, id, true
 		}
-		return o.s.base, true // the goroutine that created the simulation
+		return o.s.base, id, true // the goroutine that created the simulation
 	})
 }
 

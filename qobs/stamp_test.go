@@ -22,7 +22,7 @@ func TestSeqOrderIsTimeOrder(t *testing.T) {
 		held   int64 = -1 // the goroutine whose next clock read waits
 		second       = make(chan struct{})
 	)
-	hooks.SetSite(func(context.Context) hooks.Site {
+	restore := hooks.SetSite(func(context.Context, int64) hooks.Site {
 		return hooks.Site{Clock: clockFunc(func() time.Time {
 			mu.Lock()
 			hold := held == hooks.GoroutineID()
@@ -39,7 +39,7 @@ func TestSeqOrderIsTimeOrder(t *testing.T) {
 			return time.Now() // the wall clock's
 		})}
 	})
-	t.Cleanup(func() { hooks.SetSite(func(context.Context) hooks.Site { return hooks.Site{} }) })
+	t.Cleanup(restore)
 
 	for _, kind := range []string{"record", "invoke", "done"} {
 		t.Run(kind, func(t *testing.T) {

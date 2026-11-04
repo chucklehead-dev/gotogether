@@ -131,8 +131,10 @@ func (r *Recorder) Issues() []string {
 
 // checkThread notes the goroutine of a Thread's first step, and an issue
 // when a later step comes from another.
-func (r *Recorder) checkThread(thread, action string) {
-	g := hooks.GoroutineID()
+func (r *Recorder) checkThread(thread, action string, g int64) {
+	if g == 0 {
+		g = hooks.GoroutineID()
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.threads == nil {
@@ -146,6 +148,15 @@ func (r *Recorder) checkThread(thread, action string) {
 		r.issues = append(r.issues, fmt.Sprintf("thread %s (qobs.Thread) recorded %q from goroutine %d after goroutine %d: "+
 			"a thread asserts program order, which two goroutines do not have; give each its own (qobs.Thread in the goroutine)", thread, action, g, first))
 		r.threads[thread] = g // one issue per change of goroutine
+	}
+}
+
+// checkRecordedThread validates only the context's thread identity actually
+// emitted by an accepted record. Filtering, interruption and an explicit thread
+// override cannot assert program order on an unused qobs.Thread identity.
+func (r *Recorder) checkRecordedThread(ctx context.Context, s *qtrace.Step, id int64) {
+	if thread, ok := ctx.Value(threadKey{}).(string); ok && s.Thread == thread {
+		r.checkThread(thread, s.Action, id)
 	}
 }
 
@@ -266,10 +277,26 @@ func WithRecorder(ctx context.Context, r *Recorder) context.Context {
 // with context.Background() inside a simulation still lands in its own
 // run, even with runs in parallel); else the global one (nil if none).
 func From(ctx context.Context) *Recorder {
-	if r, ok := qrun.Get(ctx, recorderKey); ok && r != nil {
-		return r
+	r, _ := from(ctx)
+	return r
+}
+
+// from also retains a goroutine identity read while finding the run. It is
+// shared only within this operation, never its context or ownership snapshot.
+func from(ctx context.Context) (*Recorder, int64) {
+	if r, ok := qrun.InContext(ctx, recorderKey); ok {
+		if r != nil {
+			return r, 0
+		}
+		return global.Load(), 0 // an explicit nil shadows the goroutine's run
 	}
-	return global.Load()
+	run, id, ok := hooks.Resolve(0)
+	if ok {
+		if r, ok := qrun.InContext(run, recorderKey); ok && r != nil {
+			return r, id
+		}
+	}
+	return global.Load(), id
 }
 
 // Record records one step through the context's recorder (WithRecorder),
@@ -286,11 +313,16 @@ func From(ctx context.Context) *Recorder {
 // another). Recorder.Record lists the other keys (actor, process, thread,
 // outcome, order.<d>, invoked, when).
 func Record(ctx context.Context, action string, err error, kv ...any) {
-	if r := From(ctx); r != nil {
-		r.Record(ctx, action, err, kv...)
+	r, id := from(ctx)
+	if r != nil {
+		r.record(ctx, action, err, expand(kv), 0, id)
 		return
 	}
-	if hooks.SiteOf(ctx).Discard {
+	recordMissing(ctx, action, id)
+}
+
+func recordMissing(ctx context.Context, action string, id int64) {
+	if hooks.SiteOf(ctx, id).Discard {
 		return // interrupted work with nowhere to report it
 	}
 	if hooks.StrictOn() {
@@ -349,7 +381,7 @@ func Thread(ctx context.Context) context.Context {
 // Values are normalised to string, int64, bool or float64. A Ref, in a
 // key's place, links the step to its artifact (qtrace.Step.Ref).
 func (r *Recorder) Record(ctx context.Context, action string, err error, kv ...any) {
-	r.record(ctx, action, err, expand(kv), 0)
+	r.record(ctx, action, err, expand(kv), 0, 0)
 }
 
 // A StepRef is a step's link to its artifact (Ref).
@@ -399,7 +431,7 @@ func expand(kv []any) []any {
 }
 
 // record records a step, the completion of invocation call if not 0.
-func (r *Recorder) record(ctx context.Context, action string, err error, kv []any, call uint64) {
+func (r *Recorder) record(ctx context.Context, action string, err error, kv []any, call uint64, id int64) {
 	if r == nil {
 		return
 	}
@@ -408,7 +440,7 @@ func (r *Recorder) record(ctx context.Context, action string, err error, kv []an
 		return
 	}
 	s.Call = call
-	site := hooks.SiteOf(ctx)
+	site := hooks.SiteOf(ctx, id)
 	if site.Discard {
 		s.Time = site.Now()
 		r.mu.Lock()
@@ -416,6 +448,7 @@ func (r *Recorder) record(ctx context.Context, action string, err error, kv []an
 		r.mu.Unlock()
 		return
 	}
+	r.checkRecordedThread(ctx, s, site.GoroutineID)
 	// seq is taken here, after the effect the step describes has happened.
 	// Two concurrent steps may be numbered in either order, but their
 	// times are in the same one (stamp).
@@ -457,21 +490,26 @@ type Call struct {
 //
 // With no recorder it returns nil, whose Done does nothing.
 func Invoke(ctx context.Context, action string, kv ...any) *Call {
-	if r := From(ctx); r != nil {
-		return r.Invoke(ctx, action, kv...)
+	r, id := from(ctx)
+	if r != nil {
+		return r.invoke(ctx, action, kv, id)
 	}
-	Record(ctx, action, nil, kv...) // the same no-op, or strict failure
+	recordMissing(ctx, action, id) // the same no-op, or strict failure
 	return nil
 }
 
 // Invoke records the invocation of an operation and returns the call (see
 // the package's Invoke).
 func (r *Recorder) Invoke(ctx context.Context, action string, kv ...any) *Call {
+	return r.invoke(ctx, action, kv, 0)
+}
+
+func (r *Recorder) invoke(ctx context.Context, action string, kv []any, id int64) *Call {
 	if r == nil {
 		return nil
 	}
 	c := &Call{r: r, ctx: ctx, action: action, kv: append([]any(nil), expand(kv)...)}
-	site := hooks.SiteOf(ctx)
+	site := hooks.SiteOf(ctx, id)
 	if site.Discard {
 		return c // interrupted work: its Done, if any, goes to Interrupted
 	}
@@ -482,6 +520,7 @@ func (r *Recorder) Invoke(ctx context.Context, action string, kv ...any) *Call {
 		}
 	}
 	s, _ := r.step(ctx, action, nil, keys)
+	r.checkRecordedThread(ctx, s, site.GoroutineID)
 	s.Invocation, s.Outcome = true, ""
 	c.seq, s.Time = r.stamp(site)
 	s.Seq = c.seq
@@ -507,7 +546,7 @@ func (c *Call) Done(err error, kv ...any) {
 			}
 		}
 	}
-	c.r.record(c.ctx, c.action, err, all, c.seq)
+	c.r.record(c.ctx, c.action, err, all, c.seq, 0) // Done may run on another goroutine
 }
 
 // Settled records, through the context's recorder (found as Record finds
@@ -517,17 +556,21 @@ func (c *Call) Done(err error, kv ...any) {
 // deployment records it where it knows (every client done, queues
 // drained). A no-op with no recorder.
 func Settled(ctx context.Context) {
-	if r := From(ctx); r != nil {
-		r.Settled(ctx)
+	if r, id := from(ctx); r != nil {
+		r.settled(ctx, id)
 	}
 }
 
 // Settled records that the system has settled (the package's Settled).
 func (r *Recorder) Settled(ctx context.Context) {
+	r.settled(ctx, 0)
+}
+
+func (r *Recorder) settled(ctx context.Context, id int64) {
 	if r == nil {
 		return
 	}
-	site := hooks.SiteOf(ctx)
+	site := hooks.SiteOf(ctx, id)
 	if site.Discard {
 		return
 	}
@@ -540,8 +583,8 @@ func (r *Recorder) Settled(ctx context.Context) {
 // Record finds it), that its steps recorded at or before t are all
 // delivered (CompleteThrough of the Recorder). A no-op with no recorder.
 func CompleteThrough(ctx context.Context, t time.Time) {
-	if r := From(ctx); r != nil {
-		r.CompleteThrough(ctx, t)
+	if r, id := from(ctx); r != nil {
+		r.completeThrough(ctx, t, id)
 	}
 }
 
@@ -553,10 +596,14 @@ func CompleteThrough(ctx context.Context, t time.Time) {
 // acknowledgement of everything up to t. A watermark is a record, not a
 // step, and takes no seq. A log that states none is taken whole.
 func (r *Recorder) CompleteThrough(ctx context.Context, t time.Time) {
+	r.completeThrough(ctx, t, 0)
+}
+
+func (r *Recorder) completeThrough(ctx context.Context, t time.Time, id int64) {
 	if r == nil || t.IsZero() {
 		return
 	}
-	site := hooks.SiteOf(ctx)
+	site := hooks.SiteOf(ctx, id)
 	if site.Discard {
 		return
 	}
@@ -572,7 +619,6 @@ func (r *Recorder) step(ctx context.Context, action string, err error, kv []any)
 	}
 	if t, ok := ctx.Value(threadKey{}).(string); ok {
 		s.Thread = t
-		r.checkThread(t, action)
 	} else if sc := trace.SpanContextFromContext(ctx); sc.IsValid() {
 		s.Thread = sc.SpanID().String()
 	}

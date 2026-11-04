@@ -22,7 +22,7 @@ import (
 
 // Process-wide: the hooks qenv installs, and the strict runs in progress.
 var (
-	site   atomic.Pointer[func(context.Context) Site]
+	site   atomic.Pointer[func(context.Context, int64) Site]
 	strict atomic.Int64
 )
 
@@ -37,6 +37,9 @@ type Clock interface{ Now() time.Time }
 type Site struct {
 	Clock   Clock
 	Discard bool
+	// GoroutineID is an identity already read during this operation. Zero means
+	// no lookup was needed. It is never an ownership snapshot or a cached site.
+	GoroutineID int64
 }
 
 // Now is the time a step recorded now at the site carries: its
@@ -54,16 +57,27 @@ func (s Site) Now() time.Time {
 // recorded in a simulation carries the simulation's virtual time, not the
 // wall clock's, and a client history recorded there has intervals to
 // linearize. One lookup serves both the discard check and the clock, and
-// the context comes first: the goroutine's id costs microseconds.
-func SetSite(f func(context.Context) Site) { site.Store(&f) }
+// the context comes first: the goroutine's id costs microseconds. The supplied
+// identity is reused only within this operation; zero requests a lazy lookup.
+// restore removes this installation only while it still owns the hook.
+func SetSite(f func(context.Context, int64) Site) (restore func()) {
+	installed := &f
+	old := site.Swap(installed)
+	return sync.OnceFunc(func() { site.CompareAndSwap(installed, old) })
+}
 
-// SiteOf is where a step recorded with ctx is recorded (SetSite's lookup;
-// the wall clock and no discard without one).
-func SiteOf(ctx context.Context) Site {
+// SiteOf freshly resolves the site for the original recording context. id may
+// be an identity already read during this operation, never a cached owner. With
+// no installed hook, the wall clock applies and nothing is discarded.
+func SiteOf(ctx context.Context, id int64) Site {
 	if f := site.Load(); f != nil {
-		return (*f)(ctx)
+		found := (*f)(ctx, id)
+		if found.GoroutineID == 0 {
+			found.GoroutineID = id
+		}
+		return found
 	}
-	return Site{}
+	return Site{GoroutineID: id}
 }
 
 // Strict turns on, until release is called, the rule that a step must
@@ -402,20 +416,36 @@ func NotesOf(ctx context.Context) *Notes {
 }
 
 // Process-wide: installed by qenv.
-var resolver atomic.Pointer[func() (context.Context, bool)]
+var resolver atomic.Pointer[func(int64) (context.Context, int64, bool)]
+var fallbackResolver atomic.Pointer[func(int64) (context.Context, int64, bool)]
 
 // SetResolver installs how the calling goroutine's run context is found:
 // qenv returns the context of the goroutine's simulation task, or of the
 // simulation it created.
-func SetResolver(f func() (context.Context, bool)) { resolver.Store(&f) }
+func SetResolver(f func(int64) (context.Context, int64, bool)) { resolver.Store(&f) }
 
-// Resolve is the calling goroutine's run context by the resolver, if one
-// is installed and the goroutine is a run's.
-func Resolve() (context.Context, bool) {
+// SetFallbackResolver installs qrun's explicit-start lookup. A simulation's
+// resolver has priority; both reuse one operation's already observed identity.
+func SetFallbackResolver(f func(int64) (context.Context, int64, bool)) {
+	fallbackResolver.Store(&f)
+}
+
+// Resolve finds the calling goroutine's run, preferring the simulation resolver
+// over explicit starts. id is an identity already read during this operation;
+// zero is lazy. The returned identity can be reused even when no run is found.
+func Resolve(id int64) (context.Context, int64, bool) {
 	if f := resolver.Load(); f != nil {
-		return (*f)()
+		var ctx context.Context
+		var ok bool
+		ctx, id, ok = (*f)(id)
+		if ok {
+			return ctx, id, true
+		}
 	}
-	return nil, false
+	if f := fallbackResolver.Load(); f != nil {
+		return (*f)(id)
+	}
+	return nil, id, false
 }
 
 // GoroutineID is the calling goroutine's id, from the runtime's stack

@@ -61,18 +61,25 @@ func Get[T any](ctx context.Context, k *Key[T]) (T, bool) {
 // a simulation's (qenv resolves it from the goroutine), else one Start
 // began on it.
 func Current() (context.Context, bool) {
-	if ctx, ok := hooks.Resolve(); ok { // a simulation's (qenv installs the resolver)
-		return ctx, true
-	}
-	if started.n.Load() == 0 {
-		return nil, false
-	}
-	started.Lock()
-	defer started.Unlock()
-	if st := started.m[hooks.GoroutineID()]; len(st) > 0 {
-		return st[len(st)-1], true
-	}
-	return nil, false
+	ctx, _, ok := hooks.Resolve(0)
+	return ctx, ok
+}
+
+func init() {
+	hooks.SetFallbackResolver(func(id int64) (context.Context, int64, bool) {
+		if started.n.Load() == 0 {
+			return nil, id, false
+		}
+		if id == 0 {
+			id = hooks.GoroutineID()
+		}
+		started.Lock()
+		defer started.Unlock()
+		if st := started.m[id]; len(st) > 0 {
+			return st[len(st)-1], id, true
+		}
+		return nil, id, false
+	})
 }
 
 // started holds the runs Start began, a stack per goroutine.

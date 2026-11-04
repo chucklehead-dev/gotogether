@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Portable comparison replays (current branch): confirmed source witnesses can
+Recording identity and ownership (current branch): background recording reuses
+one operation's goroutine ID across fresh run/site lookups. Local CPU-1 paired
+medians improve from 17.0 to 7.2 µs, with one fewer allocation; explicit-context
+allocations stay unchanged. Filtered, discarded and overridden-thread events no
+longer claim unused thread ownership. Callback-driven ownership changes and
+cross-task completion retain their timing and original context semantics.
+See [measurement and controls](performance.md#recording-identity-consolidation-2026-11-04).
+
+Portable comparison replays (merged PR #61, 7e4400e9): confirmed source witnesses can
 be exported with their captured model bytes, hashes, exact argument vector and
 current report JSON. Fresh output ownership excludes other report writers;
 publication is atomic and refuses overwrite. Native relocation tests remove the
@@ -753,7 +761,7 @@ four, L more; agent-days in practice).
 
 | # | Item | Size | Why here |
 |---|---|---|---|
-| 1 | Reassess the next cross-facet capability from adoption evidence | M | a real hello model review now exercises I42 and portable witness evidence; rotate away from comparison semantics unless new usage demonstrates a blocker |
+| 1 | Select a cross-facet capability from actual usage friction | M | recording consolidation closes measured duplicate lookup and false thread ownership issues; further scope should come from a concrete new contract blocker rather than adjacent comparison fixtures |
 | alongside | Further adoption-driven capability | M | the bounded LRU MBT trial now supplies installed non-SQL evidence; choose the next facet from independent usage or a new demonstrated blocker rather than adjacent fixtures |
 | deferred | I25: virtual physical-session capacity | M | native role-quota refusal/recovery is checked; nondeterministic pool callbacks and idle-session ownership still prevent a faithful virtual max_connections claim |
 | deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
