@@ -38,11 +38,46 @@ type Check struct {
 // Search describes an existential history search, not exploration of all
 // executions. BudgetExhausted concerns this actor's search, not the whole run.
 type Search struct {
-	Mode             string `json:"mode"` // "linearize", "resolve_pending", "linearize_resolve_pending"
-	Goal             string `json:"goal"` // "one_conforming_history"
-	BudgetExhausted  bool   `json:"budgetExhausted"`
-	OrderBudget      int    `json:"orderBudget,omitempty"` // per phase, not a total order count
-	ResolutionBudget int    `json:"resolutionBudget,omitempty"`
+	// Clock retains the effective completed-step clock constraints of a linearization.
+	Clock            *ClockEvidence `json:"clock,omitempty"`
+	Mode             string         `json:"mode"` // "linearize", "resolve_pending", "linearize_resolve_pending"
+	Goal             string         `json:"goal"` // "one_conforming_history"
+	BudgetExhausted  bool           `json:"budgetExhausted"`
+	OrderBudget      int            `json:"orderBudget,omitempty"` // per phase, not a total order count
+	ResolutionBudget int            `json:"resolutionBudget,omitempty"`
+}
+
+// ClockEvidence describes the cross-recorder clock constraints of a history's
+// completed steps. It does not describe measured clock synchronization, pending
+// call placement bounds, or a minimal set of assumptions needed for a proof.
+type ClockEvidence struct {
+	// Skew is the effective pairwise clock bound, formatted as a Go duration.
+	Skew string `json:"skew"`
+	// Source is "default" when the configured skew adopts the default, else "configured".
+	Source string `json:"source"`
+	// Constraints counts imposed ordered step pairs, not distinct recorder pairs.
+	Constraints int `json:"constraints"`
+	// Recorders are the sorted identities participating in those constraints.
+	Recorders []string `json:"recorders,omitempty"`
+	// ClosestGap is the smallest observed gap exceeding Skew, absent with no constraints.
+	ClosestGap string `json:"closestGap,omitempty"`
+	// Conditional marks a conclusive model failure checked under clock constraints.
+	// It does not establish that weakening the bound would change the verdict.
+	Conditional bool `json:"conditional"`
+}
+
+// Clone snapshots a search and its mutable clock evidence. A nil search stays nil.
+func (s *Search) Clone() *Search {
+	if s == nil {
+		return nil
+	}
+	out := *s
+	if s.Clock != nil {
+		clock := *s.Clock
+		clock.Recorders = slices.Clone(s.Clock.Recorders)
+		out.Clock = &clock
+	}
+	return &out
 }
 
 // Effect is an assumed pending-call effect in the checked candidate. Its
@@ -123,6 +158,21 @@ func (s Summary) String() string {
 		fmt.Fprintf(&b, "  reason: %s\n", s.Reason)
 	}
 	b.WriteString(partitionScopeText(s.Actors, s.PartitionInstances))
+	// Keep configured bounds visible even when actor detail is folded or capped.
+	var bounds []string
+	for _, a := range s.Actors {
+		if a.Search != nil && a.Search.Clock != nil {
+			c := a.Search.Clock
+			bound := fmt.Sprintf("%s (%s)", c.Skew, c.Source)
+			if !slices.Contains(bounds, bound) {
+				bounds = append(bounds, bound)
+			}
+		}
+	}
+	if len(bounds) > 0 {
+		slices.Sort(bounds)
+		fmt.Fprintf(&b, "  history clock skew bounds: %s\n", strings.Join(bounds, ", "))
+	}
 	visible := []Actor{}
 	folded := 0
 	for _, a := range s.Actors {
@@ -165,6 +215,16 @@ func (s Summary) String() string {
 				fmt.Fprintf(&b, "; resolution budget %d", q.ResolutionBudget)
 			}
 			b.WriteByte('\n')
+			if c := q.Clock; c != nil {
+				fmt.Fprintf(&b, "    clock skew %s (%s); %d cross-recorder clock constraints", c.Skew, c.Source, c.Constraints)
+				if c.Constraints > 0 {
+					fmt.Fprintf(&b, "; recorders %s; closest gap %s", strings.Join(c.Recorders, ", "), c.ClosestGap)
+				}
+				if c.Conditional {
+					fmt.Fprintf(&b, "; negative conclusion assumes clocks within %s", c.Skew)
+				}
+				b.WriteByte('\n')
+			}
 		}
 		kinds := map[string]map[Status]int{}
 		for _, c := range a.Checks {

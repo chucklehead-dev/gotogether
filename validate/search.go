@@ -472,6 +472,18 @@ func (s *search) mark(rep *Report) {
 				if q.OrderBudget == 0 {
 					q.OrderBudget = DefaultLinearizeBudget
 				}
+				// These are the original completed steps of this actor or
+				// partition: the same inputs ClockOrders sees in Linearize
+				// and the forced-order path, before recorder resequencing.
+				skew, source := s.options.Skew, "configured"
+				if skew <= 0 {
+					skew, source = qtrace.RealTimeSlack, "default"
+				}
+				clock := qtrace.ClockOrders(s.recorded[a.Actor], skew)
+				q.Clock = &receipt.ClockEvidence{Skew: clock.Skew.String(), Source: source, Constraints: clock.Orders, Recorders: slices.Clone(clock.Recorders)}
+				if clock.Orders > 0 {
+					q.Clock.ClosestGap = clock.Closest.String()
+				}
 			}
 			if s.options.ResolvePending {
 				if q.Mode != "" {

@@ -3272,10 +3272,16 @@ forces the opposite order, while a declared 5ms bound admits it. A separate
 empty replica supplies the stale-read control after the write and still
 fails under both bounds. Tests regenerate the native logs and check JSON
 conditional issue text; this is neither a deployment nor measured NTP proof.
-It also exposes output limits: direct history JSON does not always retain
-the requested skew when no clock edge remains, and TUI navigation does not
-carry searched-order evidence. A shared evidence contract is the next step,
-not a per-pair clock API or a claim that the current outputs are equivalent.
+The resulting shared receipt retains an effective skew and source even with
+zero clock edges. Original completed steps, scoped by actor or partition before
+resequencing, supply the same ClockOrders facts as linearization: imposed
+step-pairs, sorted recorder identities and the closest gap. These are not
+distinct recorder pairs or a minimal proof. Conditionality is finalized after
+tool, loss and budget classification, only for a conclusive model failure under
+clock constraints; it does not assert a weaker bound would change that result.
+JSON and existing navigation/TUI receipt views share cloned evidence. Pending-
+only placement is separate. Recorded-history cursor navigation still does not
+search orders or map a selected candidate to model states.
 
 A review found two pending calls on either side of a quiet settle
 unordered (the first, if it took effect, did so before the settle, and

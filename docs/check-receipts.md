@@ -37,6 +37,17 @@ for the whole nominal run, not the model state at the current cursor.
   termination metadata, not from parsing an issue's wording. Order budgets are
   per search phase, not total counts; combined linearization and resolution uses
   the order budget, not the standalone resolution budget.
+- `search.clock` retains the effective linearization bound even with zero clock
+  edges. `skew` and `closestGap` are Go-duration strings. `source` is `default`
+  when the configured value adopts the default 1ms, otherwise `configured`.
+  `constraints` counts imposed ordered pairs of completed steps, not unique
+  recorder pairs or a minimal proof. `recorders` lists their sorted identities;
+  `closestGap` is absent with zero constraints. Each actor or partition has its
+  own evidence. `conditional` marks a conclusive model failure checked under
+  those constraints; passes, exhausted searches, tool and unjudged results are
+  false. It does not prove that weakening the bound changes the verdict, or
+  establish measured synchronization. Pending-only placement does not emit this
+  completed-step linearization evidence.
 - `assumedEffects` describes calls marked ambiguous in the checked candidate:
   action, arguments, candidate record identity and position.
   These pending-call effects are assumptions, not observed completions. Failure
@@ -55,6 +66,10 @@ Text prints a compact “what was checked” section, with at most three actors,
 check counts grouped by kind and status, and three assumed effects per actor.
 Passing partitions without search assumptions stay folded; omitted counts point
 to the full structured receipt. JSON retains every actor, check and assumption.
+Effective clock bounds remain visible before the actor-detail cap. Receipts
+clone their clock data, and existing navigation transports these whole-run
+facts. This does not make recorded-history navigation search orders or map a
+selected candidate to cursor states.
 The TUI uses a scrollable section and distinguishes whole-run judgment from
 cursor-state diagnostics. Navigation uses only `gotogether.nav/2`; the marker
 rejects mismatched independently built test binaries and navigators. There is no

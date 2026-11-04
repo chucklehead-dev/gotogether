@@ -3275,6 +3275,13 @@ type ChoiceStep struct
     field Expression string `json:"expression"`
     field Recorder string `json:"recorder,omitempty"`
     field Seq uint64 `json:"seq,omitempty"`
+type ClockEvidence struct
+    field Skew string `json:"skew"`
+    field Source string `json:"source"`
+    field Constraints int `json:"constraints"`
+    field Recorders []string `json:"recorders,omitempty"`
+    field ClosestGap string `json:"closestGap,omitempty"`
+    field Conditional bool `json:"conditional"`
 type Component struct
     field Target string `json:"target"`
     field Binding string `json:"binding,omitempty"`
@@ -3344,11 +3351,13 @@ type Record struct
     field Actor string `json:"actor"`
     field Action string `json:"action"`
 type Search struct
+    field Clock *ClockEvidence `json:"clock,omitempty"`
     field Mode string `json:"mode"`
     field Goal string `json:"goal"`
     field BudgetExhausted bool `json:"budgetExhausted"`
     field OrderBudget int `json:"orderBudget,omitempty"`
     field ResolutionBudget int `json:"resolutionBudget,omitempty"`
+    method (*Search) Clone() *Search
 type Status string
 type Summary struct
     field Composition *Composition `json:"composition,omitempty"`

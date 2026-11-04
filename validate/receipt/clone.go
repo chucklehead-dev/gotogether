@@ -29,10 +29,7 @@ func (c *Composition) Clone() *Composition {
 			actor := &copy.Actors[i]
 			actor.PartitionInfo = actor.PartitionInfo.Clone()
 			actor.Checks = slices.Clone(actor.Checks)
-			if actor.Search != nil {
-				search := *actor.Search
-				actor.Search = &search
-			}
+			actor.Search = actor.Search.Clone()
 			actor.Choices = actor.Choices.Clone()
 			actor.AssumedEffects = slices.Clone(actor.AssumedEffects)
 			for k := range actor.AssumedEffects {

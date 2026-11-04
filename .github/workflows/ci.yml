@@ -71,6 +71,18 @@ jobs:
       - name: vet
         if: matrix.part == 'core'
         run: go vet ./...
+      - name: every module tidy on its own go.mod
+        if: matrix.part == 'core'
+        # Check external module resolution before the expensive model suite:
+        # a proxy failure should fail fast, not after successful model checks.
+        # Except ci/consumer, whose go.mod requires nothing on purpose: the
+        # consumer job go-gets the published modules at the pushed commit,
+        # as a user would, and a go.mod complete here would name an older
+        # commit, stale at every push
+        run: |
+          for m in $(git ls-files '*go.mod' | xargs -n1 dirname | grep -v -e testdata -e '^ci/consumer$'); do
+            (cd "$m" && go mod tidy -diff) || { echo "::error::$m: go mod tidy"; exit 1; }
+          done
       - name: test
         if: matrix.part == 'core'
         run: |
@@ -81,16 +93,6 @@ jobs:
           # a core package costing twice the CPU seconds it did (ci/test-times.txt) fails
           sort -k2,2nr "$RUNNER_TEMP/core-cpu.txt"
           ci/time-budget.sh < "$RUNNER_TEMP/core-cpu.txt"
-      - name: every module tidy on its own go.mod
-        if: matrix.part == 'core'
-        # but ci/consumer, whose go.mod requires nothing on purpose: the
-        # consumer job go-gets the published modules at the pushed commit,
-        # as a user would, and a go.mod complete here would name an older
-        # commit, stale at every push
-        run: |
-          for m in $(git ls-files '*go.mod' | xargs -n1 dirname | grep -v -e testdata -e '^ci/consumer$'); do
-            (cd "$m" && go mod tidy -diff) || { echo "::error::$m: go mod tidy"; exit 1; }
-          done
       - name: executable lint onboarding
         if: matrix.part == 'core'
         run: ci/lint-onboarding.sh
