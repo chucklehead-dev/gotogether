@@ -12,7 +12,7 @@ if [ -n "${MUTANT:-}" ]; then
   [ -d "testdata/mutants/$MUTANT" ] || [[ $MUTANT == drop-* ]] || { echo "unknown MUTANT=$MUTANT (testdata/mutants has $(ls testdata/mutants | tr '\n' ' '))" >&2; exit 2; }
   run="TestMutants\$/^$MUTANT\$"
 else
-  run='TestFaithful$|TestFaithfulAtClients$|TestScarce$|TestGreedy$|TestReceiptOnce$|TestGenerated$'
+  run='TestFaithful$|TestFaithfulAtClients$|TestScarce$|TestGreedy$|TestReceiptOnce$|TestGenerated$|TestUpcasterFixRefoldsPersistedSnapshots$'
 fi
 go run ./cmd/library model -check
 GOTOGETHER_CHECK=1 go test -short -count=1 -run "$run" -v . | grep -E '^(--- |ok|FAIL)|runs, '

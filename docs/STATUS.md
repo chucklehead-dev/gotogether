@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Lint request preflight (current branch): malformed flags and unexpected positionals
+Library upcaster-fix snapshots (current branch): I1's persisted-history example
+uses the real books fold and SQLite across separate release processes. The
+existing dropsCopies contrast creates an incorrect snapshot, an unchanged release
+reuses it, the same-version fix refolds correctly, and another fixed process
+reuses its new snapshot. Memo/audits are disabled and stored events are unchanged.
+Fingerprint probes cover this concrete correction, not every semantic change.
+See [the rehearsal](../examples/library/README.md#repairing-a-buggy-upcaster).
+
+Lint request preflight (merged PR #65, 72b2ece1): malformed flags and unexpected positionals
 produce an operational blocked request report before target inspection. A parsed
 -json flag selects the same lint/1 document for request errors; use -json first.
 Help remains exit 0, and raw arguments are not scanned to guess an output mode.
@@ -770,8 +778,8 @@ four, L more; agent-days in practice).
       PostgreSQL.
     - 10, the canary gate (S-M), an Argo Rollouts AnalysisTemplate.
     - 11, sharding (M-L, after grist slice 3's leases).
-11. **Small leftovers**, one line each in ROADMAP: I1's library
-    upcaster-fix example; I2's `examples/shards`; I11's broader typed-state/model-step generation beyond the
+11. **Small leftovers**, one line each in ROADMAP: I2's `examples/shards`;
+    I11's broader typed-state/model-step generation beyond the
     completed bounded two-integer joint-state corpus; I23's PostgreSQL benchmark in
     CI; I27's grist/README.md (after grist's tag); I36's gopls note;
     I37/I40's goroutine-id lookups (19-26 µs on Thread and

@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- Library's persisted upcaster-fix rehearsal now checks buggy/unchanged/fixed
+  release processes on SQLite, correct snapshot invalidation and reuse, and
+  unchanged stored events. It exercises existing contracts without a runtime
+  API or persistence-format change.
+
 - Lint rejects malformed flags and positional arguments before inspecting inputs.
   Put `-json` first for structured request errors in the existing lint report;
   help stays exit 0 and ordinary Go flag parsing remains authoritative.

@@ -61,6 +61,12 @@ CPU near-threshold failure did not justify a budget increase: the combined head
 passed all 36 checks, with payouts at 31.5 CPU seconds. Repeated cost growth would
 need per-test attribution; duplicate identical explorations are a consolidation
 candidate without reducing seeds or claims.
+The next facet-depth slice completes I1's library deployment-history rehearsal:
+a buggy upcaster's persisted snapshot, unchanged-release reuse, corrected-release
+refold, and subsequent corrected-snapshot reuse across fresh processes. This
+exercises a known cache contract with actual application folds rather than adding
+another generic report feature. No runtime API or persistence-format change is
+needed; further scope should follow another demonstrated contract boundary.
 Keep frozen baseline pins for reproducibility, not as legacy support promises.
 Further adapters, adjacent fixtures and per-pair clock APIs need usage evidence.
 
@@ -224,13 +230,14 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
 
 ### Silent wrong answers
 
-- **I1. A fixed upcaster refolds (S). In progress** (3b20911 landed
-  the fingerprint and the mutant `upcasterFixKeepsSnapshots`). A read
-  model's fingerprint held no upcaster, so snapshots folded through a
-  buggy upcaster stayed in use after its fix, and `CheckSnapshots` (a
-  fresh store) could not see it. Left: library's upcaster-fix example
-  (a `buggyUpcaster` mutant, snapshots taken under it, then the fix:
-  the regression as an example); the runtime audit was built with I22.
+- **I1. A fixed upcaster refolds (S). Done.** The runtime fingerprint and
+  `upcasterFixKeepsSnapshots` contrast are now complemented by library's
+  `TestUpcasterFixRefoldsPersistedSnapshots`: actual books folds and persisted
+  SQLite snapshots across separate buggy/unchanged/fixed release processes.
+  The same-version fix invalidates the concrete buggy snapshot, refolds correct
+  counts without rewriting stored events, then reuses its corrected snapshot.
+  Memo and audits are disabled to isolate the mechanism; changes outside the
+  fingerprint's generated probes still require a read-model version bump.
 - **I2. Sound set folds in the Go evaluator (S). Done** (4bdec87:
   operators of a commuting shape, else every order up to 10 elements,
   else `Unsupported`; left: the example `examples/shards`).
