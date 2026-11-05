@@ -166,7 +166,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 - The repository is a Go workspace (`go.work`, checked in): every module
   sees the others' code as it is, without a release. CI sets `GOWORK=off`
   and tests each module on its own go.mod, as a user would build it.
-- Go ≥ 1.26.10 (`go.mod`; the supported Go 1.26 patch floor). quint ≥ 0.32 on PATH
+- Go ≥ 1.27.3 (`go.mod`; the shared current runtime floor). quint ≥ 0.32 on PATH
   (`npm i -g @informalsystems/quint`, then `QUINT_VERSION=0.33.0
   ci/install-quint.sh` for the Rust evaluator). Tests that need quint
   skip without it.
@@ -206,10 +206,10 @@ Use `testing/synctest` for pure in-memory concurrency tests instead of sleeps or
 custom context wrappers; external processes and file/network I/O are not durable
 bubble waits. Check current Go documentation before assuming a new API exists.
 
-The shared floor is Go 1.26.10 because gosim's runtime hooks currently require
-that family. The ordinary core is also tested on current stable Go 1.27.3; do not
-weaken gosim's guard or add silent toolchain fallback. See docs/go-toolchain.md
-before proposing a major toolchain or compiler-dependent dependency update.
+The shared floor is Go 1.27.3, including gosim's translated runtime target.
+Validate genuine toolchain/standard-library admission before a major update;
+do not weaken gosim's guard or add silent fallback to another Go family.
+See docs/go-toolchain.md before compiler-dependent dependency updates.
 Frozen adoption evidence and historical measurements retain their original
 versions; they are not compatibility promises.
 

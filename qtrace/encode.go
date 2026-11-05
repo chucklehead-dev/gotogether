@@ -369,7 +369,8 @@ func appendEscaped(b []byte, s string) []byte {
 		r, size := utf8.DecodeRuneInString(s[i:])
 		if r == utf8.RuneError && size == 1 {
 			b = append(b, s[start:i]...)
-			b = append(b, '\\', 'u', 'f', 'f', 'f', 'd')
+			// Go 1.27's encoding/json writes replacement runes as UTF-8.
+			b = utf8.AppendRune(b, utf8.RuneError)
 			i += size
 			start = i
 			continue

@@ -12,7 +12,7 @@ lease and completes it, proving that rejecting every ack is not a repair.
 
 ## Reproduce and keep the native evidence
 
-From this directory, with Go 1.26.10, Quint 0.33.0 and `jq` on PATH:
+From this directory, with Go 1.27.3, Quint 0.33.0 and `jq` on PATH:
 
 ```sh
 incident_out=$(mktemp -d)

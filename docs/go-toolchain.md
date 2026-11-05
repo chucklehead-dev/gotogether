@@ -1,70 +1,67 @@
 # Go toolchain policy and admission
 
-The live shared minimum is **Go 1.26.10**. This is the maintained patch of the
-runtime family required by gosim's current hooks, not a promise to support older
-customer toolchains. All live module/workspace directives, scaffolds, test-module
-emitters, the consumable CI job and image default agree. Preflight checks this
-alignment. Frozen adoption inputs and historical measurements keep their original
-versions so their evidence remains reproducible.
+The shared minimum is **Go 1.27.3**. All live module/workspace directives,
+scaffolds, test-module emitters, the consumable CI job and image default agree.
+Preflight checks this alignment. Frozen adoption inputs and historical
+measurements retain their original versions so their evidence remains reproducible.
+This unreleased project supports one current runtime family; a port advances that
+shared floor rather than adding parallel implementations for older toolchains.
 
 The official `https://go.dev/dl/?mode=json` feed checked on 2026-11-05 lists
-**Go 1.27.3** as current stable and **Go 1.26.10** as the maintained prior-family
-release. Both official Linux/amd64 archives were checked against the feed's size
-and SHA256 before local admission tests. Do not describe the installed 1.26.1
-baseline as the latest release.
+Go 1.27.3 as current stable. Its Linux/amd64 archive was checked against the
+feed's size and SHA256 before local admission. Admission commands set
+`GOTOOLCHAIN=local` and select the tested compiler explicitly, so automatic
+selection cannot disguise the runtime actually exercised.
 
 ## Admission evidence
 
-| Toolchain and scope | Result |
-|---|---|
-| 1.27.3: memo/cache, subprocess cancellation, recording ownership | passed |
-| 1.27.3: native qenv runtime contracts, invariant checks on | passed |
-| 1.27.3: real gosim broadcast deterministic replay | refused by the runtime-hook guard |
-| 1.26.10: same real gosim deterministic replay | passed (83.236s cold translation/build) |
-| 1.26.10 and 1.27.3: memo cancellation race/shuffle, 20 runs | passed |
-| 1.26.10: native core, both scaffold generators, woven fixtures, analyzer acceptance | passed |
-| 1.26.10: workspace module tidy-diff (40 modules), root vet and preflight | passed |
+Both qgosim and the gosim example pin the published fork port
+`v0.0.0-20261105184451-66f95e073358` (commit
+`66f95e073358e556fd4f17e2953d30f2b963475f`). Admission selects the downloaded
+module without a local replacement, and runs qgosim's automatic weaving before
+translating its consumers.
 
-The separate `current Go core` CI job keeps checking ordinary core contracts on
-1.27.3 with `GOTOOLCHAIN=local`, so that admission cannot silently switch compilers.
-Local admission runs also pin their toolchain. Frozen Go1.27 adoption modules keep
-the standard Go automatic selection they already require; their inputs are not
-rewritten to the shared live floor. This is
-bounded host-core admission, not a claim that every integration supports 1.27.
-The usual matrix uses the shared 1.26.10 floor and exercises the integrations.
-Preflight formats visible Go source files without descending into hidden generated
-trees such as gosim's .gosim output; running native admission first must not make
-that generated code a repository formatting failure.
+Go 1.27.3 native admission covers memo/cache, subprocess cancellation, recording
+ownership, native qenv contracts, real woven build/run fixtures, analyzer
+acceptance, qhegel state-machine checks and both scaffold generators. Root vet,
+preflight and all 40 workspace module tidy-diffs pass. All native short-suite
+packages pass after provisioning toxiproxy for qnemesis. The full suite exposed a
+step-log JSON parity mismatch for invalid UTF-8: the fast encoder now emits the
+replacement rune as current encoding/json does, and all 20,000 generated parity
+cases pass.
 
-The actual gosim refusal was:
+Published-fork acceptance exercises broadcast faithful runs, rejection controls
+and deterministic replay, checkout faithful runs across all isolation levels and
+both mutant suites, and automatically woven edgepublish faithful, invariant and
+mutant checks. Native and simulated consumer vet covers both examples and
+qgosim. These are semantic integration checks, not merely successful translation.
 
-```text
-gosim: this gosim translates go1.26's standard library, not go1.27.3's: build it with go1.26 (GOTOOLCHAIN=go1.26.1), or use a gosim release for go1.27.3
-```
+The former bounded `current Go core` admission job is superseded by the ordinary
+CI matrix running the shared 1.27.3 floor. Integration jobs remain in that matrix.
+Preflight formats visible Go source without descending into hidden generated
+trees such as gosim's `.gosim` output.
 
-The patch named by that upstream error is historical; use the tested maintained
-1.26.10 patch. The latest gosim fork revision checked (`9ee1adcb9f4e`, alongside the pinned
-`f3a3ad889291`) still declares Go1.26 support, so changing its dependency pin alone does not port the hooks. Raising
-core's minimum to 1.27 would also break the current-core replacement in the gosim
-example, even if qgosim's own directive stayed at 1.26. Keep the guard intact.
+Before this port, the fork deliberately refused Go 1.27's standard library. A
+module directive or dependency pin alone could not admit that compiler: the fork
+needed matching runtime layouts, timer behavior, hashing and translated standard
+library hooks. Keep that guard strict for every later runtime family.
 
 ## Current APIs and the next major port
 
-Use the baseline's current standard APIs where they improve the implementation:
-typed `errors.AsType`, iterators from `maps`/`slices`, `WaitGroup.Go`, `OnceFunc`,
+Use current standard APIs where they improve implementation: typed
+`errors.AsType`, iterators from `maps`/`slices`, `WaitGroup.Go`, `OnceFunc`,
 `T.Context`, `B.Loop`, and `testing/synctest`. These are already used in the
-repository. The memo tests now use real contexts and `synctest.Wait` to establish
-durable blocking; they need neither a custom context wrapper nor a real timeout.
-Disabling waiter cancellation or canceled-owner retry makes those tests fail.
-Do not wrap external process or network waits in a synctest bubble and assume
-they become durably blocked.
+repository. Memo tests use real contexts and `synctest.Wait` to establish durable
+blocking. Do not wrap external process or network waits in a synctest bubble and
+assume they become durably blocked.
 
 The dependency audit found x/tools 0.52.0, x/mod 0.42.0, x/sync 0.24.0 and
-staticcheck 0.8.2 current. x/sys 0.49.0 (currently 0.48.0) and Orchestrion 1.15.0 (currently 1.13.1) are
-separate admission candidates, not evidence that a Go1.27 runtime-hook port already exists.
+staticcheck 0.8.2 current. x/sys 0.49.0 (currently 0.48.0) and Orchestrion 1.15.0
+(currently 1.13.1) remain separate admission candidates.
 
 A major floor increase requires a real gosim hook/standard-library port and
 replay evidence first. Then check native qenv behavior, recording ownership,
-subprocess lifecycle, woven coverage/mutation fixtures, analyzer fixes and the
-real Orchestrion tier. Do not remove an integration check, fake GOVERSION or add
-alternate source implementations merely to make a newer version pass.
+subprocess lifecycle, both scaffold generators, woven coverage/mutation fixtures,
+analyzer fixes and the real Orchestrion tier. Check all workspace module tidiness,
+vet and preflight before publication. Do not remove integration checks, fake
+GOVERSION, or add alternate source implementations merely to pass a new version.
