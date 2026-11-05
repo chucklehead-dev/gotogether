@@ -1,6 +1,6 @@
 module github.com/chucklehead-dev/gotogether/qweave
 
-go 1.26.1
+go 1.26.10
 
 require (
 	golang.org/x/tools v0.52.0

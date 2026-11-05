@@ -8,6 +8,10 @@ and adds a line here.
 
 ## Unreleased
 
+- Live modules and scaffolds require Go 1.26.10. Current stable Go 1.27.3 also
+  checks ordinary core runtime contracts in CI; gosim still requires its genuine
+  Go 1.26 runtime-hook family. Memo cancellation tests use standard synctest.
+
 - `qtest.Model(...).WithOptions(qtest.ModelOptions{...})` selects copied
   test-local constant expressions and search bounds without rewriting bindings.
   Zero bounds inherit; positive bounds override. Claims retain proof scope and

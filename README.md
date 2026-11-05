@@ -11,7 +11,7 @@ and how to resume it: [docs/STATUS.md](docs/STATUS.md).
 
 ```sh
 git clone https://github.com/chucklehead-dev/gotogether && cd gotogether
-npm install -g @informalsystems/quint     # quint ≥ 0.32; Go ≥ 1.26.1
+npm install -g @informalsystems/quint     # quint ≥ 0.32; Go ≥ 1.26.10
 cd examples/hello && go test -v .         # under a minute, most of it building
 ```
 
@@ -264,7 +264,7 @@ its protocol model (`examples/edgepublish`).
 ## Install
 
 ```sh
-go get github.com/chucklehead-dev/gotogether@latest                      # Go ≥ 1.26.1
+go get github.com/chucklehead-dev/gotogether@latest                      # Go ≥ 1.26.10
 go get github.com/chucklehead-dev/gotogether/qhegel@latest               # Hegel, in tests (its own module: the core needs no Hegel)
 npm install -g @informalsystems/quint                                  # quint ≥ 0.32 on PATH
 go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest   # the CLI: scaffold, lint, validate, skills (gotogether help; each command's -h)
@@ -352,9 +352,12 @@ with `toQuint`. The finding carries the parameter, model type and fix in native
 JSON. Mapped `.outcome` expressions and general template expressions are outside
 this narrow rule; it does not infer arbitrary expression or observation types.
 
-Go: 1.26.x. The core needs 1.26.1 (hegel-go's minimum); the gosim fork
-translates one release's standard library, 1.26's, and says so under
-another. Until the first tags, `@latest` is the newest commit.
+Go: the supported floor is 1.26.10, the current maintained patch of the runtime
+family gosim translates. Go 1.27.3 is the latest stable release checked here:
+ordinary core runtime contracts run on it in CI, but gosim's Go 1.26 runtime hooks
+explicitly refuse it. A genuine hook port is required before raising the shared
+minimum to 1.27; the guard remains intact. See [toolchain policy](docs/go-toolchain.md).
+Until the first tags, `@latest` is the newest commit.
 
 Quint's Rust backend is the default. If quint cannot download its
 evaluator, run `ci/install-quint.sh` from a clone, or set
@@ -1068,7 +1071,7 @@ upstream gosim.
 
 Run `ci/preflight.sh` before pushing repository changes. It checks formatting,
 package-state scope, API/schema/format metadata, docs, skills, simulation lint,
-and complete CLI help/tutorial freshness using Go and Bash. The same command is
+and complete CLI help/tutorial freshness using Go, Bash and standard Unix find/xargs. The same command is
 CI's dependency gate before native tool installation and model suites. A cold
 Go build or dependency download can still take time. The script does not update
 snapshots or write persistent reports; full and race tests remain relevant to

@@ -7,7 +7,14 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Projected graph-label benchmarks (current branch): graph benchmarks now include
+Current Go admission (current branch): live modules, scaffolds and CI/image
+baselines move to maintained Go 1.26.10. Ordinary host-core contracts are also
+checked on current stable Go 1.27.3. The actual gosim replay refuses 1.27 because
+its runtime hooks require the 1.26 family; no guard is weakened. Pure memo tests
+use synctest instead of wall-clock timeouts and a custom context wrapper.
+See [toolchain policy and admission evidence](go-toolchain.md).
+
+Projected graph-label benchmarks (merged PR #68, 77e4df2a): graph benchmarks now include
 first-non-step-action label projection alongside ordinary full-event labels.
 I39's duplicate parent-label candidate was measured and rejected: fewer callback
 calls did not improve end-to-end exploration; the allocation-neutral version's
@@ -887,8 +894,8 @@ there). **Open:**
   YAML; the rest experimental).
 - **One core module or a runtime module**: recommended one module at
   v0.x, carve a runtime module after GR4-GR7.
-- **The Go floor**: `go 1.25` for the core after I15's go1.25 build;
-  qhegel stays at 1.26.1.
+- **The Go floor**: the old 1.25 lowering proposal is superseded. The shared
+  maintained floor is 1.26.10; full 1.27 admission requires a gosim hook port.
 - **Governance**: a CHANGELOG by module, a short CONTRIBUTING, the
   weekly breaking renames ending at R5.
 - **Upstream reports**, drafted, not filed:

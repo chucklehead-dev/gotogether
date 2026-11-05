@@ -303,7 +303,7 @@ func TestRepositoryPreflightFormattingIsNonwriting(t *testing.T) {
 			goCalls := filepath.Join(bin, "go-calls")
 			tools := map[string]string{
 				"gofmt": `#!/bin/sh
-printf '%s\n' "$@" > "$PREFLIGHT_TEST_FORMAT_CALLS"
+printf '%s\n' "$@" >> "$PREFLIGHT_TEST_FORMAT_CALLS"
 case "$PREFLIGHT_TEST_FORMAT_MODE" in
   dirty) printf 'example.go\n' ;;
   parse-error) printf 'invalid Go syntax\n' >&2; exit 2 ;;
@@ -324,8 +324,17 @@ printf '%s\n' "$*" >> "$PREFLIGHT_TEST_GO_CALLS"
 				"PREFLIGHT_TEST_FORMAT_MODE="+mode)
 			output, runErr := cmd.CombinedOutput()
 			args, err := os.ReadFile(formatCalls)
-			if err != nil || string(args) != "-l\n.\n" {
-				t.Fatalf("format command must inspect without rewriting: %q, %v", args, err)
+			files := strings.Split(strings.TrimSpace(string(args)), "\n")
+			if err != nil || len(files) < 2 || files[0] != "-l" || !slices.Contains(files, "./internal/ciconfig/preflight_test.go") {
+				t.Fatalf("format command must inspect source files without rewriting: %q, %v", args, err)
+			}
+			for _, file := range files[1:] {
+				if file == "-l" { // xargs may split a large checkout into batches.
+					continue
+				}
+				if !strings.HasSuffix(file, ".go") || strings.Contains(file, "/.") {
+					t.Errorf("format command inspected a directory or hidden artifact: %q", file)
+				}
 			}
 			calls, err := os.ReadFile(goCalls)
 			if mode == "clean" {

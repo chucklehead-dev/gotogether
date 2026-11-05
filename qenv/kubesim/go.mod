@@ -1,6 +1,6 @@
 module github.com/chucklehead-dev/gotogether/qenv/kubesim
 
-go 1.26.1
+go 1.26.10
 
 require (
 	github.com/chucklehead-dev/gotogether v0.0.0-20261104145617-a2ba2fa9ff97

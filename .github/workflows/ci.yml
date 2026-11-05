@@ -38,6 +38,24 @@ jobs:
       - name: repository contracts (no native tools)
         run: ci/preflight.sh
 
+  go-current:
+    name: current Go core
+    needs: preflight
+    # The newest host runtime is checked separately from gosim's Go1.26 ABI.
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.27.3
+          cache-dependency-path: go.sum
+      - name: host cancellation, recording and deterministic cache checks
+        run: go test -count=1 -timeout 10m ./internal/memo ./internal/quintcmd ./qobs
+      - name: native simulation runtime contracts
+        run: GOTOGETHER_CHECK=1 go test -count=1 -timeout 10m -run '^TestNative' ./qenv
+
   staticcheck:
     needs: preflight
     # A pinned analyzer, outside the runtime module graph; all default checks.
@@ -300,7 +318,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.26.1
+          go-version: 1.26.10
       - name: go install the commands at this commit
         run: |
           for c in cmd/gotogether qweave/cmd/qweave qanalysis/cmd/quintvet qnav/cmd/gotogether-nav; do
