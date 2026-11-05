@@ -1,6 +1,6 @@
 module github.com/chucklehead-dev/gotogether/examples/gosim
 
-go 1.26.10
+go 1.27.3
 
 require (
 	github.com/chucklehead-dev/gosim v0.0.0-20261022204023-f3a3ad889291
@@ -13,8 +13,6 @@ require (
 	hegel.dev/go/hegel v0.9.27
 )
 
-require github.com/chucklehead-dev/gotogether/qweave v0.0.0 // indirect
-
 require (
 	dario.cat/mergo v1.0.1 // indirect
 	github.com/Ladicle/tabwriter v1.0.0 // indirect
@@ -23,6 +21,7 @@ require (
 	github.com/ProtonMail/go-crypto v1.1.2 // indirect
 	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/chucklehead-dev/gotogether/qweave v0.0.0 // indirect
 	github.com/cloudflare/circl v1.5.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.3.4 // indirect
 	github.com/dave/dst v0.27.4 // indirect

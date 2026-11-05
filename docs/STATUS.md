@@ -7,12 +7,13 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Current Go admission (current branch): live modules, scaffolds and CI/image
-baselines move to maintained Go 1.26.10. Ordinary host-core contracts are also
-checked on current stable Go 1.27.3. The actual gosim replay refuses 1.27 because
-its runtime hooks require the 1.26 family; no guard is weakened. Pure memo tests
-use synctest instead of wall-clock timeouts and a custom context wrapper.
-See [toolchain policy and admission evidence](go-toolchain.md).
+Go 1.27 adoption preparation (local branch, not ready to publish): the shared live module, workspace, scaffold,
+fixture and publication floor is 1.27.3. The fork port is the required runtime
+prerequisite; GitHub write access currently blocks its publication (403). Its
+existing dependency pins remain unchanged until a real port revision is published
+and admitted without local replacements.
+Normal CI uses the current family and drops the redundant pre-port host-core job.
+Frozen source histories remain unchanged. See [toolchain policy](go-toolchain.md).
 
 Projected graph-label benchmarks (merged PR #68, 77e4df2a): graph benchmarks now include
 first-non-step-action label projection alongside ordinary full-event labels.
@@ -894,8 +895,8 @@ there). **Open:**
   YAML; the rest experimental).
 - **One core module or a runtime module**: recommended one module at
   v0.x, carve a runtime module after GR4-GR7.
-- **The Go floor**: the old 1.25 lowering proposal is superseded. The shared
-  maintained floor is 1.26.10; full 1.27 admission requires a gosim hook port.
+- **The Go floor**: the old 1.25 lowering proposal is superseded by the shared
+  current 1.27.3 floor and real runtime-hook admission.
 - **Governance**: a CHANGELOG by module, a short CONTRIBUTING, the
   weekly breaking renames ending at R5.
 - **Upstream reports**, drafted, not filed:

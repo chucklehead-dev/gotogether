@@ -81,12 +81,12 @@ production code is retained. The known duplicate work is not sufficient evidence
 for another implementation change. Future performance work needs representative
 end-to-end controls as well as operation counts; broader evaluator redesign
 remains deferred.
-The toolchain review now checks official current releases rather than assuming
-installed Go 1.26.1 is latest. Go 1.26.10 is the maintained compatible floor;
-1.27.3 is checked for ordinary host-core contracts, with gosim admission blocked
-by its explicit Go 1.26 runtime-hook contract. Pure memo cancellation tests now
-use standard synctest with real contexts. Full 1.27 admission needs a hook port,
-not compatibility wrappers or a weaker guard. The next bounded feature candidate
+The Go 1.27 adoption slice moves the shared live floor to 1.27.3 after the fork's
+runtime/standard-library port. Normal CI now exercises that one current family;
+the separate pre-port host-core admission job is redundant. Old admission results
+remain provenance, not a second compatibility target. Genuine hook semantics and
+fresh-process determinism must remain prerequisites for future major updates.
+The next bounded feature candidate
 is I17 model step-branch reachability: restore twophase's coverage assertion lost
 when its manual graph walk was migrated, with honest bounded/unknown outcomes.
 Keep frozen baseline pins for reproducibility, not as legacy support promises.
@@ -1027,12 +1027,12 @@ Decisions only the maintainer takes, each with the recommendation:
   runtime module (qobs, qobshttp, qrole, qrun, woven, `qtrace.Step`)
   only after GR4-GR7, when the shared internals' home (`internal/hooks`,
   `internal/wovenrt`) is clear.
-- **The Go floor. Resolved for the current runtime target.** Live modules and
-  scaffolds use Go 1.26.10. The earlier proposal to lower the core to 1.25 is
-  superseded by prerelease convergence on current APIs. Current stable 1.27.3
-  passes bounded ordinary-core admission, but the real gosim replay tier refuses
-  its runtime before translation. A real Go 1.27 hook port is required to raise
-  the shared minimum; do not relax that guard. See go-toolchain.md.
+- **The Go floor. Resolved for the current runtime target.** Live modules,
+  scaffolds and the gosim runtime target use Go 1.27.3. The old proposal to lower
+  the core to 1.25 is superseded by prerelease convergence on current APIs. Future
+  major updates require a real hook/standard-library port and semantic admission;
+  do not relax the guard or add parallel older-family source implementations.
+  See go-toolchain.md.
 - **Bare expectations' quantifier (I16).** Breaking for every example's
   bare claims. Done as I16 says, before tags (DESIGN §67).
 - **GR10's slice order.** Recommended: slice 3 (failover and restore)

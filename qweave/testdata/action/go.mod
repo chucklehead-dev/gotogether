@@ -1,6 +1,6 @@
 module example.com/actionfixture
 
-go 1.26.10
+go 1.27.3
 
 require github.com/chucklehead-dev/gotogether v0.0.0
 

@@ -38,7 +38,7 @@ event versioned, snapshots), [examples/wallet-grist](../examples/wallet-grist)
 
 ## 1. Your first app
 
-You need Go 1.26.10 or later and quint 0.32 or later on PATH
+You need Go 1.27.3 or later and quint 0.32 or later on PATH
 (`npm i -g @informalsystems/quint`). Outside any Go module:
 
 ```sh

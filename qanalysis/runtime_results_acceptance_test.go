@@ -40,7 +40,7 @@ func TestRuntimeResultCLIWithActualSDK(t *testing.T) {
 	if err := os.Mkdir(consumer, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mod := fmt.Sprintf("module example.com/runtime-result-acceptance\n\ngo 1.26.10\n\nrequire github.com/chucklehead-dev/gotogether v0.0.0\n\nreplace github.com/chucklehead-dev/gotogether => %s\n", strconv.Quote(filepath.ToSlash(core)))
+	mod := fmt.Sprintf("module example.com/runtime-result-acceptance\n\ngo 1.27.3\n\nrequire github.com/chucklehead-dev/gotogether v0.0.0\n\nreplace github.com/chucklehead-dev/gotogether => %s\n", strconv.Quote(filepath.ToSlash(core)))
 	if err := os.WriteFile(filepath.Join(consumer, "go.mod"), []byte(mod), 0o644); err != nil {
 		t.Fatal(err)
 	}

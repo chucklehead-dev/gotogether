@@ -1,6 +1,6 @@
 module github.com/chucklehead-dev/gotogether/qgosim
 
-go 1.26.10
+go 1.27.3
 
 require (
 	github.com/chucklehead-dev/gosim v0.0.0-20261022204023-f3a3ad889291

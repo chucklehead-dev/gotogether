@@ -4,7 +4,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"go/version"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -132,7 +131,6 @@ func TestPublicationGoFloorsAgree(t *testing.T) {
 	}
 	var workflow struct {
 		Jobs map[string]struct {
-			Env   map[string]string `yaml:"env"`
 			Steps []struct {
 				Uses string            `yaml:"uses"`
 				With map[string]string `yaml:"with"`
@@ -141,18 +139,6 @@ func TestPublicationGoFloorsAgree(t *testing.T) {
 	}
 	if err := yaml.Unmarshal(data, &workflow); err != nil {
 		t.Fatal(err)
-	}
-	if workflow.Jobs["go-current"].Env["GOTOOLCHAIN"] != "local" {
-		t.Error("current Go admission must pin GOTOOLCHAIN=local rather than silently switch compiler")
-	}
-	currentHost := ""
-	for _, step := range workflow.Jobs["go-current"].Steps {
-		if strings.HasPrefix(step.Uses, "actions/setup-go@") {
-			currentHost = step.With["go-version"]
-		}
-	}
-	if !version.IsValid("go"+currentHost) || version.Compare("go"+currentHost, "go"+floor) < 0 {
-		t.Errorf("current Go host must be pinned at or above floor %s, got %q", floor, currentHost)
 	}
 	found := false
 	for _, step := range workflow.Jobs["consumable"].Steps {

@@ -1,6 +1,6 @@
 module github.com/chucklehead-dev/gotogether/qenv/simlog/kafkalog
 
-go 1.26.10
+go 1.27.3
 
 require (
 	github.com/chucklehead-dev/gotogether v0.0.0-20261104145617-a2ba2fa9ff97

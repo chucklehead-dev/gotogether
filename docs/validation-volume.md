@@ -18,7 +18,7 @@ deposits add two setup records per account. Quint shadow auditing is explicitly
 disabled; compilation is warmed, and failure/artifact paths are not measured.
 This is not a cold CLI or production throughput budget.
 
-Run from the root with Go 1.26.10 and Quint 0.33.0 available:
+Run from the root with Go 1.27.3 and Quint 0.33.0 available:
 
 ```sh
 GOWORK=off go test ./internal/qeval -run '^TestInteracting' -count=1

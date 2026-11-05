@@ -11,7 +11,7 @@ and how to resume it: [docs/STATUS.md](docs/STATUS.md).
 
 ```sh
 git clone https://github.com/chucklehead-dev/gotogether && cd gotogether
-npm install -g @informalsystems/quint     # quint ≥ 0.32; Go ≥ 1.26.10
+npm install -g @informalsystems/quint     # quint ≥ 0.32; Go ≥ 1.27.3
 cd examples/hello && go test -v .         # under a minute, most of it building
 ```
 
@@ -264,7 +264,7 @@ its protocol model (`examples/edgepublish`).
 ## Install
 
 ```sh
-go get github.com/chucklehead-dev/gotogether@latest                      # Go ≥ 1.26.10
+go get github.com/chucklehead-dev/gotogether@latest                      # Go ≥ 1.27.3
 go get github.com/chucklehead-dev/gotogether/qhegel@latest               # Hegel, in tests (its own module: the core needs no Hegel)
 npm install -g @informalsystems/quint                                  # quint ≥ 0.32 on PATH
 go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest   # the CLI: scaffold, lint, validate, skills (gotogether help; each command's -h)
@@ -352,11 +352,9 @@ with `toQuint`. The finding carries the parameter, model type and fix in native
 JSON. Mapped `.outcome` expressions and general template expressions are outside
 this narrow rule; it does not infer arbitrary expression or observation types.
 
-Go: the supported floor is 1.26.10, the current maintained patch of the runtime
-family gosim translates. Go 1.27.3 is the latest stable release checked here:
-ordinary core runtime contracts run on it in CI, but gosim's Go 1.26 runtime hooks
-explicitly refuse it. A genuine hook port is required before raising the shared
-minimum to 1.27; the guard remains intact. See [toolchain policy](docs/go-toolchain.md).
+Go: the supported floor is 1.27.3 across live modules, scaffolds and CI.
+The gosim fork targets that same standard-library/runtime family; another family's
+hooks are refused explicitly. See [toolchain policy](docs/go-toolchain.md).
 Until the first tags, `@latest` is the newest commit.
 
 Quint's Rust backend is the default. If quint cannot download its

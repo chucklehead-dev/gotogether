@@ -238,7 +238,7 @@ func TestWeaveOutsideTheWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	work := filepath.Join(t.TempDir(), "go.work")
-	if err := os.WriteFile(work, []byte("go 1.26.10\n\nuse "+core+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(work, []byte("go 1.27.3\n\nuse "+core+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	_, err = qweave.Weave(qweave.Config{Dir: "testdata/sync", Env: append(os.Environ(), "GOWORK="+work)})

@@ -1,6 +1,6 @@
 module github.com/chucklehead-dev/gotogether/internal/hegelprops
 
-go 1.26.10
+go 1.27.3
 
 require (
 	github.com/anishathalye/porcupine v1.3.1
