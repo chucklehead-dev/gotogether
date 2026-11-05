@@ -64,6 +64,33 @@ func BenchmarkExplore(b *testing.B) {
 	}
 }
 
+// BenchmarkExploreBranchLabels projects to the first non-step action in these
+// fixtures, exercising branch-prefix projection as well as label interning.
+func BenchmarkExploreBranchLabels(b *testing.B) {
+	branch := func(events []Event) []Event {
+		for i, event := range events {
+			if event.Action != "" && event.Action != "step" {
+				return events[i:]
+			}
+		}
+		return events
+	}
+	for _, c := range benchModels(b) {
+		b.Run(c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				g, err := c.m.Explore(c.consts, "init", "step", Bound{States: c.states}, branch)
+				if err != nil {
+					b.Fatal(err)
+				}
+				if len(g.States) != c.states {
+					b.Fatalf("%d states, not %d", len(g.States), c.states)
+				}
+			}
+		})
+	}
+}
+
 // a state some steps from init, by the first transition of each
 func deepState(b *testing.B, m *Model, consts map[string]Value, n int) State {
 	b.Helper()

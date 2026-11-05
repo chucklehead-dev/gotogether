@@ -74,6 +74,13 @@ search bounds to the existing engine; counters uses its generated files directly
 Complete proofs, depth-only bounded proofs, state-cut unknowns and native-replayed
 refutations retain their existing meanings. No new format or second engine is
 needed. Further capability should follow another actual authoring/runtime gap.
+The consolidation review adds branch-projected graph benchmarks to the existing
+full-event workloads. I39's proposed parent-label reuse reduced projection calls
+but regressed all six short-run medians by 1.9–4.2% in four alternating pairs;
+production code is retained. The known duplicate work is not sufficient evidence
+for another implementation change. Future performance work needs representative
+end-to-end controls as well as operation counts; broader evaluator redesign
+remains deferred.
 Keep frozen baseline pins for reproducibility, not as legacy support promises.
 Further adapters, adjacent fixtures and per-pair clock APIs need usage evidence.
 
@@ -874,8 +881,11 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   1.6-2x faster at load 5-10 (2.7x at load 40), allocations halved, Key
   3x. Left, for I50: the labels (a successor's event list and its slice,
   36% of an explore's bytes), `action`'s successor slices and merged
-  assignments (26%), environments by name; Explore encodes a new node's
-  label twice (added and edge), a small saving.
+  assignments (26%), environments by name; Explore still encodes a new node's
+  label twice (added and edge). The
+  2026-11-05 reuse experiment reduced projection calls but regressed six measured
+  medians, so the implementation is retained; branch-projected graph workloads
+  now complement the full-event benchmarks. Revisit only with fresh evidence.
 - **I40. The scheduler's small costs (S). Done** (089889b). A fault
   choice's rate found by its kind's dot-prefixes (120 → 57 ns), no
   options closure or nemesis maps per step (a bare step 0 allocations,

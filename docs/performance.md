@@ -617,3 +617,71 @@ This review also found a separate false-issue bug: ownership checks preceded
 now follows accepted filtering and discard decisions, and checks a context thread
 only when that identity survives explicit overrides. Accepted cross-goroutine
 misuse still fails. The per-step goroutine lookup required by `qobs.Thread` remains.
+
+## Graph parent-label experiment (2026-11-05)
+
+The I39 review identified duplicate work in `Model.Explore`: a discovering
+transition is projected and interned for its edge, then again for the new state's
+parent path. On the small complete multi-start graph fixture this means 32
+projection calls for 22 transitions (ten non-start states).
+
+The proposed reuse removed those ten calls, but did **not** improve the measured
+end-to-end workloads. Keep the production implementation. Operation counts alone
+are insufficient justification for this optimization.
+
+The added `BenchmarkExploreBranchLabels` complements `BenchmarkExplore` with a
+first-non-step-action projection, using the same bank, kvstore and payd models and
+2000/1000/1000 state limits. It exercises prefix projection as well as interning;
+it does not model every helper-filtering policy in the higher-level analyzer.
+These cases are automatically included by the nightly's existing benchmark run.
+
+The allocation-neutral candidate used the parent's last outgoing edge label.
+This is safe because search calls `added` immediately after the discovering
+`edge`, whose fresh target ID prevents deduplication. The rejected change was:
+
+```diff
+         if nd.parent >= 0 {
+-            evs := nd.via
+-            if label != nil {
+-                evs = label(evs)
+-            }
+-            g.Via[j] = g.label(evs)
++            out := g.Out[nd.parent]
++            g.Via[j] = out[len(out)-1].Label
+         }
+```
+
+Four alternating before/after process pairs on one local Intel Xeon Platinum
+8573C runner, CPU-1, two iterations per case, produced these median ms/op values.
+The baseline was `b19762dc` plus the new benchmark, and the candidate changed only
+the parent-label block above. No correctness tests ran during these samples.
+
+| Workload | Baseline ms | Candidate ms | Change | Median allocs/op, both |
+|---|---:|---:|---:|---:|
+| full labels: bank | 351.26 | 358.04 | +1.9% | 2,636,959 |
+| full labels: kvstore | 406.16 | 415.06 | +2.2% | 2,982,402 |
+| full labels: payd | 184.63 | 192.38 | +4.2% | 1,104,485 |
+| projected labels: bank | 331.96 | 338.20 | +1.9% | 2,629,996 |
+| projected labels: kvstore | 396.72 | 409.21 | +3.1% | 2,978,478 |
+| projected labels: payd | 174.28 | 181.64 | +4.2% | 1,101,381 |
+
+These short runs do not identify the cause or establish a portable regression
+magnitude; compiler/code layout and runner variation remain possible. All six
+medians moved against the candidate, so they do not justify landing it. A separate
+captured-label variant also introduced one allocation per graph and was rejected.
+Samples overlapping correctness tests were discarded rather than combined here.
+
+Graph/path tests, including the existing brute-force oracle, passed during the
+experiment; the evaluator suite and native model claims also passed. Correctness
+is necessary but does not establish a performance benefit. No runtime, API,
+report/schema, dependency or CPU-budget change is retained.
+
+Run the benchmark cases from the repository root (Go and Quint on PATH):
+
+```sh
+GOWORK=off go test ./internal/qeval -run '^$' -bench '^BenchmarkExplore' -benchtime=2x -cpu=1
+```
+
+For comparisons, compile separate test binaries and alternate their order while
+the runner is otherwise idle. The model compilation/setup is outside benchmark
+timing; the numbers above describe warm exploration, not CLI cold-start cost.

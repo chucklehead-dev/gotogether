@@ -7,7 +7,14 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Test-local model checks (current branch): `ModelCheck.WithOptions(ModelOptions)`
+Projected graph-label benchmarks (current branch): graph benchmarks now include
+first-non-step-action label projection alongside ordinary full-event labels.
+I39's duplicate parent-label candidate was measured and rejected: fewer callback
+calls did not improve end-to-end exploration; the allocation-neutral version's
+four-pair medians regressed by 1.9–4.2%. Production exploration stays unchanged.
+See [the experiment](performance.md#graph-parent-label-experiment-2026-11-05).
+
+Test-local model checks (merged PR #67, b19762dc): `ModelCheck.WithOptions(ModelOptions)`
 sets copied constant expressions and search bounds without editing the binding.
 The existing engine preserves proof scope and native witness replay. Malformed
 option framing and negative bounds fail before binding loading; unknown constants
