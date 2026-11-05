@@ -12,9 +12,10 @@ import (
 // The model's whole state graph for three participants (99 states):
 // both invariants held in each, so proved for the instance, and every
 // state the step cannot leave is every node decided, the protocol's end
-// (simulate.terminal): without it they are deadlocks.
+// (simulate.terminal): without it they are deadlocks. Every named action
+// the model's step branches to is reachable in this instance.
 func TestGraphProvesInvariants(t *testing.T) {
-	qtest.Model(t, binding).Expect(t, qtest.Proves("consistency"), qtest.Proves("commitIsDecided"), qtest.NoDeadlocks())
+	qtest.Model(t, binding).Expect(t, qtest.Proves("consistency"), qtest.Proves("commitIsDecided"), qtest.NoDeadlocks(), qtest.AllStepActionsReachable())
 }
 
 // The model with the coordinator's decision made early (it commits once

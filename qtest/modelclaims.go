@@ -31,6 +31,9 @@ import (
 // is a witness wherever the graph found it, replayed by quint test.
 // Possible is found by the evaluator's search or quint's sampling, and
 // impossible only by a complete search.
+// AllStepActionsReachable also uses the graph, requiring one observed transition
+// for each named step action, even in a partial graph; absence is a failure only
+// in a complete graph.
 
 // Model is the model of binding (a binding file) on its own, for claims
 // about it (ModelCheck.Expect). It skips the test without quint.
@@ -97,7 +100,8 @@ func (o ModelOptions) constants() []string {
 }
 
 // A ModelClaim is what a test expects of a model on its own
-// (ModelCheck.Expect): Proves, Refutes, Live, NoDeadlocks, Possible.
+// (ModelCheck.Expect): Proves, Refutes, Live, NoDeadlocks,
+// AllStepActionsReachable, Possible.
 type ModelClaim interface {
 	String() string
 	// needs adds what the claim needs simulated to n
@@ -134,7 +138,7 @@ func (n *modelNeeds) eventual(name string) {
 func (m *ModelCheck) Expect(t testing.TB, claims ...ModelClaim) {
 	t.Helper()
 	if len(claims) == 0 {
-		t.Fatal("qtest.Model(...).Expect: no claims: state what the model on its own must show (Proves, Refutes, Live, NoDeadlocks, Possible)")
+		t.Fatal("qtest.Model(...).Expect: no claims: state what the model on its own must show (Proves, Refutes, Live, NoDeadlocks, AllStepActionsReachable, Possible)")
 	}
 	if err := m.options.validate(); err != nil {
 		t.Fatalf("qtest.Model(%s): %v", m.binding, err)
@@ -384,6 +388,35 @@ func (c live) judgeModel(rep *model.Report) (tri, string) {
 		return yes, "no fair cycle keeps it false in " + v.Bound.String()
 	}
 	return unknown, "no fair cycle keeps it false in " + v.Bound.String() + ", which proves nothing of the cycles past it"
+}
+
+type allStepActionsReachable struct{}
+
+// AllStepActionsReachable claims every named action the model's step branches
+// to has an observed transition in the Go evaluator's graph. This is action-name
+// reachability, not coverage of argument values or distinct syntactic branches
+// calling the same action, and does not claim native replay of each transition.
+// Binding actions outside step and model helpers are not included.
+//
+// Observing every step action holds even in a partial graph. A missing action
+// fails only for a complete graph; otherwise it has no verdict. No graph, no
+// named step actions, or evaluator disagreement also has no verdict.
+func AllStepActionsReachable() ModelClaim { return allStepActionsReachable{} }
+
+func (allStepActionsReachable) String() string { return "reaching every step action" }
+
+func (allStepActionsReachable) needs(n *modelNeeds) error { n.graph = true; return nil }
+
+func (allStepActionsReachable) judgeModel(rep *model.Report) (tri, string) {
+	reach := rep.StepActionReachability()
+	switch reach.Status {
+	case "reachable":
+		return yes, reach.Reason
+	case "unreachable":
+		return no, reach.Reason
+	default:
+		return unknown, reach.Reason
+	}
 }
 
 type noDeadlocks struct{}

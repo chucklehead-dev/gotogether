@@ -29,6 +29,26 @@ func TestSimulateNativeGraphDocument(t *testing.T) {
 			if doc.Graph == nil || doc.Graph.Scope != "model_state_graph" || doc.Graph.Complete != tc.complete || doc.Graph.Cut != tc.cut {
 				t.Fatalf("wrong scope: %s", out)
 			}
+			coverage := doc.Graph.StepActions
+			wantStatus := "unknown"
+			if tc.complete {
+				wantStatus = "unreachable"
+			}
+			if coverage == nil || coverage.Status != wantStatus || len(coverage.Actions) == 0 {
+				t.Fatalf("lost named step-action reachability: %s", out)
+			}
+			foundRepair := false
+			for _, action := range coverage.Actions {
+				if action.Action == "repair" {
+					foundRepair = true
+					if action.Transitions != 0 || action.States != 0 {
+						t.Fatalf("invented repair witness: %s", out)
+					}
+				}
+			}
+			if !foundRepair {
+				t.Fatalf("omitted dead named action: %s", out)
+			}
 			if tc.name == "state cap" && doc.Graph.Bound.States != 1 {
 				t.Fatalf("lost state bound: %+v", doc.Graph)
 			}

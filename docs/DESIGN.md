@@ -6707,3 +6707,34 @@ graph execution and native replay from its claims. A complete graph proves its
 instance, a depth cut proves only the stated bounded scope, and a state cut is
 unknown. Replayed witnesses use the same effective constant overrides. Counters
 uses Depth:3 directly; authored binding/model bytes remain unchanged.
+
+
+## 100. Named step-action reachability
+
+Twophase lost its no-dead-action assertion when its manual graph walk migrated
+to ModelCheck. Restore that contract as AllStepActionsReachable, sharing the
+existing graph rather than adding a search or sampling mode. The roster is the
+named actions called directly by step (following a bare action wrapper), with
+helpers excluded. Names are deduplicated: two alternatives calling the same
+action do not become separate coverage obligations. Binding actions outside
+step, argument combinations and anonymous alternatives are not this claim.
+
+Count every roster action present in a transition's events, once per transition
+and enabling source state. Crediting only the first event misclassified the
+second action of a composite all-step as dead. Keep the first-action label used
+for liveness separate; this slice does not redefine fairness or cycle search.
+
+Each roster member needs one observed transition. All witnessed is reachable
+even after a cutoff; missing actions are unreachable only after complete
+exploration. Bounds and unsupported evaluation leave absence unknown, an empty
+roster cannot pass vacuously, and evaluator disagreement voids positive evidence.
+A model evaluation error is inconclusive. Positive evidence is the Go evaluator's,
+not a claim that every action witness was independently replayed by Quint.
+
+Report.StepActionReachability owns this classification. Model claims and the
+canonical Document consume it; graph.stepActions contains copied action names,
+transition/enabling-state counts, missing names, status and reason alongside the
+graph's existing extent and bounds. Display wording is not parsed. These are
+observations, not implicit CLI assertions: discovering an unreachable action does
+not change simulate's exit status unless an existing requested check fails.
+There is no second report format or compatibility representation.

@@ -692,6 +692,16 @@ copies its constants; positive bounds override the binding, while zero inherits
 its search bound or the engine default. A state-truncated graph remains no verdict,
 and a depth-only proof still states its bound.
 
+To check that every named action called directly by the model's `step` can occur,
+add `qtest.AllStepActionsReachable()` to the same `Model(...).Expect(...)`.
+An action witnessed in the explored graph is reachable even when a bound stops
+exploration. An unseen action is unreachable only in a complete graph; otherwise
+the claim has no verdict and fails the test with the bound to revisit. This checks
+named step actions, not all argument combinations, syntactic alternatives, or
+recorded implementation coverage. `simulate -graph -json` exposes the same
+counts and reachability in `graph.stepActions`, independently of display text.
+That metadata is observational; it does not add a CLI assertion or change its exit status.
+
 A bigger system deploys more doubles the same way:
 
 ```go

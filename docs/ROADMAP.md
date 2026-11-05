@@ -86,9 +86,14 @@ runtime/standard-library port. Normal CI now exercises that one current family;
 the separate pre-port host-core admission job is redundant. Old admission results
 remain provenance, not a second compatibility target. Genuine hook semantics and
 fresh-process determinism must remain prerequisites for future major updates.
-The next bounded feature candidate
-is I17 model step-branch reachability: restore twophase's coverage assertion lost
-when its manual graph walk was migrated, with honest bounded/unknown outcomes.
+The following bounded feature slice restores I17's lost twophase assertion with
+AllStepActionsReachable: each named action directly called by step must have a
+transition witness. Composite transitions count every roster action once;
+complete absence is unreachable, bounded absence unknown. This is named-action
+reachability, not syntactic branch or parameter-combination coverage. Canonical
+reports retain the same typed counts and scope. After this facet-depth slice,
+rotate toward a concrete general-framework gap or evidence-driven consolidation;
+do not expand reachability modes without a demonstrated caller need.
 Keep frozen baseline pins for reproducibility, not as legacy support promises.
 Further adapters, adjacent fixtures and per-pair clock APIs need usage evidence.
 
@@ -487,7 +492,10 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   now built through immutable `ModelCheck.WithOptions(ModelOptions)`, replacing
   counters' copied-tree/generated-YAML workaround. Zero bounds inherit and
   positive bounds override; claims still own graph checks and native replay.
-  Left: a claim on the actions never enabled (twophase's walk checked none was).
+  Named step-action reachability is now a claim too:
+  `AllStepActionsReachable()` restores twophase's no-dead-action assertion.
+  It distinguishes transition witnesses from complete absence and bounded unknowns;
+  canonical graph reports retain the action counts and status.
 - **I18. validate split (M, breaking, before tags). Done** (DESIGN
   §70, §71; HISTORY "I18", "I18's rest"): model analysis in
   `validate/model` (`Simulate`, `Analyzer`: `Graph`, `Possible`), above

@@ -228,20 +228,41 @@ type DocCheck struct {
 // DocGraph describes a model-state graph, not recorded executions. Complete
 // means exploration finished within Bound; a depth bound still limits its scope.
 type DocGraph struct {
-	Scope       string        `json:"scope"`
-	States      int           `json:"states"`
-	Starts      int           `json:"starts"`
-	Transitions int           `json:"transitions"`
-	Depth       int           `json:"depth"`
-	Complete    bool          `json:"complete"`
-	Cut         string        `json:"cut,omitempty"`
-	Stopped     string        `json:"stopped,omitempty"`
-	Bound       DocGraphBound `json:"bound"`
-	Deadlocks   int           `json:"deadlocks"`
-	Terminals   int           `json:"terminals"`
-	Quiescent   int           `json:"quiescent"`
-	Unfair      []string      `json:"unfair,omitempty"`
-	Stops       []string      `json:"stops,omitempty"`
+	Scope       string                     `json:"scope"`
+	States      int                        `json:"states"`
+	Starts      int                        `json:"starts"`
+	Transitions int                        `json:"transitions"`
+	Depth       int                        `json:"depth"`
+	Complete    bool                       `json:"complete"`
+	Cut         string                     `json:"cut,omitempty"`
+	Stopped     string                     `json:"stopped,omitempty"`
+	Bound       DocGraphBound              `json:"bound"`
+	Deadlocks   int                        `json:"deadlocks"`
+	Terminals   int                        `json:"terminals"`
+	Quiescent   int                        `json:"quiescent"`
+	Unfair      []string                   `json:"unfair,omitempty"`
+	Stops       []string                   `json:"stops,omitempty"`
+	StepActions *DocStepActionReachability `json:"stepActions,omitempty"`
+}
+
+// DocStepActionReachability describes calls to step's statically identified
+// non-helper actions, not every syntactic branch or argument combination.
+// Status is reachable, unreachable, or unknown; graph scope and bounds retain
+// the extent of the observations. Counts include each action once per edge.
+type DocStepActionReachability struct {
+	Status  string                  `json:"status"`
+	Reason  string                  `json:"reason"`
+	Missing []string                `json:"missing"`
+	Actions []DocStepActionCoverage `json:"actions"`
+}
+
+// DocStepActionCoverage counts transitions taking an identified action and
+// source states enabling it. A zero is absence of observed execution, not proof
+// of impossibility unless the containing graph's exploration is complete.
+type DocStepActionCoverage struct {
+	Action      string `json:"action"`
+	Transitions int    `json:"transitions"`
+	States      int    `json:"states"`
 }
 
 // DocGraphBound is the configured exploration cap; zero depth means no depth cap.

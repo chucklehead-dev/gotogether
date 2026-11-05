@@ -7,6 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
+Named model-step action reachability: `qtest.AllStepActionsReachable()` shares
+ModelCheck's graph with invariant and deadlock claims. It accepts a witnessed
+action even in a partial graph, rejects unseen actions only in a complete graph,
+and leaves bounded absence, empty inventories and invalidated evidence unknown.
+Composite transitions count each named step action once, rather than only the
+first; helper and binding-only actions are outside the roster. Shared reports
+retain typed action counts and status in `graph.stepActions`, without changing
+CLI success criteria. Twophase's lost coverage assertion is restored. See DESIGN §100.
+
 Go 1.27 adoption: the shared live module, workspace, scaffold, fixture and
 publication floor is 1.27.3. qgosim and its examples pin the published gosim port
 `66f95e073358`, with actual replay, checkout and woven edgepublish admission

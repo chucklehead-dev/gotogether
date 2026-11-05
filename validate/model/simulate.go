@@ -286,7 +286,7 @@ func simulate(bpath string, b *binding.Binding, checker *modelChecker, opt Simul
 			bpath, strings.Join(eventually, ", "))
 		return s.rep, nil
 	}
-	if len(invariants) == 0 && len(possibleList) == 0 && !(opt.Graph && len(eventually) > 0) {
+	if len(invariants) == 0 && len(possibleList) == 0 && !opt.Graph {
 		return nil, fmt.Errorf("simulate: %s names no invariants (or pass -invariants a,b) and no possibles", bpath)
 	}
 	holds, allows := nameSet(sec.Holds), nameSet(sec.Allows)
