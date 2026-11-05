@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- `qhistory.StrongSessionSerializable` checks explicit client session order,
+  without requiring clocks. Supply `Txn.Session` and `SessionOrder`; missing or
+  ambiguous evidence is an input error. Unknown outcomes never establish an
+  outgoing order edge. Cycle reports retain typed dependency evidence.
+
 - Model analysis APIs now require a caller context: `model.New`, `Simulate`,
   analyzer `Graph`, `Possible`, `Simulate` and graph `Lacks`. Migrate directly to
   context-first calls. Compilation/cache waits, managed subprocesses and

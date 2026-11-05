@@ -6782,3 +6782,33 @@ and invoke actual CLI dispatch plus SIGTERM. The signal controls require final
 machine error reports without graph/check verdicts, and always release their test
 gates during cleanup. Representative graph benchmarks check the cost of request
 checkpoints rather than inferring performance from the number of checks alone.
+
+
+## 102. Explicit session order in database histories
+
+The list-append checker could detect a stale read after a completed writer when
+clock timestamps established the order, but could not express the same evidence
+from a sequential client without clocks. Transaction IDs and history positions
+are global recording order, not client session order. Inferring sessions from
+those would invent constraints in concurrent histories.
+
+Txn.Session and SessionOrder are explicit caller assertions: a later attempt in
+the same logical session was invoked after an earlier attempt returned. Positive
+ordinals need not be contiguous. StrongSessionSerializable requires this evidence
+for every potentially committed transaction, rejects partial or duplicate metadata,
+and checks serializability plus session precedence without global realtime edges.
+Serializable stays ordinary serializability. StrictSerializable can also use
+supplied session evidence, while retaining optional timestamp-based precedence.
+
+Only a known committed predecessor establishes an outgoing order edge. A timeout
+may later be inferred committed from a read, but its return did not establish that
+the commit finished then. Such a transaction can receive an edge from a known
+predecessor, and cannot source one. Known predecessor ordering survives gaps made
+by unknown and aborted attempts. Native cycle evidence includes edge provenance;
+callers need not parse prose to distinguish data and ordering dependencies.
+
+Independent serial-permutation replay tests the committed-only bounded cases;
+focused unknown-outcome controls test the timeout boundary. Automatic capture is
+separate: the shared Record wrapper has no caller session identity. An explicit
+serial session handle should follow an actual workload rather than pretend its
+current global transaction IDs already supply this evidence.

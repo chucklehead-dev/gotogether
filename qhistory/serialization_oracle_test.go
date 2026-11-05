@@ -22,7 +22,7 @@ func TestUnobservedAppendsAgainstBruteForce(t *testing.T) {
 		t.Helper()
 		for timing, timed := range serialOracleTimings(history) {
 			for _, level := range []qhistory.Level{qhistory.Serializable, qhistory.StrictSerializable} {
-				want := serialExplanationExists(timed, level == qhistory.StrictSerializable)
+				want := serialExplanationExists(timed, level)
 				rep, err := qhistory.Check(level, timed)
 				if err != nil {
 					t.Fatalf("%s, timing %d, %s: %v", name, timing, level, err)
@@ -82,7 +82,7 @@ func TestUnobservedAppendsAgainstBruteForce(t *testing.T) {
 // serialExplanationExists applies whole transactions to lists, accepting a
 // history exactly when some order gives every read its recorded answer. It does
 // not construct dependencies or infer a maximal observed prefix.
-func serialExplanationExists(history []qhistory.Txn, strict bool) bool {
+func serialExplanationExists(history []qhistory.Txn, level qhistory.Level) bool {
 	var visit func(uint64, map[string][]int) bool
 	visit = func(done uint64, lists map[string][]int) bool {
 		if done == 1<<len(history)-1 {
@@ -96,11 +96,14 @@ func serialExplanationExists(history []qhistory.Txn, strict bool) bool {
 				panic("serial oracle only admits the committed bounded universe")
 			}
 			blocked := false
-			if strict {
-				for j, prior := range history {
-					if i != j && done&(1<<j) == 0 && !prior.Completed.IsZero() && !tx.Invoked.IsZero() && prior.Completed.Before(tx.Invoked) {
-						blocked = true
-					}
+			for j, prior := range history {
+				if i == j || done&(1<<j) != 0 {
+					continue
+				}
+				realtime := level == qhistory.StrictSerializable && !prior.Completed.IsZero() && !tx.Invoked.IsZero() && prior.Completed.Before(tx.Invoked)
+				session := (level == qhistory.StrongSessionSerializable || level == qhistory.StrictSerializable) && prior.Session != "" && prior.Session == tx.Session && prior.SessionOrder < tx.SessionOrder
+				if realtime || session {
+					blocked = true
 				}
 			}
 			if blocked {
@@ -159,4 +162,69 @@ func serialOracleTimings(history []qhistory.Txn) [][]qhistory.Txn {
 	partial[len(partial)-1].Invoked = at(3)
 	variants = append(variants, partial)
 	return variants
+}
+
+// Session evidence constrains serial replay independently of transaction IDs,
+// input order, and clocks. Each observed list is replayed against every serial
+// permutation; the oracle does not use the checker's dependency graph.
+func TestSessionOrderAgainstBruteForce(t *testing.T) {
+	cases := 0
+	for _, list := range [][]int{{}, {1}, {2}, {1, 2}, {2, 1}} {
+		base := []qhistory.Txn{txn(90, app("x", 1)), txn(7, app("x", 2)), txn(31, rd("x", list...))}
+		for _, sessions := range []struct {
+			name   string
+			ids    []string
+			orders []uint64
+		}{
+			{"one-forward", []string{"a", "a", "a"}, []uint64{1, 2, 3}},
+			{"one-reverse", []string{"a", "a", "a"}, []uint64{3, 2, 1}},
+			{"independent", []string{"a", "b", "c"}, []uint64{1, 1, 1}},
+			{"writer-reader", []string{"a", "b", "a"}, []uint64{1, 1, 2}},
+		} {
+			history := slices.Clone(base)
+			for i := range history {
+				history[i].Session, history[i].SessionOrder = sessions.ids[i], sessions.orders[i]
+			}
+			for timing, timed := range serialOracleTimings(history) {
+				for _, reverse := range []bool{false, true} {
+					if reverse {
+						slices.Reverse(timed)
+					}
+					for _, level := range []qhistory.Level{qhistory.Serializable, qhistory.StrongSessionSerializable, qhistory.StrictSerializable} {
+						want := serialExplanationExists(timed, level)
+						rep, err := qhistory.Check(level, timed)
+						if err != nil {
+							t.Fatalf("read %v, %s, timing %d, reverse %v, %s: %v", list, sessions.name, timing, reverse, level, err)
+						}
+						if rep.OK() != want {
+							t.Fatalf("read %v, %s, timing %d, reverse %v, %s: OK %v, serial explanation %v\nhistory: %+v\n%s", list, sessions.name, timing, reverse, level, rep.OK(), want, timed, rep)
+						}
+						cases++
+					}
+				}
+			}
+		}
+	}
+	t.Logf("checked %d session/clock/history combinations against every serial order", cases)
+}
+
+func TestStrictSessionAndRealtimeCombinedAgainstBruteForce(t *testing.T) {
+	// Each policy alone admits a serial order. Together, B->A (session),
+	// A->C (the empty read), C->B (realtime) form a forbidden cycle.
+	history := []qhistory.Txn{txn(90, rd("x")), txn(7, app("y", 2)), txn(31, app("x", 1))}
+	history[0].Session, history[0].SessionOrder = "a", 2
+	history[1].Session, history[1].SessionOrder = "a", 1
+	history[2].Session, history[2].SessionOrder = "b", 1
+	history[2].Completed = time.Unix(1, 0)
+	history[1].Invoked = time.Unix(2, 0)
+	for _, level := range []qhistory.Level{qhistory.Serializable, qhistory.StrongSessionSerializable, qhistory.StrictSerializable} {
+		want := level != qhistory.StrictSerializable
+		if got := serialExplanationExists(history, level); got != want {
+			t.Fatalf("oracle %s: got %v, want %v", level, got, want)
+		}
+		rep, err := qhistory.Check(level, history)
+		if err != nil || rep.OK() != want {
+			t.Fatalf("%s: report %v, err %v; want OK %v", level, rep, err, want)
+		}
+	}
 }
