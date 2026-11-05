@@ -3,7 +3,7 @@ module github.com/chucklehead-dev/gotogether/examples/edgepublish
 go 1.27.3
 
 require (
-	github.com/DataDog/orchestrion v1.13.1
+	github.com/DataDog/orchestrion v1.15.0
 	github.com/chucklehead-dev/gotogether v0.0.0
 	github.com/chucklehead-dev/gotogether/qhegel v0.0.0-00010101000000-000000000000
 	go.opentelemetry.io/otel v1.46.0
@@ -22,7 +22,7 @@ require (
 	github.com/DataDog/datadog-agent/pkg/trace/stats v0.82.3 // indirect
 	github.com/DataDog/datadog-agent/pkg/trace/traceutil v0.82.3 // indirect
 	github.com/DataDog/datadog-go/v5 v5.9.1 // indirect
-	github.com/DataDog/dd-trace-go/v2 v2.10.1 // indirect
+	github.com/DataDog/dd-trace-go/v2 v2.12.0 // indirect
 	github.com/DataDog/go-libddwaf/v5 v5.0.1 // indirect
 	github.com/DataDog/go-runtime-metrics-internal v0.0.4-0.20260217080614-b0f4edc38a6d // indirect
 	github.com/DataDog/go-sqllexer v0.2.4 // indirect
@@ -80,7 +80,7 @@ require (
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/polyfloyd/go-errorlint v1.8.1-0.20250906200200-9b25878c4dea // indirect
 	github.com/power-devops/perfstat v0.0.0-20260805114148-88456608a4f6 // indirect
-	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
+	github.com/puzpuzpuz/xsync/v4 v4.5.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rs/zerolog v1.35.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
@@ -110,11 +110,11 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/crypto v0.55.0 // indirect
+	golang.org/x/crypto v0.56.0 // indirect
 	golang.org/x/exp v0.0.0-20260813180055-c1d0aacb2297 // indirect
 	golang.org/x/mod v0.42.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.51.0 // indirect

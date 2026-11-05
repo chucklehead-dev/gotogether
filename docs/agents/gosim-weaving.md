@@ -72,8 +72,8 @@ Gotchas for agents (and humans) before changing qgosim, qweave, qenv/weave, the 
   upstream history plus our commits, its `FORK.md` saying what they
   change. Change the fork there, push, then bump qgosim's and
   examples/gosim's requirement (`go get github.com/chucklehead-dev/gosim@<commit>`).
-  It translates one Go release's standard library (Go 1.26) and refuses
-  another. Choosers with entropy
+  It translates the current Go family recorded in the
+  [toolchain policy](../go-toolchain.md) and refuses another family. Choosers with entropy
   (`qenv.EntropyOf`: Seeded, qhegel.Choices, a ChoiceLog or Replay of
   them) hand gosim bytes in chunks for every choice but faults. A chooser
   without it (a plain wrapper) falls back to one round trip per choice,

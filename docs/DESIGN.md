@@ -14,8 +14,9 @@ in the move: quint-connect parity for `connect`, the Hegel integration,
 and span conversion.
 
 The spike's verification ran on Go 1.25, Quint 0.32 (`--backend
-typescript`) and Orchestrion v1.13.1. The migrated code is tested with
-Go 1.26, Quint 0.33 (both backends) and hegel-go v0.9.27. Anything marked
+typescript`) and Orchestrion v1.13.1. The initial migrated code was tested with
+Go 1.26, Quint 0.33 (both backends) and hegel-go v0.9.27. Current runtime and
+library versions and their admission evidence are in [the toolchain policy](go-toolchain.md). Anything marked
 **speculative** or **unverified** was not run.
 
 The ask had two parts:

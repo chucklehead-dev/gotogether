@@ -45,3 +45,39 @@ func TestWovenEscapes(t *testing.T) {
 		s.Close()
 	}
 }
+
+// Both WaitGroup.Go receiver forms must create simulation-owned tasks. An
+// unwoven real goroutine can finish a callback too, so check its ownership and
+// advance virtual time instead of accepting completion alone.
+func TestWovenWaitGroupGo(t *testing.T) {
+	for seed := range uint64(20) {
+		s := qenv.New(qenv.NewSeeded(seed))
+		var wg sync.WaitGroup
+		completed := 0
+		escaped := false
+		var elapsed time.Duration
+		s.Spawn("parent", func(ctx context.Context) {
+			start := qenv.Now(ctx)
+			callback := func() {
+				child := context.Background()
+				if qenv.From(child) != s {
+					escaped = true
+					return
+				}
+				qenv.Sleep(child, time.Hour)
+				completed++
+			}
+			guarded.RunGroup(&wg, callback)
+			guarded.RunLocalGroup(callback)
+			elapsed = qenv.Now(ctx).Sub(start)
+		})
+		err := s.Run(3 * time.Hour)
+		s.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if escaped || completed != 2 || elapsed != 2*time.Hour {
+			t.Fatalf("seed %d: escaped=%v completed=%d virtual elapsed=%v; want two simulation-owned callbacks totaling 2h", seed, escaped, completed, elapsed)
+		}
+	}
+}

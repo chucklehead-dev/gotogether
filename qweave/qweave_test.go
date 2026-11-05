@@ -30,6 +30,8 @@ func TestWeaveSyncFixture(t *testing.T) {
 		`woven.MutexLock(&(c).Mutex)`, // the promoted call, on the embedded field
 		`go woven.Go(func() {`,
 		`defer woven.Done(wg)`,
+		`woven.GroupGo(wg, fn)`,  // WaitGroup.Go pointer receiver
+		`woven.GroupGo(&wg, fn)`, // WaitGroup.Go value receiver
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("woven guarded.go lacks %s:\n%s", want, src)

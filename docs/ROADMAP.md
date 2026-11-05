@@ -94,6 +94,14 @@ reachability, not syntactic branch or parameter-combination coverage. Canonical
 reports retain the same typed counts and scope. After this facet-depth slice,
 rotate toward a concrete general-framework gap or evidence-driven consolidation;
 do not expand reachability modes without a demonstrated caller need.
+The following consolidation admits the audit's remaining current-library
+candidates: live x/sys 0.49.0 requirements and external Orchestrion 1.15.0. It
+checks exclusive publication, replay exports and actual weaving, including the
+existing WaitGroup.Go hook through both engines. Free-form weaving guidance now
+links the central Go policy instead of retaining a stale runtime-family number.
+No new runtime facade or source compatibility branch is needed. Choose the next
+general-framework capability from a concrete authoring/runtime gap rather than
+expanding the just-completed reachability facet.
 Keep frozen baseline pins for reproducibility, not as legacy support promises.
 Further adapters, adjacent fixtures and per-pair clock APIs need usage evidence.
 
