@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- `qtest.AllStepActionsReachable()` checks named model-step actions through the
+  existing graph exploration, distinguishing witnessed reachability, complete
+  unreachability and bounded unknowns. Composite transitions count every named
+  step action once. `simulate -graph -json` retains copied counts and scope in
+  `graph.stepActions`; twophase again asserts that no named step action is dead.
+
 - Live modules and scaffolds require Go 1.27.3, aligned with the ported gosim
   runtime family. Normal CI now exercises one current toolchain target; frozen
   evidence inputs remain unchanged. Step-log encoding follows current standard

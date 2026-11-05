@@ -159,6 +159,15 @@ func (s *sim) graph(bpath string, b *binding.Binding, checker *modelChecker, pos
 	for _, a := range r.Actions {
 		inStep[a.Action] = true
 	}
+	// Wrapper and nested calls observed in actual transitions are not extra
+	// reachability obligations, but neither are they outside step.
+	for _, events := range r.graph.Labels {
+		for _, event := range events {
+			if event.Action != "" {
+				inStep[event.Action] = true
+			}
+		}
+	}
 	var outside []string
 	for _, a := range slices.Sorted(maps.Keys(b.Actions)) {
 		if !inStep[a] {

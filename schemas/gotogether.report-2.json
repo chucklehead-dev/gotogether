@@ -2146,6 +2146,64 @@
         "states": {
           "type": "integer"
         },
+        "stepActions": {
+          "additionalProperties": false,
+          "properties": {
+            "actions": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "action": {
+                    "type": "string"
+                  },
+                  "states": {
+                    "type": "integer"
+                  },
+                  "transitions": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "action",
+                  "transitions",
+                  "states"
+                ],
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "type": "array"
+            },
+            "missing": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "status": {
+              "enum": [
+                "reachable",
+                "unreachable",
+                "unknown"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "reason",
+            "missing",
+            "actions"
+          ],
+          "type": [
+            "object",
+            "null"
+          ]
+        },
         "stopped": {
           "type": "string"
         },

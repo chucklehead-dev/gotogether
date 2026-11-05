@@ -36,6 +36,18 @@ func (r *Report) Doc() *validate.Document {
 	}
 	if g := r.Graph; g != nil {
 		d.Graph = &validate.DocGraph{Scope: "model_state_graph", States: g.States, Starts: g.Starts, Transitions: g.Transitions, Depth: g.Depth, Complete: g.Complete, Cut: g.Cut, Stopped: g.Stopped, Bound: validate.DocGraphBound{States: g.Bound.States, Depth: g.Bound.Depth}, Deadlocks: g.Deadlocks, Terminals: g.Terminals, Quiescent: g.Quiescent, Unfair: slices.Clone(g.Unfair), Stops: slices.Clone(g.Stops)}
+		reach := r.StepActionReachability()
+		stepActions := &validate.DocStepActionReachability{
+			Status: reach.Status, Reason: reach.Reason,
+			Missing: append([]string{}, reach.Missing...),
+			Actions: []validate.DocStepActionCoverage{},
+		}
+		for _, action := range reach.Actions {
+			stepActions.Actions = append(stepActions.Actions, validate.DocStepActionCoverage{
+				Action: action.Action, Transitions: action.Transitions, States: action.States,
+			})
+		}
+		d.Graph.StepActions = stepActions
 	}
 	for _, v := range r.Invariants {
 		if v.Error != "" {

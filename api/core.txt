@@ -1814,6 +1814,7 @@ const RoleMutant = evidence.RoleMutant
 const RoleReplay = evidence.RoleReplay
 func Absent(name string, cause validate.Cause) Expectation
 func All(es ...Expectation) Claim
+func AllStepActionsReachable() ModelClaim
 func AnyOf(es ...Expectation) Expectation
 func Artifacts(a ...validate.Artifact) Option
 func AtMostActions(n int) ShrinkClaim
@@ -2571,6 +2572,7 @@ type DocGraph struct
     field Quiescent int `json:"quiescent"`
     field Unfair []string `json:"unfair,omitempty"`
     field Stops []string `json:"stops,omitempty"`
+    field StepActions *DocStepActionReachability `json:"stepActions,omitempty"`
 type DocGraphBound struct
     field States int `json:"states"`
     field Depth int `json:"depth"`
@@ -2639,6 +2641,15 @@ type DocRecord struct
     field TraceID string `json:"traceId,omitempty"`
     field SpanID string `json:"spanId,omitempty"`
     field Text string `json:"text"`
+type DocStepActionCoverage struct
+    field Action string `json:"action"`
+    field Transitions int `json:"transitions"`
+    field States int `json:"states"`
+type DocStepActionReachability struct
+    field Status string `json:"status"`
+    field Reason string `json:"reason"`
+    field Missing []string `json:"missing"`
+    field Actions []DocStepActionCoverage `json:"actions"`
 type Document struct
     field Comparison *DocComparison `json:"comparison,omitempty"`
     field SkipReason string `json:"skipReason,omitempty"`
@@ -3262,6 +3273,7 @@ type Report struct
     field Code int
     field Text string
     method (*Report) Doc() *validate.Document
+    method (*Report) StepActionReachability() StepActionReachability
 type SimulateOptions struct
     field Quint string
     field Seed string
@@ -3279,6 +3291,12 @@ type SimulateOptions struct
     field Stops []string
     field Out string
     field Replay bool
+type StepActionReachability struct
+    field Status string
+    field Reason string
+    field Missing []string
+    field Actions []ActionCoverage
+    field Bound Bound
 type Verdict struct
     field Name string
     field Class string

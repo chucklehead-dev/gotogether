@@ -204,6 +204,78 @@ type ActionCoverage struct {
 	Transitions, States int
 }
 
+// countStepActions counts calls from the static step-action roster, rather than
+// adding actions only after observing them (which hides unreachable actions).
+func countStepActions(actions []ActionCoverage, g *qeval.Graph) {
+	byName := make(map[string]int, len(actions))
+	for i, action := range actions {
+		byName[action.Action] = i
+	}
+	labels := make([][]int, len(g.Labels))
+	for label, events := range g.Labels {
+		for _, event := range events {
+			if i, ok := byName[event.Action]; ok && !slices.Contains(labels[label], i) {
+				labels[label] = append(labels[label], i)
+			}
+		}
+	}
+	seen := make([]bool, len(actions))
+	for _, edges := range g.Out {
+		clear(seen)
+		for _, edge := range edges {
+			for _, i := range labels[edge.Label] {
+				actions[i].Transitions++
+				if !seen[i] {
+					actions[i].States++
+					seen[i] = true
+				}
+			}
+		}
+	}
+}
+
+// StepActionReachability is the graph's evidence that every statically named,
+// non-helper action called by step can execute. This is action-call coverage,
+// not coverage of every source-level branch, parameter or schedule.
+// Status is "reachable", "unreachable", or "unknown". A complete graph can
+// establish an action is unreachable; partial exploration can establish positive
+// reachability for the whole finite roster, but cannot establish absence.
+// Actions and Missing are independent snapshots in step declaration order.
+type StepActionReachability struct {
+	Status, Reason string
+	Missing        []string
+	Actions        []ActionCoverage
+	Bound          Bound
+}
+
+// StepActionReachability summarizes existing graph evidence without changing
+// the simulation verdict or requiring a second exploration.
+func (r *Report) StepActionReachability() StepActionReachability {
+	result := StepActionReachability{Status: "unknown", Reason: "no state graph"}
+	if r == nil || r.Graph == nil {
+		return result
+	}
+	g := r.Graph
+	result.Actions = slices.Clone(g.Actions)
+	result.Missing = slices.Clone(g.NeverEnabled())
+	result.Bound = graphBound(g)
+	switch {
+	case r.EvaluatorBug != "":
+		result.Reason = "evaluator disagreement voids graph evidence: " + r.EvaluatorBug
+	case g.Cut == "error":
+		result.Reason = "the graph stopped on a model error: " + g.Stopped
+	case len(g.Actions) == 0:
+		result.Reason = "the step has no identified non-helper action calls"
+	case len(result.Missing) == 0:
+		result.Status, result.Reason = "reachable", "every identified step action witnessed within the explored graph ("+g.Extent()+")"
+	case g.Complete:
+		result.Status, result.Reason = "unreachable", "the complete graph never executes: "+strings.Join(result.Missing, ", ")
+	default:
+		result.Reason = "not reached within the explored graph (" + g.Extent() + "): " + strings.Join(result.Missing, ", ")
+	}
+	return result
+}
+
 // NeverEnabled are the step's actions no transition of the graph takes:
 // dead in the instance if the graph is complete, else not reached within
 // its bound.
@@ -379,45 +451,22 @@ func (c *modelChecker) Graph(cfg GraphSearch) (*GraphResult, error) {
 			r.Quiescent++
 		}
 	}
-	// coverage: each transition's branch action, once per label
+	// Liveness labels retain the outer branch; step-action reachability counts
+	// every statically named action actually called by an edge, including
+	// several calls in one composite branch. A repeated call counts once.
 	branch := make([]string, len(g.Labels))
 	for i, l := range g.Labels {
 		if a, ok := evalshare.BranchEvent(c.Model, qeval.Transition{Events: l}); ok {
 			branch[i] = a.Action
 		}
 	}
-	cov := map[string]*ActionCoverage{}
-	for _, a := range e.Model.BranchActions(step) {
+	roster := e.Model.BranchActions(step)
+	for _, a := range roster {
 		if !c.Model.Helpers[a] {
 			r.Actions = append(r.Actions, ActionCoverage{Action: a})
 		}
 	}
-	for i := range r.Actions {
-		cov[r.Actions[i].Action] = &r.Actions[i]
-	}
-	for _, out := range g.Out {
-		in := map[string]bool{}
-		for _, ed := range out {
-			a := branch[ed.Label]
-			if a == "" {
-				continue
-			}
-			ac := cov[a]
-			if ac == nil {
-				// an action the step reaches through another's branch
-				r.Actions = append(r.Actions, ActionCoverage{Action: a})
-				for i := range r.Actions {
-					cov[r.Actions[i].Action] = &r.Actions[i]
-				}
-				ac = cov[a]
-			}
-			ac.Transitions++
-			if !in[a] {
-				in[a] = true
-				ac.States++
-			}
-		}
-	}
+	countStepActions(r.Actions, g)
 	// the eventual vals as cycles, every action weakly fair but those
 	// named: a name the step never calls is an error, as a misspelled
 	// one would leave an action fair
@@ -428,10 +477,15 @@ func (c *modelChecker) Graph(cfg GraphSearch) (*GraphResult, error) {
 			list  []string
 		}{{"unfair", unfair}, {"stops", stops}} {
 			for _, a := range x.list {
-				if !slices.ContainsFunc(r.Actions, func(ac ActionCoverage) bool { return ac.Action == a }) && a != "step" {
+				if !slices.ContainsFunc(r.Actions, func(ac ActionCoverage) bool { return ac.Action == a }) && !slices.Contains(branch, a) && a != "step" {
 					var known []string
 					for _, ac := range r.Actions {
 						known = append(known, ac.Action)
+					}
+					for _, action := range branch {
+						if action != "" && !slices.Contains(known, action) {
+							known = append(known, action)
+						}
 					}
 					return nil, fmt.Errorf("graph: simulate.%s names %s, which is no action of %s's step (its actions: %s)", x.field, a, c.Binding.Module, strings.Join(known, ", "))
 				}
