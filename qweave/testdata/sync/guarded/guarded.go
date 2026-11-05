@@ -55,3 +55,16 @@ func Spawn(wg *sync.WaitGroup, fn func()) {
 		fn()
 	}()
 }
+
+// RunGroup starts and joins a callback through a pointer WaitGroup receiver.
+func RunGroup(wg *sync.WaitGroup, fn func()) {
+	wg.Go(fn)
+	wg.Wait()
+}
+
+// RunLocalGroup starts and joins a callback through a value WaitGroup receiver.
+func RunLocalGroup(fn func()) {
+	var wg sync.WaitGroup
+	wg.Go(fn)
+	wg.Wait()
+}

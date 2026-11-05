@@ -7,6 +7,14 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
+Current-library admission: live x/sys requirements are 0.49.0 and the external
+Orchestrion tier is 1.15.0 on the shared Go 1.27.3 floor. Atomic-publication race,
+source/replay export and native/woven integration checks cover the update;
+Darwin/Windows checks establish compilation only. The sync fixture exercises
+WaitGroup.Go through qweave and real Orchestrion. Heavy tracing dependencies stay
+in the external example and frozen histories retain their graphs. See the
+[admission evidence](go-toolchain.md).
+
 Named model-step action reachability: `qtest.AllStepActionsReachable()` shares
 ModelCheck's graph with invariant and deadlock claims. It accepts a witnessed
 action even in a partial graph, rejects unseen actions only in a complete graph,

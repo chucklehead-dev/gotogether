@@ -55,9 +55,23 @@ repository. Memo tests use real contexts and `synctest.Wait` to establish durabl
 blocking. Do not wrap external process or network waits in a synctest bubble and
 assume they become durably blocked.
 
-The dependency audit found x/tools 0.52.0, x/mod 0.42.0, x/sync 0.24.0 and
-staticcheck 0.8.2 current. x/sys 0.49.0 (currently 0.48.0) and Orchestrion 1.15.0
-(currently 1.13.1) remain separate admission candidates.
+The 2026-11-05 official-module audit identifies x/tools 0.52.0, x/mod 0.42.0,
+x/sync 0.24.0 and staticcheck 0.8.2 as current. The subsequent bounded library
+admission advances every live x/sys requirement to 0.49.0 and the external
+Orchestrion tier to 1.15.0. Orchestrion and its tracing dependencies remain in
+the edgepublish module; the core does not acquire them. Frozen rehearsal inputs
+retain their captured dependency graphs.
+
+x/sys admission checks atomic no-replace publication under the Linux race
+checker, source snapshots, comparison export/replay and bundle publication.
+Darwin and Windows atomic-publication test binaries compile; these checks do
+not establish runtime behavior on those platforms. Go 1.27's ordinary os.Rename
+still permits replacement, so exclusive publication uses the platform primitives.
+Orchestrion 1.15.0 includes current compiler/link flag support. Admission runs
+native and genuinely woven edgepublish tests plus qweave's independent fixture,
+coverage and mutant suite. The existing sync fixture also exercises
+sync.WaitGroup.Go through both weaving engines. This verifies the existing
+modern API hook without adding another runtime facade.
 
 A major floor increase requires a real gosim hook/standard-library port and
 replay evidence first. Then check native qenv behavior, recording ownership,

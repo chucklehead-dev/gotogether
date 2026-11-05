@@ -6,8 +6,9 @@ by a qenv `Chooser` in the test process (DESIGN.md §14 and §15.1). It is a
 module of its own because it depends on gosim: the fork,
 [github.com/chucklehead-dev/gosim](https://github.com/chucklehead-dev/gosim)
 (upstream's history plus our commits; its FORK.md says what they change),
-an ordinary module requirement. It needs the Go release the fork's hooks
-match (Go 1.26); gosim names the fix under another.
+an ordinary module requirement. Its hooks target one current Go family; the
+[toolchain policy](../docs/go-toolchain.md) records the admitted version and
+evidence. Gosim refuses another family with an actionable toolchain error.
 
 - In the simulation (`//go:build sim`):
   - `New` returns a native `*qenv.Sim` whose choices are the host's,
@@ -21,7 +22,7 @@ match (Go 1.26); gosim names the fix under another.
   - `Scenario` is the same, for `System.Explore`.
 
 The fork:
-- ports gosim to Go 1.26;
+- ports gosim to the admitted current Go runtime family;
 - routes every bounded choice through a Chooser (`gosimruntime.Choose`);
 - adds `gosimruntime.Emit`;
 - extends the metatest protocol: `metatesting.MetaT.RunWith`, `Start`,
@@ -42,4 +43,5 @@ machine (gosim gives each its own globals). Code that records with
 `context.Background()`, such as a goroutine started with `go`, then
 records into the run.
 
-gosim's race mode does not build on 1.26 yet.
+gosim's race-mode simulation remains unsupported; the fork's FORK.md records
+its scope.
