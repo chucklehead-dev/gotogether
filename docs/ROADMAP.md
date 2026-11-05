@@ -69,9 +69,14 @@ Request validation now precedes target effects, using the existing lint report.
 After these reporting/request corrections, rotate toward an independently
 observed capability or facet contract rather than more output modes. A payouts
 CPU near-threshold failure did not justify a budget increase: the combined head
-passed all 36 checks, with payouts at 31.5 CPU seconds. Repeated cost growth would
-need per-test attribution; duplicate identical explorations are a consolidation
-candidate without reducing seeds or claims.
+passed all 36 checks, with payouts at 31.5 CPU seconds. Repeated cost growth needs
+per-test attribution. The payouts consolidation
+reuses noDuplicateCheck's existing exploration for cross-app link checks instead
+of repeating identical simulation and validation. Both models retain their
+separate explorations, all seeds and all claims; no budget increase or framework
+cache/revalidation API is needed. Warm paired CPU measurements showed no material
+improvement; fewer exploration calls alone do not establish an end-to-end speedup.
+The structural benefit is checking the same recorded runs for rejection and links.
 The I1 facet-depth slice completes library's deployment-history rehearsal:
 a buggy upcaster's persisted snapshot, unchanged-release reuse, corrected-release
 refold, and subsequent corrected-snapshot reuse across fresh processes. This
