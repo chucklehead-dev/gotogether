@@ -2,6 +2,7 @@ package qeval
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -89,6 +90,8 @@ func (e *Expr) UnmarshalJSON(b []byte) error {
 // state variables, and the table that resolves each name and operator
 // application to its declaration.
 type Model struct {
+	// ctx belongs to a shallow request view, never the cached model.
+	ctx    context.Context
 	byName map[string]*Decl
 	byID   map[int64]*Decl
 	// refs resolves a name's or an application's node id to what it names:

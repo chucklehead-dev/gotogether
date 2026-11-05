@@ -8,6 +8,13 @@ and adds a line here.
 
 ## Unreleased
 
+- Model analysis APIs now require a caller context: `model.New`, `Simulate`,
+  analyzer `Graph`, `Possible`, `Simulate` and graph `Lacks`. Migrate directly to
+  context-first calls. Compilation/cache waits, managed subprocesses and
+  cooperative evaluation/search honor cancellation without inventing a model
+  verdict or poisoning reuse. Model claims use `testing.T.Context`; `simulate`
+  and `model-diff` emit operational-error reports on interruption.
+
 - Admit current x/sys v0.49.0 across live module graphs and Orchestrion v1.15.0
   in the external weaving example on Go 1.27.3. Existing atomic-publication,
   source/replay export and native/woven checks retain their contracts. The sync

@@ -143,6 +143,9 @@ func (m *ModelCheck) Expect(t testing.TB, claims ...ModelClaim) {
 	if err := m.options.validate(); err != nil {
 		t.Fatalf("qtest.Model(%s): %v", m.binding, err)
 	}
+	if err := t.Context().Err(); err != nil {
+		t.Fatalf("qtest.Model(%s): %v", m.binding, err)
+	}
 	b, err := binding.Load(m.binding)
 	if err != nil {
 		t.Fatal(err)
@@ -153,7 +156,7 @@ func (m *ModelCheck) Expect(t testing.TB, claims ...ModelClaim) {
 			t.Fatalf("qtest.Model(%s): %s: %v", m.binding, c, err)
 		}
 	}
-	rep, err := model.Simulate(m.binding, model.SimulateOptions{
+	rep, err := model.Simulate(t.Context(), m.binding, model.SimulateOptions{
 		Invariants: n.invariants, Eventually: n.eventually, Possibles: n.possibles,
 		Graph: n.graph, Replay: n.graph, Constants: m.options.constants(),
 		States: m.options.States, Depth: m.options.Depth,

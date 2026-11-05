@@ -13,12 +13,12 @@ import (
 
 func graphOf(t *testing.T, path string, cfg GraphSearch) *GraphResult {
 	t.Helper()
-	c, err := newChecker(path, validate.Options{})
+	c, err := newChecker(t.Context(), path, validate.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { c.Close() })
-	r, err := c.Graph(cfg)
+	r, err := c.Graph(t.Context(), cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

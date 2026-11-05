@@ -6,6 +6,7 @@
 package evalshare
 
 import (
+	"context"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
@@ -24,8 +25,10 @@ type Eval struct {
 
 // EvaluatorOf is validate's evaluator of checker (a *validate.Checker)
 // for the evaluation module make writes, compiled once by its text and
-// the model's source. Set by validate's init. Process-wide.
-var EvaluatorOf func(checker any, make func(path string) (*binding.EvalModule, error)) *Eval
+// the model's source, with caller-owned cancellation during cache waits and
+// compilation. Returned models are context-free shared data. Set by validate's
+// init. Process-wide.
+var EvaluatorOf func(ctx context.Context, checker any, make func(path string) (*binding.EvalModule, error)) *Eval
 
 // ShortName is a model variable's name without its module's qualifier.
 func ShortName(v string) string { return v[strings.LastIndex(v, ":")+1:] }

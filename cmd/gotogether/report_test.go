@@ -74,7 +74,7 @@ func TestValidateJSON(t *testing.T) {
 func TestSimulateJSON(t *testing.T) {
 	skip.Quint(t) // not parallel: simulate prints to os.Stdout
 	code, got := capture(t, func() (int, error) {
-		return simulate([]string{"-json", "-graph", "-binding", "../../validate/testdata/vending.yaml"})
+		return simulate(t.Context(), []string{"-json", "-graph", "-binding", "../../validate/testdata/vending.yaml"})
 	})
 	var d validate.Document
 	if err := json.Unmarshal([]byte(got), &d); err != nil {

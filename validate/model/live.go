@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -90,12 +91,15 @@ type HotLasso struct {
 // liveness judges each eventual val over the graph of ce: the families
 // are the labels' branch actions (branch, "" for a transition no action
 // names, which is step's own), fair as unfair and stops say.
-func (c *modelChecker) liveness(ce *cexWriter, evs []string, branch []string, unfair, stops []string) ([]EventualVerdict, error) {
+func (c *modelChecker) liveness(ctx context.Context, ce *cexWriter, evs []string, branch []string, unfair, stops []string) ([]EventualVerdict, error) {
 	g, e := ce.g, ce.e
 	consts := map[string]qeval.Value{}
 	names := map[string]int{}
 	fam := qeval.Families{Of: make([]int, len(g.Labels))}
 	for i, a := range branch {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if a == "" {
 			a = "step"
 		}
@@ -123,6 +127,9 @@ func (c *modelChecker) liveness(ce *cexWriter, evs []string, branch []string, un
 	}
 	var out []EventualVerdict
 	for _, ev := range evs {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		v := EventualVerdict{Name: ev}
 		val, ok := e.Module.Eventually[ev]
 		if !ok {
@@ -130,6 +137,9 @@ func (c *modelChecker) liveness(ce *cexWriter, evs []string, branch []string, un
 		}
 		hot := make([]bool, len(g.States))
 		for id, s := range g.States {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			if !g.Expanded[id] {
 				continue // in no cycle: its edges are unknown
 			}
@@ -142,6 +152,9 @@ func (c *modelChecker) liveness(ce *cexWriter, evs []string, branch []string, un
 				continue
 			}
 			if err != nil {
+				if canceled := ctx.Err(); canceled != nil {
+					return nil, canceled
+				}
 				v.Error, v.Counterexample = err.Error(), ce.path(id, "")
 				break
 			}
@@ -158,7 +171,11 @@ func (c *modelChecker) liveness(ce *cexWriter, evs []string, branch []string, un
 			out = append(out, v)
 			continue
 		}
-		for _, comp := range g.HotComponents(hot, fam) {
+		components, err := g.HotComponents(ctx, hot, fam)
+		if err != nil {
+			return nil, err
+		}
+		for _, comp := range components {
 			if !comp.Fair() {
 				if len(comp.States) == 1 {
 					v.Stutters++
@@ -198,6 +215,9 @@ func (w *cexWriter) lasso(ev string, comp qeval.Component, famName []string, fam
 	replay := h.Prefix.Replay
 	at, prev := l.Entry, entry
 	for i, ed := range l.Cycle {
+		if w.ctx.Err() != nil {
+			break
+		}
 		t := qeval.Transition{Events: w.g.Labels[ed.Label], State: w.g.States[ed.To]}
 		if a := famName[fam.Of[ed.Label]]; ed.To != at && !slices.Contains(h.Takes, a) {
 			h.Takes = append(h.Takes, a)
@@ -212,6 +232,9 @@ func (w *cexWriter) lasso(ev string, comp qeval.Component, famName []string, fam
 	}
 	conds := []string{"not(" + ev + ")"}
 	for _, v := range w.e.Model.Vars {
+		if w.ctx.Err() != nil {
+			break
+		}
 		conds = append(conds, fmt.Sprintf("%s == %s", evalshare.ShortName(v), qeval.String(entry[v])))
 	}
 	h.Replay = replay + ".expect(and { " + strings.Join(conds, ", ") + " })"

@@ -63,7 +63,7 @@ func TestCacheAcrossProcesses(t *testing.T) {
 			t.Fatal(err)
 		}
 		make := func(path string) (*binding.EvalModule, error) { return c.Binding.EvalModule(c.Model, path) }
-		if e := compileEval(c, make, t.TempDir()); e.err != nil || e.m == nil {
+		if e := compileEval(t.Context(), c, make, t.TempDir()); e.err != nil || e.m == nil {
 			t.Fatalf("compile: %v", e.err)
 		}
 		return processes(t, log, "compile")

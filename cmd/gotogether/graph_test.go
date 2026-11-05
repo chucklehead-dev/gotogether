@@ -29,7 +29,7 @@ func TestSimulateGraph(t *testing.T) {
 		{[]string{"-binding", "../../validate/testdata/graph_ends.yaml"}, 0},
 		{[]string{"-binding", "../../validate/testdata/vending.yaml"}, 0},
 	} {
-		if code, err := simulate(append([]string{"-graph"}, c.args...)); code != c.want || err != nil {
+		if code, err := simulate(t.Context(), append([]string{"-graph"}, c.args...)); code != c.want || err != nil {
 			t.Errorf("%v: exit %d, %v; want %d", c.args, code, err, c.want)
 		}
 	}
@@ -52,7 +52,7 @@ func TestSimulateGraph(t *testing.T) {
 		t.Fatal(err)
 	}
 	code, got := capture(t, func() (int, error) {
-		return simulate([]string{"-graph", "-binding", "../../validate/testdata/graph_wrap.yaml", "-out", rel})
+		return simulate(t.Context(), []string{"-graph", "-binding", "../../validate/testdata/graph_wrap.yaml", "-out", rel})
 	})
 	if code != 0 {
 		t.Errorf("graph_wrap -out %s: exit %d; want 0", rel, code)
@@ -74,12 +74,12 @@ func TestSimulateGraph(t *testing.T) {
 		{[]string{"-binding", "../../validate/testdata/graph_partial.yaml"}, "  quiet   1 reachable state only a stutter leaves", ""},
 		{[]string{"-binding", "../../validate/testdata/graph_wrap.yaml"}, "  outside reset: the binding's, never called by step", ""},
 	} {
-		_, got := capture(t, func() (int, error) { return simulate(append([]string{"-graph"}, c.args...)) })
+		_, got := capture(t, func() (int, error) { return simulate(t.Context(), append([]string{"-graph"}, c.args...)) })
 		if !strings.Contains(got, c.want) || c.absent != "" && strings.Contains(got, c.absent) {
 			t.Errorf("%v: want %q (and no %q) in\n%s", c.args, c.want, c.absent, got)
 		}
 	}
-	if code, err := simulate([]string{"-graph", "-verify", "3", "-binding", "../../validate/testdata/graph.yaml"}); code != 2 || err == nil {
+	if code, err := simulate(t.Context(), []string{"-graph", "-verify", "3", "-binding", "../../validate/testdata/graph.yaml"}); code != 2 || err == nil {
 		t.Errorf("-graph -verify: exit %d, %v; want refused", code, err)
 	}
 	dir := t.TempDir()
@@ -88,7 +88,7 @@ func TestSimulateGraph(t *testing.T) {
 	if err := os.WriteFile(b, []byte("spec: "+spec+"\nmodule: grow\nactions: {step: {}}\ninvariants: [positive]\nsimulate: {holds: [positive]}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code, err := simulate([]string{"-graph", "-binding", b}); code != 2 || err != nil {
+	if code, err := simulate(t.Context(), []string{"-graph", "-binding", b}); code != 2 || err != nil {
 		t.Errorf("grow: exit %d, %v; want 2 (stopped, not complete)", code, err)
 	}
 }
@@ -128,7 +128,7 @@ func TestSimulateGraphEventually(t *testing.T) {
 		{[]string{"-binding", "../../validate/testdata/hot_storm.yaml", "-out", out}, 1, "    then this cycle, forever, drained false in each of its states (2 steps of a component of 2; taking retry, every weakly fair action enabled throughout it taken: retry):"},
 		{[]string{"-binding", "../../validate/testdata/hot_ends.yaml"}, 1, "    then nothing, forever: the step cannot leave that state (a deadlock, or an end simulate.terminal declares), and finished is false there"},
 	} {
-		code, got := capture(t, func() (int, error) { return simulate(append([]string{"-graph"}, c.args...)) })
+		code, got := capture(t, func() (int, error) { return simulate(t.Context(), append([]string{"-graph"}, c.args...)) })
 		if code != c.code || !strings.Contains(got, c.want) {
 			t.Errorf("%v: exit %d, want %d and %q in\n%s", c.args, code, c.code, c.want, got)
 		}
@@ -148,7 +148,7 @@ func TestSimulateGraphEventually(t *testing.T) {
 func TestSimulateGraphCheckedByQuint(t *testing.T) {
 	skip.Quint(t)
 	code, got := capture(t, func() (int, error) {
-		return simulate([]string{"-graph", "-binding", "../../validate/testdata/vending.yaml"})
+		return simulate(t.Context(), []string{"-graph", "-binding", "../../validate/testdata/vending.yaml"})
 	})
 	if code != 0 || !strings.Contains(got, "every state they reach is in the graph") {
 		t.Errorf("exit %d, want 0 and the sample's agreement in\n%s", code, got)
@@ -156,7 +156,7 @@ func TestSimulateGraphCheckedByQuint(t *testing.T) {
 	hooks.TamperEval.Store(8)
 	defer hooks.TamperEval.Store(0)
 	code, got = capture(t, func() (int, error) {
-		return simulate([]string{"-graph", "-binding", "../../validate/testdata/vending.yaml"})
+		return simulate(t.Context(), []string{"-graph", "-binding", "../../validate/testdata/vending.yaml"})
 	})
 	if code != 1 || !strings.Contains(got, "a state the Go evaluator's complete graph lacks") || strings.Contains(got, "  holds ") {
 		t.Errorf("tampered: exit %d, want 1, the evaluator bug named and no holds, in\n%s", code, got)

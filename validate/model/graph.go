@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"maps"
@@ -108,17 +109,35 @@ type GraphResult struct {
 // rest on the evaluator alone, and this is quint's check of them
 // (review 11, O1: a fold the evaluator folded in the wrong order made a
 // complete graph of states quint never visits, missing the one it does).
-func (r *GraphResult) Lacks(tr *itf.Trace) (int, string, error) {
+func (r *GraphResult) Lacks(ctx context.Context, tr *itf.Trace) (index int, state string, err error) {
+	defer func() {
+		if canceled := ctx.Err(); canceled != nil {
+			index, state, err = -1, "", canceled
+		}
+	}()
 	if r.graph == nil || r.e == nil {
 		return -1, "", fmt.Errorf("graph: no graph to compare with")
 	}
+	if err := ctx.Err(); err != nil {
+		return -1, "", err
+	}
 	if r.keys == nil {
-		r.keys = map[string]bool{}
+		keys := make(map[string]bool, len(r.graph.States))
 		for _, s := range r.graph.States {
-			r.keys[r.e.Model.Key(s)] = true
+			if err := ctx.Err(); err != nil {
+				return -1, "", err
+			}
+			keys[r.e.Model.Key(s)] = true
 		}
+		if err := ctx.Err(); err != nil {
+			return -1, "", err
+		}
+		r.keys = keys
 	}
 	for i, st := range tr.States {
+		if err := ctx.Err(); err != nil {
+			return -1, "", err
+		}
 		s := qeval.State{}
 		for _, v := range r.e.Model.Vars {
 			short := v[strings.LastIndex(v, ":")+1:]
@@ -206,13 +225,16 @@ type ActionCoverage struct {
 
 // countStepActions counts calls from the static step-action roster, rather than
 // adding actions only after observing them (which hides unreachable actions).
-func countStepActions(actions []ActionCoverage, g *qeval.Graph) {
+func countStepActions(ctx context.Context, actions []ActionCoverage, g *qeval.Graph) error {
 	byName := make(map[string]int, len(actions))
 	for i, action := range actions {
 		byName[action.Action] = i
 	}
 	labels := make([][]int, len(g.Labels))
 	for label, events := range g.Labels {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		for _, event := range events {
 			if i, ok := byName[event.Action]; ok && !slices.Contains(labels[label], i) {
 				labels[label] = append(labels[label], i)
@@ -221,6 +243,9 @@ func countStepActions(actions []ActionCoverage, g *qeval.Graph) {
 	}
 	seen := make([]bool, len(actions))
 	for _, edges := range g.Out {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		clear(seen)
 		for _, edge := range edges {
 			for _, i := range labels[edge.Label] {
@@ -232,6 +257,7 @@ func countStepActions(actions []ActionCoverage, g *qeval.Graph) {
 			}
 		}
 	}
+	return ctx.Err()
 }
 
 // StepActionReachability is the graph's evidence that every statically named,
@@ -317,7 +343,15 @@ func (r *GraphResult) Extent() string {
 // quint refuses. A construct the evaluator does not take, met during the
 // search, is no error: the result is cut "unsupported", naming it, and
 // never complete.
-func (c *modelChecker) Graph(cfg GraphSearch) (*GraphResult, error) {
+func (c *modelChecker) Graph(ctx context.Context, cfg GraphSearch) (result *GraphResult, err error) {
+	defer func() {
+		if canceled := ctx.Err(); canceled != nil {
+			result, err = nil, canceled
+		}
+	}()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	sim := c.Binding.Simulate
 	if sim == nil {
 		sim = &binding.Simulation{}
@@ -346,7 +380,8 @@ func (c *modelChecker) Graph(cfg GraphSearch) (*GraphResult, error) {
 		preds = append(preds, terminal)
 	}
 	cc := c.simulationInstance(cfg.Constants)
-	e := evalshare.EvaluatorOf(cc.Checker, func(path string) (*binding.EvalModule, error) { return cc.Binding.PossibleModule(c.Model, path, preds) })
+	original := evalshare.EvaluatorOf(ctx, cc.Checker, func(path string) (*binding.EvalModule, error) { return cc.Binding.PossibleModule(c.Model, path, preds) })
+	e := analysisEvaluator(ctx, original)
 	if e.Err != nil {
 		return nil, fmt.Errorf("graph: the Go evaluator has no evaluation module for %s: %w", c.Binding.SpecPath(), e.Err)
 	}
@@ -372,7 +407,7 @@ func (c *modelChecker) Graph(cfg GraphSearch) (*GraphResult, error) {
 	}
 	g, err := e.Model.Explore(consts, e.Module.Init, step, bound, label)
 	r := &GraphResult{States: len(g.States), Starts: g.Starts, Transitions: g.Edges(), Complete: g.Complete, Cut: g.Cut,
-		Bound: GraphBound{bound.States, bound.Depth}, graph: g, e: e, checker: cc, sourceChecker: c}
+		Bound: GraphBound{bound.States, bound.Depth}, graph: g, e: original, checker: cc, sourceChecker: c}
 	if err != nil {
 		var u *qeval.Unsupported
 		var ee *qeval.EvalError
@@ -389,15 +424,24 @@ func (c *modelChecker) Graph(cfg GraphSearch) (*GraphResult, error) {
 		}
 	}
 	for _, d := range g.Depth {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		r.Depth = max(r.Depth, d)
 	}
-	ce := &cexWriter{c: c, e: e, g: g, step: step}
+	ce := &cexWriter{ctx: ctx, c: c, e: e, g: g, step: step}
 	// each invariant in every state, in id order: the first violated is a
 	// nearest one, its path from the parent tree a shortest
 	for _, inv := range invs {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		v := InvariantVerdict{Name: inv}
 		val := e.Module.Possible[inv]
 		for id, s := range g.States {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			x, err := e.Model.Eval(consts, s, val)
 			var u *qeval.Unsupported
 			if errors.As(err, &u) {
@@ -409,6 +453,9 @@ func (c *modelChecker) Graph(cfg GraphSearch) (*GraphResult, error) {
 				continue
 			}
 			if err != nil {
+				if canceled := ctx.Err(); canceled != nil {
+					return nil, canceled
+				}
 				v.Error, v.Counterexample = err.Error(), ce.path(id, "")
 				break
 			}
@@ -426,6 +473,9 @@ func (c *modelChecker) Graph(cfg GraphSearch) (*GraphResult, error) {
 	}
 	// deadlocks, the terminal states set apart
 	for _, id := range g.Deadlocks() {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if terminal != "" {
 			x, err := e.Model.Eval(consts, g.States[id], e.Module.Possible[terminal])
 			if err != nil {
@@ -447,6 +497,9 @@ func (c *modelChecker) Graph(cfg GraphSearch) (*GraphResult, error) {
 	// where a step can always stutter (a read, a grist query) there is
 	// never one, so they say where such a model stops
 	for i, out := range g.Out {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if g.Expanded[i] && len(out) > 0 && !slices.ContainsFunc(out, func(ed qeval.Edge) bool { return ed.To != i }) {
 			r.Quiescent++
 		}
@@ -456,6 +509,9 @@ func (c *modelChecker) Graph(cfg GraphSearch) (*GraphResult, error) {
 	// several calls in one composite branch. A repeated call counts once.
 	branch := make([]string, len(g.Labels))
 	for i, l := range g.Labels {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if a, ok := evalshare.BranchEvent(c.Model, qeval.Transition{Events: l}); ok {
 			branch[i] = a.Action
 		}
@@ -466,7 +522,9 @@ func (c *modelChecker) Graph(cfg GraphSearch) (*GraphResult, error) {
 			r.Actions = append(r.Actions, ActionCoverage{Action: a})
 		}
 	}
-	countStepActions(r.Actions, g)
+	if err := countStepActions(ctx, r.Actions, g); err != nil {
+		return nil, err
+	}
 	// the eventual vals as cycles, every action weakly fair but those
 	// named: a name the step never calls is an error, as a misspelled
 	// one would leave an action fair
@@ -494,7 +552,7 @@ func (c *modelChecker) Graph(cfg GraphSearch) (*GraphResult, error) {
 				}
 			}
 		}
-		if r.Eventually, err = c.liveness(ce, evs, branch, unfair, stops); err != nil {
+		if r.Eventually, err = c.liveness(ctx, ce, evs, branch, unfair, stops); err != nil {
 			return nil, err
 		}
 	}
@@ -551,6 +609,7 @@ func stateText(e *evalshare.Eval, s qeval.State) string {
 
 // cexWriter writes a graph's paths as counterexamples.
 type cexWriter struct {
+	ctx  context.Context
 	c    *modelChecker
 	e    *evalshare.Eval
 	g    *qeval.Graph
@@ -590,6 +649,9 @@ func (w *cexWriter) replayStep(prev qeval.State, t qeval.Transition, k int) (cal
 func (w *cexWriter) named(s qeval.State) []validate.NamedValue {
 	var out []validate.NamedValue
 	for _, v := range w.e.Model.Vars {
+		if w.ctx.Err() != nil {
+			break
+		}
 		out = append(out, validate.NamedValue{Name: evalshare.ShortName(v), Value: qeval.String(s[v])})
 	}
 	return out
@@ -605,6 +667,9 @@ func (w *cexWriter) path(id int, end string) *Counterexample {
 		// init has several states: the replay starts in this one's values
 		var parts []string
 		for _, v := range w.e.Model.Vars {
+			if w.ctx.Err() != nil {
+				break
+			}
 			parts = append(parts, fmt.Sprintf("%s' = %s", evalshare.ShortName(v), qeval.String(start[v])))
 		}
 		run = "all { " + strings.Join(parts, ", ") + " }"
@@ -622,6 +687,9 @@ func (w *cexWriter) path(id int, end string) *Counterexample {
 // from first) whose call quint may draw otherwise (Sampled).
 func (w *cexWriter) steps(prev qeval.State, ts []qeval.Transition, first int) (out []GraphStep, calls string, sampled []int) {
 	for i, t := range ts {
+		if w.ctx.Err() != nil {
+			break
+		}
 		st := GraphStep{Call: "step", State: w.named(t.State)}
 		k := branchIndex(w.c.Model, t)
 		if k >= 0 {

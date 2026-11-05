@@ -98,6 +98,6 @@ func (m *Model) commutesStatic(f *Expr) bool {
 	if f.Kind != "lambda" || len(f.Params) != 2 || f.Expr == nil {
 		return false
 	}
-	ev := m.evaluation(nil, nil)
+	ev := m.detached().evaluation(nil, nil)
 	return ev.commutes(&Lambda{params: paramNames(f), body: f.Expr})
 }

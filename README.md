@@ -692,6 +692,16 @@ copies its constants; positive bounds override the binding, while zero inherits
 its search bound or the engine default. A state-truncated graph remains no verdict,
 and a depth-only proof still states its bound.
 
+Direct `validate/model` analyses take the caller's context:
+`model.New(ctx, binding, opts)`, `model.Simulate(ctx, binding, opts)` and
+`analyzer.Graph(ctx, search)`, `Possible(ctx, goals, search)` or
+`Simulate(ctx, opts)`. Reuse the analyzer with a fresh context for each request.
+`qtest.Model(...).Expect(t, ...)` uses `t.Context()` automatically. Cancellation
+stops managed compiler/sampling/replay processes, cache waits and cooperative
+CPU analysis; it returns an error detectable with `errors.Is`, without a model
+verdict. `simulate` and `model-diff` handle interrupts as operational errors
+(exit 2 and the existing JSON error document).
+
 To check that every named action called directly by the model's `step` can occur,
 add `qtest.AllStepActionsReachable()` to the same `Model(...).Expect(...)`.
 An action witnessed in the explored graph is reachable even when a bound stops

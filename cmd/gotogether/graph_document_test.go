@@ -21,7 +21,7 @@ func TestSimulateNativeGraphDocument(t *testing.T) {
 	}{{"complete", nil, true, ""}, {"state cap", []string{"-states", "1"}, false, "states"}, {"depth cap", []string{"-depth", "1"}, false, "depth"}} {
 		t.Run(tc.name, func(t *testing.T) {
 			args := append([]string{"-json", "-graph", "-binding", "../../validate/testdata/vending.yaml", "-samples", "1"}, tc.args...)
-			code, out := capture(t, func() (int, error) { return simulate(args) })
+			code, out := capture(t, func() (int, error) { return simulate(t.Context(), args) })
 			var doc validate.Document
 			if err := json.Unmarshal([]byte(out), &doc); err != nil {
 				t.Fatalf("status%d: %v\n%s", code, err, out)
@@ -62,7 +62,7 @@ func TestSimulateNativeGraphDocument(t *testing.T) {
 func TestSimulateErrorsAndSamplingHaveNoInventedGraph(t *testing.T) {
 	skip.Quint(t)
 	for _, args := range [][]string{{"-json", "-binding", "../../validate/testdata/vending.yaml", "-samples", "1", "-steps", "2"}, {"-json", "-graph", "-binding", filepath.Join(t.TempDir(), "missing.yaml")}} {
-		_, out := capture(t, func() (int, error) { code, _ := simulate(args); return code, nil })
+		_, out := capture(t, func() (int, error) { code, _ := simulate(t.Context(), args); return code, nil })
 		var d validate.Document
 		if err := json.Unmarshal([]byte(out), &d); err != nil {
 			t.Fatal(err)
@@ -84,7 +84,7 @@ func TestSimulateUnsupportedScopeAndNativeNoVerdictStatus(t *testing.T) {
 	if err = os.WriteFile(b, []byte("spec: "+spec+"\nmodule: grow\nactions: {step: {}}\ninvariants: [positive]\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	code, out := capture(t, func() (int, error) { return simulate([]string{"-json", "-graph", "-binding", b}) })
+	code, out := capture(t, func() (int, error) { return simulate(t.Context(), []string{"-json", "-graph", "-binding", b}) })
 	var d validate.Document
 	if err = json.Unmarshal([]byte(out), &d); err != nil {
 		t.Fatal(err)

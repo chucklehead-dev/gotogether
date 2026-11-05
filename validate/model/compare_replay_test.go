@@ -176,7 +176,7 @@ func TestComparisonReplayChecksOriginalActionsAndHiddenState(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { c.Close() })
-	g, err := For(c).Graph(GraphSearch{})
+	g, err := For(c).Graph(t.Context(), GraphSearch{})
 	if err != nil {
 		t.Fatal(err)
 	}

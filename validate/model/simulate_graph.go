@@ -24,7 +24,10 @@ import (
 // for a verdict that fails, 2 for a graph the evaluator could not finish
 // or an invariant it could not evaluate, with nothing failing: it never
 // says complete then.
-func (s *sim) graph(bpath string, b *binding.Binding, checker *modelChecker, possibles []*possibleCheck, overrides, invariants, eventually []string, opt SimulateOptions) error {
+func (s *sim) graph(ctx context.Context, bpath string, b *binding.Binding, checker *modelChecker, possibles []*possibleCheck, overrides, invariants, eventually []string, opt SimulateOptions) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	sec := b.Simulate
 	if sec == nil {
 		sec = &binding.Simulation{}
@@ -43,7 +46,7 @@ func (s *sim) graph(bpath string, b *binding.Binding, checker *modelChecker, pos
 	if evs == nil {
 		evs = []string{}
 	}
-	r, err := checker.Graph(GraphSearch{Constants: overrides, Invariants: invariants, Eventually: evs, States: opt.States, Depth: opt.Depth, Unfair: opt.Unfair, Stops: opt.Stops})
+	r, err := checker.Graph(ctx, GraphSearch{Constants: overrides, Invariants: invariants, Eventually: evs, States: opt.States, Depth: opt.Depth, Unfair: opt.Unfair, Stops: opt.Stops})
 	if err != nil {
 		return fmt.Errorf("simulate -graph: %w", err)
 	}
@@ -53,7 +56,7 @@ func (s *sim) graph(bpath string, b *binding.Binding, checker *modelChecker, pos
 	var sampledLine string
 	evalBug := false
 	if r.Complete {
-		n, lack, err := crossCheck(b, overrides, opt.Quint, r, steps, samples, opt.Seed)
+		n, lack, err := crossCheck(ctx, b, overrides, opt.Quint, r, steps, samples, opt.Seed)
 		switch {
 		case err != nil:
 			return err
@@ -162,6 +165,9 @@ func (s *sim) graph(bpath string, b *binding.Binding, checker *modelChecker, pos
 	// Wrapper and nested calls observed in actual transitions are not extra
 	// reachability obligations, but neither are they outside step.
 	for _, events := range r.graph.Labels {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		for _, event := range events {
 			if event.Action != "" {
 				inStep[event.Action] = true
@@ -197,7 +203,13 @@ func (s *sim) graph(bpath string, b *binding.Binding, checker *modelChecker, pos
 		for i, c := range possibles {
 			ps[i] = c.p
 		}
-		rs, evalErr := checker.Possible(ps, PossibleSearch{Constants: overrides, States: r.Bound.States, Depth: r.Bound.Depth})
+		rs, evalErr := checker.Possible(ctx, ps, PossibleSearch{Constants: overrides, States: r.Bound.States, Depth: r.Bound.Depth})
+		if isAnalysisCancellation(evalErr) {
+			return evalErr
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		var left []*possibleCheck
 		for i, c := range possibles {
 			if evalErr == nil && rs[i].Found {
@@ -225,7 +237,7 @@ func (s *sim) graph(bpath string, b *binding.Binding, checker *modelChecker, pos
 			if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
 				return err
 			}
-			if err := quintPossibles(opt.Quint, dir, file, left, steps, samples, opt.Seed, 0, nil); err != nil {
+			if err := quintPossibles(ctx, opt.Quint, dir, file, left, steps, samples, opt.Seed, 0, nil); err != nil {
 				return err
 			}
 		}
@@ -235,6 +247,9 @@ func (s *sim) graph(bpath string, b *binding.Binding, checker *modelChecker, pos
 		}
 		code = max(code, pc)
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if runs := replayRuns(r); out != "" && len(runs) > 0 {
 		if err := writeReplays(b, overrides, out, runs); err != nil {
 			return err
@@ -242,7 +257,7 @@ func (s *sim) graph(bpath string, b *binding.Binding, checker *modelChecker, pos
 		s.printf("  wrote   %s: quint test --main simulate --match 'gtg_' %s replays each counterexample\n", out, given)
 	}
 	if opt.Replay {
-		if err := s.replay(b, overrides, opt.Quint); err != nil {
+		if err := s.replay(ctx, b, overrides, opt.Quint); err != nil {
 			return err
 		}
 	}
@@ -280,7 +295,10 @@ func graphBound(r *GraphResult) Bound {
 // test, one run at a time, setting each verdict's Replayed. A path whose
 // steps have other successors is not replayed: quint's draw among them
 // would not reproduce it.
-func (s *sim) replay(b *binding.Binding, overrides []string, quint string) error {
+func (s *sim) replay(ctx context.Context, b *binding.Binding, overrides []string, quint string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	type one struct {
 		v      *Verdict
 		name   string
@@ -312,17 +330,29 @@ func (s *sim) replay(b *binding.Binding, overrides []string, quint string) error
 	file := filepath.Join(dir, "replay.qnt")
 	var runs []string
 	for _, x := range todo {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		runs = append(runs, fmt.Sprintf("  run %s = %s", x.name, x.replay))
 	}
 	if err := writeReplays(b, overrides, file, runs); err != nil {
 		return err
 	}
 	for _, x := range todo {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if len(x.drawn) > 0 {
 			x.v.Replayed = fmt.Sprintf("not replayed: steps %v have other successors, which quint's replay may draw instead", x.drawn)
 			continue
 		}
-		out, err := runQuint(quint, dir, []string{"test", "--main", "simulate", "--match", "^" + x.name + "$", "--max-samples", "1", file})
+		out, err := runQuint(ctx, quint, dir, []string{"test", "--main", "simulate", "--match", "^" + x.name + "$", "--max-samples", "1", file})
+		if isAnalysisCancellation(err) {
+			return err
+		}
+		if canceled := ctx.Err(); canceled != nil {
+			return canceled
+		}
 		switch {
 		case err == nil:
 			x.v.Replayed = "replayed"
@@ -455,7 +485,10 @@ const crossChecked = 50
 // lacks: how many traces it read, and the first such state, with where
 // it was, or "". The one quint process of a -graph run without possibles
 // (review 11, O1).
-func crossCheck(b *binding.Binding, overrides []string, quint string, r *GraphResult, steps, samples int, seed string) (int, string, error) {
+func crossCheck(ctx context.Context, b *binding.Binding, overrides []string, quint string, r *GraphResult, steps, samples int, seed string) (int, string, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, "", err
+	}
 	n := min(max(samples, 1), crossChecked)
 	dir, err := os.MkdirTemp("", "gotogether-graph-*")
 	if err != nil {
@@ -475,7 +508,13 @@ func crossCheck(b *binding.Binding, overrides []string, quint string, r *GraphRe
 	if seed != "" {
 		argv = append(argv, "--seed", seed)
 	}
-	out, qerr := runQuint(quint, dir, append(argv, file))
+	out, qerr := runQuint(ctx, quint, dir, append(argv, file))
+	if isAnalysisCancellation(qerr) {
+		return 0, "", qerr
+	}
+	if err := ctx.Err(); err != nil {
+		return 0, "", err
+	}
 	files, _ := filepath.Glob(filepath.Join(dir, "t_*.itf.json"))
 	if len(files) == 0 {
 		return 0, "", fmt.Errorf("simulate -graph: quint's sampling of the instance wrote no trace to check the graph against: %v\n%s", qerr, out)
@@ -484,11 +523,11 @@ func crossCheck(b *binding.Binding, overrides []string, quint string, r *GraphRe
 	// by the module's types where quint's Rust backend's integers need them
 	traces := &binding.TraceReader{Quint: quint, Spec: file, Module: "simulate"}
 	for _, f := range files {
-		tr, err := traces.Read(context.Background(), f)
+		tr, err := traces.Read(ctx, f)
 		if err != nil {
 			return 0, "", fmt.Errorf("simulate -graph: %s: %w", f, err)
 		}
-		i, st, err := r.Lacks(tr)
+		i, st, err := r.Lacks(ctx, tr)
 		if err != nil {
 			return 0, "", fmt.Errorf("simulate -graph: %w", err)
 		}

@@ -109,7 +109,7 @@ func TestReportNativeSimulationDeliveryFailure(t *testing.T) {
 	junit := filepath.Join(dir, "result.xml")
 	sarif := filepath.Join(dir, "result.sarif")
 	code, out := capture(t, func() (int, error) {
-		code, err := simulate([]string{"-json", "-graph", "-binding", "../../validate/testdata/vending.yaml", "-report", "json=" + good, "-report", "junit=" + junit, "-report", "sarif=" + sarif, "-report", "json=" + dir})
+		code, err := simulate(t.Context(), []string{"-json", "-graph", "-binding", "../../validate/testdata/vending.yaml", "-report", "json=" + good, "-report", "junit=" + junit, "-report", "sarif=" + sarif, "-report", "json=" + dir})
 		if err == nil {
 			t.Error("missing report delivery error")
 		}

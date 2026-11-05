@@ -2,6 +2,7 @@ package qeval
 
 import (
 	"container/heap"
+	"context"
 	"errors"
 	"slices"
 )
@@ -70,11 +71,22 @@ func (s *search) pathTo(i int) []Transition {
 // run searches from starts until a hook stops it, its frontier is empty,
 // or the state bound cuts it. An error is the evaluator's (Unsupported,
 // EvalError) or a hook's: the nodes found before it stay.
-func (s *search) run(starts []State) error {
+func (s *search) run(starts []State) (err error) {
+	defer func() {
+		if canceled := s.m.contextErr(); canceled != nil {
+			err, s.complete, s.cut = canceled, false, "canceled"
+		}
+	}()
 	defer raiseGC()()
+	if err := s.m.contextErr(); err != nil {
+		return err
+	}
 	s.seen, s.complete = map[seenKey]int{}, true
 	q := &frontier{nodes: &s.nodes}
 	for _, st := range starts {
+		if err := s.m.contextErr(); err != nil {
+			return err
+		}
 		k := s.m.Key(st)
 		if _, ok := s.seen[seenKey{k, 0}]; ok {
 			continue
@@ -93,6 +105,9 @@ func (s *search) run(starts []State) error {
 		heap.Push(q, len(s.nodes)-1)
 	}
 	for q.Len() > 0 {
+		if err := s.m.contextErr(); err != nil {
+			return err
+		}
 		i := heap.Pop(q).(int)
 		nd := s.nodes[i]
 		if s.b.Depth > 0 && nd.depth >= s.b.Depth {
@@ -108,6 +123,9 @@ func (s *search) run(starts []State) error {
 		}
 		s.depth = max(s.depth, nd.depth+1)
 		for _, t := range ts {
+			if err := s.m.contextErr(); err != nil {
+				return err
+			}
 			p := nd.progress
 			if p < len(s.steps) && s.steps[p](t) {
 				p++
@@ -146,7 +164,7 @@ func (s *search) run(starts []State) error {
 			heap.Push(q, j)
 		}
 	}
-	return nil
+	return s.m.contextErr()
 }
 
 // frontier orders a search's open nodes: the most steps taken first,
@@ -228,11 +246,16 @@ type Edge struct {
 // A label that drops events (a step's choices no branch uses: bank's
 // step picks a source and destination for a deposit too) merges the
 // edges that differ only in them. An error is the evaluator's (an *Unsupported construct, an
-// *EvalError) or init's: the graph found before it is returned with it,
+// *EvalError), request cancellation, or init's: the graph found before it is returned with it,
 // not Complete, cut "unsupported" for an Unsupported one, and holds only
 // real states and edges (a path in it is a trace of the model).
-func (m *Model) Explore(consts map[string]Value, init, step string, b Bound, label func([]Event) []Event) (*Graph, error) {
-	g := &Graph{ids: map[string]int{}, labels: map[string]int{}, m: m}
+func (m *Model) Explore(consts map[string]Value, init, step string, b Bound, label func([]Event) []Event) (g *Graph, err error) {
+	g = &Graph{ids: map[string]int{}, labels: map[string]int{}, m: m.detached()}
+	defer func() {
+		if canceled := m.contextErr(); canceled != nil {
+			g.Complete, g.Cut, err = false, "canceled", canceled
+		}
+	}()
 	if init == "" {
 		init = "init"
 	}
@@ -287,14 +310,23 @@ func (m *Model) Explore(consts map[string]Value, init, step string, b Bound, lab
 	// the starts are the first nodes: those distinct, within the bound
 	g.Starts = 0
 	for g.Starts < len(g.Parent) && g.Parent[g.Starts] < 0 {
+		if g.Starts&255 == 0 {
+			if canceled := m.contextErr(); canceled != nil {
+				err = canceled
+				break
+			}
+		}
 		g.Starts++
 	}
 	return g, err
 }
 
-// cutOf is the Cut an error leaves: "unsupported" for the evaluator's
-// refusal, "error" for any other.
+// cutOf is the Cut an error leaves: "canceled" for request cancellation,
+// "unsupported" for the evaluator's refusal, and "error" for other errors.
 func cutOf(err error) string {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return "canceled"
+	}
 	var u *Unsupported
 	if errors.As(err, &u) {
 		return "unsupported"

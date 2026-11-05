@@ -21,6 +21,7 @@ var pinIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(::[A-Za-z_][A-Za
 // Equivalent choices reaching to may produce a different legal specialization
 // than a Transitions label; callers must not describe it using those Picks.
 func (m *Model) PinAction(consts map[string]Value, from State, action string, args []Value, to State, vars map[string]string) (text string, err error) {
+	defer m.finishContext(&err)
 	defer recoverInto(&err)
 	ordinary := *m
 	ordinary.replaying = false

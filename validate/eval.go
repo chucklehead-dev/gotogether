@@ -46,8 +46,8 @@ type evaluator struct {
 
 // validate/model reaches the evaluator through evalshare
 func init() {
-	evalshare.EvaluatorOf = func(checker any, make func(path string) (*binding.EvalModule, error)) *evalshare.Eval {
-		e := evaluatorOf(checker.(*Checker), make)
+	evalshare.EvaluatorOf = func(ctx context.Context, checker any, make func(path string) (*binding.EvalModule, error)) *evalshare.Eval {
+		e := evaluatorOf(ctx, checker.(*Checker), make)
 		return &evalshare.Eval{Module: e.em, Model: e.m, Err: e.err, Literal: e.literal}
 	}
 }
@@ -95,17 +95,27 @@ func stepsString(o []qtrace.Step) string {
 	return strings.Join(parts, "; ")
 }
 
-// evaluatorFor is c's binding's evaluator, compiled the first time.
+// evaluatorFor is c's binding's evaluator for context-free validation and
+// metadata callers. Model analyses use evaluatorOf with their request context.
 func evaluatorFor(c *Checker) *evaluator {
 	if c.compiled != nil {
 		return c.compiled.ev // the artifact's: no quint to compile one
 	}
-	return evaluatorOf(c, func(path string) (*binding.EvalModule, error) { return c.Binding.EvalModule(c.Model, path) })
+	return evaluatorOf(context.Background(), c, func(path string) (*binding.EvalModule, error) { return c.Binding.EvalModule(c.Model, path) })
 }
 
 // evaluatorOf is the evaluator of the module make writes for a path
-// (binding.EvalModule, or PossibleModule), compiled the first time.
-func evaluatorOf(c *Checker, make func(path string) (*binding.EvalModule, error)) *evaluator {
+// (binding.EvalModule, or PossibleModule), compiled the first time. Waiters can
+// cancel independently; a live caller retries after a canceled compiler owner.
+func evaluatorOf(ctx context.Context, c *Checker, make func(path string) (*binding.EvalModule, error)) (result *evaluator) {
+	if err := ctx.Err(); err != nil {
+		return &evaluator{err: err}
+	}
+	defer func() {
+		if err := ctx.Err(); err != nil {
+			result = &evaluator{err: err}
+		}
+	}()
 	if c.compiled != nil {
 		return &evaluator{err: ErrNeedsQuint} // another module than the artifact's: quint would compile it
 	}
@@ -125,20 +135,34 @@ func evaluatorOf(c *Checker, make func(path string) (*binding.EvalModule, error)
 	}
 
 	key := hex.EncodeToString(h.Sum(nil))[:16]
-	e, _ := evaluators.Do(key, func() (*evaluator, error) {
-		e := compileEval(c, make, filepath.Join(dir, key))
+	e, err := evaluators.DoContext(ctx, key, func() (*evaluator, error) {
+		e := compileEval(ctx, c, make, filepath.Join(dir, key))
 		if err := checkSourceFiles(files, c.Binding.SpecPath()); err != nil {
+			return &evaluator{err: err}, err
+		}
+		if err := ctx.Err(); err != nil {
 			return &evaluator{err: err}, err
 		}
 		return e, e.err
 	})
+	if err != nil {
+		return &evaluator{err: err}
+	}
 	return e
 }
 
 // compileEval writes the module make writes in dir and compiles it with
 // quint: its stdout to a file, since --out writes the modules
 // unflattened, and a pipe loses what quint has not flushed when it exits.
-func compileEval(c *Checker, make func(path string) (*binding.EvalModule, error), dir string) (result *evaluator) {
+func compileEval(ctx context.Context, c *Checker, make func(path string) (*binding.EvalModule, error), dir string) (result *evaluator) {
+	if err := ctx.Err(); err != nil {
+		return &evaluator{err: err}
+	}
+	defer func() {
+		if err := ctx.Err(); err != nil {
+			result = &evaluator{err: err}
+		}
+	}()
 	files, ok := specFilesAll(c.Binding.SpecPath())
 	if !ok {
 		return &evaluator{err: fmt.Errorf("cannot capture model sources %s", c.Binding.SpecPath())}
@@ -156,15 +180,21 @@ func compileEval(c *Checker, make func(path string) (*binding.EvalModule, error)
 	}
 	// quint's IR of the module, kept across processes by its content and
 	// the model's (cache.go)
-	key, cached := cacheKey(context.Background(), c.Options.Quint, "compile", c.Binding.SpecPath(), "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, em.Text)
+	key, cached := cacheKey(ctx, c.Options.Quint, "compile", c.Binding.SpecPath(), "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, em.Text)
+	if err := ctx.Err(); err != nil {
+		return &evaluator{err: err}
+	}
 	if cached {
 		if data, ok := cacheGet("compile", key); ok {
 			if m, err := qeval.Load(data); err == nil {
 				return &evaluator{em: em, m: m}
 			}
 		}
-		unlock, data, ok := cacheLock(context.Background(), "compile", key)
+		unlock, data, ok := cacheLock(ctx, "compile", key)
 		defer unlock()
+		if err := ctx.Err(); err != nil {
+			return &evaluator{err: err}
+		}
 		if ok {
 			if m, err := qeval.Load(data); err == nil {
 				return &evaluator{em: em, m: m} // another process's, compiled meanwhile
@@ -201,7 +231,7 @@ func compileEval(c *Checker, make func(path string) (*binding.EvalModule, error)
 	if quint == "" {
 		quint = "quint"
 	}
-	cmd := quintcmd.Command(context.Background(), quint, dir, "compile", "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, qnt)
+	cmd := quintcmd.Command(ctx, quint, dir, "compile", "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, qnt)
 	var stderr strings.Builder
 	cmd.Stdout, cmd.Stderr = f, &stderr
 	err = cmd.Run()
@@ -217,8 +247,14 @@ func compileEval(c *Checker, make func(path string) (*binding.EvalModule, error)
 	if err != nil {
 		return &evaluator{err: err}
 	}
+	if err := ctx.Err(); err != nil {
+		return &evaluator{err: err}
+	}
 	if cached {
-		if current, valid := cacheKey(context.Background(), c.Options.Quint, "compile", c.Binding.SpecPath(), "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, em.Text); valid && current == key {
+		if current, valid := cacheKey(ctx, c.Options.Quint, "compile", c.Binding.SpecPath(), "--target", "json", "--main", em.Name, "--init", em.Init, "--step", em.Init, em.Text); valid && current == key {
+			if err := ctx.Err(); err != nil {
+				return &evaluator{err: err}
+			}
 			cachePut("compile", key, data)
 		} else {
 			return &evaluator{err: fmt.Errorf("model source %s changed during compile: validate anew", c.Binding.SpecPath())}

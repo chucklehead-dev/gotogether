@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"slices"
@@ -136,7 +137,15 @@ func (r PossibleResult) Verdict() string {
 // no search: the model outside the evaluator's fragment, no step action,
 // a constant computed from a run's steps with no value given, a possible
 // that names no action or parameter of the model.
-func (c *modelChecker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]PossibleResult, error) {
+func (c *modelChecker) Possible(ctx context.Context, ps []binding.Possible, cfg PossibleSearch) (results []PossibleResult, err error) {
+	defer func() {
+		if canceled := ctx.Err(); canceled != nil {
+			results, err = nil, canceled
+		}
+	}()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	cc := c.simulationInstance(cfg.Constants)
 	b := cc.Binding
 	type goal struct {
@@ -146,6 +155,9 @@ func (c *modelChecker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]Po
 	goals := make([]goal, len(ps))
 	var preds []string
 	for i, p := range ps {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		when, steps, err := p.Resolve(c.Model)
 		if err != nil {
 			return nil, err
@@ -155,7 +167,8 @@ func (c *modelChecker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]Po
 			preds = append(preds, when)
 		}
 	}
-	e := evalshare.EvaluatorOf(cc.Checker, func(path string) (*binding.EvalModule, error) { return b.PossibleModule(c.Model, path, preds) })
+	original := evalshare.EvaluatorOf(ctx, cc.Checker, func(path string) (*binding.EvalModule, error) { return b.PossibleModule(c.Model, path, preds) })
+	e := analysisEvaluator(ctx, original)
 	if e.Err != nil {
 		return nil, fmt.Errorf("possible: the Go evaluator has no evaluation module for %s: %w", b.SpecPath(), e.Err)
 	}
@@ -204,6 +217,9 @@ func (c *modelChecker) Possible(ps []binding.Possible, cfg PossibleSearch) ([]Po
 	}
 	out := make([]PossibleResult, len(ps))
 	for i, r := range rs {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		pr := PossibleResult{Possible: ps[i], Goal: possibleGoal(goals[i].when, goals[i].steps), Found: r.Found, Complete: r.Complete, Cut: r.Cut, Nodes: r.Nodes, Depth: r.Depth}
 		for _, t := range r.Path {
 			a, ok := evalshare.BranchEvent(c.Model, t)
