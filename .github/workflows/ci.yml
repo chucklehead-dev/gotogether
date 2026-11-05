@@ -51,6 +51,11 @@ jobs:
         with:
           go-version: 1.27.3
           cache-dependency-path: go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install quint
+        run: ci/install-quint.sh
       - name: host cancellation, recording and deterministic cache checks
         run: go test -count=1 -timeout 10m ./internal/memo ./internal/quintcmd ./qobs
       - name: native simulation runtime contracts
