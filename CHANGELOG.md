@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- `qtest.Model(...).WithOptions(qtest.ModelOptions{...})` selects copied
+  test-local constant expressions and search bounds without rewriting bindings.
+  Zero bounds inherit; positive bounds override. Claims retain proof scope and
+  native witness replay. Counters now uses this instead of copying model files.
+
 - Library's persisted upcaster-fix rehearsal now checks buggy/unchanged/fixed
   release processes on SQLite, correct snapshot invalidation and reuse, and
   unchanged stored events. It exercises existing contracts without a runtime

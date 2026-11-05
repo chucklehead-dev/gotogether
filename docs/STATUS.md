@@ -7,7 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Library upcaster-fix snapshots (current branch): I1's persisted-history example
+Test-local model checks (current branch): `ModelCheck.WithOptions(ModelOptions)`
+sets copied constant expressions and search bounds without editing the binding.
+The existing engine preserves proof scope and native witness replay. Malformed
+option framing and negative bounds fail before binding loading; unknown constants
+and expression errors remain operational failures. Counters now proves its two
+invariants within three steps directly against its unchanged generated binding.
+Sibling checks and caller maps remain independent. See README and DESIGN §99.
+
+Library upcaster-fix snapshots (merged PR #66, 79030b91): I1's persisted-history example
 uses the real books fold and SQLite across separate release processes. The
 existing dropsCopies contrast creates an incorrect snapshot, an unchanged release
 reuses it, the same-version fix refolds correctly, and another fixed process

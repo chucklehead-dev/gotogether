@@ -683,6 +683,14 @@ func TestMutants(t *testing.T) {
 }
 ```
 
+For a test-local model instance or graph bound, use
+`qtest.Model(t, binding).WithOptions(qtest.ModelOptions{Constants:
+map[string]string{"LIMIT": "2"}, Depth: 3}).Expect(t, qtest.Proves(inv))`.
+This leaves generated bindings and model files unchanged. Each configured check
+copies its constants; positive bounds override the binding, while zero inherits
+its search bound or the engine default. A state-truncated graph remains no verdict,
+and a depth-only proof still states its bound.
+
 A bigger system deploys more doubles the same way:
 
 ```go

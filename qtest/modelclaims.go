@@ -2,9 +2,11 @@ package qtest
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/chucklehead-dev/gotogether/validate/model"
 
@@ -41,6 +43,57 @@ func Model(t testing.TB, binding string) *ModelCheck {
 // A ModelCheck is a model alone, its claims stated by Expect.
 type ModelCheck struct {
 	binding string
+	options ModelOptions
+}
+
+// ModelOptions select a test-local model instance and search bounds without
+// changing its binding or model files. Claims still select the checks and require
+// native replay of graph witnesses.
+type ModelOptions struct {
+	// Constants are Quint expressions keyed by declared constant name, overriding
+	// both binding.constants and simulate.constants.
+	Constants map[string]string
+	// States and Depth override search bounds when positive. Zero inherits the
+	// binding's simulate.search or the engine default; it does not clear a bound.
+	// Negative bounds are rejected by Expect before loading the binding.
+	States, Depth int
+}
+
+// WithOptions returns an independent check with options replacing its previous
+// options. Constants are copied, so later caller edits cannot change the check.
+func (m *ModelCheck) WithOptions(options ModelOptions) *ModelCheck {
+	copy := *m
+	copy.options = options
+	copy.options.Constants = maps.Clone(options.Constants)
+	return &copy
+}
+
+func (o ModelOptions) validate() error {
+	for _, bound := range []struct {
+		name  string
+		value int
+	}{{"States", o.States}, {"Depth", o.Depth}} {
+		if bound.value < 0 {
+			return fmt.Errorf("ModelOptions.%s=%d: want a nonnegative bound (0 inherits the binding/default)", bound.name, bound.value)
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(o.Constants)) {
+		if name == "" || strings.ContainsFunc(name, unicode.IsSpace) || strings.Contains(name, "=") {
+			return fmt.Errorf("ModelOptions.Constants key %q: want a nonempty constant name without whitespace or '='", name)
+		}
+		if strings.TrimSpace(o.Constants[name]) == "" {
+			return fmt.Errorf("ModelOptions.Constants[%q]: want a nonempty Quint expression", name)
+		}
+	}
+	return nil
+}
+
+func (o ModelOptions) constants() []string {
+	var out []string
+	for _, name := range slices.Sorted(maps.Keys(o.Constants)) {
+		out = append(out, name+"="+o.Constants[name])
+	}
+	return out
 }
 
 // A ModelClaim is what a test expects of a model on its own
@@ -75,13 +128,16 @@ func (n *modelNeeds) eventual(name string) {
 	}
 }
 
-// Expect simulates the model once for every claim and fails t for each
+// Expect simulates the model once for all claims and fails t for each
 // that does not hold, or has no verdict, saying its bound; each that
 // holds is logged with its bound.
 func (m *ModelCheck) Expect(t testing.TB, claims ...ModelClaim) {
 	t.Helper()
 	if len(claims) == 0 {
 		t.Fatal("qtest.Model(...).Expect: no claims: state what the model on its own must show (Proves, Refutes, Live, NoDeadlocks, Possible)")
+	}
+	if err := m.options.validate(); err != nil {
+		t.Fatalf("qtest.Model(%s): %v", m.binding, err)
 	}
 	b, err := binding.Load(m.binding)
 	if err != nil {
@@ -93,7 +149,11 @@ func (m *ModelCheck) Expect(t testing.TB, claims ...ModelClaim) {
 			t.Fatalf("qtest.Model(%s): %s: %v", m.binding, c, err)
 		}
 	}
-	rep, err := model.Simulate(m.binding, model.SimulateOptions{Invariants: n.invariants, Eventually: n.eventually, Possibles: n.possibles, Graph: n.graph, Replay: n.graph})
+	rep, err := model.Simulate(m.binding, model.SimulateOptions{
+		Invariants: n.invariants, Eventually: n.eventually, Possibles: n.possibles,
+		Graph: n.graph, Replay: n.graph, Constants: m.options.constants(),
+		States: m.options.States, Depth: m.options.Depth,
+	})
 	if err != nil {
 		t.Fatalf("qtest.Model(%s): %v", m.binding, err)
 	}

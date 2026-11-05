@@ -99,6 +99,13 @@ In Go the same verdicts are claims: `qtest.Model(t, binding).Expect(t,
 qtest.Proves(inv), qtest.Refutes(inv).InAtMost(n), qtest.Live(val),
 qtest.NoDeadlocks(), qtest.Possible(scenario))`, each with its bound
 (a truncated graph is no verdict, so the test fails naming the bound).
+Set test-local constants and bounds with
+`.WithOptions(qtest.ModelOptions{Constants: map[string]string{"LIMIT": "2"},
+Depth: 3})` before `Expect`. Constants override binding and simulate-section
+values. Positive bounds override; zero inherits, including an existing positive
+binding depth. `WithOptions` replaces the option set and copies its constants,
+so sibling checks are independent. Invalid options fail the test, not a model
+claim. Leave generated bindings alone; counters uses a local depth bound.
 A grist app's bindings carry one per command outcome and per processor
 step, generated.
 - Also check that each `holds` property *can* fail. Temporarily break
