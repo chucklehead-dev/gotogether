@@ -3,36 +3,60 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"flag"
 	"fmt"
+	"io"
 	"os"
+	"strconv"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/internal/formats"
 	lintcheck "github.com/chucklehead-dev/gotogether/lint"
 )
 
 func lint(ctx context.Context, args []string) (int, error) {
-	fs := commandFlags("lint")
+	fs := commandFlagsWithHandling("lint", flag.ContinueOnError)
 	bindings := fs.String("binding", "", "binding files, comma-separated; source actions are checked against their union")
 	source := fs.String("src", "", "Go source tree: action annotations and literal Record calls (syntactic inspection)")
 	simulation := fs.String("sim", "", "Go source tree to inspect for escapes from simulation")
 	weave := fs.String("weave", "", "Go source tree to inspect for unsupported weaving")
 	conversions := fs.String("convert", "", "span conversion rule files, comma-separated")
 	quint := fs.String("quint", "quint", "Quint binary for model metadata compilation")
-	asJSON := fs.Bool("json", false, "emit the structured lint report, including blocked checks and fixes")
-	fs.Parse(args)
+	asJSON := false
+	fs.BoolFunc("json", "emit the structured lint report, including blocked checks and fixes; put first for request errors", func(value string) error {
+		selected, err := strconv.ParseBool(value)
+		if err == nil {
+			asJSON = selected
+		}
+		return err
+	})
+	// Parse errors become request findings rather than exiting before the
+	// selected output format can be emitted. Only parsed flags select JSON:
+	// a later -json may be a string value, or follow -- or an earlier error.
+	fs.SetOutput(io.Discard)
+	parseErr := fs.Parse(args)
+	if errors.Is(parseErr, flag.ErrHelp) {
+		fs.SetOutput(os.Stderr)
+		fs.Usage()
+		return 0, nil
+	}
 	split := func(value string) []string {
 		if value == "" {
 			return nil
 		}
 		return strings.Split(value, ",")
 	}
-	report := lintcheck.Inspect(ctx, lintcheck.Options{Bindings: split(*bindings), Source: *source, Simulation: *simulation, Weave: *weave, Conversions: split(*conversions), Quint: *quint})
-	if fs.NArg() > 0 {
-		reason := "unexpected positional arguments: " + strings.Join(fs.Args(), " ")
-		report.Checks = append(report.Checks, lintcheck.Check{Name: "request.arguments", Status: lintcheck.CheckBlocked, Reason: reason, Operational: true})
-		report.Findings = append(report.Findings, lintcheck.Diagnostic{Code: "request.arguments", Severity: lintcheck.Error, Message: reason, Fix: "select input paths with -binding, -src, -sim, -weave or -convert", Confidence: "request"})
+	var report *lintcheck.Report
+	switch {
+	case parseErr != nil:
+		report = lintRequestError("request.flags", parseErr.Error(), "use gotogether lint -h for valid flags; put -json first for machine-readable request errors")
+	case fs.NArg() > 0:
+		report = lintRequestError("request.arguments", "unexpected positional arguments: "+strings.Join(fs.Args(), " "), "select input paths with -binding, -src, -sim, -weave or -convert")
+	default:
+		report = lintcheck.Inspect(ctx, lintcheck.Options{Bindings: split(*bindings), Source: *source, Simulation: *simulation, Weave: *weave, Conversions: split(*conversions), Quint: *quint})
 	}
-	if *asJSON {
+	if asJSON {
 		encoder := json.NewEncoder(os.Stdout)
 		encoder.SetIndent("", "  ")
 		if err := encoder.Encode(report); err != nil {
@@ -42,6 +66,17 @@ func lint(ctx context.Context, args []string) (int, error) {
 		printLintReport(report)
 	}
 	return report.ExitCode(), nil
+}
+
+// lintRequestError describes a refused request without claiming any target
+// was read. Inspection findings and evidence are reserved for valid requests.
+func lintRequestError(code, reason, fix string) *lintcheck.Report {
+	return &lintcheck.Report{
+		Format: formats.Lint.Name(), Scope: "request", Limits: []string{"no lint checks were performed"},
+		Checks:   []lintcheck.Check{{Name: code, Status: lintcheck.CheckBlocked, Reason: reason, Operational: true}},
+		Findings: []lintcheck.Diagnostic{{Code: code, Severity: lintcheck.Error, Message: reason, Fix: fix, Confidence: "request"}},
+		Evidence: []lintcheck.Evidence{},
+	}
 }
 
 func printLintReport(report *lintcheck.Report) {

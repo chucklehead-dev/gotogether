@@ -77,11 +77,15 @@ var commands = map[string]command{
 // command is for, gives an example, and lists its flags, removed ones
 // (whose usage starts "gone:") left out.
 func commandFlags(name string) *flag.FlagSet {
+	return commandFlagsWithHandling(name, flag.ExitOnError)
+}
+
+func commandFlagsWithHandling(name string, handling flag.ErrorHandling) *flag.FlagSet {
 	c, ok := commands[name]
 	if !ok {
 		panic("gotogether: command " + name + " has no help: add it to commands")
 	}
-	fset := flag.NewFlagSet(name, flag.ExitOnError)
+	fset := flag.NewFlagSet(name, handling)
 	fset.Usage = func() {
 		w := fset.Output()
 		fmt.Fprintf(w, "gotogether %s: %s\n\n  %s\n\nflags:\n", name, c.purpose, c.example)

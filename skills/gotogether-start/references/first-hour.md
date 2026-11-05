@@ -163,3 +163,10 @@ func TestMutants(t *testing.T) {
 In Go tests, `qtest.RequireQuint(t)` skips without quint; state what
 each test expects with `.Expect(t, claims...)` on its run or
 exploration, never by matching report text.
+
+For machine-readable lint results, put `-json` first: `gotogether lint -json
+-binding m.binding.yaml -src .`. Invalid flags or positional arguments then
+produce one blocked operational request check and no inspection evidence (exit 2).
+Fix the request before treating lint findings as source evidence. Go flag parsing
+stops at errors, positionals or `--`; a later `-json` is not an output-mode override.
+Help remains ordinary `gotogether lint -h` with exit 0.
