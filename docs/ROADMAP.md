@@ -61,12 +61,19 @@ CPU near-threshold failure did not justify a budget increase: the combined head
 passed all 36 checks, with payouts at 31.5 CPU seconds. Repeated cost growth would
 need per-test attribution; duplicate identical explorations are a consolidation
 candidate without reducing seeds or claims.
-The next facet-depth slice completes I1's library deployment-history rehearsal:
+The I1 facet-depth slice completes library's deployment-history rehearsal:
 a buggy upcaster's persisted snapshot, unchanged-release reuse, corrected-release
 refold, and subsequent corrected-snapshot reuse across fresh processes. This
 exercises a known cache contract with actual application folds rather than adding
 another generic report feature. No runtime API or persistence-format change is
 needed; further scope should follow another demonstrated contract boundary.
+The following general framework slice closes I17's concrete test-configuration
+gap: counters copied the model tree and rewrote generated YAML just to choose a
+depth bound. ModelCheck.WithOptions now supplies copied test-local constants and
+search bounds to the existing engine; counters uses its generated files directly.
+Complete proofs, depth-only bounded proofs, state-cut unknowns and native-replayed
+refutations retain their existing meanings. No new format or second engine is
+needed. Further capability should follow another actual authoring/runtime gap.
 Keep frozen baseline pins for reproducibility, not as legacy support promises.
 Further adapters, adjacent fixtures and per-pair clock APIs need usage evidence.
 
@@ -461,9 +468,11 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   for the graph and the possibles alike (binding/1 no longer read since
   the format policy's decision of 2026-10-28). hello
   proves exactlyOnce and refutes it in a model mutant; counters proves
-  its invariants within three steps. Left: `qtest.Model` takes no
-  options (constants, a bound of the test's own); a claim on the
-  actions never enabled (twophase's walk checked none was).
+  its invariants within three steps. Test-local constants and graph bounds are
+  now built through immutable `ModelCheck.WithOptions(ModelOptions)`, replacing
+  counters' copied-tree/generated-YAML workaround. Zero bounds inherit and
+  positive bounds override; claims still own graph checks and native replay.
+  Left: a claim on the actions never enabled (twophase's walk checked none was).
 - **I18. validate split (M, breaking, before tags). Done** (DESIGN
   §70, §71; HISTORY "I18", "I18's rest"): model analysis in
   `validate/model` (`Simulate`, `Analyzer`: `Graph`, `Possible`), above

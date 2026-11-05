@@ -6683,3 +6683,27 @@ for that word: it can be the value of -binding, follow --, or occur after parsin
 has already stopped. This preserves one parser and an explicit boundary rather
 than adding a second flag interpretation. Other commands retain their existing
 error handling; this does not claim universal structured usage errors.
+
+
+## 99. Test-local model instances and bounds
+
+Counters' bounded model claim copied its model tree and text-spliced the generated
+binding to set a depth bound. The model engine already accepted test-local
+constants and search bounds; ModelCheck did not expose them. Add one narrow
+ModelOptions value and immutable WithOptions builder rather than another engine,
+a generated-file override format, or separate setters for every field.
+
+Constants are expressions keyed by constant name. Copy the map at the builder
+boundary and sort names when passing them to the engine. A keyed map avoids the
+engine's permissive assignment-string framing. Reject negative bounds, empty/whitespace-containing or assignment-framed
+names and blank expressions before binding loading; declared-name and expression
+type errors remain engine errors, never successful refutations. The precedence
+is binding constants, then simulate-section constants, then test-local constants.
+
+WithOptions replaces the whole option set. Positive States/Depth override;
+zero inherits the binding/default, including a positive binding depth. It does
+not clear that bound. The check still selects invariants, eventual properties,
+graph execution and native replay from its claims. A complete graph proves its
+instance, a depth cut proves only the stated bounded scope, and a state cut is
+unknown. Replayed witnesses use the same effective constant overrides. Counters
+uses Depth:3 directly; authored binding/model bytes remain unchanged.

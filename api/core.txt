@@ -1973,6 +1973,7 @@ type Judges struct
     field Confirmed int `json:"confirmed"`
 type ModelCheck struct
     method (*ModelCheck) Expect(t testing.TB, claims ...ModelClaim)
+    method (*ModelCheck) WithOptions(options ModelOptions) *ModelCheck
 type ModelClaim interface
     String() string
     needs(n *modelNeeds) error
@@ -1980,6 +1981,10 @@ type ModelClaim interface
 type ModelCoverage struct
     field Taken map[string]int `json:"taken"`
     field Never []string `json:"never,omitempty"`
+type ModelOptions struct
+    field Constants map[string]string
+    field States int
+    field Depth int
 type Mutants struct
     field Dir string
     field Package string
