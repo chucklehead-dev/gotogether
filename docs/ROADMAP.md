@@ -35,6 +35,12 @@ managed subprocesses and cooperative evaluation, graph and liveness traversal.
 Live waiters retry after a canceled compile owner; reusable analyzers and cached
 IR retain no request context. Pure metadata, ordinary-validation evaluator
 entrypoints and go/analysis remain explicit separate lifecycle boundaries.
+The following facet-depth slice returns to I45 database history checking: explicit
+session precedence closes an untimed stale-read evidence gap. Session identity
+is caller-supplied, never inferred from recorder IDs; the checker retains typed
+cycle edges and is checked against independent serial replay. Next rotate toward
+consolidation or a concrete adoption blocker before adding more history workloads
+or an automatic capture facade.
 The general framework tick is the first bounded I42 model-behavior comparison:
 complete finite Go-evaluator graphs on explicit observations, with whole-prefix inclusion,
 separate resource bounds and native-replayed source witnesses. A non-storage
@@ -970,7 +976,11 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   gap is fixed: known committed unseen writers still constrain whole-list reads,
   catching strict stale reads and write skew without a final observer. No unseen
   writer order or Unknown completion is invented; a missing later read alone
-  does not prove loss. Session-order edges and an rw-register workload remain.
+  does not prove loss. Explicit session-order checking now adds a bounded facet-depth slice:
+  StrongSessionSerializable requires caller-supplied logical session/order
+  evidence, with no guessed recorder identity or timeout completion. An
+  independent serial-permutation oracle checks the contract. An rw-register
+  workload and ergonomic explicit session capture remain separate work.
   Example: SQLite against a hand-built "SI over read committed" shim
   with a seeded lost update, and a timeout-heavy run for I6.
 - **I46. Production capture (M each, after I19).** A trace-capture SDK

@@ -7,6 +7,15 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
+Database-history session order: `qhistory.StrongSessionSerializable` requires
+explicit `Txn.Session` and `SessionOrder` evidence for nonaborted transactions.
+It detects session stale reads without clocks, preserves known ordering across
+failed attempts and retains typed cycle dependencies. Unknown outcomes do not
+establish outgoing precedence, even when later inferred committed. Strict checking
+also honors supplied sessions; ordinary Serializable is unchanged. Independent
+serial replay checks 1,080 additional bounded combinations. Recorder IDs supply
+no session evidence; automatic capture remains separate. See DESIGN §102.
+
 Model-analysis lifecycle: canonical `validate/model` entrypoints take a context
 per operation, including analyzer construction, graph/possible searches,
 simulation and graph membership cross-checking. Managed compilation, cache
@@ -529,8 +538,15 @@ from whole-list reads to known committed appenders absent from every external
 read. This closes a strict stale-read and write-skew false-pass boundary without
 inventing unseen writer order or treating timeouts as completed commits. A small
 independent serial-execution oracle checks 1,402 bounded combinations, alongside
-actual qenv store-history controls. Session-order checking, new workloads and
-automatic recorder timestamps remain separate work. See DESIGN's I45 note.
+actual qenv store-history controls. The subsequent session-order slice adds
+StrongSessionSerializable over explicit Txn.Session/SessionOrder evidence:
+known committed predecessors order later included transactions in their session,
+including across unknown or aborted attempts. Inferred committed Unknowns cannot
+source an order edge. The stronger request rejects missing or ambiguous metadata;
+ordinary Serializable retains its contract. Typed cycle dependencies retain order
+provenance. Independent permutation replay checks bounded session histories.
+Automatic session capture, new workloads and recorder timestamps remain separate
+work. See DESIGN §102 and the I45 note.
 
 Snapshot-checkpoint follow-up ([PR #15](https://github.com/chucklehead-dev/gotogether/pull/15)): a trace's later snapshots now
 check the complete replayed state instead of being skipped. The first snapshot

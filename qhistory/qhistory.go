@@ -98,6 +98,13 @@ type Txn struct {
 	Ops                []Op
 	Outcome            Outcome
 	Invoked, Completed time.Time
+	// Session and SessionOrder assert caller order, independently of IDs and
+	// history slice order. Both must be supplied together; order is positive
+	// and unique within a session, but need not be consecutive. A later
+	// attempt was invoked after earlier attempts returned to the caller.
+	// An Unknown return does not establish that its transaction completed.
+	Session      string
+	SessionOrder uint64
 }
 
 // Level is the isolation level a history is checked against.
@@ -110,16 +117,57 @@ const (
 	SnapshotIsolation
 	// Serializable (PL-3) forbids every cycle, G2 (write skew) too.
 	Serializable
+	// StrongSessionSerializable preserves known committed transactions' order
+	// within each caller session. Every nonaborted transaction must carry
+	// Session and SessionOrder. Unknown transactions can receive an ordering
+	// edge if inferred committed, but never establish one.
+	StrongSessionSerializable
 	// StrictSerializable also forbids a cycle through real time: a
 	// transaction that completed before another was invoked precedes it
 	// (Txn.Invoked, Completed), so a read of a value older than one a
 	// transaction completed before it began is a G-single-realtime (Elle's
-	// names: the cycle's kind with "-realtime").
+	// names: the cycle's kind with "-realtime"). Supplied session order also
+	// constrains the serial explanation, without requiring session metadata.
 	StrictSerializable
 )
 
 func (l Level) String() string {
-	return [...]string{"read committed", "snapshot isolation", "serializable", "strict serializability"}[l]
+	switch l {
+	case ReadCommitted:
+		return "read committed"
+	case SnapshotIsolation:
+		return "snapshot isolation"
+	case Serializable:
+		return "serializable"
+	case StrongSessionSerializable:
+		return "strong session serializability"
+	case StrictSerializable:
+		return "strict serializability"
+	default:
+		return fmt.Sprintf("Level(%d)", int(l))
+	}
+}
+
+// DependencyKind identifies evidence for an edge in a dependency cycle.
+type DependencyKind string
+
+const (
+	WriteWrite   DependencyKind = "ww"
+	WriteRead    DependencyKind = "wr"
+	ReadWrite    DependencyKind = "rw"
+	RealTime     DependencyKind = "rt"
+	SessionOrder DependencyKind = "session"
+)
+
+// Dependency is one directed edge in an anomaly's ordered cycle. Key is
+// populated for data dependencies; Session and the ordinals identify the
+// caller assertion for a session edge.
+type Dependency struct {
+	From, To           int
+	Kind               DependencyKind
+	Key                string
+	Session            string
+	FromOrder, ToOrder uint64
 }
 
 // An Anomaly is one thing the history shows that some level forbids.
@@ -131,6 +179,8 @@ type Anomaly struct {
 	// allowed one is reported for what it shows (write skew under
 	// snapshot isolation).
 	Forbidden bool
+	// Dependencies gives every edge of a cycle, in the same order as Txns.
+	Dependencies []Dependency
 }
 
 func (a Anomaly) String() string {
@@ -178,17 +228,24 @@ func (r *Report) String() string {
 // forbidden reports whether level forbids an anomaly of kind.
 func forbidden(level Level, kind string) bool {
 	if strings.HasSuffix(kind, "-realtime") {
-		return level >= StrictSerializable
+		return level == StrictSerializable
+	}
+	if strings.HasSuffix(kind, "-session") {
+		return level == StrongSessionSerializable || level == StrictSerializable
 	}
 	switch kind {
 	case "G-single":
-		return level >= SnapshotIsolation
+		return level == SnapshotIsolation || serialLevel(level)
 	case "G2":
-		return level >= Serializable
+		return serialLevel(level)
 	case "G-nonadjacent":
-		return level >= SnapshotIsolation
+		return level == SnapshotIsolation || serialLevel(level)
 	}
 	return true
+}
+
+func serialLevel(level Level) bool {
+	return level == Serializable || level == StrongSessionSerializable || level == StrictSerializable
 }
 
 type wkey struct {
@@ -199,8 +256,13 @@ type wkey struct {
 // Check checks a history against level. It returns an error, not a
 // report, when the history is not a list-append workload's: a value
 // appended twice to one key (Generate never does), or an operation of
-// another kind.
+// another kind, invalid IDs, outcomes or level, or invalid session metadata.
+// StrongSessionSerializable requires metadata on every nonaborted transaction;
+// StrictSerializable uses supplied metadata without requiring it.
 func Check(level Level, txns []Txn) (*Report, error) {
+	if level < ReadCommitted || level > StrictSerializable {
+		return nil, fmt.Errorf("qhistory: invalid isolation level %d", level)
+	}
 	rep := &Report{Level: level}
 	add := func(kind string, ids []int, format string, a ...any) {
 		rep.Anomalies = append(rep.Anomalies, Anomaly{Kind: kind, Txns: ids, Msg: fmt.Sprintf(format, a...), Forbidden: forbidden(level, kind)})
@@ -209,8 +271,27 @@ func Check(level Level, txns []Txn) (*Report, error) {
 	writer := map[wkey]int{}       // a value's appender
 	appended := map[string][]int{} // every append, including values no read observed
 	lastOwn := map[wkey]bool{}     // a transaction's last append to the key
+	sessions := map[string]map[uint64]int{}
 	for i := range txns {
 		t := &txns[i]
+		if t.Outcome != Unknown && t.Outcome != Committed && t.Outcome != Aborted {
+			return nil, fmt.Errorf("qhistory: transaction %d: invalid outcome %d", t.ID, t.Outcome)
+		}
+		if (t.Session == "") != (t.SessionOrder == 0) {
+			return nil, fmt.Errorf("qhistory: transaction %d: Session and positive SessionOrder must be supplied together", t.ID)
+		}
+		if level == StrongSessionSerializable && t.Outcome != Aborted && t.Session == "" {
+			return nil, fmt.Errorf("qhistory: transaction %d: strong session serializability requires Session and SessionOrder", t.ID)
+		}
+		if t.Session != "" {
+			if sessions[t.Session] == nil {
+				sessions[t.Session] = map[uint64]int{}
+			}
+			if id, ok := sessions[t.Session][t.SessionOrder]; ok {
+				return nil, fmt.Errorf("qhistory: transactions %d and %d duplicate session %q order %d", id, t.ID, t.Session, t.SessionOrder)
+			}
+			sessions[t.Session][t.SessionOrder] = t.ID
+		}
 		if t.ID == 0 {
 			return nil, fmt.Errorf("qhistory: a transaction with id 0: ids must be nonzero (0 is no transaction)")
 		}
@@ -397,6 +478,18 @@ func Check(level Level, txns []Txn) (*Report, error) {
 			}
 		}
 	}
+	evidence := func(cyc []dep) []Dependency {
+		result := make([]Dependency, len(cyc))
+		for i, e := range cyc {
+			d := Dependency{From: e.from, To: e.to, Kind: DependencyKind(e.kind), Key: e.key}
+			if e.kind == "session" {
+				d.Session = byID[e.from].Session
+				d.FromOrder, d.ToOrder = byID[e.from].SessionOrder, byID[e.to].SessionOrder
+			}
+			result[i] = d
+		}
+		return result
+	}
 	for _, scc := range g.Components() {
 		kind, cyc := g.Classify(scc)
 		ids := make([]int, len(cyc))
@@ -407,24 +500,40 @@ func Check(level Level, txns []Txn) (*Report, error) {
 		}
 		fmt.Fprintf(&b, "%d", cyc[0].From)
 		add(kind, ids, "%s", b.String())
+		cycle := make([]dep, len(cyc))
+		for i, e := range cyc {
+			cycle[i] = dep{int(e.From), int(e.To), e.Kind, e.Key}
+		}
+		rep.Anomalies[len(rep.Anomalies)-1].Dependencies = evidence(cycle)
 	}
-	if level >= StrictSerializable {
-		// real time's edges with the dependencies: a cycle through one is
-		// a history no serial order that keeps real time explains
+	if level == StrongSessionSerializable || level == StrictSerializable {
+		// Add caller-session and (for StrictSerializable) real-time edges to
+		// the data dependencies. A cycle through an ordering edge has no
+		// serial explanation preserving the supplied ordering evidence.
 		rt := depgraph.New()
 		out := map[int][]dep{}
 		for _, e := range edges {
 			rt.Add(int64(e.from), int64(e.to), e.kind, e.key)
 			out[e.from] = append(out[e.from], e)
 		}
-		var timed []dep
+		var ordered []dep
 		for _, a := range txns {
 			for _, b := range txns {
-				if a.ID != b.ID && committed(a.ID) && committed(b.ID) && a.Outcome != Unknown && !a.Completed.IsZero() && !b.Invoked.IsZero() && a.Completed.Before(b.Invoked) {
+				if level == StrictSerializable && a.ID != b.ID && committed(a.ID) && committed(b.ID) && a.Outcome != Unknown && !a.Completed.IsZero() && !b.Invoked.IsZero() && a.Completed.Before(b.Invoked) {
 					e := dep{a.ID, b.ID, "rt", ""}
 					rt.Add(int64(a.ID), int64(b.ID), "rt", "")
 					out[a.ID] = append(out[a.ID], e)
-					timed = append(timed, e)
+					ordered = append(ordered, e)
+				}
+			}
+		}
+		for _, a := range txns {
+			for _, b := range txns {
+				if a.Session != "" && a.Session == b.Session && a.SessionOrder < b.SessionOrder && a.Outcome == Committed && committed(b.ID) {
+					e := dep{a.ID, b.ID, "session", ""}
+					rt.Add(int64(a.ID), int64(b.ID), e.kind, "")
+					out[a.ID] = append(out[a.ID], e)
+					ordered = append(ordered, e)
 				}
 			}
 		}
@@ -433,7 +542,7 @@ func Check(level Level, txns []Txn) (*Report, error) {
 			for _, n := range scc {
 				in[int(n)] = true
 			}
-			for _, e := range timed {
+			for _, e := range ordered {
 				if !in[e.from] || !in[e.to] {
 					continue
 				}
@@ -450,23 +559,37 @@ func Check(level Level, txns []Txn) (*Report, error) {
 						case "ww":
 							wws++
 						}
-						if h.key != "" {
+						if h.kind == "session" {
+							fmt.Fprintf(&b, "%d -session(%q:%d<%d)-> ", h.from, byID[h.from].Session, byID[h.from].SessionOrder, byID[h.to].SessionOrder)
+						} else if h.key != "" {
 							fmt.Fprintf(&b, "%d -%s(%s)-> ", h.from, h.kind, h.key)
 						} else {
 							fmt.Fprintf(&b, "%d -%s-> ", h.from, h.kind)
 						}
 					}
 					fmt.Fprintf(&b, "%d", cyc[0].from)
-					kind := "G2-realtime"
-					switch {
-					case rws == 0 && wws+rts(cyc) == len(cyc):
-						kind = "G0-realtime"
-					case rws == 0:
-						kind = "G1c-realtime"
-					case rws == 1:
-						kind = "G-single-realtime"
+					suffix := "-session"
+					if slices.ContainsFunc(cyc, func(d dep) bool { return d.kind == "rt" }) {
+						suffix = "-realtime"
 					}
-					add(kind, ids, "%s (rt: completed before the next was invoked)", b.String())
+					kind := "G2" + suffix
+					switch {
+					case rws == 0 && wws+orderingEdges(cyc) == len(cyc):
+						kind = "G0" + suffix
+					case rws == 0:
+						kind = "G1c" + suffix
+					case rws == 1:
+						kind = "G-single" + suffix
+					}
+					detail := "session: known committed attempt returned before the later attempt was invoked"
+					if suffix == "-realtime" {
+						detail = "rt: completed before the next was invoked"
+						if slices.ContainsFunc(cyc, func(d dep) bool { return d.kind == "session" }) {
+							detail += "; session: known committed attempt returned before the later attempt was invoked"
+						}
+					}
+					add(kind, ids, "%s (%s)", b.String(), detail)
+					rep.Anomalies[len(rep.Anomalies)-1].Dependencies = evidence(cyc)
 					break // one cycle a component, as for the others
 				}
 			}
@@ -476,7 +599,7 @@ func Check(level Level, txns []Txn) (*Report, error) {
 }
 
 // A dep is an edge between transactions: a dependency (ww, wr, rw on a
-// key) or real time's (rt).
+// key), real time (rt), or explicit caller order (session).
 type dep struct {
 	from, to  int
 	kind, key string
@@ -509,11 +632,11 @@ func pathOf(out map[int][]dep, in map[int]bool, a, b int) []dep {
 	return nil
 }
 
-// rts counts a cycle's real-time edges.
-func rts(cyc []dep) int {
+// orderingEdges counts real-time and caller-session ordering edges.
+func orderingEdges(cyc []dep) int {
 	n := 0
 	for _, e := range cyc {
-		if e.kind == "rt" {
+		if e.kind == "rt" || e.kind == "session" {
 			n++
 		}
 	}

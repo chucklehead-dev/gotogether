@@ -1154,10 +1154,16 @@ const Append OpKind = iota
 const Committed Outcome = iota (spec 1 of its group)
 const Read OpKind = iota (spec 1 of its group)
 const ReadCommitted Level = iota
+const ReadWrite DependencyKind = "rw"
+const RealTime DependencyKind = "rt"
 const Serializable Level = iota (spec 2 of its group)
+const SessionOrder DependencyKind = "session"
 const SnapshotIsolation Level = iota (spec 1 of its group)
-const StrictSerializable Level = iota (spec 3 of its group)
+const StrictSerializable Level = iota (spec 4 of its group)
+const StrongSessionSerializable Level = iota (spec 3 of its group)
 const Unknown Outcome = iota
+const WriteRead DependencyKind = "wr"
+const WriteWrite DependencyKind = "ww"
 func Check(level Level, txns []Txn) (*Report, error)
 func Record(db qenv.DB, h *History, lists Lists) qenv.DB
 type Anomaly struct
@@ -1165,7 +1171,17 @@ type Anomaly struct
     field Txns []int
     field Msg string
     field Forbidden bool
+    field Dependencies []Dependency
     method (Anomaly) String() string
+type Dependency struct
+    field From int
+    field To int
+    field Kind DependencyKind
+    field Key string
+    field Session string
+    field FromOrder uint64
+    field ToOrder uint64
+type DependencyKind string
 type History struct
     method (*History) Txns() []Txn
     method (*History) WithOps() []Txn
@@ -1192,6 +1208,8 @@ type Txn struct
     field Outcome Outcome
     field Invoked time.Time
     field Completed time.Time
+    field Session string
+    field SessionOrder uint64
 type Workload struct
     field Keys int
     field Txns int
