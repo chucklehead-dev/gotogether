@@ -18,8 +18,9 @@ unset GOTOGETHER_MAIN GOTOGETHER_TUTORIAL_HELP GOTOGETHER_HELLO_REPLAY
 # Help error-path subprocesses must not inherit a persistent report destination.
 unset GOTOGETHER_REPORT_DIR
 
-# Report formatting differences without rewriting a developer's working tree.
-unformatted=$(gofmt -l .)
+# Check source files without descending into hidden generated trees (.gosim,
+# .git, caches). Preserve filename boundaries and never rewrite source/artifacts.
+unformatted=$(find . -type d -name '.*' ! -path . -prune -o -type f ! -name '.*' -name '*.go' -print0 | xargs -0 gofmt -l)
 if [ -n "$unformatted" ]; then
   printf '%s\n' "$unformatted" >&2
   echo "repository formatting differs: run gofmt on the listed files" >&2

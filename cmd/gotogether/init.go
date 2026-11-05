@@ -227,7 +227,7 @@ func writeNew(p string, data []byte, exec bool) error {
 // to the module (as an example's replace => ../..).
 func writeInitGoMod(dir, module, replace string) error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "module %s\n\ngo 1.26.1\n", projectsetup.ModulePath(module))
+	fmt.Fprintf(&b, "module %s\n\ngo 1.26.10\n", projectsetup.ModulePath(module))
 	if replace != "" {
 		abs, err := filepath.Abs(replace)
 		if err != nil {

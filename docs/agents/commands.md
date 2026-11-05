@@ -210,7 +210,7 @@ raising its line budget when commands are added.
 
 Run `ci/preflight.sh` before pushing. It resolves the checkout from the script's
 location, so an absolute path works from another directory. The command runs
-nonwriting formatting and repository-contract checks without Quint or native
+nonwriting visible-source formatting (hidden generated trees such as .gosim are skipped) and repository-contract checks without Quint or native
 services. It deliberately ignores updater flags, persistent report destinations
 and child-test helper modes; use the explicit update commands separately when
 changing snapshots. Go build-cache and dependency downloads behave normally.

@@ -8,7 +8,7 @@
 # CI builds it and runs gotogether doctor -strict inside. It is published
 # nowhere: which registry, and under what name, is the maintainer's call.
 # Change a version here and in the Action's defaults together.
-ARG GO_VERSION=1.26.1
+ARG GO_VERSION=1.26.10
 FROM golang:${GO_VERSION}-bookworm
 
 ARG NODE_VERSION=22.22.0

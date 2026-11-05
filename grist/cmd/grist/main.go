@@ -189,7 +189,7 @@ func write(dir string, data any) error {
 // with replace, the toolkit's two modules from that checkout.
 func writeGoMod(dir, module, replace string) error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "module %s\n\ngo 1.26.1\n", projectsetup.ModulePath(module))
+	fmt.Fprintf(&b, "module %s\n\ngo 1.26.10\n", projectsetup.ModulePath(module))
 	if replace != "" {
 		// relative to the module, as an example's `replace => ../..`: the
 		// go.mod stays right when the checkout moves with it

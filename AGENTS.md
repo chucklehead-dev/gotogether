@@ -166,7 +166,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 - The repository is a Go workspace (`go.work`, checked in): every module
   sees the others' code as it is, without a release. CI sets `GOWORK=off`
   and tests each module on its own go.mod, as a user would build it.
-- Go ≥ 1.26.1 (`go.mod`; hegel-go needs it). quint ≥ 0.32 on PATH
+- Go ≥ 1.26.10 (`go.mod`; the supported Go 1.26 patch floor). quint ≥ 0.32 on PATH
   (`npm i -g @informalsystems/quint`, then `QUINT_VERSION=0.33.0
   ci/install-quint.sh` for the Rust evaluator). Tests that need quint
   skip without it.
@@ -177,10 +177,11 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   uses before installing native tools. It checks formatting, source/API/schema
   contracts, docs/skills and the complete CLI help/tutorial surface. It uses the
   module's go.mod with read-only resolution and clears regeneration/report/helper
-  flags rather than rewriting snapshots. It requires Go and Bash, not Quint.
+  flags rather than rewriting snapshots. It requires Go, Bash and standard Unix find/xargs, not Quint.
   Continue with the tests and vet appropriate to the change; full, shuffled,
   native and race coverage remain in CI.
-- `go vet ./... && gofmt -l .`: both must be clean.
+- `go vet ./...` and `ci/preflight.sh` must be clean. Format source rather than
+  generated hidden build trees; preflight selects the visible Go files.
 - `go test -short ./...` takes a few minutes (validate's and qtest's
   quint processes most of it). `go test ./...` adds the
   shrinking-against-the-model tests, about ten on CI; each package
@@ -195,6 +196,22 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   grpcledger, streams, fleetrollout, crossdb), quint's backends and the
   `GOTOGETHER_*` variables (keep, run one run alone, evidence, corpus,
   Hegel seeds, verbose): docs/agents/commands.md.
+
+## Current Go facilities
+
+Use the declared Go baseline's standard APIs rather than compatibility shims.
+Prefer typed `errors.AsType`, `maps`/`slices` iterator helpers, `sync.WaitGroup.Go`,
+`sync.OnceFunc`, `testing.T.Context`, and `testing.B.Loop` where they fit the work.
+Use `testing/synctest` for pure in-memory concurrency tests instead of sleeps or
+custom context wrappers; external processes and file/network I/O are not durable
+bubble waits. Check current Go documentation before assuming a new API exists.
+
+The shared floor is Go 1.26.10 because gosim's runtime hooks currently require
+that family. The ordinary core is also tested on current stable Go 1.27.3; do not
+weaken gosim's guard or add silent toolchain fallback. See docs/go-toolchain.md
+before proposing a major toolchain or compiler-dependent dependency update.
+Frozen adoption evidence and historical measurements retain their original
+versions; they are not compatibility promises.
 
 ## Conventions
 

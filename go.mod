@@ -1,6 +1,6 @@
 module github.com/chucklehead-dev/gotogether
 
-go 1.26.1
+go 1.26.10
 
 require (
 	go.opentelemetry.io/otel v1.46.0

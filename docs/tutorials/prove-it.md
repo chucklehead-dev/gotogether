@@ -22,7 +22,7 @@ this guard.
 
 ## Before you start
 
-Use Go ≥ 1.26.1 and Node.js 22 (including npm). These transcripts use
+Use Go ≥ 1.26.10 and Node.js 22 (including npm). These transcripts use
 Quint 0.33.0, the version tested in CI. The installer fetches both Quint
 and its matching Rust evaluator.
 
