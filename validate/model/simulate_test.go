@@ -111,7 +111,7 @@ func TestGraphAgreesWithQuint(t *testing.T) {
 // agreeGraph holds one binding's graph to quint, and returns how many
 // invariants both found violated.
 func agreeGraph(t *testing.T, path string, states, depth int) int {
-	c, err := newChecker(path, validate.Options{})
+	c, err := newChecker(t.Context(), path, validate.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func agreeGraph(t *testing.T, path string, states, depth int) int {
 	if depth > 0 {
 		steps = depth
 	}
-	r, err := c.Graph(GraphSearch{Constants: overrides, States: states, Depth: steps})
+	r, err := c.Graph(t.Context(), GraphSearch{Constants: overrides, States: states, Depth: steps})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,10 +196,10 @@ func TestSimulatePossible(t *testing.T) {
 	skip.Quint(t)
 	for b, want := range map[string]int{"vending.yaml": 0, "vending_strict.yaml": 1} {
 		path := filepath.Join("../testdata", b)
-		if rep, err := Simulate(path, SimulateOptions{}); err != nil || rep.Code != want {
+		if rep, err := Simulate(t.Context(), path, SimulateOptions{}); err != nil || rep.Code != want {
 			t.Errorf("%s: %v; want code %d", b, err, want)
 		}
-		c, err := newChecker(path, validate.Options{})
+		c, err := newChecker(t.Context(), path, validate.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -218,10 +218,10 @@ func TestSimulatePossible(t *testing.T) {
 		if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if err := quintPossibles("quint", dir, file, cs, 12, 300, "1", 0, nil); err != nil {
+		if err := quintPossibles(t.Context(), "quint", dir, file, cs, 12, 300, "1", 0, nil); err != nil {
 			t.Fatal(err)
 		}
-		rs, err := c.Possible(c.Binding.Simulate.Possible, PossibleSearch{Depth: 12})
+		rs, err := c.Possible(t.Context(), c.Binding.Simulate.Possible, PossibleSearch{Depth: 12})
 		if err != nil {
 			t.Fatal(err)
 		}

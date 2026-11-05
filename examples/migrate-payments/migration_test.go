@@ -109,7 +109,7 @@ func TestDraftForbidsPartialCapture(t *testing.T) {
 	for k, v := range sim.Constants {
 		consts = append(consts, k+"="+v)
 	}
-	rs, err := model.For(c).Possible(sim.Possible, model.PossibleSearch{Constants: consts})
+	rs, err := model.For(c).Possible(t.Context(), sim.Possible, model.PossibleSearch{Constants: consts})
 	if err != nil {
 		t.Fatal(err)
 	}

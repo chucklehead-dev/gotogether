@@ -1,6 +1,7 @@
 package qtest
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"slices"
@@ -186,7 +187,7 @@ func scenarios(c Claim) []*scenario {
 // scenarioMisses are the lines a failing claim's scenarios add: per run
 // (the first maxRuns), how far it followed each, and whether the model
 // on its own can follow it (checker nil: not asked).
-func (x *Exploration) scenarioMisses(c Claim) string {
+func (x *Exploration) scenarioMisses(ctx context.Context, c Claim) string {
 	scs := scenarios(c)
 	if len(scs) == 0 {
 		return ""
@@ -203,7 +204,7 @@ func (x *Exploration) scenarioMisses(c Claim) string {
 			fmt.Fprintf(&b, "\n  %s: %s", x.nameOf(r), sc.miss(runCalls(r.Report)))
 		}
 		if x.checker != nil {
-			fmt.Fprintf(&b, "\n  the model on its own: %s", modelVerdict(x.checker, sc))
+			fmt.Fprintf(&b, "\n  the model on its own: %s", modelVerdict(ctx, x.checker, sc))
 		}
 	}
 	return b.String()
@@ -212,12 +213,12 @@ func (x *Exploration) scenarioMisses(c Claim) string {
 // modelVerdict is whether the model on its own follows sc, as a line:
 // Simulate's verdict on it as a possible (the evaluator's search, then
 // quint's sampling), as qtest.Possible judges it.
-func modelVerdict(c *validate.Checker, sc *scenario) string {
+func modelVerdict(ctx context.Context, c *validate.Checker, sc *scenario) string {
 	p, err := scenarioAsPossible(c.Binding, sc)
 	if err != nil {
 		return "not searched (" + err.Error() + ")"
 	}
-	rep, err := model.For(c).Simulate(model.SimulateOptions{Invariants: []string{}, Eventually: []string{}, Possibles: []binding.Possible{p}})
+	rep, err := model.For(c).Simulate(ctx, model.SimulateOptions{Invariants: []string{}, Eventually: []string{}, Possibles: []binding.Possible{p}})
 	switch {
 	case err != nil:
 		return "not searched (" + err.Error() + ")"

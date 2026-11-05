@@ -97,6 +97,7 @@ func (t Transition) Picks() []Event {
 // per distinct label and state (two choices reaching one state are two
 // transitions; Successors has one state for both).
 func (m *Model) Transitions(consts map[string]Value, s State, name string, args ...Value) (out []Transition, err error) {
+	defer m.finishContext(&err)
 	defer recoverInto(&err)
 	d, ok := m.Decl(name)
 	if !ok {
@@ -123,6 +124,7 @@ func (m *Model) Transitions(consts map[string]Value, s State, name string, args 
 	display := map[string]string{}
 	var key []byte // reused: a lookup of seen copies nothing
 	for _, sc := range succs {
+		ev.checkpoint()
 		p := reflect.ValueOf(sc.a).UnsafePointer()
 		bs, ok := states[p]
 		if !ok {
@@ -285,6 +287,7 @@ func (w *Why) Leaf() *Cond {
 // why a step cannot take deposit. A Why from an evaluation the
 // evaluator cannot make is its error (Unsupported, EvalError).
 func (m *Model) Explain(consts map[string]Value, s State, only, name string, args ...Value) (w *Why, err error) {
+	defer m.finishContext(&err)
 	defer recoverInto(&err)
 	d, ok := m.Decl(name)
 	if !ok {

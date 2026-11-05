@@ -7,6 +7,17 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
+Model-analysis lifecycle: canonical `validate/model` entrypoints take a context
+per operation, including analyzer construction, graph/possible searches,
+simulation and graph membership cross-checking. Managed compilation, cache
+waiters, sampling/verification/replay children and cooperative CPU phases share
+that request. Cancellation returns an operational error, discards partial
+analysis results and leaves reusable analyzers and cached models usable by live
+callers. CLI interrupts and qtest's test lifetime flow through the same path.
+Remaining context-free metadata/ordinary-validation evaluator entrypoints are
+explicit boundaries; this does not claim hard preemption of arbitrary I/O or
+individual machine instructions. See DESIGN §101.
+
 Current-library admission: live x/sys requirements are 0.49.0 and the external
 Orchestrion tier is 1.15.0 on the shared Go 1.27.3 floor. Atomic-publication race,
 source/replay export and native/woven integration checks cover the update;

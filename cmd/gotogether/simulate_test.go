@@ -23,7 +23,7 @@ func TestSplitTop(t *testing.T) {
 // saying the check on the code would prove nothing.
 func TestSimulateClassifies(t *testing.T) {
 	skip.Quint(t)
-	if code, err := simulate([]string{"-binding", "../../examples/hello/hello.binding.yaml", "-samples", "200"}); code != 0 || err != nil {
+	if code, err := simulate(t.Context(), []string{"-binding", "../../examples/hello/hello.binding.yaml", "-samples", "200"}); code != 0 || err != nil {
 		t.Fatalf("hello: exit %d, %v", code, err)
 	}
 	b, err := os.ReadFile("../../examples/hello/hello.binding.yaml")
@@ -37,7 +37,7 @@ func TestSimulateClassifies(t *testing.T) {
 	if err := os.WriteFile(p, []byte(wrong), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code, err := simulate([]string{"-binding", p, "-samples", "200"}); code != 1 || err != nil {
+	if code, err := simulate(t.Context(), []string{"-binding", p, "-samples", "200"}); code != 1 || err != nil {
 		t.Fatalf("exactlyOnce claimed allowed: exit %d, %v; want 1", code, err)
 	}
 }
@@ -52,7 +52,7 @@ func must(s string, err error) string {
 // A binding's verifySkip says why -verify leaves its model out, with no
 // quint run at all (the quint binary given does not exist).
 func TestSimulateVerifySkip(t *testing.T) {
-	code, err := simulate([]string{"-binding", "../../examples/twophase/twophase.binding.yaml", "-verify", "8", "-quint", "/nonexistent/quint"})
+	code, err := simulate(t.Context(), []string{"-binding", "../../examples/twophase/twophase.binding.yaml", "-verify", "8", "-quint", "/nonexistent/quint"})
 	if code != 0 || err != nil {
 		t.Errorf("twophase -verify: exit %d, %v; want a skip", code, err)
 	}
@@ -67,7 +67,7 @@ func TestSimulateVerify(t *testing.T) {
 		t.Skip("GOTOGETHER_VERIFY=1 runs quint verify (Apalache, Java)")
 	}
 	for _, b := range []string{"../../examples/hello/hello.binding.yaml", "../../examples/lease/lease.binding.yaml"} {
-		if code, err := simulate([]string{"-binding", b, "-verify", "5"}); code != 0 || err != nil {
+		if code, err := simulate(t.Context(), []string{"-binding", b, "-verify", "5"}); code != 0 || err != nil {
 			t.Errorf("%s: exit %d, %v", b, code, err)
 		}
 	}
@@ -77,7 +77,7 @@ func TestSimulateVerify(t *testing.T) {
 // judged after a run settles): simulate says so and succeeds, with no
 // quint run, where CI's loop over every binding once failed on it.
 func TestSimulateOnlyEventualVals(t *testing.T) {
-	code, err := simulate([]string{"-binding", "../../examples/quorumkv/quorumkv.binding.yaml", "-quint", "/nonexistent/quint"})
+	code, err := simulate(t.Context(), []string{"-binding", "../../examples/quorumkv/quorumkv.binding.yaml", "-quint", "/nonexistent/quint"})
 	if code != 0 || err != nil {
 		t.Errorf("quorumkv: exit %d, %v; want nothing to simulate", code, err)
 	}
@@ -132,7 +132,7 @@ simulate:
 		return out
 	}
 	p := write("    - soldOut\n    - name: bought then refunded\n      steps: [buy, insert, refund]\n")
-	if code, err := simulate([]string{"-binding", p, "-states", "1", "-quint", shim}); code != 0 || err != nil {
+	if code, err := simulate(t.Context(), []string{"-binding", p, "-states", "1", "-quint", shim}); code != 0 || err != nil {
 		t.Fatalf("exit %d, %v; want both reached by quint", code, err)
 	}
 	if rs := runs(); len(rs) != 1 || !strings.Contains(rs[0], "--invariant nonNegative") || !strings.Contains(rs[0], "--witnesses") || !strings.Contains(rs[0], "--mbt") {
@@ -141,7 +141,7 @@ simulate:
 	// one the model forbids: still sampled to the end, and failed
 	p = write("    - repair\n")
 	out := captureStdout(t, func() {
-		if code, err := simulate([]string{"-binding", p, "-states", "1", "-quint", shim}); code != 1 || err != nil {
+		if code, err := simulate(t.Context(), []string{"-binding", p, "-states", "1", "-quint", shim}); code != 1 || err != nil {
 			t.Errorf("repair: exit %d, %v; want 1", code, err)
 		}
 	})

@@ -255,7 +255,7 @@ func TestBindingSpecNotFound(t *testing.T) {
 	}
 	resolved := filepath.Join(dir, "sub", "model", "stock.qnt")
 	for name, run := range map[string]func() (int, error){
-		"simulate": func() (int, error) { return simulate([]string{"-binding", "sub/b.yaml"}) },
+		"simulate": func() (int, error) { return simulate(t.Context(), []string{"-binding", "sub/b.yaml"}) },
 		"validate": func() (int, error) {
 			code, _, err := validated(t, []string{"-binding", "sub/b.yaml", "run.jsonl"})
 			return code, err
@@ -317,7 +317,7 @@ func TestScaffoldBindingChecks(t *testing.T) {
 	// The author selected underLimit as a guarantee, but it can fail in the
 	// model (deposits have no cap): simulate
 	// says to move it to allows, which is the classification's point
-	code, out = capture(t, func() (int, error) { return simulate([]string{"-binding", p, "-samples", "100"}) })
+	code, out = capture(t, func() (int, error) { return simulate(t.Context(), []string{"-binding", p, "-samples", "100"}) })
 	if code != 1 || !strings.Contains(out, "FAIL    underLimit: the model should guarantee it, and a trace violates it: fix the model if it must hold, or move it to simulate.allows") || strings.Contains(out, "FAIL    nonNegative") {
 		t.Errorf("simulate: exit %d:\n%s", code, out)
 	}

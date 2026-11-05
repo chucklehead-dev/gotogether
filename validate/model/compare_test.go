@@ -20,7 +20,7 @@ func comparisonGraph(t *testing.T, file string, cfg GraphSearch) *GraphResult {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = c.Close() })
-	r, err := For(c).Graph(cfg)
+	r, err := For(c).Graph(t.Context(), cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

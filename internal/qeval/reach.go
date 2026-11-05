@@ -48,6 +48,9 @@ type Reached struct {
 // found in as many expansions as it has steps. The transitions of a
 // state are computed once for every search.
 func (m *Model) Reach(consts map[string]Value, start State, step string, goals []Goal, b Bound) ([]Reached, error) {
+	if err := m.contextErr(); err != nil {
+		return nil, err
+	}
 	memo := map[string][]Transition{}
 	succ := func(s State, k string) ([]Transition, error) {
 		if ts, ok := memo[k]; ok {
@@ -93,7 +96,7 @@ func (m *Model) Reach(consts map[string]Value, start State, step string, goals [
 			out[i] = rs[j]
 		}
 	}
-	return out, nil
+	return out, m.contextErr()
 }
 
 // reach is one search: for a sequence of steps (its nodes a state and
@@ -148,5 +151,5 @@ func (m *Model) reach(start State, steps []func(Transition) bool, holds []func(S
 			out[g].Complete, out[g].Cut = s.complete, s.cut
 		}
 	}
-	return out, nil
+	return out, m.contextErr()
 }

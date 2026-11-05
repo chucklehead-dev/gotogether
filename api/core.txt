@@ -3074,8 +3074,8 @@ func Compare(ctx context.Context, before, after *GraphResult, opt CompareOptions
 func ConfirmComparison(ctx context.Context, comparison *Comparison) error
 func ExportComparison(ctx context.Context, comparison *Comparison, dir string) error
 func For(c *validate.Checker) *Analyzer
-func New(bindingPath string, opt validate.Options) (*Analyzer, error)
-func Simulate(bindingPath string, opt SimulateOptions) (*Report, error)
+func New(ctx context.Context, bindingPath string, opt validate.Options) (*Analyzer, error)
+func Simulate(ctx context.Context, bindingPath string, opt SimulateOptions) (*Report, error)
 type ActionCoverage struct
     field Action string
     field Transitions int
@@ -3083,9 +3083,9 @@ type ActionCoverage struct
 type Analyzer struct
     method (*Analyzer) Checker() *validate.Checker
     method (*Analyzer) Close() error
-    method (*Analyzer) Graph(cfg GraphSearch) (*GraphResult, error)
-    method (*Analyzer) Possible(ps []binding.Possible, cfg PossibleSearch) ([]PossibleResult, error)
-    method (*Analyzer) Simulate(opt SimulateOptions) (*Report, error)
+    method (*Analyzer) Graph(ctx context.Context, cfg GraphSearch) (*GraphResult, error)
+    method (*Analyzer) Possible(ctx context.Context, ps []binding.Possible, cfg PossibleSearch) ([]PossibleResult, error)
+    method (*Analyzer) Simulate(ctx context.Context, opt SimulateOptions) (*Report, error)
 type BehaviorInclusion struct
     field Status string
     field Reason string
@@ -3187,7 +3187,7 @@ type GraphResult struct
     field Stops []string
     field Elapsed time.Duration
     method (*GraphResult) Extent() string
-    method (*GraphResult) Lacks(tr *itf.Trace) (int, string, error)
+    method (*GraphResult) Lacks(ctx context.Context, tr *itf.Trace) (index int, state string, err error)
     method (*GraphResult) NeverEnabled() []string
 type GraphSearch struct
     field Constants []string

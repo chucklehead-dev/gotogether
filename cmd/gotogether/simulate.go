@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -19,18 +20,18 @@ import (
 // deadlocks, the actions never enabled, the shortest counterexamples and
 // each eventual val judged as cycles. The section's possibles are
 // searched by the evaluator, what it did not find sampled by quint.
-func simulate(args []string) (int, error) {
+func simulate(ctx context.Context, args []string) (int, error) {
 	var mr machineReports
 	log := &simLog{}
 	simCapture = log
 	defer func() { simCapture = nil }()
-	code, err := simulateCmd(args, &mr, log)
+	code, err := simulateCmd(ctx, args, &mr, log)
 	return mr.write(log.document(), os.Stdout, code, err)
 }
 
 // simulateCmd is the simulate command, its machine-readable reports'
 // flags in mr and its lines in log.
-func simulateCmd(args []string, mr *machineReports, log *simLog) (int, error) {
+func simulateCmd(ctx context.Context, args []string, mr *machineReports, log *simLog) (int, error) {
 	fset := commandFlags("simulate")
 	mr.flags(fset)
 	bpath := fset.String("binding", "", "binding file: its spec, module, constants, defs, invariants and simulate section")
@@ -68,7 +69,7 @@ func simulateCmd(args []string, mr *machineReports, log *simLog) (int, error) {
 	if *stops != "" {
 		opt.Stops = splitList(*stops)
 	}
-	rep, err := model.Simulate(*bpath, opt)
+	rep, err := model.Simulate(ctx, *bpath, opt)
 	if err != nil {
 		return 2, err
 	}

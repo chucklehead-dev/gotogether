@@ -140,11 +140,20 @@ func hostArgs(cs []*possibleCheck, verify, samples int, tracesDir string) (argv 
 // action's arguments). host, if set, is a sampling an invariant's run
 // made already (hostArgs): its witnesses are the predicates' verdicts
 // and its traces the sequences' first batch.
-func quintPossibles(quint, dir, file string, cs []*possibleCheck, steps, samples int, seed string, verify int, host *hostedSample) error {
+func quintPossibles(ctx context.Context, quint, dir, file string, cs []*possibleCheck, steps, samples int, seed string, verify int, host *hostedSample) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	verified, preds, seqs := quintShare(cs, verify)
 	for _, c := range verified {
 		argv := []string{"verify", "--main", "simulate", "--invariant", c.not, "--max-steps", fmt.Sprint(verify), file}
-		out, err := runQuint(quint, dir, argv)
+		out, err := runQuint(ctx, quint, dir, argv)
+		if isAnalysisCancellation(err) {
+			return err
+		}
+		if canceled := ctx.Err(); canceled != nil {
+			return canceled
+		}
 		v := strings.Contains(out, "[violation]")
 		if err != nil && !v {
 			return fmt.Errorf("simulate: quint verify of possible %q: %w\n%s", c.p.Text(), err, out)
@@ -162,7 +171,7 @@ func quintPossibles(quint, dir, file string, cs []*possibleCheck, steps, samples
 			for _, c := range preds {
 				argv = append(argv, c.val)
 			}
-			o, err := runQuint(quint, dir, argv)
+			o, err := runQuint(ctx, quint, dir, argv)
 			if err != nil {
 				return fmt.Errorf("simulate: quint run of the possibles' predicates: %w\n%s", err, o)
 			}
@@ -180,7 +189,10 @@ func quintPossibles(quint, dir, file string, cs []*possibleCheck, steps, samples
 		// by the module's types where quint's Rust backend's integers need them
 		traces := &binding.TraceReader{Quint: quint, Spec: file, Module: "simulate"}
 		for _, f := range files {
-			tr, err := traces.Read(context.Background(), f)
+			if err := ctx.Err(); err != nil {
+				return 0, err
+			}
+			tr, err := traces.Read(ctx, f)
 			if err != nil {
 				return 0, fmt.Errorf("simulate: %s: %w", f, err)
 			}
@@ -214,6 +226,9 @@ func quintPossibles(quint, dir, file string, cs []*possibleCheck, steps, samples
 	}
 	base, seedErr := strconv.ParseInt(seed, 0, 64)
 	for done := start; done < samples; done += traceBatch {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		n := min(traceBatch, samples-done)
 		s := seed
 		if done > 0 {
@@ -228,7 +243,7 @@ func quintPossibles(quint, dir, file string, cs []*possibleCheck, steps, samples
 		}
 		argv := backendArgs([]string{"run", "--main", "simulate", "--mbt", "--out-itf", filepath.Join(bdir, "t_{seq}.itf.json"), "--n-traces", fmt.Sprint(n),
 			"--max-steps", fmt.Sprint(steps), "--max-samples", fmt.Sprint(n), "--seed", s})
-		if out, err := runQuint(quint, dir, append(argv, file)); err != nil {
+		if out, err := runQuint(ctx, quint, dir, append(argv, file)); err != nil {
 			return fmt.Errorf("simulate: quint run of the possibles' traces: %w\n%s", err, out)
 		}
 		left, err := look(bdir)
@@ -239,7 +254,7 @@ func quintPossibles(quint, dir, file string, cs []*possibleCheck, steps, samples
 			break
 		}
 	}
-	return nil
+	return ctx.Err()
 }
 
 // backendArgs is argv with quint's backend, if QUINT_BACKEND names one.
@@ -270,9 +285,15 @@ func readWitnesses(out string, preds []*possibleCheck) error {
 	return nil
 }
 
-func runQuint(quint, dir string, argv []string) (string, error) {
-	cmd := quintcmd.Command(context.Background(), quint, dir, argv...)
+func runQuint(ctx context.Context, quint, dir string, argv []string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	cmd := quintcmd.Command(ctx, quint, dir, argv...)
 	out, err := cmd.CombinedOutput()
+	if canceled := ctx.Err(); canceled != nil {
+		return "", canceled
+	}
 	return string(out), err
 }
 

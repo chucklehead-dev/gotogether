@@ -1,6 +1,7 @@
 package qeval
 
 import (
+	"context"
 	"slices"
 )
 
@@ -85,7 +86,18 @@ func (c Component) Fair() bool { return len(c.Missed) == 0 }
 // unfair or stopping families leave), unfair otherwise, its Missed what
 // is enabled there (a state a fair family is stuck behind: an input left
 // fair, and the processor it hides). Each fair one carries its lasso.
-func (g *Graph) HotComponents(hot []bool, fam Families) []Component {
+// Cancellation returns its context error and no partial liveness verdict.
+func (g *Graph) HotComponents(ctx context.Context, hot []bool, fam Families) (result []Component, err error) {
+	defer func() {
+		if canceled := ctx.Err(); canceled != nil {
+			result, err = nil, canceled
+		}
+	}()
+	defer recoverInto(&err)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	check := newContextCheckpoint(ctx)
 	n := len(g.Out)
 	in := func(s int) bool { return s >= 0 && s < n && s < len(hot) && hot[s] && g.whole(s) }
 	inner := func(e Edge) bool { return fam.Fair[fam.Of[e.Label]] != Stops }
@@ -94,6 +106,9 @@ func (g *Graph) HotComponents(hot []bool, fam Families) []Component {
 	enabled := func(s int) []int {
 		var out []int
 		for _, e := range g.Out[s] {
+			if check != nil {
+				check()
+			}
 			if e.To == s {
 				continue
 			}
@@ -104,38 +119,56 @@ func (g *Graph) HotComponents(hot []bool, fam Families) []Component {
 		slices.Sort(out)
 		return out
 	}
-	comp := g.sccs(in, inner)
+	comp := g.sccs(in, inner, check)
 	var out []Component
 	for _, states := range comp {
+		if check != nil {
+			check()
+		}
 		c := Component{States: states}
 		members := map[int]bool{}
 		for _, s := range states {
+			if check != nil {
+				check()
+			}
 			members[s] = true
 		}
 		c.Obliged = enabled(states[0])
 		for _, s := range states[1:] {
+			if check != nil {
+				check()
+			}
 			c.Obliged = intersect(c.Obliged, enabled(s))
 		}
 		taken := map[int]bool{}
 		for _, s := range states {
+			if check != nil {
+				check()
+			}
 			for _, e := range g.Out[s] {
+				if check != nil {
+					check()
+				}
 				if e.To != s && members[e.To] && inner(e) {
 					taken[fam.Of[e.Label]] = true
 				}
 			}
 		}
 		for _, f := range c.Obliged {
+			if check != nil {
+				check()
+			}
 			if !taken[f] {
 				c.Missed = append(c.Missed, f)
 			}
 		}
 		if c.Fair() {
-			c.Lasso = g.fairCycle(states, members, fam, enabled, inner)
+			c.Lasso = g.fairCycle(states, members, fam, enabled, inner, check)
 		}
 		out = append(out, c)
 	}
 	slices.SortFunc(out, func(a, b Component) int { return a.States[0] - b.States[0] })
-	return out
+	return out, nil
 }
 
 // intersect is the sorted lists' common elements.
@@ -152,10 +185,13 @@ func intersect(a, b []int) []int {
 // sccs are the strongly connected components of the subgraph of the
 // states in admits (in) and the edges inner admits between them (Tarjan's,
 // iterative: a graph's paths may be 10^5 long), each sorted.
-func (g *Graph) sccs(in func(int) bool, inner func(Edge) bool) [][]int {
+func (g *Graph) sccs(in func(int) bool, inner func(Edge) bool, check func()) [][]int {
 	n := len(g.Out)
 	index, low := make([]int, n), make([]int, n)
 	for i := range index {
+		if check != nil {
+			check()
+		}
 		index[i] = -1
 	}
 	onStack := make([]bool, n)
@@ -164,6 +200,9 @@ func (g *Graph) sccs(in func(int) bool, inner func(Edge) bool) [][]int {
 	next := 0
 	type frame struct{ s, e int }
 	for root := range n {
+		if check != nil {
+			check()
+		}
 		if !in(root) || index[root] >= 0 {
 			continue
 		}
@@ -173,6 +212,9 @@ func (g *Graph) sccs(in func(int) bool, inner func(Edge) bool) [][]int {
 		stack = append(stack, root)
 		onStack[root] = true
 		for len(calls) > 0 {
+			if check != nil {
+				check()
+			}
 			f := &calls[len(calls)-1]
 			s := f.s
 			if f.e < len(g.Out[s]) {
@@ -201,6 +243,9 @@ func (g *Graph) sccs(in func(int) bool, inner func(Edge) bool) [][]int {
 			if low[s] == index[s] {
 				var c []int
 				for {
+					if check != nil {
+						check()
+					}
 					t := stack[len(stack)-1]
 					stack = stack[:len(stack)-1]
 					onStack[t] = false
@@ -224,7 +269,7 @@ func (g *Graph) sccs(in func(int) bool, inner func(Edge) bool) [][]int {
 // component, or, where none is, a state of it where the family is not
 // enabled (one exists, the component being fair). Each waypoint settles
 // its family for good, so there are at most as many as families.
-func (g *Graph) fairCycle(states []int, members map[int]bool, fam Families, enabled func(int) []int, inner func(Edge) bool) *Lasso {
+func (g *Graph) fairCycle(states []int, members map[int]bool, fam Families, enabled func(int) []int, inner func(Edge) bool, check func()) *Lasso {
 	entry := states[0]
 	if len(enabled(entry)) == 0 {
 		return &Lasso{Entry: entry}
@@ -244,9 +289,15 @@ func (g *Graph) fairCycle(states []int, members map[int]bool, fam Families, enab
 		prev := map[int]Edge{}
 		from := map[int]int{a: a}
 		for q := []int{a}; len(q) > 0; {
+			if check != nil {
+				check()
+			}
 			s := q[0]
 			q = q[1:]
 			for _, e := range g.Out[s] {
+				if check != nil {
+					check()
+				}
 				if _, seen := from[e.To]; seen || !members[e.To] || !inner(e) {
 					continue
 				}
@@ -259,6 +310,9 @@ func (g *Graph) fairCycle(states []int, members map[int]bool, fam Families, enab
 		}
 		var p []Edge
 		for x := b; x != a; x = from[x] {
+			if check != nil {
+				check()
+			}
 			p = append(p, prev[x])
 		}
 		slices.Reverse(p)
@@ -268,6 +322,9 @@ func (g *Graph) fairCycle(states []int, members map[int]bool, fam Families, enab
 		var cyc []Edge
 		cur := entry
 		for _, w := range wps {
+			if check != nil {
+				check()
+			}
 			if w.edge != nil {
 				cyc = append(cyc, path(cur, w.from)...)
 				cyc = append(cyc, *w.edge)
@@ -281,11 +338,17 @@ func (g *Graph) fairCycle(states []int, members map[int]bool, fam Families, enab
 	}
 	var cyc []Edge
 	for {
+		if check != nil {
+			check()
+		}
 		cyc = build()
 		visited := []int{entry}
 		taken := map[int]bool{}
 		from := entry
 		for _, e := range cyc {
+			if check != nil {
+				check()
+			}
 			if e.To != from {
 				taken[fam.Of[e.Label]] = true
 			}
@@ -296,10 +359,16 @@ func (g *Graph) fairCycle(states []int, members map[int]bool, fam Families, enab
 		}
 		obliged := enabled(entry)
 		for _, s := range visited[1:] {
+			if check != nil {
+				check()
+			}
 			obliged = intersect(obliged, enabled(s))
 		}
 		missed := -1
 		for _, f := range obliged {
+			if check != nil {
+				check()
+			}
 			if !taken[f] {
 				missed = f
 				break
@@ -313,7 +382,13 @@ func (g *Graph) fairCycle(states []int, members map[int]bool, fam Families, enab
 		// entry inside the component
 		added := false
 		for _, s := range states {
+			if check != nil {
+				check()
+			}
 			for _, e := range g.Out[s] {
+				if check != nil {
+					check()
+				}
 				if e.To != s && members[e.To] && inner(e) && (missed < 0 || fam.Of[e.Label] == missed) {
 					wps = append(wps, waypoint{edge: &e, from: s})
 					added = true
@@ -326,6 +401,9 @@ func (g *Graph) fairCycle(states []int, members map[int]bool, fam Families, enab
 		}
 		if !added {
 			for _, s := range states {
+				if check != nil {
+					check()
+				}
 				if !slices.Contains(enabled(s), missed) {
 					wps = append(wps, waypoint{state: s})
 					added = true

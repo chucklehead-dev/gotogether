@@ -6739,3 +6739,46 @@ graph's existing extent and bounds. Display wording is not parsed. These are
 observations, not implicit CLI assertions: discovering an unreachable action does
 not change simulate's exit status unless an existing requested check fails.
 There is no second report format or compatibility representation.
+
+
+## 101. Request-owned model analysis
+
+A real model-diff signal probe reached a gated evaluation-module compiler, sent
+SIGTERM and remained blocked until the compiler was released. Model-diff owned a
+signal context but Graph could not receive it; evaluator memo waits, cache locks
+and compiler commands substituted Background. Simulate did not install a signal
+context at all. New model claims reuse these same phases, so the boundary belongs
+to the shared framework.
+
+Require context first on model.New, package Simulate, analyzer Graph/Possible/
+Simulate and GraphResult.Lacks. Each operation takes its own context; a reusable
+analyzer does not retain a canceled request. ModelCheck.Expect and failed-scenario
+diagnostics pass the test context. Both CLI commands pass their signal context.
+There is one compiler implementation, reached through a context-bearing internal
+bridge. Existing ordinary-validation and metadata evaluator entrypoints pass
+Background explicitly at their own boundary; they do not get a duplicate compiler.
+
+Reuse memo.DoContext: waiters can leave independently, a live waiter retries after
+a canceled owner, and failed/canceled work cannot become a cached success. Version
+lookup, disk-lock waits and the managed compiler child take the same context.
+Parsed model IR stays context-free. CPU analysis uses shallow request views with
+cooperative checkpoints in evaluation, enumeration, search and liveness traversal.
+A returned graph detaches request ownership, and its retained evaluator remains
+the original cached one. Check cancellation after phases before accepting success,
+including lazy evaluation paths that can otherwise hide an unused failed let.
+
+Cancellation is a wrapped error detectable with errors.Is, never an Unsupported
+fragment, state/depth cutoff, impossible scenario, invariant violation, deadlock
+or comparison difference. Return no successful partial analysis on cancellation;
+Simulate must not fall back to sampling after a canceled evaluator search. Reuse
+the existing JSON error/exit-2 contract rather than adding another report status.
+These are cooperative checks, not hard instruction-level preemption or a promise
+to interrupt every synchronous file operation. Pure observation/metadata helpers
+remain context-free where they perform no request-owned external work.
+
+Tests gate compiler and sampling/replay children, cancel cache owners and waiters,
+exercise warm and in-progress CPU work, reuse analyzers after canceled requests,
+and invoke actual CLI dispatch plus SIGTERM. The signal controls require final
+machine error reports without graph/check verdicts, and always release their test
+gates during cleanup. Representative graph benchmarks check the cost of request
+checkpoints rather than inferring performance from the number of checks alone.

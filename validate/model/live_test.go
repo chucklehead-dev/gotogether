@@ -79,12 +79,12 @@ func TestCheckerGraphEventually(t *testing.T) {
 		t.Fatalf("depth 3: %s, %+v", d.Extent(), d.Eventually[0])
 	}
 
-	c, err := newChecker("../testdata/hot.yaml", validate.Options{})
+	c, err := newChecker(t.Context(), "../testdata/hot.yaml", validate.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer c.Close()
-	if _, err := c.Graph(GraphSearch{Unfair: []string{"sumbit"}}); err == nil || !strings.Contains(err.Error(), "simulate.unfair names sumbit, which is no action of hot's step") {
+	if _, err := c.Graph(t.Context(), GraphSearch{Unfair: []string{"sumbit"}}); err == nil || !strings.Contains(err.Error(), "simulate.unfair names sumbit, which is no action of hot's step") {
 		t.Fatalf("a misspelled action: %v", err)
 	}
 }

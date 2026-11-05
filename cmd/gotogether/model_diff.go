@@ -80,14 +80,14 @@ func modelDiff(ctx context.Context, stdout io.Writer, args []string) (int, error
 	}
 	defer right.Close()
 	cfg := model.GraphSearch{Constants: constantValues, States: *states, Depth: *depth, Invariants: []string{}, Eventually: []string{}}
-	lg, err := model.For(left).Graph(cfg)
+	lg, err := model.For(left).Graph(ctx, cfg)
 	if err != nil {
 		return reports.write(doc, stdout, 2, fmt.Errorf("model-diff before %s: %w", *before, err))
 	}
 	if err := ctx.Err(); err != nil {
 		return reports.write(doc, stdout, 2, err)
 	}
-	rg, err := model.For(right).Graph(cfg)
+	rg, err := model.For(right).Graph(ctx, cfg)
 	if err != nil {
 		return reports.write(doc, stdout, 2, fmt.Errorf("model-diff after %s: %w", *after, err))
 	}

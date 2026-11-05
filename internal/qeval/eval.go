@@ -87,6 +87,7 @@ type evaluation struct {
 	depth  int
 	// labels: each successor carries what led to it (Transitions)
 	labels bool
+	ticks  uint8 // amortized request-cancellation checkpoints
 	// acts are the successors of each action call made so far (its
 	// declaration and arguments), in this state: an action's successors
 	// depend on nothing else (its body binds only its parameters), and a
@@ -112,6 +113,7 @@ type evaluation struct {
 }
 
 func (m *Model) evaluation(consts map[string]Value, s State) *evaluation {
+	m.checkContext()
 	ev := &evaluation{m: m, consts: consts, state: s, cache: map[int64]Value{}, fp: m.fp}
 	if ev.fp != nil && s != nil {
 		ev.conj = ev.fp.Judging
@@ -122,6 +124,7 @@ func (m *Model) evaluation(consts map[string]Value, s State) *evaluation {
 // Eval is the value of the definition name (a val, or a def applied to
 // args) in state s, with the instance's constants.
 func (m *Model) Eval(consts map[string]Value, s State, name string, args ...Value) (v Value, err error) {
+	defer m.finishContext(&err)
 	defer recoverInto(&err)
 	d, ok := m.Decl(name)
 	if !ok {
@@ -134,6 +137,7 @@ func (m *Model) Eval(consts map[string]Value, s State, name string, args ...Valu
 // Successors are every distinct state action name, applied to args, may
 // step to from s (none: disabled), every variable assigned.
 func (m *Model) Successors(consts map[string]Value, s State, name string, args ...Value) (out []State, err error) {
+	defer m.finishContext(&err)
 	defer recoverInto(&err)
 	d, ok := m.Decl(name)
 	if !ok {
@@ -150,6 +154,7 @@ func (m *Model) Successors(consts map[string]Value, s State, name string, args .
 	}
 	seen := map[string]bool{}
 	for _, sc := range succs {
+		ev.checkpoint()
 		a := sc.a
 		st := State{}
 		for _, v := range m.Vars {
@@ -188,6 +193,7 @@ func (m *Model) Key(s State) string {
 // distinct successor (an action that chooses) is Unsupported: a replay
 // takes one, and quint's choice is its own.
 func (m *Model) Step(consts map[string]Value, s State, name string, args ...Value) (next State, enabled bool, err error) {
+	defer m.finishContext(&err)
 	out, err := m.Successors(consts, s, name, args...)
 	if err != nil {
 		return nil, false, err
@@ -264,6 +270,7 @@ func (ev *evaluation) bindArgs(d *Decl, args []Value, e *env, name string) (*Exp
 			return nil, nil, fmt.Errorf("qeval: %s takes %d arguments, not %d", name, len(body.Params), len(args))
 		}
 		for i, p := range body.Params {
+			ev.checkpoint()
 			e = e.bind(p.Name, args[i])
 		}
 		return body.Expr, e, nil
@@ -339,6 +346,7 @@ func (x *events) slice() []Event {
 // action is what e does as an action: its successors (none: disabled). A
 // Boolean expression is an action that assigns nothing.
 func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
+	ev.checkpoint()
 	ev.depth++
 	defer func() { ev.depth-- }()
 	if ev.depth > 10000 {
@@ -356,6 +364,7 @@ func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 		case opActionAll:
 			out := []succ{{a: assignment{}}}
 			for _, a := range e.Args {
+				ev.checkpoint()
 				next, err := ev.action(a, en)
 				if err != nil {
 					return nil, err
@@ -365,7 +374,9 @@ func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 				}
 				var prod []succ
 				for _, x := range out {
+					ev.checkpoint()
 					for _, y := range next {
+						ev.checkpoint()
 						z, err := merge(x.a, y.a)
 						if err != nil {
 							return nil, err
@@ -386,6 +397,7 @@ func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 		case opActionAny:
 			var out []succ
 			for _, a := range e.Args {
+				ev.checkpoint()
 				next, err := ev.action(a, en)
 				if err != nil {
 					return nil, err
@@ -421,6 +433,7 @@ func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 				pick = ev.m.Display(d.Name)
 			}
 			for _, x := range s.Elems {
+				ev.checkpoint()
 				next, err := ev.action(e.Expr, en.bind(d.Name, x))
 				if err != nil {
 					return nil, err
@@ -471,6 +484,7 @@ func (ev *evaluation) calledAction(e *Expr, en *env) (*Decl, []Value, bool) {
 	}
 	args := make([]Value, len(e.Args))
 	for i, a := range e.Args {
+		ev.checkpoint()
 		args[i] = ev.eval(a, en)
 	}
 	return d, args, true
@@ -484,6 +498,7 @@ func (ev *evaluation) calledAction(e *Expr, en *env) (*Decl, []Value, bool) {
 func (ev *evaluation) callAction(d *Decl, args []Value, applied bool) ([]succ, error) {
 	memo := true
 	for _, a := range args {
+		ev.checkpoint()
 		if _, ok := a.(*Lambda); ok {
 			// an operator argument (Choreo's step_with) is its closure, which
 			// no key writes: such a call is not remembered
@@ -538,6 +553,7 @@ func (ev *evaluation) label(out []succ, l Event) []succ {
 		return out
 	}
 	for i := range out {
+		ev.checkpoint()
 		out[i].lab = &events{l, out[i].lab}
 	}
 	return out
@@ -679,6 +695,7 @@ func (ev *evaluation) seqOf(v Value, op string) []Value {
 
 // call applies an operator value to args.
 func (ev *evaluation) call(f Value, args ...Value) Value {
+	ev.checkpoint()
 	l, ok := f.(*Lambda)
 	if !ok {
 		throw(internal("expected an operator, got %s", String(f)))
@@ -688,12 +705,14 @@ func (ev *evaluation) call(f Value, args ...Value) Value {
 	}
 	en := l.env
 	for i, p := range l.params {
+		ev.checkpoint()
 		en = en.bind(p, args[i])
 	}
 	return ev.eval(l.body, en)
 }
 
 func (ev *evaluation) eval(e *Expr, en *env) Value {
+	ev.checkpoint()
 	ev.depth++
 	defer func() { ev.depth-- }()
 	if ev.depth > 10000 {
@@ -843,6 +862,7 @@ func (ev *evaluation) app(e *Expr, en *env) Value {
 	if f, ok := en.lookup(e.Opcode); ok { // a let-bound operator, or one passed as a parameter
 		args := make([]Value, len(e.Args))
 		for i, a := range e.Args {
+			ev.checkpoint()
 			args[i] = ev.eval(a, en)
 		}
 		return ev.call(f, args...)
@@ -850,6 +870,7 @@ func (ev *evaluation) app(e *Expr, en *env) Value {
 	if r, ok := ev.m.refs[e.ID]; ok && (r.kind == "def" || r.kind == "param") {
 		args := make([]Value, len(e.Args))
 		for i, a := range e.Args {
+			ev.checkpoint()
 			args[i] = ev.eval(a, en)
 		}
 		if r.kind == "param" {
@@ -896,6 +917,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 	all := func() []Value {
 		out := make([]Value, len(e.Args))
 		for i := range e.Args {
+			ev.checkpoint()
 			out[i] = arg(i)
 		}
 		return out
@@ -904,6 +926,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 	// Booleans, short-circuit
 	case opAnd:
 		for _, a := range e.Args {
+			ev.checkpoint()
 			if !ev.boolOf(a, en) {
 				return Bool(false)
 			}
@@ -911,6 +934,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		return Bool(true)
 	case opOr:
 		for _, a := range e.Args {
+			ev.checkpoint()
 			if ev.boolOf(a, en) {
 				return Bool(true)
 			}
@@ -969,6 +993,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		}
 		r, x := int64(1), a // by squaring, overflow checked
 		for ; b > 0; b >>= 1 {
+			ev.checkpoint()
 			if b&1 == 1 {
 				r = mul(r, x)
 			}
@@ -1002,6 +1027,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		}
 		var out []Value
 		for i := lo; i <= hi; i++ {
+			ev.checkpoint()
 			out = append(out, Int(i))
 		}
 		return &Set{out}
@@ -1021,6 +1047,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		a, b := ev.setOf(arg(0), op), ev.setOf(arg(1), op)
 		var out []Value
 		for _, x := range a.Elems {
+			ev.checkpoint()
 			if b.has(x) {
 				out = append(out, x)
 			}
@@ -1030,6 +1057,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		a, b := ev.setOf(arg(0), op), ev.setOf(arg(1), op)
 		var out []Value
 		for _, x := range a.Elems {
+			ev.checkpoint()
 			if !b.has(x) {
 				out = append(out, x)
 			}
@@ -1038,6 +1066,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 	case opSubseteq:
 		a, b := ev.setOf(arg(0), op), ev.setOf(arg(1), op)
 		for _, x := range a.Elems {
+			ev.checkpoint()
 			if !b.has(x) {
 				return Bool(false)
 			}
@@ -1053,6 +1082,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			f := arg(1)
 			var out List
 			for _, x := range l {
+				ev.checkpoint()
 				if ev.truth(ev.call(f, x)) {
 					out = append(out, x)
 				}
@@ -1062,6 +1092,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		s, f := ev.setOf(arg(0), op), arg(1)
 		var out []Value
 		for _, x := range s.Elems {
+			ev.checkpoint()
 			if ev.truth(ev.call(f, x)) {
 				out = append(out, x)
 			}
@@ -1071,6 +1102,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		s, f := ev.setOf(arg(0), op), arg(1)
 		out := make([]Value, len(s.Elems))
 		for i, x := range s.Elems {
+			ev.checkpoint()
 			out[i] = ev.call(f, x)
 		}
 		return NewSet(out)
@@ -1087,6 +1119,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		decided := false
 		var failure *EvalError
 		for _, x := range s.Elems {
+			ev.checkpoint()
 			v, err := ev.callOrErr(f, x)
 			var ee *EvalError
 			switch {
@@ -1112,6 +1145,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 	case opFlatten:
 		var out []Value
 		for _, x := range ev.setOf(arg(0), op).Elems {
+			ev.checkpoint()
 			out = append(out, ev.setOf(x, op).Elems...)
 		}
 		return NewSet(out)
@@ -1122,8 +1156,10 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		}
 		var out []Value
 		for mask := 0; mask < 1<<len(s.Elems); mask++ {
+			ev.checkpoint()
 			var sub []Value
 			for i, x := range s.Elems {
+				ev.checkpoint()
 				if mask&(1<<i) != 0 {
 					sub = append(sub, x)
 				}
@@ -1135,6 +1171,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		sets := make([]*Set, len(e.Args))
 		n := 1
 		for i := range e.Args {
+			ev.checkpoint()
 			sets[i] = ev.setOf(arg(i), op)
 			n *= len(sets[i].Elems)
 			if n > maxSet {
@@ -1143,9 +1180,12 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		}
 		out := []Value{Tup{}}
 		for _, s := range sets {
+			ev.checkpoint()
 			var next []Value
 			for _, t := range out {
+				ev.checkpoint()
 				for _, x := range s.Elems {
+					ev.checkpoint()
 					next = append(next, append(slices.Clone(t.(Tup)), x))
 				}
 			}
@@ -1159,6 +1199,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 	case opMapCons:
 		var ks, vs []Value
 		for _, p := range all() {
+			ev.checkpoint()
 			t, ok := p.(Tup)
 			if !ok || len(t) != 2 {
 				throw(internal("Map: expected pairs, got %s", String(p)))
@@ -1170,12 +1211,14 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		s, f := ev.setOf(arg(0), op), arg(1)
 		vs := make([]Value, len(s.Elems))
 		for i, x := range s.Elems {
+			ev.checkpoint()
 			vs[i] = ev.call(f, x)
 		}
 		return &Map{Keys: slices.Clone(s.Elems), Vals: vs}
 	case opSetToMap:
 		var ks, vs []Value
 		for _, p := range ev.setOf(arg(0), op).Elems {
+			ev.checkpoint()
 			t := p.(Tup)
 			// the pairs are sorted: a key's pairs are neighbours
 			if n := len(ks); n > 0 && Compare(ks[n-1], t[0]) == 0 {
@@ -1224,6 +1267,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		var names []string
 		var vals []Value
 		for i := 0; i+1 < len(e.Args); i += 2 {
+			ev.checkpoint()
 			n, ok := arg(i).(Str)
 			if !ok {
 				throw(internal("Rec: a field name"))
@@ -1259,6 +1303,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		r := arg(0).(*Rec)
 		out := make([]Value, len(r.Names))
 		for i, n := range r.Names {
+			ev.checkpoint()
 			out[i] = Str(n)
 		}
 		return &Set{out}
@@ -1282,6 +1327,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 			throw(internal("match: expected a variant"))
 		}
 		for i := 1; i+1 < len(e.Args); i += 2 {
+			ev.checkpoint()
 			l := string(arg(i).(Str))
 			if l == v.Label || l == "_" {
 				return ev.call(arg(i+1), v.Val)
@@ -1342,6 +1388,7 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		}
 		var out List
 		for i := lo; i < hi; i++ {
+			ev.checkpoint()
 			out = append(out, Int(i))
 		}
 		return out
@@ -1349,18 +1396,21 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		l := ev.seqOf(arg(0), op)
 		out := make([]Value, len(l))
 		for i := range l {
+			ev.checkpoint()
 			out[i] = Int(i)
 		}
 		return &Set{out}
 	case opFoldl:
 		l, acc, f := ev.seqOf(arg(0), op), arg(1), arg(2)
 		for _, x := range l {
+			ev.checkpoint()
 			acc = ev.call(f, acc, x)
 		}
 		return acc
 	case opFoldr:
 		l, acc, f := ev.seqOf(arg(0), op), arg(1), arg(2)
 		for i := len(l) - 1; i >= 0; i-- {
+			ev.checkpoint()
 			acc = ev.call(f, l[i], acc)
 		}
 		return acc

@@ -59,7 +59,7 @@ simulate:
 			argv = append(argv, "-json")
 		}
 		return captureStdout(t, func() {
-			if code, err := simulate(argv); code != 1 || err != nil {
+			if code, err := simulate(t.Context(), argv); code != 1 || err != nil {
 				t.Errorf("bounded unmet requirement: exit %d, %v", code, err)
 			}
 		})

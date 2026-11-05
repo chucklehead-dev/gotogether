@@ -52,7 +52,9 @@ func TestCountStepActionsUsesStaticRoster(t *testing.T) {
 		{{Action: "helper"}, {Action: "first"}, {Action: "first"}, {Action: "second"}},
 		{{Action: "first"}},
 	}, Out: [][]qeval.Edge{{{Label: 0}, {Label: 1}}, {{Label: 0}}}}
-	countStepActions(actions, graph)
+	if err := countStepActions(t.Context(), actions, graph); err != nil {
+		t.Fatal(err)
+	}
 	want := []ActionCoverage{{Action: "first", Transitions: 3, States: 2}, {Action: "second", Transitions: 2, States: 2}, {Action: "never"}}
 	if !reflect.DeepEqual(actions, want) {
 		t.Fatalf("coverage=%+v, want %+v", actions, want)
@@ -154,7 +156,7 @@ func TestStepActionCoveragePreservesWrapperFairness(t *testing.T) {
 	if !reflect.DeepEqual(graph.Unfair, []string{"wrapper"}) {
 		t.Fatalf("fairness changed: %v", graph.Unfair)
 	}
-	report, err := Simulate(file, SimulateOptions{Graph: true, Invariants: []string{}, Eventually: []string{}, Possibles: []binding.Possible{}, Samples: 1, Steps: 1})
+	report, err := Simulate(t.Context(), file, SimulateOptions{Graph: true, Invariants: []string{}, Eventually: []string{}, Possibles: []binding.Possible{}, Samples: 1, Steps: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +167,7 @@ func TestStepActionCoveragePreservesWrapperFairness(t *testing.T) {
 
 func TestStepActionGraphOnlySimulation(t *testing.T) {
 	skip.Quint(t)
-	report, err := Simulate("../testdata/vending.yaml", SimulateOptions{Graph: true, Invariants: []string{}, Eventually: []string{}, Possibles: []binding.Possible{}, Samples: 1, Steps: 1})
+	report, err := Simulate(t.Context(), "../testdata/vending.yaml", SimulateOptions{Graph: true, Invariants: []string{}, Eventually: []string{}, Possibles: []binding.Possible{}, Samples: 1, Steps: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

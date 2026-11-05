@@ -1,6 +1,7 @@
 package qeval
 
 import (
+	"context"
 	"fmt"
 	"math/rand/v2"
 	"slices"
@@ -171,7 +172,7 @@ func checkHot(t *testing.T, name string, g *Graph, hot []bool, fam Families) {
 		}
 	}
 	got := map[int]bool{}
-	comps := g.HotComponents(hot, fam)
+	comps := hotComponents(t, g, hot, fam)
 	for _, c := range comps {
 		// a component of the hot subgraph: its states reach each other, and
 		// no state outside it both reaches and is reached by them
@@ -278,29 +279,29 @@ func TestHotComponentsFairness(t *testing.T) {
 	}, Expanded: []bool{true, true, true}, Labels: make([][]Event, 4)}
 	hot := []bool{false, true, true}
 	fair := Families{Of: []int{0, 1, 2, 3}, Fair: []Fairness{Unfair, WeakFair, WeakFair, WeakFair}}
-	if cs := g.HotComponents(hot, fair); len(cs) != 1 || cs[0].Fair() || !slices.Equal(cs[0].Missed, []int{process}) {
+	if cs := hotComponents(t, g, hot, fair); len(cs) != 1 || cs[0].Fair() || !slices.Equal(cs[0].Missed, []int{process}) {
 		t.Fatalf("process enabled throughout: %+v", cs)
 	}
 	storm := &Graph{Out: [][]Edge{g.Out[0], g.Out[1], {{retry, 1}}}, Expanded: g.Expanded, Labels: g.Labels}
-	cs := storm.HotComponents(hot, fair)
+	cs := hotComponents(t, storm, hot, fair)
 	if len(cs) != 1 || !cs[0].Fair() || cs[0].Lasso == nil || cs[0].Lasso.Entry != 1 || len(cs[0].Lasso.Cycle) != 2 {
 		t.Fatalf("process disabled in s2: %+v", cs)
 	}
 	none := Families{Of: fair.Of, Fair: slices.Repeat([]Fairness{Unfair}, 4)}
-	if cs := g.HotComponents(hot, none); len(cs) != 1 || !cs[0].Fair() {
+	if cs := hotComponents(t, g, hot, none); len(cs) != 1 || !cs[0].Fair() {
 		t.Fatalf("no fairness: %+v", cs)
 	}
 	stops := Families{Of: fair.Of, Fair: []Fairness{Unfair, WeakFair, Stops, WeakFair}}
 	// (and s2, where only retry is enabled, stutters once retries stop;
 	// s1 is a state of its own, process enabled there: unfair)
-	if cs := storm.HotComponents(hot, stops); len(cs) != 2 || !slices.Equal(cs[0].States, []int{1}) || cs[0].Fair() || !slices.Equal(cs[0].Missed, []int{process}) ||
+	if cs := hotComponents(t, storm, hot, stops); len(cs) != 2 || !slices.Equal(cs[0].States, []int{1}) || cs[0].Fair() || !slices.Equal(cs[0].Missed, []int{process}) ||
 		!slices.Equal(cs[1].States, []int{2}) || cs[1].Lasso.Cycle != nil {
 		t.Fatalf("retry stops: %+v", cs)
 	}
 	// a hot state where only a stutter and an unfair family are enabled
 	// stutters fairly
 	stuck := &Graph{Out: [][]Edge{{{submit, 1}}, {{read, 1}, {submit, 0}}}, Expanded: []bool{true, true}, Labels: g.Labels}
-	if cs := stuck.HotComponents([]bool{false, true}, fair); len(cs) != 1 || cs[0].Lasso == nil || cs[0].Lasso.Cycle != nil {
+	if cs := hotComponents(t, stuck, []bool{false, true}, fair); len(cs) != 1 || cs[0].Lasso == nil || cs[0].Lasso.Cycle != nil {
 		t.Fatalf("stuck: %+v", cs)
 	}
 }
@@ -316,17 +317,26 @@ func TestHotComponentsStutters(t *testing.T) {
 	hot := []bool{false, true, true}
 	labels := make([][]Event, 2)
 	once := &Graph{Out: [][]Edge{{}, {{turn, 2}, {done, 0}}, {{turn, 1}, {done, 2}}}, Expanded: []bool{true, true, true}, Labels: labels}
-	if cs := once.HotComponents(hot, fair); len(cs) != 1 || !cs[0].Fair() || len(cs[0].Lasso.Cycle) != 2 {
+	if cs := hotComponents(t, once, hot, fair); len(cs) != 1 || !cs[0].Fair() || len(cs[0].Lasso.Cycle) != 2 {
 		t.Fatalf("done enabled in s1 only (a stutter in s2): %+v", cs)
 	}
 	both := &Graph{Out: [][]Edge{{}, {{turn, 2}, {done, 0}}, {{turn, 1}, {done, 0}, {done, 2}}}, Expanded: once.Expanded, Labels: labels}
-	if cs := both.HotComponents(hot, fair); len(cs) != 1 || cs[0].Fair() || !slices.Equal(cs[0].Missed, []int{done}) {
+	if cs := hotComponents(t, both, hot, fair); len(cs) != 1 || cs[0].Fair() || !slices.Equal(cs[0].Missed, []int{done}) {
 		t.Fatalf("done enabled in both, a stutter in s2: %+v", cs)
 	}
 	// a single hot state where done is enabled (to s0) and stutters: its
 	// stutter takes nothing, so it is unfair, and reported with its Missed
 	single := &Graph{Out: [][]Edge{{}, {{done, 0}, {done, 1}}}, Expanded: []bool{true, true}, Labels: labels}
-	if cs := single.HotComponents([]bool{false, true}, fair); len(cs) != 1 || cs[0].Fair() || !slices.Equal(cs[0].Missed, []int{done}) {
+	if cs := hotComponents(t, single, []bool{false, true}, fair); len(cs) != 1 || cs[0].Fair() || !slices.Equal(cs[0].Missed, []int{done}) {
 		t.Fatalf("a stutter of an enabled family: %+v", cs)
 	}
+}
+
+func hotComponents(t *testing.T, g *Graph, hot []bool, fam Families) []Component {
+	t.Helper()
+	out, err := g.HotComponents(context.Background(), hot, fam)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
 }

@@ -64,7 +64,7 @@ func main() {
 		usage()
 	}
 	ctx := context.Background()
-	if os.Args[1] == "scaffold" || os.Args[1] == "steps" || os.Args[1] == "lint" || os.Args[1] == "validate" || os.Args[1] == "model-diff" {
+	if slices.Contains([]string{"scaffold", "steps", "lint", "validate", "model-diff", "simulate"}, os.Args[1]) {
 		var stop context.CancelFunc
 		ctx, stop = signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 		defer stop()
@@ -95,7 +95,7 @@ func main() {
 	case "model-diff":
 		code, err = modelDiff(ctx, os.Stdout, os.Args[2:])
 	case "simulate":
-		code, err = simulate(os.Args[2:])
+		code, err = simulate(ctx, os.Args[2:])
 	case "evidence":
 		code, err = evidence(os.Args[2:])
 	case "shrink":

@@ -46,20 +46,23 @@ import (
 // simulate section that names an invariant it lacks, options that
 // contradict each other, a quint that fails other than by a violation, a
 // model with no step.
-func Simulate(bindingPath string, opt SimulateOptions) (*Report, error) {
+func Simulate(ctx context.Context, bindingPath string, opt SimulateOptions) (*Report, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	b, err := binding.Load(bindingPath)
 	if err != nil {
 		return nil, err
 	}
-	return simulate(bindingPath, b, nil, opt)
+	return simulate(ctx, bindingPath, b, nil, opt)
 }
 
 // Simulate is Simulate of c's binding, with c's model and evaluator.
-func (c *modelChecker) Simulate(opt SimulateOptions) (*Report, error) {
+func (c *modelChecker) Simulate(ctx context.Context, opt SimulateOptions) (*Report, error) {
 	if opt.Quint == "" {
 		opt.Quint = c.Options.Quint
 	}
-	return simulate(c.Binding.Path, c.Binding, c, opt)
+	return simulate(ctx, c.Binding.Path, c.Binding, c, opt)
 }
 
 // SimulateOptions choose Simulate's checks and bounds. Every zero value
@@ -220,7 +223,15 @@ type sim struct {
 
 func (s *sim) printf(format string, a ...any) { fmt.Fprintf(&s.b, format, a...) }
 
-func simulate(bpath string, b *binding.Binding, checker *modelChecker, opt SimulateOptions) (rep *Report, err error) {
+func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *modelChecker, opt SimulateOptions) (rep *Report, err error) {
+	defer func() {
+		if canceled := ctx.Err(); canceled != nil {
+			rep, err = nil, canceled
+		}
+	}()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	s := &sim{rep: &Report{Binding: bpath}}
 	defer func() {
 		if rep != nil {
@@ -306,7 +317,7 @@ func simulate(bpath string, b *binding.Binding, checker *modelChecker, opt Simul
 		// the possibles need the model's actions (a name alone is a step
 		// if it is one) and its evaluator, as the graph does
 		if checker == nil {
-			c, err := validate.NewChecker(context.Background(), bpath, validate.Options{Quint: opt.Quint})
+			c, err := validate.NewChecker(ctx, bpath, validate.Options{Quint: opt.Quint})
 			if err != nil {
 				return nil, err
 			}
@@ -320,7 +331,7 @@ func simulate(bpath string, b *binding.Binding, checker *modelChecker, opt Simul
 	opt.Steps = orInt(opt.Steps, orInt(sec.Steps, 30))
 	opt.Samples = orInt(opt.Samples, orInt(sec.Samples, 1000))
 	if opt.Graph {
-		if err := s.graph(bpath, b, checker, possibles, overrides, invariants, eventually, opt); err != nil {
+		if err := s.graph(ctx, bpath, b, checker, possibles, overrides, invariants, eventually, opt); err != nil {
 			return nil, err
 		}
 		return s.rep, nil
@@ -363,7 +374,13 @@ func simulate(bpath string, b *binding.Binding, checker *modelChecker, opt Simul
 		if depth == 0 && verify > 0 {
 			depth = verify // quint verify's bound, so their verdicts compare
 		}
-		rs, evalErr = checker.Possible(possibleList, PossibleSearch{Constants: overrides, States: opt.States, Depth: depth})
+		rs, evalErr = checker.Possible(ctx, possibleList, PossibleSearch{Constants: overrides, States: opt.States, Depth: depth})
+		if isAnalysisCancellation(evalErr) {
+			return nil, evalErr
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		for i, c := range possibles {
 			if evalErr == nil && rs[i].Found {
 				c.quintSkip = "found by the Go evaluator, not sampled"
@@ -403,7 +420,13 @@ func simulate(bpath string, b *binding.Binding, checker *modelChecker, opt Simul
 				}
 			}
 		}
-		out, err := runQuint(opt.Quint, dir, argv)
+		out, err := runQuint(ctx, opt.Quint, dir, argv)
+		if isAnalysisCancellation(err) {
+			return nil, err
+		}
+		if canceled := ctx.Err(); canceled != nil {
+			return nil, canceled
+		}
 		violated := strings.Contains(out, "[violation]")
 		if hosting != nil && err == nil && !violated {
 			hosting.out, host = out, hosting
@@ -453,7 +476,7 @@ func simulate(bpath string, b *binding.Binding, checker *modelChecker, opt Simul
 		}
 	}
 	if len(possibles) > 0 {
-		if err := quintPossibles(opt.Quint, dir, file, left, steps, samples, opt.Seed, verify, host); err != nil {
+		if err := quintPossibles(ctx, opt.Quint, dir, file, left, steps, samples, opt.Seed, verify, host); err != nil {
 			return nil, err
 		}
 		pc, err := s.reportPossibles(bpath, possibles, rs, evalErr, steps, samples, verify)

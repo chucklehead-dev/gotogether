@@ -27,9 +27,14 @@ and an isolated source contrast; the configuration typo it exposed is fixed by
 strict preflight and direct API migration. The consolidation slice threads
 caller-owned cancellation through model loading, checker construction, lint
 inspection and trace-schema recovery, with
-independently cancelable cache waits and retry after a canceled owner. Context-free
-model-analysis, metadata, evaluator compilation and go/analysis boundaries remain
-explicit; broader lifecycle migration needs its own evidence and scope.
+independently cancelable cache waits and retry after a canceled owner. The
+subsequent model-analysis slice closes a reproduced signal-loss boundary:
+model-diff waited for a gated compiler even after receiving SIGTERM. Context-first
+analysis APIs now carry cancellation through the existing compiler/cache path,
+managed subprocesses and cooperative evaluation, graph and liveness traversal.
+Live waiters retry after a canceled compile owner; reusable analyzers and cached
+IR retain no request context. Pure metadata, ordinary-validation evaluator
+entrypoints and go/analysis remain explicit separate lifecycle boundaries.
 The general framework tick is the first bounded I42 model-behavior comparison:
 complete finite Go-evaluator graphs on explicit observations, with whole-prefix inclusion,
 separate resource bounds and native-replayed source witnesses. A non-storage
@@ -102,6 +107,13 @@ links the central Go policy instead of retaining a stale runtime-family number.
 No new runtime facade or source compatibility branch is needed. Choose the next
 general-framework capability from a concrete authoring/runtime gap rather than
 expanding the just-completed reachability facet.
+The following general-framework slice implements the previously deferred
+model-analysis lifecycle boundary after a real CLI interruption reproduced lost
+cancellation. It changes the existing API directly, shares the compiler/cache and
+error-report paths, and preserves cancellation as operational failure rather than
+bounded absence or model refutation. Further graph/diagnostic modes are not
+justified by this work; subsequent depth or consolidation should follow an
+actual consumer contract or measured cost.
 Keep frozen baseline pins for reproducibility, not as legacy support promises.
 Further adapters, adjacent fixtures and per-pair clock APIs need usage evidence.
 

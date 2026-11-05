@@ -69,7 +69,7 @@ func TestGeneratedPossibles(t *testing.T) {
 				ps = append(ps, p)
 			}
 		}
-		rs, err := model.For(c).Possible(ps, model.PossibleSearch{States: 500, Depth: 6})
+		rs, err := model.For(c).Possible(t.Context(), ps, model.PossibleSearch{States: 500, Depth: 6})
 		if err != nil {
 			t.Fatal(err)
 		}

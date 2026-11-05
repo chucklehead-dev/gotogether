@@ -42,7 +42,7 @@ func comparisonExportCase(t *testing.T) (*Comparison, string) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = c.Close() })
-		graph, err := For(c).Graph(GraphSearch{})
+		graph, err := For(c).Graph(t.Context(), GraphSearch{})
 		if err != nil {
 			t.Fatal(err)
 		}
