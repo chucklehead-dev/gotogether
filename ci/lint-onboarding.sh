@@ -57,6 +57,21 @@ assert report["checks"], report
 PY
 }
 
+# Invalid requests refuse inspection before target/model processing.
+run_report 2 request-arguments -binding examples/bank/bank.binding.yaml unexpected
+run_report 2 request-flags -jsno
+python3 - "$scratch/request-arguments.json" "$scratch/request-flags.json" <<'PYREQUEST'
+import json, sys
+for path, code in zip(sys.argv[1:], ["request.arguments", "request.flags"]):
+    report = json.load(open(path))
+    assert not report["complete"] and not report["evidence"], report
+    assert len(report["checks"]) == len(report["findings"]) == 1, report
+    assert report["checks"][0]["name"] == code, report
+    assert report["checks"][0]["status"] == "blocked", report
+    assert report["checks"][0]["operational"], report
+    assert report["findings"][0]["fix"], report
+PYREQUEST
+
 run_report 1 typo -binding examples/bank/bank.binding.yaml -src "$scratch/source"
 python3 - "$scratch/typo.json" <<'PY'
 import json, sys
@@ -105,4 +120,4 @@ assert not report["complete"], report
 assert any(c["name"] == "binding.model" and c.get("operational") for c in report["checks"]), report
 PY
 run_report 0 conversion -convert examples/kvstore/kv.convert.yaml
-printf 'lint onboarding: source repair, simulation repair, blocked dependencies, tool failure and conversion passed\n'
+printf 'lint onboarding: request refusal, source repair, simulation repair, blocked dependencies, tool failure and conversion passed\n'

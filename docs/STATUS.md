@@ -7,14 +7,20 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Report delivery status (current branch): shared machine reports attempt independent
+Lint request preflight (current branch): malformed flags and unexpected positionals
+produce an operational blocked request report before target inspection. A parsed
+-json flag selects the same lint/1 document for request errors; use -json first.
+Help remains exit 0, and raw arguments are not scanned to guess an output mode.
+No lint API or format changes. See [lint onboarding](lint-onboarding.md).
+
+Report delivery status (merged PR #64, b30c962f): shared machine reports attempt independent
 file destinations, retain original and delivery errors, and emit stdout JSON last.
 Delivery failure is command error/exit 2 while native graph/check/actor evidence
 remains intact. Successfully written reports are refreshed once after a later
 failure, including stdout failure. Delivery is best effort, not a transaction;
 refresh failures are explicit and may leave earlier bytes. No schema/API change.
 
-Repository-contract preflight (current branch): one Go/Bash command checks
+Repository-contract preflight (merged PR #63 through #64, b30c962f): one Go/Bash command checks
 nonwriting formatting, source/state/API/schema/format contracts, docs, skills,
 simulation lint and complete CLI help/tutorial freshness before CI fanout.
 Updater/report/helper flags are cleared; source guards enforce roster, selector

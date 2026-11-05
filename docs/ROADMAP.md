@@ -13,7 +13,7 @@ Standing decisions, with the maintainer:
   recording, YAML, platform and CLI module-parser dependencies.
 - MIT license.
 
-Current order (reviewed 2026-11-04): this is a prerelease library.
+Current order (reviewed 2026-11-05): this is a prerelease library.
 Correctness and usable core contracts come before release machinery. The bounded
 composition, Goo lifecycle, declared-call span, workload-phase and diagnostic
 experiments have answered their initial questions; rotate away from inventory
@@ -52,6 +52,15 @@ exited 2. Shared delivery now keeps operational status and native evidence
 separate, attempts independent outputs, joins errors and refreshes saved reports
 before final stdout. This improves existing agent/CI contracts without another
 format, adapter or adjacent comparison fixture.
+The focused lint follow-up closes another reproduced request boundary: invalid
+positionals previously started inspection and flag failures bypassed JSON.
+Request validation now precedes target effects, using the existing lint report.
+After these reporting/request corrections, rotate toward an independently
+observed capability or facet contract rather than more output modes. A payouts
+CPU near-threshold failure did not justify a budget increase: the combined head
+passed all 36 checks, with payouts at 31.5 CPU seconds. Repeated cost growth would
+need per-test attribution; duplicate identical explorations are a consolidation
+candidate without reducing seeds or claims.
 Keep frozen baseline pins for reproducibility, not as legacy support promises.
 Further adapters, adjacent fixtures and per-pair clock APIs need usage evidence.
 

@@ -6662,3 +6662,24 @@ refresh saved destinations too. There is no transaction across paths. A refresh
 can fail, leaving earlier bytes unchanged; that error is returned and included in
 any remaining writable output. Do not retry indefinitely or erase model evidence.
 Export-preflight refusal still forbids file writes before this writer is reached.
+
+
+## 98. Lint request validation before inspection
+
+Lint's structured inspection already distinguishes authored findings from
+unavailable checks, but the CLI previously inspected targets before refusing
+positionals and exited directly on malformed flags. Neither result was a useful
+request contract for an agent: an invalid request could compile a model, and a
+flag typo could bypass the requested JSON document.
+
+Use Go's flag parser with ContinueOnError for lint and classify parse errors and
+positionals before calling Inspect. A refused request has one operational blocked
+request check, an actionable finding, no target evidence and exit 2. Keep the
+current lint/1 format. Help remains normal help and exit 0 without inspection.
+
+Output selection follows successfully parsed flags, including repeated Boolean
+values. Put -json first for machine-readable request errors. Do not scan raw argv
+for that word: it can be the value of -binding, follow --, or occur after parsing
+has already stopped. This preserves one parser and an explicit boundary rather
+than adding a second flag interpretation. Other commands retain their existing
+error handling; this does not claim universal structured usage errors.

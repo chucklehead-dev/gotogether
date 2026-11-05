@@ -335,8 +335,8 @@ and `gotogether lint` checks a binding against it (every problem at its
 line) before loading it, rule files with `-convert`.
 
 
-`gotogether lint -json` emits one `gotogether.lint/1` report for the same
-inspection as text output: actionable findings, source locations where known,
+`gotogether lint -json` (put `-json` first for structured request errors) emits
+one `gotogether.lint/1` report for the same inspection as text output: actionable findings, source locations where known,
 fixes, inspected inventories, and each requested check as `pass`, `fail` or
 `blocked`. Independent targets still run when another target fails. Exit codes
 are 0 for clean performed checks, 1 for authored findings, and 2 for unavailable

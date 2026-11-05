@@ -8,6 +8,10 @@ and adds a line here.
 
 ## Unreleased
 
+- Lint rejects malformed flags and positional arguments before inspecting inputs.
+  Put `-json` first for structured request errors in the existing lint report;
+  help stays exit 0 and ordinary Go flag parsing remains authoritative.
+
 - Shared CLI reports now expose delivery failures as command error/exit 2,
   preserve native model evidence and original errors, attempt independent outputs,
   and refresh successful reports after a later failure. Stdout JSON is emitted
