@@ -7,13 +7,13 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
-Go 1.27 adoption preparation (local branch, not ready to publish): the shared live module, workspace, scaffold,
-fixture and publication floor is 1.27.3. The fork port is the required runtime
-prerequisite; GitHub write access currently blocks its publication (403). Its
-existing dependency pins remain unchanged until a real port revision is published
-and admitted without local replacements.
-Normal CI uses the current family and drops the redundant pre-port host-core job.
-Frozen source histories remain unchanged. See [toolchain policy](go-toolchain.md).
+Go 1.27 adoption: the shared live module, workspace, scaffold, fixture and
+publication floor is 1.27.3. qgosim and its examples pin the published gosim port
+`66f95e073358`, with actual replay, checkout and woven edgepublish admission
+against that dependency without local replacements. Normal CI uses this current
+family and drops the redundant pre-port host-core job. Step-log encoding matches
+current standard JSON, including invalid UTF-8 replacement runes. Frozen source
+histories remain unchanged. See [toolchain policy](go-toolchain.md).
 
 Projected graph-label benchmarks (merged PR #68, 77e4df2a): graph benchmarks now include
 first-non-step-action label projection alongside ordinary full-event labels.

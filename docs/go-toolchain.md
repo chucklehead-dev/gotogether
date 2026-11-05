@@ -1,6 +1,6 @@
 # Go toolchain policy and admission
 
-This local adoption branch prepares a shared minimum of **Go 1.27.3**. All live module/workspace directives,
+The shared minimum is **Go 1.27.3**. All live module/workspace directives,
 scaffolds, test-module emitters, the consumable CI job and image default agree.
 Preflight checks this alignment. Frozen adoption inputs and historical
 measurements retain their original versions so their evidence remains reproducible.
@@ -15,25 +15,26 @@ selection cannot disguise the runtime actually exercised.
 
 ## Admission evidence
 
-The gosim fork port is validated locally through a copied consumer tree with a
-local replacement. Publishing the fork is blocked by GitHub write access (403).
-The checked-in gosim dependency pins deliberately remain unchanged: this branch
-is preparation, not a publishable adoption PR. After the fork is published, pin
-its real revision in qgosim and examples/gosim, rerun acceptance without local
-replacements, and publish the complete adoption together. Completed native
-checks on Go 1.27.3 include memo/cache, subprocess cancellation, recording
-ownership, real woven build/run fixtures, analyzer acceptance and qhegel native
-state-machine checks. Both scaffold generators, root vet, preflight and all 40
-workspace module tidy-diffs passed. Local fork broadcast replay passed with 20
-choices and 44 identical steps; full broadcast faithful and rejection checks also
-passed. Local checkout faithful runs across all isolation levels and both mutant
-suites passed, as did woven edgepublish faithful, invariant and mutant checks.
-Native and simulated consumer vet passed. The full native short suite exposed a
+Both qgosim and the gosim example pin the published fork port
+`v0.0.0-20261105184451-66f95e073358` (commit
+`66f95e073358e556fd4f17e2953d30f2b963475f`). Admission selects the downloaded
+module without a local replacement, and runs qgosim's automatic weaving before
+translating its consumers.
+
+Go 1.27.3 native admission covers memo/cache, subprocess cancellation, recording
+ownership, native qenv contracts, real woven build/run fixtures, analyzer
+acceptance, qhegel state-machine checks and both scaffold generators. Root vet,
+preflight and all 40 workspace module tidy-diffs pass. All native short-suite
+packages pass after provisioning toxiproxy for qnemesis. The full suite exposed a
 step-log JSON parity mismatch for invalid UTF-8: the fast encoder now emits the
 replacement rune as current encoding/json does, and all 20,000 generated parity
-cases pass. All native short-suite packages passed after that correction and
-provisioning toxiproxy for qnemesis. Acceptance against a published pin must pass
-before publishing.
+cases pass.
+
+Published-fork acceptance exercises broadcast faithful runs, rejection controls
+and deterministic replay, checkout faithful runs across all isolation levels and
+both mutant suites, and automatically woven edgepublish faithful, invariant and
+mutant checks. Native and simulated consumer vet covers both examples and
+qgosim. These are semantic integration checks, not merely successful translation.
 
 The former bounded `current Go core` admission job is superseded by the ordinary
 CI matrix running the shared 1.27.3 floor. Integration jobs remain in that matrix.

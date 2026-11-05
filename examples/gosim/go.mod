@@ -3,7 +3,7 @@ module github.com/chucklehead-dev/gotogether/examples/gosim
 go 1.27.3
 
 require (
-	github.com/chucklehead-dev/gosim v0.0.0-20261022204023-f3a3ad889291
+	github.com/chucklehead-dev/gosim v0.0.0-20261105184451-66f95e073358
 	github.com/chucklehead-dev/gotogether v0.0.0
 	github.com/chucklehead-dev/gotogether/examples/checkout v0.0.0
 	github.com/chucklehead-dev/gotogether/examples/edgepublish v0.0.0
