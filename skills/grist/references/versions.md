@@ -82,6 +82,14 @@ the test intentionally needs to execute pending work after restoration.
   `grist_snapshot_put_failures_total`; `grist_fold_events_total` is what
   reads cost.
 
+For a concrete upcaster-fix deployment history, run library's
+[`TestUpcasterFixRefoldsPersistedSnapshots`](https://github.com/chucklehead-dev/gotogether/tree/main/examples/library#repairing-a-buggy-upcaster).
+It preserves the stored version-1 events, creates a buggy books snapshot, proves
+unchanged-release reuse, then checks the fixed fold and a fresh-process snapshot
+hit. Audits and memo are disabled to isolate the fingerprint mechanism. This
+proves the selected correction; changes outside generated probes still need a
+read-model version bump.
+
 ## Results
 
 | Report says | Means | Next |

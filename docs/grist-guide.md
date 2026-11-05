@@ -1124,6 +1124,12 @@ for an event it cannot read; a release writing the new version at once
 shows its negation in some run, `qtest.Some(qtest.Not(gristtest.ReadersFirst()))` (counters' `eagerV2`
 mutant).
 
+The library's [persisted upcaster-fix rehearsal](../examples/library/README.md#repairing-a-buggy-upcaster)
+shows a snapshot made through a buggy upcaster, unchanged-release reuse and
+same-version correction across fresh SQLite processes. It isolates fingerprint
+invalidation with memo and audits disabled, retaining the original stored events.
+Changes outside the fingerprint probes still need a read-model version bump.
+
 ## 8. Snapshots and the memo
 
 A read folds from the read model's state where a cache has it and the

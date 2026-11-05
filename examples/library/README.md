@@ -55,6 +55,7 @@ of building it as a newcomer to grist.
 | `TestMutant` (`dropsCopies`) | the upcaster forgetting version 1's copies | `App.CheckUpcasters` names the ignored field, and version 1's log judged by today's model is `Mismatch("addBook")` at its first addition (count 0 where the command added 2) |
 | `TestOldLogConforms` | the real tier on version 1's log (`TierConfig.Log`): the node relays the old steps re-rendered as version 2 and mails the old borrows' receipts, then today's clients catalogue, borrow and return | nothing: the store's binding conforms and settles, and the snapshots of the log, taken at each position, agree with a fold from the start (`gristtest.Snapshots`) |
 | `TestSnapshots` | `TestFaithful`'s runs with a snapshot every two events, a third of the puts torn or lost (`store.library.snapshot`) | nothing: `Conforms`, `All(Settles)`, the snapshot faults reached |
+| `TestUpcasterFixRefoldsPersistedSnapshots` | a SQLite history opened by separate buggy, unchanged and fixed release processes, with memo and audits disabled | the buggy upcaster's persisted books snapshot is reused by the unchanged release, then rejected by the corrected fingerprint; the corrected count and its new snapshot survive another reopen while raw stored events stay unchanged |
 | `TestSnapshotsMakeStartFast` | a SQLite file of 10^4 (and, full mode, 10^5) events of member a's, a node started afresh | a fresh node's first read folds every event without snapshots (230 ms, 2.5 s) and 1,000 from the snapshot (30 ms, 25 ms) |
 
 ```sh
@@ -62,3 +63,22 @@ go test -short ./...           # every claim (needs quint on PATH)
 ./run-demo.sh
 MUTANT=staleLimit ./run-demo.sh
 ```
+
+## Repairing a buggy upcaster
+
+```sh
+go test -count=1 -run '^TestUpcasterFixRefoldsPersistedSnapshots$' -v .
+```
+
+This bounded deployment-history rehearsal uses the real library catalog and
+books fold. The existing `dropsCopies` source contrast first reads version-1
+book additions through a buggy upcaster and persists an incorrect snapshot in
+SQLite. Another process with that same upcaster reuses it. Reopening with the
+corrected upcaster, at the same event and read-model versions, changes this fold's
+fingerprint and reconstructs the correct shelf from the unchanged stored events.
+A subsequent corrected process reuses the new snapshot. Memo and snapshot audits
+are disabled so they cannot hide whether fingerprint invalidation worked.
+
+Fingerprint probes detect this concrete change; a change outside their generated
+values still requires a read-model version bump. This checks persisted cache
+recovery, separately from the model conformance and upcaster-contract tests above.
