@@ -202,8 +202,10 @@ AGENTS.md has the general requirements.
   fixtures should use their own user-cache directory for admission (set both
   XDG_CACHE_HOME and HOME with t.Setenv, as the quintcmd tests do). A successful
   retry can otherwise wait behind unrelated test binaries; that wait does not
-  measure cancellation latency. Keep cancellation watchdogs tight and test the
-  shared pool separately with controlled holders rather than raising timeouts.
+  measure cancellation latency. Native CLI child fixtures can isolate those
+  directories while pinning QUINT_HOME to the original runtime-assets directory
+  (honor an explicit QUINT_HOME); this must not trigger evaluator downloads.
+  Keep cancellation watchdogs tight and test the shared pool separately with controlled holders rather than raising timeouts.
 
 
 When adding a CLI command, run `go test ./cmd/gotogether -run
