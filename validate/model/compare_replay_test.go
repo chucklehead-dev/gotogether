@@ -21,6 +21,7 @@ func comparisonFakeSource(t *testing.T, script string) *GraphResult {
 		t.Skip("fake Quint uses POSIX shell")
 	}
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "quint")
 	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"+script), 0o755); err != nil {

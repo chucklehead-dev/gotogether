@@ -57,6 +57,7 @@ func (c *cacheWaitContext) Done() <-chan struct{} {
 
 func TestQuintVersionCancellationCanRetry(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
 	if runtime.GOOS == "windows" {
 		t.Skip("fake Quint uses POSIX shell")
 	}
