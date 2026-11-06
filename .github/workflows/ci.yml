@@ -484,10 +484,8 @@ jobs:
       - name: Install quint
         run: ../ci/install-quint.sh
       - name: Install vhs, ttyd and ffmpeg
-        run: |
-          sudo apt-get update && sudo apt-get install -y ttyd ffmpeg
-          go install github.com/charmbracelet/vhs@v0.12.1
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+        timeout-minutes: 8
+        run: ../ci/install-tape-tools.sh
       - name: "the tapes: their screens against the goldens"
         run: go test -count=1 -run TestTapes -v ./tapes/
       - name: render the tapes

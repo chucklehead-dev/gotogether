@@ -70,6 +70,12 @@ each trace. This uses Go's subtest/output facilities rather than a new scope or
 close protocol. Direct Replay remains caller-owned. Keep generated trace counts
 separate from actual selected/replayed traces.
 
+The consolidation follow-up bounds native tape-tool bootstrap after a slow
+Ubuntu mirror delayed an otherwise-green PR. Reuse verified tools, acquire only
+missing packages, enforce transfer/lock and whole-command budgets, and require
+working postconditions before mandatory golden checks/rendering. This changes
+failure handling, not the meaning or number of required CI checks.
+
 Next, rotate toward a concrete general-framework or cross-facet caller problem
 rather than further parser tuning, compiled modes or snapshot features. Candidates below
 are experiments with selection thresholds, not commitments.
