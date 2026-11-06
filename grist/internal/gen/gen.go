@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/grist/internal/catalog"
@@ -447,11 +448,11 @@ func newGen(c Catalog) (*gen, error) {
 			ps = append(ps, fmt.Sprintf("%s: its arguments: %v", b.Name, err))
 		}
 		if b.Result != nil && b.Result.Kind() == reflect.Struct {
-			if _, err := scalarFields(b.Result); err != nil {
+			if _, err := resultFields(b.Result); err != nil {
 				ps = append(ps, fmt.Sprintf("query %s: its result: %v", b.Name, err))
 			}
 		} else if b.Result != nil && quintScalar(b.Result) == "" {
-			ps = append(ps, fmt.Sprintf("query %s: its result %v is neither a struct nor a scalar: the model compares scalars", b.Name, b.Result))
+			ps = append(ps, fmt.Sprintf("query %s: its result %v is neither a struct nor a scalar: wrap scalar lists in a result struct", b.Name, b.Result))
 		}
 	}
 	for _, p := range c.Processors {
@@ -569,7 +570,7 @@ func (g *gen) collectHoles() {
 			fmt.Sprintf(`pure def %sNeeds(e: Event, refusal: str): Set[Read] = Set()`, r.Quint))
 	}
 	for _, q := range g.c.Queries {
-		g.hole(q.Quint+"Answer", fmt.Sprintf("%s's answer on log (its result's scalar fields)", q.Name),
+		g.hole(q.Quint+"Answer", fmt.Sprintf("%s's answer on log (its modelled result fields)", q.Name),
 			fmt.Sprintf(`pure def %sAnswer(log: List[Event], q: %sArgs): %s = %s`, q.Quint, upper(q.Quint), g.resultType(q), g.zeroResult(q)))
 	}
 	for _, p := range g.c.Processors {
@@ -604,6 +605,9 @@ func (g *gen) resultType(q CatalogBlock) string {
 }
 
 func zeroOf(typ string) string {
+	if strings.HasPrefix(typ, "List[") {
+		return "[]"
+	}
 	switch typ {
 	case "str":
 		return `""`
@@ -617,7 +621,7 @@ func (g *gen) zeroResult(q CatalogBlock) string {
 	if q.Result.Kind() != reflect.Struct {
 		return zeroOf(quintScalar(q.Result))
 	}
-	fs, _ := scalarFields(q.Result)
+	fs, _ := resultFields(q.Result)
 	if len(fs) == 0 {
 		return "{ unit: true }" // recordType's, and the binding's answer
 	}
@@ -822,7 +826,7 @@ func (g *gen) eventsModule(b *strings.Builder) {
 	}
 	for _, q := range g.c.Queries {
 		if q.Result.Kind() == reflect.Struct {
-			fs, _ := scalarFields(q.Result)
+			fs, _ := resultFields(q.Result)
 			fmt.Fprintf(b, "  type %s = %s\n", g.claim(upper(q.Quint)+"Result", q.Name), recordType(fs))
 		}
 	}
@@ -1471,10 +1475,13 @@ func (g *gen) binding(name string, m marks) []byte {
 		parts = append(parts, "caller: {{.caller}}")
 		answer := "{{.obs.result}}"
 		if q.Result.Kind() == reflect.Struct {
-			rs, _ := scalarFields(q.Result)
+			rs, _ := resultFields(q.Result)
 			ps := make([]string, len(rs))
 			for i, f := range rs {
 				ps[i] = f.json + ": {{.obs." + f.json + "}}"
+				if strings.HasPrefix(f.typ, "List[") {
+					ps[i] = f.json + ": {{toQuint " + strconv.Quote(f.typ) + " .obs." + f.json + "}}"
+				}
 			}
 			answer = "{ " + strings.Join(ps, ", ") + " }"
 			if len(rs) == 0 {
@@ -1796,6 +1803,15 @@ func scalarFields(t reflect.Type) ([]field, error) {
 	}
 	if fs == nil {
 		out = nil
+	}
+	return out, err
+}
+
+func resultFields(t reflect.Type) ([]field, error) {
+	fs, err := catalog.ResultFields(t)
+	out := make([]field, len(fs))
+	for i, f := range fs {
+		out[i] = field{json: f.JSON, param: f.Param, typ: f.Type, tag: f.Tag}
 	}
 	return out, err
 }

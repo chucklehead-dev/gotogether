@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- Grist query result structs support lists of scalar values. Generated bindings
+  compare typed ordered lists, preserving duplicates and normalizing nil to
+  empty model observations; unsupported shapes fail explicitly unless excluded.
+  The library example checks book identities as well as counts at both tiers.
+
 - `qhegel.FindViolation` and `Shrink` return a violation only when Hegel's
   final replay reproduces it. An earlier rejected candidate cannot hide a later
   operational failure, inconclusive model verdict or failed reproduction; diagnostics remain

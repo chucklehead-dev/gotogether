@@ -680,9 +680,11 @@ jobs:
           GOTOGETHER_CHECK=1 GOTOGETHER_STRICT=1 GOTOGETHER_CPU_TIMES="$RUNNER_TEMP/grist-cpu.txt" go test -short -count=1 -timeout 30m -exec "$RUNNER_TEMP/cputime" ./...
           sort -k2,2nr "$RUNNER_TEMP/grist-cpu.txt"
           ../ci/time-budget.sh < "$RUNNER_TEMP/grist-cpu.txt"
-      - name: persisted library snapshots after an upcaster fix
+      - name: native library snapshot and query list controls
         working-directory: examples/library
-        run: go test -count=1 -timeout 5m -run '^TestUpcasterFixRefoldsPersistedSnapshots$' .
+        run: |
+          GOTOGETHER_CPU_TIMES="$RUNNER_TEMP/library-cpu.txt" go test -exec "$RUNNER_TEMP/cputime" -count=1 -timeout 5m -run '^(TestUpcasterFixRefoldsPersistedSnapshots|TestQueryListsPreserveLoanIdentity)$' .
+          ../../ci/time-budget.sh < "$RUNNER_TEMP/library-cpu.txt"
 
   payd:
     needs: preflight

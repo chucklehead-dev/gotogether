@@ -34,7 +34,7 @@ actions:
     args: { result: '{{.outcome}}' }
     expect: 'log.length() == {{.obs.head}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'
   memberLoans:
-    expect: 'memberLoansAnswer(log, { member: {{.member}}, caller: {{.caller}} }) == { count: {{.obs.count}} }'
+    expect: 'memberLoansAnswer(log, { member: {{.member}}, caller: {{.caller}} }) == { count: {{.obs.count}}, books: {{toQuint "List[str]" .obs.books}} }'
   receiptsEffect: {}
   receipts:
     expect: 'log.length() == {{.obs.head}} and checkpoints.get("receipts") == {{.obs.checkpoint}} and batchIs(appended, {{toList .obs.events}}, {{toList .obs.strs}}, {{toList .obs.ints}}, {{toList .obs.causes}})'

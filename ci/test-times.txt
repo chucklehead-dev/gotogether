@@ -21,6 +21,7 @@ examples/inventory-grist 180 # 173.9 CPU s on PR CI, 134.6 locally with CI's GOT
 examples/jobqueue 33
 examples/kvstore 61
 examples/lease 35 # 30.4 CPU s on CI (run 442, 8178000 and 54c27fd; 72.2 in run 431, 188 in run 427)
+examples/library 58 # 57.7 CPU s locally (2026-11-06), CI-selected native query-list and persisted-upcaster controls; full example suite is separate.
 examples/payd 150
 examples/payouts 40 # 24.7 CPU s on a 4-core machine (2026-10-29: its two mutants' binaries built and explored are most of it)
 examples/quorumkv 128

@@ -82,3 +82,8 @@ are disabled so they cannot hide whether fingerprint invalidation worked.
 Fingerprint probes detect this concrete change; a change outside their generated
 values still requires a read-model version bump. This checks persisted cache
 recovery, separately from the model conformance and upcaster-contract tests above.
+
+The loan query compares the full ordered book list as well as its count.
+`TestQueryListsPreserveLoanIdentity` exercises actual HTTP answers, including
+empty loans and repeated copies; both generated bindings reject wrong book
+identities, order or multiplicity with the count unchanged.

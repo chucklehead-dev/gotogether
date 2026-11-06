@@ -29,7 +29,7 @@ actions:
   returnBook:
     args: { result: '{{.outcome}}' }
   memberLoans:
-    expect: 'memberLoansAnswer(log, { member: {{.member}}, caller: {{.caller}} }) == { count: {{.obs.count}} }'
+    expect: 'memberLoansAnswer(log, { member: {{.member}}, caller: {{.caller}} }) == { count: {{.obs.count}}, books: {{toQuint "List[str]" .obs.books}} }'
 
 invariants: [copiesHeld, withinLimit]
 

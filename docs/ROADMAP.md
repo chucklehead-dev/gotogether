@@ -90,9 +90,20 @@ ten conforming replays or a later operational failure. `FindViolation` and
 no-violation expectations. This closes a real shared-caller evidence gap; it
 does not explain the held Hegel upgrade's separate property failure.
 
-Next, rotate toward a focused caller/facet experiment or consolidation selected
-from actual evidence, retaining independent-maintainer use as an alongside
-candidate rather than committing to another framework API. Candidates below
+The adoption-trial review separates implemented fixes from remaining limits in
+current dispositions beside the preserved [library](../examples/library/TRIAL.md)
+and [wallet](../examples/wallet-grist/TRIAL.md) accounts. A fresh native library
+control found a concrete remaining gap: an HTTP answer with the wrong book and
+the correct loan count passed both model bindings. Query result structs now
+compare scalar-list fields through the existing typed collection representation;
+the library checks identities, order, duplicates and empty lists at both store
+and clients. Events, arguments and dependency calls retain their scalar policy.
+Unsupported result shapes require explicit exclusion rather than silent omission.
+The held Hegel admission investigation remains separate from this facet slice.
+
+Next, rotate toward a general-framework caller problem or structural/usability
+consolidation selected from actual evidence. Retain independent-maintainer use
+as an alongside candidate; another framework API still needs a demonstrated need. Candidates below
 are experiments with selection thresholds, not commitments.
 
 | Order | Candidate | Evidence needed before implementation |

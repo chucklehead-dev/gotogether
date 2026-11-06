@@ -113,6 +113,15 @@ slices. Further order modes, stream features or diagnostic breadth need a new
 caller problem. Agent-assisted Goo/LRU/HTTP rehearsals remain bounded workflow
 evidence; they do not establish independent-maintainer adoption.
 
+Query result structs compare scalar lists as well as scalars. A native library
+control exposed wrong-book answers passing count-only checks; generated
+store/client bindings now compare identity, order and duplicates. Nil lists
+normalize to empty model observations; HTTP answers and phase Await retain their
+complete JSON semantics. Unsupported shapes fail explicitly unless excluded.
+Current [library](../examples/library/TRIAL.md#current-disposition-2026-11-06) and
+[wallet](../examples/wallet-grist/TRIAL.md#current-disposition-2026-11-06)
+dispositions distinguish completed fixes from remaining limits.
+
 ## Remaining boundaries
 
 These are constraints, not an instruction to start every track. Item identifiers

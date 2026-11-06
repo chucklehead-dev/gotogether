@@ -35,6 +35,36 @@ func JSONName(f reflect.StructField) string {
 // fix (the fields before it are returned), and so is a body that does
 // not decode as typ.
 func StepFields(typ reflect.Type, body []byte, prefix string) ([]any, error) {
+	return stepFields(typ, body, prefix, false)
+}
+
+// QueryResultFields records a query result, including ordered scalar-list
+// fields. Nil slices are empty lists; explicit grist:"-" fields stay omitted.
+func QueryResultFields(typ reflect.Type, body []byte, prefix string) ([]any, error) {
+	return stepFields(typ, body, prefix, true)
+}
+
+// QueryFieldType is a query field's model type. Bytes encode as base64 in
+// JSON, so []uint8 is not a scalar list. Pointers and nested values are refused.
+func QueryFieldType(t reflect.Type) string {
+	switch t.Kind() {
+	case reflect.String:
+		return "str"
+	case reflect.Bool:
+		return "bool"
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return "int"
+	case reflect.Slice:
+		if t.Elem().Kind() != reflect.Uint8 && t.Elem().Kind() != reflect.Slice {
+			if elem := QueryFieldType(t.Elem()); elem != "" {
+				return "List[" + elem + "]"
+			}
+		}
+	}
+	return ""
+}
+
+func stepFields(typ reflect.Type, body []byte, prefix string, result bool) ([]any, error) {
 	if typ == nil {
 		return nil, nil
 	}
@@ -44,6 +74,9 @@ func StepFields(typ reflect.Type, body []byte, prefix string) ([]any, error) {
 	}
 	v = v.Elem()
 	if typ.Kind() != reflect.Struct {
+		if result && (typ.Kind() == reflect.Slice || QueryFieldType(typ) == "") {
+			return nil, fmt.Errorf("query result %v is neither a struct nor a scalar", typ)
+		}
 		x, ok, err := scalar(prefix+"result", v)
 		if err != nil || !ok {
 			return nil, err
@@ -57,7 +90,23 @@ func StepFields(typ reflect.Type, body []byte, prefix string) ([]any, error) {
 			continue
 		}
 		n := JSONName(f)
+		if result && (f.Tag.Get("grist") == "-" || strings.Split(f.Tag.Get("json"), ",")[0] == "-") {
+			continue
+		}
+		if result && QueryFieldType(f.Type) == "" {
+			return kv, fmt.Errorf("field %s is a %v: query results support scalars and scalar lists; tag it `grist:\"-\"` to leave it out", f.Name, f.Type)
+		}
 		x, ok, err := scalar(n, v.Field(i))
+		if result && f.Type.Kind() == reflect.Slice {
+			values := make([]any, v.Field(i).Len())
+			for j := range values {
+				values[j], _, err = scalar(fmt.Sprintf("%s[%d]", n, j), v.Field(i).Index(j))
+				if err != nil {
+					return kv, err
+				}
+			}
+			x, ok = values, true
+		}
 		if err != nil {
 			return kv, err
 		}
