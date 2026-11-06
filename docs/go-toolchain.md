@@ -138,3 +138,21 @@ seconds in the local cputime harness (9.330s wall); its previously unlisted
 package now has an 18-second baseline, retaining the existing 2x regression
 factor. The first two executable hello tutorial transcripts still replay with
 the new pair; dated transcript/compiler versions remain provenance.
+
+### Hegel diagnostic investigation (2026-11-06)
+
+The diagnostic-loss path is independently reproduced on both 0.9.27 and 0.9.30:
+a native FilterTooMuch health-check failure marks `hegel.Test` failed without
+printing its error, whereas `hegel.Run` returns the full diagnostic. Core
+properties now use a private Run helper that reports the error, retains native
+assertion/panic/Goexit behavior and the ten-case short cap, and gives each
+property its own corpus namespace outside CI. Explicit database options still
+win. Replay details remain native stdout output; no descriptor capture or
+upstream replacement is shipped.
+
+A current 0.9.30 diagnostic full run passes (94.222s, including 34 equal-key
+and 26 different-key pairs in the formerly failing property). This does not
+explain the original failure or admit the upgrade. In particular, a prior
+latency experiment delayed the oracle after its final draw and does not rule
+out a generation-time health check. No TooSlow cause or cache counterexample
+has been established; 0.9.27 remains the sole admitted pin.
