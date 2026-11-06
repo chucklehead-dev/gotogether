@@ -59,13 +59,14 @@ var desc = grpc.ServiceDesc{
 func Sync(ctx context.Context, r simlog.Reader) {
 	for ctx.Err() == nil {
 		recs, err := r.Poll(ctx)
-		if err != nil {
-			continue
-		}
+		// Poll may advance healthy partitions before another fetch fails.
 		for _, rec := range recs {
 			id, _ := strconv.Atoi(string(rec.Value))
 			qobs.Record(ctx, "sync", nil, "id", id)
 			_ = r.Commit(ctx, rec.Partition, rec.Offset+1)
+		}
+		if err != nil {
+			qenv.Sleep(ctx, 50*time.Millisecond)
 		}
 	}
 }

@@ -7,6 +7,13 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
+Native stream polling: Kafka fetch errors and caller cancellation no longer
+look like idle polls; its own idle timeout remains normal. Kafka and Kinesis
+return healthy records alongside partial fetch errors, and consumers handle the
+batch before backoff. Native broker/SDK controls and projection/checkpoint tests
+cover typed errors, cancellation, idle polls and preservation of records from
+healthy partitions/shards. See DESIGN §105.
+
 Bounded fault-order sweeps: `qtest.System.FaultOrders` replaces checkout's manual
 script/capture/validation loop. Each requested directed pair gets fresh scripts
 for a fixed seed budget and normal model checks. Native evidence distinguishes

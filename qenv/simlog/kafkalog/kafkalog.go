@@ -17,6 +17,8 @@ package kafkalog
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qenv/simlog"
@@ -83,19 +85,40 @@ func NewReader(brokers []string, topic, group string, opts ...kgo.Opt) (*Reader,
 }
 
 // Poll implements simlog.Reader: the records fetched within 200 ms, at
-// most 10.
+// most 10. Records from healthy partitions are retained alongside fetch errors.
+// The adapter's idle timeout is normal; parent cancellation and broker errors
+// remain discoverable with errors.Is.
 func (r *Reader) Poll(ctx context.Context) ([]simlog.Record, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	pctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 	defer cancel()
-	fs := r.cl.PollRecords(pctx, 10)
-	if fs.IsClientClosed() {
-		return nil, kgo.ErrClientClosed
-	}
+	return pollResult(ctx, pctx, r.cl.PollRecords(pctx, 10))
+}
+
+// pollResult adapts one native batch without discarding either side of a
+// partial response. wait is the adapter-owned bounded polling context.
+func pollResult(ctx, wait context.Context, fs kgo.Fetches) ([]simlog.Record, error) {
 	var out []simlog.Record
 	fs.EachRecord(func(rec *kgo.Record) {
 		out = append(out, simlog.Record{Partition: int(rec.Partition), Offset: int(rec.Offset), Key: string(rec.Key), Value: rec.Value})
 	})
-	return out, nil
+	var errs []error
+	for _, fetch := range fs.Errors() {
+		// PollRecords injects this exact error when our own idle wait expires.
+		// A wrapped error (for example a failed group session), or a parent
+		// deadline, still describes a failure the caller must see.
+		if fetch.Topic == "" && fetch.Partition == -1 && fetch.Err == context.DeadlineExceeded && ctx.Err() == nil && wait.Err() == context.DeadlineExceeded {
+			continue
+		}
+		errs = append(errs, fmt.Errorf("kafkalog: fetch topic %q partition %d: %w", fetch.Topic, fetch.Partition, fetch.Err))
+	}
+	err := errors.Join(errs...)
+	if parent := ctx.Err(); parent != nil && !errors.Is(err, parent) {
+		err = errors.Join(err, parent)
+	}
+	return out, err
 }
 
 // Commit implements simlog.Reader, calling OnCommit when the coordinator
