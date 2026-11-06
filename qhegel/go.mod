@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	github.com/chucklehead-dev/gotogether v0.0.0-20261106163526-afa55af703b4
-	hegel.dev/go/hegel v0.9.27
+	hegel.dev/go/hegel v0.9.30
 )
 
 require (

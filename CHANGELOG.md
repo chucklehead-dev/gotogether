@@ -8,6 +8,10 @@ and adds a line here.
 
 ## Unreleased
 
+- Use Hegel 0.9.30 with native libhegel 0.50 across all live Hegel module
+  graphs. Shared rule-group membership is covered by model-checked concurrent
+  execution; existing shrinking, final-replay and diagnostic guards remain.
+
 - Store contract checks force a conflicting first wave before concurrent
   appends. Their race mutant must expose overlapping stale checks and a real
   brute-force condition violation, eliminating reliance on scheduling sleeps.
@@ -25,8 +29,7 @@ and adds a line here.
 - Use Quint 0.33.1 with evaluator 0.7.1 and matching Kubernetes staged modules
   0.37.2. Terminal trace samples retain short runs; Rust output accepts valid
   constructor-substring names. Verify evaluator cache bytes/startup and publish
-  replacements atomically. Hegel remains 0.9.27 pending a failed admission's
-  diagnosis; no legacy-version fallback is added.
+  replacements atomically.
 
 - Navigator CI reuses verified native tools and bounds acquisition with one
   command budget plus a step deadline. Missing tools and failed installation

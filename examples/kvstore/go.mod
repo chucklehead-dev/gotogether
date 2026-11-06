@@ -8,7 +8,7 @@ require (
 	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/sdk v1.46.0
 	go.opentelemetry.io/otel/trace v1.46.0
-	hegel.dev/go/hegel v0.9.27
+	hegel.dev/go/hegel v0.9.30
 )
 
 require (

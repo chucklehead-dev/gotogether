@@ -8721,3 +8721,26 @@ work in native and simulated execution, including read-error arrival paths.
 Repeated native and race controls pass, as do faithful memstore, simulated and
 QSQL stores across all three isolation levels, and SQLite. The public API and
 production store behavior are unchanged; the contract exercise is stronger.
+
+
+## Hegel 0.9.30 admission (2026-11-06)
+
+The upgrade was reopened after the diagnostic repair, rather than treating an
+irrecoverable earlier error as an indefinite veto. All 16 live Hegel graphs
+now select 0.9.30 / libhegel 0.50. Other dependencies, runtime floors, assertions,
+search limits and health-check policy are unchanged; no adapter or public API
+change was necessary.
+
+Current observable core properties pass (100.671s), including 33 equal-key and
+27 different-key pairs in the formerly failing property. Full qhegel passes
+(25.315s), with focused integrity race coverage (7.600s). A shared-rule-group
+control exercises the native 0.9.30 capability through model-checked deposits,
+requires both allowed overlap pairs and excludes the forbidden pair. The old
+SDK rejects duplicate membership; removing one membership in the new SDK fails
+the overlap check. Single-CPU repetition and race execution pass.
+
+The original failure's cause remains unknown. No semantic counterexample or
+version regression was captured; the current instrumented admission supplies
+new evidence without claiming to recover the lost message. Upstream Test's
+diagnostic loss remains, so core properties retain their private Run helper.
+Dated earlier hold decisions and frozen graphs remain provenance.

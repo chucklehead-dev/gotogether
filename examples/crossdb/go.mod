@@ -8,7 +8,7 @@ require (
 	github.com/crossplane/crossplane-runtime/v2 v2.4.2
 	github.com/crossplane/crossplane/apis/v2 v2.3.4
 	golang.org/x/time v0.15.0
-	hegel.dev/go/hegel v0.9.27
+	hegel.dev/go/hegel v0.9.30
 	k8s.io/api v0.37.2
 	k8s.io/apimachinery v0.37.2
 	k8s.io/client-go v0.37.2
