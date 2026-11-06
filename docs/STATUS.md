@@ -43,7 +43,9 @@ analysis results and leaves reusable analyzers and cached models usable by live
 callers. CLI interrupts and qtest's test lifetime flow through the same path.
 Remaining context-free metadata/ordinary-validation evaluator entrypoints are
 explicit boundaries; this does not claim hard preemption of arbitrary I/O or
-individual machine instructions. See DESIGN §101.
+individual machine instructions. Lifecycle fixtures isolate both Unix cache
+locations; native CLI signal checks retain their existing Quint assets and run
+under a controlled occupied parent pool. See DESIGN §101.
 
 Current-library admission: live x/sys requirements are 0.49.0 and the external
 Orchestrion tier is 1.15.0 on the shared Go 1.27.3 floor. Atomic-publication race,

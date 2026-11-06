@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
@@ -65,6 +66,29 @@ func TestModelAnalysisSignalCancelsCompiler(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Isolate admission without moving Quint's installed runtime assets. Its
+	// explicit QUINT_HOME override is authoritative, including an empty value.
+	quintHome, explicitHome := os.LookupEnv("QUINT_HOME")
+	if !explicitHome {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			t.Fatal(err)
+		}
+		quintHome = filepath.Join(home, ".quint")
+	}
+	// Saturate a controlled parent pool: both real CLI children must reach
+	// their compiler gates through their own pools, even under unrelated load.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	for range 2 {
+		ctx, cancel := context.WithCancel(t.Context())
+		holder := quintcmd.Command(ctx, "sleep", "", "3600")
+		if err := holder.Start(); err != nil {
+			cancel()
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { cancel(); _ = holder.Wait() })
+	}
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
 	for _, command := range []string{"simulate", "model-diff"} {
 		t.Run(command, func(t *testing.T) {
@@ -83,7 +107,9 @@ func TestModelAnalysisSignalCancelsCompiler(t *testing.T) {
 				args = append(args, "-before", binding, "-after", binding, "-observe", "x")
 			}
 			cmd := exec.Command(os.Args[0], args...)
-			cmd.Env = append(os.Environ(), "GO_WANT_MODEL_ANALYSIS_MAIN=1", "GOTOGETHER_CACHE=off", "GOTOGETHER_REPORT_DIR=")
+			cache := t.TempDir()
+			cmd.Env = append(os.Environ(), "GO_WANT_MODEL_ANALYSIS_MAIN=1", "GOTOGETHER_CACHE=off", "GOTOGETHER_REPORT_DIR=",
+				"HOME="+cache, "XDG_CACHE_HOME="+cache, "QUINT_HOME="+quintHome)
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout, cmd.Stderr = &stdout, &stderr
 			if err := cmd.Start(); err != nil {

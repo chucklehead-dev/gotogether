@@ -20,6 +20,7 @@ func contextQuint(t *testing.T, script string) string {
 	// Fake-only commands get their own admission pool: unrelated native suites
 	// must not consume the startup deadline used to prove running cancellation.
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
 	path := filepath.Join(t.TempDir(), "quint")
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+script), 0o755); err != nil {
 		t.Fatal(err)
