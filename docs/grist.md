@@ -392,7 +392,9 @@ The decisions, with their reasons:
   directly replace a lagging processor's memoized prefix; successive triggers can
   fold only their new events while that entry remains cached. Ordinary LRU
   eviction still applies across all owners. The first historical read still refolds when the only
-  persistent snapshot is ahead of it. Owner identity is process-local, not part
+  persistent snapshot is ahead of it. [SQLite recovery measurements](performance.md#cold-historical-processor-recovery-2026-11-06)
+  quantify this first-read boundary; historical retention still needs an actual
+  latency target. Owner identity is process-local, not part
   of a persisted snapshot key or fingerprint. A read of a memoized state reads that event
   again and the events after it; another event there (a rewind refilled
   the position) or none drops it, counted stale. Only a read that folded

@@ -23,31 +23,30 @@ Reviewed 2026-11-06. Use a tick, tock, consolidate cadence: general framework
 capability, focused feature/contract depth, then structural, usability or
 performance work selected from evidence. This is a balance, not a quota.
 
-Recent slices are [#80](https://github.com/chucklehead-dev/gotogether/pull/80)
-(general directed fault-order coverage),
-[#81](https://github.com/chucklehead-dev/gotogether/pull/81)
-(native stream partial-result correctness), and
-[#82](https://github.com/chucklehead-dev/gotogether/pull/82)
-(shared evidence discovery). The handoff consolidation now removes superseded
-next-work instructions and keeps dated summaries in
-[HISTORY](HISTORY.md#handoff-consolidation-2026-11-06). It changes no runtime
-contract or previously recorded evidence.
+Recent consolidation fixed evidence discovery (#82) and separated this current
+handoff from chronological history (#83). The general-framework follow-up,
+compiled pending-call resolution (#84), is merged: existing placement/ordering
+searches retain assumed effects, bounds and evaluator-only provenance through
+portable replay. Missing binding inputs cannot become negative proof. The
+unchanged receipt-history fixture and existing wallet/raftkv callers establish
+an existing-user portability gap, not an independent adopter request. See
+DESIGN §106.
 
-The next general-framework slice closes I21's compiled pending-call gap using
-the existing placement and ordering searches. An unchanged receipt-history
-fixture passes with ordinary resolution but compiled resolution previously
-refused even after relocation; wallet/raftkv already use pending calls. Native
-controls retain assumed effects, bounds and evaluator-only provenance, with
-unsupported errors and no fallback. This is existing-user portability coverage,
-not evidence of an independent adopter request. See DESIGN §106.
+The subsequent I24 investigation measures real SQLite processor recovery with
+fresh App/connection state, default cadence/memo/batching and audits disabled.
+A newer-only snapshot forces the first prefix rebuild, but first readiness is
+about 7–14% of full recovery in the measured counter workload. Keep the runtime
+and snapshot contract unchanged; require an actual latency target before
+retention work. See [the measurements and limits](performance.md#cold-historical-processor-recovery-2026-11-06).
 
-Next, rotate toward measured facet depth before more compiled search modes.
-Candidates below are experiments with selection thresholds, not commitments.
+Next, rotate toward a concrete cross-facet caller problem or measured shared
+cost rather than more compiled modes or snapshot features. Candidates below
+are experiments with selection thresholds, not commitments.
 
 | Order | Candidate | Evidence needed before implementation |
 |---|---|---|
-| Next investigation: facet | I24: first cold historical-read cost | Measure a realistic lagging-processor workload. Warm memo ownership is fixed; change persistent snapshot retention only if cold refolds materially matter and anchor/rewind semantics remain sound. |
-| Consolidation candidate | Evidence discovery cost at representative suite volume | Profile actual file mixes before replacing the streaming implementation. Correct discovery is required; fewer scans or callback counts alone do not establish an end-to-end speedup. |
+| Next consolidation candidate | Evidence discovery cost at representative suite volume | Profile actual file mixes before replacing the streaming implementation. Correct discovery is required; fewer scans or callback counts alone do not establish an end-to-end speedup. |
+| Deferred facet follow-up | I24: historical snapshot retention | SQLite baseline is measured. First establish an actual first-read/recovery target; other projections, eviction, audits, process/OS coldness and PostgreSQL need their own evidence. |
 | Alongside | Independent-maintainer use or a newly reproduced caller blocker | Existing agent-assisted Goo/LRU/HTTP trials retain their bounded scope. Prefer real friction over another adjacent fixture or adapter. |
 
 Keep capture integrity, model conformance, runtime completion, coverage and
@@ -61,8 +60,8 @@ features, model-comparison mappings, broad diagnostic/editor expansion and
 platform facades remain deferred without new evidence. Logical transaction
 limits and native role quotas do not establish virtual physical-session fidelity.
 Cold snapshot retention is distinct from already-built warm processor memo
-ownership; pending-call resolution preserves its original completion limits. Abrupt-owner process supervision
-remains an explicit I12 boundary. Do not start all tracks at once.
+ownership; pending-call resolution preserves its original completion limits.
+Abrupt-owner process supervision remains an explicit I12 boundary. Do not start all tracks at once.
 
 The item sections below retain their technical dependencies and design detail.
 Historical release recommendations do not override the current prerelease order.
@@ -470,7 +469,9 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   the same global LRU capacity. A native alternating-head/processor rehearsal
   checks exact answers and incremental fold counts; memo-tail snapshot writes
   retain observed newer snapshots. Historical persistent snapshot retention
-  remains separate.
+  remains separate. [Cold SQLite recovery measurements](performance.md#cold-historical-processor-recovery-2026-11-06)
+  now distinguish first-read cost from full recovery; a latency target is still
+  required before changing retention.
 - **Scoped captured-transition conformance. Built.**
   `qtest.TransitionsConform(actors...)` checks native transition conformance with
   optional required exact actor identities; counters' paused incident and

@@ -40,28 +40,24 @@ pins from the checked-in go.mod files, not from historical handoff paragraphs.
 
 ## Recent progress and lessons
 
-- [#80](https://github.com/chucklehead-dev/gotogether/pull/80): bounded directed
-  fault orders use normal exploration/model checks and retain requested goals,
-  attempts and native witnesses. Conformance does not establish coverage;
-  unreached remains bounded absence. See DESIGN §104.
-- [#81](https://github.com/chucklehead-dev/gotogether/pull/81): native Kafka and
-  Kinesis polling preserves healthy records alongside errors; consumers process
-  those records before backoff so later commits do not skip discarded work.
-  Cancellation and idle polling remain distinct. See DESIGN §105.
 - [#82](https://github.com/chucklehead-dev/gotogether/pull/82): evidence discovery
   recognizes top-level format members in any order and refuses conflicting
-  evidence/manifest headers. A correct per-file check cannot compensate for
-  suite discovery silently omitting valid evidence. See
-  [CI guidance](ci.md#evidence-discovery).
+  evidence/manifest headers. Suite discovery cannot silently omit valid evidence.
+  See [CI guidance](ci.md#evidence-discovery).
+- [#83](https://github.com/chucklehead-dev/gotogether/pull/83): current capabilities,
+  boundaries and resume rules stay here; dated chronology is preserved in HISTORY.
+- [#84](https://github.com/chucklehead-dev/gotogether/pull/84): compiled pending-call
+  resolution supports placement-only and ordering/keyed searches without tools.
+  Assumed effects remain unobserved and unfinished, bounds survive portable
+  replay, and missing binding evidence cannot establish negative proof. See
+  DESIGN §106.
 
-Compiled pending-call resolution extends the existing evaluator-only handoff to
-histories with crashed/unanswered calls, alone or with ordering/keyed searches.
-Native receipts retain assumed effects and bounds; manifest/bundle replay keeps
-the original invocation-only input and works after relocation without tools.
-Unsupported evaluation errors, while clipped searches remain inconclusive.
-The unchanged receipt-history fixture demonstrates the portability gap; existing
-wallet/raftkv callers use pending resolution, but this is not new adopter-demand
-evidence. See DESIGN §106.
+Cold processor recovery is now measured on SQLite with fresh App/connection
+state, default cadence/memo/batching and audits disabled. The first-ready phase
+is about 7–14% of full recovery in this counter workload; warm prefixes remain
+incremental. Keep snapshot retention unchanged without an actual latency target.
+Raw samples, scope and the executable harness are in
+[performance.md](performance.md#cold-historical-processor-recovery-2026-11-06).
 
 These slices illustrate the cadence: general capability, focused contract depth,
 then consolidation. Correctness findings can justify consecutive consolidation
@@ -80,7 +76,7 @@ what to investigate next.
 | Model search | Broader finite-choice integration remains separate; compiled completed/pending-history searches use the artifact alone with explicit bounds and assumed effects | I4, I21; [choice scope](model-choice-witnesses.md), DESIGN §106 |
 | Process lifecycle | Abrupt owner death can orphan evaluator grandchildren; managed cancellation/admission does not bound those workers | I12 |
 | Evaluator scale | Incremental invariants for interacting entities need representative volume and dependency evidence | I19, I50; [performance](performance.md) |
-| Grist reads | A first cold historical read may refold when the only snapshot is newer; named-processor memo ownership already retains warm prefixes | I24; [Grist reads](grist.md#22-read-models) |
+| Grist reads | A first cold historical read may refold when snapshots are newer; SQLite cost is measured, warm ownership is fixed, and retention still needs a concrete latency target | I24; [measurements](performance.md#cold-historical-processor-recovery-2026-11-06) |
 | Grist operations | Safe redrive, explicit skip/resume and rewind detection across entirely restarted nodes remain open; read-only outcome inspection and observed-rewind retirement are built | I25; [operations](grist-guide.md) |
 | Database capacity | Virtual physical sessions need faithful idle ownership/pool callbacks; logical transaction limits and native PostgreSQL role quotas are distinct implemented checks | I25 |
 | Platform | GR10 slices 5, 7–11 remain; manifests precede kind/canary, sharding depends on leases | [platform order](grist-platform.md#9-slices) |
