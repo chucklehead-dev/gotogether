@@ -40,6 +40,12 @@ pins from the checked-in go.mod files, not from historical handoff paragraphs.
 
 ## Recent progress and lessons
 
+The core property suite reports native Hegel run errors, including health-check
+failures, through its private runner. The original 0.9.30 admission failure is
+still unexplained. Store contract checks force conflicting first decisions;
+negative controls prove overlap and a real condition violation rather than
+assuming a short sleep made the race happen.
+
 Hegel searches distinguish an observed candidate from a reproduced shrunk
 violation. `FindViolation` and `Shrink`, like `FindTrigger`, require the final
 replay's own failure marker; later operational errors and unstable candidates

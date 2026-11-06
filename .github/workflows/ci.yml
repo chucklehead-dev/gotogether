@@ -483,6 +483,18 @@ jobs:
           node-version: 22
       - name: Install quint
         run: ../ci/install-quint.sh
+      - name: Select Ubuntu's primary archive for tape tools
+        timeout-minutes: 1
+        run: |
+          sources=/etc/apt/sources.list.d/ubuntu.sources
+          mirrors=/etc/apt/apt-mirrors.txt
+          # Keep suites, components, signed-by and separate security sources.
+          # The runner's mirror list otherwise prioritizes the slow Azure host.
+          if ! awk -v wanted="mirror+file:$mirrors" '$1 == "URIs:" { for (i = 2; i <= NF; i++) if ($i == wanted) found = 1 } END { exit !found }' "$sources"; then
+            echo "tape tools: expected the runner's Ubuntu mirror-list source; review its APT configuration" >&2
+            exit 1
+          fi
+          printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee "$mirrors" >/dev/null
       - name: Install vhs, ttyd and ffmpeg
         timeout-minutes: 8
         run: ../ci/install-tape-tools.sh

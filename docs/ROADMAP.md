@@ -101,6 +101,13 @@ and clients. Events, arguments and dependency calls retain their scalar policy.
 Unsupported result shapes require explicit exclusion rather than silent omission.
 The held Hegel admission investigation remains separate from this facet slice.
 
+CI then exposed a store concurrency mutant escaping its randomized workload:
+a one-millisecond pause did not establish overlapping conflicting checks.
+The shared contract suite now forces a conflicting first wave and its negative
+control requires an actual brute-force condition violation after four stale
+checks. Faithful native and simulated stores pass the strengthened contract.
+Keep execution overlap as measured evidence, separate from a workload's intent.
+
 Next, rotate toward a general-framework caller problem or structural/usability
 consolidation selected from actual evidence. Retain independent-maintainer use
 as an alongside candidate; another framework API still needs a demonstrated need. Candidates below

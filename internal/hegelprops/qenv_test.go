@@ -1,4 +1,4 @@
-package hegelprops_test
+package hegelprops
 
 // The core's properties that Hegel checks. They live in a module of their
 // own, so the core's own tests need no Hegel (and its users' modules none
@@ -148,7 +148,7 @@ func TestSchedulerSemantics(t *testing.T) {
 		}
 		return out, notifies
 	}
-	hegel.Test(t, func(ht *hegel.T) {
+	checkProperty(t, func(ht hegel.TestCase) {
 		progs := make([][]op, hegel.Draw(ht, hegel.Integers(1, 4)))
 		for i := range progs {
 			for range hegel.Draw(ht, hegel.Integers(1, 6)) {
@@ -162,25 +162,25 @@ func TestSchedulerSemantics(t *testing.T) {
 			for _, o := range prog {
 				switch {
 				case o.kind == 0 && o.end-o.start != o.d:
-					ht.Fatalf("Sleep(%v) lasted %v", o.d, o.end-o.start)
+					ht.Errorf("Sleep(%v) lasted %v", o.d, o.end-o.start)
 				case o.kind == 1 && o.end != o.start:
-					ht.Fatalf("Yield took %v", o.end-o.start)
+					ht.Errorf("Yield took %v", o.end-o.start)
 				case o.kind == 2 && !o.notified && (o.d == 0 || o.end-o.start != o.d):
-					ht.Fatalf("Wait(%v) timed out after %v", o.d, o.end-o.start)
+					ht.Errorf("Wait(%v) timed out after %v", o.d, o.end-o.start)
 				case o.kind == 2 && o.notified:
 					ok := false
 					for _, n := range notifies[o.sig] {
 						ok = ok || (n == o.end && n >= o.start)
 					}
 					if !ok {
-						ht.Fatalf("Wait from %v reported a Notify at %v; notifies of signal %d: %v", o.start, o.end, o.sig, notifies[o.sig])
+						ht.Errorf("Wait from %v reported a Notify at %v; notifies of signal %d: %v", o.start, o.end, o.sig, notifies[o.sig])
 					}
 				}
 			}
 		}
 		again, _ := run(qenv.Replay(rec.Choices), progs)
 		if !reflect.DeepEqual(got, again) {
-			ht.Fatalf("replay differs:\n%v\n%v", got, again)
+			ht.Errorf("replay differs:\n%v\n%v", got, again)
 		}
 	}, hegel.WithTestCases(200))
 }
@@ -190,7 +190,7 @@ func TestSchedulerSemantics(t *testing.T) {
 // a waiting writer blocking new readers; a WaitGroup waits for tasks started
 // by Go; outside a simulation the real methods run.
 func TestWovenSyncInSimulation(t *testing.T) {
-	hegel.Test(t, func(ht *hegel.T) {
+	checkProperty(t, func(ht hegel.TestCase) {
 		s := qenv.New(qhegel.Choices(ht))
 		s.Check = true
 		defer s.Close()
@@ -204,7 +204,7 @@ func TestWovenSyncInSimulation(t *testing.T) {
 						woven.RWLock(&mu)
 						writers++
 						if writers != 1 || readers != 0 {
-							ht.Fatalf("writer with %d writers, %d readers", writers, readers)
+							ht.Errorf("writer with %d writers, %d readers", writers, readers)
 						}
 						qenv.Sleep(ctx, time.Millisecond)
 						writers--
@@ -213,7 +213,7 @@ func TestWovenSyncInSimulation(t *testing.T) {
 						woven.RLock(&mu)
 						readers++
 						if writers != 0 {
-							ht.Fatalf("reader with a writer")
+							ht.Errorf("reader with a writer")
 						}
 						qenv.Sleep(ctx, time.Millisecond)
 						readers--
@@ -228,11 +228,12 @@ func TestWovenSyncInSimulation(t *testing.T) {
 			qenv.Sleep(ctx, time.Second)
 			woven.Wait(&wg)
 			if done != 4 {
-				ht.Fatalf("Wait returned with %d of 4 done", done)
+				ht.Errorf("Wait returned with %d of 4 done", done)
 			}
 		})
 		if err := s.Run(time.Minute); err != nil {
-			ht.Fatal(err)
+			ht.Errorf("%v", err)
+			return
 		}
 	}, hegel.WithTestCases(100))
 

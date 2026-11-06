@@ -48,7 +48,7 @@ func TestEqualKeysEqualVerdicts(t *testing.T) {
 	actions := []string{"crash", "heal", "elect", "tick", "depose", "recover"}
 	at := func(s int) time.Time { return time.Unix(1000, 0).Add(time.Duration(s) * time.Second) }
 	same, differ := 0, 0
-	hegel.Test(t, func(ht *hegel.T) {
+	checkProperty(t, func(ht hegel.TestCase) {
 		var a []qtrace.Step
 		now := 0
 		near := hegel.Draw(ht, hegel.Booleans())
@@ -112,14 +112,16 @@ func TestEqualKeysEqualVerdicts(t *testing.T) {
 		same++
 		ra, err := c.Check(context.Background(), a)
 		if err != nil {
-			ht.Fatal(err)
+			ht.Errorf("%v", err)
+			return
 		}
 		rb, err := c.Check(context.Background(), b)
 		if err != nil {
-			ht.Fatal(err)
+			ht.Errorf("%v", err)
+			return
 		}
 		if va, vb := verdictOf(ra), verdictOf(rb); va != vb {
-			ht.Fatalf("one key, two verdicts:\n  %v\n  %s\n  %v\n  %s", a, va, b, vb)
+			ht.Errorf("one key, two verdicts:\n  %v\n  %s\n  %v\n  %s", a, va, b, vb)
 		}
 	}, hegel.WithTestCases(60))
 	t.Logf("%d pairs with one key judged, %d with two keys", same, differ)
@@ -147,7 +149,7 @@ func TestEqualKeysEqualVerdictsOfAHistory(t *testing.T) {
 	defer c.Close()
 	ms := func(u int) time.Time { return time.Unix(1000, 0).Add(time.Duration(u) * time.Millisecond) }
 	same, differ := 0, 0
-	hegel.Test(t, func(ht *hegel.T) {
+	checkProperty(t, func(ht hegel.TestCase) {
 		var a []qtrace.Step
 		balance, now := int64(0), 0
 		for i := range hegel.Draw(ht, hegel.Integers(1, 4)) {
@@ -195,12 +197,13 @@ func TestEqualKeysEqualVerdictsOfAHistory(t *testing.T) {
 		for _, steps := range [][]qtrace.Step{a, b} {
 			j, err := c.Judge(context.Background(), steps, validate.SearchOptions{Linearize: true})
 			if err != nil {
-				ht.Fatal(err)
+				ht.Errorf("%v", err)
+				return
 			}
 			verdicts = append(verdicts, verdictOf(j.Report))
 		}
 		if verdicts[0] != verdicts[1] {
-			ht.Fatalf("one key, two verdicts:\n  %v\n  %s\n  %v\n  %s", a, verdicts[0], b, verdicts[1])
+			ht.Errorf("one key, two verdicts:\n  %v\n  %s\n  %v\n  %s", a, verdicts[0], b, verdicts[1])
 		}
 	}, hegel.WithTestCases(40))
 	t.Logf("%d pairs with one key judged, %d with two keys", same, differ)

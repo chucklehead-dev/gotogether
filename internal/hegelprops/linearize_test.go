@@ -58,7 +58,7 @@ var porcupineRegister = porcupine.Model{
 // history its budget cuts is no verdict, counted and not compared.
 func TestLinearizeAgreesWithPorcupine(t *testing.T) {
 	cut, compared, rejected := 0, 0, 0
-	hegel.Test(t, func(ht *hegel.T) {
+	checkProperty(t, func(ht hegel.TestCase) {
 		clients := hegel.Draw(ht, hegel.Integers(1, 4))
 		var ops []regOp
 		written := []int64{0}
@@ -101,7 +101,8 @@ func TestLinearizeAgreesWithPorcupine(t *testing.T) {
 			return register(orders), nil, nil
 		})
 		if err != nil {
-			ht.Fatal(err)
+			ht.Errorf("%v", err)
+			return
 		}
 		got, wasCut := l.Verdict == qtrace.Linearizable, l.Verdict == qtrace.Undecided
 		if wasCut && !got {
@@ -113,7 +114,7 @@ func TestLinearizeAgreesWithPorcupine(t *testing.T) {
 			rejected++
 		}
 		if got != want {
-			ht.Fatalf("Linearize says %v, Porcupine %v, of %+v", got, want, ops)
+			ht.Errorf("Linearize says %v, Porcupine %v, of %+v", got, want, ops)
 		}
 	}, hegel.WithTestCases(300))
 	t.Logf("%d histories compared (%d not linearizable), %d cut short", compared, rejected, cut)
