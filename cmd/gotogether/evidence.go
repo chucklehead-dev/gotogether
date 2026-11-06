@@ -69,11 +69,18 @@ func evidence(args []string) (int, error) {
 			if err != nil {
 				return err
 			}
-			if d.IsDir() || path != root && (!strings.HasSuffix(d.Name(), ".json") || !ev.Is(path) && !validate.IsManifest(path)) {
+			if d.IsDir() || path != root && !strings.HasSuffix(d.Name(), ".json") {
+				return nil
+			}
+			isEvidence, isManifest := ev.Is(path), validate.IsManifest(path)
+			if isEvidence && isManifest {
+				return fmt.Errorf("%s: conflicting top-level format members identify both evidence and a run manifest: keep one format member and write the file anew", path)
+			}
+			if path != root && !isEvidence && !isManifest {
 				return nil // not evidence: an ITF trace, a corpus entry, a summary
 			}
 			var e *suiteEvidence
-			if validate.IsManifest(path) { // a run gotogether did not drive (Validate's, Record's, validate -manifest's)
+			if isManifest { // a run gotogether did not drive (Validate's, Record's, validate -manifest's)
 				m, err := validate.ReadManifest(path)
 				if errors.Is(err, validate.ErrManifestFormat) { // another version's: one file, not the whole suite
 					fmt.Printf("warning: %v; skipped\n", err)

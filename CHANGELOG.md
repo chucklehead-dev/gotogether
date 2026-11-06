@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- Evidence directory discovery recognizes top-level JSON format members in any
+  order, so reserializing evidence or run manifests cannot hide them from suite
+  inspection. Files naming both families fail as ambiguous instead of being
+  skipped through the wrong reader. Current-only format validation is unchanged.
+
 - Stream readers preserve partial poll batches alongside errors. Kafka now
   surfaces fetch failures and caller cancellation; Kinesis retains earlier-shard
   records when a later shard fails. Consumers process returned records before

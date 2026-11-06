@@ -795,20 +795,7 @@ func ReadManifest(path string) (*Manifest, error) {
 // IsManifest reports whether the JSON file at path is a run manifest of
 // any format version: what a tool walking a directory of evidence reads.
 func IsManifest(path string) bool {
-	f, err := os.Open(path)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-	d := json.NewDecoder(f)
-	if tok, err := d.Token(); err != nil || tok != json.Delim('{') {
-		return false
-	}
-	if key, err := d.Token(); err != nil || key != "format" {
-		return false
-	}
-	var format string
-	return d.Decode(&format) == nil && formats.Manifest.Is(format)
+	return formats.Manifest.IsFile(path)
 }
 
 // copy is a copy of m whose files can be rewritten.

@@ -35,7 +35,17 @@ The subsequent stream facet returns to native client contracts: Kafka fetch erro
 must not become idle polls, and a partial batch cannot be discarded when another
 partition/shard fails. Both native readers retain records plus errors; consumer
 loops process the records before backoff. Broader broker features should follow
-another concrete production-client gap rather than more fault-order modes. The installed LRU MBT rehearsal now covers a non-SQL consumer workflow
+another concrete production-client gap rather than more fault-order modes.
+The subsequent consolidation closes a reproduced suite-inspection omission:
+moving valid evidence's format member after its payload made strict directory
+inspection skip an unreached goal and pass. Evidence and manifest sniffers now
+share order-independent streaming discovery. Conflicting family headers fail
+before routing; unrelated traces remain excluded and version policy stays in
+the readers. This corrects input integrity without another coverage mode.
+The cold-resume audit also found dated direct-to-main push instructions and
+obsolete next-work descriptions; consolidate that handoff separately, preserving
+decision provenance and meaningful open boundaries.
+The installed LRU MBT rehearsal now covers a non-SQL consumer workflow
 and an isolated source contrast; the configuration typo it exposed is fixed by
 strict preflight and direct API migration. The consolidation slice threads
 caller-owned cancellation through model loading, checker construction, lint

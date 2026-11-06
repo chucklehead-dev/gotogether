@@ -229,23 +229,7 @@ func Read(path string) (*View, error) {
 // version: what a tool walking a directory reads, and skips the rest
 // (ITF traces, corpus entries, summaries).
 func Is(path string) bool {
-	f, err := os.Open(path)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-	// the format is WriteJSON's first key: read it alone, not a whole ITF
-	// trace beside it
-	d := json.NewDecoder(f)
-	if tok, err := d.Token(); err != nil || tok != json.Delim('{') {
-		return false
-	}
-	key, err := d.Token()
-	if err != nil || key != "format" {
-		return false
-	}
-	var format string
-	return d.Decode(&format) == nil && formats.Evidence.Is(format)
+	return formats.Evidence.IsFile(path)
 }
 
 // OfManifest is a run's manifest as evidence's view (RoleExternal): one

@@ -55,6 +55,22 @@ through GitHub's API, rate-limited for shared runners), then `go install
 github.com/chucklehead-dev/gotogether/cmd/gotogether@<version>`;
 `gotogether doctor` says what is installed and what disagrees.
 
+## Evidence discovery
+
+`gotogether evidence` discovers exploration evidence and run manifests among a
+directory's JSON files by their top-level `format` member, in any member order.
+Unrelated ITF traces, corpus entries and summaries do not contribute. Nested
+format members do not identify the enclosing document. Files that name both
+families are ambiguous and fail before reader selection.
+
+Discovery recognizes unsupported majors so the reader can name the problem;
+it does not add compatibility. Old/new exploration evidence is refused, while
+unsupported run manifests retain their warning-and-skip policy. Regenerate files
+with the current tools. A valid reordered evidence file retains its coverage
+gaps under `-strict` just as it does when passed explicitly. Discovery alone
+does not establish suite freshness or that every expected test ran: use a fresh
+`-session` identity and `-expect` list for those checks.
+
 ## Caching quint's compile
 
 Every check typechecks its model and compiles the binding's evaluation
