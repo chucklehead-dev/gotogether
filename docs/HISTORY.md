@@ -8616,3 +8616,37 @@ Real timeout and missing-tool controls distinguish installer failure from tape
 coverage. No conditional golden checks, skipped rendering, alternate application
 format or relaxed merge gate is added. Slow cold downloads may still fail;
 they now fail with a named acquisition phase instead of blocking indefinitely.
+
+
+## Current library patches and verified evaluator cache (2026-11-06)
+
+The official audit found Quint 0.33.1/evaluator 0.7.1, Hegel 0.9.30 and Kubernetes
+0.37.2 patches; the admitted Go and extended-library floor remains current.
+Quint's TypeScript dead-end recording bug affects connect's existing all-samples
+request. Seed 42's five terminal samples previously retained bounds
+[4, 4, 2, 2, 1], dropping sampled initial-terminal runs; the patch retains
+[4, 2, 1, 0, 0]. Repeated zero samples are legitimate: the control checks short
+retention/completion, not uniqueness. A separate real Rust generation/replay
+control accepts constructorCount, which the former IPC JSON parser rejected.
+
+The evaluator has no --version. Four official release archive digests and their
+extracted executable hashes are pinned. The installer validates existing bytes
+and startup, stages replacement, and publishes only the verified executable.
+Failed acquisition cannot publish a partial executable or clobber prior bytes.
+Removing validation or atomic publication fails controls; replacing mv -f with
+mv -n fails corrupt-cache repair. Native npm/engine installation and verified
+cache reuse execute successfully in an isolated prefix. This does not make the
+preceding npm CLI install atomic. The Docker image includes the adjacent pin file.
+
+Kubesim and its two native consumers pass matching 0.37.2 dependency graphs,
+including existing faithful and observed-generation/stamp-conflict/missing-token
+controls. Go source APIs are unchanged in the upstream staged SDK patch diffs.
+All live workspace modules are tidied without rewriting frozen evidence.
+
+Hegel 0.9.30 passes primary qhegel stateful/shrinking/reproduction tests, native
+race capture/group controls and shared rule-group execution, but one full
+property suite failed without a usable reason. Fixed-seed comparisons, added
+latency and a diagnostic full rerun do not reproduce that failure. No failure
+cause is asserted; keep 0.9.27 admitted until the failed observation is explained.
+The upstream io.Writer hook remains private, so there is no supported capture
+simplification to adopt merely by changing the version.

@@ -23,12 +23,12 @@ this guard.
 ## Before you start
 
 Use Go ≥ 1.27.3 and Node.js 22 (including npm). These transcripts use
-Quint 0.33.0, the version tested in CI. The installer fetches both Quint
+Quint 0.33.0; CI now checks Quint 0.33.1. The installer fetches both Quint
 and its matching Rust evaluator.
 
 ```sh
 git clone https://github.com/chucklehead-dev/gotogether && cd gotogether
-QUINT_VERSION=0.33.0 ci/install-quint.sh
+QUINT_VERSION=0.33.1 ci/install-quint.sh
 tutorial_bin="$(mktemp -d)"
 GOWORK=off GOBIN="$tutorial_bin" go install ./cmd/gotogether
 export PATH="$tutorial_bin:$PATH"

@@ -12,7 +12,7 @@ ARG GO_VERSION=1.27.3
 FROM golang:${GO_VERSION}-bookworm
 
 ARG NODE_VERSION=22.22.0
-ARG QUINT_VERSION=0.33.0
+ARG QUINT_VERSION=0.33.1
 
 # Node from nodejs.org's release (gzip: the image has no xz), checked against its SHASUMS256
 RUN set -eux; \
@@ -31,7 +31,7 @@ RUN set -eux; \
 # quint and the evaluator it expects, from its release asset (not
 # GitHub's rate-limited API), where any user finds it
 ENV QUINT_HOME=/opt/quint
-COPY ci/install-quint.sh /usr/local/bin/install-quint.sh
+COPY ci/install-quint.sh ci/quint-evaluator.sha256 /usr/local/bin/
 RUN QUINT_VERSION=${QUINT_VERSION} install-quint.sh && chmod -R a+rX /opt/quint
 
 # the CLI, from the context's source; the source removed from outside

@@ -87,3 +87,54 @@ subprocess lifecycle, both scaffold generators, woven coverage/mutation fixtures
 analyzer fixes and the real Orchestrion tier. Check all workspace module tidiness,
 vet and preflight before publication. Do not remove integration checks, fake
 GOVERSION, or add alternate source implementations merely to pass a new version.
+
+
+## Current library patches (2026-11-06)
+
+The authoritative audit still selects Go 1.27.3, x/tools 0.52.0, x/mod 0.42.0,
+x/sync 0.24.0, x/sys 0.49.0, Orchestrion 1.15.0 and staticcheck 0.8.2.
+Controller-runtime 0.25.2 is current. Kubernetes staged dependencies advance
+from 0.37.0 to 0.37.2 together across kubesim and its fleetrollout/crossdb
+consumers. Their upstream SDK diffs change dependency manifests rather than
+adding API fields. Admission exercises real client semantics, faithful runs and
+existing defect witnesses; native execution does not establish kind/kwok server
+behavior. All 40 live workspace modules remain tidy; frozen histories retain
+their original graphs.
+
+The current Quint pair is CLI **0.33.1** and Rust evaluator **0.7.1**. The CLI
+patch fixes double-recording dead-end TypeScript runs: when all requested
+samples are retained (`--n-traces == --max-samples`, as connect requests),
+duplicate long traces could displace short sampled traces. A bounded terminal
+fixture retains both initially terminal and longer samples, without requiring
+legitimate repeated samples to be unique. The Rust IPC parser also accepts
+valid variable names containing `constructor`; actual generation, decoding and
+state comparison check that path. Both controls fail with the previous pair.
+The upstream evaluator also documents a GNU libc floor of 2.31 rather than
+2.39, relevant to the Bookworm image.
+
+The evaluator has no version command. Its cache is validated against committed
+archive and executable SHA256 pins, plus native startup, before reuse. All four
+Linux/Darwin asset digests were checked against official GitHub release metadata;
+binary digests were derived from those archives. Native execution admission is
+Linux/amd64, not execution proof for the other three targets. Cache publication
+is staged and atomic, preserving an existing executable on failure. npm CLI
+installation precedes that transaction and is not itself rolled back. The image
+copies the checksum file beside the installer so build-time startup checks apply.
+
+**Hegel 0.9.30 is not admitted yet.** It advances embedded libhegel from 0.48 to
+0.50 and permits shared membership in concurrency rule groups. Full qhegel
+stateful/shrinking/reproduction tests (210.466s), native race controls and the
+new group feature pass. However, the first full internal/hegelprops run failed
+TestEqualKeysEqualVerdicts (338.931s overall) without a useful failure reason.
+Isolated old/new comparisons and a diagnostic full rerun pass; that does not
+explain or clear the original failure. No semantic counterexample or TooSlow
+cause was captured. Hegel's Test can discard native run-error details by marking
+the test failed without printing them; its io.Writer option is still private.
+Keep the sole admitted 0.9.27 pin while investigating failure observability and
+reproduction, rather than adding version fallbacks or suppressing health checks.
+
+The complete connect suite with the new controls uses 17.9 descendant CPU
+seconds in the local cputime harness (9.330s wall); its previously unlisted
+package now has an 18-second baseline, retaining the existing 2x regression
+factor. The first two executable hello tutorial transcripts still replay with
+the new pair; dated transcript/compiler versions remain provenance.

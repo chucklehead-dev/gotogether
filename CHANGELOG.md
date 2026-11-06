@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- Use Quint 0.33.1 with evaluator 0.7.1 and matching Kubernetes staged modules
+  0.37.2. Terminal trace samples retain short runs; Rust output accepts valid
+  constructor-substring names. Verify evaluator cache bytes/startup and publish
+  replacements atomically. Hegel remains 0.9.27 pending a failed admission's
+  diagnosis; no legacy-version fallback is added.
+
 - Navigator CI reuses verified native tools and bounds acquisition with one
   command budget plus a step deadline. Missing tools and failed installation
   remain operational failures; golden-screen checks and rendering stay mandatory.
