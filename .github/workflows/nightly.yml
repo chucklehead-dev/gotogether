@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 env:
-  QUINT_VERSION: 0.33.0
+  QUINT_VERSION: 0.33.1
   GOWORK: "off"
   GOTOGETHER_SEEDS: "500"
   # Hegel searches at a fresh seed, logged (GOTOGETHER_HEGEL_SEED=<it>

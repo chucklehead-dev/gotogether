@@ -40,6 +40,14 @@ pins from the checked-in go.mod files, not from historical handoff paragraphs.
 
 ## Recent progress and lessons
 
+The current tool patch refresh pairs Quint 0.33.1 with evaluator 0.7.1, preserving
+short sampled runs and valid constructor-substring names. Evaluator cache reuse
+requires byte identity and startup; publication is staged. Kubernetes staged
+modules are aligned at 0.37.2 with consumer semantic controls. Hegel 0.9.30 stays
+unadmitted after an unexplained broader-property failure; the tested current pin
+remains 0.9.27. See [admission evidence](go-toolchain.md#current-library-patches-2026-11-06).
+
+
 Navigator CI reuses verified native tools and bounds acquisition with a shared
 command budget plus a step deadline. Missing or broken tools fail bootstrap;
 golden checks and rendering remain mandatory. Cold mirror speed is outside the

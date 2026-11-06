@@ -27,7 +27,7 @@ inputs:
     default: action
   quint-version:
     description: quint's version (npm), its Rust evaluator the one it expects
-    default: "0.33.0"
+    default: "0.33.1"
   node-version:
     description: Node's version, for quint
     default: "22"

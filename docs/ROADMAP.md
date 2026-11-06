@@ -76,6 +76,12 @@ missing packages, enforce transfer/lock and whole-command budgets, and require
 working postconditions before mandatory golden checks/rendering. This changes
 failure handling, not the meaning or number of required CI checks.
 
+The library patch follow-up admits Quint's paired trace-retention/JSON fixes and
+matching Kubernetes patches through native controls. Hegel's newer native SDK
+passes primary tests but remains held on an unexplained broader-property failure.
+Improve failure observability/reproduction before adopting it; a passing rerun
+alone cannot clear a failed admission. See go-toolchain.md for the tested graph.
+
 Next, rotate toward a concrete general-framework or cross-facet caller problem
 rather than further parser tuning, compiled modes or snapshot features. Candidates below
 are experiments with selection thresholds, not commitments.

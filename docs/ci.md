@@ -31,7 +31,7 @@ jobs:
 Its inputs: `run` (bash, gotogether on PATH), `working-directory`,
 `gotogether-version` (a tag or commit; `action`, the default, builds the
 CLI from the action's own source, so the CLI is the ref you pinned),
-`quint-version` (0.33.0), `node-version` (22), `go-version` (default:
+`quint-version` (0.33.1), `node-version` (22), `go-version` (default:
 the go.mod's), `compiled` (`'true'`: neither Node nor quint, for
 `validate -compiled`), `cache`, `doctor` (`true`, `strict`, `false`).
 Its output `result` is the last `RESULT:` line's verdict (`PASS`, `FAIL`,
@@ -49,7 +49,7 @@ This repository's CI builds it and runs `gotogether doctor -strict`
 inside, and pushes it nowhere: which registry publishes it, under what
 name, is the maintainer's call. Build it yourself until then.
 
-**By hand**: `QUINT_VERSION=0.33.0 ci/install-quint.sh` installs quint
+**By hand**: `QUINT_VERSION=0.33.1 ci/install-quint.sh` installs quint
 from npm and its evaluator from the release asset (quint's own fetch goes
 through GitHub's API, rate-limited for shared runners), then `go install
 github.com/chucklehead-dev/gotogether/cmd/gotogether@<version>`;
@@ -104,14 +104,21 @@ off). Keep it between runs, keyed by the models: the Action does this.
       - uses: actions/cache@v4
         with:
           path: ~/.cache/gotogether/quint
-          key: gotogether-models-${{ runner.os }}-0.33.0-${{ hashFiles('**/*.qnt') }}
-          restore-keys: gotogether-models-${{ runner.os }}-0.33.0-
+          key: gotogether-models-${{ runner.os }}-0.33.1-${{ hashFiles('**/*.qnt') }}
+          restore-keys: gotogether-models-${{ runner.os }}-0.33.1-
 ```
 
 A stale entry is never read (its key is its content), so restoring an
 older cache only saves what still matches. Cache `~/.quint` too (the
-evaluator, keyed by quint's version): install-quint.sh skips it when
-present. `gotogether doctor` reports the cache's size.
+evaluator, keyed by the SDK's engine version). The installer checks cached
+binary bytes against `ci/quint-evaluator.sha256` and verifies startup before
+reuse. Downloads are staged, archive/binary hashes checked, and the evaluator
+executable published only after validation. Failed acquisition preserves an
+existing executable; this is evaluator-cache atomicity, not an atomic npm CLI
+plus evaluator transaction. The requested CLI must be the one on PATH, and its
+engine must match the admitted checksum set. CI's tested/default pair is
+0.33.1/0.7.1; other frontend versions are not admitted merely by this installer.
+`gotogether doctor` reports the cache's size.
 
 ## Tiers
 

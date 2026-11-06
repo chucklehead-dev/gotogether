@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 env:
-  QUINT_VERSION: 0.33.0
+  QUINT_VERSION: 0.33.1
   # every module is tested on its own go.mod: go.work is for development
   GOWORK: "off"
   # every toolkit skip (no quint, no mutants woven, SkipIfEmpty's) fails:

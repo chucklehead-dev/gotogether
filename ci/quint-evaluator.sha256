@@ -1,0 +1,11 @@
+# Rust evaluator v0.7.1. Archive digests are GitHub release asset digests:
+# https://github.com/quint-co/quint/releases/tag/evaluator/v0.7.1
+# Bare target names identify the binary extracted from that verified archive.
+ce0502bdef65dc26c242a9e56379a9bb26de6f3db38f0e3989339d46a542f5eb  quint_evaluator-x86_64-unknown-linux-gnu.tar.gz
+1764f11e8c1a9f644af5c934e9a71645b313f82f8db1284965866a2f417da9aa  quint_evaluator-x86_64-unknown-linux-gnu
+706819d56eb2153a12b7d3c07b5060917cf5f4431bf5069f998f9ff1e97c4388  quint_evaluator-aarch64-unknown-linux-gnu.tar.gz
+d63d72c13e7664665e6397d6859668651ad7bdbaaa0fe3c408313ca74a8fe741  quint_evaluator-aarch64-unknown-linux-gnu
+b4c2a706cad360151d08b5ce1577e23859a47b4e16ad11e53dbe8de7e5c450ca  quint_evaluator-x86_64-apple-darwin.tar.gz
+c9e16a06d1f6140664d82150931225d9333b91696a269ba1951866a55d9554fd  quint_evaluator-x86_64-apple-darwin
+62a7b5226bbc73c738cce94a265b1f87d062e3d1b30a16f7210132f00d8b95b2  quint_evaluator-aarch64-apple-darwin.tar.gz
+c918492321c1f1db0be02477e4520c4c29ecb42afeaaaefed87b36f16fc21dd8  quint_evaluator-aarch64-apple-darwin

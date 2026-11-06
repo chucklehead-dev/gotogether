@@ -170,7 +170,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   sees the others' code as it is, without a release. CI sets `GOWORK=off`
   and tests each module on its own go.mod, as a user would build it.
 - Go ≥ 1.27.3 (`go.mod`; the shared current runtime floor). quint ≥ 0.32 on PATH
-  (`npm i -g @informalsystems/quint`, then `QUINT_VERSION=0.33.0
+  (`npm i -g @informalsystems/quint`, then `QUINT_VERSION=0.33.1
   ci/install-quint.sh` for the Rust evaluator). Tests that need quint
   skip without it.
 - Merge only after the CI workflow has finished successfully for the exact PR

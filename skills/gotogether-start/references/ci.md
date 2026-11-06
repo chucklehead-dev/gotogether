@@ -27,7 +27,7 @@ CLI of the ref the action is pinned at), `quint-version`, `node-version`,
 `go-version`, `compiled`, `cache`, `doctor` (`true`, `strict`, `false`).
 Output `result`: `PASS`, `FAIL`, `NO VERDICT`.
 
-Without the Action: `QUINT_VERSION=0.33.0 ci/install-quint.sh` (the
+Without the Action: `QUINT_VERSION=0.33.1 ci/install-quint.sh` (the
 evaluator from its release asset: quint's own fetch is rate-limited on
 shared runners), and cache `~/.quint` and `~/.cache/gotogether/quint`
 (`GOTOGETHER_CACHE`) keyed by quint's version and `hashFiles('**/*.qnt')`.
