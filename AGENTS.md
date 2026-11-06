@@ -29,8 +29,11 @@ The design record is `docs/DESIGN.md`. Read §9 before changing `connect`
 or `qhegel`, §10 before changing `qenv`, and §11 before changing
 `qload` or `qmeta`.
 
-Where the work stands (done, half done, next, the maintainer's open
-decisions, how to resume): docs/STATUS.md. Update it when an item lands.
+Where the work stands and how to resume: docs/STATUS.md. Keep it a short
+current handoff: update capabilities and boundaries in place when an item lands.
+Put dated progress, measurements and superseded plans in docs/HISTORY.md rather
+than prepending another chronology to STATUS. docs/ROADMAP.md's Current order
+section owns priorities; its item sections retain dependencies and open scope.
 
 ## Layout
 
