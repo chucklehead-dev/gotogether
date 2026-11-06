@@ -8766,3 +8766,9 @@ is documented in [the upstream note](upstream/hegel-run-diagnostics.md), rather
 than silently sacrificing saved counterexamples for better errors. `After`
 retains completed cases with a partial-search qualifier when native generation
 fails; `Batched` stops before treating an incomplete round as checked evidence.
+
+Hosted admission exposed a fixture environment assumption: removing `CI` alone
+left `GITHUB_ACTIONS=true`, which independently disables Hegel's default corpus.
+The same failure reproduced locally with that marker. Native controls isolate
+the non-CI default and distinguish CI's disabled default from an explicit
+persistent database; corpus save/replay assertions remain required.

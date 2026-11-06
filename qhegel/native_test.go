@@ -94,7 +94,10 @@ func nativeChild(t *testing.T, scenario, mode string, short bool, dir string, ex
 	if scenario == "corpus" {
 		cmd.Env = nil
 		for _, value := range os.Environ() {
-			if !strings.HasPrefix(value, "CI=") {
+			// libhegel's CI detection recognizes GitHub's marker even when
+			// generic CI is absent. Select the non-CI default before explicit
+			// per-control environment overrides below.
+			if !strings.HasPrefix(value, "CI=") && !strings.HasPrefix(value, "GITHUB_ACTIONS=") {
 				cmd.Env = append(cmd.Env, value)
 			}
 		}
@@ -257,6 +260,36 @@ func TestNativeCorpusPersistsAndIsolatesProperties(t *testing.T) {
 			run("b", false, true)
 			run("a", true, true)
 			run("b", true, true)
+		})
+	}
+}
+
+// The hosted-runner default disables persistence, while an explicit database
+// still saves examples. The non-CI control above checks the inverse default.
+func TestNativeCICorpusDefaultsAndOverrides(t *testing.T) {
+	for _, custom := range []bool{false, true} {
+		t.Run(fmt.Sprint(custom), func(t *testing.T) {
+			dir := t.TempDir()
+			options := []string{"CI=true", "GITHUB_ACTIONS=true", "QHEGEL_NATIVE_PROPERTY=a"}
+			if custom {
+				database := filepath.Join(dir, "shared-corpus")
+				if err := os.Mkdir(database, 0700); err != nil {
+					t.Fatal(err)
+				}
+				options = append(options, "QHEGEL_NATIVE_DATABASE="+database)
+			}
+			out, err := nativeChild(t, "corpus", "Off", false, dir, options...)
+			if err == nil || !strings.Contains(string(out), "native assertion sentinel") {
+				t.Fatalf("failure control: %v\n%s", err, out)
+			}
+			options = append(options, "QHEGEL_NATIVE_REUSE=1")
+			out, err = nativeChild(t, "corpus", "Off", false, dir, options...)
+			if (err != nil) != custom {
+				t.Fatalf("CI reuse with custom=%t: %v\n%s", custom, err, out)
+			}
+			if custom && !strings.Contains(string(out), "native assertion sentinel") {
+				t.Fatalf("explicit CI database did not reproduce its saved assertion:\n%s", out)
+			}
 		})
 	}
 }
