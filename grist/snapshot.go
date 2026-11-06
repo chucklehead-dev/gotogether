@@ -2,27 +2,12 @@ package grist
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/url"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/grist/store"
 )
-
-// snapshotSum is a snapshot's checksum: a hash of every field but Sum,
-// and of anchor, the identity (eventID) of the event at its position,
-// the last it folded: a torn or altered snapshot is never read, nor one
-// whose last event a rewound log no longer holds (a put of a fold begun
-// before a restore and committed after it).
-func snapshotSum(s Snapshot, anchor string) string {
-	h := sha256.New()
-	fmt.Fprintf(h, "%s\x00%s\x00%s\x00%d\x00%s\x00", s.Name, s.Key, s.Fingerprint, s.Pos, anchor)
-	h.Write(s.State)
-	return hex.EncodeToString(h.Sum(nil))[:32]
-}
 
 // snapshotKey is a keyed read's key: its tags as key=value pairs, each
 // query-escaped, joined by '&'; "" for a plain read model.
@@ -181,7 +166,7 @@ func (m *ReadModel[S]) fromMemo(r *Reads, memo *memoTable, mk memoKey, q Selecto
 		return zero, false
 	}
 	s := m.init()
-	if len(evs) == 0 || evs[0].Pos != e.anchor || eventID(evs[0]) != e.id || json.Unmarshal(e.state, &s) != nil {
+	if len(evs) == 0 || !memoAnchorMatches(evs[0], e.anchor, e.id) || json.Unmarshal(e.state, &s) != nil {
 		memo.drop(mk)
 		r.app.stats.memoStale.Add(1)
 		return zero, false
