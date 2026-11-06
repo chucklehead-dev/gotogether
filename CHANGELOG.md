@@ -8,6 +8,17 @@ and adds a line here.
 
 ## Unreleased
 
+- Grist's native Main joins processor, relay and tenant-watcher cancellation
+  cleanup before its final relay flush and resource closure. Processor effects
+  must cooperate with cancellation; simulation crash lifetimes are unchanged.
+
+- Evidence discovery uses one streaming pass for exploration/run headers and
+  Go 1.27's JSON value skipping, preserving reordered and conflicting-header
+  checks with less command time on measured artifact mixes. Unreadable JSON
+  now fails suite inspection instead of disappearing. `qtest.IsEvidence` and
+  `validate.IsManifest` now return `(bool, error)`; handle the read error before
+  routing a file. No bool-only adapter or additional artifact format is kept.
+
 - Compiled histories support pending-call resolution, alone or with ordinary/keyed
   linearization, using the artifact's evaluator without Quint fallback. Assumed
   effects remain unobserved and pending calls remain unfinished. Unsupported

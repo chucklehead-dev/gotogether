@@ -1,10 +1,14 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/chucklehead-dev/gotogether/qtest"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // A JSON reserialization must not turn a strict coverage failure into a pass
@@ -62,5 +66,33 @@ func TestEvidenceDirectoryDiscoversReorderedDocuments(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A directory scan must not hide an unreadable file beside healthy evidence.
+func TestEvidenceUnreadableFile(t *testing.T) {
+	dir := t.TempDir()
+	healthy := `{"format":"gotogether.evidence/3","session":"readability","role":"faithful","test":"Healthy","runs":1,"conform":1}`
+	for _, name := range []string{"healthy.json", "unreadable.json"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(healthy), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	path := filepath.Join(dir, "unreadable.json")
+	if err := os.Chmod(path, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(path, 0600) })
+	if _, err := os.ReadFile(path); !errors.Is(err, os.ErrPermission) {
+		t.Skip("filesystem/actor can still read mode-000 files")
+	}
+	for _, classify := range []func(string) (bool, error){qtest.IsEvidence, validate.IsManifest} {
+		if found, err := classify(path); found || !errors.Is(err, os.ErrPermission) {
+			t.Fatalf("file predicate discarded unreadable input: %t %v", found, err)
+		}
+	}
+	code, err := evidence([]string{"-strict", "-session", "readability", dir})
+	if code != 2 || !errors.Is(err, os.ErrPermission) || !strings.Contains(err.Error(), "unreadable.json") {
+		t.Fatalf("unreadable input hidden: exit %d err %v", code, err)
 	}
 }

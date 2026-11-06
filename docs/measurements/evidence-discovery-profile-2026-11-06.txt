@@ -1,0 +1,145 @@
+Evidence discovery profiling controls
+
+Toolchain: Go 1.27.3 linux/amd64; CPU Intel Xeon Platinum 8573C; benchmark concurrency suffix 5.
+Baseline production source: 078769cc4cfe7140d000118ffe4884308303ef51 (existing encoding/json.Token dual-family scan).
+Candidate: final API-migrated discovery prototype; direct jsontext.SkipValue, single-pass CLI routing and explicit probe errors.
+No parallel heavy correctness/translation runs during paired timings; profiles collected separately.
+
+Portable tracked mix: 2 actual Raft corpus entries + Rust/TypeScript ITFs + 1 current tiny healthy exploration evidence.
+5 JSON files; 2,183,729B. The positive evidence is a command control, not a fresh generated production suite.
+Historical captured tree: 497 actual ignored adoption artifacts + 1 current tiny healthy exploration evidence.
+498 JSON files; 2,384,368B. Mix includes run/3, run/2, report/1, report/2, ITF/no-format documents and arrays.
+Older run manifests retain baseline warning-and-skip behavior; originals were copied, never changed.
+Captured source-tree hash (sorted relative paths and content digests, before positive control):6c62cf40991c801b8408cc5d36ff1aaec712dc9c3cde31b52893bc256576ee3a
+
+CLI paired protocol:
+One fixed baseline-built benchmark harness binary invokes each prebuilt CLI as a child process.
+CLI command: gotogether evidence -history COPIED_FIXTURE_TREE
+Startup, directory walking, discovery, selected saved-report readers and suite rendering are included; outputs discarded.
+This command decodes/checks saved evidence/manifests; it does not freshly validate histories against a model.
+Fixture copying/setup and initial acceptance invocation are outside timing; process/OS caches are warm.
+6 before/after process pairs; order alternates old/new then new/old;10 timed CLI invocations/case/sample.
+Benchmark binary working directory:cmd/gotogether.
+GOTOGETHER_DISCOVERY_BENCH_BIN=<old-or-new> GOTOGETHER_DISCOVERY_BENCH_DIR=<copied-capture-tree> ./bench.test -test.run '^$' -test.bench '^BenchmarkEvidenceDiscoveryCLI$' -test.benchtime=10x -test.count=1
+Child allocations are not measured by the parent CLI benchmark.
+Captured-tree stdout/stderr were separately verified byte-identical between CLI versions.
+
+Leaf profiling protocol:
+The standalone Evidence.IsFile+Manifest.IsFile query workload is retained for both versions.
+The historical baseline returns bool; the current source checks both errors from the new (bool,error) API.
+This measures parser/leaf costs and allocations; candidate CLI can consolidate the pair, so this is not its full routing path.
+GOTOGETHER_DISCOVERY_BENCH_DIR=<copied-capture-tree> ./bench.test -test.run '^$' -test.bench '^BenchmarkEvidenceDiscoveryLeaves$' -test.benchtime=100x -test.cpuprofile=cpu.pprof -test.memprofile=mem.pprof
+CPU and alloc_space top tables below are native Go pprof text. Binary profiles remain temporary.
+
+Final CLI medians (6 samples/version/case, each10 command invocations):
+tracked-mix:37.182017ms ->9.8800615ms (-73.43%).
+captured-tree:38.777217ms ->15.634135ms (-59.68%).
+The preliminary pre-API-migration pair logs were archived separately and are not the final numbers.
+
+=== baseline-leaves.log ===
+goos: linux
+goarch: amd64
+pkg: github.com/chucklehead-dev/gotogether/cmd/gotogether
+cpu: INTEL(R) XEON(R) PLATINUM 8573C
+BenchmarkEvidenceDiscoveryLeaves/tracked-mix-5         	     100	  29479833 ns/op	         5.000 files/op	   2183729 input-B/op	 8353574 B/op	  663453 allocs/op
+BenchmarkEvidenceDiscoveryLeaves/captured-tree-5       	     100	  28301671 ns/op	       498.0 files/op	   2384368 input-B/op	 9285218 B/op	  334986 allocs/op
+PASS
+
+=== candidate-leaves.log ===
+goos: linux
+goarch: amd64
+pkg: github.com/chucklehead-dev/gotogether/cmd/gotogether
+cpu: INTEL(R) XEON(R) PLATINUM 8573C
+BenchmarkEvidenceDiscoveryLeaves/tracked-mix-5         	     100	  10290126 ns/op	         5.000 files/op	   2183729 input-B/op	   60200 B/op	     175 allocs/op
+BenchmarkEvidenceDiscoveryLeaves/captured-tree-5       	     100	  13753106 ns/op	       498.0 files/op	   2384368 input-B/op	 3118962 B/op	   16056 allocs/op
+PASS
+
+=== baseline-cpu-top.txt ===
+File: discovery-baseline-bench.test
+Build ID: 7d530a45793a57492b27cf71fe53ad768db2fee7
+Type: cpu
+Time: 2026-11-06 16:08:04 UTC
+Duration: 5.81s, Total samples = 6790ms (116.80%)
+Showing nodes accounting for 3710ms, 54.64% of 6790ms total
+Dropped 163 nodes (cum <= 33.95ms)
+Showing top 12 nodes out of 143
+      flat  flat%   sum%        cum   cum%
+     620ms  9.13%  9.13%      640ms  9.43%  encoding/json/internal/jsonwire.ConsumeSimpleString (inline)
+     610ms  8.98% 18.11%     2110ms 31.08%  encoding/json/jsontext.(*decoderState).ReadToken
+     590ms  8.69% 26.80%     1050ms 15.46%  runtime.mallocgcSmallScanNoHeaderSC2
+     440ms  6.48% 33.28%      440ms  6.48%  internal/runtime/syscall/linux.Syscall6
+     330ms  4.86% 38.14%      510ms  7.51%  runtime.mallocgcTinySC2
+     300ms  4.42% 42.56%      300ms  4.42%  encoding/json/internal/jsonwire.ConsumeWhitespace (inline)
+     270ms  3.98% 46.54%     5330ms 78.50%  encoding/json.(*Decoder).Token
+     150ms  2.21% 48.75%      150ms  2.21%  runtime.futex
+     110ms  1.62% 50.37%      830ms 12.22%  runtime.slicebytetostring
+     100ms  1.47% 51.84%      100ms  1.47%  encoding/json/jsontext.(*decodeBuffer).previousOffsetStart (inline)
+     100ms  1.47% 53.31%      180ms  2.65%  encoding/json/jsontext.Token.Kind (inline)
+      90ms  1.33% 54.64%      120ms  1.77%  runtime.scanblock
+
+=== candidate-cpu-top.txt ===
+File: discovery-candidate-bench.test
+Build ID: 3fd87fa9331317de0372ab6c5ee6c54db68c68fa
+Type: cpu
+Time: 2026-11-06 16:27:02 UTC
+Duration: 2.43s, Total samples = 2590ms (106.70%)
+Showing nodes accounting for 1890ms, 72.97% of 2590ms total
+Dropped 71 nodes (cum <= 12.95ms)
+Showing top 12 nodes out of 114
+      flat  flat%   sum%        cum   cum%
+     470ms 18.15% 18.15%     2080ms 80.31%  encoding/json/jsontext.(*decoderState).ReadToken
+     380ms 14.67% 32.82%      380ms 14.67%  internal/runtime/syscall/linux.Syscall6
+     290ms 11.20% 44.02%      290ms 11.20%  encoding/json/internal/jsonwire.ConsumeSimpleString (inline)
+     270ms 10.42% 54.44%      270ms 10.42%  encoding/json/internal/jsonwire.ConsumeWhitespace (inline)
+     160ms  6.18% 60.62%      160ms  6.18%  encoding/json/jsontext.(*decodeBuffer).invalidatePreviousRead (inline)
+      70ms  2.70% 63.32%      110ms  4.25%  encoding/json/internal/jsonwire.ConsumeStringResumable
+      50ms  1.93% 65.25%       60ms  2.32%  encoding/json/jsontext.(*objectNameStack).copyQuotedBuffer
+      50ms  1.93% 67.18%       50ms  1.93%  internal/runtime/atomic.(*Uint32).CompareAndSwap (inline)
+      40ms  1.54% 68.73%       40ms  1.54%  encoding/json/internal/jsonwire.ConsumeSimpleNumber (inline)
+      40ms  1.54% 70.27%       40ms  1.54%  encoding/json/jsontext.(*stateEntry).Increment (inline)
+      40ms  1.54% 71.81%       70ms  2.70%  encoding/json/jsontext.(*stateMachine).pushObject (inline)
+      30ms  1.16% 72.97%       30ms  1.16%  encoding/json/internal/jsonwire.ConsumeStringResumable.func1 (inline)
+
+=== baseline-mem-top.txt ===
+File: discovery-baseline-bench.test
+Build ID: 7d530a45793a57492b27cf71fe53ad768db2fee7
+Type: alloc_space
+Time: 2026-11-06 16:08:09 UTC
+Showing nodes accounting for 1625.02MB, 98.05% of 1657.29MB total
+Dropped 77 nodes (cum <= 8.29MB)
+Showing top 12 nodes out of 31
+      flat  flat%   sum%        cum   cum%
+  825.01MB 49.78% 49.78%  1575.50MB 95.06%  encoding/json.(*Decoder).Token
+  459.57MB 27.73% 77.51%   515.63MB 31.11%  encoding/json/jsontext.Token.String (inline)
+  221.36MB 13.36% 90.87%   225.36MB 13.60%  encoding/json/jsontext.(*decoderState).fetch
+   56.56MB  3.41% 94.28%    56.56MB  3.41%  slices.Grow[go.shape.[]uint8,go.shape.uint8] (inline)
+   32.01MB  1.93% 96.21%    32.01MB  1.93%  encoding/json/jsontext.NewDecoder (inline)
+      18MB  1.09% 97.30%       18MB  1.09%  syscall.ByteSliceFromString
+    9.50MB  0.57% 97.87%     9.50MB  0.57%  encoding/json/v2.JoinOptions (inline)
+       3MB  0.18% 98.05%    35.01MB  2.11%  encoding/json.NewDecoder
+         0     0% 98.05%     9.50MB  0.57%  encoding/json.(*Decoder).UseNumber
+         0     0% 98.05%    56.06MB  3.38%  encoding/json/internal/jsonwire.AppendUnquote
+         0     0% 98.05%    56.06MB  3.38%  encoding/json/internal/jsonwire.UnquoteMayCopy (inline)
+         0     0% 98.05%   234.86MB 14.17%  encoding/json/jsontext.(*Decoder).ReadToken (inline)
+
+=== candidate-mem-top.txt ===
+File: discovery-candidate-bench.test
+Build ID: 3fd87fa9331317de0372ab6c5ee6c54db68c68fa
+Type: alloc_space
+Time: 2026-11-06 16:27:04 UTC
+Showing nodes accounting for 325.14MB, 98.58% of 329.82MB total
+Dropped 36 nodes (cum <= 1.65MB)
+Showing top 12 nodes out of 45
+      flat  flat%   sum%        cum   cum%
+  242.90MB 73.65% 73.65%   247.40MB 75.01%  encoding/json/jsontext.(*decoderState).fetch
+   35.01MB 10.62% 84.26%    35.01MB 10.62%  encoding/json/jsontext.NewDecoder
+   17.50MB  5.31% 89.57%    17.50MB  5.31%  syscall.ByteSliceFromString
+    9.50MB  2.88% 92.45%     9.50MB  2.88%  os.newFile
+       6MB  1.82% 94.27%        6MB  1.82%  os.readFileContents
+    4.50MB  1.36% 95.63%     4.50MB  1.36%  encoding/json/jsontext.(*objectNameStack).copyQuotedBuffer
+       3MB  0.91% 96.54%        3MB  0.91%  encoding/json/jsontext.(*stateMachine).pushObject (inline)
+       3MB  0.91% 97.45%        3MB  0.91%  encoding/json/jsontext.(*objectNameStack).push (inline)
+       2MB  0.61% 98.06%        2MB  0.61%  encoding/json/jsontext.(*stateMachine).pushArray (inline)
+    1.72MB  0.52% 98.58%     1.72MB  0.52%  runtime/pprof.StartCPUProfile
+         0     0% 98.58%    12.51MB  3.79%  encoding/json/jsontext.(*Decoder).ReadToken
+         0     0% 98.58%   242.90MB 73.65%  encoding/json/jsontext.(*Decoder).SkipValue

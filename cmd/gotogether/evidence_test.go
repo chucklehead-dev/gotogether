@@ -81,8 +81,13 @@ func TestEvidenceFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = os.WriteFile(filepath.Join(dir, "TestA", "trace.itf.json"), []byte(`{"states": []}`), 0o644)
-	if !ev.Is(filepath.Join(dir, "TestA", "x1.json")) || ev.Is(filepath.Join(dir, "TestA", "trace.itf.json")) {
-		t.Error("evidence.Is: the evidence not seen, or an ITF trace taken for it")
+	found, err := ev.Is(filepath.Join(dir, "TestA", "x1.json"))
+	if err != nil || !found {
+		t.Errorf("evidence not discovered: %t %v", found, err)
+	}
+	found, err = ev.Is(filepath.Join(dir, "TestA", "trace.itf.json"))
+	if err != nil || found {
+		t.Errorf("ITF trace taken as evidence: %t %v", found, err)
 	}
 	if code, err := evidence([]string{dir}); code != 0 || err != nil {
 		t.Errorf("evidence: %d %v", code, err)

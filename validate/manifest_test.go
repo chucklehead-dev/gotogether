@@ -92,13 +92,16 @@ func TestManifestRoundTrip(t *testing.T) {
 	if w, err := got.Verify(); err != nil || len(w) > 0 || got.Inputs[0].Path != filepath.Join(moved, "run.jsonl") {
 		t.Errorf("moved: %v %v %s", w, err, got.Inputs[0].Path)
 	}
-	if !IsManifest(filepath.Join(moved, "run.manifest.json")) {
+	if found, err := IsManifest(filepath.Join(moved, "run.manifest.json")); err != nil || !found {
 		t.Error("IsManifest: false")
 	}
 	other := filepath.Join(moved, "evidence.json")
 	os.WriteFile(other, []byte(`{"format": "gotogether.evidence/3", "runs": 1}`), 0o644)
-	if _, err := ReadManifest(other); err == nil || !strings.Contains(err.Error(), `not a run manifest of "gotogether.run/3"`) || IsManifest(other) {
+	if _, err := ReadManifest(other); err == nil || !strings.Contains(err.Error(), `not a run manifest of "gotogether.run/3"`) {
 		t.Errorf("another format: %v", err)
+	}
+	if found, err := IsManifest(other); err != nil || found {
+		t.Errorf("another family classified as manifest: %t %v", found, err)
 	}
 }
 
@@ -471,7 +474,7 @@ func TestManifestRequiresCurrentEvaluationFormat(t *testing.T) {
 			if _, err := ReadManifest(path); !errors.Is(err, ErrManifestFormat) || !strings.Contains(err.Error(), ManifestFormat) {
 				t.Fatalf("old recipe wasn't refused with the current format: %v", err)
 			}
-			if !IsManifest(path) {
+			if found, err := IsManifest(path); err != nil || !found {
 				t.Fatal("evidence discovery hid an old recipe instead of allowing a useful reader error")
 			}
 		})

@@ -39,13 +39,26 @@ about 7–14% of full recovery in the measured counter workload. Keep the runtim
 and snapshot contract unchanged; require an actual latency target before
 retention work. See [the measurements and limits](performance.md#cold-historical-processor-recovery-2026-11-06).
 
-Next, rotate toward a concrete cross-facet caller problem or measured shared
-cost rather than more compiled modes or snapshot features. Candidates below
+The shared discovery consolidation now closes the measured Token hot path with
+Go 1.27 streaming value skipping and one CLI family pass. Actual command
+medians fall from about 37→10 and 39→16 ms on bounded artifact mixes. Public
+file predicates return errors, and unreadable JSON cannot vanish from a suite.
+See [the data and limits](performance.md#evidence-discovery-streaming-consolidation-2026-11-06).
+
+CI exposed a native shutdown ownership gap during this consolidation: Main
+could return while processor cancellation cleanup was still running. Native
+node tasks now join before final relay flush and owned resource teardown;
+cooperative cancellation remains required. The original intermittent directory
+cleanup failure did not reproduce locally, so its exact cause remains unproven.
+Prefer this demonstrated lifecycle correction over a new convenience claim or
+speculative snapshot feature.
+
+Next, rotate toward a concrete general-framework or cross-facet caller problem
+rather than further parser tuning, compiled modes or snapshot features. Candidates below
 are experiments with selection thresholds, not commitments.
 
 | Order | Candidate | Evidence needed before implementation |
 |---|---|---|
-| Next consolidation candidate | Evidence discovery cost at representative suite volume | Profile actual file mixes before replacing the streaming implementation. Correct discovery is required; fewer scans or callback counts alone do not establish an end-to-end speedup. |
 | Deferred facet follow-up | I24: historical snapshot retention | SQLite baseline is measured. First establish an actual first-read/recovery target; other projections, eviction, audits, process/OS coldness and PostgreSQL need their own evidence. |
 | Alongside | Independent-maintainer use or a newly reproduced caller blocker | Existing agent-assisted Goo/LRU/HTTP trials retain their bounded scope. Prefer real friction over another adjacent fixture or adapter. |
 

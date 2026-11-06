@@ -23,7 +23,7 @@ func TestDirectedFaultCoverageRequiresCurrentEvidence(t *testing.T) {
 	if got, err := Read(path); err == nil || got != nil || !strings.Contains(err.Error(), "run the tests again") {
 		t.Fatalf("legacy evidence was adapted: %+v %v", got, err)
 	}
-	if !Is(path) {
+	if found, err := Is(path); err != nil || !found {
 		t.Fatal("older evidence must still be discovered so its refusal is visible")
 	}
 }

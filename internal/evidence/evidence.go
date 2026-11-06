@@ -228,7 +228,8 @@ func Read(path string) (*View, error) {
 // Is reports whether the JSON file at path is evidence of any format
 // version: what a tool walking a directory reads, and skips the rest
 // (ITF traces, corpus entries, summaries).
-func Is(path string) bool {
+// Encountered I/O errors are returned; classification does not validate the file.
+func Is(path string) (bool, error) {
 	return formats.Evidence.IsFile(path)
 }
 

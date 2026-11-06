@@ -141,7 +141,8 @@ func ReadEvidence(path string) (*Evidence, error) {
 // IsEvidence reports whether the JSON file at path is evidence of any
 // format version: what a tool walking a directory reads, and skips the
 // rest (ITF traces, corpus entries, summaries).
-func IsEvidence(path string) bool { return evidence.Is(path) }
+// Encountered I/O errors are returned; classification does not validate the file.
+func IsEvidence(path string) (bool, error) { return evidence.Is(path) }
 
 // ManifestEvidence is a run's manifest as evidence (RoleExternal): one
 // run, its verdict, its test (or the manifest's name) and package, so

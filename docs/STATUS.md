@@ -40,10 +40,6 @@ pins from the checked-in go.mod files, not from historical handoff paragraphs.
 
 ## Recent progress and lessons
 
-- [#82](https://github.com/chucklehead-dev/gotogether/pull/82): evidence discovery
-  recognizes top-level format members in any order and refuses conflicting
-  evidence/manifest headers. Suite discovery cannot silently omit valid evidence.
-  See [CI guidance](ci.md#evidence-discovery).
 - [#83](https://github.com/chucklehead-dev/gotogether/pull/83): current capabilities,
   boundaries and resume rules stay here; dated chronology is preserved in HISTORY.
 - [#84](https://github.com/chucklehead-dev/gotogether/pull/84): compiled pending-call
@@ -51,6 +47,21 @@ pins from the checked-in go.mod files, not from historical handoff paragraphs.
   Assumed effects remain unobserved and unfinished, bounds survive portable
   replay, and missing binding evidence cannot establish negative proof. See
   DESIGN §106.
+- [#85](https://github.com/chucklehead-dev/gotogether/pull/85): cold processor
+  recovery is measured rather than used to justify speculative retention work.
+
+Evidence discovery now uses one streaming family pass and standard JSON value
+skipping. Recorded end-to-end artifact mixes improve from about 37→10 and
+39→16 ms. Unreadable JSON fails operationally; library file predicates return
+`(bool, error)` so callers cannot silently confuse a read error with absence.
+Current ordering, ambiguity and version policies remain. See
+[the measurements](performance.md#evidence-discovery-streaming-consolidation-2026-11-06).
+
+Native Grist shutdown now cancels and joins its owned processors, relays and
+tenant watcher before the final relay flush and resource teardown. Processor
+effects must honor cancellation. This closes a deterministic ownership gap
+found while investigating a CI directory-cleanup failure; that exact flaky
+failure was not reproduced locally. Simulation crash lifetimes remain separate.
 
 Cold processor recovery is now measured on SQLite with fresh App/connection
 state, default cadence/memo/batching and audits disabled. The first-ready phase

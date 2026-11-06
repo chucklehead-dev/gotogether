@@ -174,7 +174,14 @@ func TestFaultOrderAutomaticEvidenceMetadata(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if entry.IsDir() || !wire.Is(path) {
+		if entry.IsDir() {
+			return nil
+		}
+		found, err := wire.Is(path)
+		if err != nil {
+			return err
+		}
+		if !found {
 			return nil
 		}
 		e, err := ReadEvidence(path)

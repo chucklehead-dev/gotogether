@@ -61,7 +61,11 @@ github.com/chucklehead-dev/gotogether/cmd/gotogether@<version>`;
 directory's JSON files by their top-level `format` member, in any member order.
 Unrelated ITF traces, corpus entries and summaries do not contribute. Nested
 format members do not identify the enclosing document. Files that name both
-families are ambiguous and fail before reader selection.
+families are ambiguous and fail before reader selection. Unreadable JSON files
+are operational errors, even beside healthy evidence; they cannot silently
+vanish from a strict suite. Library callers must handle the `(bool, error)`
+results of `qtest.IsEvidence` and `validate.IsManifest` before routing a file.
+These are classification predicates, not whole-document validators.
 
 Discovery recognizes unsupported majors so the reader can name the problem;
 it does not add compatibility. Old/new exploration evidence is refused, while
