@@ -102,7 +102,7 @@ func (b *QueryBlock[Q, R]) Run(ctx context.Context, s Store, env Envelope, q Q) 
 		var obs []any
 		if err == nil {
 			body, _ := json.Marshal(res)
-			if obs, err = rec.StepFields(reflect.TypeFor[R](), body, "obs."); err != nil {
+			if obs, err = rec.QueryResultFields(reflect.TypeFor[R](), body, "obs."); err != nil {
 				err = fmt.Errorf("grist: query %s: its result: %w", b.info.name, err)
 			}
 		}

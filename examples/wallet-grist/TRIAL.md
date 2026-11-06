@@ -1,5 +1,24 @@
 # Trial: building examples/wallet-grist as a newcomer to grist
 
+## Current disposition (2026-11-06)
+
+The original trial and measurements below are retained unchanged. Its ranked
+requests have the following current dispositions; historical pins, timings and
+copied harness sizes are not claims about the current checkout.
+
+| Original request | Current behavior and remaining limit |
+|---|---|
+| 1. Generator | [GR2](../../docs/ROADMAP.md) is built: [grist.Main](../../grist/main.go) generates skeletons/bindings and [gristtest.Generated](../../grist/gristtest/gristtest.go) checks them. Application rules, read-model folds and intended properties remain handwritten. |
+| 2. Unconditioned under Serializable | [Command documentation](../../docs/grist.md#24-commands) explicitly says no isolation level protects an `Unconditioned` decision. This is a corrected contract, not a promise that the mutant becomes safe. |
+| 3. Library harnesses | [qtest.Mutants](../../qtest/mutants.go) supplies the overlay harness; [gristtest](../../grist/gristtest/mutants.go) adds generated rule/peer mutants. [NewTier / Tier.Settle / Tier.Check](../../grist/gristtest/tier.go) exercise SQLite/HTTP and judge the bindings. Native [Main shutdown](../../grist/main.go) joins owned work before final relay flush. Effects must cooperate with cancellation; abrupt process death is separate. |
+| 4. Multi-entity guidance | [Entities reference](../../skills/grist/references/entities.md) describes per-entity events, keyed views and read dependencies. It does not permit dropping conditioned reads to manufacture a write-skew workload. |
+| 5. Typed dependencies | [NewDep](../../grist/deps.go) supplies typed context dependencies; [declared calls](../../docs/grist-instrumentation.md) and [model guidance](../../skills/grist/references/model.md) cover dependency observations. Arbitrary external effects still need an appropriate declared adapter or explicit instrumentation. |
+
+The comparison table below also retains historical boundaries: this trial is not
+evidence of client-crash/pending-call coverage or a general list-append history
+workload. Select a fresh caller task that actually needs such behavior before
+expanding those facets; completing a historical wishlist is not a roadmap goal.
+
 2026-10-27. An agent new to grist built examples/wallet's bank on it,
 reading only skills/grist/SKILL.md, docs/grist.md (§3.2, §3.6, §8.2 and
 the status lines, skimmed for the generator), `go doc` of grist,

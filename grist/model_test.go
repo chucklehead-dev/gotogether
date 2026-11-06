@@ -330,13 +330,13 @@ func TestGenerateRefuses(t *testing.T) {
 	grist.NewCommand(a, "c", func(r *grist.Reads, c ptr) ([]grist.Event, error) { return nil, nil }, grist.Internal())
 	grist.NewProcessor(a, "p", ev, func(ctx context.Context, r *grist.Reads, e tagged, m grist.Meta) grist.Result { return grist.Skip() })
 	type listed struct {
-		Books []string `json:"books"`
+		Books [][]string `json:"books"`
 	}
 	grist.NewQuery(a, "q", func(r *grist.Reads, q struct{}) (listed, error) { return listed{}, nil }, grist.Internal())
 	_, err := gen.Generate(a, t.TempDir())
-	// a list in a query's answer, which no step records: once dropped
-	// without a word, the answer then compared on nothing
-	for _, want := range []string{"declares no result shape", "tag n is an integer", "is a pointer", "field Books is a []string", "grist:\"-\""} {
+	// Nested lists remain unsupported: they must be explicitly opted out,
+	// rather than dropping a query answer without comparing it.
+	for _, want := range []string{"declares no result shape", "tag n is an integer", "is a pointer", "field Books is a [][]string", "grist:\"-\""} {
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("Generate: %v, want %q", err, want)
 		}
@@ -714,4 +714,50 @@ func TestPeerCallIsTheCallersSide(t *testing.T) {
 			t.Errorf("the generated model or binding has %q: a peer's call has no site in its caller's model", not)
 		}
 	}
+}
+
+// Query lists are ordinary generated result fields; their stubs and both
+// observation bindings typecheck, while arguments retain their scalar contract.
+func TestStarterQueryLists(t *testing.T) {
+	type answer struct {
+		Names   []string `json:"names"`
+		Counts  []int64  `json:"counts"`
+		Flags   []bool   `json:"flags"`
+		Ignored []string `json:"ignored" grist:"-"`
+	}
+	a := grist.New("lists")
+	grist.NewEvent[itemNoted](a, "noted")
+	grist.NewQuery(a, "values", func(r *grist.Reads, q struct{}) (answer, error) { return answer{}, nil }, grist.Authorize(grist.Authenticated))
+	files, err := gen.Starter(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body := string(files["model/lists_rules.qnt"]); !strings.Contains(body, "{ names: [], counts: [], flags: [] }") {
+		t.Fatalf("list stub:\n%s", body)
+	}
+	dir := t.TempDir()
+	writeFiles(t, dir, files)
+	generated, err := gen.Generate(a, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := generated.Write(dir); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"lists.binding.yaml", "lists.calls.binding.yaml"} {
+		body, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, typ := range []string{"List[str]", "List[int]", "List[bool]"} {
+			if !strings.Contains(string(body), `toQuint "`+typ+`"`) {
+				t.Errorf("%s lacks typed %s conversion", name, typ)
+			}
+		}
+		if strings.Contains(string(body), "obs.ignored") {
+			t.Errorf("%s records explicit opt-out", name)
+		}
+	}
+	requireQuint(t)
+	quint(t, filepath.Join(dir, "model"), "typecheck", "lists.qnt")
 }

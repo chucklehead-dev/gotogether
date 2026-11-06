@@ -265,3 +265,38 @@ func TestPhaseQueryComparisonPreservesLargeIntegerIdentity(t *testing.T) {
 		t.Fatalf("equal large integer did not satisfy query gate: %v %+v", err, phases)
 	}
 }
+
+func TestPhaseQueryScalarLists(t *testing.T) {
+	type answer struct {
+		Ns    []int64  `json:"ns"`
+		Flags []bool   `json:"flags"`
+		Empty []string `json:"empty"`
+	}
+	a := grist.New("lists")
+	grist.NewQuery(a, "values", func(r *grist.Reads, q struct{}) (answer, error) {
+		return answer{Ns: []int64{9007199254740993, 9007199254740993}, Flags: []bool{true, false}}, nil
+	}, grist.Authorize(grist.Authenticated))
+	for _, http := range []bool{false, true} {
+		cfg := gristsim.Config{HTTP: http, Tenants: []string{"t1"}, Clients: 1, Ops: 1, Send: []string{"values"}, Phases: []gristsim.Phase{{Name: "exact", Faults: gristsim.FaultsDisabled, Timeout: 10 * time.Second, Await: []gristsim.Observation{{Call: gristsim.Call{Name: "values", Args: struct{}{}}, Result: json.RawMessage(`{"ns":[9007199254740993,9007199254740993],"flags":[true,false],"empty":null}`)}}}}}
+		steps, phases, err := runPhasePlan(a, cfg)
+		if err != nil || phases[0].Status != "completed" {
+			t.Fatalf("HTTP %t exact list: %v %+v", http, err, phases)
+		}
+		observed := false
+		for _, step := range steps {
+			if step.Action == "values" && step.Obs["ns"] == `[9007199254740993,9007199254740993]` && step.Obs["flags"] == `[true,false]` && step.Obs["empty"] == `[]` {
+				observed = true
+			}
+		}
+		if !observed {
+			t.Fatalf("HTTP %t missing canonical exact list observations: %+v", http, steps)
+		}
+		// Await checks the full HTTP JSON: null and [] remain distinct even though
+		// nil and empty slices share the model's empty-list observation.
+		cfg.Phases[0].Await[0].Result = json.RawMessage(`{"ns":[9007199254740993,9007199254740993],"flags":[true,false],"empty":[]}`)
+		_, phases, err = runPhasePlan(a, cfg)
+		if err == nil || phases[0].Requirements[0].Status != "timed_out" {
+			t.Fatalf("HTTP %t null/empty gate collapsed: %v %+v", http, err, phases)
+		}
+	}
+}

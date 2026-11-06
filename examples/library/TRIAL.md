@@ -1,5 +1,29 @@
 # TRIAL: a newcomer builds examples/library on grist
 
+## Current disposition (2026-11-06)
+
+The account below preserves the original newcomer trial. Its ranked requests
+are evidence from that date, not a list of missing features today.
+
+| Original request | Current behavior and remaining limit |
+|---|---|
+| 1. Query result lists | Query result structs support scalar lists through [ResultFields](../../grist/internal/catalog/catalog.go). [LoansView](queries.go) compares `Books` identity, order and multiplicity; unsupported nested/record/map/byte slices require explicit exclusion. [Native controls](query_lists_test.go) check faithful answers and reject corrupted lists at both bindings. |
+| 2. Site causality | [Declared-call instrumentation](../../docs/grist-instrumentation.md#33-what-grist-records) and [model guidance](../../skills/grist/references/model.md) describe ordering at the triggering commit and eventual claims. This does not make every intermediate cross-dependency state an invariant. |
+| 3. Exercised blocks | [gristtest.Exercised](../../grist/gristtest/catalog.go) checks catalog blocks and declared command outcomes, apart from model helpers. Coverage does not prove arbitrary workload reachability. |
+| 4. Workload prologue | [Config.Phases](../../grist/gristsim/gristsim.go) and [prerequisites](../../docs/grist-workload-phases.md) establish named bounded outcomes/observations before random clients. Use these rather than relying on accidental random coverage. |
+| 5. Within / Also | [Command documentation](../../docs/grist.md#24-commands) identifies these as designed, not built. The narrower advisory-read workflow remains unavailable. |
+| 6. Scaffold replacement and failure | [grist new](../../grist/cmd/grist/main.go) resolves the checkout from the current directory and writes module-relative replacements. Setup failures retain the scaffold with recovery commands; this is resumable setup, not transactional rollback. |
+| 7. Eventual claim names | [Model guidance](../../skills/grist/references/model.md) documents `validate.EventuallyName("v")` (`"eventually v"`). Bare names are not aliases. |
+| 8. Outcome-specific takes | [Catalog coverage](../../grist/gristtest/catalog.go) uses `qtest.Takes(action).Outcome(outcome)`, including declared refusals. |
+| 9. Generated read names | [Model guidance](../../skills/grist/references/model.md) names keyed-view reads (`totalsReads(counter)`) and maps `Exists(T, Tag("k", v))` to `<t>ByK(v)` (unfiltered `Exists(T)` to `<t>Read`) for `Needs`. |
+| 10. NewDep fallback | [Dependency guidance](../../skills/grist/references/loop.md) recommends an interface type and a stand-in refusing calls with an attachment diagnostic; [NewDep](../../grist/deps.go) documents fallback lookup. The fallback is supplied by the application, not synthesized. This example now uses declared calls instead. |
+| 11. Mutant CPU cost (partial) | [qtest.Mutants.FullOnly](../../qtest/mutants.go) skips named mutants in short mode, and the [test loop](../../skills/grist/references/loop.md) shows that option. It does not remove the build cost of selected overlay mutants; choosing which checks may be full-only remains an application decision. The original CPU measurement below has not been remeasured here. |
+
+The query-list follow-up uses this app's real HTTP answer and both generated
+bindings. It closes the observed count-only blind spot without extending event,
+argument or dependency-call shapes. The other remaining limits above still need
+concrete caller requirements before an API change.
+
 A friction log. Minutes are from the start of the trial. I read only what a
 user has: README.md, skills/grist (SKILL.md and references), docs/grist.md,
 `grist new`, `go doc`. Anything else I looked at is named where I looked.

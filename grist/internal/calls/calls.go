@@ -125,7 +125,7 @@ func Record(ctx context.Context, app *grist.App, env grist.Envelope, name string
 	case a.Rejected != "":
 		call.Done(nil, append([]any{"outcome", a.Rejected}, refused...)...)
 	case query:
-		obs, err := rec.StepFields(app.ResultType(name), a.Result, "obs.")
+		obs, err := rec.QueryResultFields(app.ResultType(name), a.Result, "obs.")
 		if err != nil {
 			a.Err = fmt.Sprintf("grist: query %s: its result: %v", name, err)
 			call.Done(errors.New(a.Err), refused...)

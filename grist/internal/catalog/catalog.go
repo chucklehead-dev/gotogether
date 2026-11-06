@@ -380,12 +380,12 @@ func QuintName(name string) (string, error) {
 // whether the call happened (a timeout, a lost answer).
 const UnknownOutcome = "unknown"
 
-// A Field is a block's scalar field, as a step records it and the model
+// A Field is a block's modelled field, as a step records it and the model
 // takes it.
 type Field struct {
 	JSON  string // its JSON name: the step's field
 	Param string // its Quint parameter's name (JSON, or JSON_ where Quint reserves it)
-	Type  string // str, int or bool
+	Type  string // str, int, bool; query result fields also allow List[scalar]
 	Tag   bool   // tagged `grist:"tag"`
 }
 
@@ -413,6 +413,15 @@ var QuintIdent = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
 // pointer field is refused (recorded only when set, so a step may lack
 // its parameter), as is a JSON name that is no Quint identifier.
 func ScalarFields(t reflect.Type) ([]Field, error) {
+	return shapeFields(t, false)
+}
+
+// ResultFields are query result fields, including ordered scalar lists.
+func ResultFields(t reflect.Type) ([]Field, error) {
+	return shapeFields(t, true)
+}
+
+func shapeFields(t reflect.Type, result bool) ([]Field, error) {
 	if t == nil || t.Kind() != reflect.Struct {
 		return nil, nil
 	}
@@ -423,11 +432,20 @@ func ScalarFields(t reflect.Type) ([]Field, error) {
 			continue
 		}
 		n := rec.JSONName(f)
+		if result && (f.Tag.Get("grist") == "-" || strings.Split(f.Tag.Get("json"), ",")[0] == "-") {
+			continue
+		}
 		if f.Type.Kind() == reflect.Pointer && QuintScalar(f.Type.Elem()) != "" {
 			return nil, fmt.Errorf("field %s is a pointer, recorded only when set: make it a value", f.Name)
 		}
 		q := QuintScalar(f.Type)
+		if result {
+			q = rec.QueryFieldType(f.Type)
+		}
 		if q == "" {
+			if result {
+				return nil, fmt.Errorf("field %s is a %v: query results support scalars and scalar lists (bytes encode as base64); tag it `grist:\"-\"` to leave it out", f.Name, f.Type)
+			}
 			// a step records scalars only: a list or a struct dropped
 			// without a word once left a query's answer uncompared
 			if f.Tag.Get("grist") == "-" {

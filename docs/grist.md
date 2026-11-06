@@ -662,7 +662,14 @@ var Show = grist.NewQuery(App, "show-counter",
 ```
 
 Its step (§3.1) records the result and the pinned position P, so the
-model checks that the answer is the fold of the log through P.
+model checks that the answer is the fold of the log through P. Query result
+structs may contain scalars and slices of strings, booleans or model-range
+integers. Generated results use typed Quint lists, preserving order and
+multiplicity; nil slices normalize to empty model observations. HTTP answers retain their original JSON; phase Await compares complete JSON,
+so `null` and `[]` remain distinct there. Unsupported fields (including nested collections, records, pointers and
+byte slices) must explicitly opt out with `grist:"-"`. Events and arguments
+remain scalar-only. See the library's [loan query](../examples/library/queries.go)
+and [native controls](../examples/library/query_lists_test.go).
 
 ### 2.6 Processors
 

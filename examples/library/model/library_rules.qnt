@@ -68,9 +68,19 @@ module libraryRules {
   pure def returnBookEvents(log: List[Event], c: ReturnBookArgs): List[Event] = [bookReturned(c.member, c.book)]
   pure def returnBookNeeds(c: ReturnBookArgs, result: str): Set[Read] = loansReads(c.member)
 
-  // member-loans: how many loans the member holds
+  // Return removes the first borrowed copy, preserving the remaining order.
+  pure def removeFirst(books: List[str], book: str): List[str] =
+    books.foldl({ books: [], removed: false }, (s, b) =>
+      if (not(s.removed) and b == book) { books: s.books, removed: true }
+      else { books: s.books.append(b), removed: s.removed }).books
+  pure def loanBooks(log: List[Event], m: str): List[str] =
+    loansEvents(log, m).foldl([], (books, e) =>
+      if (e.typ == "book-borrowed") books.append(bookBorrowedBook(e))
+      else removeFirst(books, bookReturnedBook(e)))
+
+  // member-loans: ordered identities, including repeated copies.
   pure def memberLoansAnswer(log: List[Event], q: MemberLoansArgs): MemberLoansResult =
-    { count: loanCount(log, q.member) }
+    { count: loanCount(log, q.member), books: loanBooks(log, q.member) }
 
   // receipts skips no borrow (its handler never Skips)
   pure def receiptsSkips(prefix: List[Event], trigger: int): bool = false
