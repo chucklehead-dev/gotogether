@@ -41,8 +41,9 @@ pins from the checked-in go.mod files, not from historical handoff paragraphs.
 ## Recent progress and lessons
 
 The core property suite reports native Hegel run errors, including health-check
-failures, through its private runner. The original 0.9.30 admission failure is
-still unexplained. Store contract checks force conflicting first decisions;
+failures, through its private runner. Hegel 0.9.30 is now admitted against the
+current graph with these diagnostics active; the earlier opaque failure remains
+historical provenance. Store contract checks force conflicting first decisions;
 negative controls prove overlap and a real condition violation rather than
 assuming a short sleep made the race happen.
 
@@ -51,15 +52,16 @@ violation. `FindViolation` and `Shrink`, like `FindTrigger`, require the final
 replay's own failure marker; later operational errors and unstable candidates
 fail the search rather than returning earlier model evidence. Cached checks and
 the fresh final report must retain conclusive model evidence; bounded hidden
-search cannot become a violation. Hegel stays at
-0.9.27; this corrects existing callers independently of the held upgrade.
+search cannot become a violation. These evidence guards remain active with
+Hegel 0.9.30 and its libhegel 0.50 engine.
 
 The current tool patch refresh pairs Quint 0.33.1 with evaluator 0.7.1, preserving
 short sampled runs and valid constructor-substring names. Evaluator cache reuse
 requires byte identity and startup; publication is staged. Kubernetes staged
-modules are aligned at 0.37.2 with consumer semantic controls. Hegel 0.9.30 stays
-unadmitted after an unexplained broader-property failure; the tested current pin
-remains 0.9.27. See [admission evidence](go-toolchain.md#current-library-patches-2026-11-06).
+modules are aligned at 0.37.2 with consumer semantic controls. All 16 live
+Hegel graphs select 0.9.30. Its admission covers full observable properties,
+stateful/shrinking/reproduction and race checks, plus actual shared-rule
+participation in two concurrent groups. See [admission evidence](go-toolchain.md#hegel-0930-admission-2026-11-06).
 
 
 Navigator CI reuses verified native tools and bounds acquisition with a shared

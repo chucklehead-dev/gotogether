@@ -77,10 +77,12 @@ working postconditions before mandatory golden checks/rendering. This changes
 failure handling, not the meaning or number of required CI checks.
 
 The library patch follow-up admits Quint's paired trace-retention/JSON fixes and
-matching Kubernetes patches through native controls. Hegel's newer native SDK
-passes primary tests but remains held on an unexplained broader-property failure.
-Improve failure observability/reproduction before adopting it; a passing rerun
-alone cannot clear a failed admission. See go-toolchain.md for the tested graph.
+matching Kubernetes patches through native controls. Hegel 0.9.30 is now
+admitted after repairing native diagnostic visibility and completing the current
+full property/integration/race gates. Shared rule membership is exercised in
+both concurrent groups and checked against the bank model. The earlier opaque
+failure remains unexplained; the admission record preserves it alongside the
+current observable results. See go-toolchain.md for scope.
 
 The next general-framework correction makes expected-violation searches require
 Hegel's final replay, matching the existing `FindTrigger` contract. Native
@@ -88,7 +90,8 @@ controls reproduced an earlier rejected deposit being returned as “shrunk” a
 ten conforming replays or a later operational failure. `FindViolation` and
 `Shrink` now reject both outcomes while retaining deterministic shrinking and
 no-violation expectations. This closes a real shared-caller evidence gap; it
-does not explain the held Hegel upgrade's separate property failure.
+does not explain the earlier opaque property failure; current 0.9.30 admission
+uses the repaired diagnostics and complete integration gates.
 
 The adoption-trial review separates implemented fixes from remaining limits in
 current dispositions beside the preserved [library](../examples/library/TRIAL.md)
@@ -99,7 +102,7 @@ compare scalar-list fields through the existing typed collection representation;
 the library checks identities, order, duplicates and empty lists at both store
 and clients. Events, arguments and dependency calls retain their scalar policy.
 Unsupported result shapes require explicit exclusion rather than silent omission.
-The held Hegel admission investigation remains separate from this facet slice.
+Hegel admission and this query-result facet retain independent validation.
 
 CI then exposed a store concurrency mutant escaping its randomized workload:
 a one-millisecond pause did not establish overlapping conflicting checks.

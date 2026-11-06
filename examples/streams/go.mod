@@ -8,7 +8,7 @@ require (
 	github.com/chucklehead-dev/gotogether/qenv/simlog/kinesislog v0.0.0
 	github.com/chucklehead-dev/gotogether/qhegel v0.0.0-00010101000000-000000000000
 	github.com/twmb/franz-go/pkg/kfake v0.0.0-20261020234411-c06330b92452
-	hegel.dev/go/hegel v0.9.27
+	hegel.dev/go/hegel v0.9.30
 )
 
 require (

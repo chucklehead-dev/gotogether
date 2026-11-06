@@ -7,7 +7,7 @@ require (
 	github.com/chucklehead-dev/gotogether/examples/sktrace v0.0.0
 	github.com/chucklehead-dev/gotogether/qenv/kubesim v0.0.0
 	github.com/chucklehead-dev/gotogether/qhegel v0.0.0-00010101000000-000000000000
-	hegel.dev/go/hegel v0.9.27
+	hegel.dev/go/hegel v0.9.30
 	k8s.io/api v0.37.2
 	k8s.io/client-go v0.37.2
 	k8s.io/utils v0.0.0-20260626114624-be93311217bd

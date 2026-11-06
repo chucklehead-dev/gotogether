@@ -12,7 +12,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.46.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
-	hegel.dev/go/hegel v0.9.27
+	hegel.dev/go/hegel v0.9.30
 )
 
 require (

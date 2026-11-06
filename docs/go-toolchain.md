@@ -121,17 +121,11 @@ is staged and atomic, preserving an existing executable on failure. npm CLI
 installation precedes that transaction and is not itself rolled back. The image
 copies the checksum file beside the installer so build-time startup checks apply.
 
-**Hegel 0.9.30 is not admitted yet.** It advances embedded libhegel from 0.48 to
-0.50 and permits shared membership in concurrency rule groups. Full qhegel
-stateful/shrinking/reproduction tests (210.466s), native race controls and the
-new group feature pass. However, the first full internal/hegelprops run failed
-TestEqualKeysEqualVerdicts (338.931s overall) without a useful failure reason.
-Isolated old/new comparisons and a diagnostic full rerun pass; that does not
-explain or clear the original failure. No semantic counterexample or TooSlow
-cause was captured. Hegel's Test can discard native run-error details by marking
-the test failed without printing them; its io.Writer option is still private.
-Keep the sole admitted 0.9.27 pin while investigating failure observability and
-reproduction, rather than adding version fallbacks or suppressing health checks.
+**Hegel 0.9.30 is admitted** with embedded libhegel 0.50 (previously 0.48).
+All 16 live Hegel module graphs select this version. Shared membership in
+concurrency rule groups is checked through native execution and the bank model.
+The earlier admission hold, diagnosed visibility problem and current validation
+are recorded below; no legacy-version fallback is retained.
 
 The complete connect suite with the new controls uses 17.9 descendant CPU
 seconds in the local cputime harness (9.330s wall); its previously unlisted
@@ -151,8 +145,37 @@ win. Replay details remain native stdout output; no descriptor capture or
 upstream replacement is shipped.
 
 A current 0.9.30 diagnostic full run passes (94.222s, including 34 equal-key
-and 26 different-key pairs in the formerly failing property). This does not
-explain the original failure or admit the upgrade. In particular, a prior
+and 26 different-key pairs in the formerly failing property). That run did not
+explain the original failure and was not, by itself, admission evidence. In particular, a prior
 latency experiment delayed the oracle after its final draw and does not rule
 out a generation-time health check. No TooSlow cause or cache counterexample
-has been established; 0.9.27 remains the sole admitted pin.
+has been established. The hold remained until the current admission below.
+
+
+### Hegel 0.9.30 admission (2026-11-06)
+
+Admission now uses the current Go 1.27.3 / Quint 0.33.1 / evaluator 0.7.1 graph
+with the repaired core property runner, unchanged assertions and budgets, and
+no additional health-check suppression. Full core properties pass (100.671s),
+including the formerly failing key property (33 equal-key, 27 different-key
+pairs). Full qhegel passes (25.315s); focused integrity race checks pass
+(7.600s), covering final replay, inconclusive verdict refusal, trigger searches,
+capture cleanup and shared groups. Native diagnostic/control-flow/short-limit
+race controls also pass (1.042s).
+
+The new shared-group control records real bank deposits while a read rule
+participates in both mutation and snapshot groups. It requires observed
+read/mutation and read/snapshot overlap and forbids mutation/snapshot overlap.
+Hegel 0.9.27 fails the same control on duplicate membership. Removing one
+membership on 0.9.30 fails the overlap requirement; thus registration alone
+cannot satisfy the control. Single-CPU repetitions and race execution pass.
+See [the executable control](../qhegel/groups_test.go).
+
+The original opaque failure cannot be reconstructed from its discarded error.
+It remains an unknown historical observation, with no captured semantic
+counterexample or established 0.9.30 regression. Current complete observable
+admission, the new native capability control and unchanged failure guards
+replace that temporary hold. This does not claim that 0.9.30 fixed the lost
+error: upstream `hegel.Test` still has that limitation, and the private core
+`Run` helper remains necessary. Admission requires the complete exact-head CI
+workflow, including consumers, before merging.
