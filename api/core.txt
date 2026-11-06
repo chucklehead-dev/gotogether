@@ -226,9 +226,9 @@ func OptPick[T any](s *Step, name string) (*T, error)
 func Pick[T any](s *Step, name string) (T, error)
 func ReadTraces(ctx context.Context, c Config, files []string) ([]*itf.Trace, error)
 func Replay(tr *itf.Trace, d Driver, opt ReplayOptions) error
-func Run(t testing.TB, c Config, newDriver func() Driver)
+func Run(t *testing.T, c Config, newDriver func(testing.TB) Driver)
 func Skip(*Step) error
-func Test(t testing.TB, c Config, test string, newDriver func() Driver)
+func Test(t *testing.T, c Config, test string, newDriver func(testing.TB) Driver)
 type Config struct
     field Spec string
     field Main string

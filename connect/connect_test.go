@@ -3,7 +3,6 @@ package connect
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -80,39 +79,12 @@ func needQuint(t *testing.T) {
 
 func TestRunBank(t *testing.T) {
 	needQuint(t)
-	Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 10, MaxSteps: 15}, func() Driver { return &bankDriver{} })
-}
-
-// fakeT records Fatalf instead of stopping the test.
-type fakeT struct {
-	testing.TB
-	failed string
-}
-
-func (f *fakeT) Fatalf(format string, args ...any) {
-	f.failed = strings.TrimSpace(strings.ReplaceAll(sprintf(format, args...), "\n", " | "))
-	panic(f)
-}
-func (f *fakeT) Helper() {}
-
-func catch(t *testing.T, f func(ft *fakeT)) string {
-	ft := &fakeT{TB: t}
-	func() {
-		defer func() {
-			if r := recover(); r != nil && r != ft {
-				panic(r)
-			}
-		}()
-		f(ft)
-	}()
-	return ft.failed
+	Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 10, MaxSteps: 15}, func(testing.TB) Driver { return &bankDriver{} })
 }
 
 func TestRunFindsBug(t *testing.T) {
 	needQuint(t)
-	msg := catch(t, func(ft *fakeT) {
-		Run(ft, Config{Spec: "testdata/bank.qnt", MaxSamples: 50, MaxSteps: 20, Seed: "0x1"}, func() Driver { return &bankDriver{buggy: true} })
-	})
+	msg := connectFailureOutput(t, "bug")
 	t.Log(msg)
 	for _, want := range []string{"states diverge", ".Balances[", "transfer(", "QUINT_SEED=0x1"} {
 		if !strings.Contains(msg, want) {
@@ -123,18 +95,7 @@ func TestRunFindsBug(t *testing.T) {
 
 func TestUnimplementedAction(t *testing.T) {
 	needQuint(t)
-	msg := catch(t, func(ft *fakeT) {
-		// seeded: a random seed's five traces sometimes took no transfer
-		Run(ft, Config{Spec: "testdata/bank.qnt", MaxSamples: 5, MaxSteps: 10, Seed: "0x1"}, func() Driver {
-			d := &bankDriver{}
-			return DriverFunc(func(s *Step) error {
-				if s.Action == "transfer" {
-					return Switch{}.Step(s)
-				}
-				return d.Step(s)
-			})
-		})
-	})
+	msg := connectFailureOutput(t, "unimplemented")
 	t.Log(msg)
 	if !strings.Contains(msg, `unimplemented action "transfer"`) {
 		t.Fatalf("failure: %s", msg)
@@ -143,9 +104,7 @@ func TestUnimplementedAction(t *testing.T) {
 
 func TestQuintTestNeedsNondetPath(t *testing.T) {
 	needQuint(t)
-	msg := catch(t, func(ft *fakeT) {
-		Test(ft, Config{Spec: "testdata/bank.qnt", MaxSamples: 1}, "aliceSavesTest", func() Driver { return &bankDriver{} })
-	})
+	msg := connectFailureOutput(t, "nondet")
 	if !strings.Contains(msg, "no mbt::actionTaken") {
 		t.Fatalf("failure: %s", msg)
 	}
@@ -190,8 +149,6 @@ func TestDiff(t *testing.T) {
 		t.Fatalf("%q", d)
 	}
 }
-
-func sprintf(format string, args ...any) string { return fmt.Sprintf(format, args...) }
 
 // A state type whose field compares nothing fails the check: an
 // unexported field is never decoded, and a misspelled one stayed at its

@@ -39,7 +39,7 @@ func (d *driver) State() (any, error) { return state{Balances: d.sut.Balances()}
 
 func TestModel(t *testing.T) {
 	connect.Run(t, connect.Config{Spec: "model/bank.qnt", Main: "bankDesign", MaxSamples: 50, MaxSteps: 30},
-		func() connect.Driver { return &driver{} })
+		func(testing.TB) connect.Driver { return &driver{} })
 }
 ```
 
@@ -47,6 +47,23 @@ Mapping from quint-connect: `#[quint_run]` → `connect.Run`; `#[quint_test]`
 → `connect.Test`; `switch!` → `connect.Switch` (key `"_"` is the catch-all);
 `param?` → `connect.OptPick[T]`; `impl State` → `State() (any, error)`;
 `Config{state, nondet}` → `Config.StatePath`, `Config.NondetPath`.
+
+## Own each trace's resources
+
+`connect.Run` and `connect.Test` take a `*testing.T` and a factory
+`func(testing.TB) connect.Driver`. The factory receives the synchronous
+`trace_<index>` child test, not the outer test. Use its `Context` for operations
+and its `Cleanup` for server shutdown or joining owned workers. Go cancels the
+child context before cleanup; cleanup completes before the next trace starts.
+The factory handle exposes no `Parallel` method: replay remains sequential and
+stops at the first failing trace. Do not cast the handle to start parallel tests.
+
+Select a trace with `QUINT_SEED=0x... go test -run '^TestModel$/trace_7$'`.
+Generation still runs once; unselected traces are neither read nor driven.
+Native `go test -json` records child results, skips, and structured
+`gotogether.trace_index` and `gotogether.seed` attributes. Generated trace counts
+are not replay coverage; skipped/filtered traces supply no conformance evidence.
+`connect.Replay` itself leaves the supplied driver's lifetime with its caller.
 
 ## Decoding model values (`itf.Decode`, used by Pick and State)
 

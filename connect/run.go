@@ -240,9 +240,13 @@ func seqOf(path string) int {
 func must[T any](t T, _ error) T { return t }
 
 // Run generates traces with `quint run --mbt` and replays each on a fresh
-// driver from newDriver, failing t at the first divergence, with the seed
-// that reproduces it. It is quint-connect's #[quint_run].
-func Run(t testing.TB, c Config, newDriver func() Driver) {
+// driver from newDriver. Each trace runs in a synchronous trace_<index>
+// subtest; newDriver receives that trace's context, cleanup and temporary
+// directory lifetime through testing.TB. Its cleanups finish before the next
+// trace starts. Ordinary Go test filtering and skips apply to the subtests.
+// Run fails t at the first divergence, with the seed that reproduces it.
+// It is quint-connect's #[quint_run].
+func Run(t *testing.T, c Config, newDriver func(testing.TB) Driver) {
 	t.Helper()
 	if c.Dir == "" {
 		c.Dir = t.TempDir()
@@ -255,10 +259,11 @@ func Run(t testing.TB, c Config, newDriver func() Driver) {
 }
 
 // Test replays the traces of the spec's `run` named test (quint test --match)
-// on a fresh driver each. It is quint-connect's #[quint_test]. Unless the
-// spec records the action itself (Config.NondetPath), use package validate
-// to check such tests against Go instead.
-func Test(t testing.TB, c Config, test string, newDriver func() Driver) {
+// on a fresh driver each, with the per-trace subtest lifetimes described in
+// Run. It is quint-connect's #[quint_test]. Unless the spec records the
+// action itself (Config.NondetPath), use package validate to check such tests
+// against Go instead.
+func Test(t *testing.T, c Config, test string, newDriver func(testing.TB) Driver) {
 	t.Helper()
 	if c.Dir == "" {
 		c.Dir = t.TempDir()
@@ -270,35 +275,43 @@ func Test(t testing.TB, c Config, test string, newDriver func() Driver) {
 	replayAll(t, c, files, newDriver, "test "+test)
 }
 
-func replayAll(t testing.TB, c Config, files []string, newDriver func() Driver, what string) {
+func replayAll(t *testing.T, c Config, files []string, newDriver func(testing.TB) Driver, what string) {
 	t.Helper()
-	t.Logf("connect: %s %s: %d traces, seed %s", what, c.Spec, len(files), c.Seed)
+	t.Logf("connect: %s %s: generated %d traces, seed %s", what, c.Spec, len(files), c.Seed)
 	traces := &traceReader{c: c}
 	for i, f := range files {
-		tr, err := traces.read(t.Context(), f)
-		if err != nil {
-			t.Fatalf("connect: %s: %v", f, err)
-		}
-		opt := ReplayOptions{Trace: i, StatePath: c.StatePath, NondetPath: c.NondetPath}
-		if c.Verbose > 0 {
-			opt.OnStep = func(s *Step) {
-				if c.Verbose > 1 {
-					t.Logf("[trace %d step %d]\n%s", s.Trace, s.Index, s)
-				} else {
-					t.Logf("[trace %d step %d] %s", s.Trace, s.Index, s.summary())
+		if !t.Run(fmt.Sprintf("trace_%d", i), func(t *testing.T) {
+			t.Attr("gotogether.trace_index", strconv.Itoa(i))
+			if c.Seed != "" {
+				t.Attr("gotogether.seed", c.Seed)
+			}
+			tr, err := traces.read(t.Context(), f)
+			if err != nil {
+				t.Fatalf("connect: %s: %v", f, err)
+			}
+			opt := ReplayOptions{Trace: i, StatePath: c.StatePath, NondetPath: c.NondetPath}
+			if c.Verbose > 0 {
+				opt.OnStep = func(s *Step) {
+					if c.Verbose > 1 {
+						t.Logf("[trace %d step %d]\n%s", s.Trace, s.Index, s)
+					} else {
+						t.Logf("[trace %d step %d] %s", s.Trace, s.Index, s.summary())
+					}
 				}
 			}
-		}
-		if err := Replay(tr, newDriver(), opt); err != nil {
-			msg := err.Error()
-			if se, ok := errors.AsType[*StepError](err); ok && se.Kind != "trace" {
-				msg += "\n\n" + indent(se.Step.String(), "    ")
+			if err := Replay(tr, newDriver(t), opt); err != nil {
+				msg := err.Error()
+				if se, ok := errors.AsType[*StepError](err); ok && se.Kind != "trace" {
+					msg += "\n\n" + indent(se.Step.String(), "    ")
+				}
+				repro := ""
+				if c.Seed != "" && what == "run" {
+					repro = fmt.Sprintf("\nreproduce with QUINT_SEED=%s (trace file %s)", c.Seed, f)
+				}
+				t.Fatalf("connect: %s\n%s", msg, repro)
 			}
-			repro := ""
-			if c.Seed != "" && what == "run" {
-				repro = fmt.Sprintf("\nreproduce with QUINT_SEED=%s (trace file %s)", c.Seed, f)
-			}
-			t.Fatalf("connect: %s\n%s", msg, repro)
+		}) {
+			t.FailNow()
 		}
 	}
 }

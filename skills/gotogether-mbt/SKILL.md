@@ -22,7 +22,8 @@ compared with the model's. The Go counterpart of quint-connect.
 2. A projection: `State() (any, error)`, exported fields named after the
    model's.
 3. `connect.Run(t, connect.Config{Spec: ..., Main: ..., MaxSamples: 50,
-   MaxSteps: 30}, newDriver)`.
+   MaxSteps: 30}, newDriver)`. The factory takes the trace's `testing.TB`;
+   use its `Context` and `Cleanup` for resources, not the outer test's.
 4. One action at a time, until a run of 50 samples passes; then raise
    `MaxSteps`.
 5. A program that runs by itself: `sys.FollowTraces(t, cfg,

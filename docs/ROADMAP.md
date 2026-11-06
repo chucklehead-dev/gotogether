@@ -63,6 +63,13 @@ It also owns bounded/failed replay cleanup rather than leaving gated tasks
 behind. Keep per-trace resource ownership in view when selecting the next
 general-framework slice; an example fix alone does not justify a public scope API.
 
+The general-framework follow-up gives connect test drivers native per-trace
+lifetimes. KV's existing 30-trace run retained 30 servers until outer-test
+cleanup; child `testing.TB` factories now scope context and resource cleanup to
+each trace. This uses Go's subtest/output facilities rather than a new scope or
+close protocol. Direct Replay remains caller-owned. Keep generated trace counts
+separate from actual selected/replayed traces.
+
 Next, rotate toward a concrete general-framework or cross-facet caller problem
 rather than further parser tuning, compiled modes or snapshot features. Candidates below
 are experiments with selection thresholds, not commitments.

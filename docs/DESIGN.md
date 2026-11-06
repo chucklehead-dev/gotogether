@@ -6946,3 +6946,36 @@ histories independently, check no-effect and invariant alternatives, and refuse
 unsupported operations without invoking external tools. CLI and API bundle
 replay remove the original tree, relocate the artifact, and run with Node/Quint
 unavailable while preserving native verdicts, assumed effects and bounds.
+
+
+## 107. Native per-trace lifetimes for connect tests
+
+The existing KV model-driven test generated 30 traces, starting a fresh HTTP
+server for each while registering shutdown on its outer testing.T. All 30
+servers remained live until parent cleanup. The publisher exercise separately
+showed why finite replay is not worker completion: a trace may end with gated
+work still in flight. Its low-level adapter owns that work (HISTORY).
+
+`connect.Run` and `connect.Test` now accept `*testing.T` and a factory
+`func(testing.TB) Driver`. Each original trace index gets a synchronous native
+`trace_<index>` child test. Driver construction, trace reading and verbose
+logging run inside that child. Its context cancels before cleanups, and all
+cleanups finish before the next trace starts. The factory receives the native
+child through testing.TB, which exposes resource facilities without Parallel.
+Casting it to create parallel tests is outside the sequential contract. Failed
+children stop the parent immediately, after cleanup; failure details retain the
+original index, picks, seed and trace file.
+
+Generation and its files remain parent-owned and happen once. Native Go test
+filtering can select a child without reading or constructing unselected traces.
+Skips are native skips, not replay evidence. Logs say how many traces were
+generated; they do not claim all replayed. Native go-test JSON carries child
+identities and Go test attributes for the original index and resolved seed,
+without a separate report schema. Direct `connect.Replay` remains caller-owned;
+there is no optional closer protocol, legacy factory adapter or custom scope.
+
+Controls exercise real context cancellation, temporary directories and server
+shutdown before the next constructor. Helper processes check actual child
+failure/cleanup and first-divergence stopping, replacing fake testing.TB fatal
+interception. The existing KV run now peaks at one server with none remaining.
+Bank and two-phase callers use the current factory directly.

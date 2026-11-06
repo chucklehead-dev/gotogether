@@ -1,0 +1,112 @@
+Existing KV MBT resource-lifetime rehearsal, 2026-11-06, Go 1.27.3
+
+Scope: TestModelDrivesService, 30 traces, temporary instrumentation counting
+httptest servers at construction and cleanup. This is the existing repository
+caller, not an independent adopter or a throughput/latency benchmark. Instrumented
+code was supplied through Go overlays; no counters enter production code.
+
+Baseline: outer-test cleanup
+=== RUN   TestModelDrivesService
+    kvstore_test.go:283: connect: run model/kv.qnt: 30 traces, seed 0x7392fb29
+    kvstore_test.go:252: active MBT servers before parent cleanup: 1
+    kvstore_test.go:252: active MBT servers before parent cleanup: 2
+    kvstore_test.go:252: active MBT servers before parent cleanup: 3
+    kvstore_test.go:252: active MBT servers before parent cleanup: 4
+    kvstore_test.go:252: active MBT servers before parent cleanup: 5
+    kvstore_test.go:252: active MBT servers before parent cleanup: 6
+    kvstore_test.go:252: active MBT servers before parent cleanup: 7
+    kvstore_test.go:252: active MBT servers before parent cleanup: 8
+    kvstore_test.go:252: active MBT servers before parent cleanup: 9
+    kvstore_test.go:252: active MBT servers before parent cleanup: 10
+    kvstore_test.go:252: active MBT servers before parent cleanup: 11
+    kvstore_test.go:252: active MBT servers before parent cleanup: 12
+    kvstore_test.go:252: active MBT servers before parent cleanup: 13
+    kvstore_test.go:252: active MBT servers before parent cleanup: 14
+    kvstore_test.go:252: active MBT servers before parent cleanup: 15
+    kvstore_test.go:252: active MBT servers before parent cleanup: 16
+    kvstore_test.go:252: active MBT servers before parent cleanup: 17
+    kvstore_test.go:252: active MBT servers before parent cleanup: 18
+    kvstore_test.go:252: active MBT servers before parent cleanup: 19
+    kvstore_test.go:252: active MBT servers before parent cleanup: 20
+    kvstore_test.go:252: active MBT servers before parent cleanup: 21
+    kvstore_test.go:252: active MBT servers before parent cleanup: 22
+    kvstore_test.go:252: active MBT servers before parent cleanup: 23
+    kvstore_test.go:252: active MBT servers before parent cleanup: 24
+    kvstore_test.go:252: active MBT servers before parent cleanup: 25
+    kvstore_test.go:252: active MBT servers before parent cleanup: 26
+    kvstore_test.go:252: active MBT servers before parent cleanup: 27
+    kvstore_test.go:252: active MBT servers before parent cleanup: 28
+    kvstore_test.go:252: active MBT servers before parent cleanup: 29
+    kvstore_test.go:252: active MBT servers before parent cleanup: 30
+--- PASS: TestModelDrivesService (1.08s)
+PASS
+ok  	github.com/chucklehead-dev/gotogether/examples/kvstore	1.081s
+
+Candidate: native per-trace testing.TB ownership
+=== RUN   TestModelDrivesService
+    kvstore_test.go:287: connect: run model/kv.qnt: generated 30 traces, seed 0xb6ed1a39
+=== RUN   TestModelDrivesService/trace_0
+=== RUN   TestModelDrivesService/trace_1
+=== RUN   TestModelDrivesService/trace_2
+=== RUN   TestModelDrivesService/trace_3
+=== RUN   TestModelDrivesService/trace_4
+=== RUN   TestModelDrivesService/trace_5
+=== RUN   TestModelDrivesService/trace_6
+=== RUN   TestModelDrivesService/trace_7
+=== RUN   TestModelDrivesService/trace_8
+=== RUN   TestModelDrivesService/trace_9
+=== RUN   TestModelDrivesService/trace_10
+=== RUN   TestModelDrivesService/trace_11
+=== RUN   TestModelDrivesService/trace_12
+=== RUN   TestModelDrivesService/trace_13
+=== RUN   TestModelDrivesService/trace_14
+=== RUN   TestModelDrivesService/trace_15
+=== RUN   TestModelDrivesService/trace_16
+=== RUN   TestModelDrivesService/trace_17
+=== RUN   TestModelDrivesService/trace_18
+=== RUN   TestModelDrivesService/trace_19
+=== RUN   TestModelDrivesService/trace_20
+=== RUN   TestModelDrivesService/trace_21
+=== RUN   TestModelDrivesService/trace_22
+=== RUN   TestModelDrivesService/trace_23
+=== RUN   TestModelDrivesService/trace_24
+=== RUN   TestModelDrivesService/trace_25
+=== RUN   TestModelDrivesService/trace_26
+=== RUN   TestModelDrivesService/trace_27
+=== RUN   TestModelDrivesService/trace_28
+=== RUN   TestModelDrivesService/trace_29
+=== NAME  TestModelDrivesService
+    kvstore_test.go:283: server ownership: peak=1 remaining=0
+--- PASS: TestModelDrivesService (1.09s)
+    --- PASS: TestModelDrivesService/trace_0 (0.01s)
+    --- PASS: TestModelDrivesService/trace_1 (0.01s)
+    --- PASS: TestModelDrivesService/trace_2 (0.01s)
+    --- PASS: TestModelDrivesService/trace_3 (0.00s)
+    --- PASS: TestModelDrivesService/trace_4 (0.00s)
+    --- PASS: TestModelDrivesService/trace_5 (0.00s)
+    --- PASS: TestModelDrivesService/trace_6 (0.01s)
+    --- PASS: TestModelDrivesService/trace_7 (0.00s)
+    --- PASS: TestModelDrivesService/trace_8 (0.00s)
+    --- PASS: TestModelDrivesService/trace_9 (0.00s)
+    --- PASS: TestModelDrivesService/trace_10 (0.01s)
+    --- PASS: TestModelDrivesService/trace_11 (0.00s)
+    --- PASS: TestModelDrivesService/trace_12 (0.00s)
+    --- PASS: TestModelDrivesService/trace_13 (0.00s)
+    --- PASS: TestModelDrivesService/trace_14 (0.00s)
+    --- PASS: TestModelDrivesService/trace_15 (0.00s)
+    --- PASS: TestModelDrivesService/trace_16 (0.00s)
+    --- PASS: TestModelDrivesService/trace_17 (0.01s)
+    --- PASS: TestModelDrivesService/trace_18 (0.00s)
+    --- PASS: TestModelDrivesService/trace_19 (0.00s)
+    --- PASS: TestModelDrivesService/trace_20 (0.00s)
+    --- PASS: TestModelDrivesService/trace_21 (0.00s)
+    --- PASS: TestModelDrivesService/trace_22 (0.00s)
+    --- PASS: TestModelDrivesService/trace_23 (0.00s)
+    --- PASS: TestModelDrivesService/trace_24 (0.00s)
+    --- PASS: TestModelDrivesService/trace_25 (0.00s)
+    --- PASS: TestModelDrivesService/trace_26 (0.00s)
+    --- PASS: TestModelDrivesService/trace_27 (0.00s)
+    --- PASS: TestModelDrivesService/trace_28 (0.01s)
+    --- PASS: TestModelDrivesService/trace_29 (0.00s)
+PASS
+ok  	github.com/chucklehead-dev/gotogether/examples/kvstore	1.099s
