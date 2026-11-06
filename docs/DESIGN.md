@@ -6879,3 +6879,32 @@ Evidence advances to current-only major 3: older readers must refuse these
 new coverage obligations instead of silently reporting strict success. Older
 files are regenerated, not adapted. No separate sequence language or parallel
 result format is introduced.
+
+
+## 105. Native stream poll outcomes
+
+A controlled Kafka Fetch failure returned a healthy partition's record and a
+TopicAuthorizationFailed error through franz-go. The adapter kept the record but
+ignored the error; even parent cancellation became an empty successful poll.
+Kinesis had the reverse partial-result defect: a later shard failure discarded
+records already fetched from earlier shards, after their cursors had advanced.
+
+Keep the existing Reader.Poll signature and return both the healthy records and
+the error. Kafka joins fetch errors with topic/partition context while preserving
+typed error identity. Its own 200 ms polling deadline is idle only while the
+parent remains live; caller cancellation/deadlines and client closure surface.
+Kinesis returns its accumulated records with a later iterator/fetch failure and
+propagates cancellation during its idle wait. Neither adapter buffers deferred
+errors or invents a new outcome format.
+
+Consumers process returned records before error backoff. Discarding that batch
+and committing a later offset could make the loss durable. This does not permit
+committing records whose processing failed, nor force processing after caller
+cancellation. The streams projection and installed-consumer example retain their
+existing apply-before-commit behavior for healthy records.
+
+Tests use native kfake broker faults and the AWS SDK against controlled Kinesis
+responses. They cover mixed records/errors, error-only responses, typed error
+identity, idle and cancellation distinctions, and commit/reopen checkpoints.
+Pure-memory synctest consumers prove that two successive batches both affect
+projection/checkpoints when the first also reports a poll error.

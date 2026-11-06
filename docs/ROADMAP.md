@@ -30,7 +30,13 @@ prove impossibility. System.FaultOrders now samples directed pairs through the
 same engine, checks every attempt, and retains requested goals, bounds and native
 witnesses in existing evidence. Co-occurrence alone cannot establish both orders.
 After this slice, rotate away from more order modes until a new caller need
-justifies them. The subsequent consolidation closes a reproduced suite-inspection omission:
+justifies them.
+The subsequent stream facet returns to native client contracts: Kafka fetch errors
+must not become idle polls, and a partial batch cannot be discarded when another
+partition/shard fails. Both native readers retain records plus errors; consumer
+loops process the records before backoff. Broader broker features should follow
+another concrete production-client gap rather than more fault-order modes.
+The subsequent consolidation closes a reproduced suite-inspection omission:
 moving valid evidence's format member after its payload made strict directory
 inspection skip an unreached goal and pass. Evidence and manifest sniffers now
 share order-independent streaming discovery. Conflicting family headers fail

@@ -14,6 +14,13 @@ Both readers share streaming family discovery; conflicting evidence/manifest
 headers fail before reader selection. Readers retain current-only validation
 and existing unsupported-manifest warnings. See [CI guidance](ci.md#evidence-discovery).
 
+Native stream polling: Kafka fetch errors and caller cancellation no longer
+look like idle polls; its own idle timeout remains normal. Kafka and Kinesis
+return healthy records alongside partial fetch errors, and consumers handle the
+batch before backoff. Native broker/SDK controls and projection/checkpoint tests
+cover typed errors, cancellation, idle polls and preservation of records from
+healthy partitions/shards. See DESIGN §105.
+
 Bounded fault-order sweeps: `qtest.System.FaultOrders` replaces checkout's manual
 script/capture/validation loop. Each requested directed pair gets fresh scripts
 for a fixed seed budget and normal model checks. Native evidence distinguishes

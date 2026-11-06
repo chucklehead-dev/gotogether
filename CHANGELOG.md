@@ -13,6 +13,11 @@ and adds a line here.
   inspection. Files naming both families fail as ambiguous instead of being
   skipped through the wrong reader. Current-only format validation is unchanged.
 
+- Stream readers preserve partial poll batches alongside errors. Kafka now
+  surfaces fetch failures and caller cancellation; Kinesis retains earlier-shard
+  records when a later shard fails. Consumers process returned records before
+  handling errors, preventing later commits from skipping discarded work.
+
 - `qtest.System.FaultOrders` samples every requested directed fault pair with
   fresh scripts and a fixed seed budget. Attempts retain ordinary model and
   runtime checks; order evidence reports witnessed or bounded unreached, never

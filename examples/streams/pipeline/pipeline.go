@@ -158,11 +158,12 @@ type Consumer struct {
 func (c *Consumer) Run(ctx context.Context) {
 	for ctx.Err() == nil {
 		recs, err := c.Reader.Poll(ctx)
+		// A different partition may have failed after these records were read.
+		// Handle the returned batch before backing off; its cursor moved already.
+		c.Process(ctx, recs)
 		if err != nil {
 			qenv.Sleep(ctx, 50*time.Millisecond)
-			continue
 		}
-		c.Process(ctx, recs)
 	}
 }
 
