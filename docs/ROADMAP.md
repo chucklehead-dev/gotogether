@@ -30,7 +30,16 @@ prove impossibility. System.FaultOrders now samples directed pairs through the
 same engine, checks every attempt, and retains requested goals, bounds and native
 witnesses in existing evidence. Co-occurrence alone cannot establish both orders.
 After this slice, rotate away from more order modes until a new caller need
-justifies them. The installed LRU MBT rehearsal now covers a non-SQL consumer workflow
+justifies them. The subsequent consolidation closes a reproduced suite-inspection omission:
+moving valid evidence's format member after its payload made strict directory
+inspection skip an unreached goal and pass. Evidence and manifest sniffers now
+share order-independent streaming discovery. Conflicting family headers fail
+before routing; unrelated traces remain excluded and version policy stays in
+the readers. This corrects input integrity without another coverage mode.
+The cold-resume audit also found dated direct-to-main push instructions and
+obsolete next-work descriptions; consolidate that handoff separately, preserving
+decision provenance and meaningful open boundaries.
+The installed LRU MBT rehearsal now covers a non-SQL consumer workflow
 and an isolated source contrast; the configuration typo it exposed is fixed by
 strict preflight and direct API migration. The consolidation slice threads
 caller-owned cancellation through model loading, checker construction, lint

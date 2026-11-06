@@ -7,6 +7,13 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
+Evidence discovery: directory scans and explicit paths recognize the same
+reordered JSON evidence and run manifests. A strict scan cannot lose an
+unreached fault-order goal merely because a serializer moved the format member.
+Both readers share streaming family discovery; conflicting evidence/manifest
+headers fail before reader selection. Readers retain current-only validation
+and existing unsupported-manifest warnings. See [CI guidance](ci.md#evidence-discovery).
+
 Bounded fault-order sweeps: `qtest.System.FaultOrders` replaces checkout's manual
 script/capture/validation loop. Each requested directed pair gets fresh scripts
 for a fixed seed budget and normal model checks. Native evidence distinguishes
@@ -1026,12 +1033,14 @@ or HTTPRoute weights); GR3's five design questions
 
 1. Read [AGENTS.md](../AGENTS.md) (conventions, gotchas) and the area's
    page under [agents/](agents/); ROADMAP's item for what you pick.
-2. Work in a worktree from origin/main, rebase before pushing, push to
-   main (`git push origin HEAD:main`). Commit messages end with the
-   attribution lines the session gives.
+2. Work on a branch in a worktree from origin/main and open a pull request.
+   Preserve published commit ancestry when integrating main. Merge only after
+   the CI workflow has completed successfully for the exact PR head and every
+   expected check has passed; the early repository gate alone is not enough.
 3. Check before pushing:
    ```sh
-   go vet ./... && gofmt -l .          # both clean
+   ci/preflight.sh                    # shared repository contracts; no native tools
+   go vet ./...                       # plus tests appropriate to the changed modules
    go test -short ./...                # the root module, a few minutes (quint on PATH)
    go test -short -timeout 30m ./validate/ ./qtest/   # the slow two, if touched
    GOWORK=off go test ./skills/ ./internal/docsnippets/   # after doc or API changes
@@ -1050,7 +1059,8 @@ or HTTPRoute weights); GR3's five design questions
    seeds, core mutants, fuzz, qeval's differential batch, quint
    verify on every binding, evaluator shadows, volume (10⁵ steps), benchmarks against a
    day before. A package costing twice its ci/test-times.txt line fails.
-5. Watch the push's CI to green; a red run is the next task.
+5. Watch the PR head's full CI to green; a red run is the next task. Recheck
+   the head and completed workflow before merging.
 
 **Where the reviews came from.** Each review was a set of agents given a
 role (architect, usability designer with newcomers, formal-methods

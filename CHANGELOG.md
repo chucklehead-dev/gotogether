@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- Evidence directory discovery recognizes top-level JSON format members in any
+  order, so reserializing evidence or run manifests cannot hide them from suite
+  inspection. Files naming both families fail as ambiguous instead of being
+  skipped through the wrong reader. Current-only format validation is unchanged.
+
 - `qtest.System.FaultOrders` samples every requested directed fault pair with
   fresh scripts and a fixed seed budget. Attempts retain ordinary model and
   runtime checks; order evidence reports witnessed or bounded unreached, never
