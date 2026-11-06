@@ -7122,3 +7122,1425 @@ adapter was required. Friction centered on dependency/doc setup, scaffold
 property classification and the shrink driver's empty action contract. The
 record and frozen artifacts are in internal/adoptiontest/http-sql; the next
 capability increment remains I4's bounded pinned-witness replay.
+
+
+## Handoff consolidation (2026-11-06)
+
+The following snapshots preserve the handoff at commit
+`630de52e20a75eea664f2298ebe43ff2ffc7d3e7` before consolidation. They contain
+historical branch names, pins, priorities, measurements and implementation
+summaries accumulated across earlier sessions. Their present-tense and
+“next” statements are dated evidence, not current instructions or compatibility
+promises. Some open-item statements were already superseded by code, including
+the Go-floor decision and read-only outcome inspection. Current capabilities,
+boundaries and priorities are in [STATUS](STATUS.md) and [ROADMAP](ROADMAP.md).
+The original review accounts elsewhere in this file remain authoritative for
+their own dates; this archive preserves handoff provenance without rewriting them.
+
+### Archived status snapshot
+
+### Status: where the work stands, and how to pick it up
+
+<!-- not built: qtest.NoHotCycle qobs.Sometimes -->
+
+For anyone (a person or an agent) resuming this repository cold. Five
+minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
+you pick. This page links rather than repeats: when it and ROADMAP
+disagree, ROADMAP and the code win, and this page should be fixed.
+
+Evidence discovery: directory scans and explicit paths recognize the same
+reordered JSON evidence and run manifests. A strict scan cannot lose an
+unreached fault-order goal merely because a serializer moved the format member.
+Both readers share streaming family discovery; conflicting evidence/manifest
+headers fail before reader selection. Readers retain current-only validation
+and existing unsupported-manifest warnings. See [CI guidance](ci.md#evidence-discovery).
+
+Native stream polling: Kafka fetch errors and caller cancellation no longer
+look like idle polls; its own idle timeout remains normal. Kafka and Kinesis
+return healthy records alongside partial fetch errors, and consumers handle the
+batch before backoff. Native broker/SDK controls and projection/checkpoint tests
+cover typed errors, cancellation, idle polls and preservation of records from
+healthy partitions/shards. See DESIGN §105.
+
+Bounded fault-order sweeps: `qtest.System.FaultOrders` replaces checkout's manual
+script/capture/validation loop. Each requested directed pair gets fresh scripts
+for a fixed seed budget and normal model checks. Native evidence distinguishes
+witnessed from bounded unreached, retains attempted seeds and witness references,
+and reports unmet goals to strict evidence inspection. Normal Explore and
+FollowTraces still require complete scripts. See DESIGN §104.
+
+Processor memo ownership: ordinary reads and each named Grist processor keep
+separate memo entries within the existing total LRU capacity. Interleaving head
+queries no longer forces a lagging processor to rebuild every trigger's prefix.
+The first cold historical read still refolds when its only snapshot is ahead.
+Memo-tail snapshot writes retain observed newer snapshots; anchor checks and
+pinned-state semantics remain unchanged. Anchor checks now share a small private
+policy file; each planted rewind mutant changes only its intended check rather
+than copying the entire snapshot implementation. Checksum bytes are unchanged.
+See grist §2.2 and I24.
+
+Compiled client-history linearization: `validate -compiled -linearize` and
+keyed searches use the artifact's evaluator alone, with native provenance and
+bounded-unknown outcomes. Unsupported candidates error without launching Quint.
+Portable manifests retain search settings through bundle/relocated replay with
+Node and Quint unavailable. Pending-call resolution remains separate. See DESIGN §103.
+
+Database-history session order: `qhistory.StrongSessionSerializable` requires
+explicit `Txn.Session` and `SessionOrder` evidence for nonaborted transactions.
+It detects session stale reads without clocks, preserves known ordering across
+failed attempts and retains typed cycle dependencies. Unknown outcomes do not
+establish outgoing precedence, even when later inferred committed. Strict checking
+also honors supplied sessions; ordinary Serializable is unchanged. Independent
+serial replay checks 1,080 additional bounded combinations. Recorder IDs supply
+no session evidence; automatic capture remains separate. See DESIGN §102.
+
+Payouts exploration consolidation: the noDuplicateCheck mutant reuses its
+payouts-model exploration for cross-app link checks. Its separate bank-model
+exploration and all short/full seeds and assertions remain. This removes an
+identical simulation/validation pass without a framework API or CPU-budget change.
+
+Model-analysis lifecycle: canonical `validate/model` entrypoints take a context
+per operation, including analyzer construction, graph/possible searches,
+simulation and graph membership cross-checking. Managed compilation, cache
+waiters, sampling/verification/replay children and cooperative CPU phases share
+that request. Cancellation returns an operational error, discards partial
+analysis results and leaves reusable analyzers and cached models usable by live
+callers. CLI interrupts and qtest's test lifetime flow through the same path.
+Remaining context-free metadata/ordinary-validation evaluator entrypoints are
+explicit boundaries; this does not claim hard preemption of arbitrary I/O or
+individual machine instructions. Lifecycle fixtures isolate both Unix cache
+locations; native CLI signal checks retain their existing Quint assets and run
+under a controlled occupied parent pool. See DESIGN §101.
+
+Current-library admission: live x/sys requirements are 0.49.0 and the external
+Orchestrion tier is 1.15.0 on the shared Go 1.27.3 floor. Atomic-publication race,
+source/replay export and native/woven integration checks cover the update;
+Darwin/Windows checks establish compilation only. The sync fixture exercises
+WaitGroup.Go through qweave and real Orchestrion. Heavy tracing dependencies stay
+in the external example and frozen histories retain their graphs. See the
+[admission evidence](go-toolchain.md).
+
+Named model-step action reachability: `qtest.AllStepActionsReachable()` shares
+ModelCheck's graph with invariant and deadlock claims. It accepts a witnessed
+action even in a partial graph, rejects unseen actions only in a complete graph,
+and leaves bounded absence, empty inventories and invalidated evidence unknown.
+Composite transitions count each named step action once, rather than only the
+first; helper and binding-only actions are outside the roster. Shared reports
+retain typed action counts and status in `graph.stepActions`, without changing
+CLI success criteria. Twophase's lost coverage assertion is restored. See DESIGN §100.
+
+Go 1.27 adoption: the shared live module, workspace, scaffold, fixture and
+publication floor is 1.27.3. qgosim and its examples pin the published gosim port
+`66f95e073358`, with actual replay, checkout and woven edgepublish admission
+against that dependency without local replacements. Normal CI uses this current
+family and drops the redundant pre-port host-core job. Step-log encoding matches
+current standard JSON, including invalid UTF-8 replacement runes. Frozen source
+histories remain unchanged. See [toolchain policy](go-toolchain.md).
+
+Projected graph-label benchmarks (merged PR #68, 77e4df2a): graph benchmarks now include
+first-non-step-action label projection alongside ordinary full-event labels.
+I39's duplicate parent-label candidate was measured and rejected: fewer callback
+calls did not improve end-to-end exploration; the allocation-neutral version's
+four-pair medians regressed by 1.9–4.2%. Production exploration stays unchanged.
+See [the experiment](performance.md#graph-parent-label-experiment-2026-11-05).
+
+Test-local model checks (merged PR #67, b19762dc): `ModelCheck.WithOptions(ModelOptions)`
+sets copied constant expressions and search bounds without editing the binding.
+The existing engine preserves proof scope and native witness replay. Malformed
+option framing and negative bounds fail before binding loading; unknown constants
+and expression errors remain operational failures. Counters now proves its two
+invariants within three steps directly against its unchanged generated binding.
+Sibling checks and caller maps remain independent. See README and DESIGN §99.
+
+Library upcaster-fix snapshots (merged PR #66, 79030b91): I1's persisted-history example
+uses the real books fold and SQLite across separate release processes. The
+existing dropsCopies contrast creates an incorrect snapshot, an unchanged release
+reuses it, the same-version fix refolds correctly, and another fixed process
+reuses its new snapshot. Memo/audits are disabled and stored events are unchanged.
+Fingerprint probes cover this concrete correction, not every semantic change.
+See [the rehearsal](../examples/library/README.md#repairing-a-buggy-upcaster).
+
+Lint request preflight (merged PR #65, 72b2ece1): malformed flags and unexpected positionals
+produce an operational blocked request report before target inspection. A parsed
+-json flag selects the same lint/1 document for request errors; use -json first.
+Help remains exit 0, and raw arguments are not scanned to guess an output mode.
+No lint API or format changes. See [lint onboarding](lint-onboarding.md).
+
+Report delivery status (merged PR #64, b30c962f): shared machine reports attempt independent
+file destinations, retain original and delivery errors, and emit stdout JSON last.
+Delivery failure is command error/exit 2 while native graph/check/actor evidence
+remains intact. Successfully written reports are refreshed once after a later
+failure, including stdout failure. Delivery is best effort, not a transaction;
+refresh failures are explicit and may leave earlier bytes. No schema/API change.
+
+Repository-contract preflight (merged PR #63 through #64, b30c962f): one Go/Bash command checks
+nonwriting formatting, source/state/API/schema/format contracts, docs, skills,
+simulation lint and complete CLI help/tutorial freshness before CI fanout.
+Updater/report/helper flags are cleared; source guards enforce roster, selector
+containment and dependencies. Full/shuffle/native suites remain intact. Actual
+missing-state-scope and oversized-help controls fail early without invoking Quint.
+See [developer commands](agents/commands.md).
+
+Recording identity and ownership (merged PR #62, 2ec17ac9): background recording reuses
+one operation's goroutine ID across fresh run/site lookups. Local CPU-1 paired
+medians improve from 17.0 to 7.2 µs, with one fewer allocation; explicit-context
+allocations stay unchanged. Filtered, discarded and overridden-thread events no
+longer claim unused thread ownership. Callback-driven ownership changes and
+cross-task completion retain their timing and original context semantics.
+See [measurement and controls](performance.md#recording-identity-consolidation-2026-11-04).
+
+Portable comparison replays (merged PR #61, 7e4400e9): confirmed source witnesses can
+be exported with their captured model bytes, hashes, exact argument vector and
+current report JSON. Fresh output ownership excludes other report writers;
+publication is atomic and refuses overwrite. Native relocation tests remove the
+original trees before replay. A real hello completion-contract change supplies
+a scope control: equal observed state sequences do not replace named-action or
+finish claims. See [the historical review](../internal/adoptiontest/model-review/README.md).
+
+Finite model-behavior comparison (merged PR #60, 1aafa1b4): `model-diff` compares two
+complete finite Go-evaluator graphs on explicit named variables, preserving
+every transition. Whole-prefix inclusion retains hidden-state nondeterminism;
+separate product and work bounds remain inconclusive. Typed report data separates
+source-native replay from complete-target-graph exclusion. A finite non-storage
+handshake checks early acknowledgments, tightened behavior and hidden updates.
+See [scope and evidence](model-comparison.md). No general refinement, stutter
+abstraction or native exhaustive equivalence is claimed.
+
+Model-loading cancellation (merged PR #59, d13a6cb0): binding loading and automatic trace
+schema recovery take a caller context, as do checker construction and lint
+inspection. Cache waiters can cancel independently; a live waiter retries after
+an owner's canceled load. Subprocess and cache-lock waits use the same lifecycle.
+Cancellation remains an operational error, not a model counterexample. The
+context-free model-analysis, metadata/manifest construction, evaluator compilation
+and go/analysis entrypoints remain explicit lifecycle boundaries; this does not
+claim cancellation coverage for every toolkit API.
+
+Installed LRU MBT and configuration preflight (merged PR #58, c6f5476b): a consumer
+outside the workspace uses published SDK and simplelru modules, a separately
+authored finite model, and actual API observations. Sampled traces and five
+forced cases pass. A parent-planted Get-nonpromotion change in a disposable
+module copy produces a typed recency mismatch at Get step 3, with baseline and
+frozen files unchanged. Existing upstream coverage retains credit; this is
+agent-assisted installed-workflow evidence, not independent adoption or an
+upstream production defect. See internal/adoptiontest/lru-mbt/FRICTION.md.
+The rehearsal found a real SDK usability issue: malformed numeric environment
+values silently selected defaults. Config.FromEnv now returns (Config, error),
+validates budgets/verbosity before trace effects, and migrates callers directly.
+
+Typed history clock evidence (merged PR #57, 294d48d9): linearization receipts retain
+an effective bound and source even with zero clock edges. Actor/partition facts
+count imposed completed-step pairs, participating recorders and closest gap.
+Conclusive model failures are marked as checked under those assumptions; no
+minimal-proof or synchronization measurement is claimed. Report JSON and
+existing navigation/TUI receipts share cloned data. Pending-only placement and
+searched-history cursor navigation remain separate. Module tidiness now runs
+before expensive core tests after a late dependency-download failure forced a
+full-job retry.
+
+Clock-assumption example (merged PR #56, 49e9e2bd): kvstore records real Store
+observations under authored intervals and a synthetic 5ms recorder offset.
+The default 1ms assumption forces a misleading order; a declared 5ms bound
+admits the faithful history. A planted stale replica still fails at both
+bounds. Tests regenerate exact native logs, and CLI/JSON checks preserve
+the existing conditional issue text. This is not measured host/NTP evidence.
+The example exposed missing zero-edge bound provenance; typed receipts now
+supply it. Recorded-history TUI navigation still does not search orders.
+
+Fuzz input framing (merged PR #55, 066d77c4): generated Go fuzz inputs are raw entropy, so
+mutating bytes into a replay-header prefix cannot create a spurious format
+failure. Explicit seeds are encoded recordings, validated and decoded once
+before mutation. Persisted replay version checks remain intact. The streams
+CI failure exposed this framework boundary; the stream model was unchanged.
+
+Portable installed skills (merged PR #55, 066d77c4): 15 repository-relative links
+now use the existing canonical GitHub main URLs, preserving fragments. Local
+and cross-skill references remain relative inside the installed tree. Source
+and actual installation checks cover link destinations, including directory
+and fragment links; the CLI's existing force flag refreshes embedded guidance.
+Install keeps copying the portable source directly, with no Markdown rewriter,
+new dependency, format or update mode. Remote links require network access
+and track main; offline path checks do not prove hosted availability.
+
+Bounded qsql COUNT(*) (merged PR #54, 308a6b93): single-table counts accept an optional
+AS alias and the existing WHERE subset. Empty matches return one int64 zero;
+NULL-valued rows count, own writes are visible, and Store predicate reads retain
+isolation checks. SQLite differential coverage and forced in-range/adjacent
+phantom controls check these boundaries. Other aggregates, grouping, joins and
+count locking/ordering/limits remain explicit errors. This finishes a bounded
+G9 slice; rotate away from SQL depth next.
+
+Native PostgreSQL admission evidence (merged PR #53, c9101506): a restricted login
+role's connection quota is exhausted by an observed idle physical session.
+Append preserves native pgx 53300, transient NotCommitted classification and
+unchanged heads/events/steps/markers. Closing the holder pool permits exactly
+one batch through the same writer pool. This role-quota test is distinct from
+logical transaction admission and server-global pool-sizing proof. Virtual
+physical-session modeling remains deferred pending a faithful ownership model.
+
+Logical transaction capacity (merged PR #52, cbf419a4): Store.MaxTransactions bounds
+active transactions with deterministic immediate refusal. DB.Begin now returns
+(Txn, error), with direct caller migration and typed known-not-applied evidence.
+Leases release exactly once across commit, rollback, conflict, crash and reset;
+reset preserves stale transactions' ErrUnavailable. SQL pool callbacks draw no
+choices, refused grist appends are NotCommitted, and refused history attempts
+are empty Aborted entries. A native Quint set model checks capacities 1/2 and
+rejects actual unlimited-mode ablations at forced full attempts. This does not
+model idle pooled connections or complete the physical max_connections proposal.
+
+Executable hello transcripts (merged PR #51, 564fa9e3): prove-it's first sampled and
+complete-graph commands run against the CLI in an isolated copy with fresh
+caches. Literal tutorial output is compared with only graph elapsed time
+normalized; counts, claims, witnesses, complete output and native exit status
+remain checked. Stale possibility wording and missing setup prerequisites are
+corrected. Installation and the later tutorial sections are not replayed here.
+
+Pinned suite guards (merged PR #50, eefab5fc): the core passes default staticcheck
+v0.8.2 checks, including tests, with the tool outside its dependency graph.
+Grist's PostgreSQL-backed short suite has descendant-CPU budgets per push;
+the full suite runs nightly. Remaining literal Quint test launches in the core
+and grist now use shared admission/cancellation, guarded by a source check.
+The absent-verdict sentinel is qtest.ErrNoVerdict;
+callers and published module pins advance together without a compatibility alias.
+
+Tutorial command freshness (merged PR #49, 435e655f): prompted tutorial shell commands
+are checked against actual CLI help, including wrapped/chained invocations and
+flag/value boundaries. Value flags now show argument types in help. The guard
+does not run examples or validate quoted output; full replay remains separate.
+
+Shared Quint admission (merged PR #48, 3380b2fa): all core Quint launches participate in
+one lifecycle limit, including compile and typecheck. Two fixed slots coordinate
+the same user sharing a cache directory on supported Unix platforms;
+other platforms use two process-local slots. Constructors take no permit,
+queued cancellation launches no child, and failed starts or completed waits
+release admission. Kernel locks recover permits on owner death, but this does
+not prove cleanup of orphan evaluator grandchildren. Cross-process, command
+semantics, failure, cancellation and real-evaluator tests cover these boundaries.
+
+Discarded runtime-result tooling (merged PR #47, dc65946e): typed quintsim findings now
+identify ignored error results from qenv.Sim runtime methods. They preserve
+real method identity across aliases/promoted calls, keep unrelated Run/Settle
+methods clean, and offer propagation fixes only in safe sole-error functions.
+The native analyzer JSON carries stable rule categories; real-tool acceptance
+checks the SDK, fix application and corrected code. This typed check requires
+quintvet/go vet or the existing golangci plugin; syntax-only CLI lint does not
+guess receiver types. No new analyzer mode or output format is introduced.
+
+Joint-state differential coverage (merged PR #46, 70b2b7c1): I11 now checks complete
+successor pairs for two integer state variables, including correlated choices,
+simultaneous cross-reads and two-action state propagation. Independent analytical
+controls reject fabricated products, missing combinations and sequential-update
+mistakes. Pure finite relation oracles run on both native Quint backends; sampled
+action witnesses are additional membership checks, not completeness proofs.
+Abnormal native process exits cannot count as agreement in either differential
+harness. The generated fragment remains bounded; no new runtime API or general
+model-step generator is introduced.
+
+GR10c down-process settlement (merged PR #45, 59a10d90): ordinary deterministic Settle
+requires every registered process up, and SettleCore requires only its named
+core up. A required down process returns Unsettled with immutable local process
+identities and no settle marker. Outside-core blocked waits follow the same scope
+as pending tasks; process-free clients and global step limits remain relevant.
+Execution JSON/navigation/TUI carry the terminal runtime outcome independently
+of model judgments. Unavailable completion leaves eventual obligations unjudged;
+a genuinely available quiet system still exposes real obligation defects.
+Permanent Exit is shutdown, not recovery: use Run or a surviving SettleCore.
+
+Tail-membership adoption rehearsal (merged PR #44, b0b2f124): an independent two-slot
+model checks actual Goo capability ownership, read-anchored expiry, immutable
+member data and atomic selection. The 38-step faithful trace passes; a later
+parent-planted exact-expiry source contrast fails at sequence 10. Faithful and
+failing bundles replay after relocation, while missing observations remain
+evidence errors. See [scope and reproduction](../internal/adoptiontest/goo-tail-membership/README.md).
+Existing Goo coverage retains credit; this is agent-assisted, authored-history
+evidence, not independent adoption or a production defect. It required no new
+core API. It supports rotating back to the known runtime settlement boundary.
+
+Scaffold setup recovery (merged PR #43, 1608f52c): init/new retain generated files after
+failed dependency or model setup and print a shell-safe continuation from the
+failed stage through verification. Automatic execution and printed commands use
+GOWORK=off. Write-only flags print the full plan, including versioned dependency
+selection without a checkout replacement. Module/destination validation and Go
+availability preflight avoid predictable writes; replacement paths use go.mod
+quoting. No rollback or persisted resume format is introduced. Next: a fresh
+end-to-end adoption exercise to identify a concrete remaining blocker.
+
+Partition scope and replay provenance (merged PR #42, b35568c): source actor identity
+and typed partition key/value now survive reports without parsing display names.
+Receipt-local tables retain original constants once, effective substitutions and
+evaluated-prefix justification; folded passes and merged reports keep correct
+references. JSON/TUI share this evidence independently of navigation cursors.
+Summaries distinguish actor identities from judgments and partitions. Clone,
+large-number round-trip and serialized-growth controls protect the shared data;
+the replay optimization and checking semantics remain unchanged.
+
+Model possibility evidence (merged PR #41): resolved goals distinguish state
+predicates from ordered action sequences. Predicate readiness can hold initially
+without executing a command. Report/2 carries structured evaluator transitions,
+identified actions and exact named Quint literals; unknown attribution remains
+explicit. Bounds, impossible and overall/backend found distinctions stay intact.
+The current schema/CLI/packaging checks advance together; frozen runtime SDKs,
+models and drivers remain unchanged. qtest model claims use the same wording.
+
+Grist generated draws (merged PR #40): the documented order/order collision
+no longer requires renaming a command to place. Argument and framework locals
+avoid action/helper/domain/temporary names and colliding type suffixes, while
+keeping public action/parameter names, recorded fields and binding identities.
+Store/client and query/site branches share allocation with command reachability
+predicates. Native Quint tests cover the original catalog shape and related
+caller/imported-helper collisions. Handwritten rules/invariants remain untouched;
+affected generated files should be regenerated through the app's model command.
+
+Simulation step-budget boundary (merged PR #39): quiet completion on the last
+permitted turn now succeeds instead of returning ErrMaxSteps. Stuck and horizon
+outcomes remain distinct, and actual exhaustion stops before another task,
+fault choice or in-bound deadline advance. Limits remain cumulative across
+calls. Core hooks carry the corrected limit outcome into execution JSON and
+TUI profiles without a format or API change. Completion still proves no model
+property; settlement still requires its existing pending-work check.
+
+Navigation reconstruction guard (merged PR #38): observed-state navigation
+refuses non-loss errors in the selected whole actor, including conflicting
+recorder identities, ordering errors and partitions. Previously a discarded
+conflicting payload could silently determine the displayed state. CLI JSON and
+TUI fallback now return an input error without a node, including at cursor zero.
+Exact retries, unrelated clean actors, model-only navigation, valid model-failure
+prefixes and existing gap/snapshot policies retain their behavior.
+
+Collection argument lint (merged PR #37): the original plain-field mapping
+mistake from the large-count rehearsal now produces an early authored finding.
+Known collection arguments need conversion, so identity mappings recommend
+omission and other recorded JSON fields get a typed conversion example.
+Interned argument IDs get separate guidance; `.outcome` and general expressions
+remain supported. Native lint JSON retains code, severity, parameter symbol,
+confidence and fix without inventing YAML coordinates. This is static binding
+compatibility evidence, not a trace verdict or complete expression checker.
+
+Collection conversion correction (merged PR #36): removing redundant argument
+mappings from the large-count trial exposed a core default-path defect. Flat
+collection helpers decoded through float64 and converted through int64, changing
+recorded operations before Quint saw them. Defaults and explicit helpers now
+preserve arbitrary integer literals, reject fractional/exponent counts, and
+retain strict single-value JSON input. Regression controls and the disposable
+no-mapping rehearsal preserve exact values through ITF and relocated replay.
+The original frozen model, binding, driver and dependency pins are untouched.
+
+Large-count rehearsal (merged PR #35): a second real-library contract adds
+unbounded arithmetic and exact-value handoff evidence without a core format or
+API change. The Go evaluator and Quint Rust backend retain signed-int64 limits;
+Quint/TypeScript is explicit throughout the trial. Frozen drivers retain raw
+public decimal strings and exact native numeric projections. All artifacts and
+limitations are documented in internal/adoptiontest/goo-counted-values. The
+trial exposed one misleading core hint: missing-state Rust advice now qualifies
+backend support instead of promising an unavailable trace.
+
+Source-capture follow-up (merged PR #34): source judgments now retain private
+model identities and conservative cache dependencies; changed model, binding or
+conversion rules are refused before recording. Typed ITF schema inference and
+empty-history manifests obey the same stability checks. Definition-string file
+imports must move into model files. The bounded external-tool guarantee is
+documented in DESIGN §73. Vacuity witness predicates now use an internal
+diagnostic checker bracketed by the original source guards; they cannot inherit
+the original binding's recorded identity or fall back from compiled-only mode.
+
+Compiled-manifest follow-up (merged PR #33): gotogether.run/3 records a hashed
+compiled artifact as the evaluator-only replay dependency. Bundle preserves its
+bytes/layout, binding, inputs and exact source-availability coverage, including
+absent-source provenance paths; relocated replay needs no Quint/Node probes.
+Actual compiled results retain their loaded digest and coverage so manifest
+creation refuses changed artifacts or a different judging recipe. High-level
+input readers also retain exact byte fingerprints and refuse changed/uncaptured
+inputs before recording, across native, converted and typed ITF paths. Source-mode
+model and conversion-rule capture now guard exact parsed binding/rule bytes and
+source inventories at loading, judgment and manifest creation, including warm
+caches and ITF-only inputs. External Quint reads live files: pre/post guards
+do not prove atomic cross-file snapshots or detect mutations restored between
+checks. Literal
+constant overrides that would misjudge frozen IR now require recompilation;
+unsupported ITF inference stops before asking Quint. Native pass/fail/no-verdict,
+JSON/TUI receipts, and export-integrity boundaries stay unchanged. The shared
+format has one current version; all published core pins agree at da8e99e1560f.
+
+Captured-transition assertion follow-up (merged PR #32): qtest.TransitionsConform
+judges the existing native conformance facet for all judged actors or required
+exact identities. It replaces manual checks in counters' paused incident and
+requeue's storm, with their original rejection, payment, cycle and settlement
+controls intact. Empty/missing/unjudged transitions remain unknown, including
+under negation; capture/validation errors cannot manufacture counterexamples.
+Native ordering/search/loss assumptions remain disclosed, and invariant,
+composition, completion, settlement and JSON/TUI verdicts stay unchanged. Real
+paused/invariant-failure/rejection/reconstruction controls and an ablation cover
+the distinction. No validator or output format changes are needed.
+
+Stored-outcome inspection follow-up (merged PR #31): both native Failed/Unknown
+bodies now require captured TriggerID, and checkpoint telemetry exposes it too.
+App.InspectOutcomes and `<app> outcomes [-json]` share bounded typed pages, original
+provenance, raw retained/missing/replaced observations and explicit limitations.
+Store.ReadEvent supports raw exact positions across all tiers, so unfamiliar
+replacement types are visible. OpenReadOnly checks only an existing current SQL
+schema and rejects all mutators; the CLI opens SQLite with mode=ro. Page and
+trigger lookups are independent reads, not snapshots, and stored outcomes cannot
+enumerate every pending/lost/retired completion or authorize redrive. The logical
+model remains identity-opaque; native provenance and store contracts carry these
+facts. Old position-only outcomes are refused without reconstruction.
+
+In-flight rewind follow-up (merged PR #30): observed rewinds retire the node's
+processor work across resume. Late callbacks retain truthful native completion
+records with the original ID/key and pinned causal clock, while retired work
+cannot retry or submit checkpoints/domain outcomes. Retired read/append answers
+also cannot repopulate resumed rewind memory. Deterministic barriers cover
+retained/replaced triggers, retained/lost checkpoints, success/unknown/NotApplied
+and resume-before-return; normal controls retain outcomes/retries. The counter
+loss fixture's captured transitions now conform under its unchanged model;
+operator reconciliation and eventual payout properties remain unresolved while
+paused. This admission fence cannot revoke already-issued transactions/calls or
+detect unobserved restores. Stronger atomic store identity preconditions and
+explicit start/completion modeling remain separate work if a concrete boundary
+requires them.
+
+Stored-effect-identity follow-up (merged PR #29): two real restore cycles
+reproduced different effect keys on surviving and restarted nodes. Every store
+now mints immutable `Stored.ID` values, preserved as `Meta.ID`; keys derive from
+the captured stored event, and typed `CallInfo.TriggerID` plus native `triggerId`
+records carry that identity. Identical replacement data gets a fresh ID while
+retained-prefix keys remain stable. Missing identities fail closed before any
+callback/checkpoint. SQL schema 2 and one required call header replace old shapes
+without backfilling. The independent store contracts, restore/restart fixture,
+public crash/retry fixture and HTTP controls cover the guarantee; existing models
+keep keys opaque and do not prove identity generation. Rewind detection and
+operator reconciliation remain distinct requirements. The forced counter contrast
+checks payment-call budgets directly; the in-flight follow-up above adds the
+observed-rewind outcome fence and transition-conformance control.
+
+Portable-handoff follow-up (merged PR #28): `gotogether bundle -out DIR
+MANIFEST` verifies and exports the existing native manifest and complete file
+graph through private staging and exclusive atomic publication. Existing output,
+stale inputs/artifacts and unsupported model references are refused. Library
+`Manifest.Bundle` has the same checked, transactional file-copy contract; its
+receiver stays unchanged on error. Export integrity never becomes a model pass.
+The jobqueue walkthrough now exports its three cases without manual model/binding
+copying, removes source captures and replays the relocated incident. Composition
+receipts remain evidence requiring their originating registered System/test.
+
+Incident-workflow follow-up (merged PR #27): the existing jobqueue stale-ack
+mutant is recorded through actual service calls, checked as native JSON, inspected
+in the TUI, relocated and replayed, then repaired under the unchanged model.
+The repaired execution also accepts a fresh valid ack. Generic disabled-call
+navigation now exposes its exact checked captured record without assigning a
+verdict to a model cursor or fabricating obligation evidence. Empty, changed and
+missing evidence retain no-verdict/error status. This is a bounded planted
+rehearsal, not production discovery or independent adoption. See
+[the runnable runbook](../examples/jobqueue/INCIDENT.md).
+
+Map-storage follow-up (merged PR #26): existing-key updates share an immutable
+key domain while copying values; insertions copy keys even with spare capacity.
+Independent copying-reference checks cover 1,111 bounded histories and retained
+snapshots. Ring workloads check every account/edge per complete cycle and full
+global conservation at each prefix. Measured ring transfer bytes fall about 49%
+at 1,000 accounts; whole-validator bytes fall about 12% at 100 accounts/1,000
+transfers. The latter still checks the existing nonNegative model, not the
+separate global-conservation fixture. See [the scope and measurements](validation-volume.md#wider-histories-and-map-storage).
+
+Evaluator-allocation follow-up (merged PR #25): ordinary immutable binding
+frames keep a pointer to a deferred error instead of reserving an error interface
+on every frame. The error cell is allocated inside the failure branch, preserving
+successful-let allocation counts. Measurements reduce the 1,000-account
+invariant's bytes by 21% and whole-validator bytes by about 6%. Full evaluation,
+closure lifetimes and error verdicts are unchanged. See
+[the measurements and tradeoff](validation-volume.md#binding-frame-storage).
+
+Event-projection follow-up (PR #24): commands, processor emits and effect
+success events validate source, stored and intermediate upcast scalar shapes.
+Success events and observations are prepared before external effects. Invalid
+new evidence cannot commit; represented known retained shapes are checked even
+on already-rendered relay rows. Application/data faults retain their diagnostic
+instead of becoming wrapped observations, domain refusals or false NotApplied
+claims. Processor rules inspect the newest shape before storage conversion.
+See grist-guide §2 and the projection boundary tests.
+
+Interacting-validation baseline (merged PR #23): separate transition, tracking,
+invariant and whole-validator benchmarks now measure histories with transfers.
+A test-only written-entry cache agrees with full evaluation on 1,360 bounded
+prefixes; destination and cross-entry controls demonstrate unsafe shortcuts.
+No production optimization or new binding syntax is introduced. See
+[measurements and the next decision](validation-volume.md).
+
+Stored-history follow-up (PR #22): `gristtest.StoredLogs` restores each
+retained fixture fresh, validates every event and its recorded observations,
+audits current fold/snapshot consistency, and checks the committed prefix against
+today's model. It never starts processors/effects or invents settle. Per-stage
+statuses, fixture hashes and native model documents distinguish failures, errors
+and no verdict. Historical snapshots and original row timestamps were not captured;
+completion/within bindings are refused. The real library v1 fixture passes with
+pending receipts left pending. See grist-guide §6.7.
+
+Finite-initialization follow-up (PR #21): ordinary complete traces can
+start from several legal finite model states. Search budgets distinct roots,
+keeps each root's initial invariant history, and confirms the selected original
+initializer with Quint. Shared receipts retain separate initialization evidence
+for JSON, text and TUI, without inventing an observed input event. Model cursor
+exploration still explicitly refuses ambiguous starts; it does not choose an
+arbitrary root. Acceptance tests use an independent root/path oracle and
+ablations of both root enumeration and initial property checks.
+See [the scope contract](model-choice-witnesses.md).
+
+Calibration-evidence follow-up (merged PR #20): generated trajectories now
+reject failed runs and missing samples rather than averaging zeros. Sample
+times are exact whole seconds (including an explicit initial-state sample at
+zero), initial queues must be representable, and simulation continues through
+a timeout lookahead to complete retrospective orbit observations. Grist sizing
+propagates trajectory errors before fitting or recommending a timeout.
+See DESIGN §11.1.
+
+Recovery-evidence follow-up (PR #19): `qload.Runs`, `Count`, and
+`Mostly` now return errors for invalid batches and any unjudged seed. The
+observations remain available in seed order, but no majority or degraded witness
+is inferred from missing evidence. Hegel trigger search and Grist sizing
+propagate these errors rather than finding a trigger or recommending settings.
+The recovery threshold, tie rule, and explicit chain-only sizing mode remain.
+See DESIGN §11.1.
+
+PostgreSQL wake-hint follow-up (merged PR #18): transactional notifications
+cover tenant creation and event or step-only appends. The optional
+`sqlstore/pgnotify.Serve()` adapter owns a dedicated reconnecting listener through
+Main's drain; every subscription and notification wakes readers to check SQL
+again. Polling remains the backstop. Native SQL waits subscribe before reading,
+closing a lost-wake window. Tests cover broadcast, spurious hints, cross-store
+polling, real PostgreSQL delivery/reconnect, and service cancellation/join.
+No generic changefeed, new simulation semantics, or notification-based progress
+is introduced. See grist §2.11.
+
+Lock-wait follow-up (PR #17): rolled-back and reset Store transactions
+stop waiting even while a different transaction holds the requested key. SQL
+statements recheck their transaction after a yielding operation, so an explicit
+transaction cancelled while blocked ends promptly with its cancellation result.
+Applied commits preserve success or unknown outcome. Tests cover lock and commit
+waits, a fresh holder after reset, ordinary waiting and deterministic replay.
+This fixes lifecycle handling; it does not add pool-capacity simulation or new
+per-statement cancellation tracking. See DESIGN §51.
+
+Unobserved-append follow-up (merged PR #16): qhistory retains rw dependencies
+from whole-list reads to known committed appenders absent from every external
+read. This closes a strict stale-read and write-skew false-pass boundary without
+inventing unseen writer order or treating timeouts as completed commits. A small
+independent serial-execution oracle checks 1,402 bounded combinations, alongside
+actual qenv store-history controls. The subsequent session-order slice adds
+StrongSessionSerializable over explicit Txn.Session/SessionOrder evidence:
+known committed predecessors order later included transactions in their session,
+including across unknown or aborted attempts. Inferred committed Unknowns cannot
+source an order edge. The stronger request rejects missing or ambiguous metadata;
+ordinary Serializable retains its contract. Typed cycle dependencies retain order
+provenance. Independent permutation replay checks bounded session histories.
+Automatic session capture, new workloads and recorder timestamps remain separate
+work. See DESIGN §102 and the I45 note.
+
+Snapshot-checkpoint follow-up ([PR #15](https://github.com/chucklehead-dev/gotogether/pull/15)): a trace's later snapshots now
+check the complete replayed state instead of being skipped. The first snapshot
+still establishes a lost-head log's initial state; later ones cannot reset the
+model or erase earlier failures. A disagreement is a conformance mismatch at
+the snapshot's own record, retained in JSON and navigation. This closes the
+S11 checkpoint gap without expanding inventory, lint or onboarding work.
+Imported state must be captured completely through the model's exports;
+stateful qualified imports, instances and unresolved scopes are refused for
+checkpoints. See DESIGN §50 and the trace skill's partial-log guidance.
+
+Library-adaptation follow-up (merged PR #14): the published library starter was
+adapted to Goo's real strict `subjectfacts.Read` boundary with 16 fixed YAML
+inputs and actual returned values. Model, binding, driver, fixtures and module
+pins were frozen before a parent-planted source contrast disabled unknown-field
+checking. The faithful run passes; the contrast is a state mismatch on an
+unexpectedly accepted input. See [the rehearsal](../internal/adoptiontest/goo-read/README.md).
+Expected input rejections remain domain observations, and tool/setup failures earn
+no contrast credit. This is agent-assisted, instruction-isolated evidence, not
+independent-maintainer adoption, general parser verification or discovery of a
+production bug. No missing runtime adapter blocked this bounded exercise.
+The actual blocker was machine-readable graph scope: agents had to extract
+completeness/counts from display prose. The canonical model `Report.Doc()` now
+emits native graph extent, limits, truncation, per-check proof coverage and
+reachability search evidence; skipped checks retain a typed no-verdict reason.
+The reproduction checks exact faithful/mismatch/error results and replay after
+both evidence bundles move and the original project path disappears. All seven
+frozen contract hashes remain intact; the frozen SDK pin records the original
+workflow, while reproduction uses the newer CLI for typed graph checks.
+
+Library-entry follow-up (merged PR #13): `init -kind library` supplies an
+ordinary Go snapshot-library workflow with actual observed calls, a finite
+model, a planted aliasing contrast and portable evidence/replay. It extends
+workflow coverage demonstrated by the hand-authored Goo trial; it does not
+establish unaided or independent-maintainer adoption. Binding scaffold property
+roles are now explicit, addressing the HTTP/SQL trial's completion-as-invariant
+friction. No new stream facade or automatic model inference is introduced.
+
+Component-shrinking follow-up (merged PR #12): default identity preserves named
+local/protocol obligations by component role, target, binding, kind and name,
+with multiplicity, alongside primary actor failures. `ActionShrink.System`
+reuses registered checks for every fresh rerun. Structured identities survive in
+results and shrink.json; unsupported identities and missing/unchecked scopes do
+not reproduce a failure. The bounded acceptance case uses a plain qenv
+producer/consumer counter checked by Quint. See DESIGN's "E8. External shrinking".
+
+Structured-lint follow-up (merged PR #11): text and JSON share one
+`gotogether.lint/1` report with typed rule-site findings, native source positions,
+fixes, inventories and requested checks marked pass/fail/blocked. Independent
+checks survive another target's failure. Completeness and exit status are derived
+from the report; static inspection does not establish trace conformance. The
+[executable walkthrough](lint-onboarding.md) covers planted mistakes, corrections
+and blocked/operational controls.
+
+Finite-choice follow-up (merged PR #10): I4's first bounded slice searches whole
+ordinary complete traces and confirms a selected original-action witness with
+Quint. JSON and TUI receipts distinguish exhaustive Go search from selected-path
+confirmation; unsupported scopes and exhausted bounds give no verdict. See
+[model-choice witnesses](model-choice-witnesses.md).
+
+Worker-completion follow-up (merged PR #9): no-work signal waits are scoped;
+grist watchers/relays/pollers and simlog senders count accepted work, callbacks,
+retry backoffs and paused obligations as active. Short bounds yield Unsettled,
+without a settle marker. A separate non-grist HTTP/SQLite cold-start rehearsal
+uses published modules and frozen model/binding, with real rerun shrinking and
+explicit incomplete/missing-evidence controls. See
+[the rehearsal](../internal/adoptiontest/http-sql/README.md).
+
+Diagnostic-evidence follow-up (merged PR #8): explicit binding selectors link
+model-authored outstanding intents to captured and native identities, preserving
+missing/ambiguous results in JSON. The TUI opens a scoped evidence list and exact
+captured-record inspector without moving the cursor or changing judgments. See
+[model-diagnostics-prototype.md](model-diagnostics-prototype.md#exact-evidence-links).
+
+Workload-phase follow-up (merged PR #7): gristsim named prerequisites require
+actual call outcomes and bounded query observations before later work. They
+replace unchecked prologues and inventory pacing sleeps. Failed preparation is
+unjudged workload evidence, never a model counterexample or mutant kill. JSON
+and navigation/TUI retain phase policy, timings and last observations. See
+[grist-workload-phases.md](grist-workload-phases.md).
+
+Model-preflight follow-up (merged PR #6): grist model checks and the generated
+witness share one nonwriting, structured catalog/source inspection. Mechanical
+changes and handwritten work stay distinct; generated updates retain review
+findings. JSON is read-only and discloses blocked checks and unperformed Quint
+typechecking. See [grist-model-preflight.md](grist-model-preflight.md).
+
+Run-profile follow-up (merged PR #5): driven explorations resolve execution and
+primary validation policies once, preserve per-row profiles in evidence, and show
+the actual navigation replay policy. Simulator invocations retain their effective
+horizons, caps and reached limits separately. Shared JSON/text/TUI presentation is
+documented in [run-profiles.md](run-profiles.md).
+
+Composition follow-up (merged PR #4): `gristtest.Composition.System` registers
+local model checkers, catalog peer links and an optional universal protocol check
+for every native history, including navigation. `Report.Composition` is canonical;
+normal conformance assertions include applicable checks. Wrong histories, wrong
+service bindings, unknown obligations and order limits cannot silently pass.
+Receipts preserve model-authored diagnostics. See [grist-composition.md](grist-composition.md).
+The implementation PRs are identified in the follow-up entries above; the
+single current navigation contract is nav/2.
+
+Check-receipt first increment (merged PR #3): validation reports and run
+navigation share structured statuses, ordering-search limits and assumed effects
+through validate/receipt. Whole-run receipts remain independent of cursor state;
+all current navigation producers emit required receipts (nav/2, current only). Grist
+composition aggregation is included by PR #4. See [check-receipts.md](check-receipts.md).
+
+Evidence freshness follow-up (included in this branch): `GOTOGETHER_SESSION` labels
+exploration evidence and run manifests. `evidence -session` filters the
+suite before coverage and expectation checks; unscoped completeness checks
+require explicit `-history`. Use a fresh ID and `go test -count=1`.
+
+**As of 2026-10-31 (stored-log-regressions branch).** GR4's first composition experiment is implemented
+(HISTORY "GR4: the first composition experiment") on the GR3 slice 5
+baseline. This prototype branch aligns published modules' core pins at
+`ff1a24e2` so finite initialization witnesses and their published report schema, complete calibration trajectories, checked recovery aggregation, interrupted lock waits, SQL cancellation, snapshot-checkpoint validation/navigation, scoped worker completion, diagnostic evidence, workload phases, shared preflight-format metadata,
+run profiles, finite-choice witness evidence, structured lint emitters, component shrink identities, composition and nav/2
+contract work outside go.work; the
+merged declared-call span increment did not require a core-pin bump. The
+checkpoint slice updated the pins for navigation; the lock-wait slice advances
+them again so published SQL consumers share the terminal-wait contract; recovery
+aggregation advances them for the error-returning API used by Hegel and sizing.
+The calibration follow-up advances them again for checked trajectory construction.
+Finite initialization advances them for shared receipt evidence and TUI previews.
+**Nothing is tagged**: every module is pre-release,
+published modules require each other at pseudo-versions, and breaking
+renames still land (R5 waits for the maintainer).
+
+The first GR4 composition increment is built on that baseline: acyclic
+peer graphs, shared services instantiated once, and a three-service
+experiment with per-service models plus posting conservation. A combined
+protocol model and causal projection (`gristtest.ProtocolSteps`) are built, with missing, duplicate and premature-posting
+contrasts. `CheckProtocolOrders` now explores bounded alternative causal
+orderings, distinguishing counterexamples, exhaustive checks and limit
+exhaustion. See [grist-composition.md](grist-composition.md). The maintainer's direction:
+correctness first, then composition and an adoption trial; keep APIs
+flexible. The agent-assisted Goo trial now validates the core modeling
+workflow in an independently maintained library (not grist adoption):
+[PR and passing CI](https://github.com/casselc/goo/pull/1). The first
+[GR3 slice 6 increment](grist-call-spans.md) is implemented: a lossless
+OTel round-trip over real HTTP for payouts -> bank, including lost replies,
+pending invocations and the generated freshKey mutant. Release hardening
+is not a gate.
+
+A [model-authored diagnostics prototype](model-diagnostics-prototype.md)
+now explores the inventory trial's unanswered-intent reporting friction.
+It uses Quint documentation annotations, without an extra binding mapping,
+and shares optional structured data across text/JSON/navigation/TUI. This
+is provisional work; explicit evidence selectors now link captured and native
+identities in JSON/CLI/TUI. Editor source ranges and broader checked-history
+coverage remain open. It does not change grist runtime behavior.
+
+#### 1. What works now
+
+The toolkit checks Go code against Quint models; [README](../README.md)
+is the front door, [ARCHITECTURE.md](ARCHITECTURE.md) the structure.
+
+| Area | What you can do today | Start at |
+|---|---|---|
+| MBT | Quint traces drive the code (`connect.Run`, `connect.Test`, quint-connect parity) | README §1, [examples/bank](../examples/bank) |
+| Hegel | Hegel drives and the model judges and shrinks, or the model drives and Hegel varies (qhegel, its own module) | README §2, skill `gotogether-hegel` |
+| Trace validation | steps recorded (`qobs`, `//quint:action`, OTel spans converted) and judged by a binding; `validate -json`, JUnit, SARIF; on-call reports with one record index, wall time, pod, trace id and a state diff | README §3, [instrumentation.md](instrumentation.md), DESIGN §68 |
+| Simulation | qenv: virtual time, crashable processes, Store, Queue, Service, Disk, qhttp, qsql, simlog doubles, fault kinds by name; `System.Explore`, Exhaust, PCT, sweeps, mutants (overlays and qmut), coverage by model step | README §4, [examples/hello](../examples/hello), skill `gotogether-faults` |
+| Published doubles | `qenv/simgrpc`, `qenv/kubesim`, `qenv/simlog/kafkalog`, `qenv/simlog/kinesislog` as modules; `qenv/simlog` in the core | api/simgrpc.txt etc., ci/consumer |
+| Metastability and sizing | qload simulation, qmeta's CTMC, `FindTrigger`, alert rules from qrole gauges; sizing from an app's own steps (`qmeta.Size`, grist's `<app> sizing`) | README §5, [examples/retrystorm](../examples/retrystorm), skill `gotogether-metastability` |
+| The Go evaluator | decides passing runs (quint judges failing ones); `simulate -graph` (a complete state graph: invariants proved for the instance, cross-checked against quint's samples), liveness as lassos under per-action weak fairness, deadlocks, possibles and scenarios, partitioned validation of serial logs (`partition:`), `gotogether compile` + `validate -compiled` with no Node or quint | DESIGN §56, §61, §62, §66, §64; [tutorials](tutorials/README.md) |
+| Model claims in tests | `qtest.Model` with `qtest.Proves`, `qtest.Refutes`, `qtest.Live`, `qtest.NoDeadlocks`, `qtest.Possible`; explicit quantifiers on run claims (`Some`, `All`, `None`, `qtest.Not`) | qtest/modelclaims.go, DESIGN §67, §69 |
+| grist | event-sourced framework checked by its model: events with upcasters and rolling versions, read models with snapshots, commands, rules, queries, processors, declared calls, the HTTP API, `grist.Main`, memstore, simstore, sqlstore (SQLite, PostgreSQL, qsql), the generated model and bindings, `grist new`, gristtest's harnesses; GR10 slices 1, 2, 3, 4, 6 (identity, probes, drain, rolling restarts, failover and `<app> resume`, `catalog -diff`, sizing) | [grist-guide.md](grist-guide.md), [examples/counters](../examples/counters), skill `grist` |
+| Packaging | the composite Action (`.github/actions/gotogether`), the image (`ci/image/Dockerfile`, built by CI, published nowhere), `gotogether doctor`, `gotogether init -kind http`, CI tiers | [ci.md](ci.md), DESIGN §64 |
+| Analyzers | quintvet (quintsim, quintweave, quintaction, quintctx with fixes), golangci plugin, JSON Schemas for bindings and rule files | qanalysis/, [agents/analysis.md](agents/analysis.md) |
+| Tutorials | five guided pages with real output: prove it, liveness, possibles and scenarios, grist on Kubernetes, production at volume | [tutorials/](tutorials/README.md) |
+
+#### 2. Done in this push (2026-10-28)
+
+About 200 commits since 2026-10-28 00:00 (`git log --oneline
+--since=2026-10-28`). Each line is one item; the commit is the main one
+(several items have follow-ups). Detail: HISTORY's entries from "Tenth
+review" on.
+
+| Item | What | Commit |
+|---|---|---|
+| H1 | the Go evaluator decides passing runs; D3 compile cache | 8178000, 54c27fd |
+| H2 | a rejection names its false conjunct with values | 4c11232 |
+| H3 | `Recorder.Close` closes its sink, returns its error | 2ccdd9c |
+| H4 | one vocabulary (grist's caller, Guarantee, mutants in the core) | 1cdd4a4, 36b2876 |
+| H5 | the woven ABI, grist's generator hidden | efd04a7, 9cf63bb |
+| H6 | the grist path at the front (`gristsim.System`, ShortSeeds, warnings) | 3811902 |
+| H7 | upcasting and snapshots; the doubles published | 65e5d23, 3c43801..fe4d368 |
+| P1 | blocking rules in grist | 007ec6e |
+| P2 | the state-graph explorer (`simulate -graph`) | 9012f7a |
+| P3, P4 | possibility and scenario claims | 74fe3b0, c7f7743 |
+| P5 | navigators (`gotogether nav`, the qnav TUI) | fc4b2d4, 3298ffa |
+| P6 | liveness as cycles; examples/requeue | dc00ab8, f21ca9f |
+| P7 | grist's obligations generated | 9ec2918 |
+| P8 | skills in pavlov's shape, the migration skill | 6462d5d |
+| GR10 s1 | identity, probes, the drain | 1530f20 |
+| GR10 s2 | graceful termination, the lagging router, `gristsim.Cluster` | 5b0a0da |
+| GR10 s3 | store failover and restore, `grist.ErrRewound`, `resume` (with I25) | f626316, fd98f8a |
+| GR10 s4 | versions that roll (with I22) | 2c2747c |
+| GR10 s6 | sizing from the app's steps | 4703fc8, 09be377 |
+| I1 | a fixed upcaster refolds (fingerprint) | 3b20911 |
+| I2 | sound set folds in the evaluator | 4bdec87 |
+| I3 | `-graph` cross-checked against quint | 1471d77 |
+| I4 (first bounded slice) | finite whole-path search, original-action pinned replay and explicit scope/evidence | PR #10; f7194d8d |
+| I5 | ResolvePending keeps invariants if a placement can | fe01988 |
+| I6 | qhistory ignores an Unknown transaction's completion | 5cc4785 |
+| I7 | cross-recorder real time named in the verdict, a skew setting | 1b80ee0 |
+| I8 | liveness says what it checks | 4442276 |
+| I9 | verdicts state their bounds | 99009ca |
+| I10 | a fault site declared in a run is the run's | 64b99ce |
+| I11 | differential tests of qeval against quint; Rust integers read by type | 54326d3, ca859ac |
+| I12 (cancellation and admission) | process-group cancellation, `t.Context()`, two shared managed-command slots per user cache | 6fcfdfb, eca11bc7 |
+| I13 | formats and the woven ABI versioned; `gotogether doctor` | 83bca60 |
+| I14 | one core version (`ci/bump-core.sh`, the consumer job) | e93b353 |
+| I15 (part) | shuffled tests, wider race job, qhegel fd capture, pinned staticcheck and measured grist short/full tiers | d0afb10, eefab5fc |
+| I16 | explicit quantifiers | 03fa005 |
+| I17 | `model.Simulate`, model claims, `qtest.Possible` a claim, `gotogether.binding/2`'s one search bound | c40570f, 55d2504 |
+| I18 | validate split: `validate/model`, `validate/navproto`; `qtrace.Record`, the knob rule (DESIGN §71) | 263333b and I18's rest |
+| I19 | validation at volume: `partition:` | f27adb0 |
+| I20 | on-call reports, `-json` | a985abe |
+| I21 | the Action, the image, `compile`/`-compiled` | 1c0e469, 7173581 |
+| I22 | versions that roll, the snapshot audit | 2c2747c |
+| I23 | sqlstore reads in one query | 1d0166a |
+| I24 | grist's reads at scale: the memo, anchored snapshots, metrics, pruning, App options | 3fd4de5 |
+| I25 | grist's operations basics | fd98f8a |
+| I26 | the generator warns on what an app forgot | a6be970 |
+| GR3 s4 | lints for a grist application's own code (lint -sim over its files, quintraw) | 26b8e47 |
+| GR3 s5 | peer calls: actors naming the App, `grist.NewPeer`, `gristsim.Config.Peers`, `gristtest.Linked`, examples/payouts | HISTORY "GR3 slice 5" |
+| GR4 first | acyclic peer graphs, shared peers, three-service conservation experiment; Linked matches command identity | HISTORY "GR4: the first composition experiment" |
+| GR4 protocol | ProtocolSteps and a combined causal model; missing, duplicate and premature posting contrasts | HISTORY "GR4: a combined protocol model" |
+| GR4 inventory trial | three-service public-API rehearsal, three bugs, replay and friction report | examples/inventory-grist/TRIAL.md |
+| GR4 order search | bounded universal causal ordering checks; counterexample identities and explicit exhaustion | HISTORY "GR4: concurrent protocol orderings" |
+| I27, I34 | grist's user guide; ARCHITECTURE.md, example tracks | b382007, c41bd82 |
+| I28-I32 | the first hour: a catch shown, progress, reserved names, reports in words, help | 15cf741, c0eb502, eb1520b, acd5fb1 |
+| I33, I36 | `gotogether init -kind http`, analyzers that fix, JSON Schemas | 9708379, 79c034c, dce024f |
+| I35 | five tutorials | 70f1839 |
+| I37-I41 | recording, Reconstruct, qeval, scheduler costs; nightly benchmarks | 3047ddb, 075ce15, cbd8849, 089889b, 65bfb9d |
+
+#### 3. Half done: exactly what remains
+
+In the order to take them. Sizes as in ROADMAP (S under a week, M two to
+four, L more; agent-days in practice).
+
+1. **I4's broader scope.** Finite ordinary-trace choices, including initialization,
+   are implemented on this branch. History/hidden/partition/snapshot/resume/within integration,
+   broader IR rendering and tighter enumeration resource bounds remain; select
+   further work from adopter evidence. See [the scope](model-choice-witnesses.md).
+2. **I35's rest.** Command/flag freshness and prove-it's first two hello
+   transcripts are checked. Expand explicit isolated walkthroughs only where
+   repeated setup/output friction warrants it; avoid a general shell runner or
+   wildcards that can hide changed verdicts. Remaining designer's
+   pages: wallet-grist's three scenarios with a too-strict model mutant,
+   a migrate-payments front page with stage times, wallet to wallet-grist
+   as the migration skill's second walk-through, kind for grist (waits
+   on GR10 slice 9); run-side hot cycles and strong fairness when built.
+3. **I12's remaining supervision boundary.** Shared admission now coordinates
+   two managed commands per user sharing a Unix cache directory. Abrupt
+   owner death can still orphan evaluator grandchildren; do not claim a bound
+   on those workers without a separate supervision design.
+4. **I15's rest (S).** Pinned static analysis and grist's measured short/full
+   tiers are implemented. The Go-floor decision and corresponding build check
+   remain separate; ask hegel-go for an `io.Writer` option.
+5. **I19's incremental invariants.** A log whose entities interact
+   cannot be partitioned and is still judged at the sum of its states;
+   judging only the entries a step changed would make entry-wise
+   invariants linear. Also the million-step example.
+6. **I20's remaining deployment context.** Checked portable export now removes
+   manual model/binding staging from the jobqueue runbook. A store-side grist
+   step's pod still needs G8's location; packaging cannot invent deployment
+   provenance that was never recorded.
+7. **I25's leftovers**, each concrete in ROADMAP: (2) an admin command listing and re-driving `grist.failed`
+   dead letters; (3) `resume -from P` with a model step
+   `gristSkipped`; (4) durable rewind detection across entirely restarted
+   nodes (effect-key identity is now independent of rewind memory); (5) the Store's connection faults; (6) slice 5's DSN reopen
+   on an authentication failure. Then the guide's ops section (I27).
+8. **I21's publishing.** Publish the image and tag the Action (after
+   R5's tags); the CI-budget reference repository and pending-call resolution
+   under `-compiled`. Compiled manifests and completed-history linearization
+   are implemented.
+9. **H7 and I22 leftovers.** Schema changes beyond upcasting (an event
+    split, a field whose meaning changed: grist.md §9); a processor
+    reading behind the head refolds from the start when the only
+    snapshot is later than its trigger; a new event type stays readers
+    first with no API to hold it back (an app's flag, grist-platform
+    §3.6); crossdb's kube interceptor onto kubesim (GR7's).
+10. **GR10's remaining slices** ([grist-platform.md](grist-platform.md)
+    §9; the order there: 8, 9, 10, with 5 and 7 alongside, 11 last):
+    - 5, configuration and secrets (M): `FileSource`, `-db-file` with
+      reopen, TLS from files, configuration as commands, projections,
+      certificate expiry; library; mutants `certOnce`, `flagFromFile`.
+    - 7, load and the scaler (M): a gristsim load, an autoscaler in
+      qload, sizing's HPA rows.
+    - 8, manifests and the lint (M): `<app> manifests`, `-lint`,
+      kubeconform, `grist new` given manifests.
+    - 9, gotogether-kube and the kind tier (M-L), counters on kind with
+      PostgreSQL.
+    - 10, the canary gate (S-M), an Argo Rollouts AnalysisTemplate.
+    - 11, sharding (M-L, after grist slice 3's leases).
+11. **Small leftovers**, one line each in ROADMAP: I2's `examples/shards`;
+    I11's broader typed-state/model-step generation beyond the
+    completed bounded two-integer joint-state corpus; I23's PostgreSQL benchmark in
+    CI; I27's grist/README.md (after grist's tag); I36's gopls note;
+    I37/I40's goroutine-id lookups (19-26 µs on Thread and
+    Background paths); I39's label allocations (for I50); I41's nested
+    modules' benchmarks and examples/perf.
+
+#### 4. Next experiments, in recommended order
+
+| # | Item | Size | Why here |
+|---|---|---|---|
+| 1 | Select a cross-facet capability from actual usage friction | M | recording consolidation closes measured duplicate lookup and false thread ownership issues; further scope should come from a concrete new contract blocker rather than adjacent comparison fixtures |
+| alongside | Further adoption-driven capability | M | the bounded LRU MBT trial now supplies installed non-SQL evidence; choose the next facet from independent usage or a new demonstrated blocker rather than adjacent fixtures |
+| deferred | I25: virtual physical-session capacity | M | native role-quota refusal/recovery is checked; nondeterministic pool callbacks and idle-session ownership still prevent a faithful virtual max_connections claim |
+| deferred | I19: incremental invariant design or further storage changes | M | two bounded memory improvements and wider profiles are available; require a representative volume target and dependency proof before expanding the evaluator |
+| alongside | Independent-maintainer use or a concrete new contract blocker | M | agent-assisted Goo Read rehearsal is not independent adoption; use real friction to choose further capabilities |
+
+Use a tick, tock, consolidate cadence: general-purpose capabilities, focused
+feature or contract depth, then structural/usability/performance work selected
+from evidence. These are priorities rather than a fixed quota. The LRU rehearsal
+rotates to non-SQL MBT and its strict-config fix closes actual setup friction.
+Keep one current API/format; baseline pins preserve reproducible evidence, not
+legacy compatibility or a promise to support old consumer workflows.
+
+Balance general framework work with facet depth. Logical capacity, native
+PostgreSQL quotas and bounded COUNT(*) were consecutive storage slices.
+Installed-skills portability rotates back to general onboarding and fixes
+a demonstrated consumer defect: a repository-relative documentation link
+resolved outside the installed tree. Portable authored URLs and guards solve
+that at the source, shared by checkout and installed guidance. The bounded
+clock example now makes existing assumptions concrete and exposes two output
+gaps. Shared receipts now retain clock assumptions; searched-history cursor
+navigation is a larger separate feature requiring adoption evidence. Rotate
+to observed consolidation work after the non-SQL consumer trial. Further SQL
+syntax, virtual physical sessions and evaluator redesign need fresh adoption
+evidence.
+
+The counted-values trial is now implemented in
+[internal/adoptiontest/goo-counted-values](../internal/adoptiontest/goo-counted-values/README.md).
+Its independent mathematical model and real executor driver were frozen only
+after native JSON, TypeScript ITF and bundled replay preserved exact values.
+The wrapping-sum source contrast produces a native sequence-4 mismatch; missing
+observations remain evidence errors. Native record inspection and relocated
+replay preserve the result without inventing TypeScript's absent failure state.
+The existing small-count Hegel tests remain credited, and no production bug or
+new core decoder defect is claimed. See its FRICTION.md before proposing further
+numeric or backend work. Ordinary counts, SQL, live ClickHouse and UI behavior
+remain outside this bounded trial.
+
+Do not start all tracks at once. Worker completion and the bounded HTTP/SQLite
+rehearsal are merged in PR #9; finite pinned choices in PR #10, structured lint
+in PR #11, the first component-aware shrink slice in PR #12, and the library
+starter/property-role fix in PR #13. This branch records a bounded adaptation of
+the published starter to Goo's strict definition reader. It confirms this
+workflow for the selected contract and identifies setup/authoring friction.
+It also fixes the demonstrated graph-report data gap, without adding a runtime
+adapter. Model and CLI machine output share native facts through `Report.Doc()`;
+next work should address another observed blocker rather than expanding a catalog. The next capability should follow an
+actual blocker or independent-maintainer use; outbound streams remain a
+candidate only if that evidence requires them. Broader peer or
+conformance shrink identities still need typed evidence and an adoption case.
+Further inventory/diagnostic expansion, cycles, clusters and platform facades
+wait for evidence. GR10c down-process availability is distinct from GR10b's
+active-worker accounting; both now contribute to honest settlement.
+The fresh tail-membership exercise adds stateful external-library evidence
+without a new adapter; do not start another adjacent fixture in place of that
+known runtime correction.
+
+The span round-trip and inventory trials retain explicit limits; they do not
+establish generic third-party HTTP inference or unaided onboarding. R5 is
+available when the maintainer wants tags; no compatibility commitment is needed
+for these prerelease iterations. The review and lessons are recorded in
+[HISTORY](HISTORY.md#breadth-and-core-lessons-review-2026-10-30).
+
+#### 5. Decisions for the maintainer
+
+From ROADMAP's "For the maintainer" (each with its recommendation
+there). **Open:**
+
+- **Tags and v0.1 (R5).** v0.1.0 of every published module once I1-I10,
+  I12-I14 and I16-I18 are in; tag order gosim, core, qweave, qhegel,
+  qanalysis, qgosim, then grist, qnav and the doubles, `<dir>/v0.1.0`.
+  The original cancellation and admission slices are implemented. Whether I12's
+  remaining abrupt-owner supervision boundary and I15's rest must come first
+  is the maintainer's call; no tags are requested by this development slice.
+- **The "grist" name.** A codename since grist.md §10.5; recommended:
+  keep it and drop "codename", or rename in one commit before an
+  adopter. A trademark check is the maintainer's.
+- **Stability labels** per package (stable at v0.1: qobs, qobshttp,
+  qtrace's Step and Trace, qrun, qrole, woven, the step log, the binding
+  YAML; the rest experimental).
+- **One core module or a runtime module**: recommended one module at
+  v0.x, carve a runtime module after GR4-GR7.
+- **The Go floor**: the old 1.25 lowering proposal is superseded by the shared
+  current 1.27.3 floor and real runtime-hook admission.
+- **Governance**: a CHANGELOG by module, a short CONTRIBUTING, the
+  weekly breaking renames ending at R5.
+- **Upstream reports**, drafted, not filed:
+  [quint's REPL import cycle](upstream/quint-repl-import-cycle.md),
+  [quint's Rust integers as bignumber.js records](upstream/quint-rust-bignumber-itf.md);
+  also worth filing: quint's evaluator not killed with node (I12 works
+  around it), hegel-go's output `io.Writer` (I15).
+
+**Already decided** (do not reopen): the format policy (2026-10-28:
+pre-release, a reader reads the current major only, a file naming none
+read as the current; after v0.1 the maintainer decides; DESIGN §63);
+H's and P's items (2026-10-28, as recommended); bare expectations' quantifiers (I16, done); GR10's slice
+order (slice 3 beside 4, done); GR10's six decisions of 2026-10-28
+(grist-platform.md §10: no Kubernetes Lease; 45 s grace; a rewind fails
+closed until `resume`; no app binary links client-go; sizing into
+manifests only with `-sizing`; the canary an Argo Rollouts Job analysis
+or HTTPRoute weights); GR3's five design questions
+(grist-instrumentation.md); the standing decisions at ROADMAP's top
+(nothing released, crashes per step, the global recorder opt-in, MIT).
+
+#### 6. Known issues and rough edges
+
+- **I35's list, reported not fixed** (HISTORY "I35: tutorials"): a
+  passing negated claim is not in the test's
+  summary line; hello's mutant report says "schedule 3" where its nav
+  command says `schedule=1:2`; the quint cache grows unbounded (3.2 GB
+  seen); `serve -steps DIR/` fails when DIR does not exist.
+- **Slow tests.** validate costs about 960 CPU s and internal/qeval
+  about 530 on CI (ci/test-times.txt). Locally under load, `go test
+  ./validate/` can pass go's default 10-minute timeout: use `-timeout
+  30m`, as CI does. counters' faulty `TestPayoutTwoNodes` needs 20
+  seeds per push. Under a shared machine, compare ratios, not seconds.
+- **Flaky in the past, now guarded:** `TestFaultPoints` (fixed by I10;
+  the shuffle job catches the next one). CI's last red runs (548-550)
+  were a stale qnav golden and the TypeScript backend's missing diff,
+  both fixed.
+- **After a core change another published module needs:** push the
+  core, then `ci/bump-core.sh <commit>` and push again;
+  `TestCorePinsAgree` fails until every pin agrees (AGENTS.md,
+  "Requirements and commands").
+- **Worktrees share `git stash`.** The stash is per repository, not per
+  worktree: an agent in one worktree can pop another's. Commit to a
+  branch instead, or name stashes and check `git stash list` first.
+- **Stale docs.** docs/grist.md's status paragraph lists GR10 slices 1
+  and 2 only (3, 4 and 6 are built too); ROADMAP's I10, I12 and I15 lack
+  their "done" marks (section 2).
+- **The real tier's assumptions** (the adopter's B4): OTLP files only, no
+  collector; spans must not be sampled out; cross-host time assumes 1 ms
+  unless `-skew` says otherwise (a per-pair skew is G8's).
+
+#### 7. How to resume
+
+1. Read [AGENTS.md](../AGENTS.md) (conventions, gotchas) and the area's
+   page under [agents/](agents/); ROADMAP's item for what you pick.
+2. Work on a branch in a worktree from origin/main and open a pull request.
+   Preserve published commit ancestry when integrating main. Merge only after
+   the CI workflow has completed successfully for the exact PR head and every
+   expected check has passed; the early repository gate alone is not enough.
+3. Check before pushing:
+   ```sh
+   ci/preflight.sh                    # shared repository contracts; no native tools
+   go vet ./...                       # plus tests appropriate to the changed modules
+   go test -short ./...                # the root module, a few minutes (quint on PATH)
+   go test -short -timeout 30m ./validate/ ./qtest/   # the slow two, if touched
+   GOWORK=off go test ./skills/ ./internal/docsnippets/   # after doc or API changes
+   cd examples/hello && go test -short ./...           # each example is its own module
+   ```
+   A changed exported API: `GOTOGETHER_UPDATE_API=1 go test
+   ./internal/apisurface/` and a CHANGELOG line. Other modules'
+   commands: [agents/commands.md](agents/commands.md).
+4. CI ([ci.yml](../.github/workflows/ci.yml)): `test` (the core: -short
+   with CPU budgets, shuffle, race, TypeScript and GOTOGETHER_CHECK
+   variants, every example's module), `workspace`, `consumable` and
+   `consumer` (outside-in builds), `doubles`, `grist`, `qnav` and its
+   tapes, `gosim`, `qweave`, `edgepublish`, the Action's two jobs, the
+   image, and per-example jobs. The nightly
+   ([nightly.yml](../.github/workflows/nightly.yml), 03:17 UTC): fresh
+   seeds, core mutants, fuzz, qeval's differential batch, quint
+   verify on every binding, evaluator shadows, volume (10⁵ steps), benchmarks against a
+   day before. A package costing twice its ci/test-times.txt line fails.
+5. Watch the PR head's full CI to green; a red run is the next task. Recheck
+   the head and completed workflow before merging.
+
+**Where the reviews came from.** Each review was a set of agents given a
+role (architect, usability designer with newcomers, formal-methods
+expert, adopter, Go specialist) at a commit; their reports lived in a
+session scratchpad and are not kept. HISTORY records each review's
+findings and the synthesis; ROADMAP's I track is the eleventh's (at
+`65e5d23`). Its points not yet in any item, or only in a bold idea:
+
+- *Adopter*: ownership cost (someone must write and own each model and
+  binding; about 15 terms of vocabulary; the docs are agent-first, so a
+  platform team writes its own golden path); grist's production binary
+  imports qenv, which auditors will question; 45 go.mod files; no
+  timers or sagas against Temporal (GR8), no projections UI against
+  event stores. Examples it would want: an open-source controller's
+  issue reproduced (I48), a Postgres job-queue library (River-like), grist
+  end to end on kind with a managed-style PostgreSQL (GR10 slice 9),
+  an OSS service brought under a model in a day.
+- *Go specialist*: the goroutine lookup still costs tens of µs on the
+  Thread and Background paths; one option style per kind of knob (I18's
+  DESIGN rule); gorelease or apidiff once tags exist; examples/perf, a
+  hot-service recording benchmark at `-cpu 1,4,8`, an idiomatic
+  `database/sql` adapter, qeval at 10⁵-10⁶ states.
+- *Formal-methods expert*: refinement, symmetry, partial-order
+  reduction, fairness choices, Elle's other workloads, inductive proofs
+  and sampling confidence are I42-I45 and I9's nightly line; its
+  examples (shards, a lock service live only under strong fairness,
+  Elle on SQLite, kvstore under skew, raftkv Exhaust vs PCT) are each
+  item's example.
+- *Architect*: `SnapshotEvery` the one grist setting in a context (I24: done, App options);
+  record kinds as flags on `qtrace.Step` (I18); a runtime module (the
+  maintainer's).
+- *Designer*: a `grist doctor` checklist (I26: done, the generator's warnings); nav in the
+  browser (I47).
+
+### Archived roadmap opening
+
+### Roadmap
+
+What is open. What is done (the A–D, U, V, W, R1–R4, X, Y, Z, T, E and G tracks,
+the move to gotogether) and the reviews that shaped it are in
+docs/HISTORY.md; why the code is the way it is, in DESIGN.md.
+
+Standing decisions, with the maintainer:
+- Nothing is released yet. Tags wait for the maintainer (R5).
+- Crashes are considered at every scheduling step (`NemesisEvery` is
+  opt-in); `qenv.Service`'s crash window is on by default.
+- The global recorder is opt-in (`qtest.Global()`).
+- Heavy integrations stay in separate modules; the core keeps its small
+  recording, YAML, platform and CLI module-parser dependencies.
+- MIT license.
+
+Current order (reviewed 2026-11-06): this is a prerelease library.
+Correctness and usable core contracts come before release machinery. The bounded
+composition, Goo lifecycle, declared-call span, workload-phase and diagnostic
+experiments have answered their initial questions; rotate away from inventory
+and further diagnostic breadth. Breaking changes are allowed, without parallel
+legacy formats.
+
+Use a tick, tock, consolidate cadence: general framework capability, bounded
+feature or contract depth, and evidence-driven structural/usability/performance
+work.
+The next general framework slice follows checkout's existing manual fault-order
+loop: ordinary scripted Explore correctly rejects incomplete scripts, while a
+bounded order sweep must retain unsuccessful attempts without pretending they
+prove impossibility. System.FaultOrders now samples directed pairs through the
+same engine, checks every attempt, and retains requested goals, bounds and native
+witnesses in existing evidence. Co-occurrence alone cannot establish both orders.
+After this slice, rotate away from more order modes until a new caller need
+justifies them.
+The subsequent stream facet returns to native client contracts: Kafka fetch errors
+must not become idle polls, and a partial batch cannot be discarded when another
+partition/shard fails. Both native readers retain records plus errors; consumer
+loops process the records before backoff. Broader broker features should follow
+another concrete production-client gap rather than more fault-order modes.
+The subsequent consolidation closes a reproduced suite-inspection omission:
+moving valid evidence's format member after its payload made strict directory
+inspection skip an unreached goal and pass. Evidence and manifest sniffers now
+share order-independent streaming discovery. Conflicting family headers fail
+before routing; unrelated traces remain excluded and version policy stays in
+the readers. This corrects input integrity without another coverage mode.
+The cold-resume audit also found dated direct-to-main push instructions and
+obsolete next-work descriptions; consolidate that handoff separately, preserving
+decision provenance and meaningful open boundaries.
+The installed LRU MBT rehearsal now covers a non-SQL consumer workflow
+and an isolated source contrast; the configuration typo it exposed is fixed by
+strict preflight and direct API migration. The consolidation slice threads
+caller-owned cancellation through model loading, checker construction, lint
+inspection and trace-schema recovery, with
+independently cancelable cache waits and retry after a canceled owner. The
+subsequent model-analysis slice closes a reproduced signal-loss boundary:
+model-diff waited for a gated compiler even after receiving SIGTERM. Context-first
+analysis APIs now carry cancellation through the existing compiler/cache path,
+managed subprocesses and cooperative evaluation, graph and liveness traversal.
+Live waiters retry after a canceled compile owner; reusable analyzers and cached
+IR retain no request context. Pure metadata, ordinary-validation evaluator
+entrypoints and go/analysis remain explicit separate lifecycle boundaries.
+The following facet-depth slice returns to I45 database history checking: explicit
+session precedence closes an untimed stale-read evidence gap. Session identity
+is caller-supplied, never inferred from recorder IDs; the checker retains typed
+cycle edges and is checked against independent serial replay. After the payouts
+exploration consolidation, the next general framework slice closes I21's compiled
+linearization boundary: completed concurrent histories can be searched and replayed
+from the artifact without external tools, under explicit evaluator-only evidence.
+Unsupported candidates cannot become negative proof, and bounds stay undecided.
+Pending-call resolution remains separate; rotate to another facet before expanding
+compiled search modes or adding automatic history capture.
+The general framework tick is the first bounded I42 model-behavior comparison:
+complete finite Go-evaluator graphs on explicit observations, with whole-prefix inclusion,
+separate resource bounds and native-replayed source witnesses. A non-storage
+handshake checks the contract. The recent model/source contrasts motivated this
+review tool; they did not establish an adopter blocker. A pinned historical hello
+completion change now exercises that workflow: state-sequence equivalence leaves
+named completion obligations separate. Its replay-ergonomics gap is addressed by
+portable confirmed-source artifacts and an original-hash source snapshot helper.
+Recording identity consolidation rotates back to the shared runtime: duplicate
+background lookup is removed without caching ownership or clocks, and filtered
+non-events stop claiming thread ownership. Further capability should follow an
+actual usage blocker before expanding comparison mappings or liveness.
+Two late repository-contract failures (help length and process-state scope) also
+justify a shared non-native preflight gate before CI fanout. It preserves full
+coverage while shortening feedback; this is evidence-driven consolidation, not
+a new product capability or a reason to expand adjacent fixtures.
+A subsequent cross-facet reporting correction follows a reproduced CLI failure:
+stdout JSON claimed pass/exit 0 before a requested report failed and the command
+exited 2. Shared delivery now keeps operational status and native evidence
+separate, attempts independent outputs, joins errors and refreshes saved reports
+before final stdout. This improves existing agent/CI contracts without another
+format, adapter or adjacent comparison fixture.
+The focused lint follow-up closes another reproduced request boundary: invalid
+positionals previously started inspection and flag failures bypassed JSON.
+Request validation now precedes target effects, using the existing lint report.
+After these reporting/request corrections, rotate toward an independently
+observed capability or facet contract rather than more output modes. A payouts
+CPU near-threshold failure did not justify a budget increase: the combined head
+passed all 36 checks, with payouts at 31.5 CPU seconds. Repeated cost growth needs
+per-test attribution. The payouts consolidation
+reuses noDuplicateCheck's existing exploration for cross-app link checks instead
+of repeating identical simulation and validation. Both models retain their
+separate explorations, all seeds and all claims; no budget increase or framework
+cache/revalidation API is needed. Warm paired CPU measurements showed no material
+improvement; fewer exploration calls alone do not establish an end-to-end speedup.
+The structural benefit is checking the same recorded runs for rejection and links.
+The I1 facet-depth slice completes library's deployment-history rehearsal:
+a buggy upcaster's persisted snapshot, unchanged-release reuse, corrected-release
+refold, and subsequent corrected-snapshot reuse across fresh processes. This
+exercises a known cache contract with actual application folds rather than adding
+another generic report feature. No runtime API or persistence-format change is
+needed; further scope should follow another demonstrated contract boundary.
+The following general framework slice closes I17's concrete test-configuration
+gap: counters copied the model tree and rewrote generated YAML just to choose a
+depth bound. ModelCheck.WithOptions now supplies copied test-local constants and
+search bounds to the existing engine; counters uses its generated files directly.
+Complete proofs, depth-only bounded proofs, state-cut unknowns and native-replayed
+refutations retain their existing meanings. No new format or second engine is
+needed. Further capability should follow another actual authoring/runtime gap.
+The consolidation review adds branch-projected graph benchmarks to the existing
+full-event workloads. I39's proposed parent-label reuse reduced projection calls
+but regressed all six short-run medians by 1.9–4.2% in four alternating pairs;
+production code is retained. The known duplicate work is not sufficient evidence
+for another implementation change. Future performance work needs representative
+end-to-end controls as well as operation counts; broader evaluator redesign
+remains deferred.
+The Go 1.27 adoption slice moves the shared live floor to 1.27.3 after the fork's
+runtime/standard-library port. Normal CI now exercises that one current family;
+the separate pre-port host-core admission job is redundant. Old admission results
+remain provenance, not a second compatibility target. Genuine hook semantics and
+fresh-process determinism must remain prerequisites for future major updates.
+The following bounded feature slice restores I17's lost twophase assertion with
+AllStepActionsReachable: each named action directly called by step must have a
+transition witness. Composite transitions count every roster action once;
+complete absence is unreachable, bounded absence unknown. This is named-action
+reachability, not syntactic branch or parameter-combination coverage. Canonical
+reports retain the same typed counts and scope. After this facet-depth slice,
+rotate toward a concrete general-framework gap or evidence-driven consolidation;
+do not expand reachability modes without a demonstrated caller need.
+The following consolidation admits the audit's remaining current-library
+candidates: live x/sys 0.49.0 requirements and external Orchestrion 1.15.0. It
+checks exclusive publication, replay exports and actual weaving, including the
+existing WaitGroup.Go hook through both engines. Free-form weaving guidance now
+links the central Go policy instead of retaining a stale runtime-family number.
+No new runtime facade or source compatibility branch is needed. Choose the next
+general-framework capability from a concrete authoring/runtime gap rather than
+expanding the just-completed reachability facet.
+The following general-framework slice implements the previously deferred
+model-analysis lifecycle boundary after a real CLI interruption reproduced lost
+cancellation. It changes the existing API directly, shares the compiler/cache and
+error-report paths, and preserves cancellation as operational failure rather than
+bounded absence or model refutation. Further graph/diagnostic modes are not
+justified by this work; subsequent depth or consolidation should follow an
+actual consumer contract or measured cost.
+Keep frozen baseline pins for reproducibility, not as legacy support promises.
+Further adapters, adjacent fixtures and per-pair clock APIs need usage evidence.
+
+The bounded completion-accounting slice (GR10b) is built: distinguish idle
+background workers from workers holding work, tested in plain qenv and a second
+asynchronous consumer. This is a known daemon/settlement classification boundary,
+not a newly demonstrated silent pass. Alongside it, a cold-start non-grist
+HTTP/SQLite rehearsal now exercises actual observations, a frozen model/source
+contrast, replay and real workload shrinking, with prefix and missing-evidence
+controls. See [the rehearsal](../internal/adoptiontest/http-sql/README.md). I4's first finite pinned-witness slice is implemented for ordinary complete
+traces, with whole-path search, original-action Quint confirmation and explicit
+unsupported/bounded outcomes. See [its scope](model-choice-witnesses.md). The first typed core lint report and executable lint walkthrough are also
+implemented: shared text/JSON evidence, rule-site findings and explicit blocked
+checks. See [the walkthrough](lint-onboarding.md). Broader onboarding and editor
+integration should follow concrete adopter friction before expanding choice modes.
+
+The first component-aware shrinking slice is implemented: named local/protocol
+obligations retain component/binding identity through real reruns, calibration
+and artifacts, with explicit refusal outside the supported receipt evidence.
+The non-inventory acceptance case is a plain qenv producer/consumer counter.
+The synchronous library starter and explicit scaffold property roles are merged
+in PR #13. A bounded adaptation now exercises Goo's strict definition-reading
+API through the published starter: 16 authored inputs, actual native API returns,
+a frozen contract and a later parent-planted source contrast. See
+[the rehearsal](../internal/adoptiontest/goo-read/README.md). This is
+agent-assisted evidence, not independent-maintainer adoption or general parser
+verification. No missing runtime adapter blocked it. Expected library rejection
+is observed domain data; tool and mutation-setup errors are separate failures.
+Go's module-cache overlay restriction was handled with an isolated dependency
+copy and alternate modfile, leaving the frozen baseline and external repository
+unchanged. It did expose a core machine-output blocker: graph completeness and
+counts required parsing human text. Canonical model-report documents now retain
+native graph scope, check bounds/proof coverage, reachability search extent and
+typed skip reasons; the rehearsal consumes those fields directly. No new runtime
+adapter was needed.
+
+A second [bounded real-library rehearsal](../internal/adoptiontest/goo-counted-values/README.md)
+checks exact large-count arithmetic through native recording, Quint/TypeScript,
+ITF, bundle and replay. The independent model/driver freeze precedes a planted
+wrapping-addition source contrast. Existing small-count tests remain credited;
+Rust/Go int64 refusals and absent TypeScript failure state remain explicit.
+That frozen explicit-helper trial did not demonstrate a decoder defect. A later
+no-mapping variant exposed float64 rounding in flat collection defaults; the
+core now preserves exact integer literals through those defaults and helpers,
+with explicit refusal of fractional/exponent inputs. Frozen artifacts stay
+unchanged. A follow-up static binding rule now diagnoses plain recorded-field
+templates for collection arguments, with omission/typed-conversion fixes and
+explicit outcome-expression exclusions. Further capabilities
+should follow independent use or a concrete contract blocker, rather than more
+adjacent numeric fixtures.
+
+A navigation integrity follow-up refuses non-loss reconstruction errors before
+anchoring an observed state, including within partitions and at cursor zero.
+Exact retries and existing loss/snapshot policies remain supported. The
+simulation budget follow-up now permits quiet completion on the final allowed
+turn, preserves stuck and horizon outcomes, and refuses another runnable turn or
+in-bound deadline advance before time or choices are consumed. The budget remains
+cumulative across calls. Recent fixes reinforce a shared rule: capture integrity,
+model conformance, runtime completion and execution limits are separate facts;
+none should stand in for another in JSON, TUI or claims. Further work should
+start with fresh end-to-end use or a demonstrated contract blocker.
+
+An adoption-driven generator correction removes a documented workaround:
+command order with argument order now gets a separate local model draw instead
+of shadowing its action. Argument and framework draw allocation preserves
+external vocabulary and rule records across store/client branches and
+reachability predicates. Native typechecking and executable witnesses retain
+the original catalog shape and cover related caller/helper collisions. This
+improves model authoring without an inference mode or a new format.
+
+Model reachability evidence now separates predicates holding from action
+sequences executing. Resolved goals and exact structured evaluator witnesses
+are available in report/2, including explicit unattributed transitions and
+backend/search bounds. A generated command-outcome predicate may hold initially
+without a command executing. Partition reporting now preserves source actor/partition identities and original
+versus optimized replay constants in shared receipts, with local instance IDs,
+clone/merge isolation and near-linear serialization. Text, JSON and TUI share
+these facts without changing the unread-constant replay optimization.
+Scaffold setup recovery now addresses the documented populated-directory failure:
+init/new retain files and print the failed and remaining setup steps plus
+verification, using shell-safe arguments and GOWORK=off. Write-only output uses
+the same complete plan; module/Go preflight and quoted replacement paths avoid
+predictable setup failures. A fresh [tail-membership capability exercise](../internal/adoptiontest/goo-tail-membership/README.md)
+now checks a distinct stateful contract: two snapshot slots, read-anchored expiry,
+ownership, immutable payload/provenance and atomic multi-reference resolution.
+The model/observer freeze precedes a planted exact-expiry defect; native mismatch,
+missing-evidence refusal and relocated replay preserve separate facts. The full
+native outputs remain alongside lossless model projections. Existing Goo tests
+retain credit, and the authored histories do not establish exhaustive verification
+or independent adoption. No new core API was needed. GR10c now addresses the
+documented down-process settlement boundary: ordinary Settle requires all
+registered processes up; SettleCore applies that requirement and pending-task
+accounting only to its selected processes plus process-free clients. Blocked
+outside-core waits follow the same scope, while scheduling and global step
+limits remain unchanged. Typed execution facts retain down-process identities
+without inferring business work from killed goroutines or weakening eventual
+properties. Choose further work from independent use or a concrete blocker.
+
+S11's skipped middle-snapshot gap is implemented in PR #15:
+later snapshots check the whole replayed state and cannot reset it. The first
+snapshot retains its lost-head initialization role. The merged I45 increment (PR #16)
+closes a separate database-history omission: known committed appenders that no
+external read observed still constrain reads. This catches strict stale reads
+and write skew without inventing unseen writer order or Unknown completion.
+The next runtime slice fixes interrupted database lock waits: rolled-back or
+reset transactions wake independently of an unrelated lock holder, and explicit
+SQL cancellation retains its correct result after a yielding operation. This
+supports existing services without adding a pool or timer facade.
+Further shrinking, lint, editor and onboarding breadth still
+needs concrete blockers. Existing streams already covers simulated, Kafka and Kinesis
+tiers; a new outbound facade still needs evidence. Do not start all these tracks at once. Tags remain the maintainer's
+call. See HISTORY's "Breadth and core lessons review, 2026-10-30" for tradeoffs.
+
+GR4's first increment is built: acyclic peer graphs, one store/node/API
+per peer, shared peers instantiated once, per-service model judgments
+and an independent end-to-end posting check (docs/grist-composition.md).
+A combined causal protocol model is built over the same
+histories (`gristtest.ProtocolSteps`), including missing, duplicate and
+premature-posting contrasts. Bounded universal order search now checks
+concurrent extensions with explicit exhaustion and counterexample identities.
+The inventory-grist adoption rehearsal is built: cancellation and
+confirmation at a shared inventory owner, three planted bugs, local and
+combined checks, and a friction report. Order-specific obligation diagnostics and exact evidence links are built;
+named prerequisite phases are also built
+with required outcomes, real query observations and explicit fault policy
+(docs/grist-workload-phases.md). Broader per-service configuration, cycles,
+clusters and rollouts need adopter evidence.
+The independent Goo lifecycle modeling trial is validated in
+[casselc/goo#1](https://github.com/casselc/goo/pull/1): two tenants and two
+immutable generations, real kernel APIs, three source mutants shrunk to
+2/6/3 operations, and passing consumer and repository CI. It found no
+production defect within its bounds. This agent-assisted trial validates
+the core workflow in an independently maintained library; it does not
+establish unaided onboarding or grist adoption. The bounded GR3 slice 6
+experiment is now built in payouts; review its [results and remaining
+limits](grist-call-spans.md#result-of-the-first-increment) before expanding it.
+A provisional [model-authored diagnostics experiment](model-diagnostics-prototype.md)
+is in progress: typed Quint documentation annotations associate a checked
+property with its outstanding-intent value, without another YAML mapping.
+The inventory missingRelease witness feeds structured text/JSON/TUI details.
+Explicit binding selectors now resolve captured/native identities in JSON, CLI
+and TUI without changing judgments. Developer-editor integration and broader
+checked-history diagnostics remain open, but are not the next expansion.
+The earlier tracks below retain their item identifiers and technical dependencies; their historical release
+recommendations do not override this prerelease order.
