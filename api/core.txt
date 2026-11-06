@@ -1929,6 +1929,7 @@ type Claim interface
     String() string
 type Evidence struct
     field Format string `json:"format"`
+    field FaultOrders []FaultOrderEvidence `json:"faultOrders,omitempty"`
     field Profiles []runprofile.Profile `json:"profiles,omitempty"`
     field Executions []runprofile.Execution `json:"executions,omitempty"`
     field Compositions []receipt.Composition `json:"compositions,omitempty"`
@@ -1987,6 +1988,37 @@ type Fault struct
     field Name string
     field Recorded bool
 type FaultMap map[string]func(s *connect.Step) *Fault
+type FaultOrder struct
+    field First qenv.Scripted
+    field Second qenv.Scripted
+    field Exploration *Exploration
+    field Budget int
+    field Status string
+    field Witness string
+type FaultOrderAttempt = evidence.FaultOrderAttempt
+    field Run string `json:"run"`
+    field Seed *uint64 `json:"seed,omitempty"`
+type FaultOrderConfig struct
+    field Faults []qenv.Scripted
+    field Seeds int
+    field ShortSeeds int
+    field Expect func(first, second qenv.Scripted) []Claim
+type FaultOrderEvidence = evidence.FaultOrder
+    field First FaultSpec `json:"first"`
+    field Second FaultSpec `json:"second"`
+    field Budget int `json:"budget"`
+    field Attempts []FaultOrderAttempt `json:"attempts"`
+    field Status string `json:"status"`
+    field Witness string `json:"witness,omitempty"`
+type FaultOrderResult struct
+    field Orders []*FaultOrder
+    method (*FaultOrderResult) Evidence() *Evidence
+type FaultOrderSpec = evidence.FaultSpec
+    field Kind string `json:"kind"`
+    field Option int `json:"option,omitempty"`
+    field Name string `json:"name,omitempty"`
+    field After int `json:"after,omitempty"`
+    method (FaultSpec) String() string
 type Judges struct
     field Evaluator int `json:"evaluator"`
     field Confirmed int `json:"confirmed"`
@@ -2128,6 +2160,7 @@ type System struct
     method (System) CheckCases(t testing.TB, workflow string) CaseCheck
     method (System) Exhaust(t testing.TB, b Bound) *Exploration
     method (System) Explore(t testing.TB, cfg ExploreConfig) *Exploration
+    method (System) FaultOrders(t *testing.T, cfg FaultOrderConfig) *FaultOrderResult
     method (System) FaultRates() qenv.Rates
     method (System) FollowTraces(t testing.TB, trace connect.Config, faults FaultMap) *Exploration
     method (System) Fuzz(f *testing.F, seeds ...[]byte)

@@ -261,6 +261,16 @@ func creatorID() (int64, bool) {
 // it, qtest's workflows ask it and the runs' FaultNames. Process-wide.
 var KnownStatic = func(string) bool { return true }
 
+// KnownStaticKind reports whether an exact fault kind (not an option or prefix)
+// was declared outside a run. qenv installs its registry-backed implementation.
+// Process-wide; reads declaration metadata, not one run's names.
+var KnownStaticKind = func(string) bool { return false }
+
+// KnownFaultOption reports whether a declared fault kind has a nonnominal
+// option with this name. Option names are immutable once declared.
+// Process-wide; reads immutable declaration metadata.
+var KnownFaultOption = func(string, string) bool { return false }
+
 // FaultNames are what one run declared or chose: fault kinds, their
 // options (kind.option) and nemeses (nemesis.<name>), as reports print
 // them. A name another run's double declared is not one of them, so a
@@ -271,12 +281,17 @@ var KnownStatic = func(string) bool { return true }
 type FaultNames struct {
 	mu    sync.Mutex
 	names map[string]bool
+	kinds map[string]bool // exact kinds, separately from kind.option names
 	sites map[string][]string
 }
 
 // AddSite notes a site of fault kind, and the kind.
 func (f *FaultNames) AddSite(kind, site string) {
-	f.Add(kind)
+	if strings.HasPrefix(kind, "nemesis.") {
+		f.Add(kind)
+	} else {
+		f.AddKind(kind)
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.sites == nil {
@@ -311,6 +326,30 @@ func (f *FaultNames) Add(names ...string) {
 	for _, n := range names {
 		f.names[n] = true
 	}
+}
+
+// AddKind records an exact fault kind, preserving its distinction from a
+// kind.option name when a workflow requests a specific scripted target.
+func (f *FaultNames) AddKind(kind string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.kinds == nil {
+		f.kinds = map[string]bool{}
+	}
+	if f.names == nil {
+		f.names = map[string]bool{}
+	}
+	f.kinds[kind], f.names[kind] = true, true
+}
+
+// HasKind reports whether this run declared or chose this exact kind.
+func (f *FaultNames) HasKind(kind string) bool {
+	if f == nil {
+		return false
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.kinds[kind]
 }
 
 // Covers reports whether name is one of the names, or a prefix of one at

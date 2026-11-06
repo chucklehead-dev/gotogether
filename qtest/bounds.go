@@ -98,7 +98,7 @@ func (x *Exploration) judges() *Judges {
 // runs given one by one, or none).
 func (x *Exploration) sampleBound() *SampleBound {
 	n := len(x.Runs)
-	if x.search != nil || x.alone != nil || x.given || n == 0 {
+	if x.search != nil || x.alone != nil || x.given || x.faultOrder != nil || n == 0 {
 		return nil
 	}
 	return &SampleBound{Runs: n, Rate: confidence.Rate(n), OneIn: confidence.OneIn(n)}

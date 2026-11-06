@@ -8,6 +8,13 @@ and adds a line here.
 
 ## Unreleased
 
+- `qtest.System.FaultOrders` samples every requested directed fault pair with
+  fresh scripts and a fixed seed budget. Attempts retain ordinary model and
+  runtime checks; order evidence reports witnessed or bounded unreached, never
+  impossible. Saved evidence retains requested targets and native witnesses;
+  strict evidence inspection treats unreached orders as coverage gaps. Evidence
+  is now `gotogether.evidence/3`; regenerate older evidence with current tests.
+
 - Grist memo entries distinguish ordinary reads from each named processor,
   avoiding repeated historical refolds when head queries interleave with a
   lagging processor. All entries share the existing LRU capacity and retain

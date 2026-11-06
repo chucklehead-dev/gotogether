@@ -75,7 +75,11 @@ func DeclareIn(f *hooks.FaultNames, inRun bool, name string, options ...string) 
 	name = strings.TrimPrefix(name, "fault.")
 	switch {
 	case f != nil:
-		f.Add(name)
+		if strings.HasPrefix(name, "nemesis.") {
+			f.Add(name)
+		} else {
+			f.AddKind(name)
+		}
 		for _, o := range options {
 			f.Add(name + "." + o)
 		}
@@ -109,7 +113,7 @@ func DeclareNemesis(f *hooks.FaultNames, name string) {
 	}
 	registry.nemeses[name] = true
 	if f != nil {
-		f.Add("nemesis." + name)
+		f.AddKind("nemesis." + name)
 	}
 }
 
@@ -135,6 +139,18 @@ func KnownStatic(name string) bool {
 		}
 	}
 	return false // a nemesis is a simulation's: none is static
+}
+
+// KnownStaticKind reports an exact statically declared kind. Option labels
+// and dot prefixes are not kinds, even if another run declared one elsewhere.
+func KnownStaticKind(name string) bool {
+	if strings.HasPrefix(name, "nemesis.") {
+		return false
+	}
+	registry.Lock()
+	defer registry.Unlock()
+	k := registry.kinds[name]
+	return k != nil && (k.static || len(k.sites) > 0)
 }
 
 // Options are a declared kind's option names (with or without the

@@ -36,6 +36,9 @@ import (
 // An Exploration is many seeded runs of a simulated scenario, checked
 // against the model in bulk.
 type Exploration struct {
+	faultOrder        *FaultOrder // requested pair; permits only bounded incomplete scripts
+	faultOrderOrigins []origin    // planned native identities, including failed attempts
+
 	profile *runprofile.Profile
 	Runs    []*Run
 	// Cached counts the runs judged from an earlier verdict on the same
@@ -156,6 +159,8 @@ type ExploreConfig struct {
 // An exploreSpec is an exploration as the System's methods ask for it:
 // the user's ExploreConfig, and what only a method sets.
 type exploreSpec struct {
+	faultOrder *FaultOrder // dedicated pair-attempt completion policy
+
 	ExploreConfig
 	without []string   // fault kinds forced nominal by the workflow (a sweep row)
 	opts    []Option   // the System's, and a sweep row's (System.Opts configures)
@@ -292,12 +297,19 @@ func explore(t testing.TB, bindingPath string, cfg exploreSpec, scenario func(c 
 	}
 	e := begin(t, bindingPath, cfg.opts, scenario, cfg.Parallel)
 	x := e.x
+	x.faultOrder = cfg.faultOrder
+	if x.faultOrder != nil {
+		x.faultOrder.Exploration = x
+	}
 	x.corpus, x.fuzz, x.mutant = corpusDir(t, cfg.ExploreConfig), cfg.fuzz, cfg.baseline != ""
 	n, offset := resolved.count, resolved.offset
 	resolved.profile(x)
 	var seeds []uint64
 	spec, alone := runSpecFor(t, x.ref())
 	if alone {
+		if cfg.faultOrder != nil && spec.kind != "seed" {
+			t.Fatalf("qtest.FaultOrders: %s replay bypasses the requested script; use :seed=<n>", spec.kind)
+		}
 		x.alone = &spec
 		x.profile.Replay = spec.kind + "=" + spec.value
 		x.profile.Seeds = nil
@@ -494,11 +506,18 @@ func runOne(c settings, woven bool, ch qenv.Chooser, scenario func(c qenv.Choose
 	}
 	for _, c := range rec.Choices { // what the run chose: under gosim, all the host sees of its kinds
 		if k, ok := strings.CutPrefix(c.Kind, "fault."); ok {
-			faults.Add(k)
+			if strings.HasPrefix(k, "nemesis.") {
+				faults.Add(k) // the family remains useful to prefix-based rate checks
+				if c.Value > 0 && c.Name != "" {
+					faults.AddKind("nemesis." + c.Name)
+				}
+			} else {
+				faults.AddKind(k)
+			}
 		}
 	}
 	for _, n := range rec.Nemeses {
-		faults.Add("nemesis." + n)
+		faults.AddKind("nemesis." + n)
 	}
 	recorded := mem.Steps()
 	run := &Run{Steps: recorded, Recorded: recorded, Choices: rec.Choices, Nemeses: rec.Nemeses, Interrupted: r.Interrupted(), Code: code, Err: err, diverged: cerr, Unsettled: unsettled, faults: faults, notes: notes.Lines(), simulations: simulationCalls(simulations.Calls())}
@@ -565,6 +584,9 @@ func (x *Exploration) nameOf(r *Run) string {
 // that failed to run (rather than to conform) fails t, naming it.
 func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark int, origins []origin) {
 	t.Helper()
+	if x.faultOrder != nil {
+		x.faultOrderOrigins = append([]origin(nil), origins...)
+	}
 	if n, msgs := hooks.Escaped(mark); n > mark {
 		t.Errorf("gotogether: %d steps were recorded from outside the runs while they ran (from a goroutine no run's task started, "+
 			"or after its run closed: a test in parallel may have recorded some); the first:\n%s", n-mark, msgs[0])
@@ -1600,12 +1622,43 @@ func (x *Exploration) unscripted() string {
 // too.
 func (x *Exploration) unknownScripted(t testing.TB) {
 	t.Helper()
+	if x.faultOrder != nil && ran(x.Runs) {
+		for _, fault := range []qenv.Scripted{x.faultOrder.First, x.faultOrder.Second} {
+			known := hooks.KnownStaticKind(fault.Kind)
+			for _, run := range x.Runs {
+				if run != nil && run.faults.HasKind(fault.Kind) {
+					known = true
+					break
+				}
+			}
+			if !known {
+				t.Errorf("qtest.FaultOrders: %q is not an exact fault kind or named nemesis this system declared or chose; option names, prefixes and other runs' declarations are not targets", fault.Kind)
+			} else if fault.Name != "" && !strings.HasPrefix(fault.Kind, "nemesis.") && !hooks.KnownFaultOption(fault.Kind, fault.Name) {
+				t.Errorf("qtest.FaultOrders: %s has no nonnominal option named %q; declare its option names or request its positive Option", fault.Kind, fault.Name)
+			}
+		}
+	}
 	seen := map[string]bool{}
 	n, misnamed := 0, false
 	var first *Run
 	for _, r := range x.Runs {
 		if r == nil {
 			continue
+		}
+		if x.faultOrder != nil {
+			for _, fault := range []qenv.Scripted{x.faultOrder.First, x.faultOrder.Second} {
+				if fault.Name == "" || strings.HasPrefix(fault.Kind, "nemesis.") {
+					continue
+				}
+				for _, chosen := range r.Choices {
+					if chosen.Kind == "fault."+fault.Kind && chosen.Name == fault.Name && chosen.Value == 0 {
+						msg := fmt.Sprintf("qtest.FaultOrders: %s names %q but the observed choice is nominal option 0; request a nonnominal fault", fault.Kind, fault.Name)
+						if !slices.Contains(r.misnamed, msg) {
+							r.misnamed = append(r.misnamed, msg)
+						}
+					}
+				}
+			}
 		}
 		for _, m := range r.misnamed {
 			if !seen[m] {
@@ -1623,7 +1676,7 @@ func (x *Exploration) unknownScripted(t testing.TB) {
 	// a run that did not make its script's faults did not test what the
 	// script says, whatever the claims: a crash "after step 3" of a run of
 	// two steps once passed without crashing
-	if n > 0 && !misnamed {
+	if n > 0 && !misnamed && x.faultOrder == nil {
 		t.Errorf("gotogether: in %d of %d runs scripted faults never happened (%s's: %v): a run never reached a choice of the fault's kind "+
 			"after its After steps, or after the faults it Follows, or an earlier fault of its kind; lower After, or script a fault the run reaches "+
 			"(Run.Unscripted lists them)", n, len(x.Runs), x.nameOf(first), first.Unscripted)

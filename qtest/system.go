@@ -18,7 +18,7 @@ import (
 // run it on a chooser. The
 // workflows over it share that one definition: explore seeds (Explore),
 // follow a model's traces through their faults (FollowTraces), sweep
-// configurations (Sweep), and shrink a failure with Hegel
+// configurations (Sweep), sample ordered fault pairs (FaultOrders), and shrink a failure with Hegel
 // (qhegel.Shrink).
 //
 //	sys := qtest.System{Binding: "checkout.binding.yaml", Run: func(c qenv.Chooser) error {

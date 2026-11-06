@@ -472,6 +472,10 @@ func (e *engine) navNode(b *navBase, req navproto.Request) (*navproto.Node, erro
 	r.origin = origin{kind: "schedule", value: schedule(spec.ds)}
 	node := &navproto.Node{Protocol: navproto.Protocol, Run: x.ref() + ":" + b.r0.ID(), ID: spec.id(), Schedule: schedule(spec.ds), At: spec.at, Folded: nc.folded, Branches: []navproto.Branch{}, Steps: []string{},
 		Path: pathWords(nc.path)}
+	if order := x.faultOrder; order != nil {
+		goal := order.faultEvidence()
+		node.Notes = append(node.Notes, fmt.Sprintf("requested fault order: %s then %s (seed budget %d); this navigation node may change the faults, so inspect its recorded choices separately", goal.First, goal.Second, goal.Budget))
+	}
 	if x.profile != nil {
 		p := x.profile.Clone()
 		p.Mode, p.Chooser, p.Parallel = "navigation", "navigation", 1

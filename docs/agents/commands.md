@@ -143,7 +143,7 @@ AGENTS.md has the general requirements.
   historical reports do not establish current-run completeness. Reused IDs
   cannot establish freshness; concurrent invocations need separate directories.
   `GOTOGETHER_EVIDENCE=dir` writes each exploration's evidence
-  (`gotogether.evidence/2`, with its role: faithful, mutant, replay) as
+  (`gotogether.evidence/3`, with its role: faithful, mutant, replay) as
   dir/<package>/<test>/x<N>.json (the package as its directory in its
   module, `_` the root), cleared per test, a run alone a replay; a System's `Mutant` marks a
   config's mutation so the suite's gaps leave it out. Each Validate and

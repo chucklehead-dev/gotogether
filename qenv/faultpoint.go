@@ -99,7 +99,11 @@ func (s *Sim) FaultSites() map[string][]string { return s.names.Sites() }
 // this one's runs. What is declared outside any run is known to every
 // run: a woven fault point declares its kind at init, and a double built
 // before its simulation, outside a run, declares its kinds as it did.
-func init() { hooks.KnownStatic = choice.KnownStatic }
+func init() {
+	hooks.KnownStatic = choice.KnownStatic
+	hooks.KnownStaticKind = choice.KnownStaticKind
+	hooks.KnownFaultOption = func(kind, name string) bool { return slices.Contains(choice.Options(kind), name) }
+}
 
 // PointCoverage is what runs did at one fault kind.
 type PointCoverage struct {
