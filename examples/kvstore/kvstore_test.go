@@ -233,7 +233,7 @@ type driver struct {
 }
 
 func (d *driver) Step(s *connect.Step) error {
-	ctx := context.Background()
+	ctx := d.t.Context()
 	key := func() string { return connect.MustPick[string](s, "key") }
 	val := func() string { return connect.MustPick[string](s, "value") }
 	ignore := func(err error) error {
@@ -277,7 +277,7 @@ func (d *driver) State() (any, error) {
 func TestModelDrivesService(t *testing.T) {
 	qtest.RequireQuint(t)
 	connect.Run(t, connect.Config{Spec: "model/kv.qnt", Main: "kvDesign", MaxSamples: 30, MaxSteps: 25},
-		func() connect.Driver { return &driver{t: t} })
+		func(trace testing.TB) connect.Driver { return &driver{t: trace} })
 }
 
 // ---- 3. Hegel drives the service, the model judges --------------------------

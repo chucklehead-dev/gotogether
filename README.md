@@ -367,13 +367,16 @@ Python and no server.
 ## 1. The model drives Go (`connect`, like quint-connect)
 
 ```go
-type driver struct{ bank *bank.Bank }
+type driver struct {
+	bank *bank.Bank
+	ctx context.Context
+}
 
 func (d *driver) Step(s *connect.Step) error {
 	return connect.Switch{
 		"init":    func(*connect.Step) error { d.bank = bank.New(accounts); return nil },
 		"deposit": func(s *connect.Step) error {
-			return d.bank.Deposit(ctx, connect.MustPick[string](s, "account"), connect.MustPick[int](s, "amount"))
+			return d.bank.Deposit(d.ctx, connect.MustPick[string](s, "account"), connect.MustPick[int](s, "amount"))
 		},
 		// ... one case per model action; "_" is the catch-all
 	}.Step(s)
@@ -384,7 +387,7 @@ func (d *driver) State() (any, error) { return struct{ Balances map[string]int }
 
 func TestModelDrivesBank(t *testing.T) {
 	connect.Run(t, connect.Config{Spec: "model/bank.qnt", Main: "bankDesign", MaxSamples: 30, MaxSteps: 25},
-		func() connect.Driver { return &driver{} })
+		func(tb testing.TB) connect.Driver { return &driver{ctx: tb.Context()} })
 }
 ```
 
@@ -402,7 +405,14 @@ differing fields (`.Balances[bob]: model 16, implementation 17`), and
 | `Config { state, nondet }` | `Config.StatePath`, `Config.NondetPath` |
 | `QUINT_SEED`, `QUINT_VERBOSE` (compile time) | the same, read at run time, plus `QUINT_MAX_SAMPLES`, `QUINT_MAX_STEPS`, `QUINT_BACKEND`, `QUINT_BIN` |
 
-Each trace gets a fresh driver. See
+Each trace runs in a synchronous `trace_<index>` subtest. Its factory receives
+that trace's `testing.TB`: use `Context`, `Cleanup` and `TempDir` for work and
+resources owned by the trace. Context cancellation and cleanup finish before
+the next trace starts. The first divergence stops the run. Native `go test
+-json` identifies each trace and emits `gotogether.trace_index` and seed
+attributes. `-run` can select one; filtered or skipped
+traces are not evidence that they replayed. Direct `connect.Replay` leaves
+resource ownership with its caller. See
 [skills/gotogether-mbt](skills/gotogether-mbt/SKILL.md) for the TDD
 loop.
 

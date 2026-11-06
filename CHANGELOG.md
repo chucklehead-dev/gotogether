@@ -8,6 +8,13 @@ and adds a line here.
 
 ## Unreleased
 
+- `connect.Run` and `connect.Test` run each trace in a synchronous native
+  subtest. They now take `*testing.T` and a `func(testing.TB) Driver` factory;
+  use the provided trace handle for context, cleanup and temporary resources.
+  Cleanup finishes before the next trace starts, and failures stop replay.
+  Native Go JSON/filtering exposes trace identity; direct `Replay` stays
+  caller-owned. No outer-test factory adapter is retained.
+
 - Edgepublish's stand-in supports the previously blocked Rust MBT schedules.
   Remove unused sealed-generation bookkeeping that blocked new pushes behind
   paused writes; preserve generation locks and seal effects. Bounded/failed

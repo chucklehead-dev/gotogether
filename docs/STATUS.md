@@ -40,6 +40,13 @@ pins from the checked-in go.mod files, not from historical handoff paragraphs.
 
 ## Recent progress and lessons
 
+`connect.Run` and `connect.Test` give each trace a native child-test lifetime.
+Factories receive that trace's `testing.TB`, so context cancellation and cleanup
+finish before the next trace starts. KV's existing 30-trace workload no longer
+retains all test servers until parent cleanup. Native Go JSON and `-run` expose
+stable trace identities; generated counts do not imply filtered/skipped coverage.
+
+
 - [#83](https://github.com/chucklehead-dev/gotogether/pull/83): current capabilities,
   boundaries and resume rules stay here; dated chronology is preserved in HISTORY.
 - [#84](https://github.com/chucklehead-dev/gotogether/pull/84): compiled pending-call

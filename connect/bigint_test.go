@@ -62,8 +62,8 @@ func TestRustIntegersReadByType(t *testing.T) {
 	}
 	for _, backend := range backends {
 		t.Run(backend, func(t *testing.T) {
-			Run(t, Config{Spec: "../validate/testdata/bigint.qnt", MaxSteps: 4, MaxSamples: 3, Backend: backend}, func() Driver { return &bigDriver{} })
-			Run(t, Config{Spec: "../itf/testdata/bignumber.qnt", MaxSteps: 2, MaxSamples: 2, Backend: backend}, func() Driver { return pickDriver{} })
+			Run(t, Config{Spec: "../validate/testdata/bigint.qnt", MaxSteps: 4, MaxSamples: 3, Backend: backend}, func(testing.TB) Driver { return &bigDriver{} })
+			Run(t, Config{Spec: "../itf/testdata/bignumber.qnt", MaxSteps: 2, MaxSamples: 2, Backend: backend}, func(testing.TB) Driver { return pickDriver{} })
 		})
 	}
 }

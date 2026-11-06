@@ -49,7 +49,7 @@ func (d *driver) State() (any, error) { return modelState{Balances: d.bank.Balan
 func TestModelDrivesBank(t *testing.T) {
 	qtest.RequireQuint(t)
 	connect.Run(t, connect.Config{Spec: "model/bank.qnt", Main: "bankDesign", MaxSamples: 30, MaxSteps: 25},
-		func() connect.Driver { return &driver{} })
+		func(testing.TB) connect.Driver { return &driver{} })
 }
 
 // What model-driven testing can and cannot catch. LostDeposit diverges
@@ -60,7 +60,7 @@ func TestModelDrivesBank(t *testing.T) {
 // model judging (hegel_test.go's TestHegelCatchesSelfTransfer).
 func TestModelDrivenCatchesOnlyDivergence(t *testing.T) {
 	qtest.RequireQuint(t)
-	files, c, err := connect.GenerateRun(context.Background(), connect.Config{Spec: "model/bank.qnt", Main: "bankDesign",
+	files, c, err := connect.GenerateRun(t.Context(), connect.Config{Spec: "model/bank.qnt", Main: "bankDesign",
 		MaxSamples: 40, MaxSteps: 25, Seed: "0x5eed", Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)

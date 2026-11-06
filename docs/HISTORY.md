@@ -8581,3 +8581,20 @@ owning Replay entry point. Teardown follows the existing crash recorder policy:
 it is outside the observed prefix. The same diagnostic retains zero waiters
 after either set of fixed replays; disabling cleanup fails the lifecycle controls.
 This is example ownership, not a new general connect lifecycle API.
+
+
+## Connect trace lifetimes (2026-11-06)
+
+The general-framework follow-up to the publisher exercise uses native Go test
+lifetimes (DESIGN §107). Temporary counter instrumentation of the existing KV
+30-trace model test measured 30 retained HTTP servers on the baseline. With
+child-test context/cleanup ownership, the same workload peaks at one, with zero
+remaining after replay. See [the resource rehearsal](measurements/connect-trace-resources-2026-11-06.txt).
+
+Run/Test now take an explicit per-trace testing.TB factory and run synchronous
+subtests; all live callers and the MBT skill migrate directly. Low-level Replay
+stays caller-owned. A control passing the outer test into factories fails on
+retained context/cleanup. Native helper-process tests retain the original
+first-failure/reproduction contract. An actual KV go-test JSON run exposes all
+30 child results; selecting trace_7 produces one selected child, retaining index
+7. Native trace-index/seed attributes add data without another format.

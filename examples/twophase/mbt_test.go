@@ -1,7 +1,6 @@
 package twophase_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/connect"
@@ -16,6 +15,7 @@ import (
 // machines, one transition per step, with no network in between: the
 // model chooses which node moves and how.
 type driver struct {
+	t           testing.TB
 	mutation    tpc.Mutation
 	coordinator *tpc.Coordinator
 	parts       map[string]*tpc.Participant
@@ -24,11 +24,12 @@ type driver struct {
 }
 
 func (d *driver) Step(s *connect.Step) error {
-	ctx := context.Background()
+	ctx := d.t.Context()
 	node := func() *tpc.Participant { return d.parts[connect.MustPick[string](s, "node")] }
 	return connect.Switch{
 		"init": func(*connect.Step) error {
 			sim := qenv.New(qenv.Nominal{})
+			d.t.Cleanup(sim.Close)
 			names := twophase.Config{}.Names()
 			d.coordinator = &tpc.Coordinator{DB: qenv.NewStore(sim, "c", qenv.Serializable), Participants: names, Mutation: d.mutation}
 			d.parts = map[string]*tpc.Participant{}
@@ -75,7 +76,7 @@ type nodeState struct {
 }
 
 func (d *driver) State() (any, error) {
-	ctx := context.Background()
+	ctx := d.t.Context()
 	out := map[string]nodeState{"c": {d.coordinator.Decision(ctx)}}
 	for n, p := range d.parts {
 		out[n] = nodeState{p.Stage(ctx)}
@@ -89,7 +90,7 @@ func (d *driver) State() (any, error) {
 func TestModelDrivesTransitions(t *testing.T) {
 	qtest.RequireQuint(t)
 	connect.Run(t, connect.Config{Spec: "model/twophase.qnt", Main: "twophase3", MaxSamples: 30, MaxSteps: 12,
-		StatePath: []string{"s", "system"}}, func() connect.Driver { return &driver{} })
+		StatePath: []string{"s", "system"}}, func(trace testing.TB) connect.Driver { return &driver{t: trace} })
 }
 
 // What the model's traces catch: committing on the first vote diverges at
@@ -99,7 +100,7 @@ func TestModelDrivesTransitions(t *testing.T) {
 // (TestMutants, TestHegelShrinksImpatience).
 func TestModelDrivenMutants(t *testing.T) {
 	qtest.RequireQuint(t)
-	files, c, err := connect.GenerateRun(context.Background(), connect.Config{Spec: "model/twophase.qnt", Main: "twophase3",
+	files, c, err := connect.GenerateRun(t.Context(), connect.Config{Spec: "model/twophase.qnt", Main: "twophase3",
 		MaxSamples: 40, MaxSteps: 12, Seed: "0x2bc", Dir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -110,7 +111,7 @@ func TestModelDrivenMutants(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := connect.Replay(tr, &driver{mutation: m}, connect.ReplayOptions{Trace: i, StatePath: []string{"s", "system"}}); err != nil {
+			if err := connect.Replay(tr, &driver{t: t, mutation: m}, connect.ReplayOptions{Trace: i, StatePath: []string{"s", "system"}}); err != nil {
 				t.Logf("mutation %d caught (seed %s): %v", m, c.Seed, err)
 				return true
 			}

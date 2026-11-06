@@ -20,7 +20,7 @@
 //	func (d *bank) State() (any, error) { return BankState{Balance: d.b.Balance()}, nil }
 //
 //	func TestBank(t *testing.T) {
-//		connect.Run(t, connect.Config{Spec: "bank.qnt", MaxSteps: 20}, func() connect.Driver { return &bank{} })
+//		connect.Run(t, connect.Config{Spec: "bank.qnt", MaxSteps: 20}, func(testing.TB) connect.Driver { return &bank{} })
 //	}
 //
 // The quint-connect concepts map as follows:
@@ -34,7 +34,8 @@
 //	QUINT_SEED, QUINT_VERBOSE (compile time)                             QUINT_SEED, QUINT_VERBOSE, ... (read at run time)
 //
 // Differences: a fresh Driver is made for every trace (no state leaks
-// between traces); traces run in a deterministic order; a state mismatch
+// between traces); each trace has its own testing.TB lifetime for context,
+// cleanup and temporary files; traces run in a deterministic order; a state mismatch
 // always prints a field-level diff; and the environment is read when the
 // test runs, so changing QUINT_SEED needs no rebuild.
 package connect
