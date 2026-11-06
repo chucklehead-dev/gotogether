@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- Compiled validation supports linearizing completed client histories, including
+  keyed searches and portable manifest/bundle replay without Node or Quint.
+  Candidates and final judgments use the compiled evaluator alone, explicitly
+  recorded in existing evidence. Unsupported searches error instead of falling
+  back; exhausted budgets remain undecided. Pending-call resolution stays separate.
+
 - `qhistory.StrongSessionSerializable` checks explicit client session order,
   without requiring clocks. Supply `Txn.Session` and `SessionOrder`; missing or
   ambiguous evidence is an input error. Unknown outcomes never establish an
