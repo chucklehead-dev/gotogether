@@ -122,8 +122,12 @@ gotogether validate -binding stock.binding.yaml -compiled stock.model.json runs/
 With the Action: `compiled: 'true'`. What it claims (DESIGN §64): a pass
 and a failure are the evaluator's, each result saying so, with no pass
 sampled by quint; a run the evaluator cannot decide is `NO VERDICT
-(needs quint)`, never a guess; searches (`-linearize`), ITF inputs and
-`-manifest` are refused; a stale artifact (another binding, a changed
+(needs quint)`, never a guess. Completed client histories can use `-linearize`
+and `-linearize-key`; candidates are judged by the compiled evaluator alone,
+without Quint confirmation. Search budgets retain undecided outcomes, and an
+unsupported candidate returns an error rather than pruning it or falling back.
+`-manifest`, bundle and replay retain the artifact and search settings. Pending-call
+resolution and ITF inputs remain refused. A stale artifact (another binding, a changed
 source, an evaluation module this gotogether writes otherwise, a later
 format, quint before 0.32) is refused with the fix, `gotogether
 compile`. `gotogether doctor -compiled stock.model.json` checks it ahead.

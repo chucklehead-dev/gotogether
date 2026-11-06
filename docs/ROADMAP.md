@@ -13,7 +13,7 @@ Standing decisions, with the maintainer:
   recording, YAML, platform and CLI module-parser dependencies.
 - MIT license.
 
-Current order (reviewed 2026-11-05): this is a prerelease library.
+Current order (reviewed 2026-11-06): this is a prerelease library.
 Correctness and usable core contracts come before release machinery. The bounded
 composition, Goo lifecycle, declared-call span, workload-phase and diagnostic
 experiments have answered their initial questions; rotate away from inventory
@@ -38,9 +38,13 @@ entrypoints and go/analysis remain explicit separate lifecycle boundaries.
 The following facet-depth slice returns to I45 database history checking: explicit
 session precedence closes an untimed stale-read evidence gap. Session identity
 is caller-supplied, never inferred from recorder IDs; the checker retains typed
-cycle edges and is checked against independent serial replay. Next rotate toward
-consolidation or a concrete adoption blocker before adding more history workloads
-or an automatic capture facade.
+cycle edges and is checked against independent serial replay. After the payouts
+exploration consolidation, the next general framework slice closes I21's compiled
+linearization boundary: completed concurrent histories can be searched and replayed
+from the artifact without external tools, under explicit evaluator-only evidence.
+Unsupported candidates cannot become negative proof, and bounds stay undecided.
+Pending-call resolution remains separate; rotate to another facet before expanding
+compiled search modes or adding automatic history capture.
 The general framework tick is the first bounded I42 model-behavior comparison:
 complete finite Go-evaluator graphs on explicit observations, with whole-prefix inclusion,
 separate resource bounds and native-replayed source witnesses. A non-storage
@@ -607,7 +611,7 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   binding and compiled-model checks, docs/ci.md's tiers, and `gotogether
   compile` with `validate -compiled`. Left: publishing the image and
   tagging the Action (after R5's tags), the CI-budget reference
-  repository, `-manifest` and searches under `-compiled`. What it was: A GitHub Action (`setup-gotogether`:
+  repository and pending-call resolution under `-compiled`. What it was: A GitHub Action (`setup-gotogether`:
   quint and its evaluator pinned and cached, `validate` and `evidence
   -strict` steps with annotations) and a container image with quint
   pinned, so no repository copies `install-quint.sh`; `gotogether
@@ -621,7 +625,11 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   single current run/3 recipe without Node/Quint. The artifact is a hashed
   executable dependency, not a driver's informational artifact. Relative layout,
   exact source availability, and native pass/fail/no-verdict are retained;
-  unsupported checks do not fall back. Actual compiled digest/coverage anchor
+  unsupported checks do not fall back. Completed-history linearization, including
+  keyed search, now uses the same evaluator-only contract and portable replay;
+  candidates unsupported by the evaluator error rather than becoming rejected
+  prefixes. Search bounds remain undecided. Pending-call resolution stays separate.
+  Actual compiled digest/coverage anchor
   recording, and frozen-IR constant overrides require recompilation. Example: a
   CI-budget reference repository, ten small model-checked services under
   5 CPU minutes per PR each.

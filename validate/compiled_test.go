@@ -157,7 +157,7 @@ func TestCompiledUnsupportedIsNoVerdict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.Judge(context.Background(), steps, SearchOptions{Linearize: true}); !errors.Is(err, ErrNeedsQuint) {
+	if _, err := a.Judge(context.Background(), steps, SearchOptions{ResolvePending: true}); !errors.Is(err, ErrNeedsQuint) {
 		t.Errorf("a search by a compiled model: %v, want ErrNeedsQuint", err)
 	}
 }
