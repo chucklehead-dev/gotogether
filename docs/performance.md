@@ -685,3 +685,109 @@ GOWORK=off go test ./internal/qeval -run '^$' -bench '^BenchmarkExplore' -bencht
 For comparisons, compile separate test binaries and alternate their order while
 the runner is otherwise idle. The model compilation/setup is outside benchmark
 timing; the numbers above describe warm exploration, not CLI cold-start cost.
+
+
+## Cold historical processor recovery (2026-11-06)
+
+I24's remaining cold-read question is narrower than processor memo ownership:
+a fresh application has a processor checkpoint behind the head, but the store's
+only snapshot is newer than the first trigger. It must rebuild that trigger's
+prefix. Warm owned memo entries already avoid repeating the prefix on later
+triggers; this experiment does not change that implementation.
+
+**Decision:** retain the current snapshot contract. A cold rebuild is measurable,
+but these runs do not establish a first-read or recovery target that warrants
+historical snapshot retention. The newer-snapshot first-ready phase accounts for
+about 7–14% of full recovery here, despite containing 90% of the processor folds.
+A concrete first-read latency requirement could justify a different decision;
+none is supplied by this bounded workload.
+
+`grist/BenchmarkColdProcessorRecovery` uses real named processors over persistent
+SQLite, 10,000 or 100,000 counter events, and one or four owners. Each starts at
+90% of the head and catches up through the head, with an ordinary head query
+after each callback. Head queries are serialized; pinned processor reads can
+run concurrently. Runtime snapshot cadence (1000), memo capacity (4096) and
+processor batching (100) retain their defaults. Audits are disabled explicitly
+to isolate recovery rather than periodic audit refolds. The memo has no eviction
+pressure. This is a simple counter fold, not an arbitrary business projection.
+
+Two current-contract conditions share the same events, checkpoints and targets:
+
+- **HEAD snapshot:** persist a genuine head snapshot, which every earlier
+  processor read must leave intact. The harness observes every snapshot write,
+  so a transient downgrade cannot hide behind a later head query restoring it.
+- **Eligible prefix:** persist a genuine snapshot immediately before the first
+  trigger, then append the same tail. Today's store keeps one snapshot per key;
+  this control cannot also retain the HEAD snapshot. Ordinary head reads must
+  rebuild its tail. This is not an implementation or speedup estimate for a
+  hypothetical multi-position snapshot store.
+
+Fixture construction uses bulk 1000-event appends, rather than a history of one
+command transaction per event; its relay startup has that shape. Setup explicitly
+requests fixture snapshot writes, then closes and copies the database. App
+construction, copying, opening, result checks and closing are outside timing.
+Each sample has a fresh App memo and reopened connection in the same process,
+with a likely warm OS page cache. It does not measure cold-machine or full
+process startup. Cancellation and database close finish SQL work, but the API
+has no join for every App.Start goroutine; final pollers are parked after their
+durable checkpoint and cannot begin more callbacks. Small background shutdown
+work may still overlap the next sample.
+
+The benchmark reports three distinct extents:
+
+1. `first-get-ns/owner`: mean elapsed time inside each owner's first pinned Get;
+   `first-ready-ns/op` additionally includes startup/relay work until all first
+   reads finish, before head queries start. Concurrent Get times are not summed
+   into a claim about wall-clock recovery.
+2. `next100-ns/op`: the next exactly 100 callbacks per owner, with head queries
+   and default batching. This is a callback window, not a durable-checkpoint
+   window; its final checkpoint may commit afterward.
+3. `recovery-ns/op`: startup through successful durable final checkpoint commits
+   for every owner. A separate reopened connection checks checkpoints and
+   snapshots. Every pinned/head value and expected fold count is asserted.
+
+Three grouped samples per case on Go 1.27.3/linux-amd64, modernc SQLite 1.40.1,
+Intel Xeon Platinum 8573C, benchmark concurrency suffix 5 (runner quota 4 CPUs)
+produced these medians. No other benchmark/correctness work ran concurrently.
+Samples were not alternating independent process pairs; these are descriptive
+local values, not statistical confidence or a portable improvement magnitude.
+The [native Go output](measurements/cold-processor-2026-11-06.txt) retains all
+24 samples, allocation counts and custom metrics.
+
+| Events / owners | First Get ms, HEAD → eligible | All first-ready ms, HEAD → eligible | Full recovery ms, HEAD → eligible |
+|---|---:|---:|---:|
+| 10k / 1 | 36.96 → 5.20 | 38.67 → 6.68 | 287.72 → 269.18 |
+| 10k / 4 | 95.36 → 9.29 | 101.27 → 17.11 | 1117.39 → 1057.01 |
+| 100k / 1 | 403.44 → 4.92 | 405.34 → 7.28 | 2821.87 → 2381.95 |
+| 100k / 4 | 763.29 → 7.44 | 783.97 → 15.14 | 10669.44 → 9935.13 |
+
+The first processor folds fall from 9000/36000/90000/360000 to 1/4/1/4.
+The next hundred callbacks still fold exactly 100 or 400 events in both
+conditions. Eligible first reads are not free: four owners return 4408 event
+rows through Store.Read, including eligibility probes, anchors and processor
+fetches, despite folding only four events. Row metrics count **returned event
+rows from Store.Read**, not all SQL, snapshot, checkpoint or StepLog rows.
+Timed allocations include recovery/relay/query work, not fixture creation.
+
+A small 2000-event smoke test runs the same harness for both snapshot conditions
+and both owner counts in ordinary CI. Its smaller eligible tail does not reach
+the snapshot cadence and may keep the prefix snapshot; the head memo still
+warms. Race checks pass. Removing only the initial read's newer-snapshot write
+guard makes the smoke fail on an attempted downgrade, confirming that the
+preservation assertion is active. No runtime, store API/schema, persistence
+format, dependency, CPU budget or nightly benchmark roster changes are made.
+This nested-module benchmark is manual; the nightly's root-module collector
+does not automatically include it.
+
+Reproduce the matrix (fixture setup adds wall time outside the reported extent):
+
+```sh
+GOTOOLCHAIN=local GOWORK=off go -C grist test -run '^$' -bench '^BenchmarkColdProcessorRecovery$' -benchtime=1x -count=3 .
+```
+
+Before a retention proposal, establish the actual first-read/recovery target,
+repeat against that workload with controlled comparisons, and validate relevant
+PostgreSQL behavior separately. A position-bounded lookup would change every
+store tier; it must preserve fingerprint/checksum/immutable-anchor validation,
+pinned positions and read-set conditioning, head-query cost and bounded storage.
+Increasing cadence alone cannot make a newer snapshot eligible.
