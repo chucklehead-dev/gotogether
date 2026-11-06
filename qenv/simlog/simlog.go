@@ -73,6 +73,11 @@ type Writer interface {
 // commits offsets. Commit(p, next) says that every record of p before
 // next was processed; it may fail, and a consumer that lost the partition
 // in a rebalance is refused (ErrFenced).
+//
+// Poll can return records and an error together, for example when another
+// partition's fetch fails. The reader's cursor has already advanced for those
+// records. Process them before handling the error; discarding them and later
+// committing a higher offset can skip work.
 type Reader interface {
 	Poll(ctx context.Context) ([]Record, error)
 	Commit(ctx context.Context, partition, next int) error

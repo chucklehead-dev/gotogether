@@ -30,7 +30,12 @@ prove impossibility. System.FaultOrders now samples directed pairs through the
 same engine, checks every attempt, and retains requested goals, bounds and native
 witnesses in existing evidence. Co-occurrence alone cannot establish both orders.
 After this slice, rotate away from more order modes until a new caller need
-justifies them. The installed LRU MBT rehearsal now covers a non-SQL consumer workflow
+justifies them.
+The subsequent stream facet returns to native client contracts: Kafka fetch errors
+must not become idle polls, and a partial batch cannot be discarded when another
+partition/shard fails. Both native readers retain records plus errors; consumer
+loops process the records before backoff. Broader broker features should follow
+another concrete production-client gap rather than more fault-order modes. The installed LRU MBT rehearsal now covers a non-SQL consumer workflow
 and an isolated source contrast; the configuration typo it exposed is fixed by
 strict preflight and direct API migration. The consolidation slice threads
 caller-owned cancellation through model loading, checker construction, lint

@@ -105,8 +105,12 @@ func (r *Reader) open(ctx context.Context) error {
 }
 
 // Poll implements simlog.Reader: up to 10 records of each shard, from
-// the checkpoint on a shard's first read.
+// the checkpoint on a shard's first read. Records fetched before a later
+// shard fails accompany its error and must be processed before handling it.
 func (r *Reader) Poll(ctx context.Context) ([]simlog.Record, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if r.shards == nil {
 		if err := r.open(ctx); err != nil {
 			return nil, err
@@ -124,14 +128,14 @@ func (r *Reader) Poll(ctx context.Context) ([]simlog.Record, error) {
 			}
 			it, err := r.C.GetShardIterator(ctx, in)
 			if err != nil {
-				return nil, err
+				return out, err
 			}
 			r.iters[i], r.pos[i] = aws.ToString(it.ShardIterator), cp.next
 		}
 		got, err := r.C.GetRecords(ctx, &kinesis.GetRecordsInput{ShardIterator: aws.String(r.iters[i]), Limit: aws.Int32(10)})
 		if err != nil {
 			r.iters[i] = "" // reopen from the checkpoint
-			return nil, err
+			return out, err
 		}
 		r.iters[i] = aws.ToString(got.NextShardIterator)
 		for _, rec := range got.Records {
@@ -147,6 +151,7 @@ func (r *Reader) Poll(ctx context.Context) ([]simlog.Record, error) {
 		// Kinesis allows five GetRecords a second per shard
 		select {
 		case <-ctx.Done():
+			return out, ctx.Err()
 		case <-time.After(200 * time.Millisecond):
 		}
 	}

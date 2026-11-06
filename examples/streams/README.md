@@ -4,6 +4,10 @@ A stream pipeline checked end to end against one Quint model, on three
 logs: a simulated one with faults (qenv), Kafka through franz-go, and
 Kinesis through the AWS SDK.
 
+A poll can return healthy records together with an error from another partition
+or shard. Consumers process those records before error backoff: the client's
+cursor has advanced, and skipping them could let a later commit lose work.
+
 - **The application** (`pipeline/`): a publisher relays keyed events from
   a transactional outbox to the log; consumers read the log, apply each
   event to a projection (idempotent by a per-key version, in one
