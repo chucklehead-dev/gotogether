@@ -123,7 +123,7 @@ go run github.com/DataDog/orchestrion go test ./sim/ -v            # Orchestrion
 | `TestExploredRunsConform` | 40 seeds: every interleaving of pushes, rotations and background seals, with failures, ambiguous writes and crashes, is a behaviour of the model |
 | `TestInvariantsHoldWithoutAmbiguousWrites` | with plain failures only, the design's invariants hold too |
 | `TestExplorationFindsAmbiguousFindings` | with ambiguous writes, random runs find the model's known findings F1/F3 (9 of 60 seeds), which `ambiguous-seal` had reproduced by hand |
-| `TestMutants` | `ManifestBeforeTable` (every seed), `NoRotationLock` (34 of 40), `BackwardRotation` (2 of 150: a narrow window; a rotation back to a generation the model never rotated to) |
+| `TestMutants` | exploration catches `ManifestBeforeTable` and `NoRotationLock`; a directed delayed-clock schedule checks faithful conformance and rejects `BackwardRotation` without relying on a rare random interleaving |
 | `TestHegelShrinksNoRotationLock` | Hegel shrinks to a rotation while a push is between its writes |
 | `TestLoadRecovers` | 3 requests/s against an S3 that serves 10 writes/s, through a 3x slowdown: recovers with 4 exporters or 16 |
 | `TestTimeoutsMakeDuplicates` | with 16 exporters and a 2 s S3 timeout, S3's queueing delay turns writes ambiguous and the collector's retries commit requests twice, with no trigger at all (30 in a run); with a 10 s timeout, none |
@@ -156,22 +156,26 @@ What the simulation found:
     interrupted, as successful. Steps recorded while a killed task
     unwinds are now discarded.
 
+The MBT tests use Quint's default Rust backend and seed 42; `QUINT_BACKEND`
+and `QUINT_SEED` can select another backend or schedule. Both Rust and
+TypeScript traces exercise the same store comparisons. The stand-in omits
+retention/detach bookkeeping, including an unused sealed-generation list whose
+exclusive-lock epilogue blocked valid model schedules. Seal writes and task
+joining remain, as do generation locks on pushes and rotations. This does not
+validate the real exporter's retention scheduling.
+
+`mbt.Driver.Replay` owns each finite replay: it cancels held writes and joins
+pushes, ticks and background seals on success or error. Cancellation cleanup
+is outside the recorded prefix. Its internal adapter implements `connect.Driver`;
+use the owning `Replay` entry point rather than a detached adapter.
+
 ## Known gaps
 
-- With `--backend rust`, `quint run --mbt` traces of `currentDesign`
-  include schedules the driver cannot reproduce yet. One example is a
-  `pushStart` right after a crash and an idle rotation: the stand-in waits
-  for a write that the gate never sees, and the step times out ("the
-  implementation made no write within 2s"). The spike verified the MBT
-  tests on the typescript backend, so `mbt` defaults to
-  `QUINT_BACKEND=typescript` and seed 42. Set `QUINT_BACKEND=rust` to
-  reproduce the gap.
 - The stand-in, not the real exporter, is validated here. The real one
   is checked from trace files in casselc/observability (`otel-chdb/PBT.md`).
   The simulation could run the real one too: it needs the same
   `//qenv:go` mark on its background seal, and its unlock method value
   wrapped. Its chDB sessions would also need a seam, as the stand-in's
   `Store` is.
-- Hegel cannot find `BackwardRotation` within its budget here: the window
-  is a few runs in a hundred, and every case is a quint check. Seeded
-  exploration finds it.
+- `BackwardRotation` uses a directed delayed-clock witness. Unconstrained
+  Hegel/random exploration is not a reliable regression for that narrow window.

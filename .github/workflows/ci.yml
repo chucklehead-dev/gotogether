@@ -410,6 +410,8 @@ jobs:
         env:
           GOTOGETHER_STRICT: ""
         run: go test -count=1 -timeout 30m ./...
+      - name: MBT traces on TypeScript too
+        run: QUINT_BACKEND=typescript go test -timeout 5m -count=1 -run '^TestModelTraces' ./mbt/
       - name: test (woven with Orchestrion)
         run: go run github.com/DataDog/orchestrion go test -timeout 30m -count=1 ./mbt/ ./scenarios/
       - name: the publisher in a simulation (qenv/weave's aspects, woven by qweave)

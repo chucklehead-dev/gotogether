@@ -1,7 +1,7 @@
 package mbt
 
 import (
-	"context"
+	"errors"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -16,9 +16,7 @@ import (
 
 // QUINT_MAX_SAMPLES (default 5) traces of QUINT_MAX_STEPS (default 30)
 // steps are generated from the model's currentDesign instance with seed
-// QUINT_SEED (default 42) and QUINT_BACKEND (default typescript: the
-// configuration these tests were verified with; see README "Known gaps"
-// for a Rust-backend trace the driver cannot schedule yet).
+// QUINT_SEED (default 42) and QUINT_BACKEND (Quint's default, Rust).
 func traces(t *testing.T) []string {
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint not installed")
@@ -36,10 +34,7 @@ func traces(t *testing.T) []string {
 	if c.Seed == "" {
 		c.Seed = "42"
 	}
-	if c.Backend == "" {
-		c.Backend = "typescript"
-	}
-	files, _, err := connect.GenerateRun(context.Background(), c)
+	files, _, err := connect.GenerateRun(t.Context(), c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,6 +71,11 @@ func TestModelTracesCatchManifestBeforeTable(t *testing.T) {
 		}
 		d := &Driver{Mutation: publisher.ManifestBeforeTable}
 		if err := d.Replay(tr); err != nil {
+			step, ok := errors.AsType[*connect.StepError](err)
+			if !ok || step.Kind != "step" || step.Step.Action != "pushStart" ||
+				!strings.Contains(step.Err.Error(), "expecting its table insert; the implementation wrote manifest ") {
+				t.Fatalf("%s: not the manifest-before-table witness: %v", filepath.Base(f), err)
+			}
 			caught++
 			t.Logf("%s: rejected: %v", filepath.Base(f), err)
 		}

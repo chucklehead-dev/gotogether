@@ -14,7 +14,7 @@
 //   - rotation records itself before the background seal starts (publish.go
 //     starts the seal goroutine, then sets st.cur; both under the exclusive
 //     lock, so nothing observable differs);
-//   - one signal per publisher; no table DDL, retention or detach;
+//   - one signal per publisher; no table DDL, retention bookkeeping or detach;
 //   - Tick, which publish.go does not have (see Tick);
 //   - Mutation switches on deliberate protocol bugs for the demo. The zero
 //     value is the faithful behaviour;
@@ -73,9 +73,8 @@ type generation struct {
 }
 
 type signalState struct {
-	mu     sync.RWMutex // pushes hold it shared for the whole write; rotation exclusively
-	cur    *generation
-	sealed []*generation
+	mu  sync.RWMutex // pushes hold it shared for the whole write; rotation exclusively
+	cur *generation
 }
 
 // Publisher publishes one signal for one producer incarnation.
@@ -198,9 +197,6 @@ func (p *Publisher) sealInBackground(g *generation) {
 	go func() {
 		defer p.wg.Done()
 		_ = p.seal(context.Background(), g)
-		p.st.mu.Lock()
-		p.st.sealed = append(p.st.sealed, g)
-		p.st.mu.Unlock()
 	}()
 }
 
