@@ -8650,3 +8650,27 @@ latency and a diagnostic full rerun do not reproduce that failure. No failure
 cause is asserted; keep 0.9.27 admitted until the failed observation is explained.
 The upstream io.Writer hook remains private, so there is no supported capture
 simplification to adopt merely by changing the version.
+
+## Expected-violation final replay integrity (2026-11-06)
+
+On admitted Hegel 0.9.27 with native Quint 0.33.1/evaluator 0.7.1, a deposit
+rejected only on the first callback produced ten conforming replays. Hegel
+reported an unconfirmed failure, yet `FindViolation` returned that earlier
+candidate as a shrunk violation. A second control produced an explicit
+operational failure after the first candidate and still returned it. The
+unchanged implementation passed the deterministic violation control but failed
+both rejection controls (5.741 seconds total).
+
+Expected model failures now use the final-replay marker contract already used
+by `FindTrigger`: only the final replay can return a `Violation`. Earlier
+candidates do not override Hegel errors. Capture cleanup, native diagnostics,
+verdict caching and the public API remain in place. `Shrink` uses the same
+search. This fixes an existing contract independently of Hegel's held upgrade;
+it makes no claim about that admission failure's unexplained cause.
+
+Independent review also reproduced bounded hidden search (`ticks.yaml` with a
+`fire` step) returning an inconclusive model result as a violation. Search
+verdicts now retain native receipt status, and both the cached search result and
+the fresh final report must establish conclusive model failure or a separately
+recorded unsettled runtime outcome with a conclusive model result. Inconclusive
+and operational model results cannot manufacture violations.

@@ -16,6 +16,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtest"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 	"hegel.dev/go/hegel"
 )
 
@@ -90,10 +91,7 @@ func findViolation(t testing.TB, cfg ViolationConfig, cases qtest.CaseCheck, bod
 	c.Options.NoITF = true
 	var err error
 	cc := newCaseChecker(c)
-	var (
-		mu    sync.Mutex
-		found *Violation
-	)
+	var found *Violation
 	base := []hegel.Option{hegel.SuppressHealthCheck(hegel.TooSlow), hegel.WithDatabase("")}
 	quiet := os.Getenv("GOTOGETHER_VERBOSE") != "1"
 	if quiet {
@@ -113,7 +111,7 @@ func findViolation(t testing.TB, cfg ViolationConfig, cases qtest.CaseCheck, bod
 	var out string
 	func() {
 		defer func() { out = hegelOut.stop() }() // also when a case's t.Fatal ends the goroutine
-		err = hegel.Run(func(tc hegel.TestCase) {
+		found, err = runViolationSearch(func(tc hegel.TestCase) {
 			rec := NewCase(tc, cases.Recorder...)
 			defer rec.begin(tc, cases.Global)()
 			body(tc, rec)
@@ -126,15 +124,15 @@ func findViolation(t testing.TB, cfg ViolationConfig, cases qtest.CaseCheck, bod
 				tc.Errorf("qhegel: checking the run: %v", err)
 				return
 			}
+			if v.Status != receipt.Pass && v.Status != receipt.Fail {
+				tc.Errorf("qhegel: the model did not produce a conclusive verdict:\n%s", v.Summary)
+				return
+			}
 			if rec.unsettled != "" {
 				v.OK, v.Summary = false, rec.unsettled+"\n"+v.Summary
 			}
 			if !v.OK {
-				// Hegel replays the shrunk case last, so the last failure is it
-				mu.Lock()
-				found = &Violation{Run: qtest.Run{Steps: steps, Choices: rec.Recorded(), Unsettled: rec.unsettled}, Summary: v.Summary}
-				mu.Unlock()
-				tc.Errorf("qhegel: the run does not satisfy the model:\n%s", v.Summary)
+				panic(violationFound{&Violation{Run: qtest.Run{Steps: steps, Choices: rec.Recorded(), Unsettled: rec.unsettled}, Summary: v.Summary}})
 			}
 		}, opts...)
 	}()
@@ -158,15 +156,42 @@ func findViolation(t testing.TB, cfg ViolationConfig, cases qtest.CaseCheck, bod
 		}
 		return v
 	case found == nil:
-		t.Fatalf("qhegel: no case violated the model, but the test failed: %v", err)
+		t.Fatalf("qhegel: the search did not reproduce a model violation; test failed: %v", err)
 	}
 	found.found = true
 	found.QuintRuns, found.CacheHits = q, hits
 	if found.Report, err = c.Check(t.Context(), found.Steps); err != nil {
 		t.Fatalf("qhegel: checking the shrunk run: %v", err)
 	}
+	status := found.Report.Receipt().Status
+	if status != receipt.Fail && !(status == receipt.Pass && found.Unsettled != "") {
+		t.Fatalf("qhegel: the final run did not establish a violation:\n%s", found.Report.Summary())
+	}
 	found.Report.Unsettled = found.Unsettled
 	return found
+}
+
+// violationFound is propagated only by Hegel's final deterministic replay.
+// An earlier rejected candidate cannot establish a completed shrink when the
+// search later fails or cannot reproduce that candidate. See runTriggerSearch.
+type violationFound struct{ violation *Violation }
+
+func (failure violationFound) Error() string {
+	return "qhegel: the run does not satisfy the model:\n" + failure.violation.Summary
+}
+
+func runViolationSearch(body func(hegel.TestCase), opts ...hegel.Option) (found *Violation, err error) {
+	defer func() {
+		if value := recover(); value != nil {
+			if failure, ok := value.(violationFound); ok {
+				found = failure.violation
+				return
+			}
+			panic(value)
+		}
+	}()
+	err = hegel.Run(body, opts...)
+	return
 }
 
 // log logs the shrunk run: its size, its faults, and its failure in a

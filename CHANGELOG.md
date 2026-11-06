@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- `qhegel.FindViolation` and `Shrink` return a violation only when Hegel's
+  final replay reproduces it. An earlier rejected candidate cannot hide a later
+  operational failure, inconclusive model verdict or failed reproduction; diagnostics remain
+  visible and no new public API or dependency version is introduced.
+
 - Use Quint 0.33.1 with evaluator 0.7.1 and matching Kubernetes staged modules
   0.37.2. Terminal trace samples retain short runs; Rust output accepts valid
   constructor-substring names. Verify evaluator cache bytes/startup and publish

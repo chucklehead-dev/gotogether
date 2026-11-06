@@ -82,8 +82,17 @@ passes primary tests but remains held on an unexplained broader-property failure
 Improve failure observability/reproduction before adopting it; a passing rerun
 alone cannot clear a failed admission. See go-toolchain.md for the tested graph.
 
-Next, rotate toward a concrete general-framework or cross-facet caller problem
-rather than further parser tuning, compiled modes or snapshot features. Candidates below
+The next general-framework correction makes expected-violation searches require
+Hegel's final replay, matching the existing `FindTrigger` contract. Native
+controls reproduced an earlier rejected deposit being returned as “shrunk” after
+ten conforming replays or a later operational failure. `FindViolation` and
+`Shrink` now reject both outcomes while retaining deterministic shrinking and
+no-violation expectations. This closes a real shared-caller evidence gap; it
+does not explain the held Hegel upgrade's separate property failure.
+
+Next, rotate toward a focused caller/facet experiment or consolidation selected
+from actual evidence, retaining independent-maintainer use as an alongside
+candidate rather than committing to another framework API. Candidates below
 are experiments with selection thresholds, not commitments.
 
 | Order | Candidate | Evidence needed before implementation |

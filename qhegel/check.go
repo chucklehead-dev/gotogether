@@ -13,11 +13,13 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
+	"github.com/chucklehead-dev/gotogether/validate/receipt"
 	"hegel.dev/go/hegel"
 )
 
 // verdict is the outcome of checking one run.
 type verdict struct {
+	Status  receipt.Status
 	OK      bool
 	Summary string // the validator's report (or what the cache remembered of it)
 	Cached  bool   // decided from earlier checks, without running quint
@@ -90,7 +92,7 @@ func (cc *caseChecker) lookup(k keyed) (verdict, bool) {
 	if k.prefixable {
 		for i, key := range k.keys {
 			if sum, ok := cc.prefixes[key]; ok {
-				return verdict{Summary: fmt.Sprintf("the first %d steps are a prefix the model already rejected:\n%s", i+1, sum), Cached: true}, true
+				return verdict{Status: receipt.Fail, Summary: fmt.Sprintf("the first %d steps are a prefix the model already rejected:\n%s", i+1, sum), Cached: true}, true
 			}
 		}
 	}
@@ -102,12 +104,12 @@ func (cc *caseChecker) lookup(k keyed) (verdict, bool) {
 // key has its own refs, which no verdict reads; the run itself is told
 // its own.
 func (cc *caseChecker) store(k keyed, rep *validate.Report) verdict {
-	v := verdict{OK: rep.OK(), Summary: rep.Summary()}
-	cached := verdict{OK: v.OK, Summary: rep.WithoutRefs().Summary()}
+	v := verdict{Status: rep.Receipt().Status, OK: rep.OK(), Summary: rep.Summary()}
+	cached := verdict{Status: v.Status, OK: v.OK, Summary: rep.WithoutRefs().Summary()}
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 	cc.full[k.keys[len(k.keys)-1]] = cached
-	if !v.OK && k.prefixable && len(rep.Actors) == 1 && len(rep.Issues) == 0 {
+	if v.Status == receipt.Fail && k.prefixable && len(rep.Actors) == 1 && len(rep.Issues) == 0 {
 		if at := failingStep(rep.Actors[0], k.steps); at >= 0 {
 			// the prefix key up to the failing step, in effective steps
 			for j := len(k.effIdx) - 1; j >= 0; j-- {
@@ -126,7 +128,7 @@ func (cc *caseChecker) store(k keyed, rep *validate.Report) verdict {
 // Check decides one run. A run with no steps is vacuously OK.
 func (cc *caseChecker) Check(ctx context.Context, steps []qtrace.Step) (verdict, error) {
 	if len(steps) == 0 {
-		return verdict{OK: true, Summary: "no steps recorded"}, nil
+		return verdict{Status: receipt.Pass, OK: true, Summary: "no steps recorded"}, nil
 	}
 	k := cc.key(steps)
 	if v, ok := cc.lookup(k); ok {
@@ -155,7 +157,7 @@ func (cc *caseChecker) Prefetch(ctx context.Context, runs [][]qtrace.Step) ([]ve
 	var idx []int
 	for i, steps := range runs {
 		if len(steps) == 0 {
-			out[i] = verdict{OK: true, Summary: "no steps recorded"}
+			out[i] = verdict{Status: receipt.Pass, OK: true, Summary: "no steps recorded"}
 			continue
 		}
 		ks[i] = cc.key(steps)
