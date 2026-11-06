@@ -38,6 +38,11 @@ Quint are still required tools. Export uses existing manifest data and leaves
 its verdict unchanged; it does not rerun the model or sanitize the evidence.
 Generated work files are not the source model.
 
+The copied original reports retain historical source paths, including navigation
+commands. Locate moved inputs and bindings through the manifest-relative paths
+shown above; `reports/replay.json` describes the relocated replay. The copied
+reports are not registered manifest artifacts and are not hash-verified by export.
+
 To export an existing manifest directly, use a fresh output directory:
 
 ```sh
