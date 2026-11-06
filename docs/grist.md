@@ -375,6 +375,8 @@ The decisions, with their reasons:
   claim); a snapshot and a memoized state trusting their position after
   a rewind (`snapshotTrustsPosition`, `memoTrustsPosition`, caught by
   `TestRewindInvalidatesSnapshots` and `TestRewindInvalidatesTheMemo`).
+  Their overlays replace only the small anchor-policy file: other cache changes
+  use the faithful implementation rather than whole-file mutant copies.
   The anchor retired `snapshotPastItsPosition` (a snapshot labelled one
   past what it folded): its label no longer names its last event, so it
   is never read.

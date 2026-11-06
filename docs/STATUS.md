@@ -12,7 +12,10 @@ separate memo entries within the existing total LRU capacity. Interleaving head
 queries no longer forces a lagging processor to rebuild every trigger's prefix.
 The first cold historical read still refolds when its only snapshot is ahead.
 Memo-tail snapshot writes retain observed newer snapshots; anchor checks and
-pinned-state semantics remain unchanged. See grist §2.2 and I24.
+pinned-state semantics remain unchanged. Anchor checks now share a small private
+policy file; each planted rewind mutant changes only its intended check rather
+than copying the entire snapshot implementation. Checksum bytes are unchanged.
+See grist §2.2 and I24.
 
 Compiled client-history linearization: `validate -compiled -linearize` and
 keyed searches use the artifact's evaluator alone, with native provenance and
