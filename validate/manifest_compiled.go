@@ -11,7 +11,7 @@ import (
 )
 
 // checkEvaluation prevents an ambiguous recipe from silently falling back to
-// Quint. Compiled manifests describe one primary binding, never ITF or searches.
+// Quint. Compiled manifests describe one primary binding, never ITF or pending-call resolution.
 func (m *Manifest) checkEvaluation() error {
 	for _, in := range m.Inputs {
 		if in.Model != nil && in.Model.Compiled != nil {
@@ -27,8 +27,8 @@ func (m *Manifest) checkEvaluation() error {
 	if m.Tools.Quint != "" || m.Tools.Backend != "" {
 		return errors.New("manifest: compiled evaluation records no runtime Quint or backend; compilation provenance belongs to the hashed artifact")
 	}
-	if m.Check.Linearize || m.Check.Key != "" || m.Check.ResolvePending {
-		return fmt.Errorf("manifest: compiled evaluation cannot replay history searches: %w", ErrNeedsQuint)
+	if m.Check.ResolvePending {
+		return fmt.Errorf("manifest: compiled evaluation cannot replay pending-call resolution: %w", ErrNeedsQuint)
 	}
 	for _, in := range m.Inputs {
 		if in.Format == "itf" || in.Model != nil {

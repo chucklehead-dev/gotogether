@@ -6812,3 +6812,33 @@ focused unknown-outcome controls test the timeout boundary. Automatic capture is
 separate: the shared Record wrapper has no caller session identity. An explicit
 serial session handle should follow an actual workload rather than pretend its
 current global transaction IDs already supply this evidence.
+
+
+## 103. Compiled completed-history linearization
+
+Compiled validation already supports portable recorded-order checks, but rejected
+all history searches because ordinary searches confirm Go-selected orders and
+negative search proofs with Quint. This prevents a compiled adopter from checking
+a concurrent client history whose recorded order is invalid but has a valid
+linearization, even though its model's actions are supported by the artifact.
+
+Use the existing linearization engine over the artifact evaluator, retaining the
+compiled mode's existing evaluator-only evidence contract. No candidate or negative
+proof claims independent Quint confirmation. The final chosen order is checked by
+the same compiled checker. Per-history evaluator state stays isolated, and request
+views do not attach contexts to shared artifacts. Environment selection of Quint
+or shadow mode cannot introduce an external fallback into compiled evaluation.
+
+Unsupported candidate evaluation is an operational error, not rejection of that
+candidate: pruning it could turn an incomplete search into a false refutation.
+Exhausted budgets remain undecided. Preserve existing initial-snapshot, missing
+record, clock and partition scope; hidden-action searches, resumed histories and
+later snapshot checkpoints retain their existing refusals. Pending-call resolution
+is separate and still requires the ordinary path.
+
+Reuse the current manifest, receipt, report and navigation evidence. The compiled
+artifact remains a hashed executable dependency; search flags and bounds remain
+part of the replay recipe. CLI acceptance checks actual reordering, an exhaustive
+negative and absent-source provenance, then exports, deletes the original tree,
+relocates and replays with forbidden Node/Quint executables. Recorded-order failure
+is the negative control for the history repaired by linearization.

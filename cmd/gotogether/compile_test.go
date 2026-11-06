@@ -15,7 +15,7 @@ import (
 
 // gotogether compile, then validate -compiled: the result line quint's
 // check gives, with no quint (-quint names none there is), compiled manifest
-// replay, an unsupported search refused, and a stale artifact
+// replay, unsupported pending resolution refused, and a stale artifact
 // refused with the fix, leaving no empty artifacts directory behind. Not
 // parallel: it sets TMPDIR.
 func TestCompileThenValidate(t *testing.T) {
@@ -57,7 +57,7 @@ func TestCompileThenValidate(t *testing.T) {
 			t.Errorf("output lacks %q:\n%s", want, got)
 		}
 	}
-	code, got, err = validated(t, []string{"-binding", bind, "-compiled", model, "-linearize", log})
+	code, got, err = validated(t, []string{"-binding", bind, "-compiled", model, "-resolve-pending", log})
 	if code != 2 || err == nil || !strings.Contains(err.Error(), "needs quint") {
 		t.Fatalf("unsupported search: exit %d, %v:\n%s", code, err, got)
 	}

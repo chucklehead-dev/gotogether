@@ -14,6 +14,12 @@ The first cold historical read still refolds when its only snapshot is ahead.
 Memo-tail snapshot writes retain observed newer snapshots; anchor checks and
 pinned-state semantics remain unchanged. See grist §2.2 and I24.
 
+Compiled client-history linearization: `validate -compiled -linearize` and
+keyed searches use the artifact's evaluator alone, with native provenance and
+bounded-unknown outcomes. Unsupported candidates error without launching Quint.
+Portable manifests retain search settings through bundle/relocated replay with
+Node and Quint unavailable. Pending-call resolution remains separate. See DESIGN §103.
+
 Database-history session order: `qhistory.StrongSessionSerializable` requires
 explicit `Txn.Session` and `SessionOrder` evidence for nonaborted transactions.
 It detects session stale reads without clocks, preserves known ordering across
@@ -836,8 +842,9 @@ four, L more; agent-days in practice).
    nodes (effect-key identity is now independent of rewind memory); (5) the Store's connection faults; (6) slice 5's DSN reopen
    on an authentication failure. Then the guide's ops section (I27).
 8. **I21's publishing.** Publish the image and tag the Action (after
-   R5's tags); the CI-budget reference repository; `-manifest` and
-   searches under `-compiled`.
+   R5's tags); the CI-budget reference repository and pending-call resolution
+   under `-compiled`. Compiled manifests and completed-history linearization
+   are implemented.
 9. **H7 and I22 leftovers.** Schema changes beyond upcasting (an event
     split, a field whose meaning changed: grist.md §9); a processor
     reading behind the head refolds from the start when the only

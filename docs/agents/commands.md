@@ -198,7 +198,12 @@ AGENTS.md has the general requirements.
   wall-time alarm (the twice-shuffled suite uses 40 minutes). This hang guard
   is separate from CPU regression budgets: instrumentation and waiting for
   shared Quint admission can cross Go's default 10-minute wall-time alarm
-  while individual native checks keep progressing.
+  while individual native checks keep progressing. Fake compiler lifecycle
+  fixtures should use their own user-cache directory for admission (set both
+  XDG_CACHE_HOME and HOME with t.Setenv, as the quintcmd tests do). A successful
+  retry can otherwise wait behind unrelated test binaries; that wait does not
+  measure cancellation latency. Keep cancellation watchdogs tight and test the
+  shared pool separately with controlled holders rather than raising timeouts.
 
 
 When adding a CLI command, run `go test ./cmd/gotogether -run

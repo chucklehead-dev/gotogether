@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 )
 
 // This compiler deliberately holds the first attempt. Every later attempt emits
@@ -21,6 +22,11 @@ func evaluatorContextFixture(t *testing.T) (*Checker, func(string) (*binding.Eva
 	if runtime.GOOS == "windows" {
 		t.Skip("compiler fixture uses POSIX shell")
 	}
+	// This fixture tests compiler ownership and cancellation, not admission
+	// against unrelated model checks in other test binaries. A successful retry
+	// must have its own pool, just as the compiler process is local to this test.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "quint")
 	script := `#!/bin/sh
@@ -47,13 +53,13 @@ printf '%s\n' '{"modules":[{"name":"m","declarations":[]}],"main":"m"}'
 	return c, make, bin
 }
 
-func awaitEvaluator(t *testing.T, done <-chan *evaluator) *evaluator {
+func awaitEvaluator(t *testing.T, operation string, done <-chan *evaluator) *evaluator {
 	t.Helper()
 	select {
 	case e := <-done:
 		return e
 	case <-time.After(5 * time.Second):
-		t.Fatal("evaluator did not return after cancellation")
+		t.Fatalf("evaluator did not return: %s", operation)
 		return nil
 	}
 }
@@ -77,6 +83,32 @@ func awaitEvaluatorFile(t *testing.T, path string) {
 }
 
 func TestEvaluatorContextOwnerWaiterAndRetry(t *testing.T) {
+	t.Run("ordinary", testEvaluatorContextOwnerWaiterAndRetry)
+	t.Run("unrelated-admission-occupied", func(t *testing.T) {
+		switch runtime.GOOS {
+		case "linux", "darwin", "freebsd", "openbsd", "netbsd", "dragonfly":
+		default:
+			t.Skip("independent admission pools require Unix file locks")
+		}
+		// These independent processes retain the inherited pool after the compiler
+		// fixture changes this process's cache directory. Neither may prevent its
+		// canceled owner from releasing its live waiter to retry.
+		t.Setenv("XDG_CACHE_HOME", t.TempDir())
+		t.Setenv("HOME", t.TempDir())
+		for range 2 {
+			ctx, cancel := context.WithCancel(t.Context())
+			cmd := quintcmd.Command(ctx, "sleep", "", "3600")
+			if err := cmd.Start(); err != nil {
+				cancel()
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { cancel(); _ = cmd.Wait() })
+		}
+		testEvaluatorContextOwnerWaiterAndRetry(t)
+	})
+}
+
+func testEvaluatorContextOwnerWaiterAndRetry(t *testing.T) {
 	t.Setenv("GOTOGETHER_CACHE", "off")
 	c, makeModule, bin := evaluatorContextFixture(t)
 	ownerCtx, cancelOwner := context.WithCancel(t.Context())
@@ -92,7 +124,7 @@ func TestEvaluatorContextOwnerWaiterAndRetry(t *testing.T) {
 	go func() { waiter <- evaluatorOf(waiterReady, c, makeModule) }()
 	<-waiterReady.waiting
 	cancelWaiter()
-	if e := awaitEvaluator(t, waiter); !errors.Is(e.err, context.Canceled) {
+	if e := awaitEvaluator(t, "canceled waiter", waiter); !errors.Is(e.err, context.Canceled) {
 		t.Fatalf("waiter error: %v", e.err)
 	}
 	select {
@@ -106,10 +138,10 @@ func TestEvaluatorContextOwnerWaiterAndRetry(t *testing.T) {
 	go func() { live <- evaluatorOf(liveReady, c, makeModule) }()
 	<-liveReady.waiting
 	cancelOwner()
-	if e := awaitEvaluator(t, owner); !errors.Is(e.err, context.Canceled) {
+	if e := awaitEvaluator(t, "canceled owner", owner); !errors.Is(e.err, context.Canceled) {
 		t.Fatalf("owner error: %v", e.err)
 	}
-	recovered := awaitEvaluator(t, live)
+	recovered := awaitEvaluator(t, "successful live retry", live)
 	if recovered.err != nil || recovered.m == nil {
 		t.Fatalf("live waiter did not retry: %v", recovered.err)
 	}

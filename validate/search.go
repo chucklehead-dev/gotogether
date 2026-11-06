@@ -506,6 +506,8 @@ func (s *search) mark(rep *Report) {
 // searchError is a search's failure, carried out of its callbacks.
 type searchError struct{ error }
 
+func (e searchError) Unwrap() error { return e.error }
+
 // fail ends a search with an error (search recovers it).
 func fail(format string, a ...any) { panic(searchError{fmt.Errorf(format, a...)}) }
 
@@ -737,8 +739,17 @@ func order(ch, full *Checker, tr *qtrace.Trace, pending, settles []qtrace.Step, 
 				fs, states := make([]int, len(orders)), make([]string, len(orders))
 				judged := true
 				for i, o := range settledAs(tr, orders) {
+					if err := ch.mode.context().Err(); err != nil {
+						panic(searchError{err})
+					}
 					f, st, err := ev.e.judge(ch, tr, o, len(orders[i]), invariants)
 					if err != nil {
+						if ev.native {
+							if cancel := ch.mode.context().Err(); cancel != nil {
+								panic(searchError{cancel})
+							}
+							panic(searchError{fmt.Errorf("compiled linearization of actor %s: %w: %v", a, ErrNeedsQuint, err)})
+						}
 						ev.off, ev.refused, ev.why, judged = true, true, err.Error(), false
 						break
 					}
@@ -816,10 +827,16 @@ func order(ch, full *Checker, tr *qtrace.Trace, pending, settles []qtrace.Step, 
 
 // newEvalUse is how a search with ch (and full, its invariants') uses
 // the Go evaluator: not at all under GOTOGETHER_EVAL=quint or when it
-// searches again with quint alone.
+// searches again with quint alone. A compiled checker always uses its artifact
+// alone, independently of the ambient evaluation mode, with no external fallback.
 func newEvalUse(ch, full *Checker) *evalUse {
 	ev := &evalUse{byCheck: ch.mode.byCheck}
 	switch {
+	case ch.compiled != nil:
+		ev.native = true
+		e := *evaluatorFor(full)
+		e.m = e.m.WithContext(ch.mode.context())
+		ev.e = &e
 	case ch.mode.quintOnly:
 		ev.off, ev.why = true, "a search again with quint alone"
 	case ch.Options.evalMode() == "quint":
@@ -871,6 +888,9 @@ type found struct {
 // alone.
 func (ev *evalUse) decide(f found, proof *qtrace.Proof, quint func([][]qtrace.Step) ([]int, []string), a string, again func() found) found {
 	o, ok, cut := f.order, f.ok, f.cut
+	if ev.native {
+		return f
+	}
 	if !ev.used {
 		return f // quint judged every candidate
 	}
@@ -957,6 +977,7 @@ func confirms(proof *qtrace.Proof, quint func([][]qtrace.Step) ([]int, []string)
 
 // evalUse is how a search used the Go evaluator.
 type evalUse struct {
+	native  bool // the compiled artifact alone judges; no Quint fallback or confirmation
 	e       *evaluator
 	off     bool   // quint checks the candidates (no evaluator, or it refused one)
 	why     string // why it is off
@@ -976,6 +997,8 @@ type evalUse struct {
 // some for a reason worth saying.
 func (ev *evalUse) note(issue qtrace.Issue) qtrace.Issue {
 	switch {
+	case ev.native:
+		issue.Msg += "; candidates judged by the compiled model's Go evaluator alone, without Quint confirmation"
 	case ev.disagreed:
 		issue.Severity = "warn"
 		issue.Msg += "; " + ev.why + ": searched again with quint (GOTOGETHER_EVAL=quint checks with quint alone)"
@@ -1061,21 +1084,24 @@ func orderIssue(ch, full *Checker, tr *qtrace.Trace, a string, budget int, parti
 	// prefixes are confirmed by their states
 	inst := inHistory(full, tr)
 	inst.Options.NoITF = false
-	quintInv := quintChecker(inst, tr, a, true)
+	invariantCheck := quintChecker(inst, tr, a, true)
+	if ev.native {
+		invariantCheck = checker(inst, true)
+	}
 	violates := false
 	if ok && len(full.Binding.Invariants) > 0 {
-		if violates = first(quintInv([][]qtrace.Step{o})) >= 0; !violates {
-			cl = nil // quint checked the order, conformance and invariants both
+		if violates = first(invariantCheck([][]qtrace.Step{o})) >= 0; !violates {
+			cl = nil // the selected backend checked conformance and invariants
 		}
 	}
 	switch {
 	case violates:
-		// the order found violates an invariant (quint says, one check): another that conforms may
+		// the selected backend finds an invariant violation: another conforming order may
 		// not, and a run must not look violating by the order picked
 		inv := checker(full, true)
 		ev.used = false
 		f2, proof2 := lin(inv)
-		f2 = ev.decide(f2, proof2, quintInv, a, again(inv))
+		f2 = ev.decide(f2, proof2, invariantCheck, a, again(inv))
 		o2, ok2, tried2, cut2 := f2.order, f2.ok, f2.tried, f2.cut
 		switch {
 		case ok2:

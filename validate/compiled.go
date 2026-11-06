@@ -282,7 +282,7 @@ type compiledState struct {
 const noQuint = "gotogether-validate-compiled-runs-no-quint"
 
 // ErrNeedsQuint is why a compiled checker refuses what only quint can
-// judge (a search, ITF input).
+// judge (unsupported evaluation, pending-call resolution or ITF input).
 var ErrNeedsQuint = errors.New("needs quint: a compiled model (validate -compiled) is judged by the Go evaluator alone")
 
 // NewCompiledChecker is a checker of bindingPath's runs by the compiled
