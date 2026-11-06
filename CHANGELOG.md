@@ -8,6 +8,10 @@ and adds a line here.
 
 ## Unreleased
 
+- Navigator CI reuses verified native tools and bounds acquisition with one
+  command budget plus a step deadline. Missing tools and failed installation
+  remain operational failures; golden-screen checks and rendering stay mandatory.
+
 - `connect.Run` and `connect.Test` run each trace in a synchronous native
   subtest. They now take `*testing.T` and a `func(testing.TB) Driver` factory;
   use the provided trace handle for context, cleanup and temporary resources.

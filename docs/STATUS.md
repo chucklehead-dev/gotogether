@@ -40,6 +40,12 @@ pins from the checked-in go.mod files, not from historical handoff paragraphs.
 
 ## Recent progress and lessons
 
+Navigator CI reuses verified native tools and bounds acquisition with a shared
+command budget plus a step deadline. Missing or broken tools fail bootstrap;
+golden checks and rendering remain mandatory. Cold mirror speed is outside the
+budget guarantee.
+
+
 `connect.Run` and `connect.Test` give each trace a native child-test lifetime.
 Factories receive that trace's `testing.TB`, so context cancellation and cleanup
 finish before the next trace starts. KV's existing 30-trace workload no longer

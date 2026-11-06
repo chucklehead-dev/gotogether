@@ -8598,3 +8598,21 @@ retained context/cleanup. Native helper-process tests retain the original
 first-failure/reproduction contract. An actual KV go-test JSON run exposes all
 30 child results; selecting trace_7 produces one selected child, retaining index
 7. Native trace-index/seed attributes add data without another format.
+
+
+## Bounded native tape bootstrap (2026-11-06)
+
+PR #89's navigator job spent over 26 minutes downloading from the Ubuntu mirror
+before cancellation; no UI test had failed. APT selected 92 new packages
+(69.9 MB), with zero upgrades. The same step on #88 took 26 seconds, and a
+single-job retry on a fresh runner passed without source changes. The other
+35 successful checks were preserved.
+
+The navigator now uses one Linux CI helper: reuse working ttyd/ffmpeg and the
+pinned VHS build, install only missing packages without recommends, and verify
+postconditions. A shared 300-second command budget bounds native probes and
+acquisition, including privileged APT; an independent CI step deadline remains.
+Real timeout and missing-tool controls distinguish installer failure from tape
+coverage. No conditional golden checks, skipped rendering, alternate application
+format or relaxed merge gate is added. Slow cold downloads may still fail;
+they now fail with a named acquisition phase instead of blocking indefinitely.

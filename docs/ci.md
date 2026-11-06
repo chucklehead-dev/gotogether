@@ -55,6 +55,23 @@ through GitHub's API, rate-limited for shared runners), then `go install
 github.com/chucklehead-dev/gotogether/cmd/gotogether@<version>`;
 `gotogether doctor` says what is installed and what disagrees.
 
+## Native navigator tools
+
+The repository's navigator job uses `ci/install-tape-tools.sh`. It reuses
+working installed ttyd (at least 1.7), ffmpeg and the pinned VHS module. Only
+missing system packages are installed, without recommends. Version/startup
+checks must pass before golden tests or rendering; missing tools are an
+installation failure, not skipped coverage.
+
+`TAPE_TOOLS_TIMEOUT_SECONDS` is a shared command budget (default 300, positive
+and at most 600). APT lock and network waits are bounded too; privileged APT
+runs inside its timeout so downloads cannot survive the deadline. The CI step
+has an independent eight-minute limit. Diagnostics identify the failing phase
+and preserve nonzero status. These bounds do not promise fast cold downloads:
+PR #89's mirror took over 26 minutes to fetch missing codec packages, while the
+same bootstrap on another runner took 26 seconds. Retry acquisition rather
+than weakening the mandatory golden-screen or rendering checks.
+
 ## Evidence discovery
 
 `gotogether evidence` discovers exploration evidence and run manifests among a
