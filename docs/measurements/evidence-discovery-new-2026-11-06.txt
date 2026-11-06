@@ -1,0 +1,48 @@
+# pair 1 new
+goos: linux
+goarch: amd64
+pkg: github.com/chucklehead-dev/gotogether/cmd/gotogether
+cpu: INTEL(R) XEON(R) PLATINUM 8573C
+BenchmarkEvidenceDiscoveryCLI/tracked-mix-5         	      10	   9888278 ns/op	         5.000 files/op	   2183729 input-B/op
+BenchmarkEvidenceDiscoveryCLI/captured-tree-5       	      10	  15555145 ns/op	       498.0 files/op	   2384368 input-B/op
+PASS
+# pair 2 new
+goos: linux
+goarch: amd64
+pkg: github.com/chucklehead-dev/gotogether/cmd/gotogether
+cpu: INTEL(R) XEON(R) PLATINUM 8573C
+BenchmarkEvidenceDiscoveryCLI/tracked-mix-5         	      10	   9372302 ns/op	         5.000 files/op	   2183729 input-B/op
+BenchmarkEvidenceDiscoveryCLI/captured-tree-5       	      10	  15660669 ns/op	       498.0 files/op	   2384368 input-B/op
+PASS
+# pair 3 new
+goos: linux
+goarch: amd64
+pkg: github.com/chucklehead-dev/gotogether/cmd/gotogether
+cpu: INTEL(R) XEON(R) PLATINUM 8573C
+BenchmarkEvidenceDiscoveryCLI/tracked-mix-5         	      10	  10362035 ns/op	         5.000 files/op	   2183729 input-B/op
+BenchmarkEvidenceDiscoveryCLI/captured-tree-5       	      10	  15513238 ns/op	       498.0 files/op	   2384368 input-B/op
+PASS
+# pair 4 new
+goos: linux
+goarch: amd64
+pkg: github.com/chucklehead-dev/gotogether/cmd/gotogether
+cpu: INTEL(R) XEON(R) PLATINUM 8573C
+BenchmarkEvidenceDiscoveryCLI/tracked-mix-5         	      10	   9871845 ns/op	         5.000 files/op	   2183729 input-B/op
+BenchmarkEvidenceDiscoveryCLI/captured-tree-5       	      10	  15779778 ns/op	       498.0 files/op	   2384368 input-B/op
+PASS
+# pair 5 new
+goos: linux
+goarch: amd64
+pkg: github.com/chucklehead-dev/gotogether/cmd/gotogether
+cpu: INTEL(R) XEON(R) PLATINUM 8573C
+BenchmarkEvidenceDiscoveryCLI/tracked-mix-5         	      10	  10461952 ns/op	         5.000 files/op	   2183729 input-B/op
+BenchmarkEvidenceDiscoveryCLI/captured-tree-5       	      10	  15607601 ns/op	       498.0 files/op	   2384368 input-B/op
+PASS
+# pair 6 new
+goos: linux
+goarch: amd64
+pkg: github.com/chucklehead-dev/gotogether/cmd/gotogether
+cpu: INTEL(R) XEON(R) PLATINUM 8573C
+BenchmarkEvidenceDiscoveryCLI/tracked-mix-5         	      10	   9587780 ns/op	         5.000 files/op	   2183729 input-B/op
+BenchmarkEvidenceDiscoveryCLI/captured-tree-5       	      10	  16041225 ns/op	       498.0 files/op	   2384368 input-B/op
+PASS

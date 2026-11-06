@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	ev "github.com/chucklehead-dev/gotogether/internal/evidence"
+	"github.com/chucklehead-dev/gotogether/internal/formats"
 	"github.com/chucklehead-dev/gotogether/validate"
 	"github.com/chucklehead-dev/gotogether/validate/runprofile"
 )
@@ -72,7 +73,10 @@ func evidence(args []string) (int, error) {
 			if d.IsDir() || path != root && !strings.HasSuffix(d.Name(), ".json") {
 				return nil
 			}
-			isEvidence, isManifest := ev.Is(path), validate.IsManifest(path)
+			isEvidence, isManifest, err := formats.DiscoverEvidence(path)
+			if err != nil {
+				return err
+			}
 			if isEvidence && isManifest {
 				return fmt.Errorf("%s: conflicting top-level format members identify both evidence and a run manifest: keep one format member and write the file anew", path)
 			}

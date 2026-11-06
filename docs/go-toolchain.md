@@ -36,6 +36,14 @@ both mutant suites, and automatically woven edgepublish faithful, invariant and
 mutant checks. Native and simulated consumer vet covers both examples and
 qgosim. These are semantic integration checks, not merely successful translation.
 
+JSON discovery also exercises the current standard jsontext SkipValue path on
+Go 1.27.3 without experiments. A translated public validate.IsManifest consumer
+reads reordered/nested JSON and huge numbers in the simulated filesystem,
+retains missing-file error identity and replays an emitted step exactly. The
+existing deterministic broadcast replay also passes on the modified core and
+the published fork. Normal encoding/json already brings jsontext/v2 into this
+toolchain's graph; no fork-hook or dependency change is required.
+
 The former bounded `current Go core` admission job is superseded by the ordinary
 CI matrix running the shared 1.27.3 floor. Integration jobs remain in that matrix.
 Preflight formats visible Go source without descending into hidden generated

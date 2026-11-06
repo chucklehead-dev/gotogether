@@ -35,7 +35,7 @@ func TestEvidenceDir(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, pkgDir(), t.Name(), "x2.json")); !os.IsNotExist(err) {
 		t.Errorf("a stale x2.json survived the rerun: %v", err)
 	}
-	if !IsEvidence(filepath.Join(dir, pkgDir(), t.Name(), "x1.json")) {
+	if found, err := IsEvidence(filepath.Join(dir, pkgDir(), t.Name(), "x1.json")); err != nil || !found {
 		t.Error("the rerun's x1.json is not evidence")
 	}
 }

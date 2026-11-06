@@ -1848,7 +1848,7 @@ func Finishes() Expectation
 func Global() Option
 func HasIssue(kind string) Expectation
 func Invariants(names ...string) Option
-func IsEvidence(path string) bool
+func IsEvidence(path string) (bool, error)
 func Killed(sel StepSelector) StepClaim
 func Linearize() Option
 func LinearizeBudget(n int) Option
@@ -2416,7 +2416,7 @@ func CurrentTools(o Options) Tools
 func EventuallyName(val string) string
 func Finishable(b *binding.Binding) error
 func ITFModel(tr *itf.Trace, opt ITFOptions) (*RunModel, error)
-func IsManifest(path string) bool
+func IsManifest(path string) (bool, error)
 func LoadCompiled(path string) (*CompiledModel, error)
 func NewChecker(ctx context.Context, bindingPath string, opt Options) (*Checker, error)
 func NewCompiledChecker(bindingPath, compiledPath string, opt Options) (*Checker, error)

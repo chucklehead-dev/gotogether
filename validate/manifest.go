@@ -796,7 +796,8 @@ func ReadManifest(path string) (*Manifest, error) {
 
 // IsManifest reports whether the JSON file at path is a run manifest of
 // any format version: what a tool walking a directory of evidence reads.
-func IsManifest(path string) bool {
+// Encountered I/O errors are returned; classification does not validate the file.
+func IsManifest(path string) (bool, error) {
 	return formats.Manifest.IsFile(path)
 }
 

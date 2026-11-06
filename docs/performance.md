@@ -791,3 +791,97 @@ PostgreSQL behavior separately. A position-bounded lookup would change every
 store tier; it must preserve fingerprint/checksum/immutable-anchor validation,
 pinned positions and read-set conditioning, head-query cost and bounded storage.
 Increasing cadence alone cannot make a newer snapshot eligible.
+
+
+## Evidence discovery streaming consolidation (2026-11-06)
+
+The order-independent discovery correction (#82) preserved coverage but used two
+separate format predicates for each JSON file. A matching canonical header
+could return early; the other family still scanned the payload. Unrelated ITF,
+report and corpus JSON was scanned twice. Standalone two-predicate profiling put
+78.5% of sampled CPU and 95.1% of allocation space under encoding/json.Token.
+
+Use the admitted Go 1.27.3 standard `encoding/json/jsontext.Decoder.SkipValue`
+instead of boxing every skipped token. A shared multi-family pass routes CLI
+files. Duplicate top-level evidence/run headers remain ambiguous; nested headers
+do not classify the document. Duplicate names and invalid Unicode use the same
+acceptance/replacement semantics as the current authoritative encoding/json
+readers. Recognized headers survive later syntax errors so their reader can
+refuse them; encountered I/O errors are operational, not absence evidence.
+
+The public `qtest.IsEvidence` and `validate.IsManifest` predicates now return
+`(bool, error)`. Migrate directly and check the error; there is no bool-only
+compatibility adapter. The previous CLI could exit 0 with healthy evidence
+beside an unreadable JSON file. The current CLI exits 2, naming the file. Native
+permission and injected-reader controls check this, separately from timing.
+Classification still does not replace full reader validation or suite freshness.
+
+The end-to-end control invokes the actual `evidence -history` subprocess,
+including startup, directory traversal, discovery, selected saved-report readers
+and suite rendering. This command checks/decodes **saved reports**; it does not
+freshly validate a history against its model. Outputs go to null streams while
+printing work is retained. Setup, fixture copying, CLI builds and an initial
+acceptance invocation are untimed. Parent allocations do not represent child
+allocations and are not used as an end-to-end memory claim.
+
+Two unchanged-byte mixes were measured:
+
+- **Tracked mix:** two actual Raft corpus entries and Rust/TypeScript ITFs, plus
+  a tiny current healthy evidence control: five files, 2,183,729 bytes. This case
+  is reproducible from a normal checkout. It is artifact-heavy, not a claim
+  about every typical evidence directory.
+- **Historical captured tree:** 497 ignored outputs from the HTTP/SQLite and
+  three Goo adoption rehearsals, copied without edits, plus the same control:
+  498 files, 2,384,368 bytes. Formats include run/3, run/2, report/1, report/2,
+  ITF/no-format JSON and arrays. Old manifests retain their warning/skip policy.
+  The control keeps the command meaningful; this is a historical byte-shape
+  workload, not a fresh supported production suite or independent adopter run.
+  Exact ignored outputs are not in the repository; the profiling metadata keeps
+  their inventory/content hash. This optional case needs the captured tree.
+
+One fixed baseline-built benchmark harness invoked prebuilt old/current CLIs in
+six alternating before/after process pairs. Each sample averaged ten separate
+CLI invocations per case. Go 1.27.3/linux-amd64, Intel Xeon Platinum 8573C,
+benchmark concurrency suffix 5; process/OS caches were warm. No heavy correctness
+or translation job overlapped the pairs. On the same captured tree, baseline
+and current stdout/stderr were also verified byte-identical.
+
+| End-to-end workload | Baseline median ms | Current median ms | Old range ms | Current range ms |
+|---|---:|---:|---:|---:|
+| Tracked corpus/ITF mix | 37.18 | 9.88 | 36.36–39.64 | 9.37–10.46 |
+| Historical captured tree | 38.78 | 15.63 | 38.37–40.19 | 15.51–16.04 |
+
+This is roughly 73% and 60% lower command time on these bounded inputs. It
+supports retaining the implementation; it does not establish a portable
+percentage or every-suite speedup. Native
+[baseline](measurements/evidence-discovery-old-2026-11-06.txt) and
+[current](measurements/evidence-discovery-new-2026-11-06.txt) output retains every
+pair. [Profiling/control metadata](measurements/evidence-discovery-profile-2026-11-06.txt)
+includes the CPU/allocation text summaries and captured-tree hash.
+
+Standalone two-predicate profiles isolate parser cost, **not** the CLI's new
+single-pass route. Over 100 iterations per case, tracked leaf time went from
+29.48 to 10.29 ms, allocations from 8,353,574 to 60,200 B/op and from 663,453 to
+175 allocs/op. Historical-tree leaf time went from 28.30 to 13.75 ms, 9,285,218
+to 3,118,962 B/op and 334,986 to 16,056 allocs/op. These are allocated bytes,
+not retained memory/RSS or child-process allocations.
+
+The source benchmarks join the existing root-module nightly collector
+automatically; the captured-tree case is opt-in. Normal runs build the current
+CLI outside timing. Select a prebuilt executable to compare versions with one
+fixed harness; compile native benchmark binaries before alternating them.
+
+```sh
+GOTOOLCHAIN=local GOWORK=off go test ./cmd/gotogether -run '^$' -bench '^BenchmarkEvidenceDiscovery' -benchtime=10x
+GOTOOLCHAIN=local GOWORK=off GOTOGETHER_DISCOVERY_BENCH_DIR=/path/to/captured-tree go test ./cmd/gotogether -run '^$' -bench '^BenchmarkEvidenceDiscoveryCLI$' -benchtime=10x
+```
+
+Correctness controls retain reordered/escaped/case-folded keys, invalid Unicode,
+large numbers, nested and duplicate headers, malformed prefixes/tails, unsupported
+majors and strict gaps. Focused race tests, the full CLI short suite and public
+API migration checks pass. Current-core gosim admission executes SkipValue via
+public validate.IsManifest in a simulated filesystem, checks missing-file error
+identity, and deterministically replays an emitted step. The published fork is
+unchanged and GOEXPERIMENT is empty; normal encoding/json already includes
+jsontext/v2 in this admitted toolchain. No schema, persistent format, external
+dependency, fork hook or CPU-budget change is needed.
