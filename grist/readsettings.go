@@ -56,7 +56,8 @@ func AuditSnapshots(oneIn int) AppOption {
 // refilled, ErrRewound, invalidates it), not a snapshot and its tail. A
 // state is memoized only by a read that folded Snapshots' every events or
 // read a snapshot, so a short log's reads are as they are without it. A
-// least recently used state goes first.
+// least recently used state goes first. Ordinary reads and each named processor
+// keep separate cursor states within the same total entry budget.
 func Memo(entries int) AppOption {
 	return AppOption{apply: func(a *App) { a.memoSize = entries }}
 }

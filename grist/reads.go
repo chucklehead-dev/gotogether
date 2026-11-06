@@ -34,6 +34,9 @@ type Reads struct {
 	sels   []Selector
 	id     string // the command id, for ID
 	caller string // the envelope's caller, for Caller
+	// memoOwner separates a processor's historical cursor from ordinary reads.
+	// It is the stable processor name, never a trigger or command identity.
+	memoOwner string
 	// base is the tenant's clock base when the reads began (clockBase): a
 	// step of what they read is recorded on that clock
 	base int64

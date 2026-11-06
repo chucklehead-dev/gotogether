@@ -7,6 +7,13 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
+Processor memo ownership: ordinary reads and each named Grist processor keep
+separate memo entries within the existing total LRU capacity. Interleaving head
+queries no longer forces a lagging processor to rebuild every trigger's prefix.
+The first cold historical read still refolds when its only snapshot is ahead.
+Memo-tail snapshot writes retain observed newer snapshots; anchor checks and
+pinned-state semantics remain unchanged. See grist §2.2 and I24.
+
 Compiled client-history linearization: `validate -compiled -linearize` and
 keyed searches use the artifact's evaluator alone, with native provenance and
 bounded-unknown outcomes. Unsupported candidates error without launching Quint.

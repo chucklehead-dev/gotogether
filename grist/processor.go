@@ -576,6 +576,7 @@ func (pl *poller) decide(ctx context.Context, e Stored) (Result, bool) {
 			return Result{}, false
 		}
 		r := readsAt(ctx, pl.app, pl.s, pl.tenant, e.Pos, pl.key(e))
+		r.memoOwner = pl.p.name
 		res := pl.p.handle(ctx, r, e)
 		if r.err != nil {
 			pl.pause(ctx)
