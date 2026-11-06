@@ -114,7 +114,7 @@ func scenario(tc hegel.TestCase, mut Mutation, steps int) {
 func TestHegelSchedulesConverge(t *testing.T) {
 	qtest.RequireQuint(t)
 	qhegel.Test(t, qhegel.Config{Binding: "broadcast.binding.yaml", Mode: qhegel.Batched, Opts: []qtest.Option{qtest.Global()}, Rounds: 2},
-		func(ht *hegel.T, _ *qhegel.Case) { scenario(ht, Faithful, 30) },
+		func(ht hegel.TestCase, _ *qhegel.Case) { scenario(ht, Faithful, 30) },
 		hegel.WithTestCases(25), hegel.WithDatabase(""))
 }
 

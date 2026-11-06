@@ -47,8 +47,8 @@ func cfg(mode qhegel.Mode) qhegel.Config {
 	return qhegel.Config{Binding: "bank.binding.yaml", Mode: mode, Opts: []qtest.Option{qtest.Global()}, AllowEmpty: true}
 }
 
-func runMachine(m Mutation) func(*hegel.T, *qhegel.Case) {
-	return func(ht *hegel.T, _ *qhegel.Case) {
+func runMachine(m Mutation) func(hegel.TestCase, *qhegel.Case) {
+	return func(ht hegel.TestCase, _ *qhegel.Case) {
 		hegel.RunStateful(ht, &machine{bank: New(accounts, WithMutation(m))}, hegel.WithStatefulStepCount(12))
 	}
 }

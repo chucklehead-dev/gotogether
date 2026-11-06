@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- `qhegel.Test` callbacks use `hegel.TestCase`, matching the other Hegel
+  entrypoints. Per-case resources use deferred cleanup; the KV example closes
+  servers before subsequent cases, including rejected cases. The supported SDK
+  test runner retains native corpus persistence, output and short-mode limits.
+
 - Use Hegel 0.9.30 with native libhegel 0.50 across all live Hegel module
   graphs. Shared rule-group membership is covered by model-checked concurrent
   execution; existing shrinking, final-replay and diagnostic guards remain.

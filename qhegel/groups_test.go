@@ -84,7 +84,7 @@ func TestSharedRuleGroupsConform(t *testing.T) {
 	needQuint(t)
 	coverage := &groupCoverage{}
 	qhegel.Test(t, qhegel.Config{Binding: "testdata/bank.yaml", Mode: qhegel.Each, AllowEmpty: true},
-		func(tc *hegel.T, rec *qhegel.Case) {
+		func(tc hegel.TestCase, rec *qhegel.Case) {
 			hegel.RunStateful(tc, &groupedBank{rec: rec, coverage: coverage},
 				hegel.WithBoundedConcurrency(2), hegel.WithStatefulStepCount(20),
 				hegel.WithRuleGroup("operations", "RuleRead", "RuleIncrement"),

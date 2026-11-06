@@ -2,10 +2,13 @@ package kvstore
 
 import (
 	"context"
+	"net"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/connect"
 	"github.com/chucklehead-dev/gotogether/convert"
@@ -23,13 +26,19 @@ import (
 
 // service starts the HTTP service on a fresh store, its spans going to sr.
 func service(t testing.TB, sr *tracetest.SpanRecorder) *kv.Client {
+	cl, close := startService(sr)
+	t.Cleanup(close)
+	return cl
+}
+
+// startService gives property cases explicit ownership of the server lifetime.
+func startService(sr *tracetest.SpanRecorder) (*kv.Client, func()) {
 	var opts []sdktrace.TracerProviderOption
 	if sr != nil {
 		opts = append(opts, sdktrace.WithSpanProcessor(sr))
 	}
 	srv := httptest.NewServer(kv.NewServer(kv.NewStore(), sdktrace.NewTracerProvider(opts...)).Handler())
-	t.Cleanup(srv.Close)
-	return &kv.Client{Base: srv.URL}
+	return &kv.Client{Base: srv.URL}, srv.Close
 }
 
 // catalog is what the service does, as the model's actions by outcome,
@@ -319,11 +328,66 @@ func (m *machine) RuleGet(tc hegel.TestCase) {
 // each case's recorder (Global) and the runs are checked after the test.
 func TestHegelDrivesService(t *testing.T) {
 	qtest.RequireQuint(t)
+	var previous *kv.Client
+	cases := 0
 	qhegel.Test(t, qhegel.Config{Binding: "kv.binding.yaml", Mode: qhegel.After, Opts: []qtest.Option{qtest.Global()}, AllowEmpty: true},
-		func(ht *hegel.T, _ *qhegel.Case) {
-			hegel.RunStateful(ht, &machine{cl: service(ht, nil), versions: hegel.NewPool[int64](ht)},
+		func(tc hegel.TestCase, _ *qhegel.Case) {
+			if previous != nil && serviceListening(previous) {
+				tc.Errorf("previous property case still has a live HTTP server")
+			}
+			cl, close := startService(nil)
+			defer close()
+			previous = cl
+			cases++
+			hegel.RunStateful(tc, &machine{cl: cl, versions: hegel.NewPool[int64](tc)},
 				hegel.WithStatefulStepCount(15))
 		}, hegel.WithTestCases(30), hegel.WithDatabase(""))
+	if cases < 2 {
+		t.Fatalf("only %d property cases exercised server lifetimes", cases)
+	}
+	if serviceListening(previous) {
+		t.Fatal("last property case retained its HTTP server")
+	}
+}
+
+// Probe the real listener rather than counting calls to a cleanup function.
+func serviceListening(cl *kv.Client) bool {
+	conn, err := net.DialTimeout("tcp", strings.TrimPrefix(cl.Base, "http://"), time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
+
+// A rejected native Hegel case unwinds its defer before another case starts.
+func TestHegelServiceClosesRejectedCase(t *testing.T) {
+	var previous *kv.Client
+	attempts, completed := 0, 0
+	err := hegel.Run(func(tc hegel.TestCase) {
+		if previous != nil && serviceListening(previous) {
+			tc.Errorf("previous case retained its HTTP listener")
+		}
+		cl, close := startService(nil)
+		defer close()
+		previous = cl
+		attempts++
+		if !serviceListening(cl) {
+			tc.Errorf("case HTTP listener was never live")
+		}
+		_ = hegel.Draw(tc, hegel.Integers(0, 100))
+		tc.Assume(attempts != 1)
+		completed++
+	}, hegel.WithTestCases(3), hegel.WithDatabase(""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts < 2 || completed == 0 {
+		t.Fatalf("rejected-case recovery not exercised: %d attempts, %d completed", attempts, completed)
+	}
+	if serviceListening(previous) {
+		t.Fatal("native Hegel run retained its final HTTP listener")
+	}
 }
 
 // ---- 4. the mutants ---------------------------------------------------------
@@ -387,7 +451,8 @@ func TestMutant(t *testing.T) {
 		// alone (the revision wrongly advanced, caught by the CAS's own
 		// check of the revision).
 		v := qhegel.FindViolation(t, qhegel.ViolationConfig{Binding: "kv.binding.yaml", Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, _ *qhegel.Case) {
-			cl := service(t, nil)
+			cl, close := startService(nil)
+			defer close()
 			hegel.RunStateful(tc, &machine{cl: cl, versions: hegel.NewPool[int64](tc)}, hegel.WithStatefulStepCount(10))
 		}, hegel.WithTestCases(30), hegel.WithSeed(11))
 		v.Expect(t, qtest.Mismatch("cas"))

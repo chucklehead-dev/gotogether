@@ -8744,3 +8744,25 @@ version regression was captured; the current instrumented admission supplies
 new evidence without claiming to recover the lost message. Upstream Test's
 diagnostic loss remains, so core properties retain their private Run helper.
 Dated earlier hold decisions and frozen graphs remain provenance.
+
+
+## Hegel callback and case ownership consolidation (2026-11-06)
+
+`qhegel.Test` now takes `hegel.TestCase`, matching `FindViolation`, `Shrink`
+and trace variation. Existing callbacks migrate directly; no compatibility
+format is retained. Native case failures abort, and deferred resource cleanup
+belongs to each invocation rather than the outer Go test. KV's actual generated
+workload and rejected-case control check listener closure before subsequent
+cases; its expected-violation search also closes servers during shrinking.
+
+Investigation first reproduced public health-check diagnostic loss: SDK `Test`
+returns a bare failed test for `FilterTooMuch`, whereas `Run` returns the full
+error. A proposed `Run` migration failed a real corpus persistence control:
+`WithDatabase` alone cannot supply the private database key that `Test` derives
+from the Go test name. Per-property directories do not fix the missing key.
+The shipped implementation keeps the supported SDK test runner and its output,
+short-mode and corpus behavior. The supported-key or direct SDK diagnostic fix
+is documented in [the upstream note](upstream/hegel-run-diagnostics.md), rather
+than silently sacrificing saved counterexamples for better errors. `After`
+retains completed cases with a partial-search qualifier when native generation
+fails; `Batched` stops before treating an incomplete round as checked evidence.

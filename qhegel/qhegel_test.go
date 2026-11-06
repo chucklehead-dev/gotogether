@@ -83,8 +83,8 @@ func needQuint(t *testing.T) {
 	}
 }
 
-func run(buggy bool) func(ht *hegel.T, rec *qhegel.Case) {
-	return func(ht *hegel.T, rec *qhegel.Case) {
+func run(buggy bool) func(ht hegel.TestCase, rec *qhegel.Case) {
+	return func(ht hegel.TestCase, rec *qhegel.Case) {
 		m := &bankMachine{b: &bank{bal: map[string]int{"alice": 0, "bob": 0}, buggy: buggy}, rec: rec}
 		hegel.RunStateful(ht, m, hegel.WithStatefulStepCount(8))
 	}

@@ -608,6 +608,16 @@ with no Python and no server. Its stateful API discovers `Rule*` and
 `Invariant*` methods by reflection. Two directions are useful with a
 Quint model.
 
+`qhegel.Test` takes `func(hegel.TestCase, *qhegel.Case)`, matching the other
+case helpers. `TestCase.Errorf` aborts the native case. Case-owned resources
+use deferred cleanup; the outer Go test owns its context and test-wide cleanup.
+Internally the supported SDK `hegel.Test` bridges its case to this interface;
+there is no second public callback format. This retains native test output,
+short-mode limits and database keys derived from the Go test name. Public
+`hegel.Run` cannot currently set a corpus key, so switching runners would lose
+persistence. Full health-check error visibility awaits a supported SDK change;
+see [the reproduction and boundary](upstream/hegel-run-diagnostics.md).
+
 **Hegel drives, the model judges.**
 - Hegel's rules call the implementation with drawn inputs, including
   invalid ones. The implementation, or the rule, records model steps.
