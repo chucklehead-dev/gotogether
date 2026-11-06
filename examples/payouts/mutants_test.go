@@ -46,9 +46,10 @@ func TestMutant(t *testing.T) {
 		// callers' rule: Linked says the two sides agree, not that either
 		// is right
 		quiet := system(commits, pair).WithRates(qenv.NoFaults)
-		quiet.Explore(t, cfg).Expect(t, qtest.Some(qtest.Rejects("request")))
+		e := quiet.Explore(t, cfg)
+		e.Expect(t, qtest.Some(qtest.Rejects("request")))
 		quiet.WithBinding(atBank).Explore(t, cfg).Expect(t, qtest.Some(qtest.Violates("onePaymentPerPayout")))
-		if n := linked(t, quiet.Explore(t, cfg)); n != 0 {
+		if n := linked(t, e); n != 0 {
 			t.Errorf("noDuplicateCheck: Links found %d runs unlinked: want the two sides agreeing", n)
 		}
 	default:

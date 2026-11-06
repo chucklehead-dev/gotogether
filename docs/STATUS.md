@@ -16,6 +16,11 @@ also honors supplied sessions; ordinary Serializable is unchanged. Independent
 serial replay checks 1,080 additional bounded combinations. Recorder IDs supply
 no session evidence; automatic capture remains separate. See DESIGN §102.
 
+Payouts exploration consolidation: the noDuplicateCheck mutant reuses its
+payouts-model exploration for cross-app link checks. Its separate bank-model
+exploration and all short/full seeds and assertions remain. This removes an
+identical simulation/validation pass without a framework API or CPU-budget change.
+
 Model-analysis lifecycle: canonical `validate/model` entrypoints take a context
 per operation, including analyzer construction, graph/possible searches,
 simulation and graph membership cross-checking. Managed compilation, cache
