@@ -1,302 +1,66 @@
 # Roadmap
 
-What is open. What is done (the A–D, U, V, W, R1–R4, X, Y, Z, T, E and G tracks,
-the move to gotogether) and the reviews that shaped it are in
-docs/HISTORY.md; why the code is the way it is, in DESIGN.md.
+Open work and its dependencies. [STATUS](STATUS.md) is the short current
+handoff; [HISTORY](HISTORY.md) preserves completed plans and reviews;
+[DESIGN](DESIGN.md) records contracts and decisions. Item identifiers below
+remain stable even when their first bounded increment is built.
 
-Standing decisions, with the maintainer:
-- Nothing is released yet. Tags wait for the maintainer (R5).
-- Crashes are considered at every scheduling step (`NemesisEvery` is
-  opt-in); `qenv.Service`'s crash window is on by default.
+## Standing decisions
+
+- Nothing is released. Iterate toward one current API/format without legacy
+  compatibility layers. Tags and publication wait for the maintainer (R5).
+- Crashes are considered at every scheduling step; `NemesisEvery` is opt-in.
+  `qenv.Service`'s crash window is on by default.
 - The global recorder is opt-in (`qtest.Global()`).
-- Heavy integrations stay in separate modules; the core keeps its small
-  recording, YAML, platform and CLI module-parser dependencies.
-- MIT license.
+- Heavy integrations remain separate modules; the core keeps its small runtime
+  and CLI dependencies. MIT license.
+- The live Go/runtime floor is 1.27.3; [toolchain policy](go-toolchain.md) owns
+  admission. Frozen histories retain their original pins as provenance.
 
-Current order (reviewed 2026-11-06): this is a prerelease library.
-Correctness and usable core contracts come before release machinery. The bounded
-composition, Goo lifecycle, declared-call span, workload-phase and diagnostic
-experiments have answered their initial questions; rotate away from inventory
-and further diagnostic breadth. Breaking changes are allowed, without parallel
-legacy formats.
+## Current order
 
-Use a tick, tock, consolidate cadence: general framework capability, bounded
-feature or contract depth, and evidence-driven structural/usability/performance
-work.
-The next general framework slice follows checkout's existing manual fault-order
-loop: ordinary scripted Explore correctly rejects incomplete scripts, while a
-bounded order sweep must retain unsuccessful attempts without pretending they
-prove impossibility. System.FaultOrders now samples directed pairs through the
-same engine, checks every attempt, and retains requested goals, bounds and native
-witnesses in existing evidence. Co-occurrence alone cannot establish both orders.
-After this slice, rotate away from more order modes until a new caller need
-justifies them.
-The subsequent stream facet returns to native client contracts: Kafka fetch errors
-must not become idle polls, and a partial batch cannot be discarded when another
-partition/shard fails. Both native readers retain records plus errors; consumer
-loops process the records before backoff. Broader broker features should follow
-another concrete production-client gap rather than more fault-order modes.
-The subsequent consolidation closes a reproduced suite-inspection omission:
-moving valid evidence's format member after its payload made strict directory
-inspection skip an unreached goal and pass. Evidence and manifest sniffers now
-share order-independent streaming discovery. Conflicting family headers fail
-before routing; unrelated traces remain excluded and version policy stays in
-the readers. This corrects input integrity without another coverage mode.
-The cold-resume audit also found dated direct-to-main push instructions and
-obsolete next-work descriptions; consolidate that handoff separately, preserving
-decision provenance and meaningful open boundaries.
-The installed LRU MBT rehearsal now covers a non-SQL consumer workflow
-and an isolated source contrast; the configuration typo it exposed is fixed by
-strict preflight and direct API migration. The consolidation slice threads
-caller-owned cancellation through model loading, checker construction, lint
-inspection and trace-schema recovery, with
-independently cancelable cache waits and retry after a canceled owner. The
-subsequent model-analysis slice closes a reproduced signal-loss boundary:
-model-diff waited for a gated compiler even after receiving SIGTERM. Context-first
-analysis APIs now carry cancellation through the existing compiler/cache path,
-managed subprocesses and cooperative evaluation, graph and liveness traversal.
-Live waiters retry after a canceled compile owner; reusable analyzers and cached
-IR retain no request context. Pure metadata, ordinary-validation evaluator
-entrypoints and go/analysis remain explicit separate lifecycle boundaries.
-The following facet-depth slice returns to I45 database history checking: explicit
-session precedence closes an untimed stale-read evidence gap. Session identity
-is caller-supplied, never inferred from recorder IDs; the checker retains typed
-cycle edges and is checked against independent serial replay. After the payouts
-exploration consolidation, the next general framework slice closes I21's compiled
-linearization boundary: completed concurrent histories can be searched and replayed
-from the artifact without external tools, under explicit evaluator-only evidence.
-Unsupported candidates cannot become negative proof, and bounds stay undecided.
-Pending-call resolution remains separate; rotate to another facet before expanding
-compiled search modes or adding automatic history capture.
-The general framework tick is the first bounded I42 model-behavior comparison:
-complete finite Go-evaluator graphs on explicit observations, with whole-prefix inclusion,
-separate resource bounds and native-replayed source witnesses. A non-storage
-handshake checks the contract. The recent model/source contrasts motivated this
-review tool; they did not establish an adopter blocker. A pinned historical hello
-completion change now exercises that workflow: state-sequence equivalence leaves
-named completion obligations separate. Its replay-ergonomics gap is addressed by
-portable confirmed-source artifacts and an original-hash source snapshot helper.
-Recording identity consolidation rotates back to the shared runtime: duplicate
-background lookup is removed without caching ownership or clocks, and filtered
-non-events stop claiming thread ownership. Further capability should follow an
-actual usage blocker before expanding comparison mappings or liveness.
-Two late repository-contract failures (help length and process-state scope) also
-justify a shared non-native preflight gate before CI fanout. It preserves full
-coverage while shortening feedback; this is evidence-driven consolidation, not
-a new product capability or a reason to expand adjacent fixtures.
-A subsequent cross-facet reporting correction follows a reproduced CLI failure:
-stdout JSON claimed pass/exit 0 before a requested report failed and the command
-exited 2. Shared delivery now keeps operational status and native evidence
-separate, attempts independent outputs, joins errors and refreshes saved reports
-before final stdout. This improves existing agent/CI contracts without another
-format, adapter or adjacent comparison fixture.
-The focused lint follow-up closes another reproduced request boundary: invalid
-positionals previously started inspection and flag failures bypassed JSON.
-Request validation now precedes target effects, using the existing lint report.
-After these reporting/request corrections, rotate toward an independently
-observed capability or facet contract rather than more output modes. A payouts
-CPU near-threshold failure did not justify a budget increase: the combined head
-passed all 36 checks, with payouts at 31.5 CPU seconds. Repeated cost growth needs
-per-test attribution. The payouts consolidation
-reuses noDuplicateCheck's existing exploration for cross-app link checks instead
-of repeating identical simulation and validation. Both models retain their
-separate explorations, all seeds and all claims; no budget increase or framework
-cache/revalidation API is needed. Warm paired CPU measurements showed no material
-improvement; fewer exploration calls alone do not establish an end-to-end speedup.
-The structural benefit is checking the same recorded runs for rejection and links.
-The I1 facet-depth slice completes library's deployment-history rehearsal:
-a buggy upcaster's persisted snapshot, unchanged-release reuse, corrected-release
-refold, and subsequent corrected-snapshot reuse across fresh processes. This
-exercises a known cache contract with actual application folds rather than adding
-another generic report feature. No runtime API or persistence-format change is
-needed; further scope should follow another demonstrated contract boundary.
-The following general framework slice closes I17's concrete test-configuration
-gap: counters copied the model tree and rewrote generated YAML just to choose a
-depth bound. ModelCheck.WithOptions now supplies copied test-local constants and
-search bounds to the existing engine; counters uses its generated files directly.
-Complete proofs, depth-only bounded proofs, state-cut unknowns and native-replayed
-refutations retain their existing meanings. No new format or second engine is
-needed. Further capability should follow another actual authoring/runtime gap.
-The consolidation review adds branch-projected graph benchmarks to the existing
-full-event workloads. I39's proposed parent-label reuse reduced projection calls
-but regressed all six short-run medians by 1.9–4.2% in four alternating pairs;
-production code is retained. The known duplicate work is not sufficient evidence
-for another implementation change. Future performance work needs representative
-end-to-end controls as well as operation counts; broader evaluator redesign
-remains deferred.
-The Go 1.27 adoption slice moves the shared live floor to 1.27.3 after the fork's
-runtime/standard-library port. Normal CI now exercises that one current family;
-the separate pre-port host-core admission job is redundant. Old admission results
-remain provenance, not a second compatibility target. Genuine hook semantics and
-fresh-process determinism must remain prerequisites for future major updates.
-The following bounded feature slice restores I17's lost twophase assertion with
-AllStepActionsReachable: each named action directly called by step must have a
-transition witness. Composite transitions count every roster action once;
-complete absence is unreachable, bounded absence unknown. This is named-action
-reachability, not syntactic branch or parameter-combination coverage. Canonical
-reports retain the same typed counts and scope. After this facet-depth slice,
-rotate toward a concrete general-framework gap or evidence-driven consolidation;
-do not expand reachability modes without a demonstrated caller need.
-The following consolidation admits the audit's remaining current-library
-candidates: live x/sys 0.49.0 requirements and external Orchestrion 1.15.0. It
-checks exclusive publication, replay exports and actual weaving, including the
-existing WaitGroup.Go hook through both engines. Free-form weaving guidance now
-links the central Go policy instead of retaining a stale runtime-family number.
-No new runtime facade or source compatibility branch is needed. Choose the next
-general-framework capability from a concrete authoring/runtime gap rather than
-expanding the just-completed reachability facet.
-The following general-framework slice implements the previously deferred
-model-analysis lifecycle boundary after a real CLI interruption reproduced lost
-cancellation. It changes the existing API directly, shares the compiler/cache and
-error-report paths, and preserves cancellation as operational failure rather than
-bounded absence or model refutation. Further graph/diagnostic modes are not
-justified by this work; subsequent depth or consolidation should follow an
-actual consumer contract or measured cost.
-Keep frozen baseline pins for reproducibility, not as legacy support promises.
-Further adapters, adjacent fixtures and per-pair clock APIs need usage evidence.
+Reviewed 2026-11-06. Use a tick, tock, consolidate cadence: general framework
+capability, focused feature/contract depth, then structural, usability or
+performance work selected from evidence. This is a balance, not a quota.
 
-The bounded completion-accounting slice (GR10b) is built: distinguish idle
-background workers from workers holding work, tested in plain qenv and a second
-asynchronous consumer. This is a known daemon/settlement classification boundary,
-not a newly demonstrated silent pass. Alongside it, a cold-start non-grist
-HTTP/SQLite rehearsal now exercises actual observations, a frozen model/source
-contrast, replay and real workload shrinking, with prefix and missing-evidence
-controls. See [the rehearsal](../internal/adoptiontest/http-sql/README.md). I4's first finite pinned-witness slice is implemented for ordinary complete
-traces, with whole-path search, original-action Quint confirmation and explicit
-unsupported/bounded outcomes. See [its scope](model-choice-witnesses.md). The first typed core lint report and executable lint walkthrough are also
-implemented: shared text/JSON evidence, rule-site findings and explicit blocked
-checks. See [the walkthrough](lint-onboarding.md). Broader onboarding and editor
-integration should follow concrete adopter friction before expanding choice modes.
+Recent slices are [#80](https://github.com/chucklehead-dev/gotogether/pull/80)
+(general directed fault-order coverage),
+[#81](https://github.com/chucklehead-dev/gotogether/pull/81)
+(native stream partial-result correctness), and
+[#82](https://github.com/chucklehead-dev/gotogether/pull/82)
+(shared evidence discovery). The handoff consolidation now removes superseded
+next-work instructions and keeps dated summaries in
+[HISTORY](HISTORY.md#handoff-consolidation-2026-11-06). It changes no runtime
+contract or previously recorded evidence.
 
-The first component-aware shrinking slice is implemented: named local/protocol
-obligations retain component/binding identity through real reruns, calibration
-and artifacts, with explicit refusal outside the supported receipt evidence.
-The non-inventory acceptance case is a plain qenv producer/consumer counter.
-The synchronous library starter and explicit scaffold property roles are merged
-in PR #13. A bounded adaptation now exercises Goo's strict definition-reading
-API through the published starter: 16 authored inputs, actual native API returns,
-a frozen contract and a later parent-planted source contrast. See
-[the rehearsal](../internal/adoptiontest/goo-read/README.md). This is
-agent-assisted evidence, not independent-maintainer adoption or general parser
-verification. No missing runtime adapter blocked it. Expected library rejection
-is observed domain data; tool and mutation-setup errors are separate failures.
-Go's module-cache overlay restriction was handled with an isolated dependency
-copy and alternate modfile, leaving the frozen baseline and external repository
-unchanged. It did expose a core machine-output blocker: graph completeness and
-counts required parsing human text. Canonical model-report documents now retain
-native graph scope, check bounds/proof coverage, reachability search extent and
-typed skip reasons; the rehearsal consumes those fields directly. No new runtime
-adapter was needed.
+After this cleanup, investigate a demonstrated general-framework gap before
+expanding the just-completed fault-order or stream facets. Candidates below
+are experiments with explicit selection thresholds, not feature commitments.
 
-A second [bounded real-library rehearsal](../internal/adoptiontest/goo-counted-values/README.md)
-checks exact large-count arithmetic through native recording, Quint/TypeScript,
-ITF, bundle and replay. The independent model/driver freeze precedes a planted
-wrapping-addition source contrast. Existing small-count tests remain credited;
-Rust/Go int64 refusals and absent TypeScript failure state remain explicit.
-That frozen explicit-helper trial did not demonstrate a decoder defect. A later
-no-mapping variant exposed float64 rounding in flat collection defaults; the
-core now preserves exact integer literals through those defaults and helpers,
-with explicit refusal of fractional/exponent inputs. Frozen artifacts stay
-unchanged. A follow-up static binding rule now diagnoses plain recorded-field
-templates for collection arguments, with omission/typed-conversion fixes and
-explicit outcome-expression exclusions. Further capabilities
-should follow independent use or a concrete contract blocker, rather than more
-adjacent numeric fixtures.
+| Order | Candidate | Evidence needed before implementation |
+|---|---|---|
+| Next investigation: general | I21: bounded compiled pending-call resolution | Reuse an existing concurrent-history fixture to demonstrate a real portable-replay blocker; preserve unsupported/bounded outcomes and independent search controls. Completed-history compiled linearization already works. |
+| Subsequent facet candidate | I24: first cold historical-read cost | Measure a realistic lagging-processor workload. Warm memo ownership is fixed; change persistent snapshot retention only if cold refolds materially matter and anchor/rewind semantics remain sound. |
+| Consolidation candidate | Evidence discovery cost at representative suite volume | Profile actual file mixes before replacing the streaming implementation. Correct discovery is required; fewer scans or callback counts alone do not establish an end-to-end speedup. |
+| Alongside | Independent-maintainer use or a newly reproduced caller blocker | Existing agent-assisted Goo/LRU/HTTP trials retain their bounded scope. Prefer real friction over another adjacent fixture or adapter. |
 
-A navigation integrity follow-up refuses non-loss reconstruction errors before
-anchoring an observed state, including within partitions and at cursor zero.
-Exact retries and existing loss/snapshot policies remain supported. The
-simulation budget follow-up now permits quiet completion on the final allowed
-turn, preserves stuck and horizon outcomes, and refuses another runnable turn or
-in-bound deadline advance before time or choices are consumed. The budget remains
-cumulative across calls. Recent fixes reinforce a shared rule: capture integrity,
-model conformance, runtime completion and execution limits are separate facts;
-none should stand in for another in JSON, TUI or claims. Further work should
-start with fresh end-to-end use or a demonstrated contract blocker.
+Keep capture integrity, model conformance, runtime completion, coverage and
+execution limits separate. A partial batch must preserve both records and
+errors; a bounded absent witness is not impossibility; a valid file omitted by
+discovery cannot contribute evidence. Text, JSON and TUI should expose the same
+native facts instead of inventing parallel interpretations.
 
-An adoption-driven generator correction removes a documented workaround:
-command order with argument order now gets a separate local model draw instead
-of shadowing its action. Argument and framework draw allocation preserves
-external vocabulary and rule records across store/client branches and
-reachability predicates. Native typechecking and executable witnesses retain
-the original catalog shape and cover related caller/helper collisions. This
-improves model authoring without an inference mode or a new format.
+Virtual physical-session capacity, more fault-order modes, additional broker
+features, model-comparison mappings, broad diagnostic/editor expansion and
+platform facades remain deferred without new evidence. Logical transaction
+limits and native role quotas do not establish virtual physical-session fidelity.
+Cold snapshot retention and compiled pending calls are distinct from their
+already-built warm/completed counterparts. Abrupt-owner process supervision
+remains an explicit I12 boundary. Do not start all tracks at once.
 
-Model reachability evidence now separates predicates holding from action
-sequences executing. Resolved goals and exact structured evaluator witnesses
-are available in report/2, including explicit unattributed transitions and
-backend/search bounds. A generated command-outcome predicate may hold initially
-without a command executing. Partition reporting now preserves source actor/partition identities and original
-versus optimized replay constants in shared receipts, with local instance IDs,
-clone/merge isolation and near-linear serialization. Text, JSON and TUI share
-these facts without changing the unread-constant replay optimization.
-Scaffold setup recovery now addresses the documented populated-directory failure:
-init/new retain files and print the failed and remaining setup steps plus
-verification, using shell-safe arguments and GOWORK=off. Write-only output uses
-the same complete plan; module/Go preflight and quoted replacement paths avoid
-predictable setup failures. A fresh [tail-membership capability exercise](../internal/adoptiontest/goo-tail-membership/README.md)
-now checks a distinct stateful contract: two snapshot slots, read-anchored expiry,
-ownership, immutable payload/provenance and atomic multi-reference resolution.
-The model/observer freeze precedes a planted exact-expiry defect; native mismatch,
-missing-evidence refusal and relocated replay preserve separate facts. The full
-native outputs remain alongside lossless model projections. Existing Goo tests
-retain credit, and the authored histories do not establish exhaustive verification
-or independent adoption. No new core API was needed. GR10c now addresses the
-documented down-process settlement boundary: ordinary Settle requires all
-registered processes up; SettleCore applies that requirement and pending-task
-accounting only to its selected processes plus process-free clients. Blocked
-outside-core waits follow the same scope, while scheduling and global step
-limits remain unchanged. Typed execution facts retain down-process identities
-without inferring business work from killed goroutines or weakening eventual
-properties. Choose further work from independent use or a concrete blocker.
-
-S11's skipped middle-snapshot gap is implemented in PR #15:
-later snapshots check the whole replayed state and cannot reset it. The first
-snapshot retains its lost-head initialization role. The merged I45 increment (PR #16)
-closes a separate database-history omission: known committed appenders that no
-external read observed still constrain reads. This catches strict stale reads
-and write skew without inventing unseen writer order or Unknown completion.
-The next runtime slice fixes interrupted database lock waits: rolled-back or
-reset transactions wake independently of an unrelated lock holder, and explicit
-SQL cancellation retains its correct result after a yielding operation. This
-supports existing services without adding a pool or timer facade.
-Further shrinking, lint, editor and onboarding breadth still
-needs concrete blockers. Existing streams already covers simulated, Kafka and Kinesis
-tiers; a new outbound facade still needs evidence. Do not start all these tracks at once. Tags remain the maintainer's
-call. See HISTORY's "Breadth and core lessons review, 2026-10-30" for tradeoffs.
-
-GR4's first increment is built: acyclic peer graphs, one store/node/API
-per peer, shared peers instantiated once, per-service model judgments
-and an independent end-to-end posting check (docs/grist-composition.md).
-A combined causal protocol model is built over the same
-histories (`gristtest.ProtocolSteps`), including missing, duplicate and
-premature-posting contrasts. Bounded universal order search now checks
-concurrent extensions with explicit exhaustion and counterexample identities.
-The inventory-grist adoption rehearsal is built: cancellation and
-confirmation at a shared inventory owner, three planted bugs, local and
-combined checks, and a friction report. Order-specific obligation diagnostics and exact evidence links are built;
-named prerequisite phases are also built
-with required outcomes, real query observations and explicit fault policy
-(docs/grist-workload-phases.md). Broader per-service configuration, cycles,
-clusters and rollouts need adopter evidence.
-The independent Goo lifecycle modeling trial is validated in
-[casselc/goo#1](https://github.com/casselc/goo/pull/1): two tenants and two
-immutable generations, real kernel APIs, three source mutants shrunk to
-2/6/3 operations, and passing consumer and repository CI. It found no
-production defect within its bounds. This agent-assisted trial validates
-the core workflow in an independently maintained library; it does not
-establish unaided onboarding or grist adoption. The bounded GR3 slice 6
-experiment is now built in payouts; review its [results and remaining
-limits](grist-call-spans.md#result-of-the-first-increment) before expanding it.
-A provisional [model-authored diagnostics experiment](model-diagnostics-prototype.md)
-is in progress: typed Quint documentation annotations associate a checked
-property with its outstanding-intent value, without another YAML mapping.
-The inventory missingRelease witness feeds structured text/JSON/TUI details.
-Explicit binding selectors now resolve captured/native identities in JSON, CLI
-and TUI without changing judgments. Developer-editor integration and broader
-checked-history diagnostics remain open, but are not the next expansion.
-The earlier tracks below retain their item identifiers and technical dependencies; their historical release
-recommendations do not override this prerelease order.
+The item sections below retain their technical dependencies and design detail.
+Historical release recommendations do not override the current prerelease order.
+The previous chronological opening is preserved in the dated handoff archive.
 
 ## Eleventh review: integrity before tags (I)
 
@@ -512,8 +276,8 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   the unrelated global 500-seed override. Remaining literal Quint test launches
   in the core and grist now share admission and cancellation, with a source
   guard against direct os/exec regressions.
-  Left: an `io.Writer` option asked of hegel-go and the Go-floor decision/build
-  (the current declared floor remains unchanged). What it was: The race job widened to qtest
+  Left: an `io.Writer` option asked of hegel-go. The Go-floor decision is
+  resolved at 1.27.3 with native/runtime admission (go-toolchain.md). What it was: The race job widened to qtest
   (whose explorations run seeds in parallel), qhistory, qsweep,
   qnemesis, qload, qshrink and internal/qeval (all pass today, about 4
   CPU minutes); qhegel's capture of Hegel's output by assigning
