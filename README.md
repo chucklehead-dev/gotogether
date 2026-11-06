@@ -123,6 +123,8 @@ To prepare a handoff that needs no Quint or Node at replay time, compile the
 binding once, then validate with `-compiled model.json -manifest run.json`.
 The manifest records the compiled artifact as a checked dependency; bundle and
 replay preserve that judge, its native verdict, and any unsupported-check limits.
+Compiled histories also support `-resolve-pending`, alone or with `-linearize`:
+unobserved effects remain explicit assumptions, not completed calls.
 
 For an on-call exercise on an existing service, follow the
 [jobqueue incident walkthrough](examples/jobqueue/INCIDENT.md): a native JSON

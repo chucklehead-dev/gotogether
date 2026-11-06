@@ -1604,6 +1604,13 @@ func resolution(ch, full *Checker, tr *qtrace.Trace, settles []qtrace.Step, budg
 			orders[i] = append(orders[i], s)
 		}
 	}
+	ev := resolveEval(ch)
+	nativeNote := func(issue qtrace.Issue) qtrace.Issue {
+		if ev.native {
+			return ev.note(issue)
+		}
+		return issue
+	}
 	// found is resolution i, conforming, as the search's outcome: with a
 	// later one if i violates an invariant and that one keeps them
 	found := func(i int, sev, extra string, cl *claim) ([]qtrace.Step, qtrace.Issue, bool, *claim) {
@@ -1614,15 +1621,18 @@ func resolution(ch, full *Checker, tr *qtrace.Trace, settles []qtrace.Step, budg
 		if undecided {
 			sev = "warn"
 		}
-		return apply(tr, pls[j]), qtrace.Issue{Severity: sev, Kind: "resolve", Msg: fmt.Sprintf("actor %s: %d pending calls, resolved (%d resolutions tried): %s",
-			a, len(tr.Pending), j+1, describe(tr, pls[j])) + kept + note + extra}, undecided, cl
+		return apply(tr, pls[j]), nativeNote(qtrace.Issue{Severity: sev, Kind: "resolve", Msg: fmt.Sprintf("actor %s: %d pending calls, resolved (%d resolutions tried): %s",
+			a, len(tr.Pending), j+1, describe(tr, pls[j])) + kept + note + extra}), undecided, cl
 	}
 	// the first the Go evaluator accepts, confirmed by quint with the ones
 	// it rejected before it (or by the caller's check); none, or a
 	// refusal, and quint checks them all, as a verdict of none needs every
 	// one rejected
 	disagreed := ""
-	if i, ok := resolveEval(ch).first(ch, tr, a, orders); ok {
+	if i, ok := ev.first(ch, tr, a, orders); ok {
+		if ev.native {
+			return found(i, "info", "", nil)
+		}
 		if ch.mode.byCheck {
 			return found(i, "info", "", &claim{ch: ch, tr: tr, order: orders[i], rejected: orders[:i]})
 		}
@@ -1642,7 +1652,14 @@ func resolution(ch, full *Checker, tr *qtrace.Trace, settles []qtrace.Step, budg
 		searchedAgain.Add(1)
 		disagreed = fmt.Sprintf("; the Go evaluator and quint disagree on actor %s's resolutions: decided by quint (GOTOGETHER_EVAL=quint checks with quint alone)", a)
 	}
-	reps, errs := ch.CheckBatch(ch.mode.context(), settledAs(tr, orders), 0)
+	var reps []*Report
+	var errs []error
+	var native []int
+	if ev.native {
+		native, errs = compiledResolutions(ch, tr, a, orders, false)
+	} else {
+		reps, errs = ch.CheckBatch(ch.mode.context(), settledAs(tr, orders), 0)
+	}
 	best, bestAt := 0, -2
 	var firstErr error
 	for i := range orders {
@@ -1650,11 +1667,16 @@ func resolution(ch, full *Checker, tr *qtrace.Trace, settles []qtrace.Step, budg
 			// a resolution the binding cannot replay (a parameter read from an
 			// observation the assumed step lacks): not one to take
 			if firstErr == nil {
-				firstErr = errs[i]
+				firstErr = fmt.Errorf("candidate %d: %w", i+1, errs[i])
 			}
 			continue
 		}
-		at := failedAt(reps[i], len(orders[i]))
+		var at int
+		if ev.native {
+			at = native[i]
+		} else {
+			at = failedAt(reps[i], len(orders[i]))
+		}
 		if at < 0 {
 			sev := "info"
 			if disagreed != "" {
@@ -1666,15 +1688,15 @@ func resolution(ch, full *Checker, tr *qtrace.Trace, settles []qtrace.Step, budg
 			best, bestAt = i, at
 		}
 	}
-	if bestAt == -2 && firstErr != nil {
-		fail("resolving actor %s's pending calls: no resolution can be replayed: %v", a, firstErr)
+	if firstErr != nil {
+		panic(searchError{fmt.Errorf("resolving actor %s's pending calls: cannot rule out an unreplayable placement: %w; bind assumed-effect inputs from recorded invocation arguments instead of absent reply fields, or record where the effect took place", a, firstErr)})
 	}
 	if cut {
-		return apply(tr, pls[best]), qtrace.Issue{Severity: "warn", Kind: "resolve", Msg: fmt.Sprintf("actor %s: no resolution of its %d pending calls conformed in the %d of the budget: "+
-			"no verdict (conformance n/a); the one shown got furthest: %s", a, len(tr.Pending), len(pls), describe(tr, pls[best])) + note + disagreed}, true, nil
+		return apply(tr, pls[best]), nativeNote(qtrace.Issue{Severity: "warn", Kind: "resolve", Msg: fmt.Sprintf("actor %s: no resolution of its %d pending calls conformed in the %d of the budget: "+
+			"no verdict (conformance n/a); the one shown got furthest: %s", a, len(tr.Pending), len(pls), describe(tr, pls[best])) + note + disagreed}), true, nil
 	}
-	return apply(tr, pls[best]), qtrace.Issue{Severity: "warn", Kind: "resolve", Msg: fmt.Sprintf("actor %s: no resolution of its %d pending calls conforms (%d tried): "+
-		"whatever they did, the run is no behaviour of the model; the one shown got furthest: %s", a, len(tr.Pending), len(pls), describe(tr, pls[best])) + note + disagreed}, false, nil
+	return apply(tr, pls[best]), nativeNote(qtrace.Issue{Severity: "warn", Kind: "resolve", Msg: fmt.Sprintf("actor %s: no resolution of its %d pending calls conforms (%d tried): "+
+		"whatever they did, the run is no behaviour of the model; the one shown got furthest: %s", a, len(tr.Pending), len(pls), describe(tr, pls[best])) + note + disagreed}), false, nil
 }
 
 // keepInvariants is the resolution to take of orders, i the first that
@@ -1695,6 +1717,18 @@ func keepInvariants(full *Checker, tr *qtrace.Trace, a string, orders [][]qtrace
 		}
 	}
 	quintInv := quintChecker(inst, tr, a, true)
+	var renderErr error
+	if inst.compiled != nil {
+		quintInv = func(orders [][]qtrace.Step) ([]int, []string) {
+			fs, errs := compiledResolutions(inst, tr, a, orders, true)
+			for candidate, err := range errs {
+				if renderErr == nil && err != nil {
+					renderErr = fmt.Errorf("candidate %d in invariant scan: %w", candidate+1, err)
+				}
+			}
+			return fs, nil
+		}
+	}
 	if first(quintInv(orders[i:i+1])) < 0 {
 		return i, "", false
 	}
@@ -1705,6 +1739,9 @@ func keepInvariants(full *Checker, tr *qtrace.Trace, a string, orders [][]qtrace
 				return i + 1 + k, fmt.Sprintf(", with every invariant holding (resolution %d, the first that conforms, violates one)", i+1), false
 			}
 		}
+	}
+	if renderErr != nil {
+		panic(searchError{fmt.Errorf("resolving actor %s's pending calls with invariants: cannot rule out an unreplayable placement: %w; bind assumed-effect inputs from recorded invocation arguments instead of absent reply fields, or record where the effect took place", a, renderErr)})
 	}
 	if cut {
 		return i, fmt.Sprintf("; it violates an invariant, and no other resolution in the budget (%d) conforms with every invariant holding: no verdict for the invariants. "+
@@ -1724,9 +1761,18 @@ func (ev *evalUse) first(ch *Checker, tr *qtrace.Trace, a string, orders [][]qtr
 	}
 	var fs []int
 	for i, o := range settledAs(tr, orders) {
+		if ev.native && compiledResolutionPlan(ch, tr, o) != nil {
+			continue // an assumed output cannot supply a required binding argument
+		}
 		f, _, err := ev.e.judge(ch, tr, o, len(orders[i]), false)
 		if err != nil {
+			if ev.native {
+				compiledResolutionError(ch, a, err)
+			}
 			return 0, false
+		}
+		if ev.native && f < 0 {
+			return i, true
 		}
 		fs = append(fs, f)
 		if f < 0 {
@@ -1740,4 +1786,52 @@ func (ev *evalUse) first(ch *Checker, tr *qtrace.Trace, a string, orders [][]qtr
 		return i, true
 	}
 	return 0, false
+}
+
+// compiledResolutions judges candidates with the artifact alone, stopping at
+// the first invariant-safe witness when selecting an invariant-preserving
+// placement. A refusal is an error, never evidence that a placement fails.
+func compiledResolutions(ch *Checker, tr *qtrace.Trace, actor string, orders [][]qtrace.Step, invariants bool) ([]int, []error) {
+	ev := newEvalUse(ch, ch)
+	fs := make([]int, len(orders))
+	errs := make([]error, len(orders))
+	for i, order := range settledAs(tr, orders) {
+		if err := ch.mode.context().Err(); err != nil {
+			panic(searchError{err})
+		}
+		if err := compiledResolutionPlan(ch, tr, order); err != nil {
+			fs[i], errs[i] = len(orders[i]), err
+			continue
+		}
+		f, _, err := ev.e.judge(ch, tr, order, len(orders[i]), invariants)
+		if err != nil {
+			compiledResolutionError(ch, actor, err)
+		}
+		fs[i] = f
+		if invariants && f < 0 {
+			// One safe witness decides this existential search. Later placements
+			// need not be evaluable once that witness has been established.
+			return fs[:i+1], errs[:i+1]
+		}
+	}
+	return fs, errs
+}
+
+// Planning can refuse an assumed effect whose absent output is required as an
+// action argument. Such a placement is not replayable; it does not imply that
+// evaluator support is missing, and another placement may still be checked.
+func compiledResolutionPlan(ch *Checker, history *qtrace.Trace, order []qtrace.Step) error {
+	traces, _ := reconstruct(ch.Binding, order)
+	if len(traces) != 1 {
+		return nil
+	} // evaluator reports unsupported shapes
+	_, err := ch.plan(traces[0], history)
+	return err
+}
+
+func compiledResolutionError(ch *Checker, actor string, err error) {
+	if cancel := ch.mode.context().Err(); cancel != nil {
+		panic(searchError{cancel})
+	}
+	panic(searchError{fmt.Errorf("compiled pending resolution of actor %s: %w: %v", actor, ErrNeedsQuint, err)})
 }

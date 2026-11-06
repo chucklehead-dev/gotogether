@@ -8,6 +8,14 @@ and adds a line here.
 
 ## Unreleased
 
+- Compiled histories support pending-call resolution, alone or with ordinary/keyed
+  linearization, using the artifact's evaluator without Quint fallback. Assumed
+  effects remain unobserved and pending calls remain unfinished. Unsupported
+  evaluation errors; exhausted search budgets remain inconclusive. Portable run
+  manifests now preserve explicit placement-only resolution budgets too.
+  Missing binding inputs cannot become exhaustive negative proof in either
+  compiled or ordinary placement searches.
+
 - Evidence directory discovery recognizes top-level JSON format members in any
   order, so reserializing evidence or run manifests cannot hide them from suite
   inspection. Files naming both families fail as ambiguous instead of being

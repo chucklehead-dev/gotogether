@@ -126,6 +126,8 @@ type RunCheck struct {
 	Key            string `json:"linearizeKey,omitempty"`
 	Budget         int    `json:"linearizeBudget,omitempty"`
 	ResolvePending bool   `json:"resolvePending,omitempty"`
+	// ResolveBudget bounds pending-effect placements when not also linearizing.
+	ResolveBudget int `json:"resolveBudget,omitempty"`
 	// RequireFinish: the finish check was judged (validate -require-finish,
 	// or a complete binding's default in the CLI; qtest's Validate and
 	// Record judge none, a test claims Finishes). A replay judges it as
@@ -146,7 +148,7 @@ type RunCheck struct {
 
 // SearchOptions are the searches the check asked for.
 func (c RunCheck) SearchOptions() SearchOptions {
-	return SearchOptions{Linearize: c.Linearize, Key: c.Key, Budget: c.Budget, ResolvePending: c.ResolvePending}
+	return SearchOptions{Linearize: c.Linearize, Key: c.Key, Budget: c.Budget, ResolvePending: c.ResolvePending, ResolveBudget: c.ResolveBudget}
 }
 
 // An Input is a step log (or OTLP/JSON, or ITF) a run was judged on.
@@ -536,7 +538,7 @@ func NewManifest(r RunRecord) (*Manifest, error) {
 		m.Check.ChoiceLimit = DefaultChoiceLimit
 	}
 	o := r.Search
-	m.Check.Linearize, m.Check.Key, m.Check.Budget, m.Check.ResolvePending = o.Linearize || o.Key != "", o.Key, o.Budget, o.ResolvePending
+	m.Check.Linearize, m.Check.Key, m.Check.Budget, m.Check.ResolvePending, m.Check.ResolveBudget = o.Linearize || o.Key != "", o.Key, o.Budget, o.ResolvePending, o.ResolveBudget
 	report := &Report{Actors: r.Results, Composition: r.Composition}
 	m.Verdict = report.Verdict()
 	summary := report.Receipt()

@@ -54,6 +54,15 @@ pins from the checked-in go.mod files, not from historical handoff paragraphs.
   suite discovery silently omitting valid evidence. See
   [CI guidance](ci.md#evidence-discovery).
 
+Compiled pending-call resolution extends the existing evaluator-only handoff to
+histories with crashed/unanswered calls, alone or with ordering/keyed searches.
+Native receipts retain assumed effects and bounds; manifest/bundle replay keeps
+the original invocation-only input and works after relocation without tools.
+Unsupported evaluation errors, while clipped searches remain inconclusive.
+The unchanged receipt-history fixture demonstrates the portability gap; existing
+wallet/raftkv callers use pending resolution, but this is not new adopter-demand
+evidence. See DESIGN §106.
+
 These slices illustrate the cadence: general capability, focused contract depth,
 then consolidation. Correctness findings can justify consecutive consolidation
 slices. Further order modes, stream features or diagnostic breadth need a new
@@ -68,7 +77,7 @@ what to investigate next.
 
 | Area | Boundary | Detail |
 |---|---|---|
-| Model search | Broader finite-choice integration and compiled pending-call resolution remain separate; completed-history compiled linearization works | I4, I21; [choice scope](model-choice-witnesses.md), DESIGN §103 |
+| Model search | Broader finite-choice integration remains separate; compiled completed/pending-history searches use the artifact alone with explicit bounds and assumed effects | I4, I21; [choice scope](model-choice-witnesses.md), DESIGN §106 |
 | Process lifecycle | Abrupt owner death can orphan evaluator grandchildren; managed cancellation/admission does not bound those workers | I12 |
 | Evaluator scale | Incremental invariants for interacting entities need representative volume and dependency evidence | I19, I50; [performance](performance.md) |
 | Grist reads | A first cold historical read may refold when the only snapshot is newer; named-processor memo ownership already retains warm prefixes | I24; [Grist reads](grist.md#22-read-models) |

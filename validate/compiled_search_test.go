@@ -57,8 +57,8 @@ func TestCompiledLinearization(t *testing.T) {
 				t.Fatalf("exhaustive failure: %+v %v", j, err)
 			}
 			j, err = c.Judge(t.Context(), steps, SearchOptions{ResolvePending: true})
-			if j != nil || !errors.Is(err, ErrNeedsQuint) {
-				t.Fatalf("pending: %+v %v", j, err)
+			if err != nil || j == nil || j.Report.Receipt().Status != receipt.Fail {
+				t.Fatalf("recorded-order resolution must retain its failure: %+v %v", j, err)
 			}
 			ctx, cancel := context.WithCancel(t.Context())
 			cancel()

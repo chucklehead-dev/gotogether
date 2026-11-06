@@ -6908,3 +6908,41 @@ responses. They cover mixed records/errors, error-only responses, typed error
 identity, idle and cancellation distinctions, and commit/reopen checkpoints.
 Pure-memory synctest consumers prove that two successive batches both affect
 projection/checkpoints when the first also reports a poll error.
+
+
+## 106. Compiled pending-call resolution
+
+Existing wallet and native raftkv histories use pending-call resolution for
+crashed or unanswered clients. The unchanged receipt-history fixture needs an
+unobserved deposit to explain a later withdrawal: ordinary resolution passes,
+while a compiled checker previously refused the same search, including after
+artifact relocation with tools absent. This demonstrates a portability seam
+in an existing contract, not an independent adopter request.
+
+Reuse the existing placements, no-effect option, combined linearization/key
+search, invariant selection and native receipts. A compiled checker judges every
+candidate through its artifact alone, without Quint confirmation or fallback.
+Unsupported evaluation is an operational ErrNeedsQuint; it cannot establish that
+a placement fails. A placement whose assumed step cannot render a required
+recorded argument is unreplayable, as in the ordinary path; do not confuse that
+with an unsupported evaluator operation. A later replayable candidate can still
+supply a witness. Without a safe witness, any relevant unreplayable placement
+prevents negative proof and returns a binding-evidence error. The ordinary
+placement search follows the same rule instead of skipping errors into an
+exhaustive rejection. Search budgets retain inconclusive outcomes and invariant
+bounds; cancellation ends the request and permits later live reuse.
+
+The selected effect remains an assumption in receipts/text/JSON/TUI. Its caller
+never answered, so it remains pending for completion claims. Saved inputs retain
+the original invocation record rather than replacing it with the selected effect.
+RunCheck now retains an explicit ResolveBudget for placement-only API searches;
+combined ordering continues to use Budget. This added optional recipe metadata
+uses the current run format; older compiled readers already refuse pending-call
+resolution rather than silently selecting another judge. No legacy adapter or
+second search engine is introduced.
+
+Controls reuse the existing receipt and account models, enumerate small pending
+histories independently, check no-effect and invariant alternatives, and refuse
+unsupported operations without invoking external tools. CLI and API bundle
+replay remove the original tree, relocate the artifact, and run with Node/Quint
+unavailable while preserving native verdicts, assumed effects and bounds.
