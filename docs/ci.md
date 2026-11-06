@@ -69,8 +69,21 @@ runs inside its timeout so downloads cannot survive the deadline. The CI step
 has an independent eight-minute limit. Diagnostics identify the failing phase
 and preserve nonzero status. These bounds do not promise fast cold downloads:
 PR #89's mirror took over 26 minutes to fetch missing codec packages, while the
-same bootstrap on another runner took 26 seconds. Retry acquisition rather
-than weakening the mandatory golden-screen or rendering checks.
+same bootstrap on another runner took 26 seconds. Inspect acquisition logs
+before retrying; repeated failures need a transport decision while mandatory
+golden-screen and rendering checks remain intact.
+
+The tape job selects `https://archive.ubuntu.com/ubuntu/` in the runner's
+referenced APT mirror list. The Ubuntu 26.04 image's default list prioritizes
+Azure: two fresh runs exhausted the 300-second budget on a slow codec download,
+while two runs on the same image installed the same 84 packages in seconds.
+This is observed transfer variability, not evidence of an OS incompatibility.
+The preparation step validates the expected mirror-list reference and preserves
+the Deb822 source bytes, suites, components, keyring and separately declared
+security source. It fails clearly if the runner configuration changes. There is
+one selected archive and no new fallback chain; package signatures, acquisition
+bounds and the current Go/runner versions remain unchanged. Archive selection
+still does not guarantee download speed.
 
 ## Evidence discovery
 
