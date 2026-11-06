@@ -660,9 +660,13 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   `grist.AuditSnapshots` and `grist.Memo` App options in place of the
   context settings; counters' `TestReadCost` (10⁴ increments: 10,001
   events without, 1,002 from the snapshot, 2 from the memo). Left: a
-  processor reading behind the head still refolds from the start when
-  the only snapshot is later than its trigger (the memo does not help
-  it either: its state is past the trigger).
+  cold processor reading behind the head still refolds from the start when
+  the only snapshot is later than its trigger. Named-processor memo ownership
+  now retains its historical prefix separately from ordinary head reads, within
+  the same global LRU capacity. A native alternating-head/processor rehearsal
+  checks exact answers and incremental fold counts; memo-tail snapshot writes
+  retain observed newer snapshots. Historical persistent snapshot retention
+  remains separate.
 - **Scoped captured-transition conformance. Built.**
   `qtest.TransitionsConform(actors...)` checks native transition conformance with
   optional required exact actor identities; counters' paused incident and

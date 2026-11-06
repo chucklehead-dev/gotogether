@@ -12,7 +12,7 @@ import (
 )
 
 // The memo is a node's process-local cache of read models' states: what
-// a read folded, kept by (tenant, read model, key, fingerprint) with the
+// a read folded, kept by (tenant, read model, key, fingerprint, owner) with the
 // position and identity of its last folded event (its anchor), one table
 // per store. A read of a state it holds reads the read model's events
 // from the anchor on: the anchor first, which must be the event the
@@ -29,13 +29,15 @@ type memos struct {
 	tables map[weak.Pointer[byte]]*memoTable
 }
 
-// A memoKey is a memoized state's key.
-type memoKey struct{ tenant, name, key, fp string }
+// A memoKey is a memoized state's key. The owner is empty for ordinary
+// reads, or a processor's stable name for reads pinned at its triggers. All
+// owners share the table's one LRU budget.
+type memoKey struct{ tenant, name, key, fp, owner string }
 
 // A memoEntry is a memoized state: the read model's state as JSON after
 // folding its events through anchor (the last, whose identity is id), and
-// since, the events folded since a snapshot was taken or read (a read
-// that brings it past Snapshots' every takes one).
+// since, the events folded since a snapshot was read or its cadence was
+// last checked (a cadence check may retain an observed later snapshot).
 type memoEntry struct {
 	k      memoKey
 	anchor Position

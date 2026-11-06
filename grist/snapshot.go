@@ -67,7 +67,7 @@ func (m *ReadModel[S]) getWith(r *Reads, tags []TagPair, every int, check bool) 
 	}
 	key := snapshotKey(tags)
 	var memo *memoTable
-	mk := memoKey{tenant: r.tenant, name: m.info.name, key: key, fp: fp}
+	mk := memoKey{tenant: r.tenant, name: m.info.name, key: key, fp: fp, owner: r.memoOwner}
 	size := r.app.memoEntries(r.ctx)
 	if !check && size > 0 {
 		memo = r.app.memos.of(r.store)
@@ -202,7 +202,15 @@ func (m *ReadModel[S]) fromMemo(r *Reads, memo *memoTable, mk memoKey, q Selecto
 	}
 	since := e.since + len(tail)
 	if ss, ok := r.store.(SnapshotStore); ok && since >= every {
-		m.save(r, ss, mk.key, mk.fp, s, anchor)
+		// A head reader may have advanced the shared snapshot since this
+		// processor last read it. Retain an observed later snapshot, just
+		// as getWith does after a cold historical fold. This is a cache
+		// lookup/put guard, not an atomic monotonic-write store contract.
+		later, found, err := ss.GetSnapshot(r.ctx, r.tenant, mk.name, mk.key, mk.fp)
+		if err != nil || !found || later.Fingerprint != mk.fp || later.Pos <= anchor.Pos {
+			m.save(r, ss, mk.key, mk.fp, s, anchor)
+		}
+		// Check again after another cadence, not every historical trigger.
 		since = 0
 	}
 	if len(tail) > 0 || since != e.since {

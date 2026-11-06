@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- Grist memo entries distinguish ordinary reads from each named processor,
+  avoiding repeated historical refolds when head queries interleave with a
+  lagging processor. All entries share the existing LRU capacity and retain
+  anchor validation. Memo snapshot writes preserve observed newer snapshots.
+
 - `qhistory.StrongSessionSerializable` checks explicit client session order,
   without requiring clocks. Supply `Txn.Session` and `SessionOrder`; missing or
   ambiguous evidence is an input error. Unknown outcomes never establish an

@@ -384,13 +384,22 @@ The decisions, with their reasons:
   `DefaultMemoEntries`, least recently used out first), one table per
   store (a weak reference: two simulations of one App in parallel never
   share one, and it goes with its store), keyed like a snapshot by
-  (tenant, read model, key, fingerprint) with its last folded event's
-  position and identity. A read of a memoized state reads that event
+  (tenant, read model, key, fingerprint, owner) with its last folded event's
+  position and identity. Ordinary reads and each named processor have separate
+  owners within the same total entry limit. A head query therefore does not
+  directly replace a lagging processor's memoized prefix; successive triggers can
+  fold only their new events while that entry remains cached. Ordinary LRU
+  eviction still applies across all owners. The first historical read still refolds when the only
+  persistent snapshot is ahead of it. Owner identity is process-local, not part
+  of a persisted snapshot key or fingerprint. A read of a memoized state reads that event
   again and the events after it; another event there (a rewind refilled
   the position) or none drops it, counted stale. Only a read that folded
   the cadence's events, or read a snapshot, memoizes, so a short log's
   reads, and a simulation's schedules, are as they were; a memoized
-  state that folded the cadence's events since a snapshot takes one.
+  state that folded the cadence's events since its last snapshot check may
+  take one. Before a memo-tail put, check the current snapshot and retain an
+  observed newer snapshot. This is the same cache check as a cold read, not an
+  atomic monotonic-write guarantee across concurrent snapshot writers.
 - **Pruned after a put** (I24): the key's snapshots of other
   fingerprints more than ten times the cadence behind it
   (`store.SnapshotPruner`, every tier; storetest's `Snapshots` holds it
