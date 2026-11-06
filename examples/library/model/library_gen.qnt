@@ -59,7 +59,7 @@ module libraryEvents {
   type JoinArgs = { member: str, caller: str }
   type ReturnBookArgs = { member: str, book: str, caller: str }
   type MemberLoansArgs = { member: str, caller: str }
-  type MemberLoansResult = { count: int }
+  type MemberLoansResult = { count: int, books: List[str] }
   // call mailer/send: its request and response, and a step of it (the caller's or the site's: the outcome as result,
   // the response zero unless it is ok)
   type MailerSendRequest = { member: str, book: str }

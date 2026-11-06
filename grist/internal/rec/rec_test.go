@@ -37,3 +37,53 @@ func TestStepFields(t *testing.T) {
 		t.Errorf("a scalar: %v, %v", kv, err)
 	}
 }
+
+func TestQueryResultLists(t *testing.T) {
+	type word string
+	type words []word
+	type result struct {
+		Books   words    `json:"books"`
+		Ns      []uint64 `json:"ns"`
+		Flags   []bool   `json:"flags"`
+		Omitted []string `json:"omitted" grist:"-"`
+		Hidden  []string `json:"-"`
+	}
+	typ := reflect.TypeFor[result]()
+	kv, err := QueryResultFields(typ, []byte(`{"books":["x","y","x"],"ns":[9007199254740993,9223372036854775807],"flags":[true,false],"omitted":["ignored"]}`), "obs.")
+	want := []any{"obs.books", []any{"x", "y", "x"}, "obs.ns", []any{int64(1<<53 + 1), int64(math.MaxInt64)}, "obs.flags", []any{true, false}}
+	if err != nil || !reflect.DeepEqual(kv, want) {
+		t.Fatalf("lists = %#v, %v; want %#v", kv, err, want)
+	}
+	kv, err = QueryResultFields(typ, []byte(`{"books":null}`), "")
+	want = []any{"books", []any{}, "ns", []any{}, "flags", []any{}}
+	if err != nil || !reflect.DeepEqual(kv, want) {
+		t.Fatalf("empty = %#v, %v; want %#v", kv, err, want)
+	}
+	if _, err := QueryResultFields(typ, []byte(`{"ns":[9223372036854775808]}`), ""); err == nil || !strings.Contains(err.Error(), "ns[0]") {
+		t.Fatalf("overflow: %v", err)
+	}
+	// Arguments and events retain their scalar-only projection.
+	if kv, err := StepFields(typ, []byte(`{"books":["x"]}`), ""); err != nil || len(kv) != 0 {
+		t.Fatalf("scalar contract expanded: %#v %v", kv, err)
+	}
+}
+
+func TestQueryResultRefusesUnsupported(t *testing.T) {
+	for _, typ := range []reflect.Type{
+		reflect.TypeFor[struct{ Value *int }](),
+		reflect.TypeFor[struct{ Value [][]string }](),
+		reflect.TypeFor[struct{ Value map[string]int }](),
+		reflect.TypeFor[struct{ Value []byte }](),
+		reflect.TypeFor[[]string](),
+	} {
+		if _, err := QueryResultFields(typ, []byte(`null`), ""); err == nil {
+			t.Errorf("accepted %v", typ)
+		}
+	}
+	type opted struct {
+		Value map[string]int `grist:"-"`
+	}
+	if kv, err := QueryResultFields(reflect.TypeFor[opted](), []byte(`{}`), ""); err != nil || len(kv) != 0 {
+		t.Fatalf("opt-out: %v %v", kv, err)
+	}
+}

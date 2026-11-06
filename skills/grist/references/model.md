@@ -109,8 +109,12 @@ cover each rule's needs. A run with the rule dropped (gristtest's
 generated `drop-<rule>` mutant) commits where `<r>Refusal` refuses: a
 `Rejects` of the command.
 
-Per query `q`: `<q>Answer(log, q)`, the result's scalar fields as a
-record (or the scalar), compared with the step's at its position.
+Per query `q`: `<q>Answer(log, q)`, the result's scalar and scalar-list fields
+as a record (or a scalar result), compared with the step's at its position.
+Struct slices of strings, booleans or model-range integers become `List[str]`,
+`List[bool]` or `List[int]`. Order and duplicates matter; nil slices normalize
+to empty model observations. Generated bindings use typed `toQuint` conversion
+of recorded JSON text. Events and arguments remain scalar-only.
 Per processor `p`: `<p>Emits(prefix, trigger)` (Emits) or
 `<p>Success(prefix, trigger)` (Delivers with a success event): `prefix`
 is the log through the trigger, `prefix[trigger - 1]` the trigger; a
@@ -131,8 +135,10 @@ trigger, and the generated `<call>Served` itself takes only a request
 that follows from its trigger (examples/library's mailer: a receipt for
 no borrow rejects `mailerSendServed`), so no invariant need say it. A read `r.Exists(T, grist.Tag("k", v))` records the read the
 generator names `<t>ByK(v)` (`r.Exists(T)`: `<t>Read`), what `<c>Needs`
-returns for it. A field the model leaves out (a list in a query's
-answer) is tagged `grist:"-"`; an untagged one is the generator's error. `STRS` and `INTS`: what `step` (`gotogether
+returns for it. A field the model leaves out is tagged `grist:"-"`;
+unsupported untagged shapes are errors. Query lists cannot contain nested lists,
+records or pointers; byte slices retain their JSON base64 meaning and are not
+model lists. `STRS` and `INTS`: what `step` (`gotogether
 simulate`) draws arguments from. Read models' folds are yours (Go
 closures cannot be translated): write a def over the generated
 selection (`totalsEvents(log, c).foldl(0, (s, e) => s + counterIncrementedBy(e))`).

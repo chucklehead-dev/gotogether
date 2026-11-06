@@ -172,7 +172,7 @@ func planPhases(app *grist.App, cfg Config) ([]phasePlan, error) {
 				if err != nil {
 					return fmt.Errorf("%s (%s): Await[%d] Result: %w", prefix, phase.Name, index, err)
 				}
-				if _, err := rec.StepFields(target.ResultType(c.Name), goal, ""); err != nil {
+				if _, err := rec.QueryResultFields(target.ResultType(c.Name), goal, ""); err != nil {
 					return fmt.Errorf("%s (%s): Await[%d] Result does not decode as %s's result: %w", prefix, phase.Name, index, c.Name, err)
 				}
 				if err := strictValue(target.ResultType(c.Name), goal); err != nil {

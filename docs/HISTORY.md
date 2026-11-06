@@ -8674,3 +8674,29 @@ verdicts now retain native receipt status, and both the cached search result and
 the fresh final report must establish conclusive model failure or a separately
 recorded unsettled runtime outcome with a conclusive model result. Inconclusive
 and operational model results cannot manufacture violations.
+
+
+## Library query list coverage (2026-11-06)
+
+A native SQLite/HTTP library run returned the borrowed book `x`; changing only
+its query implementation to return `wrong-book` with the same Count=1 still
+passed both existing generated bindings. An independent identity assertion
+failed. The prior explicit `grist:"-"` prevented silent omission during model
+construction but intentionally left the list unchecked.
+
+Query-result struct scalar lists now use the existing typed JSON/Quint list
+representation at the store, client recorder and phase-goal validation. The
+library removes its exclusion and models ordered loans with one occurrence
+removed per return. Native controls preserve duplicate loans and empty answers,
+then corrupt identity, order, multiplicity or emptiness while retaining counts;
+both bindings must reject those observations. Events, arguments, dependency
+calls and unsupported collection shapes retain their existing boundaries.
+
+Current dispositions now accompany the historical library and wallet trial
+requests so solved problems and explicit remaining limits are distinguishable.
+
+The complete library short suite passes on Quint 0.33.1/evaluator 0.7.1
+(233.933s wall, 311.2 descendant CPU seconds under concurrent local load).
+The CI-selected native list and persisted-upcaster controls cost 57.7 CPU
+seconds (93.064s wall); their new baseline is 58 seconds with the unchanged
+2x regression limit. These are distinct validation scopes.
