@@ -10,6 +10,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/internal/confidence"
 	"github.com/chucklehead-dev/gotogether/internal/evidence"
+	"github.com/chucklehead-dev/gotogether/internal/formats"
 	"github.com/chucklehead-dev/gotogether/qcover"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -17,14 +18,23 @@ import (
 	"github.com/chucklehead-dev/gotogether/validate/runprofile"
 )
 
+// FaultOrderEvidence is a requested directed fault order and its observed extent.
+type FaultOrderEvidence = evidence.FaultOrder
+
+// FaultOrderSpec is one requested fault, including its exact option and step gate.
+type FaultOrderSpec = evidence.FaultSpec
+
+// FaultOrderAttempt retains an attempted run's native identity and seed.
+type FaultOrderAttempt = evidence.FaultOrderAttempt
+
 // Evidence is what an exploration, a sweep or a mutation run shows, in one
-// report: the verdicts, the faults reached, the configurations covered, the
-// code run and the mutants killed. Each part is what a passing test leaves
-// unsaid: that runs conformed says nothing of the faults never tried, the
-// code never run or the code the model does not constrain.
+// report: verdicts, faults, configurations, code and mutants. Passing model
+// checks say nothing about requested fault orders that were never reached.
 type Evidence struct {
 	// Format names this format, EvidenceFormat: a reader refuses another.
 	Format string `json:"format"`
+	// FaultOrders retain requested directed coverage separately from conformance.
+	FaultOrders []FaultOrderEvidence `json:"faultOrders,omitempty"`
 	// Profiles retain each constituent exploration's effective execution policy.
 	// Sweep rows have their own profiles rather than an invented aggregate policy.
 	Profiles []runprofile.Profile `json:"profiles,omitempty"`
@@ -87,6 +97,12 @@ type Evidence struct {
 // theirs under GOTOGETHER_EVIDENCE (dir/<package>/<test>/x<N>.json), else
 // in a kept exploration's directory (GOTOGETHER_KEEP/<test>/x<N>/evidence.json).
 func (e *Evidence) WriteJSON(path string) error {
+	if _, err := formats.Evidence.Check(e.Format); err != nil {
+		return fmt.Errorf("qtest.Evidence.WriteJSON: %w", err)
+	}
+	if err := evidence.ValidateFaultOrders(e.FaultOrders); err != nil {
+		return err
+	}
 	b, err := json.MarshalIndent(e, "", "  ")
 	if err != nil {
 		return err
@@ -139,6 +155,7 @@ func ManifestEvidence(m *validate.Manifest) *Evidence {
 // Evidence is the exploration's report.
 func (x *Exploration) Evidence() *Evidence {
 	e := evidenceOf(x.Runs)
+	e.FaultOrders = x.faultOrderEvidence()
 	if x.profile != nil {
 		e.Profiles = append(e.Profiles, x.profile.Clone())
 	}
@@ -147,9 +164,9 @@ func (x *Exploration) Evidence() *Evidence {
 			e.Executions = append(e.Executions, r.execution(x.ref()+":"+r.ID()))
 		}
 		if r != nil && r.Report != nil && r.Report.Composition != nil {
-			c := *r.Report.Composition
+			c := r.Report.Composition.Clone()
 			c.Run = x.ref() + ":" + r.ID()
-			e.Compositions = append(e.Compositions, c)
+			e.Compositions = append(e.Compositions, *c)
 		}
 	}
 	e.Session = os.Getenv("GOTOGETHER_SESSION")
@@ -172,29 +189,145 @@ func (x *Exploration) Evidence() *Evidence {
 
 // Evidence is the sweep's report over every row's runs.
 func (s *SweepResult) Evidence() *Evidence {
-	all := &Exploration{}
-	for _, x := range s.Runs {
-		if x != nil {
-			all.Runs = append(all.Runs, x.Runs...)
-			if all.actions == nil {
-				all.actions, all.steps, all.test, all.model, all.mutation = x.actions, x.steps, x.test, x.model, x.mutation
-			}
-		}
-	}
-	e := all.Evidence()
-	e.Executions = nil
-	e.Compositions = nil
-	for _, x := range s.Runs {
+	e := evidenceOfExplorations(s.Runs)
+	e.Rows = len(s.Rows)
+	return e
+}
+
+func evidenceOfExplorations(xs []*Exploration) *Evidence {
+	all, facts := &Exploration{}, &Exploration{}
+	var children []*Evidence
+	for _, x := range xs {
 		if x == nil {
 			continue
 		}
-		child := x.Evidence()
+		failed := false
+		for _, run := range x.Runs {
+			if run == nil || run.Err != nil || run.Report == nil {
+				failed = true
+			}
+		}
+		var child *Evidence
+		if failed && x.faultOrder != nil {
+			child = x.failedEvidence(x.faultOrderOrigins)
+		} else {
+			child = x.Evidence()
+		}
+		children = append(children, child)
+		if !failed {
+			all.Runs = append(all.Runs, x.Runs...)
+		}
+		for _, run := range x.Runs {
+			if run != nil {
+				facts.Runs = append(facts.Runs, run)
+			}
+		}
+		if all.actions == nil {
+			all.actions, all.steps, all.test, all.model, all.mutation = x.actions, x.steps, x.test, x.model, x.mutation
+		}
+	}
+	e := all.Evidence()
+	e.Runs, e.Conform, e.Unjudged = 0, 0, 0
+	e.FailingBy = map[string]int{}
+	e.Executions, e.Compositions = nil, nil
+	e.Faults = facts.faultCoverage()
+	if facts.hasCode() {
+		e.Code = facts.codeCoverage()
+	}
+	for _, child := range children {
+		e.Runs += child.Runs
+		e.Conform += child.Conform
+		e.Unjudged += child.Unjudged
+		for why, n := range child.FailingBy {
+			e.FailingBy[why] += n
+		}
+		if len(child.RunErrors) > 0 && e.RunErrors == nil {
+			e.RunErrors = map[string]string{}
+		}
+		for run, why := range child.RunErrors {
+			e.RunErrors[run] = why
+		}
 		e.Profiles = append(e.Profiles, child.Profiles...)
 		e.Executions = append(e.Executions, child.Executions...)
 		e.Compositions = append(e.Compositions, child.Compositions...)
+		e.FaultOrders = append(e.FaultOrders, child.FaultOrders...)
 	}
-	e.Rows = len(s.Rows)
 	return e
+}
+
+// Evidence retains requested directed coverage and every constituent
+// exploration's model and execution facts. Unreached is never impossibility.
+func (s *FaultOrderResult) Evidence() *Evidence {
+	xs := make([]*Exploration, 0, len(s.Orders))
+	for _, order := range s.Orders {
+		if order != nil && order.Exploration != nil {
+			xs = append(xs, order.Exploration)
+		}
+	}
+	e := evidenceOfExplorations(xs)
+	if s.test != "" {
+		e.Test = s.test
+	}
+	e.FaultOrders = nil
+	e.Sample, e.PCT = nil, nil // distinct requested orders are not one random sample
+	// A reproduced constituent must not become new faithful suite coverage.
+	for _, x := range xs {
+		if x.role() == RoleReplay {
+			e.Role = RoleReplay
+			break
+		}
+		if x.role() == RoleMutant {
+			e.Role = RoleMutant
+		}
+	}
+	for _, order := range s.Orders {
+		if order != nil {
+			e.FaultOrders = append(e.FaultOrders, order.faultEvidence())
+		}
+	}
+	return e
+}
+
+func (x *Exploration) faultOrderEvidence() []FaultOrderEvidence {
+	if x.faultOrder == nil {
+		return nil
+	}
+	return []FaultOrderEvidence{x.faultOrder.faultEvidence()}
+}
+
+func (order *FaultOrder) faultEvidence() FaultOrderEvidence {
+	order.refresh()
+	spec := func(f qenv.Scripted) FaultOrderSpec {
+		if strings.HasPrefix(f.Kind, "nemesis.") {
+			return FaultOrderSpec{Kind: f.Kind, After: f.After}
+		}
+		if f.Name != "" {
+			return FaultOrderSpec{Kind: f.Kind, Name: f.Name, After: f.After}
+		}
+		return FaultOrderSpec{Kind: f.Kind, Option: f.Option, After: f.After}
+	}
+	out := FaultOrderEvidence{First: spec(order.First), Second: spec(order.Second), Budget: order.Budget, Status: order.Status, Witness: order.Witness, Attempts: []FaultOrderAttempt{}}
+	x := order.Exploration
+	if x == nil {
+		return out
+	}
+	for i, run := range x.Runs {
+		var origin origin
+		if run != nil {
+			origin = run.origin
+		} else if i < len(x.faultOrderOrigins) {
+			origin = x.faultOrderOrigins[i]
+		} else {
+			continue
+		}
+		attempt := FaultOrderAttempt{Run: x.ref() + ":" + (&Run{origin: origin}).ID()}
+		if origin.kind == "seed" {
+			seed := origin.seed
+			attempt.Seed = &seed
+		}
+		out.Attempts = append(out.Attempts, attempt)
+	}
+	return out
 }
 
 func (x *Exploration) hasCode() bool {
@@ -261,6 +394,10 @@ func (e *Evidence) String() string {
 	fmt.Fprintf(&b, "evidence: %d runs", e.Runs)
 	if e.Rows > 0 {
 		fmt.Fprintf(&b, ", %d rows", e.Rows)
+	}
+	if len(e.FaultOrders) > 0 {
+		b.WriteByte('\n')
+		b.WriteString(strings.TrimSuffix(evidence.FaultOrdersString(e.FaultOrders), "\n"))
 	}
 	if sr := e.Exhaust; sr != nil && sr.Complete {
 		fmt.Fprintf(&b, "\n  search    complete within %s and %s: every run within that bound, none beyond it", plural(sr.Delays, "delay"), plural(sr.Faults, "fault"))

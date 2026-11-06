@@ -33,7 +33,7 @@ type suiteEvidence = ev.View
 // pass unseen.
 func evidence(args []string) (int, error) {
 	fset := commandFlags("evidence")
-	strict := fset.Bool("strict", false, "exit 1 if a model action, fault point or fault kind is untried by every test")
+	strict := fset.Bool("strict", false, "exit 1 if a model action, fault point or fault kind is untried by every test, or a requested fault order is unreached")
 	expectFile := fset.String("expect", "", "a file of explorations that must have written evidence, one per line (a test's, TestX or TestX/sub; one exploration, TestX#2; either after its package: its import path or the end of it, examples/hello TestX), # comments (at a line's start or after a space): exit 1 naming each that wrote none. Only explorations write evidence (Explore, Exhaust, Sweep, Mutate, Runs' claims do not)")
 	session := fset.String("session", os.Getenv("GOTOGETHER_SESSION"), "suite invocation ID; only evidence bearing this ID is counted (defaults to GOTOGETHER_SESSION)")
 	history := fset.Bool("history", false, "aggregate historical evidence without claiming current-run completeness")
@@ -234,6 +234,7 @@ func suiteReport(es []*suiteEvidence) (string, int) {
 			b.WriteString(phases)
 			b.WriteByte('\n')
 		}
+		b.WriteString(ev.FaultOrdersString(e.FaultOrders))
 		for _, run := range slices.Sorted(maps.Keys(e.RunErrors)) {
 			fmt.Fprintf(&b, "  execution error %s: %s\n", run, e.RunErrors[run])
 		}
@@ -336,6 +337,16 @@ func suiteReport(es []*suiteEvidence) (string, int) {
 	}
 	if len(reached) > 0 && len(unreached)+len(unfaulted) == 0 {
 		fmt.Fprintf(&b, "  faults  every kind reached and faulted by some test (%d kinds)\n", len(reached))
+	}
+	for _, e := range es {
+		if e.Role != ev.RoleFaithful {
+			continue
+		}
+		for _, order := range e.FaultOrders {
+			if order.Status != "witnessed" {
+				gaps++
+			}
+		}
 	}
 	return b.String(), gaps
 }

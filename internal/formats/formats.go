@@ -70,7 +70,7 @@ var (
 		Older: "write it anew with this version (gotogether validate -manifest, or the test under GOTOGETHER_EVIDENCE)"}
 	// Evidence is an exploration's evidence (qtest.Evidence), written
 	// anew by every run.
-	Evidence = Format{Thing: "evidence", Major: 2, What: "exploration evidence (GOTOGETHER_EVIDENCE)",
+	Evidence = Format{Thing: "evidence", Major: 3, What: "exploration evidence (GOTOGETHER_EVIDENCE)",
 		Older: "run the tests again to write it anew"}
 	// Model is a compiled model (gotogether compile; validate
 	// -compiled): the Go evaluator's IR of a binding's model, compiled by

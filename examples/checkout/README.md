@@ -64,7 +64,7 @@ only in full. Each test states the verdict it expects with
 | `TestMutants` | each mutant at each level, the table above | each **bold** verdict above |
 | `TestExhaustiveOneFault` | every run with one fault (2828) | nothing in the faithful shop; `DualWrite`'s one-step window |
 | `TestHegelShrinksWriteSkew` | Hegel making every choice, `LockWithoutWrite` at snapshot isolation | the write skew, shrunk, replayed without Hegel |
-| `TestNoIdempotencyKeySweep`, `TestFaultOrders` | covering arrays of fault kinds and their orders | which faults expose `NoIdempotencyKey` |
+| `TestNoIdempotencyKeySweep`, `TestFaultOrders` | parameter covering arrays and bounded directed fault-pair attempts | model checks plus witnessed/unreached fault-order evidence |
 | `TestStormChargesTwiceWithoutKeys` | the shop under a retry storm, without idempotency keys | charges twice (`TestStormIsCorrect` is the contrast) |
 | `TestMutationOfTheShop` | qweave's mutant schemata over the shop | the survivors, each an unobserved effect or equivalent |
 

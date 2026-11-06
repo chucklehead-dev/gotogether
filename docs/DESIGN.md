@@ -5215,7 +5215,7 @@ adjusting it is a field per format):
 | `gotogether.corpus/1` | qtest's corpus entries | the current only |
 | `gotogether.choices/1` | qenv.EncodeChoices' header (`BytesVersion`) | the current only |
 | `gotogether.run/3` | validate's run manifest | the current only |
-| `gotogether.evidence/2` | qtest's evidence | the current only |
+| `gotogether.evidence/3` | qtest's evidence | the current only |
 | `gotogether.model/1` | a compiled model (gotogether compile, §64) | the current only |
 | `gotogether.report/2` | validate's and simulate's `-json` (validate.Document, §68) | the current only |
 | `gotogether.nav/2` | navproto's Session and Node's `protocol` | the current only; unnamed protocols are refused |
@@ -6842,3 +6842,40 @@ part of the replay recipe. CLI acceptance checks actual reordering, an exhaustiv
 negative and absent-source provenance, then exports, deletes the original tree,
 relocates and replays with forbidden Node/Quint executables. Recorded-order failure
 is the negative control for the history repaired by linearization.
+
+
+## 104. Bounded directed fault orders
+
+Checkout's fault-order test manually ran two-fault scripts with three schedule
+seeds, recorded steps and choices, checked each run against its model, and called
+uncompleted orders impossible. Its final Untried assertion checked unordered
+co-occurrence, which can be empty even when a requested kind never faults, or
+only one direction occurs. A full permutation covering array cannot represent
+this phased workload: some fault kinds stop being reachable after a phase ends.
+
+System.FaultOrders samples each directed pair of distinct requested fault kinds,
+using fresh Script instances and explicit second-after-first precedence. Fault
+specs retain option/name and step threshold; caller-supplied Follows and ambiguous
+rosters are refused. Fixed full/short seed budgets are disclosed; no statistical
+or exhaustive absence claim follows. All other faults are nominal, with seeded
+scheduling. This first slice supports seed reproduction, not corpus or choices
+replay that would bypass the requested script.
+
+Use the existing exploration engine and model/composition/runtime checks. Only
+this workflow permits incomplete script attempts, and it does so privately;
+ordinary Explore and FollowTraces remain strict. Misnamed targets, operational
+errors and capture-integrity failures still fail. A witnessed order requires
+actual nonnominal matching choices in the requested order in a scripted attempt;
+empty remaining-script metadata from a replay cannot supply that evidence.
+
+Conformance of attempts and coverage of requested orders are different claims.
+Unwitnessed orders are bounded unreached, not impossible or passing coverage.
+Existing Evidence JSON and text retain the complete requested roster, bounds,
+attempted native run references and witnesses, along with constituent profiles
+and executions. Strict evidence inspection counts unreached faithful goals as
+coverage gaps. Navigation uses the existing run references and notes the requested
+order; changing a node's choices does not inherit a coverage claim from its base.
+Evidence advances to current-only major 3: older readers must refuse these
+new coverage obligations instead of silently reporting strict success. Older
+files are regenerated, not adapted. No separate sequence language or parallel
+result format is introduced.

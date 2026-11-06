@@ -12,6 +12,7 @@ import (
 func (x *Exploration) failedEvidence(origins []origin) *Evidence {
 	e := &Evidence{Format: EvidenceFormat, Role: x.role(), Session: os.Getenv("GOTOGETHER_SESSION"), Package: pkgDir(), Import: importPath(), Test: x.ref(), Spec: x.model, Mutant: x.mutation,
 		Runs: len(x.Runs), Unjudged: len(x.Runs), FailingBy: map[string]int{}, RunErrors: map[string]string{}}
+	e.FaultOrders = x.faultOrderEvidence()
 	if x.profile != nil {
 		e.Profiles = append(e.Profiles, x.profile.Clone())
 	}

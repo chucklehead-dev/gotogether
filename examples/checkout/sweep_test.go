@@ -1,13 +1,11 @@
 package checkout_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/examples/checkout"
 	"github.com/chucklehead-dev/gotogether/examples/checkout/shop"
 	"github.com/chucklehead-dev/gotogether/qenv"
-	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qsweep"
 	"github.com/chucklehead-dev/gotogether/qtest"
 )
@@ -88,46 +86,25 @@ func TestNoIdempotencyKeySweep(t *testing.T) {
 		}})
 }
 
-// Both orders of every pair of fault kinds, each imposed by a Script on a
-// seeded schedule (up to three seeds per order), checked by the model. A
-// whole sequence covering array (qsweep.Sequences) does not fit the shop:
-// its API faults happen only while orders are placed, so a strict order of
-// all six kinds never completes. Pairs do, except the orders the shop's
-// phases rule out, which the test names.
+// Request both directions of each fault pair and check every attempt against
+// the model. Some phase orders may remain unreached within the seed budget;
+// the evidence reports those bounds rather than calling them impossible.
 func TestFaultOrders(t *testing.T) {
 	qtest.RequireQuint(t)
 	if testing.Short() {
-		t.Skip("sweeps hundreds of runs")
+		t.Skip("sweeps fault-order attempts")
 	}
-	kinds := []string{"nemesis.crash.payments", "queue.payments.ack", "rpc.api.request", "rpc.api.response", "rpc.provider.request", "rpc.provider.response"}
-	var runs [][]qenv.Choice
-	var impossible []string
-	for _, a := range kinds {
-		for _, b := range kinds {
-			if a == b {
-				continue
-			}
-			done := false
-			for seed := uint64(1); seed <= 3 && !done; seed++ {
-				sc := &qenv.Script{Base: qenv.NewSeeded(seed), Faults: []qenv.Scripted{{Kind: a, Option: 1}, {Kind: b, Option: 1, Follows: []int{0}}}}
-				rec := &qenv.ChoiceLog{C: sc}
-				mem := &qobs.MemorySink{}
-				if _, err := checkout.Run(qenv.WithContext(rec, qobs.WithRecorder(context.Background(), qobs.NewRecorder(mem))), checkout.Config{Isolation: qenv.SnapshotIsolation}); err != nil {
-					t.Fatal(err)
-				}
-				qtest.Validate(t, binding, mem.Steps()).Expect(t, qtest.Conforms())
-				runs = append(runs, rec.Choices)
-				done = len(sc.Remaining()) == 0
-			}
-			if !done {
-				impossible = append(impossible, a+" then "+b)
-			}
-		}
-	}
-	t.Logf("orders the shop never produced: %v", impossible)
-	cov := qenv.CoverageOf(runs)
-	t.Log(cov)
-	if len(cov.Untried()) > 0 {
-		t.Errorf("pairs never together: %+v", cov.Untried())
-	}
+	sys := qtest.System{Binding: binding, Run: func(c qenv.Chooser) error {
+		_, err := checkout.Run(c, checkout.Config{Isolation: qenv.SnapshotIsolation})
+		return err
+	}}
+	result := sys.FaultOrders(t, qtest.FaultOrderConfig{Seeds: 3, Faults: []qenv.Scripted{
+		{Kind: "nemesis.crash.payments", Option: 1},
+		{Kind: "queue.payments.ack", Option: 1},
+		{Kind: "rpc.api.request", Option: 1},
+		{Kind: "rpc.api.response", Option: 1},
+		{Kind: "rpc.provider.request", Option: 1},
+		{Kind: "rpc.provider.response", Option: 1},
+	}})
+	t.Log(result.Evidence())
 }

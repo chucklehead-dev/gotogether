@@ -22,7 +22,15 @@ legacy formats.
 
 Use a tick, tock, consolidate cadence: general framework capability, bounded
 feature or contract depth, and evidence-driven structural/usability/performance
-work. The installed LRU MBT rehearsal now covers a non-SQL consumer workflow
+work.
+The next general framework slice follows checkout's existing manual fault-order
+loop: ordinary scripted Explore correctly rejects incomplete scripts, while a
+bounded order sweep must retain unsuccessful attempts without pretending they
+prove impossibility. System.FaultOrders now samples directed pairs through the
+same engine, checks every attempt, and retains requested goals, bounds and native
+witnesses in existing evidence. Co-occurrence alone cannot establish both orders.
+After this slice, rotate away from more order modes until a new caller need
+justifies them. The installed LRU MBT rehearsal now covers a non-SQL consumer workflow
 and an isolated source contrast; the configuration typo it exposed is fixed by
 strict preflight and direct API migration. The consolidation slice threads
 caller-owned cancellation through model loading, checker construction, lint
@@ -455,7 +463,7 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   file naming none is read as it); after v0.1, the maintainer decides.
   What it was: The step log, the longest-lived artifact, has no
   version (every other format does: `gotogether.run/3`,
-  `gotogether.evidence/2`, `gotogether.requests/1`); bindings have no
+  `gotogether.evidence/3`, `gotogether.requests/1`); bindings have no
   `format:` key, so a newer binding fails an older CLI with "unknown
   field"; the woven ABI is called by code a qweave binary generates
   against whatever `woven` the user's module resolves; the

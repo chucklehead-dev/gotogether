@@ -7,6 +7,13 @@ minutes here, then [ROADMAP.md](ROADMAP.md) for the detail of whatever
 you pick. This page links rather than repeats: when it and ROADMAP
 disagree, ROADMAP and the code win, and this page should be fixed.
 
+Bounded fault-order sweeps: `qtest.System.FaultOrders` replaces checkout's manual
+script/capture/validation loop. Each requested directed pair gets fresh scripts
+for a fixed seed budget and normal model checks. Native evidence distinguishes
+witnessed from bounded unreached, retains attempted seeds and witness references,
+and reports unmet goals to strict evidence inspection. Normal Explore and
+FollowTraces still require complete scripts. See DESIGN §104.
+
 Processor memo ownership: ordinary reads and each named Grist processor keep
 separate memo entries within the existing total LRU capacity. Interleaving head
 queries no longer forces a lagging processor to rebuild every trigger's prefix.
