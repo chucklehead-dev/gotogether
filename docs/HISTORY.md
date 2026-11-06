@@ -8544,3 +8544,40 @@ and TUI without changing judgments. Developer-editor integration and broader
 checked-history diagnostics remain open, but are not the next expansion.
 The earlier tracks below retain their item identifiers and technical dependencies; their historical release
 recommendations do not override this prerelease order.
+
+
+## Edgepublish Rust MBT coverage and replay ownership (2026-11-06)
+
+The documented Rust-backend gap reproduced on the existing seed-42 workload:
+two of five traces timed out waiting for a push's first table write. A completed
+background seal queued an exclusive generation lock solely to append to an
+unused sealed-generation list. Another push held a shared lock at its gated
+write, and RWMutex writer preference then blocked the next push. The stand-in
+now omits this unread retention bookkeeping, consistent with its existing
+retention/detach boundary. Publication writes, generation locking and background
+joining stay intact. This does not change or validate the real exporter.
+
+A gated native regression checks that the old generation's seal can finish
+while a current-generation push is held. Restoring the old bookkeeping fails
+that control. Rust and TypeScript traces now pass the same store comparisons;
+CI retains an explicit TypeScript control alongside the default Rust path.
+Trace generation uses the test context. The manifest-before-table control now
+requires the known first-write mismatch, rather than counting any driver error.
+
+Removing the extra scheduling points made the previous 150-seed search miss
+BackwardRotation, although it had found it on the baseline. A shared directed
+clock-boundary fixture now supplies the actual prerequisite: pause a task after
+sampling the clock while a second push crosses a generation boundary. The
+faithful publisher conforms; the stale pre-lock clock mutant produces the
+expected rotateGen mismatch, confirmed against Quint. Operational prerequisite
+errors cannot count as a mutant witness. Other broad exploration remains.
+
+The same review found paused workers surviving bounded and failed MBT replays.
+Five bounded prefixes retained ten hook waiters; five additional failed traces
+retained twenty in total. Replay now cancels both sides of its gate protocol,
+tracks pushes and ticks before waiting for their effects, and joins those tasks
+before background seals. The internal connect adapter is private, leaving one
+owning Replay entry point. Teardown follows the existing crash recorder policy:
+it is outside the observed prefix. The same diagnostic retains zero waiters
+after either set of fixed replays; disabling cleanup fails the lifecycle controls.
+This is example ownership, not a new general connect lifecycle API.

@@ -70,6 +70,14 @@ incremental. Keep snapshot retention unchanged without an actual latency target.
 Raw samples, scope and the executable harness are in
 [performance.md](performance.md#cold-historical-processor-recovery-2026-11-06).
 
+Edgepublish's MBT tests now exercise Rust traces without a TypeScript-only
+fallback. The stand-in drops unused sealed-generation bookkeeping that queued
+an exclusive lock behind gated pushes. Store comparisons, seal writes and
+generation locking remain; retention/detach and the real exporter stay outside
+this example's scope.
+Bounded and failed replays also cancel and join their held pushes, ticks and
+background seals; teardown is outside the observed prefix.
+
 These slices illustrate the cadence: general capability, focused contract depth,
 then consolidation. Correctness findings can justify consecutive consolidation
 slices. Further order modes, stream features or diagnostic breadth need a new

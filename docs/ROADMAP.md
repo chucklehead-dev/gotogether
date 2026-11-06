@@ -53,6 +53,16 @@ cleanup failure did not reproduce locally, so its exact cause remains unproven.
 Prefer this demonstrated lifecycle correction over a new convenience claim or
 speculative snapshot feature.
 
+The focused coverage follow-up closes edgepublish's documented Rust MBT gap.
+Seed-42 traces reproduced a deadlock between gated pushes and an unused
+sealed-generation bookkeeping lock in the stand-in. Removing that unobserved
+maintenance state preserves publication effects and generation locking; native
+Rust/TypeScript traces and mutant controls check the resulting coverage. This
+changes the stand-in, not the real exporter's retention implementation.
+It also owns bounded/failed replay cleanup rather than leaving gated tasks
+behind. Keep per-trace resource ownership in view when selecting the next
+general-framework slice; an example fix alone does not justify a public scope API.
+
 Next, rotate toward a concrete general-framework or cross-facet caller problem
 rather than further parser tuning, compiled modes or snapshot features. Candidates below
 are experiments with selection thresholds, not commitments.

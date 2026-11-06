@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- Edgepublish's stand-in supports the previously blocked Rust MBT schedules.
+  Remove unused sealed-generation bookkeeping that blocked new pushes behind
+  paused writes; preserve generation locks and seal effects. Bounded/failed
+  replays now cancel and join owned tasks. A directed clock-boundary contrast
+  retains backward-rotation detection when random scheduling changes.
+
 - Grist's native Main joins processor, relay and tenant-watcher cancellation
   cleanup before its final relay flush and resource closure. Processor effects
   must cooperate with cancellation; simulation crash lifetimes are unchanged.

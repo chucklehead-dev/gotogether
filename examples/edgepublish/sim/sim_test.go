@@ -1,7 +1,11 @@
 package sim_test
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/examples/edgepublish/publisher"
 	"github.com/chucklehead-dev/gotogether/examples/edgepublish/sim"
@@ -53,10 +57,9 @@ func TestExplorationFindsAmbiguousFindings(t *testing.T) {
 	explore(t, sim.Config{}, 60).Expect(t, qtest.Some(qtest.AnyOf(qtest.Violates("committedNoDuplicatePayload"), qtest.Violates("sealMatchesManifests"))))
 }
 
-// The mutants, found by exploration rather than by a scenario built for
-// each: a manifest written before its data, and a rotation that does not
-// wait for in-flight pushes (an interleaving the woven RWMutex makes the
-// scheduler choose).
+// Exploration finds the first two mutants: a manifest written before its
+// data, and a rotation that does not wait for in-flight pushes. A directed
+// clock-boundary schedule checks the narrower backward-rotation race.
 func TestMutants(t *testing.T) {
 	woven(t)
 	t.Run("ManifestBeforeTable", func(t *testing.T) {
@@ -67,28 +70,92 @@ func TestMutants(t *testing.T) {
 		explore(t, sim.Config{Mutation: publisher.NoRotationLock, NoCrashes: true}, 40, qtest.Invariants()).
 			Expect(t, qtest.Some(qtest.AnyOf(qtest.Rejects("rotateGen"), qtest.Rejects("writeTable"), qtest.Rejects("writeParquet"), qtest.Rejects("writeManifest"))))
 	})
-	// The stand-in's acquire before it caught up with publish.go's fix:
-	// a push that read the clock, then waited for the exclusive lock past
-	// a boundary another push rotated across, rotates back into a sealed
-	// generation. Exploration found it in the stand-in. The window is
-	// narrow (about 3 runs in 100 with 3 exporters and 12 requests), so
-	// it takes more seeds than the other mutants. The rotation back shows
-	// as a rotateGen the model cannot take (while another holds the lock)
-	// or as one to a generation the model never rotated to (the binding's
-	// expect): either is this bug.
+	// The old acquire samples the clock before taking the generation lock.
+	// Force that sample to return after another push crosses a boundary,
+	// instead of relying on unrelated background bookkeeping to expose it.
 	t.Run("BackwardRotation", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("150 seeds")
+		for _, tc := range []struct {
+			name     string
+			mutation publisher.Mutation
+			claim    qtest.Claim
+		}{
+			{"faithful", publisher.Faithful, qtest.Conforms()},
+			{"mutant", publisher.BackwardRotation, qtest.Some(qtest.AnyOf(qtest.Rejects("rotateGen"), qtest.Mismatch("rotateGen")))},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				sys := qtest.System{Binding: binding, Opts: []qtest.Option{qtest.Invariants()}, Run: func(c qenv.Chooser) error {
+					return delayedClockRun(c, tc.mutation)
+				}}
+				sys.WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 1}).Expect(t, tc.claim)
+			})
 		}
-		explore(t, sim.Config{Mutation: publisher.BackwardRotation, NoCrashes: true, NoAmbiguous: true, Workers: 3, Requests: 12}, 150, qtest.Invariants()).
-			Expect(t, qtest.Some(qtest.AnyOf(qtest.Rejects("rotateGen"), qtest.Mismatch("rotateGen"))))
 	})
+}
+
+// delayedClockRun models a task descheduled after reading the clock but
+// before using that reading. Both implementations get the same delayed old
+// reading and a second push after the boundary. The faithful publisher holds
+// its shared lock through that delay, then rechecks time under its exclusive
+// lock; the mutant lets the second push rotate before using the stale reading.
+func delayedClockRun(c qenv.Chooser, mutation publisher.Mutation) error {
+	s := qenv.New(c)
+	defer s.Close()
+	armed, delayed := false, false
+	now := func() time.Time {
+		at := s.Now()
+		if armed && !delayed {
+			delayed = true
+			qenv.Sleep(s.Context(), 2*sim.Generation)
+		}
+		return at
+	}
+	p := publisher.New(publisher.Config{Producer: "edge-1", Region: "eu", Signal: "traces",
+		Epoch: "epoch-1", Generation: sim.Generation, Now: now, Mutation: mutation}, publisher.NewMemStore())
+	var failures []error
+	completed := 0
+	s.Spawn("boundary", func(ctx context.Context) {
+		if err := p.Tick(ctx); err != nil {
+			failures = append(failures, err)
+			return
+		}
+		armed = true
+		qenv.Go(ctx, "stale", func(ctx context.Context) {
+			if err := p.Push(publisher.WithPayload(ctx, "stale"), []byte("stale")); err != nil {
+				failures = append(failures, err)
+			}
+			completed++
+		})
+		qenv.Go(ctx, "fresh", func(ctx context.Context) {
+			qenv.Sleep(ctx, sim.Generation)
+			if err := p.Push(publisher.WithPayload(ctx, "fresh"), []byte("fresh")); err != nil {
+				failures = append(failures, err)
+			}
+			completed++
+		})
+	})
+	if err := s.Run(3 * sim.Generation); err != nil {
+		return err
+	}
+	if !delayed || completed != 2 {
+		return fmt.Errorf("clock-boundary prerequisites not completed: delayed=%v, pushes=%d", delayed, completed)
+	}
+	if err := errors.Join(failures...); err != nil {
+		return err
+	}
+	s.Spawn("close", func(ctx context.Context) {
+		if err := p.Close(ctx); err != nil {
+			failures = append(failures, err)
+		}
+	})
+	if err := s.Settle(sim.Generation); err != nil {
+		return err
+	}
+	return errors.Join(failures...)
 }
 
 // Hegel makes every choice (interleaving, latencies, faults) and shrinks
 // NoRotationLock to a rotation while a push is between its writes.
-// (BackwardRotation's window is too narrow for Hegel's budget here: a few
-// runs in a hundred, each case a quint check.)
+// BackwardRotation uses the directed clock-boundary schedule above.
 func TestHegelShrinksNoRotationLock(t *testing.T) {
 	woven(t)
 	if testing.Short() {

@@ -44,7 +44,7 @@ type inflight struct {
 	done chan error
 }
 
-// Driver is the edgePublish writer driver.
+// Driver owns an edgePublish writer and its workers for one Replay at a time.
 type Driver struct {
 	Mutation publisher.Mutation
 	// Recorder, if set, is the global qobs recorder: a crash turns it off
@@ -61,13 +61,19 @@ type Driver struct {
 	pushes   map[pushKey]*inflight
 	seals    map[genKey]*gate
 	gens     map[string]genKey // implementation generation id (with epoch) -> model generation
+	ctx      context.Context
+	cancel   context.CancelFunc
+	work     sync.WaitGroup // pushes and ticks, including work whose first gate was rejected
 }
 
 func (d *Driver) clock() time.Time { d.mu.Lock(); defer d.mu.Unlock(); return d.now }
 
+// Only Replay supplies connect's adapter: its scope owns every spawned worker.
+type replayDriver struct{ *Driver }
+
 // Step implements connect.Driver: it dispatches each model action to its
 // handler. Consumer actions have no implementation here and are skipped.
-func (d *Driver) Step(s *connect.Step) error {
+func (d replayDriver) Step(s *connect.Step) error {
 	return connect.Switch{
 		"init":          d.init,
 		"pushStart":     d.pushStart,
@@ -88,24 +94,55 @@ func (d *Driver) Step(s *connect.Step) error {
 
 // CheckStep implements connect.StepChecker: the store against the model
 // after every step but init.
-func (d *Driver) CheckStep(s *connect.Step) error {
+func (d replayDriver) CheckStep(s *connect.Step) error {
 	if s.Index == 0 {
 		return nil
 	}
 	return d.check(s)
 }
 
-// Replay drives one trace through a fresh implementation.
-func (d *Driver) Replay(tr *itf.Trace) error { return connect.Replay(tr, d, connect.ReplayOptions{}) }
+// Replay drives one trace through a fresh implementation, then stops and joins
+// work left in flight by a bounded trace or a failed step.
+func (d *Driver) Replay(tr *itf.Trace) error {
+	d.ctx, d.cancel = context.WithCancel(context.Background())
+	d.pub = nil
+	defer d.stop()
+	return connect.Replay(tr, replayDriver{d}, connect.ReplayOptions{})
+}
+
+func (d *Driver) stop() {
+	// As on crash, unwinding held writes is teardown, not more observed
+	// execution. This driver owns its global recorder during serial replay.
+	if d.Recorder != nil {
+		qobs.SetGlobal(nil)
+		defer qobs.SetGlobal(d.Recorder)
+	}
+	d.cancel()
+	d.work.Wait()
+	// A tick can create a background seal, so join ticks before seals.
+	if d.pub != nil {
+		d.pub.Drain()
+	}
+}
 
 func (d *Driver) init(*connect.Step) error {
 	d.now = time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC)
 	d.store = publisher.NewMemStore()
 	d.arrivals = make(chan *gate, 16)
+	ctx := d.ctx // every hook keeps its own replay's lifetime, including after a crash
 	d.store.Hook = func(_ context.Context, op publisher.Op) publisher.Fault {
 		g := &gate{op: op, release: make(chan publisher.Fault)}
-		d.arrivals <- g
-		return <-g.release
+		select {
+		case d.arrivals <- g:
+		case <-ctx.Done():
+			return publisher.Fail
+		}
+		select {
+		case f := <-g.release:
+			return f
+		case <-ctx.Done():
+			return publisher.Fail
+		}
 	}
 	d.pushes = map[pushKey]*inflight{}
 	d.seals = map[genKey]*gate{}
@@ -120,7 +157,7 @@ func (d *Driver) start() error {
 	d.epoch++
 	d.pub = publisher.New(publisher.Config{Producer: "edge-1", Region: "eu", Signal: "traces",
 		Epoch: fmt.Sprintf("e%d", d.epoch), Generation: time.Minute, Now: d.clock, Mutation: d.Mutation}, d.store)
-	return d.pub.Tick(context.Background())
+	return d.pub.Tick(d.ctx)
 }
 
 var (
@@ -193,8 +230,9 @@ func (d *Driver) pushStart(s *connect.Step) error {
 	}
 	p, epoch, batch, gen, _ := push(x)
 	fl := &inflight{done: make(chan error, 1)}
-	ctx := publisher.WithPayload(context.Background(), strconv.FormatInt(p, 10))
-	go func() { fl.done <- d.pub.Push(ctx, []byte(fmt.Sprintf("rows of %d", p))) }()
+	ctx := publisher.WithPayload(d.ctx, strconv.FormatInt(p, 10))
+	pub := d.pub
+	d.work.Go(func() { fl.done <- pub.Push(ctx, []byte(fmt.Sprintf("rows of %d", p))) })
 	g, err := d.nextArrival()
 	if err != nil {
 		return err
@@ -265,7 +303,8 @@ func (d *Driver) rotateGen(s *connect.Step) error {
 	d.now = d.now.Add(time.Minute)
 	d.mu.Unlock()
 	tick := make(chan error, 1)
-	go func() { tick <- d.pub.Tick(context.Background()) }()
+	pub := d.pub
+	d.work.Go(func() { tick <- pub.Tick(d.ctx) })
 	select {
 	case err := <-tick:
 		if err != nil {
