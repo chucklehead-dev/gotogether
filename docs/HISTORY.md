@@ -8700,3 +8700,24 @@ The complete library short suite passes on Quint 0.33.1/evaluator 0.7.1
 The CI-selected native list and persisted-upcaster controls cost 57.7 CPU
 seconds (93.064s wall); their new baseline is 58 seconds with the unchanged
 2x regression limit. These are distinct validation scopes.
+
+
+## Deterministic store contention control (2026-11-06)
+
+CI exposed `TestSuiteCatchesConcurrencyMutants` accepting its deliberately racy
+store. Random selectors, random think time and a one-millisecond pause did not
+guarantee conflicting condition checks overlapped. This was a gap in the
+negative control, not evidence that an incorrect store was safe.
+
+The first wave of the shared store contract check now completes every initial
+read before appending and uses selectors matching all generated event types.
+The mutant holds four successful stale checks until all overlap, before its
+unconditioned commits. Both negative tests require the existing brute-force
+oracle's condition-after-zero violation and the four checks; timeouts or other
+operational errors cannot stand in for the witness. Subsequent randomized
+conditions and checkpoint checks remain. Atomic arrivals plus `qenv.WaitFor`
+work in native and simulated execution, including read-error arrival paths.
+
+Repeated native and race controls pass, as do faithful memstore, simulated and
+QSQL stores across all three isolation levels, and SQLite. The public API and
+production store behavior are unchanged; the contract exercise is stronger.

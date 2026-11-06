@@ -8,6 +8,10 @@ and adds a line here.
 
 ## Unreleased
 
+- Store contract checks force a conflicting first wave before concurrent
+  appends. Their race mutant must expose overlapping stale checks and a real
+  brute-force condition violation, eliminating reliance on scheduling sleeps.
+
 - Grist query result structs support lists of scalar values. Generated bindings
   compare typed ordered lists, preserving duplicates and normalizing nil to
   empty model observations; unsupported shapes fail explicitly unless excluded.

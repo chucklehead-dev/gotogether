@@ -442,8 +442,9 @@ func markers(ctx context.Context, s store.Store) error {
 
 // concurrentAgainstBruteForce: tasks append at once (qenv.Go: a
 // simulation's tasks, goroutines outside one), each read of the head
-// followed by a pause, then an append conditioned after it, half of them
-// moving a checkpoint from where the task read it, every one under its
+// followed by a pause, then an append conditioned after it. The first
+// decisions rendezvous before appending and all conflict; later decisions
+// draw random selectors. Half of them move a checkpoint from where the task read it, every one under its
 // own marker; then the committed log is replayed. Positions are dense,
 // each committed batch's condition held over the log before its events
 // (store.CheckCondition) and its checkpoint moved from the previous
@@ -466,7 +467,7 @@ func concurrentAgainstBruteForce(ctx context.Context, s store.Store) error {
 		readFail error
 	}
 	results := make([][]attempt, tasks)
-	var done atomic.Int32
+	var done, firstReads atomic.Int32
 	for i := range tasks {
 		qenv.Go(ctx, fmt.Sprintf("storetest.appender%d", i), func(ctx context.Context) {
 			defer done.Add(1)
@@ -478,6 +479,15 @@ func concurrentAgainstBruteForce(ctx context.Context, s store.Store) error {
 				if err == nil {
 					err = cerr
 				}
+				if j == 0 {
+					// Every first decision reads before any first append. Its
+					// condition matches every event, so these decisions really
+					// conflict regardless of random selectors or scheduling.
+					firstReads.Add(1)
+					if !qenv.WaitFor(ctx, func() bool { return firstReads.Load() == tasks }, time.Minute) {
+						err = fmt.Errorf("concurrent: first reads did not rendezvous")
+					}
+				}
 				if err != nil {
 					a.readFail = err
 					results[i] = append(results[i], a)
@@ -487,6 +497,9 @@ func concurrentAgainstBruteForce(ctx context.Context, s store.Store) error {
 				q.After, q.Reverse, q.Limit = 0, false, 0
 				if len(q.Tags) > 1 {
 					q.Tags = q.Tags[:1]
+				}
+				if j == 0 {
+					q = store.Selector{Types: types}
 				}
 				a.cond = store.Condition{After: head, Selectors: []store.Selector{q}}
 				if j%2 == 0 && head > cp {

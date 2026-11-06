@@ -3,6 +3,7 @@ package storetest_test
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -47,9 +48,12 @@ func TestSuiteCatchesTenantLeak(t *testing.T) {
 // racy is a mutant store that checks a batch's condition outside the
 // tenant's lock (a read, a pause, then an unconditioned append): a
 // check-then-act race no single-task check can see.
-type racy struct{ *memstore.Store }
+type racy struct {
+	*memstore.Store
+	checked atomic.Int32
+}
 
-func (s racy) Append(ctx context.Context, t string, b store.Batch) (store.Position, error) {
+func (s *racy) Append(ctx context.Context, t string, b store.Batch) (store.Position, error) {
 	if b.Condition != nil {
 		log, _, err := s.Store.Read(ctx, t, store.Selector{Types: []string{"a-happened", "b-happened"}}, 0)
 		if err != nil {
@@ -58,7 +62,18 @@ func (s racy) Append(ctx context.Context, t string, b store.Batch) (store.Positi
 		if err := store.CheckCondition(log, *b.Condition); err != nil {
 			return 0, err
 		}
-		qenv.Sleep(ctx, time.Millisecond) // another append lands here
+		if b.Condition.After == 0 {
+			// The contract check's first four decisions share the empty
+			// prefix. Hold their successful checks here until all overlap,
+			// before any unconditioned commit can land. A sleep alone never
+			// guaranteed this interleaving on a loaded native runner.
+			s.checked.Add(1)
+			if !qenv.WaitFor(ctx, func() bool { return s.checked.Load() == 4 }, time.Minute) {
+				return 0, context.DeadlineExceeded
+			}
+		} else {
+			qenv.Sleep(ctx, time.Millisecond)
+		}
 		b.Condition = nil
 	}
 	return s.Store.Append(ctx, t, b)
@@ -111,11 +126,12 @@ func (s lateSteps) Steps(ctx context.Context, t string, after int64, limit int) 
 // log and one whose rows' times are not in commit order (StepLog), and
 // one whose WaitTenants does not wait or that has none (TenantFeed).
 func TestSuiteCatchesConcurrencyMutants(t *testing.T) {
+	race := &racy{Store: memstore.New("grist")}
 	for _, c := range []struct {
 		check string
 		s     store.Store
 	}{
-		{"ConcurrentAgainstBruteForce", racy{memstore.New("grist")}},
+		{"ConcurrentAgainstBruteForce", race},
 		{"WaitWakes", eager{memstore.New("grist")}},
 		{"StepLog", headSteps{memstore.New("grist")}},
 		{"StepLog", noSteps{memstore.New("grist")}},
@@ -128,10 +144,16 @@ func TestSuiteCatchesConcurrencyMutants(t *testing.T) {
 				if err := k.Run(context.Background(), c.s); err == nil {
 					t.Errorf("%s over its mutant passes", c.check)
 				} else {
+					if c.check == "ConcurrentAgainstBruteForce" && !strings.Contains(err.Error(), "condition after 0 did not hold") {
+						t.Fatalf("contention control failed outside the forced stale-check wave: %v", err)
+					}
 					t.Logf("%s: %v", c.check, err)
 				}
 			}
 		}
+	}
+	if got := race.checked.Load(); got != 4 {
+		t.Fatalf("concurrency control exercised %d overlapping stale checks, want 4", got)
 	}
 }
 
@@ -177,4 +199,27 @@ func TestSuiteCatchesFirstTagOnly(t *testing.T) {
 			t.Logf("%s: %v", c.Name, err)
 		}
 	}
+}
+
+// The first contention wave is checked against the same brute-force oracle
+// for a faithful store and for overlapping check-then-act transactions.
+func TestConcurrentAgainstBruteForceCollisionWave(t *testing.T) {
+	for _, check := range storetest.Checks() {
+		if check.Name != "ConcurrentAgainstBruteForce" {
+			continue
+		}
+		if err := check.Run(context.Background(), memstore.New("grist")); err != nil {
+			t.Fatalf("faithful: %v", err)
+		}
+		broken := &racy{Store: memstore.New("grist")}
+		err := check.Run(context.Background(), broken)
+		if err == nil || !strings.Contains(err.Error(), "condition after 0 did not hold") {
+			t.Fatalf("overlapping stale-check commits: %v", err)
+		}
+		if got := broken.checked.Load(); got != 4 {
+			t.Fatalf("exercised %d overlapping stale checks, want 4", got)
+		}
+		return
+	}
+	t.Fatal("ConcurrentAgainstBruteForce check is missing")
 }
