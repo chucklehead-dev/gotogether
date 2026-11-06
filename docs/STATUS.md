@@ -57,6 +57,12 @@ skipping. Recorded end-to-end artifact mixes improve from about 37→10 and
 Current ordering, ambiguity and version policies remain. See
 [the measurements](performance.md#evidence-discovery-streaming-consolidation-2026-11-06).
 
+Native Grist shutdown now cancels and joins its owned processors, relays and
+tenant watcher before the final relay flush and resource teardown. Processor
+effects must honor cancellation. This closes a deterministic ownership gap
+found while investigating a CI directory-cleanup failure; that exact flaky
+failure was not reproduced locally. Simulation crash lifetimes remain separate.
+
 Cold processor recovery is now measured on SQLite with fresh App/connection
 state, default cadence/memo/batching and audits disabled. The first-ready phase
 is about 7–14% of full recovery in this counter workload; warm prefixes remain

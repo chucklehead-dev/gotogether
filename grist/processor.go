@@ -279,7 +279,7 @@ func (a *App) Start(ctx context.Context, s Store, opts ...StartOption) error {
 	for _, t := range tenants {
 		n.start(ctx, t)
 	}
-	qenv.Go(ctx, "grist.tenants", func(ctx context.Context) {
+	n.goTask(ctx, "grist.tenants", func(ctx context.Context) {
 		n.watch(ctx, feed)
 	})
 	return nil
@@ -303,6 +303,22 @@ type node struct {
 	effects atomic.Int64
 	mu      sync.Mutex
 	list    []*poller
+	// Main alone joins its native tasks before closing their resources.
+	// Simulations own their process lifetimes; a crash can suspend a task
+	// without running its defers, so they never use this wait group.
+	tasks *sync.WaitGroup
+}
+
+func (n *node) goTask(ctx context.Context, name string, fn func(context.Context)) {
+	if n.tasks == nil {
+		qenv.Go(ctx, name, fn)
+		return
+	}
+	n.tasks.Add(1)
+	qenv.Go(ctx, name, func(ctx context.Context) {
+		defer n.tasks.Done()
+		fn(ctx)
+	})
 }
 
 // stuck names a poller that has worked on one trigger for longer than
@@ -338,7 +354,7 @@ func (n *node) start(ctx context.Context, t string) {
 		return
 	}
 	r := n.relay
-	qenv.Go(ctx, "grist.relay."+t, func(ctx context.Context) {
+	n.goTask(ctx, "grist.relay."+t, func(ctx context.Context) {
 		r.run(ctx, t)
 	})
 	for _, p := range n.app.processors {
@@ -348,7 +364,7 @@ func (n *node) start(ctx context.Context, t string) {
 		n.mu.Lock()
 		n.list = append(n.list, pl)
 		n.mu.Unlock()
-		qenv.Go(ctx, "grist."+p.name+"."+t, func(ctx context.Context) {
+		n.goTask(ctx, "grist."+p.name+"."+t, func(ctx context.Context) {
 			defer n.pollers.Add(-1) // stopped (its context ended): no work in hand, for idle
 			pl.run(qobs.Thread(ctx))
 		})

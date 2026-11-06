@@ -17,6 +17,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -33,6 +34,9 @@ import (
 // none). It runs the command its arguments name, stopping on SIGINT or
 // SIGTERM, and exits 2 on a usage error, 1 on any other. A second
 // signal, in the drain, ends the process at once (the signals' default).
+// Native node tasks must finish cancellation cleanup before the final
+// relay flush and resource closure. Processor effects must cooperate
+// with cancellation: drain phase budgets do not abandon their cleanup.
 // The commands:
 //
 //	catalog    App.Catalog as JSON on stdout
@@ -519,7 +523,23 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 	// a rewind, past the old history's steps)
 	ctx = relay.With(ctx)
 	var n *node
-	if err := app.Start(nodeCtx, st, WithRelay(relay), StartOption{apply: func(c *startConfig) { c.onNode = func(x *node) { n = x } }}); err != nil {
+	var tasks sync.WaitGroup
+	// The drain budgets useful work, then cancels the node. Its native
+	// tasks must finish cancellation cleanup before dependencies, the
+	// recording sink, or the database close, including startup failures.
+	// User effects must cooperate with cancellation; a timeout cannot
+	// safely close resources while they are still in use.
+	stopAndJoin := func() {
+		stopNode()
+		tasks.Wait() //qenv:ok Main owns native tasks; simulated process teardown never waits here
+	}
+	defer stopAndJoin()
+	if err := app.Start(nodeCtx, st, WithRelay(relay), StartOption{apply: func(c *startConfig) {
+		c.onNode = func(x *node) {
+			n = x
+			x.tasks = &tasks
+		}
+	}}); err != nil {
 		return err
 	}
 	if hs != nil {
@@ -553,7 +573,7 @@ func serveMain(ctx context.Context, app *App, args []string, stderr io.Writer, o
 		hs.draining.Store(true)
 	}
 	lg.Info("draining", "grace", drain.Grace.String())
-	err = runDrain(ctx, drain, mainServer{srv: srv, done: done}, st, relay, n, stopNode, true,
+	err = runDrain(ctx, drain, mainServer{srv: srv, done: done}, st, relay, n, stopAndJoin, true,
 		func(msg string) { fmt.Fprintln(stderr, msg) }, func(phase string, kv ...any) { lg.Info("drain", append([]any{"phase", phase}, kv...)...) })
 	// an error only when there is one: a clean stop once logged "error":"<nil>"
 	kv := []any{"uptime", time.Since(started).Round(time.Millisecond).String()} //qenv:ok the real tier's uptime

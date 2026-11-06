@@ -45,6 +45,14 @@ medians fall from about 37→10 and 39→16 ms on bounded artifact mixes. Public
 file predicates return errors, and unreadable JSON cannot vanish from a suite.
 See [the data and limits](performance.md#evidence-discovery-streaming-consolidation-2026-11-06).
 
+CI exposed a native shutdown ownership gap during this consolidation: Main
+could return while processor cancellation cleanup was still running. Native
+node tasks now join before final relay flush and owned resource teardown;
+cooperative cancellation remains required. The original intermittent directory
+cleanup failure did not reproduce locally, so its exact cause remains unproven.
+Prefer this demonstrated lifecycle correction over a new convenience claim or
+speculative snapshot feature.
+
 Next, rotate toward a concrete general-framework or cross-facet caller problem
 rather than further parser tuning, compiled modes or snapshot features. Candidates below
 are experiments with selection thresholds, not commitments.
