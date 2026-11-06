@@ -71,13 +71,21 @@ func TestCompiledManifestBundleCLI(t *testing.T) {
 		return stdout.Bytes()
 	}
 	templates := map[string]string{}
-	for _, model := range []string{"account", "rr"} {
+	for _, model := range []string{"account", "rr", "blind"} {
 		dir := filepath.Join(base, "template-"+model)
 		if err := os.Mkdir(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 		for _, ext := range []string{".yaml", ".qnt"} {
-			bundleWrite(t, filepath.Join(dir, model+ext), string(mustRead(t, filepath.Join("../../validate/testdata", model+ext))))
+			from := model
+			if model == "blind" && ext == ".qnt" {
+				from = "account"
+			}
+			body := string(mustRead(t, filepath.Join("../../validate/testdata", from+ext)))
+			if model == "blind" && ext == ".yaml" {
+				body = strings.Replace(body, "spec: account.qnt", "spec: blind.qnt", 1)
+			}
+			bundleWrite(t, filepath.Join(dir, model+ext), body)
 		}
 		invoke(t, false, 0, "compile", "-binding", filepath.Join(dir, model+".yaml"), "-o", filepath.Join(dir, model+".model.json"))
 		templates[model] = dir
@@ -111,6 +119,12 @@ func TestCompiledManifestBundleCLI(t *testing.T) {
 	}
 	impossible := append([]qtrace.Step(nil), overlap...)
 	impossible[0].Obs = map[string]any{"balance": int64(6)}
+	pending := []qtrace.Step{
+		{Actor: "account", Recorder: "capture", Thread: "client", Seq: 1, Action: "deposit", Time: time.Unix(1, 0), Args: map[string]any{"amount": int64(10)}, Record: qtrace.Record{Invocation: true}},
+		{Actor: "account", Recorder: "capture", Thread: "client", Seq: 2, Action: "withdraw", Time: time.Unix(2, 0), Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}},
+	}
+	pendingFail := append([]qtrace.Step(nil), pending...)
+	pendingFail[1].Obs = map[string]any{"balance": int64(99)}
 	for _, tc := range []struct {
 		name, model, verdict string
 		code                 int
@@ -118,6 +132,9 @@ func TestCompiledManifestBundleCLI(t *testing.T) {
 		nested               bool
 		steps                []qtrace.Step
 	}{
+		{"pending-pass", "blind", "pass", 0, false, false, pending},
+		{"pending-fail", "blind", "fail", 1, false, false, pendingFail},
+		{"pending-linearize", "blind", "pass", 0, false, false, pending},
 		{"linearize-pass", "account", "pass", 0, false, false, overlap},
 		{"linearize-fail", "account", "fail", 1, false, false, impossible},
 		{"linearize-source-absent", "account", "pass", 0, true, false, overlap},
@@ -157,6 +174,15 @@ func TestCompiledManifestBundleCLI(t *testing.T) {
 			if tc.name == "invariant-subset" {
 				args = append(args, "-invariants", "nonNegative")
 			}
+			if strings.HasPrefix(tc.name, "pending-") {
+				if tc.code == 0 {
+					invoke(t, true, 1, "validate", "-binding", bind, "-compiled", artifact, "-json", log)
+				}
+				args = append(args, "-resolve-pending")
+				if tc.name == "pending-linearize" {
+					args = append(args, "-linearize")
+				}
+			}
 			if strings.HasPrefix(tc.name, "linearize-") {
 				if tc.name == "linearize-pass" {
 					invoke(t, true, 1, "validate", "-binding", bind, "-compiled", artifact, "-json", log)
@@ -185,6 +211,9 @@ func TestCompiledManifestBundleCLI(t *testing.T) {
 			}
 			if strings.HasPrefix(tc.name, "linearize-") && !original.Check.Linearize {
 				t.Fatal("manifest dropped linearization scope")
+			}
+			if strings.HasPrefix(tc.name, "pending-") && !original.Check.ResolvePending {
+				t.Fatal("manifest dropped pending resolution scope")
 			}
 			if original.Model.Compiled == nil || original.Model.Compiled.SHA256 == "" || original.Tools.Quint != "" || original.Tools.Backend != "" {
 				t.Fatalf("compiled replay mode/provenance missing or attributed to Quint: %+v", original)
@@ -215,7 +244,7 @@ func TestCompiledManifestBundleCLI(t *testing.T) {
 			runs = append(runs, savedRun{tc.name, tc.model, tc.verdict, tc.code, source, out, original, mustRead(t, artifact)})
 		})
 	}
-	if len(runs) != 10 {
+	if len(runs) != 13 {
 		t.Fatal("a compiled capture failed; no portable-replay claim can follow")
 	}
 	// A manifest's pinned artifact, binding and present source are evidence, not
@@ -245,12 +274,7 @@ func TestCompiledManifestBundleCLI(t *testing.T) {
 			}
 		})
 	}
-	// Pending-call resolution remains separate from compiled linearization;
-	// manifests must not introduce a source/Quint fallback.
-	invoke(t, true, 2, "validate", "-binding", runs[0].original.Model.Binding.Path, "-compiled", runs[0].original.Model.Compiled.Path, "-resolve-pending", "-manifest", filepath.Join(base, "search.json"), "-json", runs[0].original.Inputs[0].Path)
-	if _, err := os.Stat(filepath.Join(base, "search.json")); !os.IsNotExist(err) {
-		t.Fatal("unsupported compiled pending resolution recorded a manifest")
-	}
+	// ITF inputs remain outside compiled manifest replay.
 	itfPath, err := filepath.Abs("../../itf/testdata/bignumber.rust.itf.json")
 	if err != nil {
 		t.Fatal(err)

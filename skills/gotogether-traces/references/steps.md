@@ -207,7 +207,12 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   `gotogether compile -binding b.yaml -o model.json`,
   `gotogether validate -binding b.yaml -compiled model.json -manifest run.json steps.jsonl`.
   Bundle/replay use the hashed compiled artifact with no Quint/Node, including
-  version probes; no fallback changes the judge. Compiler provenance stays in
+  version probes; no fallback changes the judge. `-resolve-pending` works alone
+  or with `-linearize`/`-linearize-key`; selected effects remain assumptions and
+  pending calls remain unfinished. Unsupported evaluation errors rather than
+  rejecting a candidate; exhausted search budgets stay inconclusive. The manifest
+  preserves explicit `SearchOptions.ResolveBudget` for placement-only API runs;
+  combined ordering uses its order budget. Compiler provenance stays in
   the artifact; runtime Tools.Quint/Backend stay empty. The single current run
   format is `/3`; regenerate older manifests rather than editing their format.
   Readers retain exact input byte digests; if a log is appended or edited after

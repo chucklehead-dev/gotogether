@@ -2922,6 +2922,7 @@ type RunCheck struct
     field Key string `json:"linearizeKey,omitempty"`
     field Budget int `json:"linearizeBudget,omitempty"`
     field ResolvePending bool `json:"resolvePending,omitempty"`
+    field ResolveBudget int `json:"resolveBudget,omitempty"`
     field RequireFinish bool `json:"requireFinish,omitempty"`
     field LostPrefix []string `json:"lostPrefix,omitempty"`
     field LostSuffix []string `json:"lostSuffix,omitempty"`

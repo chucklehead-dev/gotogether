@@ -152,7 +152,9 @@ share.
    every failure, whose report is quint's (`quint test` on the replay
    module). Linearize and ResolvePending search orders and placements
    for concurrent and pending calls before judging. `gotogether compile`
-   and `validate -compiled` run the evaluator alone, with no quint.
+   and `validate -compiled` run the evaluator alone, including pending-effect
+   placement and combined ordering searches, with no quint fallback. Assumed
+   effects, native bounds and unsupported evaluation stay explicit.
 6. **Claim.** A test states what the verdicts must be (`.Expect(t,
    qtest.Conforms(), qtest.Some(qtest.Rejects("apply")))`), and an
    expectation naming an action the model lacks fails the test.

@@ -33,14 +33,20 @@ next-work instructions and keeps dated summaries in
 [HISTORY](HISTORY.md#handoff-consolidation-2026-11-06). It changes no runtime
 contract or previously recorded evidence.
 
-After this cleanup, investigate a demonstrated general-framework gap before
-expanding the just-completed fault-order or stream facets. Candidates below
-are experiments with explicit selection thresholds, not feature commitments.
+The next general-framework slice closes I21's compiled pending-call gap using
+the existing placement and ordering searches. An unchanged receipt-history
+fixture passes with ordinary resolution but compiled resolution previously
+refused even after relocation; wallet/raftkv already use pending calls. Native
+controls retain assumed effects, bounds and evaluator-only provenance, with
+unsupported errors and no fallback. This is existing-user portability coverage,
+not evidence of an independent adopter request. See DESIGN §106.
+
+Next, rotate toward measured facet depth before more compiled search modes.
+Candidates below are experiments with selection thresholds, not commitments.
 
 | Order | Candidate | Evidence needed before implementation |
 |---|---|---|
-| Next investigation: general | I21: bounded compiled pending-call resolution | Reuse an existing concurrent-history fixture to demonstrate a real portable-replay blocker; preserve unsupported/bounded outcomes and independent search controls. Completed-history compiled linearization already works. |
-| Subsequent facet candidate | I24: first cold historical-read cost | Measure a realistic lagging-processor workload. Warm memo ownership is fixed; change persistent snapshot retention only if cold refolds materially matter and anchor/rewind semantics remain sound. |
+| Next investigation: facet | I24: first cold historical-read cost | Measure a realistic lagging-processor workload. Warm memo ownership is fixed; change persistent snapshot retention only if cold refolds materially matter and anchor/rewind semantics remain sound. |
 | Consolidation candidate | Evidence discovery cost at representative suite volume | Profile actual file mixes before replacing the streaming implementation. Correct discovery is required; fewer scans or callback counts alone do not establish an end-to-end speedup. |
 | Alongside | Independent-maintainer use or a newly reproduced caller blocker | Existing agent-assisted Goo/LRU/HTTP trials retain their bounded scope. Prefer real friction over another adjacent fixture or adapter. |
 
@@ -54,8 +60,8 @@ Virtual physical-session capacity, more fault-order modes, additional broker
 features, model-comparison mappings, broad diagnostic/editor expansion and
 platform facades remain deferred without new evidence. Logical transaction
 limits and native role quotas do not establish virtual physical-session fidelity.
-Cold snapshot retention and compiled pending calls are distinct from their
-already-built warm/completed counterparts. Abrupt-owner process supervision
+Cold snapshot retention is distinct from already-built warm processor memo
+ownership; pending-call resolution preserves its original completion limits. Abrupt-owner process supervision
 remains an explicit I12 boundary. Do not start all tracks at once.
 
 The item sections below retain their technical dependencies and design detail.
@@ -398,7 +404,7 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   binding and compiled-model checks, docs/ci.md's tiers, and `gotogether
   compile` with `validate -compiled`. Left: publishing the image and
   tagging the Action (after R5's tags), the CI-budget reference
-  repository and pending-call resolution under `-compiled`. What it was: A GitHub Action (`setup-gotogether`:
+  repository. What it was: A GitHub Action (`setup-gotogether`:
   quint and its evaluator pinned and cached, `validate` and `evidence
   -strict` steps with annotations) and a container image with quint
   pinned, so no repository copies `install-quint.sh`; `gotogether
@@ -415,7 +421,10 @@ its I2 (H7's docs) part of I27, its I3 (versions that roll) I22.
   unsupported checks do not fall back. Completed-history linearization, including
   keyed search, now uses the same evaluator-only contract and portable replay;
   candidates unsupported by the evaluator error rather than becoming rejected
-  prefixes. Search bounds remain undecided. Pending-call resolution stays separate.
+  prefixes. Search bounds remain undecided. Pending-call resolution now shares
+  that evaluator-only contract, alone or with ordinary/keyed ordering searches.
+  Original invocation-only input, assumed effects and explicit placement-only
+  budgets survive manifest/bundle relocation and replay (DESIGN §106).
   Actual compiled digest/coverage anchor
   recording, and frozen-IR constant overrides require recompilation. Example: a
   CI-budget reference repository, ten small model-checked services under

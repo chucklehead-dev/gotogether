@@ -37,10 +37,11 @@ type BatchCheck func(ctx context.Context, runs [][]qtrace.Step) ([]*Report, []er
 // the check's or the confirmation's (and its search again with quint
 // alone), never a verdict.
 //
-// A compiled checker supports Linearize (including Key) using the artifact's
+// A compiled checker supports history searches, including Linearize with Key
+// and ResolvePending, using the artifact's
 // Go evaluator alone, without Quint confirmation or fallback, like Check.
 // Unsupported candidate evaluation is ErrNeedsQuint, never a rejected order.
-// ResolvePending still requires a noncompiled checker.
+// Pending effects use the same bounded search and remain explicitly assumed.
 //
 // Its check is Check's (its failing actors' ITF written unless NoITF).
 func (c *Checker) Judge(ctx context.Context, steps []qtrace.Step, opt SearchOptions) (*Judgment, error) {
@@ -61,6 +62,12 @@ func (c *Checker) Judge(ctx context.Context, steps []qtrace.Step, opt SearchOpti
 // they were.
 func (c *Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt SearchOptions, check BatchCheck) (js []*Judgment, errs []error) {
 	js, errs = make([]*Judgment, len(runs)), make([]error, len(runs))
+	if opt.Budget < 0 || opt.ResolveBudget < 0 {
+		for i := range errs {
+			errs[i] = fmt.Errorf("history search budgets must be nonnegative: use 0 for the default, or a positive order/placement budget")
+		}
+		return
+	}
 	if err := ctx.Err(); err != nil {
 		for i := range errs {
 			errs[i] = err
@@ -87,13 +94,6 @@ func (c *Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt Sear
 	}
 	searches := make([]*search, len(runs))
 	searching := opt.Linearize || opt.ResolvePending
-	if opt.ResolvePending && c.compiled != nil {
-		// Pending effects still require the external confirmation path.
-		for i := range errs {
-			errs[i] = fmt.Errorf("-resolve-pending: %w; judge completed calls with -linearize, or validate without -compiled", ErrNeedsQuint)
-		}
-		return js, errs
-	}
 	sem := make(chan struct{}, runtime.GOMAXPROCS(0))
 	each := func(idx []int, f func(i int)) {
 		var wg sync.WaitGroup
@@ -156,7 +156,7 @@ func (c *Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt Sear
 				if searching && c.compiled != nil {
 					for _, actor := range reps[k].Actors {
 						if actor.noVerdict == "needs quint" || actor.Choices != nil && actor.Choices.Status == "unsupported" {
-							errs[i] = fmt.Errorf("compiled linearization of actor %s: %w", actor.Actor, ErrNeedsQuint)
+							errs[i] = fmt.Errorf("compiled history search of actor %s: %w", actor.Actor, ErrNeedsQuint)
 							break
 						}
 					}

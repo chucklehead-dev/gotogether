@@ -3,7 +3,6 @@ package validate
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -157,8 +156,8 @@ func TestCompiledUnsupportedIsNoVerdict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.Judge(context.Background(), steps, SearchOptions{ResolvePending: true}); !errors.Is(err, ErrNeedsQuint) {
-		t.Errorf("a search by a compiled model: %v, want ErrNeedsQuint", err)
+	if j, err := a.Judge(t.Context(), steps, SearchOptions{ResolvePending: true}); err != nil || !j.Report.OK() {
+		t.Errorf("completed history through pending resolution: %v %v", j, err)
 	}
 }
 
