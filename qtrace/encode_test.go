@@ -200,6 +200,30 @@ func TestAppendLineAgainstMarshal(t *testing.T) {
 	}
 }
 
+// Malformed exponents must fail as json.Marshal does, including on the
+// scalar fast path used by ordinary step arguments.
+func TestAppendLineMalformedNumberExponents(t *testing.T) {
+	for _, number := range []string{"1ea2", "1Ea2", "1e+", "1e-", "1E+", "1E-", "1e++2", "1e--2"} {
+		t.Run(number, func(t *testing.T) {
+			// Keep the number alone: another unsupported value would force
+			// json.Marshal's fallback before the encoder checks its grammar.
+			s := Step{Args: map[string]any{"n": json.Number(number)}}
+			sameLine(t, &s)
+		})
+	}
+}
+
+func TestAppendLineNumberGrammarBoundaries(t *testing.T) {
+	for _, number := range []string{"", "0", "9", "10", "19", "1/", "1:", "1.:", "1e:"} {
+		t.Run(number, func(t *testing.T) {
+			// The empty Number is zero, while '/' and ':' bracket the
+			// digits without being accepted as digits themselves.
+			s := Step{Args: map[string]any{"n": json.Number(number)}}
+			sameLine(t, &s)
+		})
+	}
+}
+
 // Every step of the repository's step logs encodes as json.Marshal does.
 func TestAppendLineOnRepositoryLogs(t *testing.T) {
 	for _, steps := range repositoryLogs(t) {

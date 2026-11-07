@@ -9095,3 +9095,49 @@ benchmark samples; restricting replay to nested expressions removes extra lambda
 calls for simple sums. The committed benchmark retains sizes 20 and 1,000 with
 compilation outside timing; concurrent native work makes individual timings
 unsuitable as a regression threshold.
+
+
+## Mutation suite admission (2026-11-07)
+
+The qenv campaign wove mutations in internal packages but ran only the root
+package's tests. Removing `checked.of`'s rate validation survived that binary as
+local mutant 104; the existing child `TestSeededChecksItsRates` killed the same
+source change as local mutant 35. Both unmutated suites passed with scheduler
+checks enabled. Reusing raw IDs across binaries would activate unrelated changes.
+
+The campaign now discovers descendant test-bearing packages, including external
+suites, compiles each into a unique path, checks every inventory and baseline,
+and aggregates the union of source mutations. Stable per-file registration
+ordinals distinguish repeated identical descriptions; descriptions and counts
+must agree across binaries. Missing links are not results. No runtime metadata
+or public API changes are required. Baseline diagnostics and bounded progress
+messages make admission and execution visible. Existing survivor allowances,
+process memory caps and per-suite timeouts are unchanged. Passing this harness's
+controls does not establish that every nightly mutation gate has recovered.
+
+
+## Trace mutation recovery (2026-11-07)
+
+Native source overlays and independent public-contract controls identified 15
+real gaps among the trace gate's 44 survivors: malformed scalar number exponents,
+clock-order assumptions and closest-gap reporting, default versus explicit clock
+skew in linearization, and span-source metadata. The numeric controls contain
+only the scalar under test so unrelated unsupported values cannot force the
+standard encoder fallback and mask a broken fast path.
+
+The first full campaign with these tests produced 29/499 survivors. Five new
+survivors preserved behavior: a redundant exponent-format length guard, digit
+bounds that only force a correct fallback, a duplicate empty-number check already
+handled by the caller, and assigning the same closest gap on a tie. These source
+branches were simplified instead of constraining correct fallback behavior or
+raising the allowance. Digit classification uses unsigned byte arithmetic;
+closest-gap selection uses the builtin minimum after initialization. Public
+number controls include the empty-number-as-zero contract and digit boundaries.
+
+The final full campaign passed at 24/494, with the existing maximum of 24.
+The remaining source families match the previously reviewed equivalents.
+Encoder benchmark allocations stayed at 512 bytes and one allocation; concurrent
+load makes the sampled timings unsuitable for a speedup claim. This closes the
+trace gate, not the entire nightly. The scheduler's complete suite inventory
+contains 1,748 unique mutations, versus 1,092 linked into the old root binary;
+child-only sources stay in scope and the scheduler limit remains 22.

@@ -237,8 +237,10 @@ func ClockOrders(steps []Step, skew time.Duration) ClockAssumption {
 				continue
 			}
 			if gap := b.Invoked.Sub(a.Time); gap > skew {
-				if c.Orders++; c.Orders == 1 || gap < c.Closest {
+				if c.Orders++; c.Orders == 1 {
 					c.Closest = gap
+				} else {
+					c.Closest = min(c.Closest, gap)
 				}
 				for _, r := range []string{a.Recorder, b.Recorder} {
 					if !slices.Contains(c.Recorders, r) {
