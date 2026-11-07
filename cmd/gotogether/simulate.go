@@ -59,7 +59,7 @@ func simulateCmd(ctx context.Context, args []string, mr *machineReports, log *si
 		return 2, fmt.Errorf("simulate needs -binding b.yaml")
 	}
 	opt := model.SimulateOptions{Quint: *quint, Seed: *seed, Steps: *steps, Samples: *samples, Constants: splitTop(*consts),
-		Verify: *verify, Graph: *graph, States: *states, Depth: *depth, Out: *out}
+		Verify: *verify, Graph: *graph, States: *states, Depth: *depth, Out: *out, Progress: os.Stderr}
 	if *invs != "" {
 		opt.Invariants = splitList(*invs)
 	}

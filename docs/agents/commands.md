@@ -120,7 +120,12 @@ AGENTS.md has the general requirements.
   `GOTOGETHER_KEEP=/dir` keeps generated modules and traces from qtest and
   qhegel. `GOTOGETHER_REPORT_DIR=/dir` makes every `gotogether validate`
   and `simulate` write its report as JSON there (`gotogether.report/2`,
-  a file per command, in the order run: the Action's job summary). `GOTOGETHER_RUN='TestX#2:seed=n'` (or `:schedule=...`,
+  a file per command, in the order run: the Action's job summary).
+  `simulate` writes live binding/phase starts and elapsed completion status, plus
+  Quint diagnostics, to stderr; `-json` keeps one final report on stdout. A skipped
+  binding may exit 0 without checking anything; partial solver output is not a
+  completed verdict. Library callers opt in with `model.SimulateOptions.Progress`.
+  `GOTOGETHER_RUN='TestX#2:seed=n'` (or `:schedule=...`,
   `:corpus=<file>`, `:choices=<file>` for a steered run) runs one run of one exploration alone, the test's
   explorations numbered in order; each failing run's report prints it.
   With it, `GOTOGETHER_NAV` (start, fail, `@k`, `<schedule>@k`) navigates

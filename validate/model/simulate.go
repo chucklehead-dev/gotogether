@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"path/filepath"
@@ -50,11 +51,7 @@ func Simulate(ctx context.Context, bindingPath string, opt SimulateOptions) (*Re
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	b, err := binding.Load(bindingPath)
-	if err != nil {
-		return nil, err
-	}
-	return simulate(ctx, bindingPath, b, nil, opt)
+	return simulate(ctx, bindingPath, nil, nil, opt)
 }
 
 // Simulate is Simulate of c's binding, with c's model and evaluator.
@@ -68,6 +65,10 @@ func (c *modelChecker) Simulate(ctx context.Context, opt SimulateOptions) (*Repo
 // SimulateOptions choose Simulate's checks and bounds. Every zero value
 // is the binding's simulate section's, else its default.
 type SimulateOptions struct {
+	// Progress receives live phase progress and native Quint diagnostics.
+	// Nil is silent. Write errors are ignored; diagnostics are not evidence.
+	// Callers sharing a writer between simulations must synchronize it.
+	Progress io.Writer
 	// Quint is the quint binary ("": quint).
 	Quint string
 	// Seed is quint run's --seed ("": 1), fixed so the verdicts repeat.
@@ -233,11 +234,38 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 		return nil, err
 	}
 	s := &sim{rep: &Report{Binding: bpath}}
+	progress := &simulationProgress{w: opt.Progress, binding: bpath}
+	ctx = context.WithValue(ctx, simulationProgressKey{}, progress)
+	finished := progress.phase("binding")
+	defer func() {
+		status := phaseStatus(ctx, err)
+		if err == nil && ctx.Err() == nil && rep != nil {
+			switch {
+			case rep.Skipped != "":
+				status = "skipped"
+			case rep.Code == 1:
+				status = "fail"
+			case rep.Code == 2:
+				status = "no verdict"
+			default:
+				status = "pass"
+			}
+		}
+		finished(status)
+	}()
+	prepared := progress.phase("prepare")
+	defer func() { prepared(phaseStatus(ctx, err)) }()
 	defer func() {
 		if rep != nil {
 			rep.Text = s.b.String()
 		}
 	}()
+	if b == nil {
+		b, err = binding.Load(bpath)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if opt.Quint == "" {
 		opt.Quint = "quint"
 	}
@@ -331,6 +359,7 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 	opt.Steps = orInt(opt.Steps, orInt(sec.Steps, 30))
 	opt.Samples = orInt(opt.Samples, orInt(sec.Samples, 1000))
 	if opt.Graph {
+		prepared("completed")
 		if err := s.graph(ctx, bpath, b, checker, possibles, overrides, invariants, eventually, opt); err != nil {
 			return nil, err
 		}
@@ -352,6 +381,7 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
 		return nil, err
 	}
+	prepared("completed")
 	steps, samples, verify := opt.Steps, opt.Samples, opt.Verify
 	if verify > 0 {
 		s.printf("simulate %s: %s(%s), every trace of up to %d steps (quint verify%s)\n", bpath, b.Module, strings.Join(constantList(b, overrides), ", "), verify, capped)
@@ -374,7 +404,9 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 		if depth == 0 && verify > 0 {
 			depth = verify // quint verify's bound, so their verdicts compare
 		}
+		done := progress.phase("go-possible")
 		rs, evalErr = checker.Possible(ctx, possibleList, PossibleSearch{Constants: overrides, States: opt.States, Depth: depth})
+		done(phaseStatus(ctx, evalErr))
 		if isAnalysisCancellation(evalErr) {
 			return nil, evalErr
 		}
@@ -420,7 +452,13 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 				}
 			}
 		}
+		done := progress.phase("invariant " + inv)
 		out, err := runQuint(ctx, opt.Quint, dir, argv)
+		status := phaseStatus(ctx, err)
+		if ctx.Err() == nil && !isAnalysisCancellation(err) && strings.Contains(out, "[violation]") {
+			status = "completed"
+		}
+		done(status)
 		if isAnalysisCancellation(err) {
 			return nil, err
 		}
