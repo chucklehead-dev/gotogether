@@ -73,6 +73,10 @@ jobs:
           node-version: 22
       - name: Install quint
         run: ci/install-quint.sh
+      - name: Admit Playwright and its real request-log journey
+        if: matrix.part == 'examples'
+        timeout-minutes: 15
+        run: ci/admit-playwright.sh
       - name: Install toxiproxy-server (qnemesis' network tests, strict here)
         if: matrix.part == 'core' || matrix.part == 'race' || matrix.part == 'shuffle'
         run: |
