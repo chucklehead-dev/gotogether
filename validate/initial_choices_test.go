@@ -176,7 +176,7 @@ func TestInitialChoicesSelectNonFirstRootAcrossPolicies(t *testing.T) {
 }
 
 func TestInitialChoicesPreserveInitialPropertyHistory(t *testing.T) {
-	c := initialChoicesChecker(t, initialChoicesBoth, "safe, nonPositive, phaseBounded", Options{Eval: "shadow"})
+	c := initialChoicesChecker(t, initialChoicesBoth, "safe, nonPositive, phaseBounded", Options{Eval: "go"})
 	report, err := c.Check(t.Context(), witnessHistory(witnessObserved("forget", 2)))
 	if err != nil || len(report.Actors) != 1 || report.Actors[0].Conforms != Pass || report.OK() {
 		t.Fatalf("merged initial histories satisfied incompatible properties: err=%v report=%v", err, report)

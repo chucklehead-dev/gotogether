@@ -9024,3 +9024,13 @@ those graphs; the full CI module roster is now independently tidy-checked.
 The [bounded runtime-cost comparison](performance.md#quint-runtime-admission-cost-2026-11-07)
 measures descendant CPU as well as wall time with builds excluded. Admission has
 measurable cost; the two local pairs do not justify rebasing hosted budgets.
+
+## Choice judgment provenance (2026-11-07)
+
+Issue #97 exposed finite-choice rejections labeled as Quint judgments although
+no replay ran. Go enumeration and selected-path confirmation now retain separate
+evidence. Strict Quint/shadow absence proofs return no verdict; ordinary Go
+policy retains exhaustive negative judgments with accurate provenance. Native
+individual/batch controls count actual workload launches and check receipts,
+JSON, saved manifests and Hegel exact-run versus prefix caching. Existing
+negative enumeration oracles explicitly select Go; strict policy controls remain.

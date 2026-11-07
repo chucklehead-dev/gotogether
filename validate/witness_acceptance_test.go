@@ -147,7 +147,11 @@ func TestWitnessUsesOneJointPropertyPath(t *testing.T) {
 		{"joint.yaml", true, true},
 	} {
 		t.Run(tc.binding, func(t *testing.T) {
-			c, err := NewChecker(t.Context(), "testdata/witness/"+tc.binding, Options{Dir: t.TempDir(), Eval: "shadow"})
+			policy := "shadow"
+			if tc.binding == "joint.yaml" {
+				policy = "go" // joint absence is the Go enumeration's conclusion
+			}
+			c, err := NewChecker(t.Context(), "testdata/witness/"+tc.binding, Options{Dir: t.TempDir(), Eval: policy})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -178,7 +182,7 @@ func TestWitnessUsesOneJointPropertyPath(t *testing.T) {
 
 func TestWitnessKeepsPropertyHistoryWhenStatesMerge(t *testing.T) {
 	skip.Quint(t)
-	c, err := NewChecker(t.Context(), "testdata/witness/merged-history.yaml", Options{Dir: t.TempDir(), Eval: "shadow"})
+	c, err := NewChecker(t.Context(), "testdata/witness/merged-history.yaml", Options{Dir: t.TempDir(), Eval: "go"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +268,7 @@ func TestWitnessEventuallyUsesTheInvariantPath(t *testing.T) {
 	history := witnessHistory(witnessObserved("donePick", 2))
 	for _, binding := range []string{"eventual-conflict.yaml", "eventual-joint.yaml"} {
 		t.Run(binding, func(t *testing.T) {
-			c, err := NewChecker(t.Context(), "testdata/witness/"+binding, Options{Dir: t.TempDir(), Eval: "shadow"})
+			c, err := NewChecker(t.Context(), "testdata/witness/"+binding, Options{Dir: t.TempDir(), Eval: "go"})
 			if err != nil {
 				t.Fatal(err)
 			}

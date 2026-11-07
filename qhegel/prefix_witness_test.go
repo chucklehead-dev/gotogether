@@ -37,7 +37,7 @@ func pinnedPrefixRun(negative bool) []qtrace.Step {
 // must agree with native direct validation, while still caching complete runs.
 func TestInvariantWitnessDoesNotRejectOtherPrefixExecutions(t *testing.T) {
 	qtest.RequireQuint(t)
-	for _, eval := range []string{"go", "quint"} {
+	for _, eval := range []string{"go", "quint", "shadow"} {
 		for _, prefetch := range []bool{false, true} {
 			t.Run(eval+map[bool]string{false: "/Check", true: "/Prefetch"}[prefetch], func(t *testing.T) {
 				c, err := validate.NewChecker(t.Context(), "../validate/testdata/witness/binding.yaml", validate.Options{Dir: t.TempDir(), Eval: eval, NoITF: true})
@@ -50,17 +50,36 @@ func TestInvariantWitnessDoesNotRejectOtherPrefixExecutions(t *testing.T) {
 				if err != nil || report == nil || report.OK() {
 					t.Fatalf("unsafe selected path: %v %v", report, err)
 				}
-				if len(report.Actors) != 1 || report.Actors[0].Conforms != validate.Pass || report.Actors[0].Choices == nil || report.Actors[0].Choices.Confirmation != "path_confirmed" {
-					t.Fatalf("unsafe path was not a confirmed conforming witness:\n%s", report.Summary())
+				negativeStatus := receipt.Fail
+				if eval != "go" {
+					negativeStatus = receipt.Inconclusive
 				}
-				found := false
-				for _, inv := range report.Actors[0].Invariants {
-					if inv.Name == "safe" && inv.Verdict == validate.Fail && inv.Failure != nil && inv.Failure.Step != nil && inv.Failure.Step.Seq == bad[0].Seq {
-						found = true
+				if len(report.Actors) != 1 || report.Actors[0].Choices == nil || report.Actors[0].JudgedBy() != "evaluator" {
+					t.Fatalf("finite-choice conclusion lost its Go origin:\n%s", report.Summary())
+				}
+				r := report.Actors[0]
+				if eval == "go" {
+					if r.Conforms != validate.Pass || r.Choices.Confirmation != "path_confirmed" {
+						t.Fatalf("unsafe path was not a confirmed conforming witness:\n%s", report.Summary())
 					}
-				}
-				if !found {
-					t.Fatalf("missing invariant failure at shared first step:\n%s", report.Summary())
+					found := false
+					for _, inv := range r.Invariants {
+						if inv.Name == "safe" && inv.Verdict == validate.Fail && inv.Failure != nil && inv.Failure.Step != nil && inv.Failure.Step.Seq == bad[0].Seq {
+							found = true
+						}
+					}
+					if !found {
+						t.Fatalf("missing invariant failure at shared first step:\n%s", report.Summary())
+					}
+				} else {
+					if r.Conforms != validate.NotEvaluated || r.Choices.Confirmation != "not_performed" || !r.Choices.Exhaustive {
+						t.Fatalf("strict policy turned Go-only absence into a verdict:\n%s", report.Summary())
+					}
+					for _, inv := range r.Invariants {
+						if inv.Verdict != validate.NotEvaluated {
+							t.Fatalf("strict policy retained an unconfirmed property verdict: %+v", inv)
+						}
+					}
 				}
 				report, err = c.Check(t.Context(), good)
 				if err != nil || report == nil || !report.OK() {
@@ -82,7 +101,7 @@ func TestInvariantWitnessDoesNotRejectOtherPrefixExecutions(t *testing.T) {
 					}
 					return v
 				}
-				if v := check(bad); v.OK || v.Status != receipt.Fail {
+				if v := check(bad); v.OK || v.Status != negativeStatus || v.Cached {
 					t.Fatalf("lost native unsafe witness: %+v", v)
 				}
 				if v := check(good); !v.OK || v.Status != receipt.Pass {
@@ -93,21 +112,25 @@ func TestInvariantWitnessDoesNotRejectOtherPrefixExecutions(t *testing.T) {
 				rejected := pinnedPrefixRun(true)
 				rejected[1].Args = map[string]any{"wanted": int64(2)}
 				report, err = c.Check(t.Context(), rejected)
-				if err != nil || report == nil || len(report.Actors) != 1 || report.Actors[0].Conforms != validate.Fail || report.Actors[0].Choices == nil {
+				wantConforms := validate.Fail
+				if eval != "go" {
+					wantConforms = validate.NotEvaluated
+				}
+				if err != nil || report == nil || len(report.Actors) != 1 || report.Actors[0].Conforms != wantConforms || report.Actors[0].Choices == nil {
 					t.Fatalf("expected native finite-choice conformance rejection: %v %v", report, err)
 				}
-				if v := check(rejected); v.OK {
+				if v := check(rejected); v.OK || v.Status != negativeStatus || v.Cached {
 					t.Fatalf("conformance rejection passed: %+v", v)
 				}
 				extended := append(append([]qtrace.Step(nil), rejected...), good[2])
-				if v := check(extended); v.OK || v.Cached {
+				if v := check(extended); v.OK || v.Status != negativeStatus || v.Cached {
 					t.Fatalf("finite-choice rejection became a prefix certificate: %+v", v)
 				}
 				for _, run := range []struct {
-					steps []qtrace.Step
-					ok    bool
-				}{{bad, false}, {good, true}} {
-					if v := check(run.steps); v.OK != run.ok || !v.Cached {
+					steps  []qtrace.Step
+					status receipt.Status
+				}{{bad, negativeStatus}, {rejected, negativeStatus}, {good, receipt.Pass}} {
+					if v := check(run.steps); v.OK != (run.status == receipt.Pass) || v.Status != run.status || !v.Cached {
 						t.Fatalf("complete-run cache changed: %+v", v)
 					}
 				}

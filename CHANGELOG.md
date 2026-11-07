@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- Finite-choice judgments retain their actual evaluator provenance in JSON,
+  receipts and saved manifests. Strict Quint and shadow policies return no
+  verdict for Go-only negative proofs; a confirmed witness proves existence,
+  not absence. Refused and rejected checks preserve observed call counts.
+
 - Nightly scopes sample and Hegel seed overrides to their intended campaigns.
   Core shadow checks retain their own budgets and semantic comparisons;
   webjobs shadow explicitly checks recorded journeys and mutants. Normal-mode

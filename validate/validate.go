@@ -51,7 +51,11 @@ type Options struct {
 	// its conclusions confirmed by quint), "quint" (quint alone) or
 	// "shadow" (both, failing on any disagreement); "" is
 	// GOTOGETHER_EVAL's, else "go". An option, so tests of each run in
-	// parallel.
+	// parallel. Finite model choices use Go search and Quint witness replay.
+	// Under go, negative search conclusions retain evaluator provenance even
+	// when Quint confirms a representative failing path.
+	// Under quint or shadow, a negative search conclusion has no verdict unless
+	// independently confirmed; one selected witness cannot establish absence.
 	Eval string
 	// EvalSample is the deterministic confirmation policy for Go-evaluator
 	// passes. Nil uses GOTOGETHER_EVAL_SAMPLE (default 1/50). Plans using
@@ -847,8 +851,16 @@ func (r *Result) Reason() string {
 // JudgedBy says who gave r's verdict: "quint", "evaluator" (the Go
 // evaluator passed it, with no quint replay) or "both" (it passed, and
 // quint judged it too: a sample of its passes, GOTOGETHER_EVAL_SAMPLE;
-// a disagreement is an error issue of r's, its verdict quint's).
+// a disagreement is an error issue of r's, its verdict quint's). Finite-choice
+// conclusions come from Go enumeration; a passing matching path confirmed by
+// Quint is "both". Confirmation of one path does not confirm a negative proof.
 func (r *Result) JudgedBy() string {
+	if r.Choices != nil {
+		if r.Choices.Confirmation == "path_confirmed" && r.OK() {
+			return "both"
+		}
+		return "evaluator"
+	}
 	switch {
 	case r.byEvaluator:
 		return "evaluator"

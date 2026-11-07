@@ -4301,7 +4301,10 @@ ones that fail.
   uses whole-path finite enumeration and original-action witness specialization,
   superseding the sampled-replay limitation below within its supported scope.
   All evaluation policies disclose this Go search plus selected-path Quint
-  confirmation. Complete negative conclusions remain Go enumeration results.
+  confirmation. Complete negative conclusions remain Go enumeration results;
+  strict `quint` and `shadow` return no verdict without independent absence
+  confirmation. Positive confirmed paths are judged by both; Go-only negative
+  conclusions retain evaluator provenance in receipts and saved manifests.
   Bounds, joint-property semantics, current refusals and receipt fields are
   specified in [model-choice witnesses](model-choice-witnesses.md). Initialization
   now follows the same rule: distinct finite roots are charged before filtering

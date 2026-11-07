@@ -42,8 +42,12 @@ to confirm the original observations and exact initial/intermediate states.
 Assigning an evaluator-produced post-state directly would not establish that the
 original action admits it. The selected path's property results must also agree.
 A confirmed representative path does not independently prove a global negative
-conclusion. All three evaluation policies (`go`, `quint`, `shadow`) use this
-explicit search-and-confirmation procedure for supported internal choices.
+conclusion. Under `go`, exhaustive Go enumeration may establish a negative
+judgment; its producer is reported as `evaluator`, even if Quint confirmed one
+selected failing path. A passing path confirmed by Quint is reported as `both`.
+Under `quint` and `shadow`, negative finite-choice conclusions return no verdict:
+independent confirmation of absence is not currently supported. The bounded Go
+search detail remains visible, but no conformance or property failure is claimed.
 
 ## Bounds and current scope
 

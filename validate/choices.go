@@ -36,7 +36,7 @@ func (c *Checker) choiceNoVerdict(r *Result, status, reason string, explored int
 	if limit == 0 {
 		limit = DefaultChoiceLimit
 	}
-	r.Conforms, r.Failure = NotEvaluated, nil
+	r.Conforms, r.Failure, r.noVerdict = NotEvaluated, nil, reason
 	r.Invariants = nil
 	for _, name := range c.Binding.Invariants {
 		r.Invariants = append(r.Invariants, InvariantResult{Name: name, Verdict: NotEvaluated})
@@ -51,6 +51,26 @@ func (c *Checker) choiceNoVerdict(r *Result, status, reason string, explored int
 	return r
 }
 
+// choiceNegativePolicy preserves the Go search result without presenting it as
+// independently confirmed negative proof under a strict backend policy. A pinned
+// path can confirm existence, but cannot confirm that no other path satisfies it.
+func (c *Checker) choiceNegativePolicy(r *Result, detail *ChoiceSearch, o Options) *Result {
+	mode := o.evalMode()
+	if mode != "quint" && mode != "shadow" {
+		return r
+	}
+	reason := "independent confirmation of a negative finite model-choice conclusion is unsupported under the " + mode + " policy; exhaustive Go search alone is not independent confirmation"
+	c.choiceNoVerdict(r, "unsupported", reason, detail.Explored)
+	// Status and completeness describe the search, not the requested backend's
+	// judgment. Keep that bounded evidence alongside the no-verdict checks.
+	r.Choices = detail
+	if detail.Reason == "" {
+		detail.Reason = "finite Go search found no whole path satisfying all requested properties"
+	}
+	detail.Reason += "; no verdict: " + reason
+	return r
+}
+
 // choiceNode retains a complete explanation, not a greedy local successor.
 // bad records first violations on this path, including initial-state checks.
 type choiceNode struct {
@@ -61,6 +81,7 @@ type choiceNode struct {
 }
 
 func (c *Checker) checkChoices(ctx context.Context, tr *qtrace.Trace, p *binding.Plan, r *Result, o Options) (*Result, error) {
+	r.Calls, r.Steps = p.Calls, len(p.Calls)
 	refuse := func(reason string) (*Result, error) { return c.choiceNoVerdict(r, "unsupported", reason, 0), nil }
 	if c.compiled != nil {
 		return refuse("compiled mode cannot confirm a pinned model-choice witness with Quint")
@@ -202,7 +223,7 @@ func (c *Checker) checkChoices(ctx context.Context, tr *qtrace.Trace, p *binding
 			for _, name := range c.Binding.Invariants {
 				r.Invariants = append(r.Invariants, InvariantResult{Name: name, Verdict: NotEvaluated})
 			}
-			return r, nil
+			return c.choiceNegativePolicy(r, detail, o), nil
 		}
 		frontier = next
 	}
@@ -284,6 +305,9 @@ func (c *Checker) checkChoices(ctx context.Context, tr *qtrace.Trace, p *binding
 			}
 		}
 		r.Invariants = append(r.Invariants, ir)
+	}
+	if len(conflict) > 0 && (o.evalMode() == "quint" || o.evalMode() == "shadow") {
+		return c.choiceNegativePolicy(r, detail, o), nil
 	}
 	vars, err := c.choiceVariables(e.m)
 	if err != nil {
