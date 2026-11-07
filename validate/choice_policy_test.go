@@ -23,7 +23,7 @@ func TestChoiceVerdictPolicyAndProvenance(t *testing.T) {
 	workLog := filepath.Join(t.TempDir(), "work.log")
 	t.Setenv("CHOICE_WORK_LOG", workLog)
 	wrapper := filepath.Join(t.TempDir(), "quint")
-	if err := os.WriteFile(wrapper, []byte("#!/bin/sh\nif [ \"$1\" != \"--version\" ]; then printf '%s\\n' \"$*\" >> \"$CHOICE_WORK_LOG\"; fi\nexec \"$CHOICE_REAL_QUINT\" \"$@\"\n"), 0700); err != nil {
+	if err := os.WriteFile(wrapper, []byte("#!/bin/sh\nif [ \"$1\" = \"test\" ]; then printf '%s\\n' \"$*\" >> \"$CHOICE_WORK_LOG\"; fi\nexec \"$CHOICE_REAL_QUINT\" \"$@\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	for _, policy := range []string{"go", "quint", "shadow"} {
@@ -69,7 +69,7 @@ func TestChoiceVerdictPolicyAndProvenance(t *testing.T) {
 						}
 						wantReplay := tc.positive || (policy == "go" && tc.name != "rejected")
 						if (len(calls) > 0) != wantReplay {
-							t.Fatalf("unexpected Quint workload: want replay=%v, got %s", wantReplay, calls)
+							t.Fatalf("unexpected Quint judgment replay: want replay=%v, got %s", wantReplay, calls)
 						}
 						if r.Steps != len(tc.steps)-1 || len(r.Calls) != r.Steps {
 							t.Fatalf("observed calls lost: steps=%d calls=%d", r.Steps, len(r.Calls))
