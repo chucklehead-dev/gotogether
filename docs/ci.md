@@ -190,3 +190,19 @@ format, quint before 0.33.1) is refused with the fix, `gotogether
 compile`. `gotogether doctor -compiled stock.model.json` checks it ahead.
 A source of the model absent where it runs is not checked, and the
 report says so.
+
+### Toolkit mutation campaigns
+
+`ci/mutate-core.sh <package> [max-survivors]` admits every test-bearing package
+under the requested package tree. Each suite runs from its source directory,
+with a distinct compiled binary, a checked mutant inventory and a passing
+unmutated baseline. A source mutation survives only if every suite linking it
+passes; an unlinked suite provides no result. Source identities are checked
+per-file registration ordinals, mapped to each binary's own local IDs.
+
+The denominator counts unique source mutations across the admitted suites.
+Descendant-only mutations can increase that total. Build, inventory or baseline
+failures abort admission; setup failures cannot count as kills. Existing process
+memory caps, per-suite timeouts and survivor limits remain in force. Stderr
+reports suite admission and campaign progress; baseline failures retain their
+diagnostics. See [the harness contract](../ci/mutatecore/README.md).

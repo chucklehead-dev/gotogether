@@ -8,6 +8,10 @@ and adds a line here.
 
 ## Unreleased
 
+- Core mutation campaigns include descendant test suites, map each source
+  mutation to its local ID in every binary, and require every suite baseline
+  to pass before reporting mutant results.
+
 - Integer set folds prove that every ordering fits bounded model integers,
   including intermediate arithmetic. Potential overflow falls back to Quint
   instead of returning a value from one backend-specific order.

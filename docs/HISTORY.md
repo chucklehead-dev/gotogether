@@ -9095,3 +9095,22 @@ benchmark samples; restricting replay to nested expressions removes extra lambda
 calls for simple sums. The committed benchmark retains sizes 20 and 1,000 with
 compilation outside timing; concurrent native work makes individual timings
 unsuitable as a regression threshold.
+
+
+## Mutation suite admission (2026-11-07)
+
+The qenv campaign wove mutations in internal packages but ran only the root
+package's tests. Removing `checked.of`'s rate validation survived that binary as
+local mutant 104; the existing child `TestSeededChecksItsRates` killed the same
+source change as local mutant 35. Both unmutated suites passed with scheduler
+checks enabled. Reusing raw IDs across binaries would activate unrelated changes.
+
+The campaign now discovers descendant test-bearing packages, including external
+suites, compiles each into a unique path, checks every inventory and baseline,
+and aggregates the union of source mutations. Stable per-file registration
+ordinals distinguish repeated identical descriptions; descriptions and counts
+must agree across binaries. Missing links are not results. No runtime metadata
+or public API changes are required. Baseline diagnostics and bounded progress
+messages make admission and execution visible. Existing survivor allowances,
+process memory caps and per-suite timeouts are unchanged. Passing this harness's
+controls does not establish that every nightly mutation gate has recovered.
