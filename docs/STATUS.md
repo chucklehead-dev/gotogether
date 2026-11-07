@@ -47,7 +47,7 @@ pins from the checked-in go.mod files, not from historical handoff paragraphs.
 | Finite choices | Confirmed passing witnesses report both evaluators; Go-only negatives retain evaluator provenance. Strict Quint/shadow negative proofs are inconclusive without independent confirmation. |
 | Verdict caching | Exact-run Hegel caching remains; a selected invariant path or finite-choice search is not a rejected-prefix certificate. |
 | History checking | Repeated same-key appends retain operation order and atomic visibility; the independent serialization oracle covers multiple appends per writer. |
-| CI | Per-PR checks and nightly are separate admission surfaces. Nightly is known red. FaultOrders now checks corpus regressions separately from scripted attempts; shadow campaign/fixture isolation is corrected. Browser setup, remaining mutation survivors, benchmark regressions and verifier completion are tracked blockers. |
+| CI | Per-PR checks and nightly are separate admission surfaces. Nightly is known red. FaultOrders now checks corpus regressions separately from scripted attempts; shadow campaign/fixture isolation is corrected. Browser admission now runs the pinned package, bundled browser and real journey in PR CI and before nightly live work. Remaining mutation survivors, benchmark regressions, verifier completion and full nightly confirmation remain tracked blockers. |
 | Priorities | J1/J2 correctness and J7 nightly recovery precede unrelated features. [Issue #97](https://github.com/chucklehead-dev/gotogether/issues/97) is the review record; ROADMAP owns the selected order. |
 
 ## Recent progress and lessons

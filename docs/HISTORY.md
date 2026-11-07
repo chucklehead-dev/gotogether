@@ -9053,3 +9053,16 @@ otherwise negation can turn absent proof into a successful claim. Explicit
 three-valued checks retain their own scope, and a known positive counterexample
 still takes precedence over unrelated unknown evidence. Native die-roll policy
 controls and synthetic negation/quantifier/lifecycle contrasts cover this boundary.
+
+## Browser admission recovery (2026-11-07)
+
+The pinned Playwright 1.56.1 could not install Chromium on the Ubuntu 26.04
+runner, so its real journey never ran. Playwright 1.65.0 explicitly supports the
+current Ubuntu images. One admission script now installs that package and its
+bundled browser, launches it, and runs the existing four-submit/one-cancel
+journey with finished-model validation and exact event replay. PR CI runs the
+same script as the nightly; nightly browser admission precedes expensive live
+workloads. The script requires an actual named-test pass event so missing,
+skipped or unmatched work cannot become admission. Local browser overrides
+remain available outside this CI admission path. No assertions or campaign
+budgets are relaxed. Other known nightly gates remain separate work.

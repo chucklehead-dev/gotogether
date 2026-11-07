@@ -118,6 +118,16 @@ Chromium's journey through examples/webjobs, recorded by its
 `TestPlaywright`, and a hand-written one with a failed request, a 500, a
 page's own request id and a call never answered) and compares the log
 with the golden one, then reads it through the Go reader.
-examples/webjobs' `TestPlaywright` runs a real page against the real
-server end to end and judges the run with the model (full mode; the
-nightly installs `playwright@1.56.1` and its Chromium).
+examples/webjobs' `TestPlaywright` runs a real page against the real server,
+checks four submissions and one cancellation, judges the finished run with the
+model, and requires exact event-log replay. Regular PR CI and the nightly use
+[ci/admit-playwright.sh](../../ci/admit-playwright.sh): pinned Playwright 1.65.0,
+its bundled Chromium, a real headless launch and the journey. The nightly checks
+this before the longer live workloads. Admission requires the named Go test's
+actual pass event; skipped or unmatched tests fail. CI selects the admitted
+package and bundled browser explicitly; local journeys may still use their own
+Playwright or `CHROMIUM` override.
+
+The pinned pair passed this journey on Debian 13.6 with Chromium 158.0.8127.18
+on 2026-11-07. Older recordings and measurements above retain their original
+driver versions as evidence.
