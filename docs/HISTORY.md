@@ -9202,3 +9202,32 @@ not added. Selected choice-witness ITF cannot supply history state keys.
 Native adapter controls retain the positive witness and check unknown results,
 actor scope, pending calls and error handling. No API, schema, format or budget
 change is required.
+
+
+## Exact prefix state recovery (2026-11-07)
+
+The retained wallet history exposed a missing optimization: an accepted prefix
+inherited its verdict from a longer candidate but had no exact state key.
+The complete search encountered 67 such hits and could not merge their futures.
+It stopped unknown after 27 guided and 200 complete-phase attempts; actual
+checker work was 143 orders. One independently confirmed permitted order showed
+that the failure was bounded search, not a wallet defect.
+
+A state-capable checker can now receive one exact request for such a prefix,
+inside the candidate attempt already charged to the search. Exact requests are
+never repeated, including when state remains unavailable. Verdict-only checkers
+keep the inherited-acceptance shortcut. State merging still requires the same
+placed steps and known equal future-equivalent states; selected nondeterministic
+witness states and longer candidates' final states cannot stand in for a prefix.
+The old performance guard was refined to test these obligations explicitly.
+
+The saved case now passes in 115 attempted candidates. Instrumentation measured
+103 actual checker-order evaluations, including 29 exact-state recovery checks;
+these are included in the phase's work, not a free side search. The returned
+order passes independent Quint/Rust validation and the recorded constraints.
+A permanent wallet fixture retains the original 40 collected records (19 calls),
+uses the existing binding/model, checks every invariant, and stays one case even
+under a 500-seed nightly override. Undoing recovery returns unknown at 227
+attempts. No search allowance is increased. API comments now accurately describe
+per-phase attempted-candidate budgets and distinguish attempts from evaluations;
+a single overall cap would be a separate semantic change.

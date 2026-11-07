@@ -78,7 +78,12 @@ const reorderWindow = 8
 // returns for each the index of its first step the model rejects, or -1;
 // and, for each order the model accepts, its state after the order (any
 // string that is equal exactly when the states are; "" or a nil slice:
-// unknown). Re-sequenced, an order hides its steps' own issues (a gap, a
+// unknown). A state key must preserve everything that can affect future
+// judgments, including possible states and pinned choices of a nondeterministic
+// model. A sampled state alone is insufficient: return "" or nil when that
+// information is unavailable. Keys belong only to the exact orders checked,
+// never to their prefixes inferred from a longer order.
+// Re-sequenced, an order hides its steps' own issues (a gap, a
 // cycle): they are Reconstruct's, and the caller reports them with the
 // verdict. An error from check ends the search: Linearize returns it,
 // and no verdict.
@@ -144,14 +149,15 @@ func Linearize(steps []Step, opt LinearizeOptions, check OrderCheck) (l *Lineari
 	return l, nil
 }
 
-// DefaultLinearizeBudget is how many orders Linearize checks at most when
-// its options name no budget.
+// DefaultLinearizeBudget is the candidate allowance for each guided and
+// complete search phase when Linearize options name no budget.
 const DefaultLinearizeBudget = 200
 
 // LinearizeOptions bound and widen a Linearize search.
 type LinearizeOptions struct {
-	// Budget is how many orders the search checks at most (0:
-	// DefaultLinearizeBudget).
+	// Budget bounds attempted candidates in each guided and complete phase
+	// (0: DefaultLinearizeBudget). Memo decisions count as attempts; actual
+	// checker evaluations may be fewer. Tried sums the phases.
 	Budget int
 	// Pending are calls left pending (Trace.Pending), each of which may
 	// have taken effect anywhere real time allows, or not at all; Settles
@@ -172,7 +178,9 @@ type LinearizeOptions struct {
 
 // An OrderCheck judges candidate orders for Linearize: for each, the index of
 // its first step the model rejects, or -1; for each accepted, its state
-// ("" or nil: unknown). An error ends the search.
+// ("" or nil: unknown). Keys must describe future-equivalent exact-prefix
+// states, including all possible states and pinned choices when applicable;
+// a selected witness is insufficient. An error ends the search.
 type OrderCheck func(orders [][]Step) (failed []int, states []string, err error)
 
 // checkError carries an OrderCheck's error out of the search.
@@ -185,7 +193,8 @@ type Linearization struct {
 	// Verdict says whether an order conforms, none does (a proof), or the
 	// budget cut the search short (no verdict).
 	Verdict LinearizeVerdict
-	// Tried is how many orders were checked.
+	// Tried counts attempted candidates across the guided and complete phases,
+	// including memo hits. Actual checker evaluations may be fewer.
 	Tried int
 	// Proof is what a verdict of NotLinearizable rests on (nil for any
 	// other): an oracle other than check confirms it.
@@ -510,8 +519,10 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 	// may fail a settle's eventual val, which a pending call placed after
 	// it may make hold: its extensions are judged.
 	accepted, rejected := map[string]bool{}, map[string]bool{}
-	stateOf := map[string]string{} // an accepted order's state, when check knows it
-	whole := map[string]int{}      // a complete order's verdict: the same each time it is asked
+	stateOf := map[string]string{}    // an accepted order's state, when check knows it
+	stateChecked := map[string]bool{} // this exact order was checked, even if its state was unavailable
+	statesProvided := false           // nil-state checkers keep the verdict-only shortcut
+	whole := map[string]int{}         // a complete order's verdict: the same each time it is asked
 	judge := func(orders [][]int) []int {
 		out := make([]int, len(orders))
 		var ask []int
@@ -519,7 +530,7 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 			out[i] = -2
 			// (a complete order is judged before its extensions, in the
 			// complete search's order: this and the marking below are guards)
-			if accepted[key(o)] && !complete(o) {
+			if accepted[key(o)] && !complete(o) && (!statesProvided || stateChecked[key(o)]) {
 				out[i] = -1
 				continue
 			}
@@ -534,6 +545,9 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 				}
 			}
 			if out[i] == -2 {
+				// An inherited accepted verdict has no exact state. Request this
+				// prefix itself within its already-charged candidate check; a longer
+				// candidate's final state must never stand in for this one.
 				ask = append(ask, i)
 			}
 		}
@@ -545,8 +559,10 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 			rendered[j] = render(orders[i])
 		}
 		fs, states := check(rendered)
+		statesProvided = statesProvided || len(states) > 0
 		for j, f := range fs {
 			o := orders[ask[j]]
+			stateChecked[key(o)] = true
 			if f < 0 && j < len(states) && states[j] != "" {
 				stateOf[key(o)] = states[j]
 			}

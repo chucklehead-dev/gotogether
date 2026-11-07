@@ -34,7 +34,7 @@ const DefaultResolveBudget = 200
 type SearchOptions struct {
 	Linearize bool
 	Key       string // partition each actor's history by this argument
-	Budget    int    // orders per actor or partition (0: DefaultLinearizeBudget)
+	Budget    int    // candidate attempts per guided/complete phase of an actor or partition (0: DefaultLinearizeBudget)
 	// ResolvePending searches the pending calls' effects, in recorded order.
 	ResolvePending bool
 	ResolveBudget  int // 0: DefaultResolveBudget
