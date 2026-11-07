@@ -2964,6 +2964,11 @@ model accepts (guided: from the failing step, every single move
 constraints allow, keeping the one that gets furthest). `qtest.Linearize`
 checks a history so; finding none is strong evidence of a bug, a budget
 running out is no verdict at all (Y6: n/a, which Rejects does not match).
+An unsupported candidate is also no verdict: it cannot enter rejection caches
+or establish that no permitted history conforms. Candidate refusal is tracked
+per actor separately from budget exhaustion; independently confirmed full
+witnesses retain their scope. A selected finite-choice witness is not a
+future-equivalent state key for history merging.
 A failed claim with no verdict retains the first run unjudged for that claim,
 using the existing corpus, history and navigation paths. The retained run stays
 unknown on replay at the same bound; its artifacts support diagnosis without

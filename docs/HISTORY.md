@@ -9165,3 +9165,40 @@ unknown result. All/None lifecycle controls select the responsible run, and
 race checks pass. Removing the correction fails for the missing seed, corpus,
 history and navigation evidence. Wallet search behavior and budgets remain
 unchanged; the next diagnostic step needs a retained failing run.
+
+
+## Reproduced wallet search limitation (2026-11-07)
+
+Repeating the original 500-seed range with evidence retention produced 499
+conforming runs and one unknown: seed 20764114. Its corpus entry retains 1,594
+choices and a 19-call history; replaying that entry alone reproduces the unknown
+in about two seconds. A permitted order passes both Go and Quint/Rust validation
+with all three invariants and respects all 150 recorded precedence constraints.
+The history is linearizable; the bounded search missed its witness.
+
+The guided and complete phases tried 27 and 200 candidates. The current
+allowance is per phase, not a single overall 200-candidate limit. Measurement
+found 67 inherited accepted prefixes missing exact state keys. An unpublished
+exact-prefix-state prototype finds a witness with 115 candidates and 103 actual
+checker evaluations; its returned order also passes independent validation.
+That optimization and the budget-contract clarification remain separate work.
+
+## Unsupported history candidates cannot refute (2026-11-07)
+
+The state-key adapter audit found a preexisting false final refutation. In a
+three-call history, `double`, then `choose(1)`, then `read(1)` is permitted and
+has a confirmed model witness. History-mode finite choices are unsupported,
+but the adapter converted their NotEvaluated result to a rejection index. The
+search then cached unsupported prefixes as rejected and claimed no allowed
+order conformed. The original search implementation reproduces the bug too;
+it was not introduced by the unpublished memo optimization.
+
+A private no-verdict signal now stops candidate enumeration before rejection
+caching or proof construction. Linearization, pending-call resolution and
+confirmation preserve the unavailable result per actor, distinct from budget
+exhaustion and operational errors. Confirmed full witnesses retain conformance;
+unsupported property absence remains unknown. Finite-choice history support is
+not added. Selected choice-witness ITF cannot supply history state keys.
+Native adapter controls retain the positive witness and check unknown results,
+actor scope, pending calls and error handling. No API, schema, format or budget
+change is required.
