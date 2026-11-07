@@ -27,8 +27,9 @@ The navigation prototype is deferred while these issues are addressed.
 |---|---|---|
 | Completed correction | J1: sound Hegel prefix caching under pinned model choices | Cached and direct verdicts agree on the native finite-choice counterexample, on both evaluator policies; ordinary exact-run caching remains useful. |
 | Completed correction | J2: preserve repeated same-key append order in history checks | Reversed, missing and interleaved transaction appends rejected appropriately; independent serialization oracle includes repeated appends. |
-| Now | J7: repair nightly's scripted fault/corpus conflict and diagnose every failed gate | Corpus regressions cannot become directed-order witnesses; native reproduction works. Mutation survivors, shadow harness assumptions, browser setup, benchmarks and verifier limits require their own evidence. |
-| Next correctness | J3–J6: tool admission, ordering quantifiers, coverage assertions and mutant intent | Reproduce each finding before choosing its fix. A permitted failing ordering must not masquerade as a recorded-order failure. |
+| Completed coverage correction | J5: restore checkout's directed campaign assertion | All 30 pairs must be witnessed in normal execution; replay and filtered selections retain their scope. |
+| Now | J7: repair nightly's scripted fault/corpus conflict and diagnose every failed gate | Corpus/script compatibility is corrected: supplemental regressions and corpus-only replay cannot become directed-order witnesses. Mutation survivors, shadow harness assumptions, browser setup, benchmarks and verifier limits still require their own evidence. |
+| Next correctness | J3/J4/J6: tool admission, ordering quantifiers and mutant intent | Reproduce each finding before choosing its fix. A permitted failing ordering must not masquerade as a recorded-order failure. |
 | Then | J8–J11: differential gates and API consolidation | Green semantic gates first; reduce duplicated concepts and misplaced dependencies rather than enforcing an arbitrary API line count. |
 
 A green per-PR matrix does not establish nightly health. Keep known failing

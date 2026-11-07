@@ -87,8 +87,9 @@ func TestNoIdempotencyKeySweep(t *testing.T) {
 }
 
 // Request both directions of each fault pair and check every attempt against
-// the model. Some phase orders may remain unreached within the seed budget;
-// the evidence reports those bounds rather than calling them impossible.
+// the model. This fixed campaign must exercise all thirty directed pairs in
+// three seeds each. A replay or filtered subtest only exercises its selection;
+// a coverage miss is a failed regression threshold, not an impossibility claim.
 func TestFaultOrders(t *testing.T) {
 	qtest.RequireQuint(t)
 	if testing.Short() {
@@ -106,5 +107,21 @@ func TestFaultOrders(t *testing.T) {
 		{Kind: "rpc.provider.request", Option: 1},
 		{Kind: "rpc.provider.response", Option: 1},
 	}})
-	t.Log(result.Evidence())
+	evidence := result.Evidence()
+	t.Log(evidence)
+	if evidence.Role == qtest.RoleReplay {
+		return // reproduction is not a fresh complete campaign
+	}
+	if len(result.Orders) != 30 {
+		t.Fatalf("directed campaign has %d orders, want 30", len(result.Orders))
+	}
+	for _, order := range result.Orders {
+		if order.Exploration == nil {
+			continue // Go's subtest filter did not select this order
+		}
+		if order.Status != "witnessed" {
+			t.Errorf("expected directed coverage was not exercised: %s then %s, status %s, budget %d; executions: %+v",
+				order.First.Kind, order.Second.Kind, order.Status, order.Budget, order.Exploration.Evidence().Executions)
+		}
+	}
 }

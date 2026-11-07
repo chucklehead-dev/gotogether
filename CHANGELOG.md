@@ -16,7 +16,9 @@ and adds a line here.
   The independent serialization oracle now includes repeated appends.
 - `FaultOrders` accepts corpus regressions alongside scripted seeds. Corpus
   runs retain model checks and executable replay commands without contributing
-  directed witnesses or seed attempts.
+  directed witnesses or seed attempts. Checkout again requires its fixed
+  campaign to witness all 30 directed orders; replay and filtered selections
+  retain their own scope.
 
 - `qhegel.Test` callbacks use `hegel.TestCase`, matching the other Hegel
   entrypoints. Per-case resources use deferred cleanup; the KV example closes
