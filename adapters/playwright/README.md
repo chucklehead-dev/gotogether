@@ -120,4 +120,8 @@ page's own request id and a call never answered) and compares the log
 with the golden one, then reads it through the Go reader.
 examples/webjobs' `TestPlaywright` runs a real page against the real
 server end to end and judges the run with the model (full mode; the
-nightly installs `playwright@1.56.1` and its Chromium).
+nightly installs `playwright@1.65.0` and its Chromium, then checks a real
+headless launch before running the longer live workloads). The pinned pair
+also passed this journey on Debian 13.6 with Chromium 158.0.8127.18 on
+2026-11-07; the older recordings and measurements above retain their original
+driver versions as evidence.

@@ -323,7 +323,7 @@ budgets 40).
 
 ```sh
 go test -short ./...                       # the client's runs (faithful, each mutant's overlay), the faithful recording, three probes, the adapter; about 40 s quiet
-go test ./...                              # adds the live runs: bombadil and a Chrome on PATH; TestPlaywright: node and playwright (npm i -g playwright@1.56.1)
+go test ./...                              # adds the live runs: bombadil and a Chrome on PATH; TestPlaywright: node and playwright (npm i -g playwright@1.65.0)
 WEBJOBS_RECORD=1 go test -run 'TestLive$|TestMutants$' .   # records 6s runs into testdata/runs
 ./run-demo.sh                              # the recorded journeys, then cmd/webjobs answering one key twice
 MUTANT=readyEarly ./run-demo.sh         # or doubleJob, cancelIgnored, cancelBroken, statusStale, commitAfterCancel, rerunFinished; LIVE=1 live
