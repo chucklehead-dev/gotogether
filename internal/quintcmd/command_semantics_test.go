@@ -15,6 +15,15 @@ import (
 	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 )
 
+// The generic exec fixture explicitly implements Quint's inspection protocol.
+func TestMain(m *testing.M) {
+	if len(os.Args) == 2 && os.Args[1] == "--version" {
+		fmt.Println("0.33.1")
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
 func TestCommandIOHelper(t *testing.T) {
 	mode := os.Getenv("GOTOGETHER_COMMAND_IO_HELPER")
 	if mode == "" {
@@ -41,7 +50,11 @@ func ioCommand(t *testing.T, ctx context.Context, mode string) *quintcmd.Cmd {
 		t.Fatal(err)
 	}
 	c := quintcmd.Command(ctx, bin, "", "-test.run=^TestCommandIOHelper$")
-	c.Env = append(os.Environ(), "GOTOGETHER_COMMAND_IO_HELPER="+mode)
+	// Only these controlled helper subprocesses omit race's default one-second
+	// exit delay. The extra --version process must not consume the five-second
+	// permit-leak deadline; parent/child race instrumentation stays enabled.
+	c.Env = append(os.Environ(), "GOTOGETHER_COMMAND_IO_HELPER="+mode,
+		"GORACE="+strings.TrimSpace(os.Getenv("GORACE")+" atexit_sleep_ms=0"))
 	return c
 }
 

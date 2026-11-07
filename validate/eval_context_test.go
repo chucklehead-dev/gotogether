@@ -30,7 +30,7 @@ func evaluatorContextFixture(t *testing.T) (*Checker, func(string) (*binding.Eva
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "quint")
 	script := `#!/bin/sh
-if [ "$1" = --version ]; then echo 0.33.context-test; exit 0; fi
+if [ "$1" = --version ]; then echo 0.33.1; exit 0; fi
 printf 'compile\n' >> "$0.attempts"
 if mkdir "$0.first" 2>/dev/null; then
  : > "$0.started"
@@ -95,14 +95,21 @@ func TestEvaluatorContextOwnerWaiterAndRetry(t *testing.T) {
 		// canceled owner from releasing its live waiter to retry.
 		t.Setenv("XDG_CACHE_HOME", t.TempDir())
 		t.Setenv("HOME", t.TempDir())
+		bin := filepath.Join(t.TempDir(), "quint")
+		script := "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 0.33.1; exit 0; fi\n[ \"$1\" = hold ] || exit 2\n: > \"$2\"\nexec sleep 3600\n"
+		if err := os.WriteFile(bin, []byte(script), 0755); err != nil {
+			t.Fatal(err)
+		}
 		for range 2 {
+			started := filepath.Join(t.TempDir(), "started")
 			ctx, cancel := context.WithCancel(t.Context())
-			cmd := quintcmd.Command(ctx, "sleep", "", "3600")
+			cmd := quintcmd.Command(ctx, bin, "", "hold", started)
 			if err := cmd.Start(); err != nil {
 				cancel()
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { cancel(); _ = cmd.Wait() })
+			awaitEvaluatorFile(t, started) // both old-pool slots really hold live work
 		}
 		testEvaluatorContextOwnerWaiterAndRetry(t)
 	})

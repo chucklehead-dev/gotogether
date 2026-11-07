@@ -59,6 +59,11 @@ func (c *Cmd) admit() error {
 	if c.Process != nil {
 		return nil
 	} // exec reports repeated use itself.
+	if !versionQuery(c.raw()) {
+		if err := c.checkVersion(); err != nil {
+			return err
+		}
+	}
 	release, err := acquire(c.ctx)
 	if err != nil {
 		return err

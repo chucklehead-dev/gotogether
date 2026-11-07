@@ -24,7 +24,7 @@ func TestModelDiffPreflightReportsErrorsBeforeQuint(t *testing.T) {
 		t.Skip("fake Quint uses POSIX shell")
 	}
 	quint := filepath.Join(t.TempDir(), "quint")
-	if err := os.WriteFile(quint, []byte("#!/bin/sh\n: > \"$0.started\"\nexit 1\n"), 0o755); err != nil {
+	if err := os.WriteFile(quint, []byte("#!/bin/sh\nif [ \"$1\" = --version ]; then printf '0.33.1\\n'; : > \"$0.versioned\"; exit 0; fi\nprintf '%s\\n' \"$1\" > \"$0.started\"\nexit 1\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	for name, invalid := range map[string][]string{
@@ -56,8 +56,10 @@ func TestModelDiffPreflightReportsErrorsBeforeQuint(t *testing.T) {
 			if doc.Command != "model-diff" || doc.Verdict != "error" || doc.Exit != 2 || doc.Error == "" {
 				t.Fatalf("request failure lost machine evidence: %+v", doc)
 			}
-			if _, err := os.Stat(quint + ".started"); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("invalid request launched Quint: %v", err)
+			for _, marker := range []string{".started", ".versioned"} {
+				if _, err := os.Stat(quint + marker); !errors.Is(err, os.ErrNotExist) {
+					t.Fatalf("invalid request launched Quint (%s): %v", marker, err)
+				}
 			}
 		})
 	}
@@ -69,8 +71,8 @@ func TestModelDiffPreflightReportsErrorsBeforeQuint(t *testing.T) {
 	if code != 2 || err == nil {
 		t.Fatalf("fake tool failure: exit=%d error=%v", code, err)
 	}
-	if _, err := os.Stat(quint + ".started"); err != nil {
-		t.Fatalf("positive control did not reach fake Quint: %v", err)
+	if started, err := os.ReadFile(quint + ".started"); err != nil || strings.TrimSpace(string(started)) != "typecheck" {
+		t.Fatalf("positive control did not reach actual typecheck: %q %v", started, err)
 	}
 }
 

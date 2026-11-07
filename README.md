@@ -11,7 +11,7 @@ and how to resume it: [docs/STATUS.md](docs/STATUS.md).
 
 ```sh
 git clone https://github.com/chucklehead-dev/gotogether && cd gotogether
-npm install -g @informalsystems/quint     # quint ≥ 0.32; Go ≥ 1.27.3
+npm install -g @informalsystems/quint@0.33.1     # quint ≥ 0.33.1; Go ≥ 1.27.3
 cd examples/hello && go test -v .         # under a minute, most of it building
 ```
 
@@ -268,7 +268,7 @@ its protocol model (`examples/edgepublish`).
 ```sh
 go get github.com/chucklehead-dev/gotogether@latest                      # Go ≥ 1.27.3
 go get github.com/chucklehead-dev/gotogether/qhegel@latest               # Hegel, in tests (its own module: the core needs no Hegel)
-npm install -g @informalsystems/quint                                  # quint ≥ 0.32 on PATH
+npm install -g @informalsystems/quint@0.33.1                                  # quint ≥ 0.33.1 on PATH
 go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest   # the CLI: scaffold, lint, validate, skills (gotogether help; each command's -h)
 go install github.com/chucklehead-dev/gotogether/qweave/cmd/qweave@latest # weaving: //quint:action, coverage, mutants
 go install github.com/chucklehead-dev/gotogether/qnav/cmd/gotogether-nav@latest # the interactive navigator (gotogether nav opens it on a terminal)

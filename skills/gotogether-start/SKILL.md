@@ -44,7 +44,7 @@ tiers, a model compiled for a pipeline with no quint):
 
 ## Checklist
 
-- [ ] quint ≥ 0.32 on PATH (`quint --version`); Go ≥ 1.27.3.
+- [ ] quint ≥ 0.33.1 on PATH (`quint --version`); Go ≥ 1.27.3.
 - [ ] `gotogether` runs (`go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest`,
   or in your module `go get -tool github.com/chucklehead-dev/gotogether/cmd/gotogether` and `go tool gotogether help`).
 - [ ] The skill for the question is loaded before writing code.

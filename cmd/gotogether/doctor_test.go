@@ -94,3 +94,33 @@ func TestDoctorReport(t *testing.T) {
 		}
 	}
 }
+
+// Doctor and runtime admission use the same stable CLI floor. Failed probes
+// cannot become supported versions merely by printing a plausible value.
+func TestDoctorQuintAdmission(t *testing.T) {
+	bin := t.TempDir()
+	t.Setenv("PATH", bin)
+	for _, tc := range []struct {
+		name, script string
+		unsupported  bool
+	}{
+		{"old", "echo 0.32.0", true},
+		{"coverage-loss", "echo 0.33.0", true},
+		{"prerelease", "echo 0.33.1-rc.1", true},
+		{"unknown", "echo unknown", true},
+		{"failed-probe", "echo 0.33.1; exit 2", true},
+		{"admitted", "echo 0.33.1", false},
+		{"newer", "echo 0.34.0", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeTool(t, bin, "quint", tc.script)
+			q := quintPieces()[0]
+			if (q.skew != "") != tc.unsupported {
+				t.Fatalf("unsupported=%t, want %t: %+v", q.skew != "", tc.unsupported, q)
+			}
+			if tc.unsupported && !strings.Contains(q.skew, "0.33.1") {
+				t.Fatalf("missing actionable minimum: %+v", q)
+			}
+		})
+	}
+}

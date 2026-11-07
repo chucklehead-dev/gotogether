@@ -34,7 +34,7 @@ func TestReadTracesCancelsSchemaRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	quint := filepath.Join(dir, "quint")
-	if err := os.WriteFile(quint, []byte("#!/bin/sh\nprintf started > started\nsleep 30\n"), 0o755); err != nil {
+	if err := os.WriteFile(quint, []byte("#!/bin/sh\nif [ \"$1\" = --version ]; then echo 0.33.1; exit 0; fi\nprintf started > started\nsleep 30\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)

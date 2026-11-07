@@ -28,6 +28,9 @@ func loadModel(ctx context.Context, quint, spec, module string) (*binding.Model,
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if err := quintcmd.Require(ctx, quint, filepath.Dir(spec)); err != nil {
+		return nil, err // warm in-memory/disk models cannot bypass runtime admission
+	}
 	files, ok := specFilesAll(spec)
 	if !ok {
 		return binding.LoadModel(ctx, quint, spec, module)
