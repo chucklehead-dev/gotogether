@@ -53,6 +53,7 @@ type search struct {
 	Steps     []qtrace.Step
 	issues    []qtrace.Issue
 	undecided map[string]bool
+	unjudged  map[string]*Result // candidate judgments unavailable, distinct from exhausted budgets
 	kept      map[string][]qtrace.Issue
 	// intervals are the actors whose own steps are a client's history
 	// (they carry invocation times or records), when no search ran: a
@@ -140,11 +141,20 @@ func (s *search) confirm(rep *Report) (again *search, err error) {
 	wrong := make([]bool, len(todo))
 	var wg sync.WaitGroup
 	panics := make([]any, len(todo))
+	unjudged := make([]*Result, len(todo))
 	for i, cl := range todo {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			defer func() { panics[i] = recover() }()
+			defer func() {
+				if p := recover(); p != nil {
+					if u, ok := p.(unjudgedCandidate); ok {
+						unjudged[i] = u.result
+					} else {
+						panics[i] = p
+					}
+				}
+			}()
 			fs, _ := quintChecker(cl.ch, cl.tr, names[i], cl.invariants)(append([][]qtrace.Step{cl.order}, cl.rejected...))
 			wrong[i] = fs[0] >= 0
 			for _, f := range fs[1:] {
@@ -157,6 +167,12 @@ func (s *search) confirm(rep *Report) (again *search, err error) {
 	for i := range todo {
 		if panics[i] != nil {
 			panic(panics[i])
+		}
+		if unjudged[i] != nil {
+			if s.unjudged == nil {
+				s.unjudged = map[string]*Result{}
+			}
+			s.unjudged[todo[i].tr.Actor] = unjudged[i]
 		}
 		if wrong[i] {
 			contradicted = append(contradicted, names[i])
@@ -253,7 +269,7 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 		if budget == 0 {
 			budget = DefaultLinearizeBudget
 		}
-		s.Steps, s.issues, s.undecided, s.kept, s.claims = linearize(lc, &fc, steps, budget, opt.Key, opt.ResolvePending)
+		s.Steps, s.issues, s.undecided, s.kept, s.claims, s.unjudged = linearize(lc, &fc, steps, budget, opt.Key, opt.ResolvePending)
 		s.lost, s.binding = lostOf(c.Binding, steps, opt.Key), c.Binding
 		s.gaps, s.collected, s.pending, s.recorded, s.searched = recordedOf(c.Binding, steps, opt.Key)
 		s.overlaps = overlapsOf(c.Binding, steps, opt.Key)
@@ -268,7 +284,7 @@ func (c *Checker) search(steps []qtrace.Step, opt SearchOptions, byCheck bool) (
 		fc := *c // the invariants' search (a resolution that violates one): verdicts only too
 		fc.mode.byCheck = byCheck
 		fc.Options.Dir, fc.Options.NoITF, fc.Options.VerdictsOnly = filepath.Join(c.Options.Dir, "resolve-invariants"), true, true
-		s.Steps, s.issues, s.undecided, s.kept, s.claims = resolve(lc, &fc, steps, budget)
+		s.Steps, s.issues, s.undecided, s.kept, s.claims, s.unjudged = resolve(lc, &fc, steps, budget)
 		s.lost, s.binding = lostOf(c.Binding, steps, ""), c.Binding
 		s.gaps, s.collected, s.pending, s.recorded, s.searched = recordedOf(c.Binding, steps, "")
 		return s, nil
@@ -448,6 +464,9 @@ func (s *search) mark(rep *Report) {
 				"check in an order real time allows (qtest.Linearize(), gotogether validate -linearize)"})
 		}
 		a.Issues = append(a.Issues, s.kept[a.Actor]...)
+		if unknown := s.unjudged[a.Actor]; unknown != nil {
+			markUnjudgedHistory(a, unknown)
+		}
 		if s.undecided[a.Actor] {
 			// the search ran out of budget: the order shown is no verdict, for
 			// its conformance nor for what it violated (an order that conformed
@@ -503,6 +522,40 @@ func (s *search) mark(rep *Report) {
 	}
 }
 
+// markUnjudgedHistory preserves independently checked positive facts while
+// removing negative conclusions that would require the unsupported search.
+func markUnjudgedHistory(a, unknown *Result) {
+	if a.Failure != nil && a.Failure.Kind == "error" {
+		return
+	}
+	positive := a.Conforms == Pass
+	unjudged := !positive
+	if !positive {
+		if a.Conforms != NotEvaluated {
+			a.byEvaluator, a.sampled, a.compiled = unknown.byEvaluator, unknown.sampled, unknown.compiled
+			a.Choices, a.noVerdict = unknown.Choices, unknown.noVerdict
+		}
+		a.Conforms, a.Failure = NotEvaluated, nil
+	}
+	for i := range a.Invariants {
+		v := &a.Invariants[i]
+		if v.Failure != nil && v.Failure.Kind == "error" || positive && v.Verdict == Pass {
+			continue
+		}
+		v.Verdict, v.Failure = NotEvaluated, nil
+		unjudged = true
+	}
+	if unjudged {
+		if a.noVerdict == "" {
+			a.noVerdict = unknown.noVerdict
+		}
+		if a.noVerdict == "" {
+			a.noVerdict = "history candidate was not evaluated"
+		}
+		a.Issues = append(a.Issues, unknown.Issues...)
+	}
+}
+
 // searchError is a search's failure, carried out of its callbacks.
 type searchError struct{ error }
 
@@ -510,6 +563,47 @@ func (e searchError) Unwrap() error { return e.error }
 
 // fail ends a search with an error (search recovers it).
 func fail(format string, a ...any) { panic(searchError{fmt.Errorf(format, a...)}) }
+
+// unjudgedCandidate stops candidate enumeration before an unavailable judgment
+// can enter a rejection cache or absence proof. It is not an operational error.
+type unjudgedCandidate struct {
+	result  *Result
+	witness []qtrace.Step // a conformance candidate retained for the independent full check
+}
+
+// retainConformanceOnUnknown keeps a found candidate when a later property
+// phase cannot judge it. The final full check still decides its actual verdict.
+func retainConformanceOnUnknown(order []qtrace.Step) {
+	if p := recover(); p != nil {
+		if u, unavailable := p.(unjudgedCandidate); unavailable {
+			if len(u.witness) == 0 {
+				u.witness = order
+			}
+			panic(u)
+		}
+		panic(p)
+	}
+}
+
+// checkedHistory catches only an explicit unavailable candidate judgment for
+// this actor. Tool errors and unexpected panics retain their existing paths.
+func checkedHistory(tr *qtrace.Trace, work func() ([]qtrace.Step, qtrace.Issue, bool, *claim)) (out []qtrace.Step, issue qtrace.Issue, cut bool, cl *claim, unknown *Result) {
+	defer func() {
+		if p := recover(); p != nil {
+			u, ok := p.(unjudgedCandidate)
+			if !ok {
+				panic(p)
+			}
+			out, cl, cut, unknown = tr.Steps, nil, false, u.result
+			if len(u.witness) > 0 {
+				out = u.witness
+			}
+			issue = qtrace.Issue{Severity: "warn", Kind: "history-search", Msg: fmt.Sprintf("actor %s: history search stopped without a verdict: %s", nameOf(tr.Actor), u.result.noVerdict)}
+		}
+	}()
+	out, issue, cut, cl = work()
+	return
+}
 
 // linearize orders each actor's steps by the search, checking candidate
 // orders with ch in batches, at most budget per actor. With key, each
@@ -521,15 +615,17 @@ func fail(format string, a ...any) { panic(searchError{fmt.Errorf(format, a...)}
 // gap: steps were lost; a cycle: their constraints contradict each
 // other), for its result: the order checked is re-sequenced onto one
 // thread, where neither shows.
-func linearize(ch, full *Checker, steps []qtrace.Step, budget int, key string, resolving bool) (out []qtrace.Step, issues []qtrace.Issue, undecided map[string]bool, kept map[string][]qtrace.Issue, claims map[string]*claim) {
+func linearize(ch, full *Checker, steps []qtrace.Step, budget int, key string, resolving bool) (out []qtrace.Step, issues []qtrace.Issue, undecided map[string]bool, kept map[string][]qtrace.Issue, claims map[string]*claim, unjudged map[string]*Result) {
 	traces, issues := reconstruct(ch.Binding, steps) // deduplicated, gaps found across actors
 	undecided, kept, claims = map[string]bool{}, map[string][]qtrace.Issue{}, map[string]*claim{}
+	unjudged = map[string]*Result{}
 	type job struct {
 		tr, part *qtrace.Trace
 		o        []qtrace.Step
 		issue    qtrace.Issue
 		cut      bool
 		claim    *claim
+		unknown  *Result
 		panicked any
 	}
 	var jobs []*job
@@ -563,7 +659,9 @@ func linearize(ch, full *Checker, steps []qtrace.Step, budget int, key string, r
 			if resolving {
 				pending, settles = j.part.Pending, settlesOf(steps)
 			}
-			j.o, j.issue, j.cut, j.claim = order(jch, jfull, j.part, pending, settles, budget, key != "")
+			j.o, j.issue, j.cut, j.claim, j.unknown = checkedHistory(j.part, func() ([]qtrace.Step, qtrace.Issue, bool, *claim) {
+				return order(jch, jfull, j.part, pending, settles, budget, key != "")
+			})
 		}()
 	}
 	wg.Wait()
@@ -575,6 +673,9 @@ func linearize(ch, full *Checker, steps []qtrace.Step, budget int, key string, r
 	for _, j := range jobs {
 		tr, part, o := j.tr, j.part, j.o
 		actor := part.Actor // as the report names it ("" for no actor)
+		if j.unknown != nil {
+			unjudged[actor] = j.unknown
+		}
 		for _, i := range startIssues(ch.Binding, tr) {
 			if i.Kind == "gap" || i.Kind == "lost-prefix" || i.Kind == "cycle" {
 				kept[actor] = append(kept[actor], i)
@@ -615,7 +716,7 @@ func linearize(ch, full *Checker, steps []qtrace.Step, budget int, key string, r
 			out = append(out, w)
 		}
 	}
-	return out, issues, undecided, kept, claims
+	return out, issues, undecided, kept, claims, unjudged
 }
 
 // inDir is ch writing its modules in a subdirectory of its own for the
@@ -1054,11 +1155,15 @@ func withProcess(ch *Checker, state string, order []qtrace.Step) string {
 func quintChecker(ch *Checker, tr *qtrace.Trace, a string, invariants bool) func(orders [][]qtrace.Step) ([]int, []string) {
 	return func(orders [][]qtrace.Step) ([]int, []string) {
 		reps, errs := ch.CheckBatch(ch.mode.context(), settledAs(tr, orders), 0)
+		// Check the entire completed batch before an unavailable result can
+		// stop conversion: uncertainty must not conceal a driver failure.
+		for _, err := range errs {
+			if err != nil {
+				fail("checking history candidate for actor %s: %v", a, err)
+			}
+		}
 		fs, states := make([]int, len(orders)), make([]string, len(orders))
 		for i := range orders {
-			if errs[i] != nil {
-				fail("linearizing actor %s: %v", a, errs[i])
-			}
 			fs[i] = failedAt(reps[i], len(orders[i]))
 			if invariants && fs[i] < 0 {
 				fs[i] = violatedAt(reps[i], len(orders[i]))
@@ -1080,6 +1185,9 @@ func orderIssue(ch, full *Checker, tr *qtrace.Trace, a string, budget int, parti
 	again func(func([][]qtrace.Step) ([]int, []string)) func() found,
 	f found, cl *claim) ([]qtrace.Step, qtrace.Issue, bool, *claim) {
 	o, ok, tried, cut := f.order, f.ok, f.tried, f.cut
+	if ok {
+		defer retainConformanceOnUnknown(o)
+	}
 	// with ITF (the invariants' searches write none): a proof's merged
 	// prefixes are confirmed by their states
 	inst := inHistory(full, tr)
@@ -1158,7 +1266,7 @@ func first(fs []int, _ []string) int { return fs[0] }
 // report has no ITF: two prefixes of one actor's steps with one state
 // have the same futures.
 func lastState(rep *Report) string {
-	if rep == nil || len(rep.Actors) != 1 || rep.Actors[0].ITF == "" {
+	if rep == nil || len(rep.Actors) != 1 || rep.Actors[0].ITF == "" || rep.Actors[0].Choices != nil {
 		return ""
 	}
 	data, err := os.ReadFile(rep.Actors[0].ITF)
@@ -1191,6 +1299,18 @@ func lastState(rep *Report) string {
 // another order of the same steps ends as the probe saw, so it fails at
 // its last step and the search goes on.
 func failedAt(rep *Report, n int) int {
+	// Every conversion to a rejected-prefix index must first distinguish
+	// unavailable judgments and operational errors from model rejections.
+	for _, actor := range rep.Actors {
+		if actor.Failure != nil && actor.Failure.Kind == "error" {
+			fail("checking history candidate for actor %s: %s", nameOf(actor.Actor), actor.Summary())
+		}
+	}
+	for _, actor := range rep.Actors {
+		if actor.Conforms == NotEvaluated {
+			panic(unjudgedCandidate{result: actor})
+		}
+	}
 	for _, a := range rep.Actors {
 		if a.Conforms == Pass {
 			for _, inv := range a.Invariants {
@@ -1206,6 +1326,22 @@ func failedAt(rep *Report, n int) int {
 		return n - 1
 	}
 	return -1
+}
+
+// candidateFailure lets a completed resolution batch retain later witnesses
+// and operational errors before propagating an unavailable judgment. All actual
+// report conversion still goes through failedAt's mandatory guard.
+func candidateFailure(rep *Report, n int) (at int, unknown *Result) {
+	defer func() {
+		if p := recover(); p != nil {
+			if u, ok := p.(unjudgedCandidate); ok {
+				unknown = u.result
+			} else {
+				panic(p)
+			}
+		}
+	}()
+	return failedAt(rep, n), nil
 }
 
 // unbounded reports steps of which none has a real-time bound: no
@@ -1333,9 +1469,10 @@ func settledAs(tr *qtrace.Trace, orders [][]qtrace.Step) [][]qtrace.Step {
 // steps, an issue per actor with pending calls, the actors whose search
 // was cut short, and the issues each actor's steps had as recorded that no
 // resolution removes (gaps, cycles).
-func resolve(ch, full *Checker, steps []qtrace.Step, budget int) (out []qtrace.Step, issues []qtrace.Issue, undecided map[string]bool, kept map[string][]qtrace.Issue, claims map[string]*claim) {
+func resolve(ch, full *Checker, steps []qtrace.Step, budget int) (out []qtrace.Step, issues []qtrace.Issue, undecided map[string]bool, kept map[string][]qtrace.Issue, claims map[string]*claim, unjudged map[string]*Result) {
 	traces, issues := reconstruct(ch.Binding, steps)
 	undecided, kept, claims = map[string]bool{}, map[string][]qtrace.Issue{}, map[string]*claim{}
+	unjudged = map[string]*Result{}
 	for _, tr := range traces {
 		for _, i := range startIssues(ch.Binding, tr) {
 			if i.Kind == "gap" || i.Kind == "lost-prefix" || i.Kind == "cycle" {
@@ -1347,7 +1484,13 @@ func resolve(ch, full *Checker, steps []qtrace.Step, budget int) (out []qtrace.S
 			var issue qtrace.Issue
 			var cut bool
 			var cl *claim
-			chosen, issue, cut, cl = resolution(ch, full, tr, settlesOf(steps), budget)
+			var unknown *Result
+			chosen, issue, cut, cl, unknown = checkedHistory(tr, func() ([]qtrace.Step, qtrace.Issue, bool, *claim) {
+				return resolution(ch, full, tr, settlesOf(steps), budget)
+			})
+			if unknown != nil {
+				unjudged[tr.Actor] = unknown
+			}
 			issues = append(issues, issue)
 			if cl != nil {
 				claims[tr.Actor] = cl
@@ -1380,7 +1523,7 @@ func resolve(ch, full *Checker, steps []qtrace.Step, budget int) (out []qtrace.S
 			out = append(out, w)
 		}
 	}
-	return out, issues, undecided, kept, claims
+	return out, issues, undecided, kept, claims, unjudged
 }
 
 // placement is where each pending call took effect: -1 none, else after
@@ -1614,6 +1757,7 @@ func resolution(ch, full *Checker, tr *qtrace.Trace, settles []qtrace.Step, budg
 	// found is resolution i, conforming, as the search's outcome: with a
 	// later one if i violates an invariant and that one keeps them
 	found := func(i int, sev, extra string, cl *claim) ([]qtrace.Step, qtrace.Issue, bool, *claim) {
+		defer retainConformanceOnUnknown(apply(tr, pls[i]))
 		j, kept, undecided := keepInvariants(full, tr, a, orders, i, cut)
 		if j != i && cl != nil {
 			cl.order = orders[j] // quint judged it, and the rejections before i still stand
@@ -1662,6 +1806,7 @@ func resolution(ch, full *Checker, tr *qtrace.Trace, settles []qtrace.Step, budg
 	}
 	best, bestAt := 0, -2
 	var firstErr error
+	var unavailable *Result
 	for i := range orders {
 		if errs[i] != nil {
 			// a resolution the binding cannot replay (a parameter read from an
@@ -1675,9 +1820,21 @@ func resolution(ch, full *Checker, tr *qtrace.Trace, settles []qtrace.Step, budg
 		if ev.native {
 			at = native[i]
 		} else {
-			at = failedAt(reps[i], len(orders[i]))
+			var unknown *Result
+			at, unknown = candidateFailure(reps[i], len(orders[i]))
+			if unknown != nil {
+				if unavailable == nil {
+					unavailable = unknown
+				}
+				continue // neither a rejection nor an absence proof
+			}
 		}
 		if at < 0 {
+			if unavailable != nil {
+				// This witness establishes conformance, but earlier unknown
+				// placements cannot justify a property-absence claim.
+				panic(unjudgedCandidate{result: unavailable, witness: apply(tr, pls[i])})
+			}
 			sev := "info"
 			if disagreed != "" {
 				sev = "warn"
@@ -1690,6 +1847,9 @@ func resolution(ch, full *Checker, tr *qtrace.Trace, settles []qtrace.Step, budg
 	}
 	if firstErr != nil {
 		panic(searchError{fmt.Errorf("resolving actor %s's pending calls: cannot rule out an unreplayable placement: %w; bind assumed-effect inputs from recorded invocation arguments instead of absent reply fields, or record where the effect took place", a, firstErr)})
+	}
+	if unavailable != nil {
+		panic(unjudgedCandidate{result: unavailable})
 	}
 	if cut {
 		return apply(tr, pls[best]), nativeNote(qtrace.Issue{Severity: "warn", Kind: "resolve", Msg: fmt.Sprintf("actor %s: no resolution of its %d pending calls conformed in the %d of the budget: "+

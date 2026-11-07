@@ -8,6 +8,10 @@ and adds a line here.
 
 ## Unreleased
 
+- Linearization and pending-call resolution keep unsupported candidate checks
+  inconclusive instead of treating them as rejected prefixes or absence proofs.
+  Confirmed witnesses, actor scope and operational errors retain their meaning.
+
 - Failed exploration claims with no verdict retain the responsible run's seed,
   choices, history, corpus entry and navigation links. Diagnostics preserve the
   unknown judgment and point to replay evidence before changing search bounds.
