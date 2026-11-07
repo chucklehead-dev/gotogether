@@ -786,6 +786,10 @@ qhegel.Shrink(t, sys, hegel.WithTestCases(50)).Expect(t, skew)                  
 ```
 
 A `qtest.System` binds an application to its model once; `Explore`,
+`FaultOrders` also replays `GOTOGETHER_CORPUS` regressions after its scripted
+seed attempts. Corpus runs are model checked but never supply a directed-order
+witness or consume its seed budget; corpus-only reproduction is replay evidence.
+
 `Sweep` (covering arrays), `FaultOrders` (bounded directed fault pairs), `FollowTraces` (a model's traces' faults) and
 `qhegel.Shrink` all run it.
 

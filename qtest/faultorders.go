@@ -2,7 +2,6 @@ package qtest
 
 import (
 	"fmt"
-	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -53,15 +52,13 @@ type FaultOrderResult struct {
 // composition, replay and evidence pipeline as Explore. It does not require a
 // full permutation of all kinds to be reachable in one phased application.
 // Inspect the returned per-order status separately from the model claims.
-// Seed reproduction is supported; corpus and choices-file replay are refused
-// because they bypass this workflow's requested scripts.
+// Corpus entries are additional model regressions, never directed-order witnesses.
+// Seed reproduction retains the script; corpus-only replay retains regression
+// evidence without directed attempts. Choices-file replay is refused.
 func (s System) FaultOrders(t *testing.T, cfg FaultOrderConfig) *FaultOrderResult {
 	t.Helper()
 	if err := cfg.validate(); err != nil {
 		t.Fatal(err)
-	}
-	if os.Getenv("GOTOGETHER_CORPUS") != "" {
-		t.Fatal("qtest.FaultOrders: GOTOGETHER_CORPUS bypasses the requested scripts; use seed reproduction")
 	}
 	cfg.Faults = slices.Clone(cfg.Faults)
 	if cfg.Seeds == 0 {
@@ -93,7 +90,7 @@ func (s System) FaultOrders(t *testing.T, cfg FaultOrderConfig) *FaultOrderResul
 					want = cfg.Expect(first, second)
 				}
 				order.Exploration.Expect(t, want...)
-				t.Logf("qtest: %s then %s: %s in %d attempted runs (budget %d)", first.Kind, second.Kind, order.Status, len(order.Exploration.Runs), order.Budget)
+				t.Logf("qtest: %s then %s: %s in %d seed attempts (budget %d)", first.Kind, second.Kind, order.Status, len(order.faultEvidence().Attempts), order.Budget)
 			})
 		}
 	}

@@ -307,7 +307,7 @@ func explore(t testing.TB, bindingPath string, cfg exploreSpec, scenario func(c 
 	var seeds []uint64
 	spec, alone := runSpecFor(t, x.ref())
 	if alone {
-		if cfg.faultOrder != nil && spec.kind != "seed" {
+		if cfg.faultOrder != nil && spec.kind != "seed" && spec.kind != "corpus" {
 			t.Fatalf("qtest.FaultOrders: %s replay bypasses the requested script; use :seed=<n>", spec.kind)
 		}
 		x.alone = &spec
@@ -1622,11 +1622,11 @@ func (x *Exploration) unscripted() string {
 // too.
 func (x *Exploration) unknownScripted(t testing.TB) {
 	t.Helper()
-	if x.faultOrder != nil && ran(x.Runs) {
+	if x.faultOrder != nil && ran(x.Runs) && (x.alone == nil || x.alone.kind == "seed") {
 		for _, fault := range []qenv.Scripted{x.faultOrder.First, x.faultOrder.Second} {
 			known := hooks.KnownStaticKind(fault.Kind)
 			for _, run := range x.Runs {
-				if run != nil && run.faults.HasKind(fault.Kind) {
+				if run != nil && run.scripted && run.faults.HasKind(fault.Kind) {
 					known = true
 					break
 				}
@@ -1645,7 +1645,7 @@ func (x *Exploration) unknownScripted(t testing.TB) {
 		if r == nil {
 			continue
 		}
-		if x.faultOrder != nil {
+		if x.faultOrder != nil && r.scripted {
 			for _, fault := range []qenv.Scripted{x.faultOrder.First, x.faultOrder.Second} {
 				if fault.Name == "" || strings.HasPrefix(fault.Kind, "nemesis.") {
 					continue

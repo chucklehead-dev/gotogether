@@ -6873,8 +6873,11 @@ using fresh Script instances and explicit second-after-first precedence. Fault
 specs retain option/name and step threshold; caller-supplied Follows and ambiguous
 rosters are refused. Fixed full/short seed budgets are disclosed; no statistical
 or exhaustive absence claim follows. All other faults are nominal, with seeded
-scheduling. This first slice supports seed reproduction, not corpus or choices
-replay that would bypass the requested script.
+scheduling. Seed reproduction retains its script. Corpus entries run after the
+seeds as additional model regressions, outside the directed seed-attempt budget.
+Corpus-only reproduction is replay evidence with no directed witness or attempt;
+choices-file replay remains refused. Saved regression commands therefore remain
+executable without mistaking replay for directed coverage.
 
 Use the existing exploration engine and model/composition/runtime checks. Only
 this workflow permits incomplete script attempts, and it does so privately;

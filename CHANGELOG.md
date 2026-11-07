@@ -14,6 +14,9 @@ and adds a line here.
 - History checks preserve a transaction's repeated same-key append order and
   atomic visibility, rejecting reversed, partial and interleaved write blocks.
   The independent serialization oracle now includes repeated appends.
+- `FaultOrders` accepts corpus regressions alongside scripted seeds. Corpus
+  runs retain model checks and executable replay commands without contributing
+  directed witnesses or seed attempts.
 
 - `qhegel.Test` callbacks use `hegel.TestCase`, matching the other Hegel
   entrypoints. Per-case resources use deferred cleanup; the KV example closes
