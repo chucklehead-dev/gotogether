@@ -3,7 +3,7 @@ module github.com/chucklehead-dev/gotogether/qhegel
 go 1.27.3
 
 require (
-	github.com/chucklehead-dev/gotogether v0.0.0-20261106163526-afa55af703b4
+	github.com/chucklehead-dev/gotogether v0.0.0-20261107025236-38314d5dc3c6
 	hegel.dev/go/hegel v0.9.30
 )
 
@@ -12,6 +12,7 @@ require (
 	github.com/ebitengine/purego v0.12.0-alpha.1.0.20261015130536-d456b1bb95e8 // indirect
 	go.opentelemetry.io/otel v1.46.0 // indirect
 	go.opentelemetry.io/otel/trace v1.46.0 // indirect
+	golang.org/x/mod v0.42.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
