@@ -16,6 +16,9 @@ and adds a line here.
   receipts and saved manifests. Strict Quint and shadow policies return no
   verdict for Go-only negative proofs; a confirmed witness proves existence,
   not absence. Refused and rejected checks preserve observed call counts.
+  Exploration pass totals exclude negative and inconclusive judgments.
+  Negated and quantified claims preserve unknown conformance; independently
+  scoped lifecycle checks retain their own verdicts.
 
 - Nightly scopes sample and Hegel seed overrides to their intended campaigns.
   Core shadow checks retain their own budgets and semantic comparisons;

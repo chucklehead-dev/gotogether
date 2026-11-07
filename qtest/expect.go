@@ -70,9 +70,8 @@ const (
 )
 
 // value is e's verdict on r: met, missed, or unknown. Unknown: no report,
-// e's own (tri), or, for one naming an invariant, a conforming actor
-// without a verdict for it (a lost tail's, hidden actions past their
-// cap).
+// e's own (tri), undecided conformance without an independent judgment,
+// or an invariant left unjudged in a conforming actor.
 func (e Expectation) value(r *validate.Report) tri {
 	switch {
 	case r == nil:
@@ -81,6 +80,8 @@ func (e Expectation) value(r *validate.Report) tri {
 		return e.tri(r)
 	case e.check(r):
 		return yes
+	case !e.undecided && undecided(r):
+		return unknown
 	case invariantUnknown(e.invariants, r):
 		return unknown
 	}

@@ -9041,3 +9041,15 @@ two-order control independently passes the canonical extension and local checks,
 then rejects another permitted order; that canonical extension is not claimed
 as an observed cross-service total order. Bounds and native counterexample IDs
 remain visible in JSON.
+
+Backend provenance is independent of conformance. Exploration summaries now
+filter by the actual actor verdict before counting who judged passes; otherwise
+new Go-authored negative judgments inflate pass totals. A four-status contrast
+checks both text and structured counts and fails when that filter is removed.
+
+No verdict must also survive Boolean composition. The shared expectation
+evaluator now preserves unknown conformance before deriving a negative answer;
+otherwise negation can turn absent proof into a successful claim. Explicit
+three-valued checks retain their own scope, and a known positive counterexample
+still takes precedence over unrelated unknown evidence. Native die-roll policy
+controls and synthetic negation/quantifier/lifecycle contrasts cover this boundary.

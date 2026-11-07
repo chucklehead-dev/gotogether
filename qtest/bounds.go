@@ -12,21 +12,20 @@ import (
 // the runs made. Seeded runs are a sample (SampleBound), an exhaustive
 // search is complete within its bound or truncated (Extent), a PCT
 // schedule has a probability per run on conditions (PCTBound), and a
-// pass the Go evaluator judged alone is quint's only for the share quint
-// sampled (Judges). Evidence carries each, and a passing Expect's
+// pass the Go evaluator judged alone has no Quint confirmation (Judges). Evidence carries each, and a passing Expect's
 // summary says each in words.
 
-// Judges says who judged an exploration's conforming runs: rejections
-// and violations are always quint's, a pass the Go evaluator's unless
-// quint replayed it too (a sample of the passes, GOTOGETHER_EVAL_SAMPLE;
-// every run under GOTOGETHER_EVAL=quint or shadow).
+// Judges says who judged an exploration's conforming runs. Confirmation may
+// come from sampling ordinary passes or replaying a finite-choice witness.
+// Failing and inconclusive judgments retain their own actor-level provenance
+// and do not contribute to these pass counts.
 type Judges struct {
 	// Evaluator are the conforming runs an actor of which the Go evaluator
 	// alone passed, with no quint replay: what the evaluator is trusted
 	// with (the nightly shadow checks it against quint).
 	Evaluator int `json:"evaluator"`
-	// Confirmed are the evaluator's passes quint judged too (sampled) and
-	// agreed with: a disagreement fails its run.
+	// Confirmed are the evaluator's passes Quint judged too and agreed with,
+	// including sampled passes and confirmed finite-choice witnesses.
 	Confirmed int `json:"confirmed"`
 	// The rest of the conforming runs quint judged alone.
 }

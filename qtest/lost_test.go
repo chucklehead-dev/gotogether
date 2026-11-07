@@ -168,7 +168,8 @@ func TestClaimsOverGaps(t *testing.T) {
 		run  *Run
 		want tri
 	}{
-		{"Mismatch after the gap", Mismatch("deposit"), gapped, no},
+		{"Mismatch after the gap", Mismatch("deposit"), gapped, unknown},
+		{"Not Mismatch after the gap", Not(Mismatch("deposit")), gapped, unknown},
 		{"SameFailure after the gap", SameFailure(dense), gapped, unknown},
 		{"Finishes after the gap", Finishes(), gapped, unknown},
 		// no failure shown, but the dropped step may have been it: a
