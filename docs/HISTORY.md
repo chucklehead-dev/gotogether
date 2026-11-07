@@ -8965,3 +8965,22 @@ seeds each. Its restored coverage assertion requires those directed witnesses
 for executed ordinary campaign entries; explicit replay and unselected Go
 subtests cannot be promoted into a full-campaign claim. The framework still
 reports bounded unreached attempts for callers that do not require that coverage.
+
+
+## Nightly recovery: shadow campaigns and fixture configuration (2026-11-07)
+
+The 500-seed campaign override previously leaked into core shadow fixtures:
+a native two-run control executed 500 runs instead. Nightly now scopes seeded
+campaign settings and removes the example override from the core command.
+Semantic tests retain shadow evaluation. The one fixture specifying normal-mode
+summary wording selects normal mode explicitly. Webjobs shadow selects its
+recorded short tier, including recorded mutant evidence; the live job remains
+responsible for browser and Bombadil prerequisites. Native disagreement controls
+and an injected disagreement in the actual workflow summary still fail.
+
+Focused repaired core fixtures pass (37.081s), as do native shadow disagreement
+controls (43.579s) and the full recorded webjobs shadow tier (51.145s; 15
+agreements, no disagreements or refusals). Command controls execute the actual
+workflow snippets under inherited seed overrides. Browser-image compatibility,
+remaining mutation survivors, benchmarks and verifier completion remain open;
+this is not admission of the entire nightly suite.

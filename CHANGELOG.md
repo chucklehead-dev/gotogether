@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- Nightly scopes sample and Hegel seed overrides to their intended campaigns.
+  Core shadow checks retain their own budgets and semantic comparisons;
+  webjobs shadow explicitly checks recorded journeys and mutants. Normal-mode
+  summary formatting is isolated from inherited evaluator policies.
+
 - Hegel's verdict cache does not turn a selected invariant failure or a
   finite-choice search into rejection of every run sharing its prefix. Exact
   runs remain cached; deterministic conformance failures retain prefix reuse.
