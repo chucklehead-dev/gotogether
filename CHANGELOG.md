@@ -8,6 +8,9 @@ and adds a line here.
 
 ## Unreleased
 
+- Strengthen trace encoder, clock-ordering and span-source regression controls;
+  simplify redundant encoder checks and use the builtin minimum for clock gaps.
+
 - Core mutation campaigns include descendant test suites, map each source
   mutation to its local ID in every binary, and require every suite baseline
   to pass before reporting mutant results.

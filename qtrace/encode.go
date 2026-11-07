@@ -263,7 +263,8 @@ func appendValue(b []byte, v any) ([]byte, bool) {
 		}
 		b = strconv.AppendFloat(b, x, format, -1, 64)
 		if format == 'e' { // e-07 is e-7, as encoding/json writes it
-			if n := len(b); n >= 4 && b[n-4] == 'e' && b[n-3] == '-' && b[n-2] == '0' {
+			// Exponential format has at least five bytes (1e-07).
+			if n := len(b); b[n-4] == 'e' && b[n-3] == '-' && b[n-2] == '0' {
 				b[n-2] = b[n-1]
 				b = b[:n-1]
 			}
@@ -283,12 +284,10 @@ func appendValue(b []byte, v any) ([]byte, bool) {
 	return b, false
 }
 
-// validNumber is encoding/json's check of a json.Number.
+// validNumber is encoding/json's check of a nonempty json.Number.
+// The caller handles an empty Number as zero before checking its grammar.
 func validNumber(s string) bool {
-	digit := func(c byte) bool { return '0' <= c && c <= '9' }
-	if s == "" {
-		return false
-	}
+	digit := func(c byte) bool { return c-'0' < 10 }
 	if s[0] == '-' {
 		if s = s[1:]; s == "" {
 			return false
