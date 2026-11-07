@@ -444,7 +444,7 @@ func (m *machine) RuleTransfer(tc hegel.TestCase) {
 
 func TestBankAgainstModel(t *testing.T) {
 	qhegel.Test(t, qhegel.Config{Binding: "bank.binding.yaml", Mode: qhegel.Each, Opts: []qtest.Option{qtest.Global()}},
-		func(ht *hegel.T, _ *qhegel.Case) {
+		func(ht hegel.TestCase, _ *qhegel.Case) {
 			hegel.RunStateful(ht, &machine{bank: bank.New(accounts)}, hegel.WithStatefulStepCount(12))
 		}, hegel.WithTestCases(30))
 }
@@ -457,6 +457,14 @@ Modes, measured on the same 40-case state machine (`qhegel/modes_test.go`):
 | `Each` | check every case as it ends; Hegel shrinks failures against the model | 22 s | 32 s, shrunk |
 | `After` | check all distinct runs at the end, in bulk | 3.3 s | 3.4 s, **not shrunk** |
 | `Batched` | generate a round unchecked, check it in bulk, continue while it passes (`Rounds`, `Budget`); on a failure, replay the round in `Each` mode: cached verdicts decide every case up to the failing one, and Hegel shrinks it | 3.4 s | 23 s, shrunk |
+
+`qhegel.Test` callbacks receive `hegel.TestCase`, like `FindViolation` and
+`VaryTraces`. Use `tc.Errorf` to fail and abort the current native case.
+Own per-case resources with `defer`; the outer `testing.T` owns test-wide
+context and cleanup. See the [KV example](examples/kvstore/kvstore_test.go).
+The supported Hegel test runner retains native output, corpus persistence and
+short-mode limits. Native health-check diagnostics still have an
+[SDK limitation](docs/upstream/hegel-run-diagnostics.md).
 
 Bulk checking (`validate.Checker.CheckBatch`) replays many runs per quint
 process, grouped by instance. 24 runs take 1.6 s, against 6.6 s for one

@@ -47,6 +47,15 @@ historical provenance. Store contract checks force conflicting first decisions;
 negative controls prove overlap and a real condition violation rather than
 assuming a short sleep made the race happen.
 
+`qhegel.Test` uses the same `hegel.TestCase` callback interface as the search
+and trace helpers. Per-case resources use `defer`; outer-test cleanup is not a
+case lifetime. KV exercises server closure between generated and rejected cases.
+The SDK test runner preserves corpus persistence, output and short-mode limits.
+A proposed `hegel.Run` migration was rejected because its public API cannot
+supply the corpus key. Full native health-check diagnostics remain an
+[SDK follow-up](upstream/hegel-run-diagnostics.md), separate from the core's
+private property runner.
+
 Hegel searches distinguish an observed candidate from a reproduced shrunk
 violation. `FindViolation` and `Shrink`, like `FindTrigger`, require the final
 replay's own failure marker; later operational errors and unstable candidates

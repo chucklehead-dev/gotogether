@@ -221,10 +221,13 @@ type Config struct {
 // and its recorder; it typically builds the system under test and calls
 // hegel.RunStateful on a machine whose rules call rec.Step.
 //
-//	qhegel.Test(t, qhegel.Config{Binding: "testdata/bank.yaml"}, func(ht *hegel.T, rec *qhegel.Case) {
+// TestCase.Errorf aborts the current case. Use defer for resources owned by a
+// case; the outer testing.T's Context and Cleanup have whole-test lifetimes.
+//
+//	qhegel.Test(t, qhegel.Config{Binding: "testdata/bank.yaml"}, func(ht hegel.TestCase, rec *qhegel.Case) {
 //		hegel.RunStateful(ht, &bankMachine{bank: NewBank(), rec: rec})
 //	}, hegel.WithTestCases(30))
-func Test(t *testing.T, cfg Config, body func(ht *hegel.T, c *Case), opts ...hegel.Option) {
+func Test(t *testing.T, cfg Config, body func(ht hegel.TestCase, c *Case), opts ...hegel.Option) {
 	t.Helper()
 	if cfg.Mode == Batched {
 		batched(t, cfg, body, opts)
@@ -250,14 +253,14 @@ func Test(t *testing.T, cfg Config, body func(ht *hegel.T, c *Case), opts ...heg
 		// abort the search (a later SuppressHealthCheck in opts wins)
 		opts = append([]hegel.Option{hegel.SuppressHealthCheck(hegel.TooSlow)}, opts...)
 	}
-	hegel.Test(t, func(ht *hegel.T) {
+	passed := runNativeTest(t, func(ht hegel.TestCase) {
 		rec := NewCase(ht, cases.Recorder...)
 		defer rec.begin(ht, cases.Global)()
 		body(ht, rec)
 		steps := rec.Steps()
 		if len(steps) == 0 {
 			if !cfg.AllowEmpty {
-				ht.Fatalf("qhegel: the test case recorded no model steps (set AllowEmpty if that is expected)")
+				ht.Errorf("qhegel: the test case recorded no model steps (set AllowEmpty if that is expected)")
 			}
 			return
 		}
@@ -279,8 +282,19 @@ func Test(t *testing.T, cfg Config, body func(ht *hegel.T, c *Case), opts ...heg
 		t.Logf("qhegel: %d runs checked with quint, %d decided from earlier verdicts", q, hits)
 	}
 	if cfg.Mode == After && len(runs) > 0 {
+		if !passed {
+			t.Logf("qhegel: test failed; checking %d completed distinct runs (generation may be partial)", len(runs))
+		}
 		checkAll(t, checker, runs)
 	}
+}
+
+// runNativeTest bridges the public TestCase callback to Hegel's testing
+// entry point. The SDK owns test identity, corpus keys, output and short mode.
+func runNativeTest(t *testing.T, body func(hegel.TestCase), opts ...hegel.Option) bool {
+	t.Helper()
+	hegel.Test(t, func(ht *hegel.T) { body(ht) }, opts...)
+	return !t.Failed()
 }
 
 // checkAll validates runs in parallel (the checker's quint processes,
@@ -320,7 +334,7 @@ func Render(steps []qtrace.Step) string {
 }
 
 // batched is Test in Batched mode.
-func batched(t *testing.T, cfg Config, body func(ht *hegel.T, rec *Case), opts []hegel.Option) {
+func batched(t *testing.T, cfg Config, body func(ht hegel.TestCase, rec *Case), opts []hegel.Option) {
 	t.Helper()
 	cases := qtest.CheckCases(t, "qhegel.Test (Batched)", cfg.Binding, cfg.Opts...)
 	c := cases.Checker
@@ -334,13 +348,13 @@ func batched(t *testing.T, cfg Config, body func(ht *hegel.T, rec *Case), opts [
 		seed = time.Now().UnixNano() & 0x7fffffff //qenv:ok a random first seed for the rounds, outside any simulation
 	}
 	start := time.Now() //qenv:ok the rounds' real time budget
-	record := func(ht *hegel.T) []qtrace.Step {
+	record := func(ht hegel.TestCase) []qtrace.Step {
 		rec := NewCase(ht, cases.Recorder...)
 		defer rec.begin(ht, cases.Global)()
 		body(ht, rec)
 		steps := rec.Steps()
 		if len(steps) == 0 && !cfg.AllowEmpty {
-			ht.Fatalf("qhegel: the test case recorded no model steps (set AllowEmpty if that is expected)")
+			ht.Errorf("qhegel: the test case recorded no model steps (set AllowEmpty if that is expected)")
 		}
 		return steps
 	}
@@ -355,7 +369,7 @@ func batched(t *testing.T, cfg Config, body func(ht *hegel.T, rec *Case), opts [
 		var mu sync.Mutex
 		var runs [][]qtrace.Step
 		seen := map[string]bool{}
-		hegel.Test(t, func(ht *hegel.T) {
+		passed := runNativeTest(t, func(ht hegel.TestCase) {
 			steps := record(ht)
 			key := runKey(c, steps)
 			mu.Lock()
@@ -365,8 +379,8 @@ func batched(t *testing.T, cfg Config, body func(ht *hegel.T, rec *Case), opts [
 				runs = append(runs, steps)
 			}
 		}, append(append([]hegel.Option(nil), opts...), hegel.WithSeed(s), hegel.WithPhases(hegel.PhaseGenerate))...)
-		if t.Failed() {
-			return // the body's own checks failed, and Hegel shrank that already
+		if !passed {
+			return // native failure stops the round before bulk checking
 		}
 		// 2. Check the round in bulk.
 		vs, err := cc.Prefetch(t.Context(), runs)
@@ -387,7 +401,7 @@ func batched(t *testing.T, cfg Config, body func(ht *hegel.T, rec *Case), opts [
 		// verdicts are cached, so only Hegel's shrink candidates run quint.
 		t.Logf("qhegel: round %d (seed %d): %d of %d runs violate the model; shrinking", r, s, len(failed), len(runs))
 		ok := t.Run("shrink", func(st *testing.T) {
-			hegel.Test(st, func(ht *hegel.T) {
+			runNativeTest(st, func(ht hegel.TestCase) {
 				checkCase(ht, cc, record(ht))
 			}, append(append([]hegel.Option{hegel.SuppressHealthCheck(hegel.TooSlow)}, opts...), hegel.WithSeed(s))...)
 		})

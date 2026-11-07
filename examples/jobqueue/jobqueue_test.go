@@ -179,7 +179,7 @@ func runMachine(tc hegel.TestCase, mut queue.Mutation) {
 func TestHegelRunsConform(t *testing.T) {
 	qtest.RequireQuint(t)
 	qhegel.Test(t, qhegel.Config{Binding: "jobqueue.binding.yaml", Mode: qhegel.After, Opts: []qtest.Option{qtest.Global()}, AllowEmpty: true},
-		func(ht *hegel.T, _ *qhegel.Case) { runMachine(ht, queue.Faithful) },
+		func(ht hegel.TestCase, _ *qhegel.Case) { runMachine(ht, queue.Faithful) },
 		hegel.WithTestCases(40), hegel.WithDatabase(""))
 }
 

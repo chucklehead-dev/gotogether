@@ -78,8 +78,8 @@ failure handling, not the meaning or number of required CI checks.
 
 The library patch follow-up admits Quint's paired trace-retention/JSON fixes and
 matching Kubernetes patches through native controls. Hegel 0.9.30 is now
-admitted after repairing native diagnostic visibility and completing the current
-full property/integration/race gates. Shared rule membership is exercised in
+admitted after repairing the core property runner's native diagnostic visibility
+and completing the current full property/integration/race gates. Shared rule membership is exercised in
 both concurrent groups and checked against the bank model. The earlier opaque
 failure remains unexplained; the admission record preserves it alongside the
 current observable results. See go-toolchain.md for scope.
@@ -111,8 +111,16 @@ control requires an actual brute-force condition violation after four stale
 checks. Faithful native and simulated stores pass the strengthened contract.
 Keep execution overlap as measured evidence, separate from a workload's intent.
 
-Next, rotate toward a general-framework caller problem or structural/usability
-consolidation selected from actual evidence. Retain independent-maintainer use
+The Hegel caller consolidation converges `qhegel.Test` on `hegel.TestCase` and
+makes KV's case resources close before subsequent cases, including rejection.
+Keep Hegel's supported test runner: a real corpus control showed that public
+`Run` cannot persist counterexamples without a private database key. A broader
+diagnostics migration waits for a supported SDK option rather than trading away
+replay. See [the upstream boundary](upstream/hegel-run-diagnostics.md).
+
+Next, select focused feature depth from an actual caller gap, after this
+case-interface and ownership consolidation. Full Hegel health-check diagnostics
+remain blocked on the supported SDK boundary. Retain independent-maintainer use
 as an alongside candidate; another framework API still needs a demonstrated need. Candidates below
 are experiments with selection thresholds, not commitments.
 

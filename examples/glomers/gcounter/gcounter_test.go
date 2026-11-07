@@ -104,7 +104,7 @@ func (m *machine) RuleRead(tc hegel.TestCase) {
 func TestHegelSchedules(t *testing.T) {
 	qtest.RequireQuint(t)
 	qhegel.Test(t, qhegel.Config{Binding: "gcounter.binding.yaml", Mode: qhegel.Batched, Opts: []qtest.Option{qtest.Global()}, Rounds: 2},
-		func(ht *hegel.T, _ *qhegel.Case) {
+		func(ht hegel.TestCase, _ *qhegel.Case) {
 			s := cluster(Faithful)
 			hegel.RunStateful(ht, &machine{Network: hegelnet.Network{Sim: s, Faults: true}}, hegel.WithStatefulStepCount(25))
 			finish(s)

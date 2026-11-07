@@ -161,7 +161,8 @@ states.
 | `TestClientHistoryLinearizes` | 4 clients record their own operations, with invocation times (`kv.LoadRecorded`) | in recording order the faithful store is rejected; `qtest.Linearize()` finds the order the intervals allow |
 | `TestRotatedLogConformsAlone` | 4 clients, the log rotated every 40 operations; the last file alone | judged from its head's snapshot it conforms; without the head, the lost prefix's error |
 | `TestModelDrivesService` | model traces drive the HTTP API (`connect.Run`) | store and revision match the model after every request |
-| `TestHegelDrivesService` | a Hegel state machine over HTTP; runs checked after the test | |
+| `TestHegelDrivesService` | a Hegel state machine over HTTP; runs checked after the test | each property case owns and closes its server before the next case starts |
+| `TestHegelServiceClosesRejectedCase` | native Hegel rejects a case, then runs later cases | rejected cases close their real HTTP listener during stack unwinding |
 | `TestMutants` | each mutant of `testdata/mutants`, built with its overlay, runs `TestMutant` | each caught, as below |
 
 | Mutant (`TestMutant`) | The bug | Caught by |

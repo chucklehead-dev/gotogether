@@ -35,11 +35,20 @@ func (m *machine) InvariantNoOverdraft(tc hegel.TestCase) { /* the plain PBT pro
 
 func TestBankAgainstModel(t *testing.T) {
 	qhegel.Test(t, qhegel.Config{Binding: "bank.binding.yaml", Mode: qhegel.Each, Opts: []qtest.Option{qtest.Global()}},
-		func(ht *hegel.T, rec *qhegel.Case) {
+		func(ht hegel.TestCase, rec *qhegel.Case) {
 			hegel.RunStateful(ht, &machine{bank: New(accounts)}, hegel.WithStatefulStepCount(12))
 		}, hegel.WithTestCases(30))
 }
 ```
+
+The callback receives `hegel.TestCase`, the same case interface used by
+`FindViolation` and `VaryTraces`. `tc.Errorf` fails and aborts that native case;
+it does not continue like `testing.T.Errorf`. Use `defer` for resources created
+inside a case. The outer `t.Context()` and `t.Cleanup` belong to the whole test,
+so they cannot release one case's server before the next case starts.
+`qhegel.Test` uses Hegel's supported test runner for native output, saved
+counterexamples and short-mode limits. Its native health-check diagnostics
+remain limited by the SDK; see `docs/upstream/hegel-run-diagnostics.md`.
 
 - **Modes:** `Batched` is the usual choice (bulk checks, replayed in
   `Each` on a failure so Hegel shrinks it); `Each` checks every case;

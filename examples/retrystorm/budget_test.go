@@ -59,7 +59,7 @@ var hegelOpts = []qtest.Option{qtest.Global()}
 // Hegel drives the faithful budget; every run satisfies the model.
 func TestHegelBudgetConforms(t *testing.T) {
 	qtest.RequireQuint(t)
-	qhegel.Test(t, qhegel.Config{Binding: budgetBinding, Mode: qhegel.After, Opts: hegelOpts, AllowEmpty: true}, func(ht *hegel.T, _ *qhegel.Case) {
+	qhegel.Test(t, qhegel.Config{Binding: budgetBinding, Mode: qhegel.After, Opts: hegelOpts, AllowEmpty: true}, func(ht hegel.TestCase, _ *qhegel.Case) {
 		hegel.RunStateful(ht, &machine{b: budget(retry.Faithful)}, hegel.WithStatefulStepCount(6))
 	}, hegel.WithTestCases(20), hegel.WithDatabase(""))
 }
