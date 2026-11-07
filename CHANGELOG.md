@@ -20,6 +20,9 @@ and adds a line here.
   choices, history, corpus entry and navigation links. Diagnostics preserve the
   unknown judgment and point to replay evidence before changing search bounds.
 
+- Expose optional live model-simulation progress and stream CLI phase timing and
+  Quint diagnostics to stderr while preserving final JSON reports on stdout.
+
 - Strengthen trace encoder, clock-ordering and span-source regression controls;
   simplify redundant encoder checks and use the builtin minimum for clock gaps.
 

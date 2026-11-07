@@ -3327,6 +3327,7 @@ type Report struct
     method (*Report) Doc() *validate.Document
     method (*Report) StepActionReachability() StepActionReachability
 type SimulateOptions struct
+    field Progress io.Writer
     field Quint string
     field Seed string
     field Steps int

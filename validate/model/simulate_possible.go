@@ -1,8 +1,10 @@
 package model
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -147,7 +149,13 @@ func quintPossibles(ctx context.Context, quint, dir, file string, cs []*possible
 	verified, preds, seqs := quintShare(cs, verify)
 	for _, c := range verified {
 		argv := []string{"verify", "--main", "simulate", "--invariant", c.not, "--max-steps", fmt.Sprint(verify), file}
+		done := progressOf(ctx).phase("verified-possible " + c.p.Text())
 		out, err := runQuint(ctx, quint, dir, argv)
+		status := phaseStatus(ctx, err)
+		if ctx.Err() == nil && !isAnalysisCancellation(err) && strings.Contains(out, "[violation]") {
+			status = "completed"
+		}
+		done(status)
 		if isAnalysisCancellation(err) {
 			return err
 		}
@@ -290,11 +298,25 @@ func runQuint(ctx context.Context, quint, dir string, argv []string) (string, er
 		return "", err
 	}
 	cmd := quintcmd.Command(ctx, quint, dir, argv...)
-	out, err := cmd.CombinedOutput()
+	var out bytes.Buffer
+	var capture io.Writer = &out
+	if progress := progressOf(ctx); progress != nil && progress.w != nil {
+		capture = io.MultiWriter(capture, diagnosticWriter{progress.w})
+	}
+	// One shared writer preserves CombinedOutput's serialized merged capture.
+	cmd.Stdout, cmd.Stderr = capture, capture
+	err := cmd.Run()
 	if canceled := ctx.Err(); canceled != nil {
 		return "", canceled
 	}
-	return string(out), err
+	return out.String(), err
+}
+
+type diagnosticWriter struct{ io.Writer }
+
+func (w diagnosticWriter) Write(b []byte) (int, error) {
+	_, _ = w.Writer.Write(b)
+	return len(b), nil
 }
 
 // actionsOf are a trace's actions after init (quint's mbt::actionTaken),

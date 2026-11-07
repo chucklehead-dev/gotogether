@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -171,9 +172,13 @@ func TestHelloTutorialReplay(t *testing.T) {
 			cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestTutorialReplayProcess$")
 			cmd.Dir = dir
 			cmd.Env = append(os.Environ(), "GOWORK=off", "GOTOGETHER_HELLO_REPLAY="+string(raw), "GOTOGETHER_CACHE="+filepath.Join(root, "cache"), "TMPDIR="+scratch)
-			actual, runErr := cmd.CombinedOutput()
+			// The tutorial quotes the final stdout report. Live progress and
+			// native diagnostics remain on stderr and are useful on failure.
+			var diagnostics bytes.Buffer
+			cmd.Stderr = &diagnostics
+			actual, runErr := cmd.Output()
 			if err := checkHelloReplayOutput(replay.output, string(actual), runErr); err != nil {
-				t.Fatal(err)
+				t.Fatalf("%v\n--- stderr diagnostics ---\n%s", err, diagnostics.String())
 			}
 		})
 	}
