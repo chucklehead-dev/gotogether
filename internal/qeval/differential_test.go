@@ -72,6 +72,10 @@ func TestDifferentialAgainstQuint(t *testing.T) {
 // error, "refused" for Unsupported), checked with both backends' on every
 // push. Each fails with its fix undone.
 var differentialFindings = []struct{ typ, expr, want string }{
+	// A commuting mathematical sum is not order independent when an
+	// intermediate can overflow in the Rust backend's set order.
+	{"int", "Set((-9223372036854775807), 10).fold(9223372036854775807, (a, x) => a + x)", "refused"},
+	{"int", "(10 / (Set((-9223372036854775807), 3, 10)).fold(9223372036854775807, (a, x) => (if (true) (a + x) else (a - 100))))", "refused"},
 	// a let is evaluated where its name is read (bindLet): the evaluator
 	// bound it eagerly and threw where quint, on both backends, gives 0
 	{"int", "{ val n = 1 / 0; 0 }", "value 0"},

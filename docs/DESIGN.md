@@ -3158,7 +3158,13 @@ candidates are judged in Go (`internal/qeval`), and quint confirms.
   order (by subsets: `f(acc(T \ {x}), x)` the same for each x of each
   subset T, n·2^(n-1) applications); anything else is `Unsupported`, and
   so is a fold that fails in some order (the failure may be in an order
-  quint does not take). It once folded sorted and reversed and took
+  quint does not take). Integer sums additionally prove bounded definedness:
+  exact wide deltas bound every reachable preceding accumulator, excluding the
+  current element. For nested arithmetic, evaluating each lambda at both
+  interval endpoints checks every accumulator-dependent intermediate, including cancellation such as
+  `(acc + x) - x`. Algebraic commutativity alone does not prevent overflow.
+  This proof is linear in set size and retains safe folds beyond ten elements.
+  It once folded sorted and reversed and took
   agreement as order-independence: a round robin over three nodes
   agrees both ways and not in quint's order, and `simulate -graph`
   "proved" an invariant quint violates (review 11, F1;
