@@ -195,6 +195,14 @@ jobs:
         env:
           JOBS: 4 # qenv's 892 mutants, about ten seconds each
         run: ci/mutate-core.sh ${{ matrix.pkg }} ${{ matrix.max }}
+      - name: retain mutation campaign evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutations-${{ strategy.job-index }}
+          path: .gotogether/mutations/
+          include-hidden-files: true
+          if-no-files-found: ignore
 
   fuzz:
     runs-on: ubuntu-latest
