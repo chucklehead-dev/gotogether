@@ -1187,6 +1187,9 @@ func (x *Exploration) summary(universal bool) string {
 			continue
 		}
 		for _, a := range r.Report.Actors {
+			if !a.OK() {
+				continue
+			}
 			switch a.JudgedBy() {
 			case "evaluator":
 				byEval++

@@ -168,3 +168,26 @@ func TestShareRisk(t *testing.T) {
 		t.Errorf("a wide margin logs a risk: %v", v.log(t))
 	}
 }
+
+// Go-only choice negatives must not inflate the summary's count of passes.
+func TestVerboseJudgesCountsOnlyConformingActors(t *testing.T) {
+	t.Setenv("GOTOGETHER_VERBOSE", "1")
+	actor := func(v validate.Verdict, confirmation string) *validate.Result {
+		return &validate.Result{Actor: "probe", Conforms: v, Choices: &validate.ChoiceSearch{Status: "matched", Exhaustive: true, Confirmation: confirmation}}
+	}
+	good := actor(validate.Pass, "path_confirmed")
+	failed := actor(validate.Fail, "not_performed")
+	undecided := actor(validate.NotEvaluated, "not_performed")
+	violated := actor(validate.Pass, "path_confirmed")
+	violated.Invariants = []validate.InvariantResult{{Name: "safe", Verdict: validate.Fail}}
+	x := &Exploration{test: "TestChoiceJudges"}
+	for _, a := range []*validate.Result{good, failed, undecided, violated} {
+		x.Runs = append(x.Runs, &Run{Report: &validate.Report{Actors: []*validate.Result{a}}})
+	}
+	if s := x.summary(false); !strings.Contains(s, "passes judged by the Go evaluator 1, 1 of them also by quint") {
+		t.Fatalf("negative judgments were counted as passes: %s", s)
+	}
+	if j := x.judges(); j == nil || j.Confirmed != 1 || j.Evaluator != 0 {
+		t.Fatalf("structured pass counts disagree: %+v", j)
+	}
+}

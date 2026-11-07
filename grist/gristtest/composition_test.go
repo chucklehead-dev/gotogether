@@ -129,10 +129,12 @@ func TestCompositionSameHistoryAndOptionalProtocol(t *testing.T) {
 
 func TestCompositionUniversalScope(t *testing.T) {
 	native, apps, _, _ := orderFixture("independent")
+	// Keep one command per store: the evidence permits exactly two orders.
+	native = []qtrace.Step{native[0], native[1], native[len(native)-1]}
 	c := compositionPlan(t, apps)
-	c.Protocol = &gristtest.ProtocolModel{Checker: compositionChecker(t, "protocol/*", "true"), Limit: 6}
+	c.Protocol = &gristtest.ProtocolModel{Checker: compositionChecker(t, "protocol/*", "true"), Limit: 2}
 	good, err := c.Assess(t.Context(), native)
-	if err != nil || good.Protocol.Status != receipt.Pass || !good.Protocol.Exhaustive || good.Protocol.Checked != 6 || good.Protocol.Judgment == nil {
+	if err != nil || good.Protocol.Status != receipt.Pass || !good.Protocol.Exhaustive || good.Protocol.Checked != 2 || good.Protocol.Judgment == nil {
 		t.Fatalf("exhaustive: %+v %v", good, err)
 	}
 	if good.Protocol.Quantifier != "all_causal_orders" || len(good.Protocol.Counterexample) != 0 {
@@ -145,10 +147,29 @@ func TestCompositionUniversalScope(t *testing.T) {
 	}
 	// The canonical extension starts with bank: it passes this stronger model.
 	// A later allowed extension starts with shop, exposing a counterexample.
-	c.Protocol = &gristtest.ProtocolModel{Checker: compositionChecker(t, "protocol/*", "n > 0"), Limit: 6}
+	c.Protocol = &gristtest.ProtocolModel{Checker: compositionChecker(t, "protocol/*", "n > 0"), Limit: 2}
+	canonical, err := gristtest.ProtocolSteps(native, apps...)
+	if err != nil || orderLabels(canonical) != "bank/1,shop/1" {
+		t.Fatalf("canonical extension: %s %v", orderLabels(canonical), err)
+	}
+	canonicalReport, err := c.Protocol.Checker.Check(t.Context(), canonical)
+	if err != nil || !canonicalReport.OK() {
+		t.Fatalf("canonical extension must pass: %v %v", canonicalReport, err)
+	}
 	bad, err := c.Assess(t.Context(), native)
-	if err != nil || bad.Protocol.Status != receipt.Fail || bad.Protocol.Checked < 2 || len(bad.Protocol.Counterexample) == 0 {
+	if err != nil || bad.Protocol.Status != receipt.Fail || bad.Protocol.Checked != 2 || len(bad.Protocol.Counterexample) == 0 {
 		t.Fatalf("noncanonical counterexample: %+v %v", bad, err)
+	}
+	status, reason := bad.Problem()
+	if status != receipt.Fail || !strings.Contains(reason, "universal protocol claim (all permitted causal orders)") {
+		t.Fatalf("universal refutation lost its scope: %s %s", status, reason)
+	}
+	if text := bad.String(); !strings.Contains(text, "system protocol (all permitted causal orders) composition: fail") {
+		t.Fatalf("shared text omitted claim scope: %s", text)
+	}
+	data, err := json.Marshal(bad)
+	if err != nil || !strings.Contains(string(data), `"quantifier":"all_causal_orders"`) || !strings.Contains(string(data), `"counterexample"`) || !strings.Contains(string(data), "all permitted causal orders must conform") {
+		t.Fatalf("JSON lost universal claim or its witness: %s %v", data, err)
 	}
 	for _, r := range bad.Protocol.Counterexample {
 		if !strings.Contains(r.ID, "grist/") || !strings.Contains(r.ID, "seq") || r.Actor != "protocol/t1" || r.Action == "" {

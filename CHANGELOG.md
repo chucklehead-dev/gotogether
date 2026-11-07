@@ -8,6 +8,18 @@ and adds a line here.
 
 ## Unreleased
 
+- Protocol receipts, aggregate reasons and TUI summaries explicitly scope the
+  claim to all permitted causal orders of the collected history. Local checks
+  remain separate; a failing permitted order refutes the universal claim.
+
+- Finite-choice judgments retain their actual evaluator provenance in JSON,
+  receipts and saved manifests. Strict Quint and shadow policies return no
+  verdict for Go-only negative proofs; a confirmed witness proves existence,
+  not absence. Refused and rejected checks preserve observed call counts.
+  Exploration pass totals exclude negative and inconclusive judgments.
+  Negated and quantified claims preserve unknown conformance; independently
+  scoped lifecycle checks retain their own verdicts.
+
 - Nightly scopes sample and Hegel seed overrides to their intended campaigns.
   Core shadow checks retain their own budgets and semantic comparisons;
   webjobs shadow explicitly checks recorded journeys and mutants. Normal-mode

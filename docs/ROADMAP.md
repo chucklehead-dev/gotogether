@@ -30,7 +30,8 @@ The navigation prototype is deferred while these issues are addressed.
 | Completed coverage correction | J5: restore checkout's directed campaign assertion | All 30 pairs must be witnessed in normal execution; replay and filtered selections retain their scope. |
 | Now | J7: finish nightly admission recovery | Corpus/script compatibility and shadow fixture isolation have native controls. Browser setup, remaining mutation survivors, benchmarks and verifier limits still require admission. |
 | Completed tool correction | J3: enforce Quint admission | Stable CLI floor 0.33.1 before managed work, consistent doctor/artifact policy, and native trace-retention controls. |
-| Next correctness | J4/J6: ordering quantifiers and mutant intent | Reproduce each finding before choosing its fix. A permitted failing ordering must not masquerade as a recorded-order failure. |
+| Completed claim correction | J4: ordering quantifiers and evaluator provenance | Universal protocol claims are explicit across receipts, aggregate reasons and TUI; Go-only choice negatives cannot claim Quint confirmation. |
+| Next correctness | J6: generated mutant intent | Force the intended guard violation and assert why the model catches it, rather than accepting an incidental read-pinning mismatch. |
 | Then | J8–J11: differential gates and API consolidation | Green semantic gates first; reduce duplicated concepts and misplaced dependencies rather than enforcing an arbitrary API line count. |
 
 A green per-PR matrix does not establish nightly health. Keep known failing

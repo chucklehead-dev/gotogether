@@ -39,7 +39,33 @@ func TestCompositionReceiptUsesWholeRunScope(t *testing.T) {
 	m.w, m.h = 100, 60
 	screen := m.runScreen(&entry{r: n})
 	text := strings.Join(screen.detail, "\n")
-	for _, want := range []string{"whole-run judgment · independent of cursor", "local model fulfillment: not checked", "peer agreement checkout → inventory: fail", "system protocol business protocol: inconclusive", "3 checked; limit 3; exhaustive=false"} {
+	for _, want := range []string{"whole-run judgment · independent of cursor", "local model fulfillment: not checked", "peer agreement checkout → inventory: fail", "system protocol (all permitted causal orders) business protocol: inconclusive", "3 checked; limit 3; exhaustive=false"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestUniversalProtocolFailureKeepsClaimScope(t *testing.T) {
+	c := &receipt.Composition{
+		History: "sha256:history",
+		Local:   []receipt.Component{{Target: "shop", Status: receipt.Pass, Applicable: true}},
+		Protocol: receipt.Protocol{
+			Component:      receipt.Component{Target: "business", Status: receipt.Fail, Applicable: true, Reason: "a permitted ordering fails the model"},
+			Configured:     true,
+			Quantifier:     "all_causal_orders",
+			Checked:        2,
+			Limit:          2,
+			Counterexample: []receipt.Record{{ID: "grist/shop/seq1", Actor: "protocol/t1", Action: "place"}},
+		},
+	}
+	status, reason := c.Problem()
+	n := &navproto.Node{Run: "seed=1", Receipt: receipt.Summary{Status: status, Reason: reason, Scope: "collected_history", OtherExecutions: receipt.NotChecked, Composition: c}, Model: []navproto.ActorState{{Actor: "shop/t1"}}}
+	m := New(Config{NoColor: true})
+	m.w, m.h = 160, 60
+	screen := m.runScreen(&entry{r: n})
+	text := strings.Join(screen.head, "\n") + "\n" + strings.Join(screen.detail, "\n")
+	for _, want := range []string{"universal protocol claim (all permitted causal orders)", "local model shop: pass", "system protocol (all permitted causal orders) business: fail", "2 checked; limit 2; exhaustive=false"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q:\n%s", want, text)
 		}

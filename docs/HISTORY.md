@@ -9024,3 +9024,32 @@ those graphs; the full CI module roster is now independently tidy-checked.
 The [bounded runtime-cost comparison](performance.md#quint-runtime-admission-cost-2026-11-07)
 measures descendant CPU as well as wall time with builds excluded. Admission has
 measurable cost; the two local pairs do not justify rebasing hosted budgets.
+
+## Choice judgment provenance (2026-11-07)
+
+Issue #97 exposed finite-choice rejections labeled as Quint judgments although
+no replay ran. Go enumeration and selected-path confirmation now retain separate
+evidence. Strict Quint/shadow absence proofs return no verdict; ordinary Go
+policy retains exhaustive negative judgments with accurate provenance. Native
+individual/batch controls count actual workload launches and check receipts,
+JSON, saved manifests and Hegel exact-run versus prefix caching. Existing
+negative enumeration oracles explicitly select Go; strict policy controls remain.
+
+Protocol composition keeps its existing universal quantifier and statuses, but
+names the claim in shared text/TUI receipts and aggregate reasons. Its native
+two-order control independently passes the canonical extension and local checks,
+then rejects another permitted order; that canonical extension is not claimed
+as an observed cross-service total order. Bounds and native counterexample IDs
+remain visible in JSON.
+
+Backend provenance is independent of conformance. Exploration summaries now
+filter by the actual actor verdict before counting who judged passes; otherwise
+new Go-authored negative judgments inflate pass totals. A four-status contrast
+checks both text and structured counts and fails when that filter is removed.
+
+No verdict must also survive Boolean composition. The shared expectation
+evaluator now preserves unknown conformance before deriving a negative answer;
+otherwise negation can turn absent proof into a successful claim. Explicit
+three-valued checks retain their own scope, and a known positive counterexample
+still takes precedence over unrelated unknown evidence. Native die-roll policy
+controls and synthetic negation/quantifier/lifecycle contrasts cover this boundary.

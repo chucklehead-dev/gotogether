@@ -93,11 +93,23 @@ func TestSoundInternalChoiceIsPinned(t *testing.T) {
 	// No finite successor gives seven. Exhaustive Go search proves this
 	// rejection; no sampled Quint path is presented as a nonexistence proof.
 	roll[0].Obs["x"] = int64(7)
-	rejected := Validate(t, "testdata/die.yaml", roll)
-	rejected.Expect(t, Mismatch("roll"))
-	choices := rejected.Report.Actors[0].Choices
-	if choices == nil || choices.Status != "rejected" || !choices.Exhaustive || choices.Confirmation != "not_performed" || !decidedFailing([]*Run{rejected}) {
-		t.Fatalf("impossible die observation lacks exhaustive rejection: %+v", choices)
+	for _, policy := range []string{"go", "quint", "shadow"} {
+		t.Run(policy, func(t *testing.T) {
+			rejected := Validate(t, "testdata/die.yaml", roll, Quint(validate.Options{Eval: policy}))
+			a := rejected.Report.Actors[0]
+			choices := a.Choices
+			if choices == nil || choices.Status != "rejected" || !choices.Exhaustive || choices.Confirmation != "not_performed" || a.JudgedBy() != "evaluator" {
+				t.Fatalf("impossible die observation lost its search evidence: %+v", choices)
+			}
+			if policy == "go" {
+				rejected.Expect(t, Mismatch("roll"))
+				if !decidedFailing([]*Run{rejected}) {
+					t.Fatal("exhaustive Go rejection was not conclusive")
+				}
+			} else if a.Conforms != validate.NotEvaluated || decidedFailing([]*Run{rejected}) || Mismatch("roll").value(rejected.Report) != unknown {
+				t.Fatalf("strict policy promoted a Go-only negative to a violation: %s", rejected.Report.Summary())
+			}
+		})
 	}
 }
 

@@ -9,7 +9,7 @@ mutants) ends in one of these verdicts.
 | Verdict | Report says | Expectation | Means |
 |---|---|---|---|
 | conforms | `conformance: PASS`, every invariant `PASS` | `qtest.Conforms()` | the run is a behaviour of the model and its properties hold |
-| conforms, decided in Go | as above, and `judged by the Go evaluator, with no quint replay` | as above | the Go evaluator (internal/qeval) passed it; every failing verdict below is quint's, from its replay (`GOTOGETHER_EVAL=quint` replays passes with quint too, `=shadow` with both, failing on any difference) |
+| conforms, decided in Go | as above, and `judged by the Go evaluator, with no quint replay` | as above | the Go evaluator (internal/qeval) passed it; ordinary failing verdicts below are quint's, from replay; finite-choice Go search has the separate provenance contract below (`GOTOGETHER_EVAL=quint` replays passes with quint too, `=shadow` with both, failing on any difference) |
 | a step the model cannot take | `record <id> is not a transition of the model from the state reached` (`step i` for an inferred step), with `the model expects: <call>, which changes:` when the model answers that request otherwise | `qtest.Rejects("action")` (`""`: any) | the code did something the model forbids from that state |
 | a state mismatch | `does not match` with `expect:` and `obs:` | `qtest.Mismatch("action")` | the step was allowed, but the observed state (`obs.*`) differs from the model's after it |
 | an eventual val false at the end | `invariant eventually V: FAIL` | `qtest.Violates(validate.EventuallyName("V"))` | the run ended (settled, in a simulation) with work the model says is pending: a livelock or lost work |
@@ -29,6 +29,15 @@ mutants) ends in one of these verdicts.
 | incomplete (a prefix) | `validate -require-finish` (or `complete: true`): `the run: incomplete (no settle)`, `actor A: incomplete (pending calls)`, exit 1; `no verdict (lost tail)` and `no verdict (ITF trace)`, exit 1 too | `qtest.Finishes()` | the run passes and is no finished one: it never settled, so its eventual vals were not judged, or a call was left pending (one `-resolve-pending` placed included). A lost tail may hold what is missing (no verdict: check a log that kept its steps); an ITF trace records no settle (see "A prefix vs a finished run") |
 | real time bounds nothing | `issue: warn linearize: ... real time bounds none of its N steps` | none: record calls with `qobs.Invoke` and `Call.Done` | no step has an invocation time, so every order of its threads is allowed: sequential consistency, not linearizability |
 | a tool failure | an error, exit 2, no verdict | none: fix the binding or model | a template, a type, a missing field, or quint itself |
+
+Finite model choices retain exhaustive Go search separately from Quint's
+confirmation of a selected original-action path. Confirmed passing judgments
+report `judgedBy: both`; exhaustive negative Go conclusions report `evaluator`.
+Under `quint` or `shadow`, a negative finite-choice conclusion is inconclusive:
+confirming one failing path does not prove absence of a satisfying path. Inspect
+`choices.reason`, the search bounds and `choices.confirmation`; do not treat
+`exhaustive` as independent Quint confirmation. The same evidence reaches JSON,
+saved manifests and the shared receipt rendering used by the TUI.
 
 `qtest.AnyOf(a, b)` is either: it holds if one does, and has no verdict
 if neither does and one has none. A run with no verdict for an

@@ -87,7 +87,12 @@ func (c Composition) Problem() (Status, string) {
 		if c.Protocol.Status == Pass && (c.Protocol.Checked == 0 || !c.Protocol.Exhaustive) {
 			return Error, "protocol pass requires at least one checked ordering and an exhaustive search"
 		}
-		consider(c.Protocol.Component)
+		component := c.Protocol.Component
+		component.Target = "universal protocol claim (all permitted causal orders)"
+		if c.Protocol.Target != "" {
+			component.Target += " " + c.Protocol.Target
+		}
+		consider(component)
 	}
 	if status == Error {
 		return status, reason
@@ -122,7 +127,11 @@ func (c Composition) String() string {
 	for _, v := range c.Peers {
 		row("peer agreement", v)
 	}
-	row("system protocol", c.Protocol.Component)
+	protocolKind := "system protocol"
+	if c.Protocol.Configured {
+		protocolKind += " (all permitted causal orders)"
+	}
+	row(protocolKind, c.Protocol.Component)
 	if c.Protocol.Configured {
 		fmt.Fprintf(&b, "    all causal orderings: %d checked; limit %d; exhaustive=%v\n", c.Protocol.Checked, c.Protocol.Limit, c.Protocol.Exhaustive)
 	}

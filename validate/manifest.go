@@ -195,10 +195,9 @@ type ActorVerdict struct {
 	// it: RunVerdict.Same compares it for every actor, not only the
 	// first, whatever the reason's wording.
 	Action string `json:"action,omitempty"`
-	// JudgedBy is who passed a passing actor when quint did not alone
-	// (Result.JudgedBy: "evaluator", the Go evaluator with no quint
-	// replay; "both", a pass quint sampled and agreed with): a pass of
-	// the evaluator's alone is no quint verdict.
+	// JudgedBy identifies the actor judgment's producer, including a failing or
+	// inconclusive Go-only model-choice result. "both" requires a confirmed
+	// passing judgment, not merely confirmation of a failing selected witness.
 	JudgedBy string `json:"judgedBy,omitempty"`
 }
 
@@ -266,7 +265,7 @@ func runVerdictOf(results []*Result) RunVerdict {
 		if a.Verdict == Fail {
 			a.Action = r.failingAction()
 		}
-		if by := r.JudgedBy(); a.Verdict == Pass && by != "quint" {
+		if by := r.JudgedBy(); by != "quint" {
 			a.JudgedBy = by
 		}
 		// the run's reason and failing step are its first actor's of the

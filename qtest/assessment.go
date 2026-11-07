@@ -49,7 +49,7 @@ func compositionSummary(compositions []receipt.Composition) string {
 	groups := []struct {
 		name   string
 		counts map[receipt.Status]int
-	}{{"local models", map[receipt.Status]int{}}, {"peer agreement", map[receipt.Status]int{}}, {"system protocol", map[receipt.Status]int{}}}
+	}{{"local models", map[receipt.Status]int{}}, {"peer agreement", map[receipt.Status]int{}}, {"system protocol (all permitted causal orders)", map[receipt.Status]int{}}}
 	errors := 0
 	for _, c := range compositions {
 		if c.Error != "" {

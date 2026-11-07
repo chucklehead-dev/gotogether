@@ -33,8 +33,10 @@ import (
 // settled trace, every eventual val in the last one. A plan it accepts is
 // a pass, with no quint process. A plan it rejects goes to quint's detail
 // replay (the runs that say which check failed, and where), and one it
-// refuses, or cannot judge, to quint's replays as before: every failing
-// report is quint's, its positions and the model's states quint's.
+// refuses, or cannot judge, to quint's replays as before: ordinary failing
+// reports are quint's, their positions and the model's states quint's. Finite
+// model choices follow checkChoices: Go-only negative conclusions retain
+// evaluator provenance, and strict policies refuse unconfirmed absence proofs.
 //
 // GOTOGETHER_EVAL=quint (Options.Eval) has quint judge every run;
 // GOTOGETHER_EVAL=shadow has quint judge every run too and fails a run
