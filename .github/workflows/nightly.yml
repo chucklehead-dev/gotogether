@@ -17,10 +17,6 @@ permissions:
 env:
   QUINT_VERSION: 0.33.1
   GOWORK: "off"
-  GOTOGETHER_SEEDS: "500"
-  # Hegel searches at a fresh seed, logged (GOTOGETHER_HEGEL_SEED=<it>
-  # replays one)
-  GOTOGETHER_HEGEL_SEED: random
 
 jobs:
   grist-full:
@@ -55,11 +51,14 @@ jobs:
       - name: Install quint
         run: ../ci/install-quint.sh
       - name: full grist suite with PostgreSQL
-        # The fresh-seed example job's global 500-seed override is unrelated
+        # The fresh-seed example job's 500-seed override is unrelated
         # to these package-sized integration tests.
         run: env -u GOTOGETHER_SEEDS GOTOGETHER_CHECK=1 GOTOGETHER_STRICT=1 go test -count=1 -timeout 30m ./...
 
   fresh-seeds:
+    env:
+      GOTOGETHER_SEEDS: "500"
+      GOTOGETHER_HEGEL_SEED: random
     runs-on: ubuntu-latest
     timeout-minutes: 300
     strategy:
@@ -90,6 +89,8 @@ jobs:
           path: ${{ runner.temp }}/corpus
 
   core-properties:
+    env:
+      GOTOGETHER_HEGEL_SEED: random
     # the core's Hegel properties (internal/hegelprops) at a fresh Hegel seed
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -318,7 +319,7 @@ jobs:
     # seeds: the explorations' count where 500 would not fit 110m, each
     # measured in shadow on 4 cores (nightly 6, and nights 4 and 5, timed
     # out at 110m with 500 in all four below). own: the tests' own counts
-    # (the workflow's GOTOGETHER_SEEDS unset), the searches' cost being their
+    # (no GOTOGETHER_SEEDS override), the searches' cost being their
     # candidates', not their runs'.
     # - fleetrollout: nine explorations, at 500 seeds 4500 runs at the
     #   1.0 s a run takes CI's -short tier (49 s for 48), more with both
@@ -364,8 +365,11 @@ jobs:
             seeds: own
           - example: inventory-grist
             seeds: own
+          # Recorded journeys and recorded mutant evidence; live prerequisites
+          # are installed and exercised separately by webjobs-live.
           - example: webjobs
             seeds: own
+            short: "true"
           - example: raftkv
             shard: lost-snapshots
             seeds: own
@@ -390,15 +394,22 @@ jobs:
           SEEDS: ${{ matrix.seeds || '500' }}
           RUN: ${{ matrix.run }}
           SKIP: ${{ matrix.skip }}
+          SHORT: ${{ matrix.short }}
+          GOTOGETHER_HEGEL_SEED: random
         run: |
           if [ "$SEEDS" = own ]; then unset GOTOGETHER_SEEDS; else export GOTOGETHER_SEEDS=$SEEDS; fi
+          short_args=()
+          if [ "$SHORT" = true ]; then
+            short_args=(-short)
+            echo "recorded tier (-short); live prerequisites are exercised by webjobs-live"
+          fi
           export GOTOGETHER_SHADOW_LOG="$RUNNER_TEMP/shadow.log"
-          GOTOGETHER_EVAL=shadow go test -count=1 -timeout 110m ${RUN:+-run "$RUN"} ${SKIP:+-skip "$SKIP"} ./...
+          GOTOGETHER_EVAL=shadow go test -count=1 -timeout 110m "${short_args[@]}" ${RUN:+-run "$RUN"} ${SKIP:+-skip "$SKIP"} ./...
       - name: the core's searches, checked by both
         if: matrix.example == 'wallet'
         env:
           GOTOGETHER_SHADOW_LOG: ${{ runner.temp }}/shadow.log
-        run: GOTOGETHER_EVAL=shadow go test -count=1 -timeout 60m ./validate ./qtest
+        run: env -u GOTOGETHER_SEEDS GOTOGETHER_EVAL=shadow go test -count=1 -timeout 60m ./validate ./qtest
       - name: the runs compared
         if: always()
         run: |

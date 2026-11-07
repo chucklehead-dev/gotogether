@@ -26,6 +26,7 @@ import (
 // implementer's sentence on every line a newcomer read.
 func TestSummaryInTheUsersWords(t *testing.T) {
 	RequireQuint(t)
+	t.Setenv("GOTOGETHER_EVAL", "")         // this fixture specifies normal-mode wording, not shadow's receipts
 	t.Setenv("GOTOGETHER_EVAL_SAMPLE", "1") // quint judges every pass too
 	sys := System{Binding: "../validate/testdata/account.yaml", Run: func(c qenv.Chooser) error {
 		s := qenv.New(c)
