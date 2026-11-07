@@ -19,7 +19,11 @@ func TestEventualFailureRejectsNoPrefix(t *testing.T) {
 	}
 	inv := &validate.Result{Conforms: validate.Pass, Invariants: []validate.InvariantResult{
 		{Name: "nonNegative", Verdict: validate.Fail, Failure: &validate.Failure{Index: 1, Step: &steps[1]}}}}
-	if at := failingStep(inv, steps); at != 1 {
-		t.Errorf("an invariant's failure after step 1 marks %d", at)
+	if at := failingStep(inv, steps); at != -1 {
+		t.Errorf("an invariant failure rejected a prefix at %d", at)
+	}
+	transition := &validate.Result{Conforms: validate.Fail, Failure: &validate.Failure{Index: 1, Step: &steps[1]}}
+	if at := failingStep(transition, steps); at != 1 {
+		t.Errorf("a conformance failure lost its rejected step: %d", at)
 	}
 }

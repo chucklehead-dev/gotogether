@@ -174,8 +174,13 @@ jobs:
           # every task handed back, and a parked task is skipped).
           - pkg: qenv
             max: 22
+          # One reviewed equivalent: <= for < in session-order edges.
+          # Distinct transactions have validated unique session positions;
+          # equality can only add a self edge, ignored by graph traversal.
+          # Actual current gate: 1/110 survives; locking-read recording and
+          # Rollback-forwarding mutations are killed by semantic controls.
           - pkg: qhistory
-            max: 0
+            max: 1
           - pkg: internal/depgraph
             max: 1
           - pkg: qsweep

@@ -8,6 +8,13 @@ and adds a line here.
 
 ## Unreleased
 
+- Hegel's verdict cache does not turn a selected invariant failure or a
+  finite-choice search into rejection of every run sharing its prefix. Exact
+  runs remain cached; deterministic conformance failures retain prefix reuse.
+- History checks preserve a transaction's repeated same-key append order and
+  atomic visibility, rejecting reversed, partial and interleaved write blocks.
+  The independent serialization oracle now includes repeated appends.
+
 - `qhegel.Test` callbacks use `hegel.TestCase`, matching the other Hegel
   entrypoints. Per-case resources use deferred cleanup; the KV example closes
   servers before subsequent cases, including rejected cases. The supported SDK

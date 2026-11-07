@@ -19,133 +19,31 @@ remain stable even when their first bounded increment is built.
 
 ## Current order
 
-Reviewed 2026-11-06. Use a tick, tock, consolidate cadence: general framework
-capability, focused feature/contract depth, then structural, usability or
-performance work selected from evidence. This is a balance, not a quota.
+Reviewed 2026-11-07 against [the twelfth review](https://github.com/chucklehead-dev/gotogether/issues/97).
+Correctness and failed admission gates take priority over the feature cadence.
+The navigation prototype is deferred while these issues are addressed.
 
-Recent consolidation fixed evidence discovery (#82) and separated this current
-handoff from chronological history (#83). The general-framework follow-up,
-compiled pending-call resolution (#84), is merged: existing placement/ordering
-searches retain assumed effects, bounds and evaluator-only provenance through
-portable replay. Missing binding inputs cannot become negative proof. The
-unchanged receipt-history fixture and existing wallet/raftkv callers establish
-an existing-user portability gap, not an independent adopter request. See
-DESIGN §106.
-
-The subsequent I24 investigation measures real SQLite processor recovery with
-fresh App/connection state, default cadence/memo/batching and audits disabled.
-A newer-only snapshot forces the first prefix rebuild, but first readiness is
-about 7–14% of full recovery in the measured counter workload. Keep the runtime
-and snapshot contract unchanged; require an actual latency target before
-retention work. See [the measurements and limits](performance.md#cold-historical-processor-recovery-2026-11-06).
-
-The shared discovery consolidation now closes the measured Token hot path with
-Go 1.27 streaming value skipping and one CLI family pass. Actual command
-medians fall from about 37→10 and 39→16 ms on bounded artifact mixes. Public
-file predicates return errors, and unreadable JSON cannot vanish from a suite.
-See [the data and limits](performance.md#evidence-discovery-streaming-consolidation-2026-11-06).
-
-CI exposed a native shutdown ownership gap during this consolidation: Main
-could return while processor cancellation cleanup was still running. Native
-node tasks now join before final relay flush and owned resource teardown;
-cooperative cancellation remains required. The original intermittent directory
-cleanup failure did not reproduce locally, so its exact cause remains unproven.
-Prefer this demonstrated lifecycle correction over a new convenience claim or
-speculative snapshot feature.
-
-The focused coverage follow-up closes edgepublish's documented Rust MBT gap.
-Seed-42 traces reproduced a deadlock between gated pushes and an unused
-sealed-generation bookkeeping lock in the stand-in. Removing that unobserved
-maintenance state preserves publication effects and generation locking; native
-Rust/TypeScript traces and mutant controls check the resulting coverage. This
-changes the stand-in, not the real exporter's retention implementation.
-It also owns bounded/failed replay cleanup rather than leaving gated tasks
-behind. Keep per-trace resource ownership in view when selecting the next
-general-framework slice; an example fix alone does not justify a public scope API.
-
-The general-framework follow-up gives connect test drivers native per-trace
-lifetimes. KV's existing 30-trace run retained 30 servers until outer-test
-cleanup; child `testing.TB` factories now scope context and resource cleanup to
-each trace. This uses Go's subtest/output facilities rather than a new scope or
-close protocol. Direct Replay remains caller-owned. Keep generated trace counts
-separate from actual selected/replayed traces.
-
-The consolidation follow-up bounds native tape-tool bootstrap after a slow
-Ubuntu mirror delayed an otherwise-green PR. Reuse verified tools, acquire only
-missing packages, enforce transfer/lock and whole-command budgets, and require
-working postconditions before mandatory golden checks/rendering. This changes
-failure handling, not the meaning or number of required CI checks.
-
-The library patch follow-up admits Quint's paired trace-retention/JSON fixes and
-matching Kubernetes patches through native controls. Hegel 0.9.30 is now
-admitted after repairing the core property runner's native diagnostic visibility
-and completing the current full property/integration/race gates. Shared rule membership is exercised in
-both concurrent groups and checked against the bank model. The earlier opaque
-failure remains unexplained; the admission record preserves it alongside the
-current observable results. See go-toolchain.md for scope.
-
-The next general-framework correction makes expected-violation searches require
-Hegel's final replay, matching the existing `FindTrigger` contract. Native
-controls reproduced an earlier rejected deposit being returned as “shrunk” after
-ten conforming replays or a later operational failure. `FindViolation` and
-`Shrink` now reject both outcomes while retaining deterministic shrinking and
-no-violation expectations. This closes a real shared-caller evidence gap; it
-does not explain the earlier opaque property failure; current 0.9.30 admission
-uses the repaired diagnostics and complete integration gates.
-
-The adoption-trial review separates implemented fixes from remaining limits in
-current dispositions beside the preserved [library](../examples/library/TRIAL.md)
-and [wallet](../examples/wallet-grist/TRIAL.md) accounts. A fresh native library
-control found a concrete remaining gap: an HTTP answer with the wrong book and
-the correct loan count passed both model bindings. Query result structs now
-compare scalar-list fields through the existing typed collection representation;
-the library checks identities, order, duplicates and empty lists at both store
-and clients. Events, arguments and dependency calls retain their scalar policy.
-Unsupported result shapes require explicit exclusion rather than silent omission.
-Hegel admission and this query-result facet retain independent validation.
-
-CI then exposed a store concurrency mutant escaping its randomized workload:
-a one-millisecond pause did not establish overlapping conflicting checks.
-The shared contract suite now forces a conflicting first wave and its negative
-control requires an actual brute-force condition violation after four stale
-checks. Faithful native and simulated stores pass the strengthened contract.
-Keep execution overlap as measured evidence, separate from a workload's intent.
-
-The Hegel caller consolidation converges `qhegel.Test` on `hegel.TestCase` and
-makes KV's case resources close before subsequent cases, including rejection.
-Keep Hegel's supported test runner: a real corpus control showed that public
-`Run` cannot persist counterexamples without a private database key. A broader
-diagnostics migration waits for a supported SDK option rather than trading away
-replay. See [the upstream boundary](upstream/hegel-run-diagnostics.md).
-
-Next, select focused feature depth from an actual caller gap, after this
-case-interface and ownership consolidation. Full Hegel health-check diagnostics
-remain blocked on the supported SDK boundary. Retain independent-maintainer use
-as an alongside candidate; another framework API still needs a demonstrated need. Candidates below
-are experiments with selection thresholds, not commitments.
-
-| Order | Candidate | Evidence needed before implementation |
+| Priority | Work | Completion evidence |
 |---|---|---|
-| Deferred facet follow-up | I24: historical snapshot retention | SQLite baseline is measured. First establish an actual first-read/recovery target; other projections, eviction, audits, process/OS coldness and PostgreSQL need their own evidence. |
-| Alongside | Independent-maintainer use or a newly reproduced caller blocker | Existing agent-assisted Goo/LRU/HTTP trials retain their bounded scope. Prefer real friction over another adjacent fixture or adapter. |
+| Completed correction | J1: sound Hegel prefix caching under pinned model choices | Cached and direct verdicts agree on the native finite-choice counterexample, on both evaluator policies; ordinary exact-run caching remains useful. |
+| Completed correction | J2: preserve repeated same-key append order in history checks | Reversed, missing and interleaved transaction appends rejected appropriately; independent serialization oracle includes repeated appends. |
+| Now | J7: repair nightly's scripted fault/corpus conflict and diagnose every failed gate | Corpus regressions cannot become directed-order witnesses; native reproduction works. Mutation survivors, shadow harness assumptions, browser setup, benchmarks and verifier limits require their own evidence. |
+| Next correctness | J3–J6: tool admission, ordering quantifiers, coverage assertions and mutant intent | Reproduce each finding before choosing its fix. A permitted failing ordering must not masquerade as a recorded-order failure. |
+| Then | J8–J11: differential gates and API consolidation | Green semantic gates first; reduce duplicated concepts and misplaced dependencies rather than enforcing an arbitrary API line count. |
 
-Keep capture integrity, model conformance, runtime completion, coverage and
-execution limits separate. A partial batch must preserve both records and
-errors; a bounded absent witness is not impossibility; a valid file omitted by
-discovery cannot contribute evidence. Text, JSON and TUI should expose the same
-native facts instead of inventing parallel interpretations.
+A green per-PR matrix does not establish nightly health. Keep known failing
+nightly gates visible and block unrelated feature work while they remain
+unresolved. Do not raise budgets or survivor allowances without measurement
+and an explanation of each affected case.
 
-Virtual physical-session capacity, more fault-order modes, additional broker
-features, model-comparison mappings, broad diagnostic/editor expansion and
-platform facades remain deferred without new evidence. Logical transaction
-limits and native role quotas do not establish virtual physical-session fidelity.
-Cold snapshot retention is distinct from already-built warm processor memo
-ownership; pending-call resolution preserves its original completion limits.
-Abrupt-owner process supervision remains an explicit I12 boundary. Do not start all tracks at once.
+The remainder of J12–J27 is a proposed review queue, not an implementation
+commitment. Go-floor changes require an adoption need; current Go 1.27.3
+admission remains in force. Keep required sibling-module pin updates immediate;
+review unnecessary pin churn separately. The external pilot remains alongside
+technical work. Tags and repository-setting changes remain maintainer decisions.
 
-The item sections below retain their technical dependencies and design detail.
-Historical release recommendations do not override the current prerelease order.
-The previous chronological opening is preserved in the dated handoff archive.
+Detailed older item sections retain dependencies and historical scope. Previous
+current-order chronology is in HISTORY under the twelfth-review handoff.
 
 ## Eleventh review: integrity before tags (I)
 

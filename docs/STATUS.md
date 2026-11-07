@@ -2,7 +2,7 @@
 
 <!-- not built: qtest.NoHotCycle qobs.Sometimes -->
 
-Current handoff, reviewed 2026-11-06. [README](../README.md) is the product
+Current handoff, reviewed 2026-11-07. [README](../README.md) is the product
 entry point; [ARCHITECTURE](ARCHITECTURE.md) explains the structure;
 [ROADMAP](ROADMAP.md#current-order) owns priorities and open-item detail.
 [HISTORY](HISTORY.md#handoff-consolidation-2026-11-06) preserves the previous
@@ -37,6 +37,15 @@ pins from the checked-in go.mod files, not from historical handoff paragraphs.
 | Packaging | the composite Action (`.github/actions/gotogether`), the image (`ci/image/Dockerfile`, built by CI, published nowhere), `gotogether doctor`, `gotogether init -kind http`, CI tiers | [ci.md](ci.md), DESIGN §64 |
 | Analyzers | quintvet (quintsim, quintweave, quintaction, quintctx with fixes), golangci plugin, JSON Schemas for bindings and rule files | qanalysis/, [agents/analysis.md](agents/analysis.md) |
 | Tutorials | five guided pages with real output: prove it, liveness, possibles and scenarios, grist on Kubernetes, production at volume | [tutorials/](tutorials/README.md) |
+
+## Integrity admission
+
+| Area | Current boundary |
+|---|---|
+| Verdict caching | Exact-run Hegel caching remains; a selected invariant path or finite-choice search is not a rejected-prefix certificate. |
+| History checking | Repeated same-key appends retain operation order and atomic visibility; the independent serialization oracle covers multiple appends per writer. |
+| CI | Per-PR checks and nightly are separate admission surfaces. Nightly is known red; corpus/script interaction, mutation survivors, shadow fixtures, browser setup, benchmark regressions and verifier completion remain tracked blockers. |
+| Priorities | J1/J2 correctness and J7 nightly recovery precede unrelated features. [Issue #97](https://github.com/chucklehead-dev/gotogether/issues/97) is the review record; ROADMAP owns the selected order. |
 
 ## Recent progress and lessons
 
