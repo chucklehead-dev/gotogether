@@ -326,7 +326,10 @@ jobs:
     # at this commit too
     runs-on: ubuntu-latest
     env:
-      GOPROXY: direct
+      # Fresh repository commits bypass the module proxy; third-party vanity
+      # hosts use Go's normal proxy/cache path. Checksum verification stays on.
+      GOPROXY: https://proxy.golang.org,direct
+      GONOPROXY: github.com/chucklehead-dev/gotogether
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
