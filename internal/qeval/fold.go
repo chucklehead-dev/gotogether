@@ -2,6 +2,7 @@ package qeval
 
 import (
 	"errors"
+	"math/big"
 	"math/bits"
 )
 
@@ -24,6 +25,13 @@ const maxFoldCheck = 10
 func (ev *evaluation) foldSet(s *Set, init, f Value, op string) Value {
 	n := len(s.Elems)
 	if n <= 1 || ev.commutes(f) {
+		if initial, ok := init.(Int); n > 1 && ok {
+			l := f.(*Lambda) // commutes admitted the operator's shape
+			c := commuter{ev: ev, l: l, acc: l.params[0]}
+			if c.joins(l.body, "iadd") {
+				return ev.foldSum(s, initial, l, op)
+			}
+		}
 		acc := init
 		for _, x := range s.Elems {
 			acc = ev.call(f, acc, x)
@@ -52,6 +60,72 @@ func (ev *evaluation) foldSet(s *Set, init, f Value, op string) Value {
 	return accs[1<<n-1]
 }
 
+// foldSum checks definedness as well as commutativity. Each admitted lambda is
+// f_x(a) = a + delta_x; its accumulator-dependent intermediates are translations
+// of a too. Integer overflow can make those intermediates depend on set order,
+// even when the final mathematical sum is small or every delta is zero.
+func (ev *evaluation) foldSum(s *Set, initial Int, f *Lambda, op string) Value {
+	base := big.NewInt(int64(initial))
+	c := commuter{ev: ev, l: f, acc: f.params[0]}
+	// A single accumulator operation has no intermediate beyond its result;
+	// the prefix bounds suffice. Nested arithmetic needs endpoint replay.
+	var deltas []big.Int
+	if !c.simpleSum(f.body) {
+		deltas = make([]big.Int, len(s.Elems))
+	}
+	var delta big.Int
+	var negative, positive big.Int
+	for i, x := range s.Elems {
+		// Any element may be first. Normal evaluation preserves term errors,
+		// unsupported operations and cancellation rather than inventing values.
+		v := ev.intOf(ev.call(f, initial, x), op)
+		d := &delta
+		if deltas != nil {
+			d = &deltas[i]
+		}
+		d.Sub(big.NewInt(v), base)
+		if d.Sign() < 0 {
+			negative.Add(&negative, d)
+		} else {
+			positive.Add(&positive, d)
+		}
+	}
+	// All-negative and all-positive prefixes bound every possible subset.
+	// Proof arithmetic is wider than model integers: even a safe delta can
+	// span nearly 2^64 between two representable accumulator values.
+	var low, high big.Int
+	low.Add(base, &negative)
+	high.Add(base, &positive)
+	if !low.IsInt64() || !high.IsInt64() {
+		throw(unsupported(op, "an integer sum fold can overflow in some set orders: quint folds a set in an order of its own"))
+	}
+	for i := range deltas {
+		d := &deltas[i]
+		x := s.Elems[i]
+		ev.checkpoint()
+		var beforeLow, beforeHigh big.Int
+		beforeLow.Set(&low)
+		beforeHigh.Set(&high)
+		// The current element cannot also occur in its own preceding prefix.
+		if d.Sign() < 0 {
+			beforeLow.Sub(&beforeLow, d)
+		} else {
+			beforeHigh.Sub(&beforeHigh, d)
+		}
+		// Success at both endpoints proves every intermediate fits throughout
+		// the interval. Net-delta bounds alone miss nested cancellation.
+		if beforeLow.Cmp(base) != 0 {
+			ev.call(f, Int(beforeLow.Int64()), x)
+		}
+		if beforeHigh.Cmp(base) != 0 && beforeHigh.Cmp(&beforeLow) != 0 {
+			ev.call(f, Int(beforeHigh.Int64()), x)
+		}
+	}
+	var result big.Int
+	result.Add(&low, &positive)
+	return Int(result.Int64())
+}
+
 // tryCall is f(acc, x) in one of a fold's orders: the model's runtime
 // error there may be in an order quint does not take, so it is quint's
 // to report (Unsupported), not a verdict.
@@ -69,8 +143,9 @@ func (ev *evaluation) tryCall(f, acc, x Value, op string) (v Value) {
 	return ev.call(f, acc, x)
 }
 
-// commutes reports whether a fold with f gives one result in every order
-// of any set, by the shape of its body (acc its accumulator, E any
+// commutes recognizes an algebraically commuting shape. Integer sums also need
+// foldSum's runtime definedness proof before they give an answer. By the shape
+// of the body (acc its accumulator, E any
 // expression that does not read acc):
 //   - a sum: acc, acc + E, E + acc, acc - E, and if C then B1 else B2 of
 //     sums with C not reading acc: acc plus a sum of terms, one per element;
@@ -78,9 +153,9 @@ func (ev *evaluation) tryCall(f, acc, x Value, op string) (v Value) {
 //   - a min or max: if (acc < E) acc else E, with any comparison and either
 //     side, E the same expression in the comparison and the branch.
 //
-// Each order evaluates the same terms, so a term's runtime error is the
-// same in every order. Anything else is checked by foldSet over every
-// order, or refused.
+// Each order evaluates the same independent terms. Accumulator arithmetic is
+// partial, so mathematical commutativity alone cannot rule out overflow.
+// Anything else is checked by foldSet over every order, or refused.
 func (ev *evaluation) commutes(f Value) bool {
 	l, ok := f.(*Lambda)
 	if !ok || len(l.params) != 2 || l.body == nil {
@@ -124,6 +199,23 @@ func (c commuter) joins(e *Expr, op string) bool {
 		return c.joins(e.Args[0], op) && c.free(e.Args[1])
 	case c.builtin(e, "ite") && len(e.Args) == 3:
 		return c.free(e.Args[0]) && c.joins(e.Args[1], op) && c.joins(e.Args[2], op)
+	}
+	return false
+}
+
+// simpleSum recognizes sums with at most one accumulator-dependent operation
+// in each branch. Once every prefix result fits, there is no further bounded
+// intermediate to check. Independent terms still execute normally per element.
+func (c commuter) simpleSum(e *Expr) bool {
+	switch {
+	case c.isAcc(e):
+		return true
+	case c.builtin(e, "iadd") && len(e.Args) == 2:
+		return c.isAcc(e.Args[0]) && c.free(e.Args[1]) || c.free(e.Args[0]) && c.isAcc(e.Args[1])
+	case c.builtin(e, "isub") && len(e.Args) == 2:
+		return c.isAcc(e.Args[0]) && c.free(e.Args[1])
+	case c.builtin(e, "ite") && len(e.Args) == 3:
+		return c.free(e.Args[0]) && c.simpleSum(e.Args[1]) && c.simpleSum(e.Args[2])
 	}
 	return false
 }

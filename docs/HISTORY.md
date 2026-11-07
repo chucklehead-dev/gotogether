@@ -9066,3 +9066,32 @@ workloads. The script requires an actual named-test pass event so missing,
 skipped or unmatched work cannot become admission. Local browser overrides
 remain available outside this CI admission path. No assertions or campaign
 budgets are relaxed. Other known nightly gates remain separate work.
+
+## Integer fold definedness (2026-11-07)
+
+Nightly differential seed 20764070 exposed a second set-fold soundness boundary:
+`Set(-9223372036854775807, 10).fold(9223372036854775807, (a, x) => a + x)`
+returned 10 in Go while Rust overflowed after choosing a different first element.
+The algebraic shape whitelist proved mathematical order independence without
+proving bounded intermediate arithmetic. Changing element order would reproduce
+one backend's implementation rather than establish a sound result.
+
+Integer sum shapes now derive exact per-element deltas using wide proof
+arithmetic, bound all possible preceding subsets, and evaluate each lambda at
+both endpoints for nested arithmetic. Single-operation sums need only the
+proved prefix bounds. The current element is excluded from its own prefix. This also
+catches nested cancellation whose net delta is zero. Safe large folds retain a
+linear proof; independent model errors and cancellation keep their existing
+meaning. No numeric model domain, search budget or survivor allowance changes.
+Native Rust/TypeScript controls retain the nightly failure and safe boundary
+cases; an independent permutation oracle checks actual intermediate operations
+across additions, subtraction, cancellation and conditional branches.
+
+Removing the guard reproduces the false numeric answer. Removing only endpoint
+replay also makes both nested-order controls falsely return the maximum integer,
+so the controls distinguish a complete proof from final-sum bounds alone.
+The initial general guard cost 3–4 times baseline for ordinary sums in single
+benchmark samples; restricting replay to nested expressions removes extra lambda
+calls for simple sums. The committed benchmark retains sizes 20 and 1,000 with
+compilation outside timing; concurrent native work makes individual timings
+unsuitable as a regression threshold.

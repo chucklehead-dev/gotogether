@@ -8,6 +8,10 @@ and adds a line here.
 
 ## Unreleased
 
+- Integer set folds prove that every ordering fits bounded model integers,
+  including intermediate arithmetic. Potential overflow falls back to Quint
+  instead of returning a value from one backend-specific order.
+
 - Browser admission uses Playwright 1.65.0 and bundled Chromium in PR CI and
   before nightly live workloads. Both use one installer and real journey;
   missing tools, browser failures and skipped or unmatched tests fail admission.
