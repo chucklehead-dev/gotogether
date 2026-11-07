@@ -9231,3 +9231,28 @@ under a 500-seed nightly override. Undoing recovery returns unknown at 227
 attempts. No search allowance is increased. API comments now accurately describe
 per-phase attempted-candidate budgets and distinguish attempts from evaluations;
 a single overall cap would be a separate semantic change.
+
+### 2026-11-07 — Observable scheduler contract coverage
+
+Completed source outcomes from the durable scheduler campaign exposed real
+coverage gaps before the full inventory finished: at least 28 survivors against
+the unchanged limit of 22. This is an incomplete baseline campaign, not a
+completed passing gate. Its seven baselines passed and its admitted union is
+1,748 source mutations.
+
+New public-behavior controls cover zero and negative failover configuration,
+default and explicit restore limits, restored reads before any subsequent write,
+failover/restore wakeups, transaction-capacity release on read-only rejection,
+and unreached static fault sites. Choice controls cover name/kind distinctions,
+static-kind recognition, site-map ownership, and future-tape upgrade guidance.
+They kill 17 targeted mutations using fresh woven binaries and their own
+inventories (11 store/fault controls and six choice controls). Reviewed sorting,
+ChoiceLog and PCT equivalents are not asserted as implementation details.
+
+The full qenv and choice packages pass with invariant checking, race detection,
+shuffled order and two repetitions (62.759s and 1.352s). Both sets of tests passed
+independent cross-review. These tests do not retroactively change the running
+baseline campaign; the complete inventory and full gate on the improved suite
+remain pending. Separately, the original wallet seed range
+20764001–20764500 passes all 500 runs after exact-prefix-state recovery
+(670.564s), with unchanged search allowances.

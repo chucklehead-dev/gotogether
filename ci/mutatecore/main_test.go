@@ -146,20 +146,20 @@ esac
 		t.Fatal(err)
 	}
 	s := suite{pkg: "fake", dir: dir, binary: binary}
-	output, passed, err := execute(s, "list", 3072*1024, inventoryMode)
+	output, passed, err := execute(t.Context(), s, "list", 3072*1024, inventoryMode)
 	if err != nil || !passed || !strings.HasPrefix(output, "qmut: mutant 0 ") {
 		t.Fatalf("inventory: %q %v %v", output, passed, err)
 	}
-	_, passed, err = execute(s, "1", 3072*1024, mutantMode)
+	_, passed, err = execute(t.Context(), s, "1", 3072*1024, mutantMode)
 	if err != nil || !passed {
 		t.Fatalf("baseline failed: %v %v", passed, err)
 	}
-	_, passed, err = execute(s, "0", 3072*1024, mutantMode)
+	_, passed, err = execute(t.Context(), s, "0", 3072*1024, mutantMode)
 	if err != nil || passed {
 		t.Fatalf("failed mutant survived: %v %v", passed, err)
 	}
 	s.binary = filepath.Join(dir, "absent")
-	if _, _, err := execute(s, "0", 3072*1024, mutantMode); err == nil {
+	if _, _, err := execute(t.Context(), s, "0", 3072*1024, mutantMode); err == nil {
 		t.Fatal("missing binary treated as killed mutant")
 	}
 	boom := errors.New("infrastructure failure")
@@ -174,7 +174,7 @@ func TestBaselineFailureIncludesDiagnostics(t *testing.T) {
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\necho 'specific assertion failed' >&2\nexit 1\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	err := baseline(suite{dir: dir, binary: binary}, 3072*1024)
+	err := baseline(t.Context(), suite{dir: dir, binary: binary}, 3072*1024)
 	if err == nil || !strings.Contains(err.Error(), "specific assertion failed") {
 		t.Fatalf("lost baseline diagnostics: %v", err)
 	}
