@@ -9017,6 +9017,9 @@ retain separate work markers. Cancellation, retry, occupied-slot and cache
 controls still require their original work to occur; unsupported tools cannot
 pass merely by preventing the tested operation. Published integrations receive
 one aligned core-pin update because they need this shared admission behavior.
+The newly reachable semver import also needs dependency sums in every live
+local-replacement module. CI found that tidying only published modules missed
+those graphs; the full CI module roster is now independently tidy-checked.
 
 The [bounded runtime-cost comparison](performance.md#quint-runtime-admission-cost-2026-11-07)
 measures descendant CPU as well as wall time with builds excluded. Admission has
