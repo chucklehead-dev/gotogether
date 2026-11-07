@@ -8944,3 +8944,24 @@ distinct transactions cannot share a validated session position, and self
 edges cannot change graph traversal. Nightly allows that one audited survivor;
 locking-read recording and rollback-forwarding mutants are killed. Other
 packages' survivor allowances and performance budgets are unchanged.
+
+
+## Nightly recovery: fault-order corpus compatibility (2026-11-07)
+
+FaultOrders accepts the nightly corpus directory without replacing its scripted
+seed attempts. Saved runs are additional model regressions, included in model
+and execution totals but excluded from directed attempt rosters and witnesses.
+Corpus-only replay is executable and explicitly replay evidence: zero directed
+attempts and no witnessed script. Seed-only reproduction skips the corpus.
+Native controls exercise inclusive totals, retained seed profiles, JSON evidence,
+navigation, model regression failure, corrupt and stale corpus failure. Removing
+the scripted-witness guard makes the real corpus-only control fail. This closes
+one nightly configuration/contract conflict; remaining nightly admission failures
+stay visible and unrelated feature work remains deferred.
+
+Checkout's actual directed campaign passes under nightly-style corpus capture
+and the 500-seed environment override: all 30 pairs witnessed in three scripted
+seeds each. Its restored coverage assertion requires those directed witnesses
+for executed ordinary campaign entries; explicit replay and unselected Go
+subtests cannot be promoted into a full-campaign claim. The framework still
+reports bounded unreached attempts for callers that do not require that coverage.

@@ -99,7 +99,7 @@ func TestFaultOrderAttemptsKeepOrdinaryScriptStrict(t *testing.T) {
 	names := &hooks.FaultNames{}
 	names.AddKind("a")
 	names.AddKind("b")
-	missing := &Run{faults: names, Unscripted: []qenv.Scripted{{Kind: "a", Option: 1}}}
+	missing := &Run{scripted: true, faults: names, Unscripted: []qenv.Scripted{{Kind: "a", Option: 1}}}
 	for _, partial := range []bool{false, true} {
 		f := &failTB{TB: t}
 		x := &Exploration{Runs: []*Run{missing}}
@@ -112,7 +112,7 @@ func TestFaultOrderAttemptsKeepOrdinaryScriptStrict(t *testing.T) {
 		}
 	}
 	f := &failTB{TB: t}
-	x := &Exploration{faultOrder: &FaultOrder{First: qenv.Scripted{Kind: "a", Option: 1}, Second: qenv.Scripted{Kind: "b", Option: 1}}, Runs: []*Run{{faults: names, misnamed: []string{"invalid option"}, Unscripted: missing.Unscripted}}}
+	x := &Exploration{faultOrder: &FaultOrder{First: qenv.Scripted{Kind: "a", Option: 1}, Second: qenv.Scripted{Kind: "b", Option: 1}}, Runs: []*Run{{scripted: true, faults: names, misnamed: []string{"invalid option"}, Unscripted: missing.Unscripted}}}
 	x.unknownScripted(f)
 	if len(f.errs) != 1 || !strings.Contains(f.errs[0], "invalid option") {
 		t.Fatalf("invalid configuration suppressed: %v", f.errs)
@@ -241,7 +241,7 @@ func TestFaultOrdersProcess(t *testing.T) {
 func TestFaultOrdersSeedReplayAndRefusals(t *testing.T) {
 	RequireQuint(t)
 	for _, tc := range []struct{ mode, want string }{
-		{"seed", ""}, {"choices", "choices replay bypasses"}, {"corpus", "GOTOGETHER_CORPUS bypasses"},
+		{"seed", ""}, {"choices", "choices replay bypasses"}, {"corpus", ""},
 		{"error", "ordered-attempt-execution-failed"}, {"misnamed", "has no option"}, {"named-nominal", "observed choice is nominal option 0"},
 		{"unnamed-kind-name", "has no nonnominal option named"},
 		{"dynamic-other", "not an exact fault kind"}, {"option-collision", "not an exact fault kind"}, {"prefix-target", "not an exact fault kind"},

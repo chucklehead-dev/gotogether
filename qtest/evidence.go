@@ -321,11 +321,11 @@ func (order *FaultOrder) faultEvidence() FaultOrderEvidence {
 		} else {
 			continue
 		}
-		attempt := FaultOrderAttempt{Run: x.ref() + ":" + (&Run{origin: origin}).ID()}
-		if origin.kind == "seed" {
-			seed := origin.seed
-			attempt.Seed = &seed
+		if origin.kind != "seed" {
+			continue // corpus regressions are not directed seed attempts
 		}
+		seed := origin.seed
+		attempt := FaultOrderAttempt{Run: x.ref() + ":" + (&Run{origin: origin}).ID(), Seed: &seed}
 		out.Attempts = append(out.Attempts, attempt)
 	}
 	return out
