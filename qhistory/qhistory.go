@@ -4,7 +4,8 @@
 // real database as qenv's Store checks its own commits.
 //
 // Each transaction appends unique values to lists, one per key, and reads
-// whole lists. A database that appends atomically then gives away its
+// whole lists. Repeated appends to the same key retain their operation order
+// as one atomic block. A database that appends atomically then gives away its
 // version order: every committed read of a key is a prefix of the key's
 // final list, and a value names the transaction that appended it. From
 // the reads come the dependencies between transactions:
@@ -20,7 +21,8 @@
 // cycle: write skew). With them, from the reads alone: G1a
 // (a read saw an aborted transaction's value), G1b (a read saw a
 // transaction's intermediate value), an incompatible order (two reads of
-// a key that are not prefixes of one another), garbage (a value no
+// a key that are not prefixes of one another, or contradict a writer's atomic
+// append order), garbage (a value no
 // transaction appended) and internal (a transaction's read misses its
 // own appends), a duplicate (a value twice in one read). Read committed
 // forbids all but G-single, G-nonadjacent and G2, snapshot isolation all
@@ -268,9 +270,9 @@ func Check(level Level, txns []Txn) (*Report, error) {
 		rep.Anomalies = append(rep.Anomalies, Anomaly{Kind: kind, Txns: ids, Msg: fmt.Sprintf(format, a...), Forbidden: forbidden(level, kind)})
 	}
 	byID := map[int]*Txn{}
-	writer := map[wkey]int{}       // a value's appender
-	appended := map[string][]int{} // every append, including values no read observed
-	lastOwn := map[wkey]bool{}     // a transaction's last append to the key
+	writer := map[wkey]int{}                 // a value's appender
+	appended := map[string][]int{}           // every append, including values no read observed
+	ownAppends := map[int]map[string][]int{} // operation order within each atomic writer
 	sessions := map[string]map[uint64]int{}
 	for i := range txns {
 		t := &txns[i]
@@ -299,7 +301,7 @@ func Check(level Level, txns []Txn) (*Report, error) {
 			return nil, fmt.Errorf("qhistory: two transactions with id %d", t.ID)
 		}
 		byID[t.ID] = t
-		last := map[string]int{}
+		ownAppends[t.ID] = map[string][]int{}
 		for _, o := range t.Ops {
 			switch o.Kind {
 			case Append:
@@ -309,14 +311,11 @@ func Check(level Level, txns []Txn) (*Report, error) {
 				}
 				writer[k] = t.ID
 				appended[o.Key] = append(appended[o.Key], o.Value)
-				last[o.Key] = o.Value
+				ownAppends[t.ID][o.Key] = append(ownAppends[t.ID][o.Key], o.Value)
 			case Read:
 			default:
 				return nil, fmt.Errorf("qhistory: transaction %d: an operation of kind %d", t.ID, o.Kind)
 			}
-		}
-		for key, v := range last {
-			lastOwn[wkey{key, v}] = true
 		}
 	}
 
@@ -439,6 +438,33 @@ func Check(level Level, txns []Txn) (*Report, error) {
 		if bad {
 			continue // no order to take edges from
 		}
+		// Transaction-level edges cannot represent the order of two appends
+		// by the same writer: collapsing both values to one graph vertex
+		// discards that operation order. Each external observation must see
+		// the writer's entire atomic block, in its declared append order.
+		for _, r := range rs {
+			observed := map[int][]int{}
+			first, last := map[int]int{}, map[int]int{}
+			for i, v := range r.list {
+				w := writer[wkey{key, v}]
+				if w == r.txn || !committed(w) {
+					continue
+				}
+				if len(observed[w]) == 0 {
+					first[w] = i
+				}
+				last[w] = i
+				observed[w] = append(observed[w], v)
+			}
+			for _, w := range slices.Sorted(maps.Keys(observed)) {
+				values, want := observed[w], ownAppends[w][key]
+				if len(values) != len(want) {
+					add("G1b", []int{w, r.txn}, "%s: transaction %d read %v, containing only %v of transaction %d's atomic appends %v", key, r.txn, r.list, values, w, want)
+				} else if !slices.Equal(values, want) || last[w]-first[w]+1 != len(values) {
+					add("incompatible-order", []int{w, r.txn}, "%s: transaction %d read %v, incompatible with transaction %d's atomic append order %v", key, r.txn, r.list, w, want)
+				}
+			}
+		}
 		// A committed append absent from every external read belongs after
 		// each read in any serial explanation. Its position relative to other
 		// unseen appends is unknown: add the forced anti-dependencies, never
@@ -463,9 +489,6 @@ func Check(level Level, txns []Txn) (*Report, error) {
 			if len(r.list) > 0 {
 				last := r.list[len(r.list)-1]
 				w := writer[wkey{key, last}]
-				if !lastOwn[wkey{key, last}] && w != r.txn {
-					add("G1b", []int{w, r.txn}, "%s: transaction %d read %v, ending at %d, an intermediate append of transaction %d", key, r.txn, r.list, last, w)
-				}
 				link(w, r.txn, "wr", key)
 			}
 			if len(r.list) < len(order) {

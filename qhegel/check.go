@@ -31,10 +31,10 @@ type verdict struct {
 //
 //   - an identical run (same steps, same instance constants) gets the same
 //     verdict;
-//   - a run whose prefix up to a step the model rejected (a step that is
-//     not a transition, a state mismatch, or an invariant violation after
-//     it) matches an earlier failing run's, with the same constants, fails
-//     the same way: those verdicts depend only on that prefix.
+//   - a run whose prefix has a choice-free conformance rejection (a disabled
+//     transition or state mismatch) matches an earlier failing run's, with
+//     the same constants, fails the same way. Invariant failures and selected
+//     model-choice paths do not establish a universal prefix rejection.
 //
 // Prefix reuse is limited to runs of one actor with no domain clocks
 // (quint.order.*), whose reconstructed order is the recording order, no
@@ -109,7 +109,7 @@ func (cc *caseChecker) store(k keyed, rep *validate.Report) verdict {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 	cc.full[k.keys[len(k.keys)-1]] = cached
-	if v.Status == receipt.Fail && k.prefixable && len(rep.Actors) == 1 && len(rep.Issues) == 0 {
+	if v.Status == receipt.Fail && k.prefixable && len(rep.Actors) == 1 && rep.Actors[0].Choices == nil && len(rep.Issues) == 0 {
 		if at := failingStep(rep.Actors[0], k.steps); at >= 0 {
 			// the prefix key up to the failing step, in effective steps
 			for j := len(k.effIdx) - 1; j >= 0; j-- {
@@ -222,7 +222,19 @@ func (cc *caseChecker) constants(steps []qtrace.Step) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	return strings.Join(p.ConstantList(), ", "), true
+	// A suffix can select an earlier finite choice. Keep whole-run caching,
+	// but never use a selected path as proof about every prefix execution.
+	choiceFree := cc.Checker.Model != nil
+	if choiceFree {
+		choiceFree = len(cc.Checker.Model.Chooses("init")) == 0
+		if p.Start != nil {
+			choiceFree = choiceFree && len(cc.Checker.Model.Chooses(p.Start.Action)) == 0
+		}
+		for _, call := range p.Calls {
+			choiceFree = choiceFree && len(cc.Checker.Model.Chooses(call.Action)) == 0
+		}
+	}
+	return strings.Join(p.ConstantList(), ", "), choiceFree
 }
 
 // effective drops the steps the binding skips, when the run has a single
@@ -253,25 +265,15 @@ func identity(n int) []int {
 	return out
 }
 
-// failingStep is the index in steps of the step after which the verdict
-// became a failure: the conformance failure, else the earliest invariant
-// violation. -1 if it is not an observed step. An eventual property's
-// failure is the run's end, not its prefix's: a longer run may finish
-// the work, so it rejects no prefix.
+// failingStep identifies a conformance-rejected observed step. An invariant
+// failure, even at an observed step, need not reject all executions of that
+// prefix: a longer run can select another model path. Such failures are cached
+// only under their whole-run key.
 func failingStep(r *validate.Result, steps []qtrace.Step) int {
-	var f *validate.Failure
-	if r.Failure != nil {
-		f = r.Failure
-	} else {
-		for _, inv := range r.Invariants {
-			if strings.HasPrefix(inv.Name, validate.EventuallyName("")) {
-				continue
-			}
-			if inv.Failure != nil && (f == nil || (inv.Failure.Index >= 0 && inv.Failure.Index < f.Index)) {
-				f = inv.Failure
-			}
-		}
+	if r.Conforms != validate.Fail {
+		return -1
 	}
+	f := r.Failure
 	if f == nil || f.Step == nil {
 		return -1
 	}

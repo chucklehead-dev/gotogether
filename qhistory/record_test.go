@@ -235,3 +235,49 @@ func TestRecordCapacityRefusalThenRecovery(t *testing.T) {
 		t.Fatalf("capacity refusal/recovery history: %+v", got)
 	}
 }
+
+// Locking reads must preserve the actual successful observation, exclude a
+// failed read, and still forward rollback to release the underlying transaction.
+func TestRecordLockingReadAndRollback(t *testing.T) {
+	for _, readErr := range []error{nil, errors.New("locking read failed")} {
+		backing := &lockingTxn{readErr: readErr}
+		var history qhistory.History
+		db := qhistory.Record(lockingDB{backing}, &history, lists)
+		tx, err := db.Begin(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		value, found, err := tx.GetForUpdate("l/x")
+		if !errors.Is(err, readErr) || !found || fmt.Sprint(value) != "[1 2]" {
+			t.Fatalf("underlying locking read changed: %v %v %v", value, found, err)
+		}
+		tx.Rollback()
+		if backing.rollbacks != 1 {
+			t.Fatalf("underlying transaction rollback count %d, want 1", backing.rollbacks)
+		}
+		recorded := history.Txns()
+		if len(recorded) != 1 || recorded[0].Outcome != qhistory.Aborted {
+			t.Fatalf("rollback history: %+v", recorded)
+		}
+		want := "[read(x) = [1 2]]"
+		if readErr != nil {
+			want = "[]"
+		}
+		if fmt.Sprint(recorded[0].Ops) != want {
+			t.Fatalf("locking read error %v: operations %v, want %s", readErr, recorded[0].Ops, want)
+		}
+	}
+}
+
+type lockingDB struct{ tx *lockingTxn }
+
+func (d lockingDB) Begin(context.Context) (qenv.Txn, error) { return d.tx, nil }
+
+type lockingTxn struct {
+	qenv.Txn
+	readErr   error
+	rollbacks int
+}
+
+func (tx *lockingTxn) GetForUpdate(string) (any, bool, error) { return []int{1, 2}, true, tx.readErr }
+func (tx *lockingTxn) Rollback()                              { tx.rollbacks++ }

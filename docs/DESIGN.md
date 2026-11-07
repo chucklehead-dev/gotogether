@@ -633,10 +633,12 @@ start-up), and shrinking runs hundreds of candidates. `CaseChecker`
 caches verdicts:
 - identical runs, keyed by the instance constants and the steps with
   process and thread ids numbered by first appearance;
-- prefixes. If the model rejected run R at its k-th step, any run with
-  the same constants and the same first k steps fails the same way. A
-  conformance failure at a step, and an invariant violation after it,
-  depend only on the steps up to there.
+- prefixes of deterministic conformance failures, where rejecting step k
+  rejects every run with the same constants and first k steps. An invariant
+  failure on a selected model path does not certify rejection of all prefix
+  executions: later recorded observations can pin earlier finite choices.
+  Reports with finite-choice search evidence do not seed prefix rejection;
+  exact-run results remain cached.
 
 - skipped steps. Steps the binding skips (refused calls, with
   `outcomes: { error: skip }`) become no model call. In a single-process
@@ -645,7 +647,10 @@ caches verdicts:
 
 Prefix reuse is restricted to one actor, with no reconstruction issues
 and no domain clocks, where the reconstructed order is the recording
-order. On `examples/bank`'s SelfTransfer test, the three together cut
+order, with no lost records, snapshot start or bounded-response obligation.
+The invariant/choice guard was added after the twelfth review reproduced a
+cached failure on a directly passing longer run under both evaluator policies.
+On `examples/bank`'s SelfTransfer test, the three together cut
 quint runs from ~450 to 53 (about 5 min to 40 s), with the same shrunk
 result. Constants are part of the key
 because bindings may size them from the whole run (`max "amount"`): a
