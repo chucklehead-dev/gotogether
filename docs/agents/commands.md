@@ -152,7 +152,11 @@ AGENTS.md has the general requirements.
   log, the binding with its spec and imports, the artifacts; `gotogether validate -replay` judges it again,
   `gotogether evidence` lists it as external).
   `GOTOGETHER_CORPUS=dir`
-  replays and saves explorations' corpus entries under dir/<test>;
+  replays and saves explorations' corpus entries under dir/<test>. Failed
+  unknown-only claims save their first claim-specific unjudged run too, with
+  its seed/choices, recorded history and normal reproduce/navigation links;
+  the saved run remains unknown at the same bounds.
+
   `GOTOGETHER_HEGEL_SEED=n|random` overrides qhegel searches' seeds
   (both nightly). `GOTOGETHER_MUTANT=<id>` turns one woven mutant on for
   the whole process (`=list` prints them; ci/mutate-core.sh).

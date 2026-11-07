@@ -1403,9 +1403,17 @@ func (x *Exploration) verdict(c Claim, reps []*validate.Report) claimVerdict {
 	every := !isQ && c.(Expectation).alone || isQ && q.kind == "all"
 	switch {
 	case !j.ok && j.unjudged > 0 && j.n == 0:
-		return claimVerdict{say: func(testing.TB) string {
-			return fmt.Sprintf("want %s; %d of %d runs have no verdict (%s), and a claim that no run shows something does not hold of a run whose behaviour is not known: "+
-				"raise the budget (qtest.LinearizeBudget, a binding's hiddenDepth), shorten the runs, or check logs that kept their steps (a lost tail)", describeClaim(c), j.unjudged, len(x.Runs), x.failingReasons())
+		return claimVerdict{say: func(t testing.TB) string {
+			msg := fmt.Sprintf("want %s; %d of %d runs have no verdict (%s)", describeClaim(c), j.unjudged, len(x.Runs), x.failingReasons())
+			for i, r := range x.Runs {
+				// Unknown is claim-specific: a missing model judgment need not
+				// prevent an independent lifecycle claim from being decided.
+				if c.judge(reps[i:i+1]).unjudged > 0 {
+					return msg + "; the first run without a verdict for this claim" + claimWhy(c, r.Report) + ":\n" +
+						x.describe(t, r, true) + "\n  inspect the retained trace and search limits before changing the bounds"
+				}
+			}
+			return msg
 		}}
 	case j.ok && j.show >= 0 && !every:
 		r := x.Runs[j.show]

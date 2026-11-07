@@ -2964,6 +2964,10 @@ model accepts (guided: from the failing step, every single move
 constraints allow, keeping the one that gets furthest). `qtest.Linearize`
 checks a history so; finding none is strong evidence of a bug, a budget
 running out is no verdict at all (Y6: n/a, which Rejects does not match).
+A failed claim with no verdict retains the first run unjudged for that claim,
+using the existing corpus, history and navigation paths. The retained run stays
+unknown on replay at the same bound; its artifacts support diagnosis without
+turning an incomplete search into a model refutation.
 Since Z8 a complete search follows a guided one that finds none (every
 order real time allows, level by level, rejected prefixes pruned, no
 beam but the budget): it finds an order the guided search missed, or
