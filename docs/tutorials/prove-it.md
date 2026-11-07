@@ -15,10 +15,11 @@ Go evaluator visits every reachable state of the binding's instance
 it*: a proof, for that instance.
 
 The first two hello transcripts below are replayed by the CLI test suite in
-an isolated copy of the example. Their output is checked verbatim except for
-the graph’s elapsed time. Later commands were run when written, with paths
-shortened and long state lines cut (`[...]`); they are not yet replayed by
-this guard.
+an isolated copy of the example. The final reports on stdout are checked
+verbatim except for the graph’s elapsed time. Live progress and native
+diagnostics stream separately on stderr. Later commands were run when written,
+with paths shortened and long state lines cut (`[...]`); they are not yet
+replayed by this guard.
 
 ## Before you start
 
