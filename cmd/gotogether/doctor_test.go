@@ -44,6 +44,8 @@ func fakeTool(t *testing.T, dir, name, script string) {
 // old to say, each with the fix; quint's evaluator is read from its
 // package and found missing.
 func TestDoctorNamesSkews(t *testing.T) {
+	// Tool-report fixtures must not queue behind unrelated model searches.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	bin := t.TempDir()
 	t.Setenv("PATH", bin)
 	t.Setenv("QUINT_HOME", t.TempDir())
@@ -80,6 +82,8 @@ func TestDoctorNamesSkews(t *testing.T) {
 // The report lists the formats this version reads and says whether it
 // found a skew; -strict turns a skew into exit 1.
 func TestDoctorReport(t *testing.T) {
+	// Tool-report fixtures must not queue behind unrelated model searches.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	bin := t.TempDir()
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	fakeTool(t, bin, "qweave", `echo "qweave v0.0.9 woven ABI0"`)
@@ -98,6 +102,8 @@ func TestDoctorReport(t *testing.T) {
 // Doctor and runtime admission use the same stable CLI floor. Failed probes
 // cannot become supported versions merely by printing a plausible value.
 func TestDoctorQuintAdmission(t *testing.T) {
+	// Tool-report fixtures must not queue behind unrelated model searches.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	bin := t.TempDir()
 	t.Setenv("PATH", bin)
 	for _, tc := range []struct {
