@@ -4,18 +4,21 @@ package main
 import (
 	"bufio"
 	"cmp"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
+	"syscall"
 	"time"
 )
 
@@ -37,6 +40,8 @@ type candidate struct {
 	mutant
 	targets []target
 }
+
+const coreModule = "github.com/chucklehead-dev/gotogether"
 
 // inventoryLine is read-only after initialization.
 var inventoryLine = regexp.MustCompile(`^qmut: mutant ([0-9]+) ([^ ]+):([0-9]+) (.+)$`)
@@ -97,6 +102,7 @@ func admit(suites []suite, baseline func(suite) error) ([]candidate, error) {
 	}
 	result := make([]candidate, 0, len(bySource))
 	for _, c := range bySource {
+		preferOwner(c, suites)
 		result = append(result, *c)
 	}
 	slices.SortFunc(result, func(a, b candidate) int {
@@ -109,6 +115,20 @@ func admit(suites []suite, baseline func(suite) error) ([]candidate, error) {
 		return nil, errors.New("no mutants woven into any test suite")
 	}
 	return result, nil
+}
+
+// The source-owning package's tests often kill a mutation without running
+// broader consumers. Move that linked suite first, leaving other suites in
+// their admitted order. A passing owner still needs every remaining suite.
+func preferOwner(c *candidate, suites []suite) {
+	owner := coreModule + "/" + path.Dir(c.file)
+	for i, t := range c.targets {
+		if suites[t.suite].pkg == owner {
+			copy(c.targets[1:i+1], c.targets[:i])
+			c.targets[0] = t
+			return
+		}
+	}
 }
 
 func survives(c candidate, run func(target) (bool, error)) (bool, error) {
@@ -154,8 +174,18 @@ func testSuites(r io.Reader, work string) ([]suite, error) {
 	return suites, nil
 }
 
-func command(dir string, args ...string) error {
-	c := exec.Command(args[0], args[1:]...)
+// Every owned tool runs in its own process group: canceling a build must stop
+// qweave and compiler descendants as well as its outer go process.
+func groupCommand(ctx context.Context, name string, args ...string) *exec.Cmd {
+	c := exec.CommandContext(ctx, name, args...)
+	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	c.Cancel = func() error { return syscall.Kill(-c.Process.Pid, syscall.SIGKILL) }
+	c.WaitDelay = time.Second
+	return c
+}
+
+func command(ctx context.Context, dir string, args ...string) error {
+	c := groupCommand(ctx, args[0], args[1:]...)
 	c.Dir = dir
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
@@ -172,8 +202,8 @@ const (
 
 // Positional arguments carry paths literally. timeout retains the existing
 // 300-second limit; a capped mutant that hangs or exhausts memory is killed.
-func execute(s suite, id string, mem int, mode runMode) (string, bool, error) {
-	c := exec.Command("sh", "-c", `ulimit -v "$1" || exit 125; shift; exec timeout 300 "$@"`, "mutatecore", strconv.Itoa(mem), s.binary)
+func execute(ctx context.Context, s suite, id string, mem int, mode runMode) (string, bool, error) {
+	c := groupCommand(ctx, "sh", "-c", `ulimit -v "$1" || exit 125; shift; exec timeout 300 "$@"`, "mutatecore", strconv.Itoa(mem), s.binary)
 	c.Dir = s.dir
 	c.Env = append(os.Environ(), "GOTOGETHER_MUTANT="+id)
 	if mode == inventoryMode {
@@ -188,6 +218,9 @@ func execute(s suite, id string, mem int, mode runMode) (string, bool, error) {
 	} else {
 		err = c.Run()
 	}
+	if ctx.Err() != nil {
+		return string(output), false, context.Cause(ctx)
+	}
 	if err == nil {
 		return string(output), true, nil
 	}
@@ -201,8 +234,8 @@ func execute(s suite, id string, mem int, mode runMode) (string, bool, error) {
 	return string(output), false, err
 }
 
-func baseline(s suite, mem int) error {
-	output, passed, err := execute(s, strconv.Itoa(len(s.mutants)), mem, baselineMode)
+func baseline(ctx context.Context, s suite, mem int) error {
+	output, passed, err := execute(ctx, s, strconv.Itoa(len(s.mutants)), mem, baselineMode)
 	if err != nil {
 		return fmt.Errorf("%w\n%s", err, output)
 	}
@@ -225,13 +258,15 @@ func positiveEnv(name string, fallback int) (int, error) {
 }
 
 func main() {
-	if err := run(); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := run(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "mutate-core:", err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
+func run(ctx context.Context) (runErr error) {
 	if len(os.Args) < 3 || len(os.Args) > 4 {
 		return errors.New("usage: mutatecore root core-package [max-survivors]")
 	}
@@ -252,12 +287,31 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	j, err := openJournal(root, pkg, os.Getenv("GOTOGETHER_MUTATION_LOG"))
+	if err != nil {
+		return fmt.Errorf("open campaign journal: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "mutation campaign records: %s\n", j.path)
+	executionComplete := false
+	defer func() {
+		if runErr != nil && !executionComplete {
+			if err := j.append("aborted", map[string]any{"error": runErr.Error()}); err != nil {
+				runErr = errors.Join(runErr, err)
+			}
+		}
+		if err := j.file.Close(); err != nil {
+			runErr = errors.Join(runErr, err)
+		}
+	}()
+	if err := j.append("start", map[string]any{"version": 1, "root": root, "package": pkg, "jobs": jobs, "mem_mb": memMB, "timeout_seconds": 300, "max_survivors": max}); err != nil {
+		return err
+	}
 	work, err := os.MkdirTemp("", "mutate-core-")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(work)
-	list := exec.Command("go", "list", "-json", "./"+pkg+"/...")
+	list := groupCommand(ctx, "go", "list", "-json", "./"+pkg+"/...")
 	list.Dir = root
 	list.Stderr = os.Stderr
 	output, err := list.Output()
@@ -274,11 +328,11 @@ func run() error {
 			return err
 		}
 		fmt.Fprintf(os.Stderr, "building mutation suite %s\n", s.pkg)
-		err := command(root, "go", "run", "-C", filepath.Join(root, "qweave"), "./cmd/qweave", "-C", root, "-mutate", "-coverpkg", "github.com/chucklehead-dev/gotogether/"+pkg, "go", "test", "-c", "-o", s.binary, s.pkg)
+		err := command(ctx, root, "go", "run", "-C", filepath.Join(root, "qweave"), "./cmd/qweave", "-C", root, "-mutate", "-coverpkg", coreModule+"/"+pkg, "go", "test", "-c", "-o", s.binary, s.pkg)
 		if err != nil {
 			return fmt.Errorf("%s: compile: %w", s.pkg, err)
 		}
-		output, passed, err := execute(*s, "list", memMB*1024, inventoryMode)
+		output, passed, err := execute(ctx, *s, "list", memMB*1024, inventoryMode)
 		if err != nil {
 			return fmt.Errorf("%s: inventory: %w", s.pkg, err)
 		}
@@ -289,13 +343,24 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", s.pkg, err)
 		}
+		if err := j.append("suite", suiteMetadata(i, *s)); err != nil {
+			return err
+		}
 		fmt.Fprintf(os.Stderr, "registered %d mutations in %s\n", len(s.mutants), s.pkg)
 	}
 	candidates, err := admit(suites, func(s suite) error {
 		started := time.Now()
 		fmt.Fprintf(os.Stderr, "checking unmutated baseline %s\n", s.pkg)
-		if err := baseline(s, memMB*1024); err != nil {
+		baselineErr := baseline(ctx, s, memMB*1024)
+		record := map[string]any{"package": s.pkg, "passed": baselineErr == nil}
+		if baselineErr != nil {
+			record["error"] = baselineErr.Error()
+		}
+		if err := j.append("baseline", record); err != nil {
 			return err
+		}
+		if baselineErr != nil {
+			return baselineErr
 		}
 		fmt.Fprintf(os.Stderr, "baseline passed %s (%s)\n", s.pkg, time.Since(started).Round(time.Millisecond))
 		return nil
@@ -303,46 +368,30 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	sources := make([]sourceRecord, len(candidates))
+	for i, c := range candidates {
+		sources[i] = sourceMetadata(c)
+	}
+	if err := j.append("admitted", map[string]any{"sources": sources, "suites": len(suites)}); err != nil {
+		return err
+	}
 	fmt.Fprintf(os.Stderr, "admitted %d source mutants across %d test suites\n", len(candidates), len(suites))
 	started := time.Now()
-	var progress sync.Mutex
-	completed := 0
-	tasks := make(chan int)
-	results := make([]bool, len(candidates))
-	errorsFound := make(chan error, len(candidates))
-	var wg sync.WaitGroup
-	for range jobs {
-		wg.Go(func() {
-			for i := range tasks {
-				passed, runErr := survives(candidates[i], func(t target) (bool, error) {
-					_, passed, err := execute(suites[t.suite], strconv.Itoa(t.id), memMB*1024, mutantMode)
-					if err != nil {
-						return false, fmt.Errorf("%s: %s source ordinal %d (local mutant %d): %w", suites[t.suite].pkg, candidates[i].file, candidates[i].ordinal, t.id, err)
-					}
-					return passed, nil
-				})
-				if runErr != nil {
-					errorsFound <- runErr
-				}
-				results[i] = passed
-				progress.Lock()
-				completed++
-				if completed%25 == 0 || completed == len(candidates) {
-					fmt.Fprintf(os.Stderr, "completed %d/%d source mutants (%s)\n", completed, len(candidates), time.Since(started).Round(time.Second))
-				}
-				progress.Unlock()
-			}
-		})
-	}
-	for i := range candidates {
-		tasks <- i
-	}
-	close(tasks)
-	wg.Wait()
-	close(errorsFound)
-	for err := range errorsFound {
+	results, err := runCampaign(ctx, candidates, jobs, max, func(ctx context.Context, t target) (bool, error) {
+		_, passed, err := execute(ctx, suites[t.suite], strconv.Itoa(t.id), memMB*1024, mutantMode)
+		if err != nil {
+			return false, fmt.Errorf("%s local mutant %d: %w", suites[t.suite].pkg, t.id, err)
+		}
+		return passed, nil
+	}, j, func(completed int) {
+		if completed%25 == 0 || completed == len(candidates) {
+			fmt.Fprintf(os.Stderr, "completed %d/%d source mutants (%s)\n", completed, len(candidates), time.Since(started).Round(time.Second))
+		}
+	})
+	if err != nil {
 		return fmt.Errorf("mutant execution: %w", err)
 	}
+	executionComplete = true
 	survivors := 0
 	for i, c := range candidates {
 		if results[i] {
@@ -351,6 +400,9 @@ func run() error {
 		}
 	}
 	fmt.Printf("%s: %d of %d mutants survived %d test suites\n", pkg, survivors, len(candidates), len(suites))
+	if ctx.Err() != nil {
+		return context.Cause(ctx)
+	}
 	if max >= 0 && survivors > max {
 		return fmt.Errorf("%d survivors exceed limit %d: review source mutations and missing behavioral controls", survivors, max)
 	}
