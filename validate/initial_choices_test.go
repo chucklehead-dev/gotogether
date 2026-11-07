@@ -255,10 +255,28 @@ func TestInitialChoicesRootBudgetAndDeduplication(t *testing.T) {
 }
 
 func TestInitialChoicesNoCallsStillChecksJointProperties(t *testing.T) {
-	c := initialChoicesChecker(t, initialChoicesBoth, "safe, nonPositive, phaseBounded", Options{})
-	r := initialChoicesOnly(t, c)
-	if r.Conforms != Pass || passed(r) || r.Choices == nil || r.Choices.Confirmation != "path_confirmed" {
-		t.Fatalf("initial-only conflicting properties passed: %+v", r)
+	for _, policy := range []string{"go", "quint", "shadow"} {
+		t.Run(policy, func(t *testing.T) {
+			c := initialChoicesChecker(t, initialChoicesBoth, "safe, nonPositive, phaseBounded", Options{Eval: policy})
+			r := initialChoicesOnly(t, c)
+			if r.Choices == nil || !r.Choices.Exhaustive || r.Steps != 0 || r.JudgedBy() != "evaluator" || r.OK() {
+				t.Fatalf("initial-only conflict lost its scope: %+v", r)
+			}
+			if policy == "go" {
+				if r.Conforms != Pass || r.Choices.Confirmation != "path_confirmed" || passed(r) {
+					t.Fatalf("Go enumeration lost its confirmed representative: %+v", r)
+				}
+			} else {
+				if r.Conforms != NotEvaluated || r.Choices.Confirmation != "not_performed" || !strings.Contains(r.Reason(), "independent confirmation") {
+					t.Fatalf("strict policy claimed an initial-only absence proof: %+v", r)
+				}
+				for _, inv := range r.Invariants {
+					if inv.Verdict != NotEvaluated {
+						t.Fatalf("unconfirmed property judgment: %+v", inv)
+					}
+				}
+			}
+		})
 	}
 }
 
