@@ -20,11 +20,11 @@ func TestOrderKeyIsInjective(t *testing.T) {
 }
 
 // The memo is what makes a search's candidates cheap: Linearize never
-// asks its check about an order it asked about before, nor about one that
-// extends a prefix the check rejected (an extension fails there too), nor
-// about an incomplete order an answer accepted (a prefix of an order that
-// failed later). A
-// memo that forgot either still found the same verdicts, so only this
+// asks its check about an exact order it asked about before, nor about one
+// that extends a prefix the check rejected (an extension fails there too).
+// A state-capable checker may be asked once for an inherited accepted prefix's
+// exact state; a verdict-only checker keeps its accepted-prefix shortcut.
+// A memo that forgot either still found the same verdicts, so only this
 // says it works. Random register histories, as the brute-force test's.
 func TestLinearizeAsksNothingTwice(t *testing.T) {
 	rng := rand.New(rand.NewPCG(3, 4))
@@ -61,7 +61,7 @@ func TestLinearizeAsksNothingTwice(t *testing.T) {
 			}
 			return b.String()
 		}
-		asked, rejected, accepted := map[string]bool{}, map[string]bool{}, map[string]bool{}
+		asked, rejected := map[string]bool{}, map[string]bool{}
 		check := func(orders [][]Step) ([]int, []string) {
 			fs, st := registerStates(orders)
 			for i, o := range orders {
@@ -75,19 +75,9 @@ func TestLinearizeAsksNothingTwice(t *testing.T) {
 						t.Errorf("trial %d: order %s asked, though its prefix %s was rejected", trial, k, id(o[:l]))
 					}
 				}
-				if accepted[k] && len(o) < len(steps) {
-					t.Errorf("trial %d: order %s asked, though an earlier answer accepted it", trial, k)
-				}
 				asked[k] = true
-				upTo := len(o)
-				if fs[i] >= 0 {
-					upTo = fs[i]
-					if fs[i] < len(o)-1 {
-						rejected[id(o[:fs[i]+1])] = true
-					}
-				}
-				for l := 1; l <= upTo; l++ {
-					accepted[id(o[:l])] = true
+				if fs[i] >= 0 && fs[i] < len(o)-1 {
+					rejected[id(o[:fs[i]+1])] = true
 				}
 			}
 			return fs, st

@@ -8,6 +8,10 @@ and adds a line here.
 
 ## Unreleased
 
+- History search recovers missing exact-prefix states within its existing
+  candidate allowance, enabling state-equivalent prefix merging without
+  repeated exact checks or borrowing longer-run states.
+
 - Linearization and pending-call resolution keep unsupported candidate checks
   inconclusive instead of treating them as rejected prefixes or absence proofs.
   Confirmed witnesses, actor scope and operational errors retain their meaning.

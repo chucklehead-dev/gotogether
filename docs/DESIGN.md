@@ -2985,7 +2985,13 @@ search, `qtrace.Linearize`'s check, the state read from a conforming
 candidate's ITF): concurrent operations that commute cost a prefix a
 set of them, not an order (five concurrent deposits: 146 orders, 456
 without). States are known only for orders quint checked whole, not for
-prefixes the memo accepted from a longer order, which are kept apart. Since T1a a call recorded with `qobs.Invoke` and `Call.Done` has
+prefixes the memo accepted from a longer order. When a state-capable checker
+has not checked that exact prefix, the search can request it once within the
+already-charged candidate attempt, enabling safe state merging. An unavailable
+state is remembered too; a longer order's final state is never substituted.
+The guided and complete phases each have the configured candidate allowance;
+attempt counts include memo decisions and can exceed actual checker calls.
+Since T1a a call recorded with `qobs.Invoke` and `Call.Done` has
 its interval from the recorder, and one recorder's steps are ordered by
 seq, exactly: in a simulation, where calls take no virtual time unless
 something sleeps, times alone made every call concurrent. The searches

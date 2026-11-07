@@ -53,8 +53,9 @@ func LinearizeByKey(arg string) Option {
 
 // LinearizeBudget is Linearize with a budget of n orders per actor (per
 // partition with LinearizeByKey; at least 1), for its guided search and as
-// many again for the complete one that follows it when it finds none: a run whose search ran out of validate.DefaultLinearizeBudget's says
-// to raise it.
+// many again for the complete one that follows it when it finds none. Memo
+// decisions count as attempts; actual checker evaluations may be fewer. A
+// bounded unknown result retains the run for replay and diagnosis.
 func LinearizeBudget(n int) Option {
 	if n < 1 {
 		panic(fmt.Sprintf("qtest: LinearizeBudget(%d): the budget is a number of orders to check, at least 1", n))
