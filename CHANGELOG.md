@@ -8,6 +8,10 @@ and adds a line here.
 
 ## Unreleased
 
+- Failed exploration claims with no verdict retain the responsible run's seed,
+  choices, history, corpus entry and navigation links. Diagnostics preserve the
+  unknown judgment and point to replay evidence before changing search bounds.
+
 - Strengthen trace encoder, clock-ordering and span-source regression controls;
   simplify redundant encoder checks and use the builtin minimum for clock gaps.
 

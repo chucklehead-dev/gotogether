@@ -9141,3 +9141,27 @@ load makes the sampled timings unsuitable for a speedup claim. This closes the
 trace gate, not the entire nightly. The scheduler's complete suite inventory
 contains 1,748 unique mutations, versus 1,092 linked into the old root binary;
 child-only sources stay in scope and the scheduler limit remains 22.
+
+
+## Retain unknown exploration evidence (2026-11-07)
+
+The wallet nightly reported one no-verdict run among 500 after exhausting the
+200-order linearization budget. Its unknown-only claim path emitted aggregate
+counts but skipped the normal run description and corpus save. Neither the
+exact seed nor its choices/history survived, so the original run cannot be
+recovered from that job. Raising a budget without the run would obscure the
+cause rather than diagnose it.
+
+Failed unknown-only claims now select the first run whose singleton judgment
+for the same claim is unjudged, then reuse the existing description, corpus,
+step-log, reproduction and navigation machinery. Selection is claim-specific:
+an unrelated missing model judgment does not replace a lifecycle claim's lost
+trace witness. The change preserves unknown conformance, backend provenance,
+claim outcomes and existing evidence JSON; it adds no format or policy.
+
+A bounded native regression exhausts a real search budget, retains one entry
+with the original choices/history, and replays that entry alone to the same
+unknown result. All/None lifecycle controls select the responsible run, and
+race checks pass. Removing the correction fails for the missing seed, corpus,
+history and navigation evidence. Wallet search behavior and budgets remain
+unchanged; the next diagnostic step needs a retained failing run.
