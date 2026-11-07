@@ -4,8 +4,8 @@ go 1.27.3
 
 require (
 	github.com/chucklehead-dev/gosim v0.0.0-20261105184451-66f95e073358
-	github.com/chucklehead-dev/gotogether v0.0.0-20261107211540-a6a3baa52914
-	github.com/chucklehead-dev/gotogether/qweave v0.0.0-20261107211540-a6a3baa52914
+	github.com/chucklehead-dev/gotogether v0.0.0-20261107213449-4a8a7f0988f3
+	github.com/chucklehead-dev/gotogether/qweave v0.0.0-20261107213449-4a8a7f0988f3
 )
 
 require (
