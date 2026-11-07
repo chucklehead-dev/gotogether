@@ -237,7 +237,7 @@ func (c Composition) Assess(ctx context.Context, steps []qtrace.Step) (out recei
 			p.Status, p.Reason = receipt.Error, e.Error()
 			errs = append(errs, e)
 		case len(search.Counterexample) > 0:
-			p.Status, p.Reason = receipt.Fail, "a causal ordering allowed by the collected history fails the system model"
+			p.Status, p.Reason = receipt.Fail, "all permitted causal orders must conform; a permitted ordering fails the system model"
 			for _, s := range search.Counterexample {
 				if !s.Settled {
 					p.Counterexample = append(p.Counterexample, receipt.Record{ID: validate.RecordID(&s), Actor: s.Actor, Action: s.Action})
@@ -247,9 +247,9 @@ func (c Composition) Assess(ctx context.Context, steps []qtrace.Step) (out recei
 			p.Status = receipt.NotChecked
 			p.Exhaustive = false
 		case !search.Exhaustive:
-			p.Status, p.Reason = receipt.Inconclusive, "causal-order limit exhausted before every ordering was checked"
+			p.Status, p.Reason = receipt.Inconclusive, "universal protocol claim undecided: causal-order limit exhausted before every permitted ordering was checked"
 		default:
-			p.Status, p.Reason = receipt.Pass, "every causal ordering of the collected history passed"
+			p.Status, p.Reason = receipt.Pass, "universal protocol claim established: every permitted causal ordering of the collected history passed"
 		}
 	}
 	return out, errors.Join(errs...)

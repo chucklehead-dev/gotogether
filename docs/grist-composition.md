@@ -100,6 +100,13 @@ definitive verdicts. A false verdict identifies a counterexample, while an
 unperformed or inconclusive check cannot supply one. A protocol omitted from
 the registration is visibly `not_checked`, with no protocol guarantee.
 
+A protocol `fail` refutes the universal claim over permitted causal orders:
+its counterexample is one order allowed by the evidence. Local conformance and
+the canonical protocol extension can both pass while that universal claim fails.
+The canonical extension is deterministic; it is not a measured cross-service
+total order. Check the native record IDs in the counterexample to identify the
+missing causal evidence or the model rule that disallows the order.
+
 This universal check differs from an existential linearization search, whose
 `goal: one_conforming_history` seeks one acceptable serialization. Neither
 proves behavior outside the collected history. Local or link success must not
