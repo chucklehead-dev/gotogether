@@ -157,7 +157,7 @@ func TestCheckerScratchRemovedByClose(t *testing.T) {
 func TestQuintProcessesBoundedProcessWide(t *testing.T) {
 	dir := t.TempDir()
 	fake := filepath.Join(dir, "quint")
-	script := "#!/bin/sh\nd=" + dir + "/running\nmkdir -p $d\ntouch $d/$$\nls $d | wc -l >> " + dir + "/seen\nsleep 0.2\nrm $d/$$\n"
+	script := "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 0.33.1; exit 0; fi\nd=" + dir + "/running\nmkdir -p $d\ntouch $d/$$\nls $d | wc -l >> " + dir + "/seen\nsleep 0.2\nrm $d/$$\n"
 	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}

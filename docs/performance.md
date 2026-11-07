@@ -885,3 +885,25 @@ identity, and deterministically replays an emitted step. The published fork is
 unchanged and GOEXPERIMENT is empty; normal encoding/json already includes
 jsontext/v2 in this admitted toolchain. No schema, persistent format, external
 dependency, fork hook or CPU-budget change is needed.
+
+
+## Quint runtime admission cost (2026-11-07)
+
+Two order-reversed local pairs compare the pre-admission core at c2ec62f4 with
+the runtime-gated implementation. Go test binaries were compiled before timing.
+Python `RUSAGE_CHILDREN` deltas measure waited descendant user plus system CPU;
+monotonic elapsed time measures wall time. Go 1.27.3, Node 22.23.4 and Quint
+0.33.1/evaluator 0.7.1 are the same in both variants. The canonical child
+environment removes NODE_PATH/NODE_OPTIONS, and model disk caching is off.
+
+| Workload, per process | Mean CPU before → after | Mean wall before → after |
+|---|---|---|
+| 20 native trace generations: existing terminal-sample TypeScript and constructor-name Rust controls, each repeated ten times | 16.351 → 17.403s (+6.4%) | 9.871 → 10.891s (+10.3%) |
+| Eight native mismatch validations, each with a fresh checker artifact directory and `Eval: "quint"` | 21.193 → 23.865s (+12.6%) | 11.312 → 13.710s (+21.2%) |
+
+All semantic assertions pass. Repeated generation amortizes the admission probe;
+fresh-checker work retains a measurable cost. These two local samples cannot
+predict hosted budgets tightly or establish a statistical regression threshold.
+No CPU budget or benchmark threshold is raised. Unknown interpreters and runtime
+overrides deliberately use uncached probes and need separate cost measurements;
+only the reviewed stock CLI/interpreter identity uses this optimization.

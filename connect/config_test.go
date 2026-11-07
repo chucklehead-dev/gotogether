@@ -71,6 +71,7 @@ func TestNumericPreflightBeforeTraceEffects(t *testing.T) {
 	t.Setenv("GOTOGETHER_CONNECT_PREFLIGHT_MARKER", marker)
 	quint := filepath.Join(root, "quint")
 	if err := os.WriteFile(quint, []byte(`#!/bin/sh
+if [ "$1" = --version ]; then echo 0.33.1; exit 0; fi
 printf called > "$GOTOGETHER_CONNECT_PREFLIGHT_MARKER"
 while [ "$#" -gt 0 ]; do
   if [ "$1" = --out-itf ]; then

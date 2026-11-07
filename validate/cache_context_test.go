@@ -62,7 +62,7 @@ func TestQuintVersionCancellationCanRetry(t *testing.T) {
 		t.Skip("fake Quint uses POSIX shell")
 	}
 	bin := filepath.Join(t.TempDir(), "quint")
-	if err := os.WriteFile(bin, []byte("#!/bin/sh\n: > \"$0.started\"\nsleep 30\n"), 0755); err != nil {
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n[ \"$1\" = --version ] || exit 2\n: > \"$0.started\"\nexec sleep 30\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
@@ -95,16 +95,16 @@ started:
 	case <-time.After(5 * time.Second):
 		t.Fatal("version cancellation did not return")
 	}
-	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho 0.33.retry\n"), 0755); err != nil {
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n[ \"$1\" = --version ] || exit 2\necho 0.33.1\n"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if v := quintVersion(t.Context(), bin); v != "0.33.retry" {
+	if v := quintVersion(t.Context(), bin); v != "0.33.1" {
 		t.Fatalf("retry version = %q", v)
 	}
 	if err := os.Remove(bin); err != nil {
 		t.Fatal(err)
 	}
-	if v := quintVersion(t.Context(), bin); v != "0.33.retry" {
+	if v := quintVersion(t.Context(), bin); v != "0.33.1" {
 		t.Fatalf("cached version = %q", v)
 	}
 }

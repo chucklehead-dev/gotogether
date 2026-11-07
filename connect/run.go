@@ -39,7 +39,7 @@ type Config struct {
 
 	Quint   string   // the quint binary (default $QUINT_BIN, else "quint")
 	Backend string   // --backend (default $QUINT_BACKEND, else quint's own default)
-	Args    []string // extra arguments for quint, e.g. --invariant
+	Args    []string // extra arguments for quint, e.g. --invariant; sampling counts use MaxSamples
 	Dir     string   // where traces are written (default a temp dir; t.TempDir() in Run and Test); one run's: its earlier traces are removed
 
 	// How to read the traces (see ReplayOptions).
@@ -93,6 +93,13 @@ func (c Config) FromEnv() (Config, error) {
 			return c, fmt.Errorf("connect: %s: %s", source, number.want)
 		}
 	}
+	for _, arg := range c.Args {
+		name, _, _ := strings.Cut(arg, "=")
+		switch name {
+		case "--max-samples", "--n-traces", "--maxSamples", "--nTraces":
+			return c, fmt.Errorf("connect: Config.Args %q overrides trace coverage: use Config.MaxSamples instead", arg)
+		}
+	}
 	if c.Backend == "" {
 		c.Backend = os.Getenv("QUINT_BACKEND")
 	}
@@ -102,7 +109,7 @@ func (c Config) FromEnv() (Config, error) {
 	return c, nil
 }
 
-func (c Config) resolve() (Config, error) {
+func (c Config) resolve(ctx context.Context) (Config, error) {
 	var err error
 	c, err = c.FromEnv()
 	if err != nil {
@@ -116,6 +123,13 @@ func (c Config) resolve() (Config, error) {
 		if runtime.GOOS == "windows" {
 			c.Quint = "quint.cmd"
 		}
+	}
+	spec, err := filepath.Abs(c.Spec)
+	if err != nil {
+		return c, err
+	}
+	if err := quintcmd.Require(ctx, c.Quint, filepath.Dir(spec)); err != nil {
+		return c, err
 	}
 	if c.MaxSamples == 0 {
 		c.MaxSamples = 100
@@ -155,9 +169,10 @@ func (e *QuintError) Error() string {
 func (e *QuintError) Unwrap() error { return e.Err }
 
 // GenerateRun runs `quint run --mbt` and returns the trace files, in order,
-// and the resolved config (with the seed used).
+// and the resolved config (with the seed used). An incomplete batch returns
+// its partial files and an error instead of claiming MaxSamples were generated.
 func GenerateRun(ctx context.Context, c Config) ([]string, Config, error) {
-	c, err := c.resolve()
+	c, err := c.resolve(ctx)
 	if err != nil {
 		return nil, c, err
 	}
@@ -185,7 +200,7 @@ func GenerateRun(ctx context.Context, c Config) ([]string, Config, error) {
 // returns its trace files. Such traces carry no mbt:: variables: replay
 // them with Config.NondetPath, or validate them instead (package validate).
 func generateTest(ctx context.Context, c Config, test string) ([]string, Config, error) {
-	c, err := c.resolve()
+	c, err := c.resolve(ctx)
 	if err != nil {
 		return nil, c, err
 	}
@@ -221,6 +236,9 @@ func quint(ctx context.Context, c Config, args []string, prefix string) ([]strin
 	}
 	files, _ := filepath.Glob(filepath.Join(c.Dir, prefix+"*.itf.json"))
 	sort.Slice(files, func(i, j int) bool { return seqOf(files[i]) < seqOf(files[j]) })
+	if prefix == "run_" && len(files) != c.MaxSamples {
+		return files, &QuintError{Args: args, Output: string(out), Err: fmt.Errorf("incomplete trace batch: generated %d trace files for %d requested samples; partial files remain in %s", len(files), c.MaxSamples, c.Dir)}
+	}
 	if len(files) == 0 {
 		return nil, &QuintError{Args: args, Output: string(out), Err: errors.New("no traces were generated: check the spec and the configuration")}
 	}

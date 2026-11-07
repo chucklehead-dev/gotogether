@@ -94,7 +94,7 @@ func TestCacheAcrossProcesses(t *testing.T) {
 	// another quint version: a wrapper that says another
 	real, _ := exec.LookPath("quint")
 	other := filepath.Join(t.TempDir(), "quint")
-	script := "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 0.0.0-other; exit 0; fi\necho \"$1\" >> '" + log + "'\nexec '" + real + "' \"$@\"\n"
+	script := "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 0.33.2; exit 0; fi\necho \"$1\" >> '" + log + "'\nexec '" + real + "' \"$@\"\n"
 	if err := os.WriteFile(other, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}

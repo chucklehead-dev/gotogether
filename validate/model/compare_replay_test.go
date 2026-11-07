@@ -24,7 +24,7 @@ func comparisonFakeSource(t *testing.T, script string) *GraphResult {
 	t.Setenv("HOME", t.TempDir())
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "quint")
-	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"+script), 0o755); err != nil {
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nif [ \"$1\" = --version ]; then echo 0.33.1; exit 0; fi\n"+script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	b := &binding.Binding{Spec: filepath.Join(dir, "source.qnt"), Module: "source"}

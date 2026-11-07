@@ -81,13 +81,29 @@ func TestModelAnalysisSignalCancelsCompiler(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
 	for range 2 {
+		// The holder participates in the same version protocol as Quint,
+		// then occupies its workload slot until cancellation.
+		bin := filepath.Join(t.TempDir(), "quint")
+		script := "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 0.33.1; exit 0; fi\n: > \"$0.started\"\nexec sleep 3600\n"
+		if err := os.WriteFile(bin, []byte(script), 0700); err != nil {
+			t.Fatal(err)
+		}
 		ctx, cancel := context.WithCancel(t.Context())
-		holder := quintcmd.Command(ctx, "sleep", "", "3600")
+		holder := quintcmd.Command(ctx, bin, "", "hold")
 		if err := holder.Start(); err != nil {
 			cancel()
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { cancel(); _ = holder.Wait() })
+		for deadline := time.Now().Add(5 * time.Second); ; {
+			if _, err := os.Stat(bin + ".started"); err == nil {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("pool holder never reached its workload")
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
 	}
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
 	for _, command := range []string{"simulate", "model-diff"} {

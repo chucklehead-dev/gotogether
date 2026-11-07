@@ -186,7 +186,7 @@ unsupported candidate returns an error rather than pruning it or falling back.
 `-manifest`, bundle and replay retain the artifact and search settings. Pending-call
 resolution and ITF inputs remain refused. A stale artifact (another binding, a changed
 source, an evaluation module this gotogether writes otherwise, a later
-format, quint before 0.32) is refused with the fix, `gotogether
+format, quint before 0.33.1) is refused with the fix, `gotogether
 compile`. `gotogether doctor -compiled stock.model.json` checks it ahead.
 A source of the model absent where it runs is not checked, and the
 report says so.

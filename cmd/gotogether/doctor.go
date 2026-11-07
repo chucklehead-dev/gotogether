@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"debug/buildinfo"
 	"encoding/json"
 	"fmt"
@@ -13,9 +14,11 @@ import (
 	"runtime/debug"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/formats"
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/validate"
 	"github.com/chucklehead-dev/gotogether/woven"
 )
@@ -338,14 +341,18 @@ func quintPieces() []piece {
 	}
 	bin, err := exec.LookPath("quint")
 	if err != nil {
-		q.version, q.note = "not installed", "npm i -g @informalsystems/quint; tests that need it skip"
+		q.version, q.note = "not installed", "npm i -g @informalsystems/quint@"+quintcmd.MinimumVersion+"; tests that need it skip"
 		ev.version = "-"
 		return []piece{q, ev, node}
 	}
-	out, _ := exec.Command(bin, "--version").Output()
-	q.version = strings.TrimSpace(string(out))
-	if !validate.QuintSupported(q.version) {
-		q.skew = fmt.Sprintf("quint %s is older than the 0.32 gotogether needs: npm i -g @informalsystems/quint@0.33.0 (or the Action's quint-version)", q.version)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	version, versionErr := quintcmd.Version(ctx, bin, "")
+	q.version = version
+	if versionErr != nil {
+		q.skew = fmt.Sprintf("cannot determine quint version: %v; install @informalsystems/quint@%s", versionErr, quintcmd.MinimumVersion)
+	} else if !quintcmd.Supported(q.version) {
+		q.skew = fmt.Sprintf("quint %q is unsupported; gotogether needs a stable version >= %s: npm i -g @informalsystems/quint@%s (or the Action's quint-version)", q.version, quintcmd.MinimumVersion, quintcmd.MinimumVersion)
 	}
 	want := evaluatorOf(bin)
 	if want == "" {

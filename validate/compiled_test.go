@@ -206,8 +206,11 @@ func TestCompiledStaleRefused(t *testing.T) {
 		{"format", "gotogether.model/2 is a later version", func(t *testing.T, _, cp string) {
 			editModel(t, cp, func(m map[string]any) { m["format"] = "gotogether.model/2" })
 		}},
-		{"quint", "older than the 0.32", func(t *testing.T, _, cp string) {
-			editModel(t, cp, func(m map[string]any) { m["quint"] = "0.31.0" })
+		{"quint-before-floor", `unsupported quint "0.33.0"`, func(t *testing.T, _, cp string) {
+			editModel(t, cp, func(m map[string]any) { m["quint"] = "0.33.0" })
+		}},
+		{"quint-prerelease", `unsupported quint "0.33.2-rc.1"`, func(t *testing.T, _, cp string) {
+			editModel(t, cp, func(m map[string]any) { m["quint"] = "0.33.2-rc.1" })
 		}},
 		{"nothing", "", func(*testing.T, string, string) {}},
 	} {

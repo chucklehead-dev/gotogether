@@ -565,6 +565,18 @@ is open, in docs/ROADMAP.md.
 
 ### 9.1 `connect` and quint-connect
 
+Managed Quint work requires a complete stable CLI version at or above 0.33.1.
+The older 0.33.0 release can silently omit short sampled runs, so selecting a
+backend does not bypass admission. Version inspection remains available for
+unsupported installations so doctor can name the problem and fix. The same
+floor applies to compiled-model metadata; recompile older artifacts. This is a
+CLI support policy, separate from the installer's checksum verification of the
+current Rust evaluator pair. Historical measurements retain their original pins.
+`GenerateRun` requires its requested trace count on success; an incomplete batch
+returns partial files with an error. Sampling counts are configured through
+`MaxSamples`, not extra arguments. File counts do not establish state coverage;
+native retention controls separately require the sampled short and long runs.
+
 `connect` follows the Rust crate's model:
 - Quint generates traces with `quint run --mbt` (`Run`) or `quint test`
   (`Test`).
@@ -5371,7 +5383,7 @@ evaluator alone. What that may claim:
   gotogether writes otherwise for the binding (an older toolkit's vals
   or expects: the module is written again and compared, text for text),
   a later format (`gotogether.model/1`, the current only: a breaking
-  change makes it another check), a quint older than 0.32. A source
+  change makes it another check), a quint older than 0.33.1. A source
   that is absent is not checked: a canary's image carries the binding
   and the artifact, not the model; the report warns that it took the
   artifact's hash for it.

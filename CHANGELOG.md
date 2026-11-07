@@ -13,6 +13,12 @@ and adds a line here.
   webjobs shadow explicitly checks recorded journeys and mutants. Normal-mode
   summary formatting is isolated from inherited evaluator policies.
 
+- Managed Quint work and compiled models require stable Quint 0.33.1 or later,
+  preventing 0.33.0's silent trace-coverage loss. Doctor shares the same support
+  policy and reports failed version probes with an upgrade instruction.
+  Connect admits the tool before trace cleanup, rejects sampling-count overrides
+  in extra arguments, and reports incomplete batches with their retained files.
+
 - Hegel's verdict cache does not turn a selected invariant failure or a
   finite-choice search into rejection of every run sharing its prefix. Exact
   runs remain cached; deterministic conformance failures retain prefix reuse.

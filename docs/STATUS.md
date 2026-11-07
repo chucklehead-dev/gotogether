@@ -42,6 +42,7 @@ pins from the checked-in go.mod files, not from historical handoff paragraphs.
 
 | Area | Current boundary |
 |---|---|
+| Quint admission | Managed runtime work and compiled models require stable Quint 0.33.1 or later. CLI support and installer verification of evaluator bytes are distinct checks. |
 | Verdict caching | Exact-run Hegel caching remains; a selected invariant path or finite-choice search is not a rejected-prefix certificate. |
 | History checking | Repeated same-key appends retain operation order and atomic visibility; the independent serialization oracle covers multiple appends per writer. |
 | CI | Per-PR checks and nightly are separate admission surfaces. Nightly is known red. FaultOrders now checks corpus regressions separately from scripted attempts; shadow campaign/fixture isolation is corrected. Browser setup, remaining mutation survivors, benchmark regressions and verifier completion are tracked blockers. |

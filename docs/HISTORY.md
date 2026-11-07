@@ -8984,3 +8984,43 @@ agreements, no disagreements or refusals). Command controls execute the actual
 workflow snippets under inherited seed overrides. Browser-image compatibility,
 remaining mutation survivors, benchmarks and verifier completion remain open;
 this is not admission of the entire nightly suite.
+
+## Quint runtime admission (2026-11-07)
+
+The twelfth review found that the documented 0.32 floor admitted Quint 0.33.0,
+whose trace retention can silently reduce the generated workload. Managed work
+now requires a complete stable CLI version at or above 0.33.1. Version
+inspection still reports unsupported installations; doctor and compiled-model
+metadata use the same predicate. Live model caches do not bypass admission, and
+connect checks the tool before creating or clearing trace directories. Offline
+compiled checks need no installed CLI but refuse unsupported compiler metadata.
+
+A probe releases its shared command slot before a workload acquires one, and
+uses the existing process-group cancellation. The actual probe has a bounded
+execution budget; caller cancellation bounds queueing. Parallel artifact controls
+found an early implementation incorrectly charged queueing to the ten-second
+probe budget. The corrected boundary passes the unchanged tests. Failed and
+cancelled probes do not become cached successes.
+
+A native version probe costs roughly 0.43–0.86 seconds on this environment.
+Reuse is restricted to the reviewed stock CLI entry and constant version source,
+package metadata, the reviewed Node binary digest and environment. Unknown
+wrappers and interpreters are probed each time. A native proxy counterexample
+showed that executable format alone cannot establish interpreter identity.
+A native control fills both command slots and admits the same stock tool from a fresh model directory; a script Node
+control changes the version by directory and must reject the unsupported one.
+This cache is a CLI support optimization, not verification of Rust evaluator
+bytes; paired evaluator checksum admission remains the installer's contract.
+
+Fake compiler and command fixtures implement the actual version protocol and
+retain separate work markers. Cancellation, retry, occupied-slot and cache
+controls still require their original work to occur; unsupported tools cannot
+pass merely by preventing the tested operation. Published integrations receive
+one aligned core-pin update because they need this shared admission behavior.
+The newly reachable semver import also needs dependency sums in every live
+local-replacement module. CI found that tidying only published modules missed
+those graphs; the full CI module roster is now independently tidy-checked.
+
+The [bounded runtime-cost comparison](performance.md#quint-runtime-admission-cost-2026-11-07)
+measures descendant CPU as well as wall time with builds excluded. Admission has
+measurable cost; the two local pairs do not justify rebasing hosted budgets.

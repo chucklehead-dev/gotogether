@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"strconv"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
@@ -47,10 +46,6 @@ import (
 
 // CompiledFormat is the format Compile writes and LoadCompiled reads.
 const CompiledFormat = "gotogether.model/1"
-
-// minQuint is the oldest quint whose IR the evaluator reads (AGENTS.md:
-// quint 0.32 or later). Read-only.
-var minQuint = [3]int{0, 32, 0}
 
 // compiledEvalDir is where, beside the model's main file, the
 // evaluation module is written for the import its text names: one
@@ -210,8 +205,8 @@ func (cm *CompiledModel) Write(path string) error {
 }
 
 // LoadCompiled reads a compiled model (Compile's), refusing another
-// format or a later major than this gotogether reads, and a quint older
-// than the evaluator reads.
+// format or a later major than this gotogether reads, and a Quint version
+// outside the current stable admission policy.
 func LoadCompiled(path string) (*CompiledModel, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -225,7 +220,7 @@ func LoadCompiled(path string) (*CompiledModel, error) {
 		return nil, fmt.Errorf("compiled model %s: %w", path, err)
 	}
 	if !QuintSupported(cm.Quint) {
-		return nil, fmt.Errorf("compiled model %s: compiled with quint %q, older than the %d.%d the Go evaluator reads: compile it again with a newer quint (gotogether compile)", path, cm.Quint, minQuint[0], minQuint[1])
+		return nil, fmt.Errorf("compiled model %s: compiled with unsupported quint %q; use stable Quint %s or later and compile it again (gotogether compile)", path, cm.Quint, quintcmd.MinimumVersion)
 	}
 	if cm.Eval == nil || len(cm.IR) == 0 || len(cm.Typecheck) == 0 {
 		return nil, fmt.Errorf("compiled model %s holds no model (no typecheck, evaluation module or IR): compile it again (gotogether compile)", path)
@@ -235,37 +230,14 @@ func LoadCompiled(path string) (*CompiledModel, error) {
 	return &cm, nil
 }
 
-// QuintSupported reports whether quint version v (`quint --version`'s)
-// is one gotogether reads: 0.32 or later.
-func QuintSupported(v string) bool { return quintAtLeast(v, minQuint) }
+// QuintSupported reports whether v is a stable CLI version at or above the
+// current admission floor. Prereleases are not admitted.
+func QuintSupported(v string) bool { return quintcmd.Supported(v) }
 
 // CacheDir is the directory of the cache of quint's typechecks and
 // compiles across processes, by content ("" when GOTOGETHER_CACHE=off):
 // a CI job keeps it between runs (docs/ci.md).
 func CacheDir() string { return cacheRoot() }
-
-// quintAtLeast reports whether quint version v ("0.33.0") is min or later.
-func quintAtLeast(v string, min [3]int) bool {
-	parts := strings.SplitN(strings.TrimPrefix(strings.TrimSpace(v), "v"), ".", 3)
-	if len(parts) < 2 {
-		return false
-	}
-	var got [3]int
-	for i, p := range parts {
-		p, _, _ = strings.Cut(p, "-")
-		n, err := strconv.Atoi(p)
-		if err != nil {
-			return false
-		}
-		got[i] = n
-	}
-	for i := range got {
-		if got[i] != min[i] {
-			return got[i] > min[i]
-		}
-	}
-	return true
-}
 
 // compiledState is a compiled checker's: the artifact, its evaluator,
 // and what its loading noted (sources not checked).
