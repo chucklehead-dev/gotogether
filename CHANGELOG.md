@@ -8,6 +8,10 @@ and adds a line here.
 
 ## Unreleased
 
+- Protocol receipts, aggregate reasons and TUI summaries explicitly scope the
+  claim to all permitted causal orders of the collected history. Local checks
+  remain separate; a failing permitted order refutes the universal claim.
+
 - Finite-choice judgments retain their actual evaluator provenance in JSON,
   receipts and saved manifests. Strict Quint and shadow policies return no
   verdict for Go-only negative proofs; a confirmed witness proves existence,

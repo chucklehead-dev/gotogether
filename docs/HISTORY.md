@@ -9034,3 +9034,10 @@ policy retains exhaustive negative judgments with accurate provenance. Native
 individual/batch controls count actual workload launches and check receipts,
 JSON, saved manifests and Hegel exact-run versus prefix caching. Existing
 negative enumeration oracles explicitly select Go; strict policy controls remain.
+
+Protocol composition keeps its existing universal quantifier and statuses, but
+names the claim in shared text/TUI receipts and aggregate reasons. Its native
+two-order control independently passes the canonical extension and local checks,
+then rejects another permitted order; that canonical extension is not claimed
+as an observed cross-service total order. Bounds and native counterexample IDs
+remain visible in JSON.
