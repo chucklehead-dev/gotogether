@@ -9256,3 +9256,26 @@ baseline campaign; the complete inventory and full gate on the improved suite
 remain pending. Separately, the original wallet seed range
 20764001–20764500 passes all 500 runs after exact-prefix-state recovery
 (670.564s), with unchanged search allowances.
+
+### 2026-11-07 — HTTP body ownership and complete framing
+
+Direct RoundTrip controls now observe request-body release after successful
+serialization, source I/O failure and preflight rejection. They retain source
+error identity, valid host:port fallback, and handler suppression for genuine
+preflight failures. Source-read failure may reach a streaming handler; the test
+does not require atomic buffering before delivery. Body closure is checked after
+the simulated scenario settles, allowing managed asynchronous cleanup.
+
+Flushed streams and large responses are read with both exact-byte and nil-error
+assertions. The previous byte-only check could accept complete application data
+while a missing chunk terminator or final CRLF produced io.ErrUnexpectedEOF.
+A fresh woven baseline passes and all ten targeted mutations are killed. The
+full HTTP package passes invariant-checked race/shuffle testing twice (4.770s);
+the final reviewed controls also pass repeated race and fresh native controls.
+No production code, mutation allowance or test-process limit changes.
+
+The earlier scheduler run stopped without a terminal record at 1,436 of 1,748
+source outcomes, retaining 124 survivors. Its interruption cause remains
+unconfirmed. These partial results prove that baseline cannot pass the limit
+of 22, but are not a complete inventory or a result for the improved tests.
+Detached supervision is being checked before another long campaign.
