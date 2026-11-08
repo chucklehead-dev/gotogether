@@ -104,6 +104,7 @@ func Load(r io.Reader) (Policy, error) {
 		return Policy{}, fmt.Errorf("policy exceeds 16 MiB")
 	}
 	d := json.NewDecoder(strings.NewReader(string(b)))
+	d.UseNumber()
 	if err := uniqueJSON(d, "policy"); err != nil {
 		return Policy{}, err
 	}
@@ -123,6 +124,16 @@ func uniqueJSON(d *json.Decoder, schema string) error {
 	t, err := d.Token()
 	if err != nil {
 		return err
+	}
+	if schema == "ordinal" {
+		n, ok := t.(json.Number)
+		if !ok {
+			return fmt.Errorf("policy: review ordinal must be an explicit non-null integer")
+		}
+		if _, err := n.Int64(); err != nil {
+			return fmt.Errorf("policy: review ordinal must be an explicit integer: %w", err)
+		}
+		return nil
 	}
 	if delim, ok := t.(json.Delim); ok {
 		switch delim {
@@ -145,6 +156,9 @@ func uniqueJSON(d *json.Decoder, schema string) error {
 				if err := uniqueJSON(d, child); err != nil {
 					return err
 				}
+			}
+			if schema == "review" && !seen["ordinal"] {
+				return fmt.Errorf("policy: review requires explicit ordinal")
 			}
 		case '[':
 			for d.More() {
@@ -187,7 +201,9 @@ func jsonField(schema, key string) (string, bool) {
 		return "scalar", true
 	case "review":
 		switch key {
-		case "file", "ordinal", "descriptor", "source_sha256", "kind", "rationale", "evidence":
+		case "ordinal":
+			return "ordinal", true
+		case "file", "descriptor", "source_sha256", "kind", "rationale", "evidence":
 			return "scalar", true
 		}
 	}

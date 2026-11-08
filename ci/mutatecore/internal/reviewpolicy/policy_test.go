@@ -265,3 +265,25 @@ func TestReviewsMustResolveWithinOwnPrefix(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewOrdinalMustBeExplicitInteger(t *testing.T) {
+	p, _ := fixture(t)
+	b, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := string(b)
+	if !strings.Contains(original, `"ordinal":0`) {
+		t.Fatal("fixture must exercise first-site ordinal zero")
+	}
+	loaded, err := Load(strings.NewReader(original))
+	if err != nil || loaded.Packages["lib"][0].Ordinal != 0 {
+		t.Fatalf("explicit zero rejected: %v", err)
+	}
+	for _, replacement := range []string{"", `"ordinal":null,`, `"ordinal":"0",`, `"ordinal":0.0,`, `"ordinal":true,`, `"ordinal":[],`, `"ordinal":{},`} {
+		bad := strings.Replace(original, `"ordinal":0,`, replacement, 1)
+		if _, err := Load(strings.NewReader(bad)); err == nil {
+			t.Fatalf("accepted incomplete/noninteger identity %s", replacement)
+		}
+	}
+}
