@@ -42,15 +42,17 @@ func accountService() http.Handler {
 // withdrawal of 1 it makes as the service's client would (on return, on
 // the scenario's goroutine): a step of the client side, in the same run
 // as the handlers'.
-func drive(t testing.TB, url string, amount int) {
+// Each server owns its client transport: closing a parallel httptest server
+// closes the process-wide default transport's idle connections too.
+func drive(t testing.TB, client *http.Client, url string, amount int) {
 	for range 5 {
-		resp, err := http.Post(fmt.Sprintf("%s/deposit?amount=%d", url, amount), "", nil)
+		resp, err := client.Post(fmt.Sprintf("%s/deposit?amount=%d", url, amount), "", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		resp.Body.Close()
 	}
-	resp, err := http.Get(url + "/balance")
+	resp, err := client.Get(url + "/balance")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +76,7 @@ func TestRecordHTTPServiceInParallel(t *testing.T) {
 				Record(t, account, func(rec *qobs.Recorder) {
 					srv := httptest.NewServer(qobshttp.Handler(accountService(), rec))
 					defer srv.Close()
-					drive(t, srv.URL, amount)
+					drive(t, srv.Client(), srv.URL, amount)
 				}, opts()...).Expect(t, Conforms())
 			})
 		}
@@ -86,7 +88,7 @@ func TestRecordHTTPServiceInParallel(t *testing.T) {
 		Record(f, account, func(*qobs.Recorder) {
 			srv := httptest.NewServer(accountService())
 			defer srv.Close()
-			drive(f, srv.URL, 3)
+			drive(f, srv.Client(), srv.URL, 3)
 		}, opts()...)
 	}()
 	<-done
