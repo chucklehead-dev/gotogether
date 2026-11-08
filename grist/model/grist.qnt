@@ -57,11 +57,15 @@ module grist {
   // head, and no event after readPos matches a read of the set. Part of
   // every conditioned commit's precondition, a refusal's included, with
   // the read set the step recorded.
-  pure def conditionHolds(log: List[Event], readPos: int, reads: Set[Read]): bool = and {
-    0 <= readPos,
-    readPos <= log.length(),
-    log.indices().forall(i => i < readPos or reads.forall(r => not(matches(log[i], r)))),
-  }
+  // At the head every log index is earlier than readPos. Keep this inside
+  // the function so callers still evaluate all three arguments normally.
+  pure def conditionHolds(log: List[Event], readPos: int, reads: Set[Read]): bool =
+    if (readPos == log.length()) true
+    else and {
+      0 <= readPos,
+      readPos <= log.length(),
+      log.indices().forall(i => i < readPos or reads.forall(r => not(matches(log[i], r)))),
+    }
 
   // an event of typ tagged key=value exists in log
   pure def existsTagged(log: List[Event], typ: str, key: str, value: str): bool =
