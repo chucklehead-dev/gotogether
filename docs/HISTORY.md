@@ -9279,3 +9279,22 @@ source outcomes, retaining 124 survivors. Its interruption cause remains
 unconfirmed. These partial results prove that baseline cannot pass the limit
 of 22, but are not a complete inventory or a result for the improved tests.
 Detached supervision is being checked before another long campaign.
+
+
+### 2026-11-08: complete scheduler audit and consumer handoff controls
+
+The frozen scheduler mutation audit at ea4ac8e7 completed all seven baselines
+and 1,748 mutation outcomes: 120 survivors, zero execution errors. Its actual
+exit was 1 because the unchanged survivor limit is 22. All 27 previously added
+store, choice and HTTP controls killed their targeted mutations. This run
+predates the SQL callback controls and the consumer controls below; their
+focused results do not retroactively change the complete audit.
+
+Deterministic simlog tests now force named consumer eviction and crash a
+consumer process independently. They check stale-commit fencing, unchanged
+committed offsets and callbacks on rejection, surviving-consumer ownership,
+and exact replay of both partitions from their committed offsets. The named
+fault must actually be consumed. All seven targeted lifecycle mutations
+(per-file ordinals 0, 1, 2, 27, 28, 29 and 31) fail behavioral assertions; the
+woven baseline and native race/shuffle controls pass. No production behavior,
+approvals, or mutation thresholds change. A fresh full gate is still required.
