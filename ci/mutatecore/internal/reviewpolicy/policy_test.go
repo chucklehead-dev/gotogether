@@ -210,8 +210,6 @@ func TestDiagnosticsCannotChangeVerdict(t *testing.T) {
 	unexpected, killed := d.Unexpected(), d.NewlyKilled()
 	unexpected[0] = Identity{}
 	killed[0] = Outcome{}
-	unexpected = unexpected[:0]
-	killed = killed[:0]
 	if d.Passed() || len(d.Unexpected()) != 1 || len(d.NewlyKilled()) != 1 || d.Unexpected()[0] != y || d.NewlyKilled()[0].KillingSuite != "first witness" {
 		t.Fatalf("diagnostic mutation altered result: %+v", d)
 	}
