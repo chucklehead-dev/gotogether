@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -107,7 +108,9 @@ func TestSimulationProgressBeforeCancellation(t *testing.T) {
 		deadline := time.Now().Add(time.Second)
 		for {
 			stat, err := os.ReadFile(statPath)
-			if errors.Is(err, os.ErrNotExist) {
+			// procfs can lose the process after opening its stat file and
+			// return ESRCH instead of ENOENT when init reaps the worker.
+			if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ESRCH) {
 				break
 			}
 			if err != nil {
