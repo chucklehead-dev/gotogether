@@ -126,7 +126,7 @@ func TestSimulationProgressBeforeCancellation(t *testing.T) {
 }
 
 func TestVerifiedPossibleProgressAndDiagnosticScope(t *testing.T) {
-	source := comparisonFakeSource(t, "echo 'native stdout'\necho 'native stderr' >&2\necho '[violation]'\nexit 1\n")
+	source := comparisonFakeSource(t, "echo 'native stderr' >&2\n"+nativeFakeScript(nativeCexJSON, nativeCexITF, 1, "native stdout [violation]"))
 	var progress bytes.Buffer
 	ctx := context.WithValue(t.Context(), simulationProgressKey{}, &simulationProgress{w: &progress, binding: "one.yaml"})
 	c := &possibleCheck{p: binding.Possible{Name: "reachable"}, when: "true", not: "not_reachable"}
@@ -165,7 +165,7 @@ func TestDiagnosticWriteFailureDoesNotChangeNativeResult(t *testing.T) {
 }
 
 func TestSimulationProgressCompletedAndSkipped(t *testing.T) {
-	source := comparisonFakeSource(t, "echo \"native argv: $*\"\n")
+	source := comparisonFakeSource(t, nativeFakeScript(nativeProofJSON, "", 0, "native argv"))
 	dir := filepath.Dir(source.checker.Binding.Spec)
 	if err := os.WriteFile(source.checker.Binding.Spec, []byte("module source { var x: int\naction init = x' = 0\naction step = x' = x\nval safe = true\nval other = true\n}\n"), 0600); err != nil {
 		t.Fatal(err)

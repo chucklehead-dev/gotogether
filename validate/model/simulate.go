@@ -65,7 +65,8 @@ func (c *modelChecker) Simulate(ctx context.Context, opt SimulateOptions) (*Repo
 // SimulateOptions choose Simulate's checks and bounds. Every zero value
 // is the binding's simulate section's, else its default.
 type SimulateOptions struct {
-	// Progress receives live phase progress and native Quint diagnostics.
+	// Progress receives live phase progress and any emitted Quint diagnostics.
+	// Structured native verification suppresses Quint's inner checker console.
 	// Nil is silent. Write errors are ignored; diagnostics are not evidence.
 	// Callers sharing a writer between simulations must synchronize it.
 	Progress io.Writer
@@ -437,9 +438,7 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 		argv := []string{"run", file, "--main", "simulate", "--invariant", inv,
 			"--max-steps", fmt.Sprint(steps), "--max-samples", fmt.Sprint(samples), "--seed", opt.Seed}
 		var hosting *hostedSample
-		if verify > 0 {
-			argv = []string{"verify", "--main", "simulate", "--invariant", inv, "--max-steps", fmt.Sprint(verify), file}
-		} else {
+		if verify <= 0 {
 			argv = backendArgs(argv)
 			if inv == hostInv {
 				traces := filepath.Join(dir, "traces-host")
@@ -453,9 +452,19 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 			}
 		}
 		done := progress.phase("invariant " + inv)
-		out, err := runQuint(ctx, opt.Quint, dir, argv)
+		var out string
+		var err error
+		violated := false
+		if verify > 0 {
+			var native nativeVerification
+			native, err = verifyNative(ctx, opt.Quint, dir, file, inv, verify)
+			out, violated = native.diagnostic, native.violated
+		} else {
+			out, err = runQuint(ctx, opt.Quint, dir, argv)
+			violated = strings.Contains(out, "[violation]")
+		}
 		status := phaseStatus(ctx, err)
-		if ctx.Err() == nil && !isAnalysisCancellation(err) && strings.Contains(out, "[violation]") {
+		if ctx.Err() == nil && !isAnalysisCancellation(err) && violated {
 			status = "completed"
 		}
 		done(status)
@@ -465,16 +474,19 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 		if canceled := ctx.Err(); canceled != nil {
 			return nil, canceled
 		}
-		violated := strings.Contains(out, "[violation]")
 		if hosting != nil && err == nil && !violated {
 			hosting.out, host = out, hosting
 		}
 		if err != nil && !violated {
-			if strings.Contains(out, "Name 'step' not found") {
+			if strings.Contains(out, "Name 'step' not found") || verify > 0 && strings.Contains(err.Error(), "Name 'step' not found") {
 				return nil, fmt.Errorf("simulate: %s has no step action to run on its own: add one that picks among its actions, "+
 					"or say why not (simulate.skip: a replay-only model)", b.Module)
 			}
-			return nil, fmt.Errorf("simulate: quint %s --invariant %s: %w\n%s", argv[0], inv, err, out)
+			command := argv[0]
+			if verify > 0 {
+				command = "verify"
+			}
+			return nil, fmt.Errorf("simulate: quint %s --invariant %s: %w\n%s", command, inv, err, out)
 		}
 		v := Verdict{Name: inv, Class: classOf(inv, holds, allows), Held: !violated, Violated: violated, Bound: bound}
 		if violated {
