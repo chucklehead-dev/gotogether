@@ -22,8 +22,39 @@ func TestMutant(t *testing.T) {
 	if _, caught, ok := gristtest.DroppedRule(App); ok {
 		// a rule dropped (drop-capacity, generated): an addition past the
 		// capacity commits where the model's guard (capacityRefusal) refuses
-		// it, a Rejects of the command it guards (TestFull is the contrast)
-		system(commits, fill).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 3}).Expect(t, caught)
+		// it. The rule still reads: the first addition must be accepted by
+		// the model, then the second rejected for the guard's full outcome,
+		// not an incidental missing read (TestFull is the contrast).
+		x := system(commits, fill).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 1})
+		x.Expect(t, caught)
+		for _, run := range x.Runs {
+			if run.Report == nil {
+				t.Fatal("capacity mutant produced no model report")
+			}
+			found := false
+			for _, actor := range run.Report.Actors {
+				f := actor.Failure
+				if f == nil || f.Step == nil || f.Step.Action != "addItem" {
+					continue
+				}
+				found = true
+				if f.Index < 0 || f.Index >= len(actor.Calls) {
+					t.Fatalf("invalid failing call index %d", f.Index)
+				}
+				accepted := 0
+				for _, call := range actor.Calls[:f.Index] {
+					if call.Action == "addItem" {
+						accepted++
+					}
+				}
+				if accepted != 1 {
+					t.Fatalf("capacity mutant rejected after %d accepted additions, want exactly one", accepted)
+				}
+			}
+			if !found {
+				t.Fatal("capacity mutant produced no rejected addition")
+			}
+		}
 		return
 	}
 	switch mutant {
