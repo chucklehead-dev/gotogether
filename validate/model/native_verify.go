@@ -17,6 +17,10 @@ import (
 	"github.com/chucklehead-dev/gotogether/itf"
 )
 
+// Owned native verification uses one fixed Apalache invariant-checking policy.
+// After mode retains bounded proof/refutation semantics but can use more memory.
+const nativeApalacheConfig = `{"checker":{"tuning":{"search.invariant.mode":"after"}}}`
+
 type nativeVerification struct {
 	violated   bool
 	diagnostic string
@@ -56,12 +60,16 @@ func verifyNativeInvariants(ctx context.Context, quint, dir, file string, invari
 		return nativeVerification{}, err
 	}
 	defer os.RemoveAll(work)
+	configFile := filepath.Join(work, "apalache.json")
+	if err := os.WriteFile(configFile, []byte(nativeApalacheConfig), 0600); err != nil {
+		return nativeVerification{}, fmt.Errorf("write owned native configuration: %w", err)
+	}
 	resultFile, traceFile := filepath.Join(work, "result.json"), filepath.Join(work, "trace.itf.json")
-	argv := []string{"verify", file, "--main", "simulate", "--invariant", invariant, "--max-steps", fmt.Sprint(steps), "--out", resultFile, "--out-itf", traceFile}
+	argv := []string{"verify", file, "--main", "simulate", "--invariant", invariant, "--max-steps", fmt.Sprint(steps), "--out", resultFile, "--out-itf", traceFile, "--apalache-config", configFile}
 	if len(invariants) > 1 {
 		// --invariants is variadic: keep the input file and all other options
 		// before its members, so none can be interpreted as another invariant.
-		argv = []string{"verify", file, "--main", "simulate", "--max-steps", fmt.Sprint(steps), "--out", resultFile, "--out-itf", traceFile, "--invariants"}
+		argv = []string{"verify", file, "--main", "simulate", "--max-steps", fmt.Sprint(steps), "--out", resultFile, "--out-itf", traceFile, "--apalache-config", configFile, "--invariants"}
 		argv = append(argv, invariants...)
 	}
 	out, commandErr := runQuint(ctx, quint, dir, argv)

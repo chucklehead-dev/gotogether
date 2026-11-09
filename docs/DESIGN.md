@@ -7033,3 +7033,24 @@ shutdown before the next constructor. Helper processes check actual child
 failure/cleanup and first-divergence stopping, replacing fake testing.TB fatal
 interception. The existing KV run now peaks at one server with none remaining.
 Bank and two-phase callers use the current factory directly.
+
+
+## 108. One owned native invariant-checking policy
+
+Native scalar safety checks, grouped holds and verified predicate possibles all
+use `verifyNativeInvariants`. Each invocation now writes its own mode-0600
+Apalache config inside the private work directory, setting only
+`checker.tuning.search.invariant.mode` to `after`. The config argument precedes
+variadic invariant names and is removed with the invocation's other artifacts.
+There is no model/count heuristic, alternate mode flag or retry policy.
+
+This is a scheduling policy, not a different invariant or proof bound. Existing
+structured stage/exit/error/ITF checks still decide proof, counterexample or no
+verdict. Cancellation wins over published artifacts. A grouped counterexample
+still requires individual member checks; predicate verification still inverts
+its negation. Successful proofs continue to assume defined source expressions.
+
+After mode can use more memory; no memory, step or wall-clock allowance changes
+accompany this policy. The [dated qualification](HISTORY.md#2026-11-09-adopt-one-owned-after-mode-native-policy)
+records representative completion evidence and its limits; it does not establish
+a controlled speedup or full-nightly recovery.

@@ -1,0 +1,126 @@
+package model
+
+import (
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/chucklehead-dev/gotogether/binding"
+)
+
+// A fake producer inspects the actual owned config while the command is alive.
+// Proof/error/cancellation classification stays with the existing strict tests.
+func TestNativeOwnedAfterPolicy(t *testing.T) {
+	for _, group := range []bool{false, true} {
+		name := "scalar"
+		if group {
+			name = "group"
+		}
+		t.Run(name, func(t *testing.T) {
+			metadata := filepath.Join(t.TempDir(), "config-evidence")
+			quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'" }
+			script := `policy=''
+previous=''
+for arg do
+ if [ "$previous" = --apalache-config ]; then policy=$arg; fi
+ previous=$arg
+done
+cp -p "$policy" ` + quote(metadata+".config") + ` || exit 42
+printf '%s' "$policy" > ` + quote(metadata+".path") + `
+printf '%s\0' "$@" > ` + quote(metadata+".argv") + `
+` + nativeFakeScript(nativeProofJSON, "", 0, "policy inspected")
+			source := comparisonFakeSource(t, script)
+			dir := t.TempDir()
+			var err error
+			if group {
+				_, err = verifyNativeGroup(t.Context(), source.checker.Options.Quint, dir, "unused.qnt", []string{"a", "b"}, 2)
+			} else {
+				_, err = verifyNative(t.Context(), source.checker.Options.Quint, dir, "unused.qnt", "a", 2)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			read := func(suffix string) []byte {
+				t.Helper()
+				raw, err := os.ReadFile(metadata + suffix)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return raw
+			}
+			if raw := string(read(".config")); raw != `{"checker":{"tuning":{"search.invariant.mode":"after"}}}` {
+				t.Fatalf("unexpected policy: %s", raw)
+			}
+			info, err := os.Stat(metadata + ".config")
+			if err != nil || info.Mode().Perm() != 0600 {
+				t.Fatalf("config mode changed: %v %v", info, err)
+			}
+			path := string(read(".path"))
+			if filepath.Base(path) != "apalache.json" || !strings.HasPrefix(filepath.Base(filepath.Dir(path)), "native-verify-") {
+				t.Fatalf("not owned per invocation: %s", path)
+			}
+			if _, err := os.Stat(path); !os.IsNotExist(err) {
+				t.Fatalf("owned config survived command: %v", err)
+			}
+			entries, err := os.ReadDir(dir)
+			if err != nil || len(entries) != 0 {
+				t.Fatalf("owned workdir leaked: %v %v", entries, err)
+			}
+			argv := strings.Split(strings.TrimSuffix(string(read(".argv")), "\x00"), "\x00")
+			at := slices.Index(argv, "--apalache-config")
+			if at < 0 || argv[at+1] != path || slices.Contains(argv[at+1:], "--apalache-config") {
+				t.Fatalf("config not supplied exactly once: %v", argv)
+			}
+			if group {
+				end := slices.Index(argv, "--invariants")
+				if end <= at || strings.Join(argv[end+1:], ",") != "a,b" {
+					t.Fatalf("variadic arguments changed: %v", argv)
+				}
+			}
+		})
+	}
+}
+
+// Opt-in complements the scalar producer controls with the same actual pinned
+// backend, without a config-injecting wrapper or parallel SMT invocations.
+func TestNativeAfterGroupedAndPossiblePinnedProducer(t *testing.T) {
+	if os.Getenv("GOTOGETHER_NATIVE_VERIFY") != "1" {
+		t.Skip("set GOTOGETHER_NATIVE_VERIFY=1 for tiny pinned native confirmations")
+	}
+	dir := t.TempDir()
+	file := filepath.Join(dir, "tiny.qnt")
+	source := `module simulate {
+ var x: int
+ action init = x' = 0
+ action step = x' = x + 1
+ val nonnegative = x >= 0
+ val bounded = x <= 2
+ val zero = x == 0
+ val not_reachable = not(x >= 1)
+ }`
+	if err := os.WriteFile(file, []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := verifyNativeGroup(t.Context(), "quint", dir, file, []string{"nonnegative", "bounded"}, 2)
+	if err != nil || result.violated {
+		t.Fatalf("group proof: %+v %v", result, err)
+	}
+	// A conjunction counterexample proves no particular member false. The
+	// existing production fallback therefore leaves both scalar checks required.
+	proved, err := proveNativeHolds(t.Context(), "quint", dir, file, []string{"nonnegative", "zero"}, map[string]bool{"nonnegative": true, "zero": true}, 2)
+	if err != nil || len(proved) != 0 {
+		t.Fatalf("group counterexample misattributed: %v %v", proved, err)
+	}
+	for _, name := range []string{"nonnegative", "zero"} {
+		result, err := verifyNative(t.Context(), "quint", dir, file, name, 2)
+		if err != nil || result.violated != (name == "zero") {
+			t.Fatalf("fallback %s: %+v %v", name, result, err)
+		}
+	}
+	possible := &possibleCheck{p: binding.Possible{Name: "reachable"}, when: "x >= 1", not: "not_reachable"}
+	if err := quintPossibles(t.Context(), "quint", dir, file, []*possibleCheck{possible}, 2, 1, "1", 2, nil); err != nil || !possible.quintFound {
+		t.Fatalf("predicate inversion: found=%v err=%v", possible.quintFound, err)
+	}
+}

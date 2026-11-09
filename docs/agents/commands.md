@@ -133,6 +133,11 @@ AGENTS.md has the general requirements.
   proof when there are at least two distinct members. A conjunction counterexample
   triggers individual checks of every member; backend errors yield no member
   proof. `allows`, unclassified invariants and possibility checks stay separate.
+  Owned native verification uses Apalache's fixed
+  `search.invariant.mode=after` policy for scalar invariants, grouped holds and
+  verified predicate possibles. Each invocation owns and removes its config;
+  there is no user mode flag or automatic retry. This changes search scheduling,
+  can use more memory, and leaves bounds, skips and process budgets unchanged.
   Native proofs assume defined model expressions: Quint declares out-of-range indexing
   undefined, and a successful backend result does not diagnose it. A skipped
   binding may exit 0 without checking anything; partial solver output is not a
