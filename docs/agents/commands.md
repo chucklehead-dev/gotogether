@@ -125,8 +125,12 @@ AGENTS.md has the general requirements.
   any emitted Quint diagnostics, to stderr; `-json` keeps one final report on stdout.
   Bounded verification reads Quint's structured result and ITF counterexample;
   Quint's `--out` suppresses its inner checker console, so those runs retain the
-  parent phase starts/completions rather than per-state checker lines. Native
-  proofs assume defined model expressions: Quint declares out-of-range indexing
+  parent phase starts/completions rather than per-state checker lines.
+  `holds` checks for one prepared binding and effective bound share a conjunction
+  proof when there are at least two distinct members. A conjunction counterexample
+  triggers individual checks of every member; backend errors yield no member
+  proof. `allows`, unclassified invariants and possibility checks stay separate.
+  Native proofs assume defined model expressions: Quint declares out-of-range indexing
   undefined, and a successful backend result does not diagnose it. A skipped
   binding may exit 0 without checking anything; partial solver output is not a
   completed verdict. Library callers opt in with `model.SimulateOptions.Progress`.
