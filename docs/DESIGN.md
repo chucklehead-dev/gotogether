@@ -7033,3 +7033,30 @@ shutdown before the next constructor. Helper processes check actual child
 failure/cleanup and first-divergence stopping, replacing fake testing.TB fatal
 interception. The existing KV run now peaks at one server with none remaining.
 Bank and two-phase callers use the current factory directly.
+
+
+## 108. One owned native invariant-checking policy
+
+Native scalar safety checks, grouped holds and verified predicate possibles all
+use `verifyNativeInvariants`. Each invocation now writes its own mode-0600
+Apalache config inside the private work directory, setting only
+`checker.tuning.search.invariant.mode` to `after`. The config argument precedes
+variadic invariant names and is removed with the invocation's other artifacts.
+There is no model/count heuristic, alternate mode flag or retry policy.
+
+This is a scheduling policy, not a different invariant or proof bound. Existing
+structured stage/exit/error/ITF checks still decide proof, counterexample or no
+verdict. Cancellation wins over published artifacts. A grouped counterexample
+still requires individual member checks; predicate verification still inverts
+its negation. Successful proofs continue to assume defined source expressions.
+
+On frozen source 46fe3b5e, one counters experiment at the existing bound eight
+completed both invariants under after mode: 3,204.82 seconds in the native call,
+3,238.16 seconds overall (about 54 minutes), actual exit zero and no remaining
+owned processes or input drift. The same frozen default-mode reference did not
+complete within its 7,200-second allowance. This is representative bounded
+completion evidence, not a controlled speedup or full-nightly pass. After mode
+can use more memory; the observed Java high-water mark was about 3.125 GiB and
+the Go process about 2.528 GiB, separate peaks that must not be summed or compared
+with the sparsely sampled reference as a measured memory increase. No memory,
+step or wall-clock allowance changes accompany this policy.

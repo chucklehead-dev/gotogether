@@ -9342,3 +9342,22 @@ The survivor count gate, memory cap and 300-second production timeout are
 unchanged. No mutation campaign or SMT work was run. The separate draft journal
 reader still needs to adopt this exact additive producer shape before integration;
 these internal execution records do not establish behavioral mutation kills.
+
+
+### 2026-11-09: adopt one owned after-mode native policy
+
+The frozen 46fe3b5e counters experiment completed both existing invariants through
+bound eight with Apalache after mode: native exit zero, 3,204.82 seconds native
+and 3,238.16 seconds overall, no input drift or remaining owned processes. The
+same-source default reference remained incomplete at 7,200 seconds. This supports
+one bounded completion result, not a speedup ratio or full-nightly recovery.
+Tiny before/after controls retained proofs, initial/step counterexamples, mixed
+group fallback and frontend-error rejection; frontend errors are not solver
+unknown controls. Java and Go high-water marks were separate observations, not a
+combined peak or controlled comparison.
+
+Owned native invocations now set only search.invariant.mode=after in private
+mode-0600 config files. The common helper covers scalar/grouped invariants and
+verified predicate possibles without new flags, schema fields, heuristic retries,
+skips or budget changes. The mode can use more memory. Strict structured verdict
+validation and the defined-source limitation remain in place.
