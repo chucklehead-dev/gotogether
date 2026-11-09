@@ -306,6 +306,7 @@ jobs:
         run: |
           go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
           GOTOGETHER_VERIFY=1 go test -count=1 -run TestSimulateVerify ./cmd/gotogether
+          GOTOGETHER_NATIVE_VERIFY=1 go test -count=1 -run '^TestNativeManagedToolIdentity$' ./validate/model
           mapfile -d '' -t bindings < <(git ls-files -z 'examples/*binding*.yaml' 'examples/**/*binding*.yaml' | sort -zu)
           args=()
           for b in "${bindings[@]}"; do

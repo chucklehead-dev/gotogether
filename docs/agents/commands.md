@@ -135,8 +135,8 @@ AGENTS.md has the general requirements.
   proof within this operation. JSON checks retain `nativeProof` with its producer
   binding, exact request/source/tool/configuration digests, ordered group and
   bound. A reused proof does not replace any binding's other checks. Unknowns,
-  errors and counterexamples never seed reuse; custom or unaccounted toolchains
-  run uncached. No persistent proof cache or new report format is introduced.
+  errors and counterexamples never seed reuse. Backend ownership must be observed
+  for a producing call; custom, unaccounted or unobserved backends run uncached. No persistent proof cache or new report format is introduced.
   `simulate` writes live binding/phase starts and elapsed completion status, plus
   any emitted Quint diagnostics, to stderr; `-json` keeps one final report on stdout.
   Bounded verification reads Quint's structured result and ITF counterexample;

@@ -9425,3 +9425,15 @@ typed proof provenance; errors, counterexamples and cancellation do not seed
 reuse. Repeated CLI bindings stop at the first failed analysis or report delivery;
 per-binding report files are unique. Nightly retains its same tracked binding
 selection, pretest, bounds and two-hour total, now within one invocation.
+
+Final ownership review found that stock Quint can attach to an already-running
+server before launching its installed backend. Installed-file hashes alone
+therefore do not establish which backend executed a proof. Cache-eligible
+producing calls now request a private endpoint and require observed socket,
+process-group, executable and jar ownership before publishing reuse metadata.
+Unknown ownership preserves ordinary strict verification but creates no reusable
+proof. This is local process accounting, not hostile-host authentication.
+The nightly checks managed-tool eligibility after its existing backend pretest,
+so tool upgrades that disable its expected reuse fail early rather than silently
+spending the whole verification budget. The binding selection and total budget
+are unchanged.

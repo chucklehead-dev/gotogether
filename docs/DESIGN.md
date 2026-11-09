@@ -7070,7 +7070,11 @@ those observers retain their own frontend validation and evaluation. A reuse key
 contains the canonical constructed invariant input, complete captured model
 source inventory, ordered holds group, effective bound, fixed native configuration
 and accounted local tool closure. Guards are checked around publication and reuse.
-Only a strictly classified positive group proof enters the store. Counterexamples
+Only a strictly classified positive group proof enters the store, after a
+read-only observer sees the configured Java executable and jar own the private
+backend endpoint's listening sockets inside the invocation's process group.
+An existing unrelated server or unavailable ownership observation cannot seed
+reuse. The observer and endpoint reservation close on every completion path. Counterexamples
 still require per-member fallback; errors and cancellation establish no reusable
 proof. Unsupported/custom tool layouts run normally without reuse. Source guards
 and local tool inventories are change detection, not hostile-host authentication
