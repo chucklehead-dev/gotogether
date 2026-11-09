@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
@@ -163,7 +164,10 @@ func modelDocCheck(v Verdict, kind string) validate.DocCheck {
 	if v.Lasso != nil && v.Lasso.Prefix != nil {
 		detail += "\n" + lassoText(v.Name, EventualVerdict{Name: v.Name, Lasso: v.Lasso})
 	}
-	return validate.DocCheck{Name: v.Name, Kind: kind, Verdict: verdict, Detail: detail, Bound: &validate.DocBound{Kind: v.Bound.Kind, States: v.Bound.States, Depth: v.Bound.Depth, Traces: v.Bound.Traces, Steps: v.Bound.Steps, Stopped: v.Bound.Stopped, Proves: v.Bound.Proves()}}
+	if v.NativeProof != nil && v.NativeProof.Reused {
+		detail += fmt.Sprintf("; reused exact bounded native proof from %s (request %s)", v.NativeProof.ProducerBinding, v.NativeProof.RequestSHA256)
+	}
+	return validate.DocCheck{NativeProof: v.NativeProof.Clone(), Name: v.Name, Kind: kind, Verdict: verdict, Detail: detail, Bound: &validate.DocBound{Kind: v.Bound.Kind, States: v.Bound.States, Depth: v.Bound.Depth, Traces: v.Bound.Traces, Steps: v.Bound.Steps, Stopped: v.Bound.Stopped, Proves: v.Bound.Proves()}}
 }
 
 func possibleGoalDoc(g PossibleGoal) *validate.DocPossibleGoal {

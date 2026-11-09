@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"iter"
 	"maps"
 	"os"
 	"path/filepath"
@@ -52,6 +53,33 @@ func Simulate(ctx context.Context, bindingPath string, opt SimulateOptions) (*Re
 		return nil, err
 	}
 	return simulate(ctx, bindingPath, nil, nil, opt)
+}
+
+// SimulateMany checks bindings sequentially and yields their independent reports.
+// It stops after the first error or nonzero report, cancellation, or an early
+// stop by its consumer. Each iteration owns an isolated, nonpersistent store of
+// exact positive native group proofs; unsupported tool identities do not reuse.
+// One graph output path cannot be shared by multiple binding requests.
+func SimulateMany(ctx context.Context, bindingPaths []string, opt SimulateOptions) iter.Seq2[*Report, error] {
+	return simulateMany(ctx, slices.Clone(bindingPaths), opt, resolveNativeToolIdentity)
+}
+
+func simulateMany(ctx context.Context, paths []string, opt SimulateOptions, identity nativeToolResolver) iter.Seq2[*Report, error] {
+	return func(yield func(*Report, error) bool) {
+		if len(paths) > 1 && opt.Out != "" {
+			yield(nil, fmt.Errorf("simulate: multiple bindings require separate graph output paths"))
+			return
+		}
+		session := newNativeProofSession(identity)
+		defer clear(session.proofs)
+		ctx := context.WithValue(ctx, nativeProofSessionKey{}, session)
+		for _, path := range paths {
+			report, err := Simulate(ctx, path, opt)
+			if !yield(report, err) || err != nil || report.Code != 0 {
+				return
+			}
+		}
+	}
 }
 
 // Simulate is Simulate of c's binding, with c's model and evaluator.
@@ -145,7 +173,9 @@ type Report struct {
 // verdict: Error or Unchecked says why). Held is a proof only as far as
 // Bound goes (Bound.Proves).
 type Verdict struct {
-	Name string
+	// NativeProof is exact session-local positive proof provenance, if eligible.
+	NativeProof *validate.NativeProof
+	Name        string
 	// Class is the simulate section's: "holds", "allows", or "" for
 	// unclassified.
 	Class            string
@@ -342,6 +372,13 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 			return nil, fmt.Errorf("simulate: %s's simulate section lists %s in both holds and allows", bpath, n)
 		}
 	}
+	var originalSources *validate.SourceGuard
+	if session, _ := ctx.Value(nativeProofSessionKey{}).(*nativeProofSession); session != nil && opt.Verify > 0 {
+		originalSources, err = validate.CaptureModelSources(b.SpecPath())
+		if err != nil {
+			return nil, err
+		}
+	}
 	var possibles []*possibleCheck
 	if len(possibleList) > 0 || opt.Graph {
 		// the possibles need the model's actions (a name alone is a step
@@ -372,16 +409,44 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 		return nil, err
 	}
 	defer os.RemoveAll(dir)
-	file := filepath.Join(dir, "simulate.qnt")
-	src, err := simulationModule(b, overrides, file)
+	baseFile := filepath.Join(dir, "simulate.qnt")
+	src, err := simulationModule(b, overrides, baseFile)
 	if err != nil {
 		return nil, err
 	}
-	if vals := possibleVals(possibles); vals != "" {
-		src = strings.TrimSuffix(src, "}\n") + vals + "}\n"
-	}
-	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+	if err := os.WriteFile(baseFile, []byte(src), 0600); err != nil {
 		return nil, err
+	}
+	file := baseFile
+	var observed string
+	if vals := possibleVals(possibles); vals != "" {
+		// Only constructor-owned observer declarations are separated. Authored defs
+		// stay in the invariant context, without textual stripping or interpretation.
+		file = filepath.Join(dir, "observers.qnt")
+		observed = strings.TrimSuffix(src, "}\n") + vals + "}\n"
+		if err := os.WriteFile(file, []byte(observed), 0600); err != nil {
+			return nil, err
+		}
+
+	}
+	if session, _ := ctx.Value(nativeProofSessionKey{}).(*nativeProofSession); session != nil && opt.Verify > 0 {
+		canonicalPath := filepath.Join(filepath.Dir(b.SpecPath()), "__gotogether_native_context.qnt")
+		canonical, err := simulationModule(b, overrides, canonicalPath)
+		if err != nil {
+			return nil, err
+		}
+		request, err := captureNativeProofRequest(session, originalSources, baseFile, file, src, observed, canonical, bpath)
+		if err != nil {
+			return nil, err
+		}
+		ctx = context.WithValue(ctx, nativeProofRequestKey{}, request)
+	}
+	if opt.Verify > 0 && file != baseFile {
+		// Separating observers must not bypass the frontend validation previously
+		// performed by the invariant command, including collisions with authored defs.
+		if out, err := runQuint(ctx, opt.Quint, dir, []string{"typecheck", file}); err != nil {
+			return nil, fmt.Errorf("simulate: observer precheck: %w\n%s", err, out)
+		}
 	}
 	prepared("completed")
 	steps, samples, verify := opt.Steps, opt.Samples, opt.Verify
@@ -432,7 +497,7 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 	if verify > 0 {
 		bound = Bound{Kind: "verified", Steps: verify}
 	}
-	proved, err := proveNativeHolds(ctx, opt.Quint, dir, file, invariants, holds, verify)
+	proved, err := proveNativeHolds(ctx, opt.Quint, dir, baseFile, invariants, holds, verify)
 	if err != nil {
 		return nil, err
 	}
@@ -467,7 +532,7 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 				}
 			} else {
 				var native nativeVerification
-				native, err = verifyNative(ctx, opt.Quint, dir, file, inv, verify)
+				native, err = verifyNative(ctx, opt.Quint, dir, baseFile, inv, verify)
 				out, violated = native.diagnostic, native.violated
 			}
 		} else {
@@ -500,10 +565,18 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 			return nil, fmt.Errorf("simulate: quint %s --invariant %s: %w\n%s", command, inv, err, out)
 		}
 		v := Verdict{Name: inv, Class: classOf(inv, holds, allows), Held: !violated, Violated: violated, Bound: bound}
+		if proved[inv] {
+			if request, _ := ctx.Value(nativeProofRequestKey{}).(*nativeProofRequest); request != nil {
+				v.NativeProof = request.proof.Clone()
+			}
+		}
 		if violated {
 			v.Trace = out
 		}
 		s.rep.Invariants = append(s.rep.Invariants, v)
+		if v.NativeProof != nil && v.NativeProof.Reused {
+			s.printf("  proof   %s: reused exact bounded native proof from %s (request %s)\n", inv, v.NativeProof.ProducerBinding, v.NativeProof.RequestSHA256)
+		}
 		switch {
 		case holds[inv] && !violated && verify > 0:
 			s.printf("  holds   %s: no trace of up to %d steps violates it\n", inv, verify)

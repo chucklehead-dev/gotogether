@@ -25,6 +25,31 @@ func proveNativeHolds(ctx context.Context, quint, dir, file string, invariants [
 	if len(members) < 2 {
 		return nil, nil
 	}
+	var token nativeProofToken
+	if request, _ := ctx.Value(nativeProofRequestKey{}).(*nativeProofRequest); request != nil {
+		var hit bool
+		var err error
+		token, hit, err = request.prepare(ctx, quint, members, steps)
+		if err != nil {
+			return nil, err
+		}
+		if hit {
+			if err := token.verify(ctx, quint); err != nil {
+				return nil, err
+			}
+			proved := make(map[string]bool, len(members))
+			for _, name := range members {
+				proved[name] = true
+			}
+			if p := progressOf(ctx); p != nil && p.w != nil {
+				fmt.Fprintf(p.w, "simulate %s: invariant batch reuses exact positive native proof from %s\n", p.binding, request.proof.ProducerBinding)
+			}
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			return proved, nil
+		}
+	}
 	done := progressOf(ctx).phase("invariant batch " + strings.Join(members, ", "))
 	result, err := verifyNativeGroup(ctx, quint, dir, file, members, steps)
 	done(phaseStatus(ctx, err))
@@ -34,12 +59,16 @@ func proveNativeHolds(ctx context.Context, quint, dir, file string, invariants [
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if err := token.verify(ctx, quint); err != nil {
+		return nil, err
+	}
 	if result.violated {
 		if progress := progressOf(ctx); progress != nil && progress.w != nil {
 			fmt.Fprintf(progress.w, "simulate %s: invariant batch %s has a counterexample; checking all members individually\n", progress.binding, strings.Join(members, ", "))
 		}
 		return nil, nil
 	}
+	token.publish(members, steps)
 	proved := make(map[string]bool, len(members))
 	for _, name := range members {
 		proved[name] = true

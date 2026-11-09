@@ -2531,6 +2531,7 @@ type DocBound struct
     field Stopped string `json:"stopped,omitempty"`
     field Proves bool `json:"proves"`
 type DocCheck struct
+    field NativeProof *NativeProof `json:"nativeProof,omitempty"`
     field Possible *DocPossible `json:"possible,omitempty"`
     field Bound *DocBound `json:"bound,omitempty"`
     field Name string `json:"name"`
@@ -2837,6 +2838,16 @@ type Manifest struct
 type NamedValue struct
     field Name string `json:"name"`
     field Value string `json:"value"`
+type NativeProof struct
+    field ProducerBinding string `json:"producerBinding"`
+    field RequestSHA256 string `json:"requestSHA256"`
+    field SourceSHA256 string `json:"sourceSHA256"`
+    field ToolchainSHA256 string `json:"toolchainSHA256"`
+    field ConfigurationSHA256 string `json:"configurationSHA256"`
+    field Invariants []string `json:"invariants"`
+    field Steps int `json:"steps"`
+    field Reused bool `json:"reused"`
+    method (*NativeProof) Clone() *NativeProof
 type NavStart struct
     field Steps []qtrace.Step
     field Actor string
@@ -2974,6 +2985,7 @@ type SearchOptions struct
     field Skew time.Duration
 type SourceGuard struct
     method (*SourceGuard) Export(ctx context.Context, dir string) (*SourceSnapshot, error)
+    method (*SourceGuard) Files() ([]File, error)
     method (*SourceGuard) Verify() error
 type SourceSnapshot struct
     field Spec File
@@ -3128,6 +3140,7 @@ func ExportComparison(ctx context.Context, comparison *Comparison, dir string) e
 func For(c *validate.Checker) *Analyzer
 func New(ctx context.Context, bindingPath string, opt validate.Options) (*Analyzer, error)
 func Simulate(ctx context.Context, bindingPath string, opt SimulateOptions) (*Report, error)
+func SimulateMany(ctx context.Context, bindingPaths []string, opt SimulateOptions) iter.Seq2[*Report, error]
 type ActionCoverage struct
     field Action string
     field Transitions int
@@ -3351,6 +3364,7 @@ type StepActionReachability struct
     field Actions []ActionCoverage
     field Bound Bound
 type Verdict struct
+    field NativeProof *validate.NativeProof
     field Name string
     field Class string
     field Held bool

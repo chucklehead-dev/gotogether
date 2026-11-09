@@ -1219,6 +1219,43 @@
           "name": {
             "type": "string"
           },
+          "nativeProof": {
+            "additionalProperties": false,
+            "properties": {
+              "configurationSHA256": {
+                "type": "string"
+              },
+              "invariants": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "producerBinding": {
+                "type": "string"
+              },
+              "requestSHA256": {
+                "type": "string"
+              },
+              "reused": {
+                "type": "boolean"
+              },
+              "sourceSHA256": {
+                "description": "SourceSHA256 covers the canonical invariant input and its full captured source inventory; framework-owned goal observers are excluded.",
+                "type": "string"
+              },
+              "steps": {
+                "type": "integer"
+              },
+              "toolchainSHA256": {
+                "type": "string"
+              }
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
           "possible": {
             "additionalProperties": false,
             "description": "Possible retains native reachability evidence, including incomplete searches.",

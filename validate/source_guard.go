@@ -43,3 +43,16 @@ func (c *Checker) CapturedModelSources() (*SourceGuard, error) {
 	}
 	return &SourceGuard{spec: c.source.model.Spec.Path, files: slices.Clone(c.source.files)}, nil
 }
+
+// Files returns an independently owned, path-sorted inventory of the captured
+// model sources, after verifying that their bytes and inventory remain unchanged.
+// A nil or uncaptured guard has no source identity and is refused.
+func (g *SourceGuard) Files() ([]File, error) {
+	if g == nil || len(g.files) == 0 {
+		return nil, fmt.Errorf("model source capture: no captured source inventory")
+	}
+	if err := g.Verify(); err != nil {
+		return nil, err
+	}
+	return slices.Clone(g.files), nil
+}

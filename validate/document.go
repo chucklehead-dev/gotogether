@@ -215,6 +215,7 @@ type DocPartition struct {
 // "allows", "bounded", "unchecked" or "fail"), a possible's ("reached",
 // "fail") or the graph's (its deadlocks, the actions it never enables).
 type DocCheck struct {
+	NativeProof *NativeProof `json:"nativeProof,omitempty"`
 	// Possible retains native reachability evidence, including incomplete searches.
 	Possible *DocPossible `json:"possible,omitempty"`
 	// Bound states what this model check covers, independently of its display detail.
