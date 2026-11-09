@@ -9437,3 +9437,18 @@ The nightly checks managed-tool eligibility after its existing backend pretest,
 so tool upgrades that disable its expected reuse fail early rather than silently
 spending the whole verification budget. The binding selection and total budget
 are unchanged.
+
+### Native session roster qualification, 2026-11-09
+
+The frozen `42c5696294d80ff72135477030dce113a99fb4d6` roster retained all
+51 bindings, bound 8 and the original 7,200-second total allowance. Build,
+backend pretest and managed-tool admission passed. Ten bindings exited zero
+(nine passes and one intentional eventual-only skip); real and retiring counters
+reused the original two-member positive proof, with four property records and
+no typed provenance-reference errors. The eleventh binding, edgepublish, stopped
+on `sealMatchesManifests`: its counterexample representations disagreed at state
+1, `simulate::edgePublish::writer`. The remaining 40 bindings are unknown.
+Elapsed time was 4,003.81 seconds, with no deadline excess or remaining owned
+processes. This is neither a complete roster qualification nor a green nightly.
+The raw temporary counterexample was not retained; a focused reproduction is
+needed to diagnose the decoder boundary without weakening strict validation.
