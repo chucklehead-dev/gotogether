@@ -50,14 +50,41 @@ func proveNativeHolds(ctx context.Context, quint, dir, file string, invariants [
 			return proved, nil
 		}
 	}
+	proofContext := ctx
+	var backend *nativeBackendRequest
+	if token.key != "" {
+		var err error
+		backend, err = token.request.session.backend(ctx)
+		if canceled := ctx.Err(); canceled != nil {
+			if backend != nil {
+				backend.close()
+			}
+			return nil, canceled
+		}
+		if err != nil || backend == nil {
+			if backend != nil {
+				backend.close()
+				backend = nil
+			}
+			token.key = ""
+		} else {
+			defer backend.close()
+			proofContext = context.WithValue(ctx, nativeBackendKey{}, backend)
+		}
+	}
 	done := progressOf(ctx).phase("invariant batch " + strings.Join(members, ", "))
-	result, err := verifyNativeGroup(ctx, quint, dir, file, members, steps)
+	result, err := verifyNativeGroup(proofContext, quint, dir, file, members, steps)
 	done(phaseStatus(ctx, err))
 	if err != nil {
 		return nil, fmt.Errorf("simulate: native holds batch: %w", err)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	// Backend/accounting failures disable reuse; they do not turn a coherent
+	// ordinary result into an error or manufacture a toolchain provenance claim.
+	if backend != nil && !backend.owned {
+		token.key = ""
 	}
 	if err := token.verify(ctx, quint); err != nil {
 		return nil, err

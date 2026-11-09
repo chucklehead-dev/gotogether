@@ -7,12 +7,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 )
@@ -30,6 +32,12 @@ func sessionBindings(t *testing.T, source *GraphResult) (string, string) {
 	}
 	return first, second
 }
+func trustedTestBackend(ctx context.Context) (*nativeBackendRequest, error) {
+	return reserveNativeBackend(ctx, nativeBackendIdentity{}, func(context.Context, *os.Process, string, nativeBackendIdentity) func() bool {
+		return func() bool { return true }
+	})
+}
+
 func testIdentity(label string) string {
 	sum := sha256.Sum256([]byte(label))
 	return hex.EncodeToString(sum[:])
@@ -43,7 +51,7 @@ func TestSimulateManyExactProofAndIndependentReports(t *testing.T) {
 	source := batchFakeSource(t, nativeFakeScript(nativeProofJSON, "", 0, "proof"), nil)
 	first, second := sessionBindings(t, source)
 	var reports []*Report
-	for report, err := range simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 8}, stableTestTool) {
+	for report, err := range simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 8}, stableTestTool, trustedTestBackend) {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -102,7 +110,7 @@ func TestSimulateManyContextChangesMiss(t *testing.T) {
 			}
 			sourceSHA := ""
 			count := 0
-			for report, err := range simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 8}, identity) {
+			for report, err := range simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 8}, identity, trustedTestBackend) {
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -189,7 +197,7 @@ func TestSimulateManyContextChangesMiss(t *testing.T) {
 func TestSimulateManyStopsAndDoesNotPersist(t *testing.T) {
 	source := batchFakeSource(t, nativeFakeScript(nativeProofJSON, "", 0, "proof"), nil)
 	first, second := sessionBindings(t, source)
-	sequence := simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, stableTestTool)
+	sequence := simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, stableTestTool, trustedTestBackend)
 	for range sequence {
 		break
 	}
@@ -204,7 +212,7 @@ func TestSimulateManyStopsAndDoesNotPersist(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	n := 0
-	for report, err := range simulateMany(ctx, []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, stableTestTool) {
+	for report, err := range simulateMany(ctx, []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, stableTestTool, trustedTestBackend) {
 		n++
 		if n == 1 {
 			if err != nil {
@@ -268,7 +276,7 @@ func TestNativeSessionRejectsPublicationDriftAndMalformedProof(t *testing.T) {
 				return testIdentity("original"), true
 			}
 			n := 0
-			for report, err := range simulateMany(ctx, []string{first, first}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2, Progress: progress}, identity) {
+			for report, err := range simulateMany(ctx, []string{first, first}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2, Progress: progress}, identity, trustedTestBackend) {
 				n++
 				if report != nil || err == nil {
 					t.Fatalf("invalid proof published: %+v %v", report, err)
@@ -320,7 +328,7 @@ func TestSimulateManyObserverProductsAndOwnGoals(t *testing.T) {
 		}
 	}
 	n := 0
-	for report, err := range simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, stableTestTool) {
+	for report, err := range simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, stableTestTool, trustedTestBackend) {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -339,7 +347,7 @@ func TestSimulateManyObserverProductsAndOwnGoals(t *testing.T) {
 	raw, _ := os.ReadFile(second)
 	_ = os.WriteFile(second, []byte(strings.Replace(string(raw), "x == 0", "missingPredicate", 1)), 0600)
 	outcomes := 0
-	for report, err := range simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, stableTestTool) {
+	for report, err := range simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, stableTestTool, trustedTestBackend) {
 		outcomes++
 		if report != nil && report.Binding == first {
 			continue
@@ -386,7 +394,7 @@ func TestSimulateManySkipAndClassificationRemainIndependent(t *testing.T) {
 		t.Fatal(err)
 	}
 	count := 0
-	for report, err := range simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, stableTestTool) {
+	for report, err := range simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, stableTestTool, trustedTestBackend) {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -403,7 +411,7 @@ func TestSimulateManySkipAndClassificationRemainIndependent(t *testing.T) {
 		t.Fatal(err)
 	}
 	count = 0
-	for report, err := range simulateMany(t.Context(), []string{first, second, first}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, stableTestTool) {
+	for report, err := range simulateMany(t.Context(), []string{first, second, first}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, stableTestTool, trustedTestBackend) {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -422,7 +430,7 @@ func TestSimulateManySkipAndClassificationRemainIndependent(t *testing.T) {
 func TestSimulateManyConcurrentIterationsAreIsolated(t *testing.T) {
 	source := batchFakeSource(t, nativeFakeScript(nativeProofJSON, "", 0, "proof"), nil)
 	first, second := sessionBindings(t, source)
-	sequence := simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, stableTestTool)
+	sequence := simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, stableTestTool, trustedTestBackend)
 	var wg sync.WaitGroup
 	for range 2 {
 		wg.Go(func() {
@@ -460,7 +468,7 @@ func TestNativeSessionNeverStoresNonpositiveResults(t *testing.T) {
 			}
 			source := batchFakeSource(t, script, map[string]bool{"a": true, "b": true})
 			first, _ := sessionBindings(t, source)
-			session := newNativeProofSession(stableTestTool)
+			session := newNativeProofSession(stableTestTool, trustedTestBackend)
 			ctx, cancel := context.WithCancel(context.WithValue(t.Context(), nativeProofSessionKey{}, session))
 			defer cancel()
 			var output bytes.Buffer
@@ -492,7 +500,7 @@ func TestNativeSessionCanceledHitDoesNotPublish(t *testing.T) {
 	var output bytes.Buffer
 	progress := &sessionMutationWriter{match: "reuses exact positive native proof", write: cancel, target: &output}
 	n := 0
-	for report, err := range simulateMany(ctx, []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2, Progress: progress}, stableTestTool) {
+	for report, err := range simulateMany(ctx, []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2, Progress: progress}, stableTestTool, trustedTestBackend) {
 		n++
 		if n == 1 {
 			if report == nil || err != nil {
@@ -504,5 +512,123 @@ func TestNativeSessionCanceledHitDoesNotPublish(t *testing.T) {
 	}
 	if n != 2 || len(batchInvocations(t, source)) != 1 {
 		t.Fatal("cache-hit cancellation did not stop at the existing proof")
+	}
+}
+
+func TestNativeSessionMissingOwnershipContinuesUncached(t *testing.T) {
+	for _, failed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("factory-error-%v", failed), func(t *testing.T) {
+			source := batchFakeSource(t, nativeFakeScript(nativeProofJSON, "", 0, "proof"), nil)
+			first, second := sessionBindings(t, source)
+			var reservations []*nativeBackendRequest
+			factory := func(ctx context.Context) (*nativeBackendRequest, error) {
+				r, err := reserveNativeBackend(ctx, nativeBackendIdentity{}, func(context.Context, *os.Process, string, nativeBackendIdentity) func() bool {
+					return func() bool { return false }
+				})
+				if err != nil {
+					return nil, err
+				}
+				reservations = append(reservations, r)
+				if failed {
+					return r, fmt.Errorf("ownership unavailable")
+				}
+				return r, nil
+			}
+			n := 0
+			for report, err := range simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, stableTestTool, factory) {
+				if err != nil || report == nil || report.Code != 0 {
+					t.Fatalf("ownership failure changed ordinary result: %+v %v", report, err)
+				}
+				n++
+				if report.Invariants[0].NativeProof != nil {
+					t.Fatal("unaccounted backend received toolchain provenance")
+				}
+			}
+			calls := batchInvocations(t, source)
+			if n != 2 || len(calls) != 2 {
+				t.Fatal("unobserved proof was reused")
+			}
+			for _, args := range calls {
+				endpoint, group := -1, -1
+				for i, arg := range args {
+					if arg == "--server-endpoint" {
+						endpoint = i
+					}
+					if arg == "--invariants" {
+						group = i
+					}
+				}
+				if failed && endpoint != -1 || !failed && (endpoint < 0 || endpoint > group) {
+					t.Fatalf("endpoint eligibility/order: %v", args)
+				}
+			}
+			for _, r := range reservations {
+				// Bound this negative control even if close regresses.
+				_ = r.listener.(*net.TCPListener).SetDeadline(time.Now())
+				if _, err := r.listener.Accept(); !errors.Is(err, net.ErrClosed) {
+					t.Fatalf("reservation leaked after verification: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestSimulateManyUnavailableInitialSourcesRemainUncached(t *testing.T) {
+	source := batchFakeSource(t, nativeFakeScript(nativeProofJSON, "", 0, "proof"), nil)
+	first, second := sessionBindings(t, source)
+	if err := os.Symlink(filepath.Join(t.TempDir(), "missing.qnt"), filepath.Join(filepath.Dir(first), "unreadable.qnt")); err != nil {
+		t.Fatal(err)
+	}
+	baseline, err := Simulate(t.Context(), first, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2})
+	if err != nil || baseline.Code != 0 {
+		t.Fatalf("ordinary baseline failed: %+v %v", baseline, err)
+	}
+	n := 0
+	for report, err := range simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, stableTestTool, trustedTestBackend) {
+		if err != nil || report == nil || report.Code != 0 || report.Invariants[0].NativeProof != nil {
+			t.Fatalf("optional capture changed ordinary result: %+v %v", report, err)
+		}
+		n++
+	}
+	if n != 2 || len(batchInvocations(t, source)) != 3 {
+		t.Fatal("uncaptured source context was reused")
+	}
+}
+
+func TestNativeSessionOwnershipMissDoesNotEraseCapturedToolGuard(t *testing.T) {
+	source := batchFakeSource(t, nativeFakeScript(nativeProofJSON, "", 0, "proof"), nil)
+	first, second := sessionBindings(t, source)
+	calls := 0
+	tool := func(context.Context, string) (string, bool) {
+		calls++
+		if calls == 1 {
+			return testIdentity("original"), true
+		}
+		return testIdentity("changed"), true
+	}
+	factory := func(ctx context.Context) (*nativeBackendRequest, error) {
+		return reserveNativeBackend(ctx, nativeBackendIdentity{}, func(context.Context, *os.Process, string, nativeBackendIdentity) func() bool {
+			return func() bool { return false }
+		})
+	}
+	n := 0
+	for report, err := range simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, tool, factory) {
+		n++
+		if report != nil || err == nil || !strings.Contains(err.Error(), "tool identity changed") {
+			t.Fatalf("ownership miss erased established guard: %+v %v", report, err)
+		}
+	}
+	if n != 1 || len(batchInvocations(t, source)) != 1 {
+		t.Fatal("drift continued into another binding")
+	}
+	// An initially unaccounted tool has no established identity to recheck.
+	unknown := func(context.Context, string) (string, bool) { calls++; return fmt.Sprint(calls), false }
+	for report, err := range simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, unknown, factory) {
+		if err != nil || report == nil || report.Code != 0 || report.Invariants[0].NativeProof != nil {
+			t.Fatalf("unaccounted tool lost ordinary semantics: %+v %v", report, err)
+		}
+	}
+	if len(batchInvocations(t, source)) != 3 {
+		t.Fatal("unaccounted tool reused or refreshed an identity")
 	}
 }

@@ -64,13 +64,13 @@ func SimulateMany(ctx context.Context, bindingPaths []string, opt SimulateOption
 	return simulateMany(ctx, slices.Clone(bindingPaths), opt, resolveNativeToolIdentity)
 }
 
-func simulateMany(ctx context.Context, paths []string, opt SimulateOptions, identity nativeToolResolver) iter.Seq2[*Report, error] {
+func simulateMany(ctx context.Context, paths []string, opt SimulateOptions, identity nativeToolResolver, backends ...nativeBackendFactory) iter.Seq2[*Report, error] {
 	return func(yield func(*Report, error) bool) {
 		if len(paths) > 1 && opt.Out != "" {
 			yield(nil, fmt.Errorf("simulate: multiple bindings require separate graph output paths"))
 			return
 		}
-		session := newNativeProofSession(identity)
+		session := newNativeProofSession(identity, backends...)
 		defer clear(session.proofs)
 		ctx := context.WithValue(ctx, nativeProofSessionKey{}, session)
 		for _, path := range paths {
@@ -374,10 +374,9 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 	}
 	var originalSources *validate.SourceGuard
 	if session, _ := ctx.Value(nativeProofSessionKey{}).(*nativeProofSession); session != nil && opt.Verify > 0 {
-		originalSources, err = validate.CaptureModelSources(b.SpecPath())
-		if err != nil {
-			return nil, err
-		}
+		// Conservative inventory capture is eligibility for optional reuse.
+		// If no guard can be established, retain ordinary uncached analysis.
+		originalSources, _ = validate.CaptureModelSources(b.SpecPath())
 	}
 	var possibles []*possibleCheck
 	if len(possibleList) > 0 || opt.Graph {
@@ -429,7 +428,7 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 		}
 
 	}
-	if session, _ := ctx.Value(nativeProofSessionKey{}).(*nativeProofSession); session != nil && opt.Verify > 0 {
+	if session, _ := ctx.Value(nativeProofSessionKey{}).(*nativeProofSession); session != nil && opt.Verify > 0 && originalSources != nil {
 		canonicalPath := filepath.Join(filepath.Dir(b.SpecPath()), "__gotogether_native_context.qnt")
 		canonical, err := simulationModule(b, overrides, canonicalPath)
 		if err != nil {

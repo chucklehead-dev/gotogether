@@ -316,11 +316,22 @@ func runQuintWithPulse(ctx context.Context, quint, dir string, argv []string, in
 	// One shared writer preserves CombinedOutput's serialized merged capture.
 	cmd.Stdout, cmd.Stderr = capture, capture
 	err := cmd.Start()
+	var finishBackend func()
+	if backend, _ := ctx.Value(nativeBackendKey{}).(*nativeBackendRequest); backend != nil {
+		backend.close()
+		if err == nil && len(argv) > 0 && argv[0] == "verify" {
+			finishBackend = backend.start(ctx, cmd.Process)
+			defer finishBackend()
+		}
+	}
 	if err == nil {
 		stop := startNativePulse(ctx, pulse, progressOf(ctx), interval)
 		defer stop() // also drain the pulse if a future command path panics
 		err = cmd.Wait()
 		stop() // no pulse can race the caller's END phase or report
+	}
+	if finishBackend != nil {
+		finishBackend()
 	}
 	if canceled := ctx.Err(); canceled != nil {
 		return "", canceled

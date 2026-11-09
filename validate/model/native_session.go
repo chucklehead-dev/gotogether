@@ -18,11 +18,16 @@ type nativeToolResolver func(context.Context, string) (string, bool)
 // reports and caller-owned slices are never stored or returned through it.
 type nativeProofSession struct {
 	identity nativeToolResolver
+	backend  nativeBackendFactory
 	proofs   map[string]*validate.NativeProof // exact request digest -> producing proof
 }
 
-func newNativeProofSession(identity nativeToolResolver) *nativeProofSession {
-	return &nativeProofSession{identity: identity, proofs: map[string]*validate.NativeProof{}}
+func newNativeProofSession(identity nativeToolResolver, backends ...nativeBackendFactory) *nativeProofSession {
+	backend := newOwnedNativeBackend
+	if len(backends) > 0 {
+		backend = backends[0]
+	}
+	return &nativeProofSession{identity: identity, backend: backend, proofs: map[string]*validate.NativeProof{}}
 }
 
 type nativeProofRequest struct {
@@ -104,10 +109,11 @@ func (r *nativeProofRequest) prepare(ctx context.Context, quint string, group []
 	if err := ctx.Err(); err != nil {
 		return nativeProofToken{}, false, err
 	}
-	token := nativeProofToken{tool: tool, request: r}
+	token := nativeProofToken{request: r}
 	if !eligible {
 		return token, false, nil
 	}
+	token.tool = tool
 	sourceData, _ := json.Marshal(struct {
 		Base  string
 		Files []validate.File
@@ -119,7 +125,7 @@ func (r *nativeProofRequest) prepare(ctx context.Context, quint string, group []
 		Group                    []string
 		Steps                    int
 		Tool, Config, Invocation string
-	}{token.source, group, steps, tool, nativeApalacheConfig, "verify:main=simulate:init=init:step=step"})
+	}{token.source, group, steps, tool, nativeApalacheConfig, "verify:main=simulate:init=init:step=step:owned-backend-v1"})
 	if err != nil {
 		return token, false, err
 	}
@@ -149,7 +155,7 @@ func (t nativeProofToken) verify(ctx context.Context, quint string) error {
 	if err := t.request.verifySources(); err != nil {
 		return err
 	}
-	if t.key != "" {
+	if t.tool != "" {
 		identity, eligible := t.request.session.identity(ctx, quint)
 		if err := ctx.Err(); err != nil {
 			return err
