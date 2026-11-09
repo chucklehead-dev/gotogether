@@ -9406,3 +9406,71 @@ terminal capture uses it. Signals remain non-atomic; all pre-settlement records,
 stopped-thread confirmations, invariant requirements and deadlines remain.
 An ordering witness with real child groups rejects serial confirmation; a Linux
 integration check confirms every thread in each group has stopped at return.
+
+### 2026-11-09: retain binding scope while avoiding repeated native proofs
+
+The after-policy 51-binding verifier attempt completed six binding commands,
+including one intentional eventual-only skip, before the original two-hour
+budget interrupted counters.real. Its completed default counters proof and the
+interrupted real request had identical imported source bytes, group, bound and
+configuration; their constructed modules differed only by framework-generated
+possible observer declarations. This does not turn the interrupted command into
+a completed result or qualify the rest of the roster.
+
+Native invariant input now separates those observers, retaining each observer's
+validation and goal checks. A sequential multi-binding iterator can reuse an
+exact positive proof only within the current operation, after source and tool
+identity checks. Independent native reports and current report/2 documents retain
+typed proof provenance; errors, counterexamples and cancellation do not seed
+reuse. Repeated CLI bindings stop at the first failed analysis or report delivery;
+per-binding report files are unique. Nightly retains its same tracked binding
+selection, pretest, bounds and two-hour total, now within one invocation.
+
+Final ownership review found that stock Quint can attach to an already-running
+server before launching its installed backend. Installed-file hashes alone
+therefore do not establish which backend executed a proof. Cache-eligible
+producing calls now request a private endpoint and require observed socket,
+process-group, executable and jar ownership before publishing reuse metadata.
+Unknown ownership preserves ordinary strict verification but creates no reusable
+proof. This is local process accounting, not hostile-host authentication.
+The nightly checks managed-tool eligibility after its existing backend pretest,
+so tool upgrades that disable its expected reuse fail early rather than silently
+spending the whole verification budget. The binding selection and total budget
+are unchanged.
+
+### Native session roster qualification, 2026-11-09
+
+The frozen `42c5696294d80ff72135477030dce113a99fb4d6` roster retained all
+51 bindings, bound 8 and the original 7,200-second total allowance. Build,
+backend pretest and managed-tool admission passed. Ten bindings exited zero
+(nine passes and one intentional eventual-only skip); real and retiring counters
+reused the original two-member positive proof, with four property records and
+no typed provenance-reference errors. The eleventh binding, edgepublish, stopped
+on `sealMatchesManifests`: its counterexample representations disagreed at state
+1, `simulate::edgePublish::writer`. The remaining 40 bindings are unknown.
+Elapsed time was 4,003.81 seconds, with no deadline excess or remaining owned
+processes. This is neither a complete roster qualification nor a green nightly.
+The raw temporary counterexample was not retained; a focused reproduction is
+needed to diagnose the decoder boundary without weakening strict validation.
+
+
+### 2026-11-09: validate native unit payloads in counterexamples
+
+The PR130 roster stopped at edgepublish's allowed `sealMatchesManifests`
+counterexample: its seven-state structured trace and ITF disagreed at writer
+state 1 under the old decoder. A focused reproduction on unchanged source
+42c56962, bound eight and default memory, returned actual native exit one in
+27.59 seconds; supervision completed in 27.94 seconds with no remaining owned
+processes. The raw structured result and ITF are retained under
+`/workspace/review-artifacts/native-edgepublish-counterexample/`.
+
+Pinned Quint converts Apalache's exact `{tag: "UNIT"}` marker to an empty tuple
+in the structured trace. General ITF decoding preserves it as a record, including
+inside nullary phase variants. Native validation now compares the two values
+using the expected structured shape: only an expected empty tuple admits that
+marker. Genuine tag records, extra marker fields, variant labels, values and
+state bounds remain checked. Augmenting-path matching preserves unordered set
+and map semantics without greedy ambiguity or crossing map keys and values.
+The retained full seven-state pair and changed-state/exit/bound controls exercise
+the adapter offline. No model, search budget, proof gate, or global ITF decoding
+rule changed; the incomplete roster remains incomplete until rerun.

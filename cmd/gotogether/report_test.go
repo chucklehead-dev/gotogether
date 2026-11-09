@@ -58,7 +58,7 @@ func TestValidateJSON(t *testing.T) {
 		}
 	}
 	es, err := os.ReadDir(reports)
-	if err != nil || len(es) != 1 || !strings.HasSuffix(es[0].Name(), "-validate-"+strconv.Itoa(os.Getpid())+".json") {
+	if err != nil || len(es) != 1 || !strings.Contains(es[0].Name(), "-validate-"+strconv.Itoa(os.Getpid())+"-") || !strings.HasSuffix(es[0].Name(), ".json") {
 		t.Errorf("GOTOGETHER_REPORT_DIR: %v %v", es, err)
 	}
 	// a -report of no known format is refused, naming them

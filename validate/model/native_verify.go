@@ -66,10 +66,16 @@ func verifyNativeInvariants(ctx context.Context, quint, dir, file string, invari
 	}
 	resultFile, traceFile := filepath.Join(work, "result.json"), filepath.Join(work, "trace.itf.json")
 	argv := []string{"verify", file, "--main", "simulate", "--invariant", invariant, "--max-steps", fmt.Sprint(steps), "--out", resultFile, "--out-itf", traceFile, "--apalache-config", configFile}
+	if backend, _ := ctx.Value(nativeBackendKey{}).(*nativeBackendRequest); backend != nil {
+		argv = append(argv, "--server-endpoint", backend.endpoint)
+	}
 	if len(invariants) > 1 {
 		// --invariants is variadic: keep the input file and all other options
 		// before its members, so none can be interpreted as another invariant.
 		argv = []string{"verify", file, "--main", "simulate", "--max-steps", fmt.Sprint(steps), "--out", resultFile, "--out-itf", traceFile, "--apalache-config", configFile, "--invariants"}
+		if backend, _ := ctx.Value(nativeBackendKey{}).(*nativeBackendRequest); backend != nil {
+			argv = append(argv[:len(argv)-1], "--server-endpoint", backend.endpoint, "--invariants")
+		}
 		argv = append(argv, invariants...)
 	}
 	out, commandErr := runQuint(ctx, quint, dir, argv)
@@ -312,7 +318,7 @@ func validateNativeTrace(normalized any, data []byte, steps int) error {
 				return fmt.Errorf("invalid ITF state %d field %s: %w", i, name, err)
 			}
 			got, ok := value.Fields[name]
-			if !ok || !got.Equal(one.States[0].Vars["v"]) {
+			if !ok || !nativeTraceEqual(got, one.States[0].Vars["v"]) {
 				return fmt.Errorf("counterexample states disagree at %d field %s", i, name)
 			}
 		}
