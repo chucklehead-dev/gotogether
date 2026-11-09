@@ -246,7 +246,7 @@ func (r executionResult) validate() error {
 			return nil
 		}
 	}
-	if r.Disposition == "signaled" && r.ExitCode == nil && r.SignalNumber > 0 && r.Signal == syscall.Signal(r.SignalNumber).String() {
+	if r.Disposition == "signaled" && r.ExitCode == nil && r.SignalNumber > 0 && r.SignalNumber <= 64 && r.Signal == syscall.Signal(r.SignalNumber).String() {
 		return nil
 	}
 	return fmt.Errorf("unresolved or contradictory execution evidence: %s", r)

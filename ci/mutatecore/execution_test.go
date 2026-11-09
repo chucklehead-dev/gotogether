@@ -7,13 +7,18 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"syscall"
 	"testing"
 )
 
 // Real tiny programs exercise the wrapper, not a guessed assertion classifier.
 func TestExecutionStatusesAndJournalPropagation(t *testing.T) {
-	for _, code := range []int{0, 1, 124, 125, 126, 127, 143, 200} {
-		t.Run(exited(code).String(), func(t *testing.T) {
+	for _, tc := range []struct {
+		code        int
+		disposition string
+	}{{0, "exited"}, {1, "exited"}, {124, "timeout_status"}, {125, "setup_status"}, {126, "setup_status"}, {127, "setup_status"}, {143, "signal_status"}, {200, "exited"}} {
+		code := tc.code
+		t.Run(strconv.Itoa(code), func(t *testing.T) {
 			dir := t.TempDir()
 			binary := filepath.Join(dir, "suite")
 			script := "#!/bin/sh\nexit " + strconv.Itoa(code) + "\n"
@@ -36,7 +41,7 @@ func TestExecutionStatusesAndJournalPropagation(t *testing.T) {
 				t.Fatal(err)
 			}
 			attempt := record.Attempts[0]
-			if attempt.Execution.ExitCode == nil || *attempt.Execution.ExitCode != code || attempt.Execution.Disposition != exited(code).Disposition || attempt.Execution.Signal != "" || attempt.Execution.SignalNumber != 0 {
+			if attempt.Execution.ExitCode == nil || *attempt.Execution.ExitCode != code || attempt.Execution.Disposition != tc.disposition || attempt.Execution.Signal != "" || attempt.Execution.SignalNumber != 0 {
 				t.Fatalf("lost observed status: %+v", attempt)
 			}
 			if setup && (record.Outcome != "error" || len(events) != 1) {
@@ -110,7 +115,7 @@ func assertJournalExecution(t *testing.T, result executionResult, executionErr e
 
 func TestCampaignRejectsUnresolvedExecutionEvidence(t *testing.T) {
 	code := 0
-	for _, r := range []executionResult{{}, {Disposition: "canceled"}, {Disposition: "execution_error"}, exited(125), {Disposition: "timeout_status", ExitCode: &code}, {Disposition: "exited", ExitCode: &code, Signal: "killed"}} {
+	for _, r := range []executionResult{{}, {Disposition: "canceled"}, {Disposition: "execution_error"}, exited(125), {Disposition: "timeout_status", ExitCode: &code}, {Disposition: "exited", ExitCode: &code, Signal: "killed"}, {Disposition: "signaled", SignalNumber: 15, Signal: "killed"}, {Disposition: "signaled", SignalNumber: 65, Signal: syscall.Signal(65).String()}, {Disposition: "signaled", SignalNumber: -1, Signal: syscall.Signal(-1).String()}} {
 		j := testJournal(t)
 		_, err := runCampaign(t.Context(), []candidate{{targets: []target{{0, 0}}}}, 1, 0, func(context.Context, target) (executionResult, error) { return r, nil }, j, func(int) { t.Fatal("unresolved attempt completed") })
 		if err == nil {
