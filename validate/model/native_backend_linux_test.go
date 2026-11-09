@@ -72,7 +72,8 @@ func TestNativeBackendOwnershipRequiresActualSocketGroupAndJar(t *testing.T) {
 		t.Fatal("owned listening process was not accounted")
 	}
 	stop := observeNativeBackend(t.Context(), backend.Process, endpoint, expected)
-	if !stop() || !stop() {
+	first, second := stop(), stop()
+	if !first || !second {
 		t.Fatal("owned observation was lost or stop was not idempotent")
 	}
 	foreign, _, _ := nativeBackendFixture(t)

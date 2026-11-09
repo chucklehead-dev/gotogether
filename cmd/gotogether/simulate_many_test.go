@@ -67,7 +67,7 @@ func TestSimulateManyIndependentReports(t *testing.T) {
 	if code != 0 || runErr != nil {
 		t.Fatalf("exit %d, %v", code, runErr)
 	}
-	if strings.Index(text, a) < 0 || strings.Index(text, b) <= strings.Index(text, a) {
+	if !strings.Contains(text, a) || strings.Index(text, b) <= strings.Index(text, a) {
 		t.Fatalf("binding order lost: %s", text)
 	}
 	docs := simulationDocuments(t, reports)
