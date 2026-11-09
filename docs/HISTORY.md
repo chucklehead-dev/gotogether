@@ -9474,3 +9474,27 @@ and map semantics without greedy ambiguity or crossing map keys and values.
 The retained full seven-state pair and changed-state/exit/bound controls exercise
 the adapter offline. No model, search budget, proof gate, or global ITF decoding
 rule changed; the incomplete roster remains incomplete until rerun.
+
+### PR #130 qualification and review closeout, 2026-11-09
+
+PR #130 merged as `d89db7f37cc1ee1a2feafd900dc0a492268db1d0` after all
+36 checks and CI workflow 42702019996 completed successfully for exact head
+`5e1beb73bd3fa1724ac3aebafb7156af2a30015c`. This admits the implementation,
+not the full nightly. The frozen 51-binding qualification retained bound eight
+and its original 7,200-second total allowance. Build, backend pretest and managed
+tool admission passed. Twenty-three bindings completed with exit zero: 17 passes
+and six declared skips. Edgepublish now passed; the default counters proof was
+reused by real and retiring bindings, with four reused property records and no
+provenance-reference errors. Inventory's withinCapacity proof was interrupted
+after 50 minutes 50 seconds when the total deadline was reached. Its cancellation
+report is an error, and the 27 later bindings remain unvisited. Cleanup left no
+owned processes; the qualification is incomplete.
+
+Review #97's J1–J6 corrections are complete with their regression evidence.
+J7 remains open: complete verifier admission, scheduler survivors and integrated
+producer provenance/completion are separate remaining gates. The latest retained
+full scheduler campaign still reports 99 survivors of 1,749 mutations at limit
+22; later focused controls do not establish a new full-campaign result. J8–J11
+remain the next proposed differential/API consolidation work after green semantic
+gates. J12–J27 remain a proposed queue subject to product need and maintainer
+choices; they are not 16 silently completed commitments.
