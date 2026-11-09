@@ -80,7 +80,8 @@ new limit, or approval policy.
 
 The 300-second test deadline sends SIGKILL to the owned process group so tests
 that ignore SIGTERM cannot outlive the cap. No grace allowance is added. GNU
-`timeout` also kills itself in that group: the observed result is an actual
-signal, not necessarily exit 124. SIGKILL can also have other causes, so this
-result remains an operational kill and is never labeled an assertion witness
-or a uniquely established timeout.
+`timeout` may also kill itself in that group. Native runs have observed both
+actual SIGKILL and exit 124 at the hard deadline; the journal preserves whichever
+occurred. The regression checks the TERM-ignoring child is no longer running,
+independently of the wrapper's status. Neither status uniquely establishes a
+timeout cause or an assertion witness; these remain operational kills.

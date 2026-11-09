@@ -9328,3 +9328,12 @@ propagation. The old command fails the regression by requiring outer
 cancellation; the corrected full mutatecore race/shuffle suite passes twice.
 Signals remain operational evidence rather than proof of timeout causality or
 behavioral assertion detection.
+
+PR #125's hosted core and shuffle jobs then exposed a test assumption: all three
+hard-deadline trials returned exit 124 promptly (about 0.21 s), whereas the local
+GNU timeout returned actual SIGKILL. Workflow 42544902732 records the exact
+failures at execution_test.go:150. The control now admits either observed wrapper
+result and separately verifies the TERM-ignoring child's termination. A readiness
+FIFO provides a live process handle for safe cleanup; a live-process negative
+control prevents status-only success. The production hard deadline and limits
+are unchanged.

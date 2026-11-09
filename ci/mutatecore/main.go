@@ -262,8 +262,8 @@ func execute(ctx context.Context, s suite, id string, mem int, mode runMode) (ex
 // the real deadline quickly; production execution always supplies 300 seconds.
 func executionCommand(ctx context.Context, s suite, id string, mem int, mode runMode, limit string) *exec.Cmd {
 	// TERM can be ignored indefinitely. KILL enforces the same deadline without
-	// adding a grace period. GNU timeout kills its own group too, so the observed
-	// signal is operational evidence, not a uniquely attributable timeout result.
+	// adding a grace period. timeout may report exit 124 or kill itself too;
+	// neither status uniquely attributes the cause of an operational kill.
 	c := groupCommand(ctx, "sh", "-c", `ulimit -v "$1" || exit 125; shift; exec timeout --signal=KILL "$@"`, "mutatecore", strconv.Itoa(mem), limit, s.binary)
 	c.Dir = s.dir
 	c.Env = append(os.Environ(), "GOTOGETHER_MUTANT="+id)
