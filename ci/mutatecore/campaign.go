@@ -9,7 +9,7 @@ import (
 // runCampaign records each completed source before reporting progress. Only a
 // fully resolved, successfully recorded campaign can return a complete result.
 // Errors cancel remaining work; cancellation is never a killed mutation.
-func runCampaign(parent context.Context, candidates []candidate, jobs, max int, trial func(context.Context, target) (bool, error), j *journal, progress func(int)) ([]bool, error) {
+func runCampaign(parent context.Context, candidates []candidate, jobs, max int, trial func(context.Context, target) (executionResult, error), j *journal, progress func(int)) ([]bool, error) {
 	ctx, cancel := context.WithCancelCause(parent)
 	defer cancel(nil)
 	tasks := make(chan int, len(candidates))
@@ -34,8 +34,12 @@ func runCampaign(parent context.Context, candidates []candidate, jobs, max int, 
 				c := candidates[i]
 				record := outcomeRecord{Source: sourceMetadata(c)}
 				passed, err := survives(c, func(t target) (bool, error) {
-					passed, err := trial(ctx, t)
-					attempt := attemptRecord{targetRecord: targetRecord{t.suite, t.id}, Outcome: "passed"}
+					execution, err := trial(ctx, t)
+					if err == nil {
+						err = execution.validate()
+					}
+					passed := execution.passed()
+					attempt := attemptRecord{targetRecord: targetRecord{t.suite, t.id}, Outcome: "passed", Execution: execution}
 					if err != nil {
 						attempt.Outcome = "error"
 						attempt.Error = err.Error()

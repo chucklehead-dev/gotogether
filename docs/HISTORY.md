@@ -9324,3 +9324,21 @@ checks and navigator grist diagnostics passed without golden changes. Runtime
 error controls, a fresh scaffold suite and TypeScript rule-origin controls passed.
 After core-pin integration, the grist root short suite used 226.4 CPU seconds
 and passed its unchanged budget.
+
+### 2026-11-09: mutation execution evidence without changing the gate
+
+Core mutation attempts and baselines now retain the owned wrapper's exact exit
+code or actual OS signal number/name. Status 124 and 129–192 are explicitly
+wrapper conventions, not confirmed timeout/signal causes: a test can return the
+same code. Ordinary exit 1 is not classified as assertion evidence. Cancellation,
+start failures and setup statuses 125–127 remain errors; missing or contradictory
+injected execution metadata cannot manufacture a resolved kill.
+
+Tiny real subprocess controls cover exits 0/1, reserved setup/status codes,
+unknown exit 200, a real short timeout, an OS termination signal, start failure
+and cancellation after startup. Journal controls retain their actual metadata
+and distinguish errors from completed operational kills. Focused race tests pass.
+The survivor count gate, memory cap and 300-second production timeout are
+unchanged. No mutation campaign or SMT work was run. The separate draft journal
+reader still needs to adopt this exact additive producer shape before integration;
+these internal execution records do not establish behavioral mutation kills.

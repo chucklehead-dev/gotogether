@@ -58,7 +58,12 @@ func syntheticCandidates() []candidate {
 func TestJournalCapturesSourceIDsActualAttemptsAndRedComplete(t *testing.T) {
 	j := testJournal(t)
 	c := syntheticCandidates()
-	results, err := runCampaign(t.Context(), c, 1, 0, func(_ context.Context, t target) (bool, error) { return t.id != 35, nil }, j, func(int) {})
+	results, err := runCampaign(t.Context(), c, 1, 0, func(_ context.Context, t target) (executionResult, error) {
+		if t.id == 35 {
+			return exited(1), nil
+		}
+		return exited(0), nil
+	}, j, func(int) {})
 	if err != nil || len(results) != 2 || results[0] || !results[1] {
 		t.Fatalf("results=%v err=%v", results, err)
 	}
@@ -86,7 +91,9 @@ func TestJournalCapturesSourceIDsActualAttemptsAndRedComplete(t *testing.T) {
 
 func TestCampaignErrorsNeverBecomeKillsOrComplete(t *testing.T) {
 	j := testJournal(t)
-	result, err := runCampaign(t.Context(), syntheticCandidates(), 1, 0, func(context.Context, target) (bool, error) { return false, errors.New("fixture execution failed") }, j, func(int) { t.Fatal("error counted as completion") })
+	result, err := runCampaign(t.Context(), syntheticCandidates(), 1, 0, func(context.Context, target) (executionResult, error) {
+		return executionResult{Disposition: "execution_error"}, errors.New("fixture execution failed")
+	}, j, func(int) { t.Fatal("error counted as completion") })
 	if err == nil || result != nil {
 		t.Fatalf("result=%v err=%v", result, err)
 	}
@@ -108,7 +115,7 @@ func TestJournalWriteAndSyncFailuresFailClosed(t *testing.T) {
 	t.Run("write", func(t *testing.T) {
 		j := testJournal(t)
 		j.file.Close()
-		results, err := runCampaign(t.Context(), syntheticCandidates(), 1, 0, func(context.Context, target) (bool, error) { return true, nil }, j, func(int) { t.Fatal("failed record counted") })
+		results, err := runCampaign(t.Context(), syntheticCandidates(), 1, 0, func(context.Context, target) (executionResult, error) { return exited(0), nil }, j, func(int) { t.Fatal("failed record counted") })
 		if err == nil || results != nil {
 			t.Fatalf("write failure returned success: %v %v", results, err)
 		}
@@ -168,12 +175,12 @@ func TestJournalCancellationProcess(t *testing.T) {
 		if err := j.append("admitted", []sourceRecord{sourceMetadata(candidates[0]), sourceMetadata(candidates[1])}); err != nil {
 			panic(err)
 		}
-		_, err = runCampaign(ctx, candidates, 1, 0, func(ctx context.Context, t target) (bool, error) {
+		_, err = runCampaign(ctx, candidates, 1, 0, func(ctx context.Context, t target) (executionResult, error) {
 			if t.id == 35 {
-				return false, nil
+				return exited(1), nil
 			}
 			<-ctx.Done()
-			return false, context.Cause(ctx)
+			return executionResult{Disposition: "canceled"}, context.Cause(ctx)
 		}, j, func(n int) {
 			if n == 1 {
 				fmt.Println("first result synced")
@@ -352,13 +359,13 @@ func TestExecuteCancellationIsNotKilledMutation(t *testing.T) {
 		t.Fatal(err)
 	}
 	type execution struct {
-		passed bool
+		result executionResult
 		err    error
 	}
 	result := make(chan execution, 1)
 	go func() {
-		_, passed, err := execute(ctx, suite{dir: dir, binary: binary}, "0", 3072*1024, mutantMode)
-		result <- execution{passed, err}
+		observed, err := execute(ctx, suite{dir: dir, binary: binary}, "0", 3072*1024, mutantMode)
+		result <- execution{observed, err}
 	}()
 	line, err := bufio.NewReader(ready).ReadString('\n')
 	if err != nil {
@@ -382,9 +389,10 @@ func TestExecuteCancellationIsNotKilledMutation(t *testing.T) {
 	case <-parent.Done():
 		t.Fatal("cancelled execution did not stop")
 	}
-	if got.passed || !errors.Is(got.err, reason) {
-		t.Fatalf("cancelled mutation became a verdict: passed=%v err=%v", got.passed, got.err)
+	if got.result.Disposition != "canceled" || got.result.ExitCode != nil || got.result.Signal != "" || got.result.SignalNumber != 0 || !errors.Is(got.err, reason) {
+		t.Fatalf("cancelled mutation became a verdict: result=%+v err=%v", got.result, got.err)
 	}
+	assertJournalExecution(t, got.result, got.err)
 }
 
 func TestJournalMetadataPreservesInventoryAndSourceMappings(t *testing.T) {

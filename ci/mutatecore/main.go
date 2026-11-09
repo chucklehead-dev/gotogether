@@ -200,9 +200,61 @@ const (
 	mutantMode
 )
 
+// executionResult describes the owned shell/timeout process, not why a test
+// failed. Encoded timeout/signal statuses can also be explicit test exits.
+type executionResult struct {
+	Output       string `json:"-"`
+	Disposition  string `json:"disposition"`
+	ExitCode     *int   `json:"exit_code,omitempty"`
+	Signal       string `json:"signal,omitempty"`
+	SignalNumber int    `json:"signal_number,omitempty"`
+}
+
+func exited(code int) executionResult {
+	r := executionResult{Disposition: "exited", ExitCode: &code}
+	switch {
+	case code == 124:
+		r.Disposition = "timeout_status"
+	case code >= 125 && code <= 127:
+		r.Disposition = "setup_status"
+	case code > 128 && code <= 192:
+		r.Disposition = "signal_status"
+	}
+	return r
+}
+
+func (r executionResult) String() string {
+	if r.ExitCode != nil {
+		return fmt.Sprintf("%s (exit %d)", r.Disposition, *r.ExitCode)
+	}
+	if r.Signal != "" {
+		return r.Disposition + " (" + r.Signal + ")"
+	}
+	return r.Disposition
+}
+
+func (r executionResult) passed() bool {
+	return r.Disposition == "exited" && r.ExitCode != nil && *r.ExitCode == 0
+}
+
+// validate prevents missing or contradictory execution evidence from becoming a
+// resolved kill when an executor is injected into campaign orchestration.
+func (r executionResult) validate() error {
+	if r.ExitCode != nil && r.Signal == "" && r.SignalNumber == 0 {
+		expected := exited(*r.ExitCode)
+		if *r.ExitCode >= 0 && *r.ExitCode <= 255 && r.Disposition == expected.Disposition && r.Disposition != "setup_status" {
+			return nil
+		}
+	}
+	if r.Disposition == "signaled" && r.ExitCode == nil && r.SignalNumber > 0 && r.SignalNumber <= 64 && r.Signal == syscall.Signal(r.SignalNumber).String() {
+		return nil
+	}
+	return fmt.Errorf("unresolved or contradictory execution evidence: %s", r)
+}
+
 // Positional arguments carry paths literally. timeout retains the existing
-// 300-second limit; a capped mutant that hangs or exhausts memory is killed.
-func execute(ctx context.Context, s suite, id string, mem int, mode runMode) (string, bool, error) {
+// 300-second limit; nonzero test statuses retain the operational kill policy.
+func execute(ctx context.Context, s suite, id string, mem int, mode runMode) (executionResult, error) {
 	c := groupCommand(ctx, "sh", "-c", `ulimit -v "$1" || exit 125; shift; exec timeout 300 "$@"`, "mutatecore", strconv.Itoa(mem), s.binary)
 	c.Dir = s.dir
 	c.Env = append(os.Environ(), "GOTOGETHER_MUTANT="+id)
@@ -211,38 +263,52 @@ func execute(ctx context.Context, s suite, id string, mem int, mode runMode) (st
 	} else {
 		c.Args = append(c.Args, "-test.short", "-test.failfast")
 	}
+	return runExecution(ctx, c, mode != mutantMode)
+}
+
+func runExecution(ctx context.Context, c *exec.Cmd, capture bool) (executionResult, error) {
 	var output []byte
 	var err error
-	if mode != mutantMode {
+	if capture {
 		output, err = c.CombinedOutput()
 	} else {
 		err = c.Run()
 	}
+	r := executionResult{Output: string(output)}
 	if ctx.Err() != nil {
-		return string(output), false, context.Cause(ctx)
+		r.Disposition = "canceled"
+		return r, context.Cause(ctx)
 	}
 	if err == nil {
-		return string(output), true, nil
-	}
-	if exit, ok := errors.AsType[*exec.ExitError](err); ok {
-		// Setup failures must not manufacture kills.
-		if exit.ExitCode() >= 125 && exit.ExitCode() <= 127 {
-			return string(output), false, err
+		r = exited(0)
+	} else if exit, ok := errors.AsType[*exec.ExitError](err); ok {
+		if status, ok := exit.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+			r.Disposition, r.Signal, r.SignalNumber = "signaled", status.Signal().String(), int(status.Signal())
+		} else {
+			r = exited(exit.ExitCode())
 		}
-		return string(output), false, nil
+		r.Output = string(output)
+		if r.Disposition == "setup_status" {
+			return r, err
+		}
+		return r, nil
+	} else {
+		r.Disposition = "execution_error"
+		return r, err
 	}
-	return string(output), false, err
+	r.Output = string(output)
+	return r, nil
 }
 
-func baseline(ctx context.Context, s suite, mem int) error {
-	output, passed, err := execute(ctx, s, strconv.Itoa(len(s.mutants)), mem, baselineMode)
+func baseline(ctx context.Context, s suite, mem int) (executionResult, error) {
+	result, err := execute(ctx, s, strconv.Itoa(len(s.mutants)), mem, baselineMode)
 	if err != nil {
-		return fmt.Errorf("%w\n%s", err, output)
+		return result, fmt.Errorf("%w\n%s", err, result.Output)
 	}
-	if !passed {
-		return fmt.Errorf("tests failed or exceeded limits:\n%s", output)
+	if !result.passed() {
+		return result, fmt.Errorf("baseline execution %s:\n%s", result, result.Output)
 	}
-	return nil
+	return result, nil
 }
 
 func positiveEnv(name string, fallback int) (int, error) {
@@ -332,14 +398,14 @@ func run(ctx context.Context) (runErr error) {
 		if err != nil {
 			return fmt.Errorf("%s: compile: %w", s.pkg, err)
 		}
-		output, passed, err := execute(ctx, *s, "list", memMB*1024, inventoryMode)
+		result, err := execute(ctx, *s, "list", memMB*1024, inventoryMode)
 		if err != nil {
 			return fmt.Errorf("%s: inventory: %w", s.pkg, err)
 		}
-		if !passed {
-			return fmt.Errorf("%s: inventory execution failed: %s", s.pkg, output)
+		if !result.passed() {
+			return fmt.Errorf("%s: inventory execution %s: %s", s.pkg, result.Disposition, result.Output)
 		}
-		s.mutants, err = inventory(output)
+		s.mutants, err = inventory(result.Output)
 		if err != nil {
 			return fmt.Errorf("%s: %w", s.pkg, err)
 		}
@@ -351,8 +417,8 @@ func run(ctx context.Context) (runErr error) {
 	candidates, err := admit(suites, func(s suite) error {
 		started := time.Now()
 		fmt.Fprintf(os.Stderr, "checking unmutated baseline %s\n", s.pkg)
-		baselineErr := baseline(ctx, s, memMB*1024)
-		record := map[string]any{"package": s.pkg, "passed": baselineErr == nil}
+		result, baselineErr := baseline(ctx, s, memMB*1024)
+		record := map[string]any{"package": s.pkg, "passed": baselineErr == nil, "execution": result}
 		if baselineErr != nil {
 			record["error"] = baselineErr.Error()
 		}
@@ -377,12 +443,12 @@ func run(ctx context.Context) (runErr error) {
 	}
 	fmt.Fprintf(os.Stderr, "admitted %d source mutants across %d test suites\n", len(candidates), len(suites))
 	started := time.Now()
-	results, err := runCampaign(ctx, candidates, jobs, max, func(ctx context.Context, t target) (bool, error) {
-		_, passed, err := execute(ctx, suites[t.suite], strconv.Itoa(t.id), memMB*1024, mutantMode)
+	results, err := runCampaign(ctx, candidates, jobs, max, func(ctx context.Context, t target) (executionResult, error) {
+		result, err := execute(ctx, suites[t.suite], strconv.Itoa(t.id), memMB*1024, mutantMode)
 		if err != nil {
-			return false, fmt.Errorf("%s local mutant %d: %w", suites[t.suite].pkg, t.id, err)
+			return result, fmt.Errorf("%s local mutant %d: %w", suites[t.suite].pkg, t.id, err)
 		}
-		return passed, nil
+		return result, nil
 	}, j, func(completed int) {
 		if completed%25 == 0 || completed == len(candidates) {
 			fmt.Fprintf(os.Stderr, "completed %d/%d source mutants (%s)\n", completed, len(candidates), time.Since(started).Round(time.Second))

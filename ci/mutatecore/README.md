@@ -23,8 +23,9 @@ existing survivor thresholds remain unchanged. Tests outside the requested packa
 mutant's linked suites run in sequence until one kills it. The exact source-owning
 package runs first when it has a linked test suite; other suites retain their
 admitted order. A passing owner still needs every other linked suite to pass.
-Timeouts and ordinary test failures kill mutants; setup failures abort the
-campaign. Inventory and baseline execution have the same cap and timeout but
+Nonzero test-process statuses still count as operational kills; setup statuses
+125–127 abort the campaign. This count policy is unchanged and does not establish
+that an assertion detected incorrect behavior. Inventory and baseline execution have the same cap and timeout but
 must pass.
 
 Run the focused controls with `go test -race ./ci/mutatecore`.
@@ -58,3 +59,21 @@ CI must retain `.gotogether/mutations/` with an `always()` artifact upload and
 matrix artifact name (for example, the job index), and retain the default
 journal location so that upload finds it. These internal records are evidence
 for review, not a public receipt format or permission to resume a prior build.
+
+Each attempted suite now retains `execution`: the owned shell/timeout process's
+`disposition`, exact `exit_code` when it exited, or actual OS `signal_number` and
+signal display name when signaled. `exited` includes exit 0 and ordinary nonzero
+statuses; exit 1 alone is not assertion evidence. `timeout_status` (124) and
+`signal_status` (129–192) describe wrapper status conventions, not proven causes:
+a test can explicitly return those statuses too. Other exit codes remain raw
+`exited` statuses. `setup_status` (125–127), `execution_error` and `canceled`
+remain errors rather than kills. Interrupted commands carry no inferred exit or
+signal result. Baseline journal records retain the same execution metadata;
+outputs and error details keep their existing capture policy.
+
+Resource/status evidence can therefore be separated from ordinary exits during
+review without changing the survivor gate. Neither an operational kill nor an
+ordinary nonzero exit is itself behavioral evidence. These additive fields are
+internal journal data; this slice does not integrate the separate draft journal
+reader or introduce a public report, compatibility reader, campaign resume,
+new limit, or approval policy.

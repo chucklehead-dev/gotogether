@@ -50,6 +50,7 @@ type suiteRecord struct {
 	Inventory []inventoryRecord `json:"inventory"`
 }
 type attemptRecord struct {
+	Execution executionResult `json:"execution"`
 	targetRecord
 	Outcome string `json:"outcome"`
 	Error   string `json:"error,omitempty"`
