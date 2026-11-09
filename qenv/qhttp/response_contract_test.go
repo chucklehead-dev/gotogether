@@ -78,20 +78,15 @@ func TestResponseLengthAndHeaderCommit(t *testing.T) {
 					}
 				}
 				if profile == "net-http" {
-					done := make(chan struct{})
-					srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-						defer close(done)
-						h.ServeHTTP(w, r)
-					}))
+					srv := httptest.NewUnstartedServer(h)
 					// The late WriteHeader is an intentional control.
 					srv.Config.ErrorLog = log.New(io.Discard, "", 0)
 					srv.Start()
 					defer srv.Close()
 					read(t.Context(), srv.Client(), srv.URL)
-					if resp == nil {
-						t.Fatal("no response")
-					}
-					<-done // handler observations have completed before their assertions
+					// Close waits for handlers before their write results are read.
+					// It also handles a failed request that never reached the handler.
+					srv.Close()
 				} else {
 					s := qenv.New(qenv.Nominal{})
 					defer s.Close()

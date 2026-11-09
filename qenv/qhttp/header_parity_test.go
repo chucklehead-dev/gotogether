@@ -94,16 +94,11 @@ func TestResponseSuppressedAndInvalidLength(t *testing.T) {
 					}
 				}
 				if profile == "net-http" {
-					done := make(chan struct{})
-					srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-						defer close(done)
-						h.ServeHTTP(w, r)
-					}))
+					srv := httptest.NewUnstartedServer(h)
 					srv.Config.ErrorLog = log.New(io.Discard, "", 0) // invalid headers are intentional controls
 					srv.Start()
 					defer srv.Close()
 					read(t.Context(), srv.Client(), srv.URL)
-					<-done
 				} else {
 					s := qenv.New(qenv.Nominal{})
 					defer s.Close()
