@@ -120,9 +120,6 @@ type ruleRefusal struct {
 func (a *App) applyRules(r *Reads, events []Event) (*ruleRefusal, error) {
 	for _, e := range events {
 		for _, ri := range a.rulesOn(e.Type) {
-			if ruledrop.Dropped == ri.name {
-				continue // a generated mutant's binary (gristtest.RuleMutants): the rule dropped
-			}
 			err := ri.check(r, e)
 			if r.err != nil {
 				return nil, nil
@@ -133,12 +130,18 @@ func (a *App) applyRules(r *Reads, events []Event) (*ruleRefusal, error) {
 			if err == nil {
 				continue
 			}
-			var rej *Rejected
-			if !errors.As(err, &rej) {
+			rej, rejected := errors.AsType[*Rejected](err)
+			if !rejected {
 				return nil, fmt.Errorf("grist: rule %s: %w", ri.name, err)
 			}
 			if !slices.Contains(ri.opts.refuses, rej.Name) {
 				return nil, fmt.Errorf("grist: rule %s refused %s, which its Refuses does not declare (%v): add it, so its commands' models have the outcome", ri.name, rej.Name, ri.opts.refuses)
+			}
+			if ruledrop.Dropped == ri.name {
+				// Ignore only the generated mutant's declared refusal. Running
+				// the callback preserves its reads and all operational checks,
+				// so the model can catch the guard rather than a missing read.
+				continue
 			}
 			return &ruleRefusal{rule: ri.name, rej: rej}, nil
 		}

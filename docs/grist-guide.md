@@ -799,7 +799,8 @@ says, per run, how far it got.
 
 A mutant is a file in `testdata/mutants/<name>/` replacing the app's
 file of the same name (an overlay). Each rule also gets a generated one,
-`drop-<rule>`, the app with that rule dropped:
+`drop-<rule>`, the app with that rule’s declared refusals ignored. Its callback
+still runs, preserving reads and operational errors:
 
 ```go
 func TestMutant(t *testing.T) {
@@ -810,7 +811,7 @@ func TestMutant(t *testing.T) {
 	qtest.RequireQuint(t)
 	if _, caught, ok := gristtest.DroppedRule(App); ok {
 		gristsim.System(commits, App, fill).WithRates(qenv.NoFaults).
-			Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 3}).Expect(t, caught)
+			Explore(t, qtest.ExploreConfig{Seeds: 1}).Expect(t, caught)
 		return
 	}
 	switch mutant {
@@ -827,6 +828,12 @@ func TestMutants(t *testing.T) {
 	qtest.Mutants{Generated: gristtest.RuleMutants(App)}.Run(t)
 }
 ```
+
+`DroppedRule` requires a recorded successful command whose structured model
+verdict names the dropped rule and its refusal after an ok decision. A missing
+read, another rule’s refusal, or an unavailable explanation cannot satisfy it.
+Use a deterministic workload that first succeeds, then crosses the guard; the
+scaffold adds three units twice to a capacity of five.
 
 `TestMutants` builds the test binary once per mutant and runs
 `TestMutant` in it. Pair every mutant with a faithful test at the same

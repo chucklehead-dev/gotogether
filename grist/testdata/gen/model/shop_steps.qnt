@@ -173,15 +173,15 @@ module shopGen {
   // its reads, before the append: their verdicts so far (the first refusal,
   // "" for none, and the reads of every rule that ran), and a guarded
   // command's (its decision's outcome, then its rules')
-  type RuleVerdict = { refusal: str, needs: Set[Read] }
-  type CommandVerdict = { decided: str, outcome: str, needs: Set[Read] }
-  pure val noRule: RuleVerdict = { refusal: "", needs: Set() }
+  type RuleVerdict = { refusal: str, rule: str, needs: Set[Read] }
+  type CommandVerdict = { decided: str, outcome: str, rule: str, needs: Set[Read] }
+  pure val noRule: RuleVerdict = { refusal: "", rule: "", needs: Set() }
 
   // rule open-shop on item-added, after acc: no verdict once one refused
   pure def openShopRuled(log: List[Event], e: Event, acc: RuleVerdict): RuleVerdict =
     val refusal = if (acc.refusal != "" or e.typ != "item-added") "" else openShopRefusal(log, e)
     if (acc.refusal != "" or e.typ != "item-added") acc
-    else { refusal: refusal, needs: acc.needs.union(openShopNeeds(e, refusal)) }
+    else { refusal: refusal, rule: if (refusal == "") "" else "open-shop", needs: acc.needs.union(openShopNeeds(e, refusal)) }
 
   // the rules on b's events, in batch order, an event's in registration
   // order: the first refusal wins
@@ -193,7 +193,7 @@ module shopGen {
   pure def addItemRuled(log: List[Event], c: AddItemArgs): CommandVerdict =
     val decided = addItemOutcome(log, c)
     val ruled = rulesOf(log, if (decided == "ok") addItemEvents(log, c) else [])
-    { decided: decided, outcome: if (ruled.refusal != "") ruled.refusal else decided, needs: ruled.needs }
+    { decided: decided, outcome: if (ruled.refusal != "") ruled.refusal else decided, rule: ruled.rule, needs: ruled.needs }
 
   // add-item: conditioned on its reads; refusals full, closed. Its outcome is
   // its decision's, then, when that is ok, the first refusal of the rules
@@ -802,15 +802,15 @@ module shopCallsGen {
   // its reads, before the append: their verdicts so far (the first refusal,
   // "" for none, and the reads of every rule that ran), and a guarded
   // command's (its decision's outcome, then its rules')
-  type RuleVerdict = { refusal: str, needs: Set[Read] }
-  type CommandVerdict = { decided: str, outcome: str, needs: Set[Read] }
-  pure val noRule: RuleVerdict = { refusal: "", needs: Set() }
+  type RuleVerdict = { refusal: str, rule: str, needs: Set[Read] }
+  type CommandVerdict = { decided: str, outcome: str, rule: str, needs: Set[Read] }
+  pure val noRule: RuleVerdict = { refusal: "", rule: "", needs: Set() }
 
   // rule open-shop on item-added, after acc: no verdict once one refused
   pure def openShopRuled(log: List[Event], e: Event, acc: RuleVerdict): RuleVerdict =
     val refusal = if (acc.refusal != "" or e.typ != "item-added") "" else openShopRefusal(log, e)
     if (acc.refusal != "" or e.typ != "item-added") acc
-    else { refusal: refusal, needs: acc.needs.union(openShopNeeds(e, refusal)) }
+    else { refusal: refusal, rule: if (refusal == "") "" else "open-shop", needs: acc.needs.union(openShopNeeds(e, refusal)) }
 
   // the rules on b's events, in batch order, an event's in registration
   // order: the first refusal wins
@@ -822,7 +822,7 @@ module shopCallsGen {
   pure def addItemRuled(log: List[Event], c: AddItemArgs): CommandVerdict =
     val decided = addItemOutcome(log, c)
     val ruled = rulesOf(log, if (decided == "ok") addItemEvents(log, c) else [])
-    { decided: decided, outcome: if (ruled.refusal != "") ruled.refusal else decided, needs: ruled.needs }
+    { decided: decided, outcome: if (ruled.refusal != "") ruled.refusal else decided, rule: ruled.rule, needs: ruled.needs }
 
   action addItem(item_: str, qty: int, of_: str, id: str, caller: str, result: str): bool = {
     val args_: AddItemArgs = { item: item_, qty: qty, of: of_, caller: caller }
