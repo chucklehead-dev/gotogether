@@ -128,8 +128,12 @@ AGENTS.md has the general requirements.
   parent phase starts/completions rather than per-state checker lines. While a
   native verification command runs, elapsed-only `RUN` lines appear every 30
   seconds; these show that the result is still awaited, not solver state or proof
-  progress. Native
-  proofs assume defined model expressions: Quint declares out-of-range indexing
+  progress.
+  `holds` checks for one prepared binding and effective bound share a conjunction
+  proof when there are at least two distinct members. A conjunction counterexample
+  triggers individual checks of every member; backend errors yield no member
+  proof. `allows`, unclassified invariants and possibility checks stay separate.
+  Native proofs assume defined model expressions: Quint declares out-of-range indexing
   undefined, and a successful backend result does not diagnose it. A skipped
   binding may exit 0 without checking anything; partial solver output is not a
   completed verdict. Library callers opt in with `model.SimulateOptions.Progress`.
