@@ -316,10 +316,11 @@ func runUnderNemesis(t *testing.T, bin, proxyURL, dir string, cfg nemesisRun) re
 	sink.Close()
 	// every node stopped (SIGSTOP) before the settle: a late step (an
 	// election timer firing) between the settle and the kill would void it
-	for _, p := range procs {
-		if err := p.Pause(ctx); err != nil {
-			t.Fatal(err)
-		}
+	// Dispatch every stop before waiting for group/thread confirmations. A
+	// sequential Pause can let followers start an election while the leader's
+	// stopped-state scan runs, changing the history being captured.
+	if err := qnemesis.PauseProcesses(ctx, procs...); err != nil {
+		t.Fatal(err)
 	}
 	hsink, err := qobs.FileSink(filepath.Join(steps, "harness.jsonl"), qobs.PerStep)
 	if err != nil {

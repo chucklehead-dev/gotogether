@@ -13,6 +13,9 @@ and adds a line here.
   typed `validate.NativeProof` provenance. `SourceGuard.Files` returns a verified
   owned inventory. The CLI accepts repeated `-binding` and `-report-dir`.
 
+- `qnemesis.PauseProcesses` sends all process stop signals before waiting for
+  group confirmations, preserving final capture without serial scan delays.
+
 - History search recovers missing exact-prefix states within its existing
   candidate allowance, enabling state-equivalent prefix merging without
   repeated exact checks or borrowing longer-run states.

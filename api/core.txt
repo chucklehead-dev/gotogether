@@ -1520,6 +1520,7 @@ func DefaultRecording() Recording
 func FromScript(sc *qenv.Script) Schedule
 func Kinds(family string, names ...string) []string
 func NewRecorder(path string, opts ...qobs.Option) (*qobs.Recorder, error)
+func PauseProcesses(ctx context.Context, processes ...*Process) error
 func Random(seed int64, mix Mix, interval, dur time.Duration) Schedule
 func ReadJournal(r io.Reader) (*Journal, error)
 func StepsIn(patterns ...string) func() int
