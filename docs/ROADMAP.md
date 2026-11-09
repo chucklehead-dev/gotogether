@@ -1180,8 +1180,9 @@ Then, in order, each item reviewed before the next:
   qhttp/simgrpc/simlog networks with faults per service; a cross-service
   causal link recorded on both sides (the cause and the caller's command
   id carried with a call and an event); per-service bindings with
-  `actors:` and a system model (Choreo for the protocol between
-  services); multi-node runs of one service (Config.Nodes). Then
+  `actors:` and a handwritten Quint system model over the
+  `gristtest.ProtocolSteps` causal projection; multi-node runs of one
+  service (Config.Nodes). Then
   integration between services: a service's event feed with remote
   consumer checkpoints, a packaged inbox/outbox, service identities
   (an actor that is a service, Internal blocks callable by named

@@ -564,8 +564,8 @@ a run's recorded steps (`qtest.Run.Recorded`, both Apps' in one run):
 every call A saw answered, ok or refused, has B's step of its key in the
 same tenant with the same outcome, every B commit whose id names A
 (`<a>/...`) has A's call of that key (pending included), and no key has
-two B steps. A system model over both (Choreo for the protocol, GR4)
-reads the same records.
+two B steps. A handwritten Quint system model over
+`gristtest.ProtocolSteps` checks the causal protocol projection (GR4).
 
 What GR4 then needs and GR3 fixes: B's API server named after B
 (`rpc.bank.*`, and every App's own: `rpc.<app>.*`), not `api`; actors
