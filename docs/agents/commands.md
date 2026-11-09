@@ -125,7 +125,10 @@ AGENTS.md has the general requirements.
   any emitted Quint diagnostics, to stderr; `-json` keeps one final report on stdout.
   Bounded verification reads Quint's structured result and ITF counterexample;
   Quint's `--out` suppresses its inner checker console, so those runs retain the
-  parent phase starts/completions rather than per-state checker lines.
+  parent phase starts/completions rather than per-state checker lines. While a
+  native verification command runs, elapsed-only `RUN` lines appear every 30
+  seconds; these show that the result is still awaited, not solver state or proof
+  progress.
   `holds` checks for one prepared binding and effective bound share a conjunction
   proof when there are at least two distinct members. A conjunction counterexample
   triggers individual checks of every member; backend errors yield no member

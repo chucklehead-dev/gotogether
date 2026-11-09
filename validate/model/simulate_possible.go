@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/confidence"
@@ -292,18 +293,35 @@ func readWitnesses(out string, preds []*possibleCheck) error {
 }
 
 func runQuint(ctx context.Context, quint, dir string, argv []string) (string, error) {
+	return runQuintWithPulse(ctx, quint, dir, argv, nativePulseInterval)
+}
+
+func runQuintWithPulse(ctx context.Context, quint, dir string, argv []string, interval time.Duration) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
 	cmd := quintcmd.Command(ctx, quint, dir, argv...)
 	var out bytes.Buffer
 	var capture io.Writer = &out
+	var pulse io.Writer
 	if progress := progressOf(ctx); progress != nil && progress.w != nil {
-		capture = io.MultiWriter(capture, diagnosticWriter{progress.w})
+		// The command's diagnostics and our elapsed-only pulse can arrive
+		// concurrently, including when the caller supplied a bytes.Buffer.
+		sink := diagnosticWriter{&nativeProgressWriter{w: progress.w}}
+		capture = io.MultiWriter(capture, sink)
+		if len(argv) > 0 && argv[0] == "verify" {
+			pulse = sink
+		}
 	}
 	// One shared writer preserves CombinedOutput's serialized merged capture.
 	cmd.Stdout, cmd.Stderr = capture, capture
-	err := cmd.Run()
+	err := cmd.Start()
+	if err == nil {
+		stop := startNativePulse(ctx, pulse, progressOf(ctx), interval)
+		defer stop() // also drain the pulse if a future command path panics
+		err = cmd.Wait()
+		stop() // no pulse can race the caller's END phase or report
+	}
 	if canceled := ctx.Err(); canceled != nil {
 		return "", canceled
 	}
