@@ -148,11 +148,10 @@ func quintPossibles(ctx context.Context, quint, dir, file string, cs []*possible
 	}
 	verified, preds, seqs := quintShare(cs, verify)
 	for _, c := range verified {
-		argv := []string{"verify", "--main", "simulate", "--invariant", c.not, "--max-steps", fmt.Sprint(verify), file}
 		done := progressOf(ctx).phase("verified-possible " + c.p.Text())
-		out, err := runQuint(ctx, quint, dir, argv)
+		native, err := verifyNative(ctx, quint, dir, file, c.not, verify)
 		status := phaseStatus(ctx, err)
-		if ctx.Err() == nil && !isAnalysisCancellation(err) && strings.Contains(out, "[violation]") {
+		if ctx.Err() == nil && !isAnalysisCancellation(err) && native.violated {
 			status = "completed"
 		}
 		done(status)
@@ -162,11 +161,10 @@ func quintPossibles(ctx context.Context, quint, dir, file string, cs []*possible
 		if canceled := ctx.Err(); canceled != nil {
 			return canceled
 		}
-		v := strings.Contains(out, "[violation]")
-		if err != nil && !v {
-			return fmt.Errorf("simulate: quint verify of possible %q: %w\n%s", c.p.Text(), err, out)
+		if err != nil {
+			return fmt.Errorf("simulate: quint verify of possible %q: %w", c.p.Text(), err)
 		}
-		c.quintFound = v
+		c.quintFound = native.violated
 	}
 	if len(preds) > 0 {
 		out := ""

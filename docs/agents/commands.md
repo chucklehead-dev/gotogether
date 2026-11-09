@@ -122,7 +122,12 @@ AGENTS.md has the general requirements.
   and `simulate` write its report as JSON there (`gotogether.report/2`,
   a file per command, in the order run: the Action's job summary).
   `simulate` writes live binding/phase starts and elapsed completion status, plus
-  Quint diagnostics, to stderr; `-json` keeps one final report on stdout. A skipped
+  any emitted Quint diagnostics, to stderr; `-json` keeps one final report on stdout.
+  Bounded verification reads Quint's structured result and ITF counterexample;
+  Quint's `--out` suppresses its inner checker console, so those runs retain the
+  parent phase starts/completions rather than per-state checker lines. Native
+  proofs assume defined model expressions: Quint declares out-of-range indexing
+  undefined, and a successful backend result does not diagnose it. A skipped
   binding may exit 0 without checking anything; partial solver output is not a
   completed verdict. Library callers opt in with `model.SimulateOptions.Progress`.
   `GOTOGETHER_RUN='TestX#2:seed=n'` (or `:schedule=...`,
