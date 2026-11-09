@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- Native counterexample validation recognizes Apalache's exact unit marker only
+  where the structured trace expects an empty tuple, including nested variant
+  payloads. Records, labels and other values remain strict; unordered collections
+  use one-to-one matching. This fixes rejection of valid edgepublish witnesses
+  without changing models, bounds, or proof acceptance.
+
 - Add `model.SimulateMany` for sequential independent binding reports, with
   operation-local reuse of exact validated positive native group proofs and
   typed `validate.NativeProof` provenance. `SourceGuard.Files` returns a verified

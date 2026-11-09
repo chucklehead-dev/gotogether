@@ -9452,3 +9452,25 @@ Elapsed time was 4,003.81 seconds, with no deadline excess or remaining owned
 processes. This is neither a complete roster qualification nor a green nightly.
 The raw temporary counterexample was not retained; a focused reproduction is
 needed to diagnose the decoder boundary without weakening strict validation.
+
+
+### 2026-11-09: validate native unit payloads in counterexamples
+
+The PR130 roster stopped at edgepublish's allowed `sealMatchesManifests`
+counterexample: its seven-state structured trace and ITF disagreed at writer
+state 1 under the old decoder. A focused reproduction on unchanged source
+42c56962, bound eight and default memory, returned actual native exit one in
+27.59 seconds; supervision completed in 27.94 seconds with no remaining owned
+processes. The raw structured result and ITF are retained under
+`/workspace/review-artifacts/native-edgepublish-counterexample/`.
+
+Pinned Quint converts Apalache's exact `{tag: "UNIT"}` marker to an empty tuple
+in the structured trace. General ITF decoding preserves it as a record, including
+inside nullary phase variants. Native validation now compares the two values
+using the expected structured shape: only an expected empty tuple admits that
+marker. Genuine tag records, extra marker fields, variant labels, values and
+state bounds remain checked. Augmenting-path matching preserves unordered set
+and map semantics without greedy ambiguity or crossing map keys and values.
+The retained full seven-state pair and changed-state/exit/bound controls exercise
+the adapter offline. No model, search budget, proof gate, or global ITF decoding
+rule changed; the incomplete roster remains incomplete until rerun.

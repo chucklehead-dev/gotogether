@@ -318,7 +318,7 @@ func validateNativeTrace(normalized any, data []byte, steps int) error {
 				return fmt.Errorf("invalid ITF state %d field %s: %w", i, name, err)
 			}
 			got, ok := value.Fields[name]
-			if !ok || !got.Equal(one.States[0].Vars["v"]) {
+			if !ok || !nativeTraceEqual(got, one.States[0].Vars["v"]) {
 				return fmt.Errorf("counterexample states disagree at %d field %s", i, name)
 			}
 		}
