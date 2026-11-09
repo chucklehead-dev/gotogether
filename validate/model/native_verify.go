@@ -27,6 +27,30 @@ type nativeVerification struct {
 // Quint suppresses its console checker progress with --out; our parent phases
 // still report START/END, and any emitted diagnostics remain streamed.
 func verifyNative(ctx context.Context, quint, dir, file, invariant string, steps int) (nativeVerification, error) {
+	return verifyNativeInvariants(ctx, quint, dir, file, []string{invariant}, steps)
+}
+
+// verifyNativeGroup checks one conjunction under exactly one native invocation.
+// A counterexample is evidence only against the conjunction, not any named member.
+func verifyNativeGroup(ctx context.Context, quint, dir, file string, invariants []string, steps int) (nativeVerification, error) {
+	if len(invariants) < 2 {
+		return nativeVerification{}, fmt.Errorf("native invariant group requires at least two members")
+	}
+	return verifyNativeInvariants(ctx, quint, dir, file, invariants, steps)
+}
+
+func verifyNativeInvariants(ctx context.Context, quint, dir, file string, invariants []string, steps int) (nativeVerification, error) {
+	if len(invariants) == 0 {
+		return nativeVerification{}, fmt.Errorf("native verification requires an invariant")
+	}
+	invariant := strings.Join(invariants, ", ")
+	seen := map[string]bool{}
+	for _, name := range invariants {
+		if strings.TrimSpace(name) == "" || seen[name] {
+			return nativeVerification{}, fmt.Errorf("native invariants require distinct nonempty names")
+		}
+		seen[name] = true
+	}
 	work, err := os.MkdirTemp(dir, "native-verify-")
 	if err != nil {
 		return nativeVerification{}, err
@@ -34,6 +58,12 @@ func verifyNative(ctx context.Context, quint, dir, file, invariant string, steps
 	defer os.RemoveAll(work)
 	resultFile, traceFile := filepath.Join(work, "result.json"), filepath.Join(work, "trace.itf.json")
 	argv := []string{"verify", file, "--main", "simulate", "--invariant", invariant, "--max-steps", fmt.Sprint(steps), "--out", resultFile, "--out-itf", traceFile}
+	if len(invariants) > 1 {
+		// --invariants is variadic: keep the input file and all other options
+		// before its members, so none can be interpreted as another invariant.
+		argv = []string{"verify", file, "--main", "simulate", "--max-steps", fmt.Sprint(steps), "--out", resultFile, "--out-itf", traceFile, "--invariants"}
+		argv = append(argv, invariants...)
+	}
 	out, commandErr := runQuint(ctx, quint, dir, argv)
 	if ctx.Err() != nil {
 		return nativeVerification{}, ctx.Err()
