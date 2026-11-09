@@ -431,6 +431,10 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 	if verify > 0 {
 		bound = Bound{Kind: "verified", Steps: verify}
 	}
+	proved, err := proveNativeHolds(ctx, opt.Quint, dir, file, invariants, holds, verify)
+	if err != nil {
+		return nil, err
+	}
 	code := 0
 	for _, inv := range invariants {
 		// the file first: --witnesses, if hostArgs adds it, takes every
@@ -456,9 +460,15 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 		var err error
 		violated := false
 		if verify > 0 {
-			var native nativeVerification
-			native, err = verifyNative(ctx, opt.Quint, dir, file, inv, verify)
-			out, violated = native.diagnostic, native.violated
+			if proved[inv] {
+				if progress.w != nil {
+					fmt.Fprintf(progress.w, "simulate %s: invariant %s uses shared batch proof\n", bpath, inv)
+				}
+			} else {
+				var native nativeVerification
+				native, err = verifyNative(ctx, opt.Quint, dir, file, inv, verify)
+				out, violated = native.diagnostic, native.violated
+			}
 		} else {
 			out, err = runQuint(ctx, opt.Quint, dir, argv)
 			violated = strings.Contains(out, "[violation]")
