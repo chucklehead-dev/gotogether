@@ -105,9 +105,10 @@ them only after an ok `<c>Outcome`, so `<c>Outcome` and `<c>Needs`
 leave the rule out (`<c>Needs` is called with `"ok"` when a rule
 refused); every action of a command declaring T in `grist.Appends`
 requires the step's outcome to be the guarded one and its read set to
-cover each rule's needs. A run with the rule dropped (gristtest's
-generated `drop-<rule>` mutant) commits where `<r>Refusal` refuses: a
-`Rejects` of the command.
+cover each rule's needs. A generated `drop-<rule>` mutant still executes the
+rule and records its reads, but ignores its declared refusal. `DroppedRule`
+requires the structured verdict to identify that rule and refusal after an ok
+decision; a missing-read rejection or another rule's refusal does not count.
 
 Per query `q`: `<q>Answer(log, q)`, the result's scalar and scalar-list fields
 as a record (or a scalar result), compared with the step's at its position.

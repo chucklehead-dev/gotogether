@@ -16,7 +16,7 @@ and both bindings are generated from the App's catalog.
 | [model/{{.Name}}.qnt](model/{{.Name}}.qnt) | written by hand: the invariants, each marked for its binding (`// grist: invariant`); the modules the bindings name |
 | [model/{{.Name}}_gen.qnt](model/{{.Name}}_gen.qnt) (the events), [model/{{.Name}}_steps.qnt](model/{{.Name}}_steps.qnt) (the actions), `*.binding.yaml`, [model/grist.qnt](model/grist.qnt) | generated: `go run ./cmd/{{.Name}} model` (never edit them; `TestGenerated` fails when they are stale) |
 | [cmd/{{.Name}}](cmd/{{.Name}}/main.go) | the binary (`grist.Main`): `model`, `catalog`, `verify`, `serve -db sqlite:PATH` |
-| [testdata/mutants](testdata/mutants) | `noInvalid`: the quantity check left out; `drop-capacity` is generated (`gristtest.RuleMutants(App)`: the app with its rule dropped); `qtest.Mutants` finds and runs them all |
+| [testdata/mutants](testdata/mutants) | `noInvalid`: the quantity check left out; `drop-capacity` is generated (`gristtest.RuleMutants(App)`: the app ignoring its rule’s refusal while retaining reads); `qtest.Mutants` finds and runs them all |
 
 ## Which check catches which mutant
 
@@ -26,8 +26,8 @@ and both bindings are generated from the App's catalog.
 | `TestFaithfulAtClients` | the same runs at the clients, linearized | nothing: `Conforms` |
 | `TestMutant` (`noInvalid`) | `TestFaithful`'s workload, no faults | `Some(Rejects("addItem"))`: an addition of none or fewer commits where the model refuses it (`TestFaithful` is the contrast) |
 | `TestScenariosPossible` | the model on its own (`qtest.Possible`) | a model too strict for the `fill up` scenario (an item filled, an addition past its capacity refused `full`) to happen |
-| `TestFull` | two clients filling one item, no faults | nothing: `None(Rejects("addItem"))` (`drop-capacity`'s contrast), some run following the `fill up` scenario (`gristtest.Scenario`) |
-| `TestMutant` (`drop-capacity`, generated) | the same, the `capacity` rule dropped | `gristtest.DroppedRule`'s claim, `Some(Rejects("addItem"))`: an addition past the capacity commits where the generated guard (`capacityRefusal`) refuses it |
+| `TestFull` | one client adds three units twice, no faults | nothing: `None(Rejects("addItem"))` (`drop-capacity`'s contrast), some run following the `fill up` scenario (`gristtest.Scenario`) |
+| `TestMutant` (`drop-capacity`, generated) | the same fixed sequence, the `capacity` refusal ignored while preserving its reads | `gristtest.DroppedRule` requires a successful decision rejected for the model's `full` outcome, after exactly one accepted addition; missing reads do not satisfy the claim |
 | `TestRealHTTP` | the real tier: SQLite, real HTTP, the warehouse's default double in process, every fifth answer lost (gristtest.Tier) | nothing: both bindings conform, every answer has its store-side step |
 | `TestGenerated` | the generated files against the catalog | a block changed without regenerating |
 
