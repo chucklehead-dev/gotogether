@@ -55,7 +55,7 @@ func crashMidway(t *testing.T, s *qenv.Sim, attach func(p *qenv.Process), body f
 	return finished
 }
 
-// Two disks, services or queues of one name in a simulation would share
+// Two doubles of one name in a simulation would share
 // their fault kinds, so a rate or a script naming one would mean both:
 // the second panics, naming the double and the fix.
 func TestDoublesClaimTheirNames(t *testing.T) {
@@ -68,6 +68,7 @@ func TestDoublesClaimTheirNames(t *testing.T) {
 			qenv.NewService(s, "d", nil, func(context.Context, int) (int, error) { return 0, nil })
 		}},
 		{"Queue", func(s *qenv.Sim) { qenv.NewQueue(s, "d", nil) }},
+		{"Router", func(s *qenv.Sim) { qenv.NewRouter(s, "d", 0) }},
 	} {
 		t.Run(c.what, func(t *testing.T) {
 			s := qenv.New(qenv.Nominal{})
