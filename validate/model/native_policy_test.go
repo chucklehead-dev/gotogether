@@ -1,7 +1,6 @@
 package model
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,19 +19,17 @@ func TestNativeOwnedAfterPolicy(t *testing.T) {
 			name = "group"
 		}
 		t.Run(name, func(t *testing.T) {
-			metadata := filepath.Join(t.TempDir(), "config-evidence.json")
-			script := `python3 - "$@" <<'PY'
-import json,os,stat,sys
-from pathlib import Path
-args=sys.argv[1:]
-p=Path(args[args.index('--apalache-config')+1])
-assert args.count('--apalache-config')==1
-if '--invariants' in args: assert args.index('--apalache-config') < args.index('--invariants')
-assert json.loads(p.read_text())=={'checker':{'tuning':{'search.invariant.mode':'after'}}}
-assert stat.S_IMODE(p.stat().st_mode)==0o600
-assert p.parent.name.startswith('native-verify-')
-Path(` + "'" + metadata + "'" + `).write_text(json.dumps({'path':str(p),'argv':args}))
-PY
+			metadata := filepath.Join(t.TempDir(), "config-evidence")
+			quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'" }
+			script := `policy=''
+previous=''
+for arg do
+ if [ "$previous" = --apalache-config ]; then policy=$arg; fi
+ previous=$arg
+done
+cp -p "$policy" ` + quote(metadata+".config") + ` || exit 42
+printf '%s' "$policy" > ` + quote(metadata+".path") + `
+printf '%s\0' "$@" > ` + quote(metadata+".argv") + `
 ` + nativeFakeScript(nativeProofJSON, "", 0, "policy inspected")
 			source := comparisonFakeSource(t, script)
 			dir := t.TempDir()
@@ -45,28 +42,41 @@ PY
 			if err != nil {
 				t.Fatal(err)
 			}
-			raw, err := os.ReadFile(metadata)
-			if err != nil {
-				t.Fatal(err)
+			read := func(suffix string) []byte {
+				t.Helper()
+				raw, err := os.ReadFile(metadata + suffix)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return raw
 			}
-			var evidence struct {
-				Path string
-				Argv []string
+			if raw := string(read(".config")); raw != `{"checker":{"tuning":{"search.invariant.mode":"after"}}}` {
+				t.Fatalf("unexpected policy: %s", raw)
 			}
-			if err := json.Unmarshal(raw, &evidence); err != nil {
-				t.Fatal(err)
+			info, err := os.Stat(metadata + ".config")
+			if err != nil || info.Mode().Perm() != 0600 {
+				t.Fatalf("config mode changed: %v %v", info, err)
 			}
-			if _, err := os.Stat(evidence.Path); !os.IsNotExist(err) {
+			path := string(read(".path"))
+			if filepath.Base(path) != "apalache.json" || !strings.HasPrefix(filepath.Base(filepath.Dir(path)), "native-verify-") {
+				t.Fatalf("not owned per invocation: %s", path)
+			}
+			if _, err := os.Stat(path); !os.IsNotExist(err) {
 				t.Fatalf("owned config survived command: %v", err)
 			}
 			entries, err := os.ReadDir(dir)
 			if err != nil || len(entries) != 0 {
 				t.Fatalf("owned workdir leaked: %v %v", entries, err)
 			}
+			argv := strings.Split(strings.TrimSuffix(string(read(".argv")), "\x00"), "\x00")
+			at := slices.Index(argv, "--apalache-config")
+			if at < 0 || argv[at+1] != path || slices.Contains(argv[at+1:], "--apalache-config") {
+				t.Fatalf("config not supplied exactly once: %v", argv)
+			}
 			if group {
-				at := slices.Index(evidence.Argv, "--invariants")
-				if at < 0 || strings.Join(evidence.Argv[at+1:], ",") != "a,b" {
-					t.Fatalf("variadic arguments changed: %v", evidence.Argv)
+				end := slices.Index(argv, "--invariants")
+				if end <= at || strings.Join(argv[end+1:], ",") != "a,b" {
+					t.Fatalf("variadic arguments changed: %v", argv)
 				}
 			}
 		})

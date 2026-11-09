@@ -9374,8 +9374,9 @@ same-source default reference remained incomplete at 7,200 seconds. This support
 one bounded completion result, not a speedup ratio or full-nightly recovery.
 Tiny before/after controls retained proofs, initial/step counterexamples, mixed
 group fallback and frontend-error rejection; frontend errors are not solver
-unknown controls. Java and Go high-water marks were separate observations, not a
-combined peak or controlled comparison.
+unknown controls. Observed high-water marks were about 3.125 GiB for Java and
+2.528 GiB for Go: separate peaks, not a combined peak or a controlled comparison
+with the sparsely sampled default reference.
 
 Owned native invocations now set only search.invariant.mode=after in private
 mode-0600 config files. The common helper covers scalar/grouped invariants and
@@ -9383,3 +9384,13 @@ verified predicate possibles without new flags, schema fields, heuristic retries
 skips or budget changes. The mode can use more memory. Strict structured verdict
 validation and the defined-source limitation remain in place.
 
+
+The new producer policy also passed nine sequential tiny native calls directly
+against pinned Quint 0.33.1/Apalache, without a config-injecting backend wrapper.
+Observed configs had exact after-only bytes and mode 0600; all were removed.
+Scalar proof, initial/step counterexamples, grouped proof and scalar fallback,
+predicate inversion and frontend-error rejection passed in 95.65 seconds under
+a 600-second total supervisor, with no signals or remaining owned processes.
+This is configuration/semantic admission, not additional representative timing
+or a real solver-unknown control. Ordinary lifecycle/adverse/cancellation tests
+continue to reject incomplete or contradictory proof evidence.

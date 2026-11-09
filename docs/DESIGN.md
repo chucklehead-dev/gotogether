@@ -7050,13 +7050,7 @@ verdict. Cancellation wins over published artifacts. A grouped counterexample
 still requires individual member checks; predicate verification still inverts
 its negation. Successful proofs continue to assume defined source expressions.
 
-On frozen source 46fe3b5e, one counters experiment at the existing bound eight
-completed both invariants under after mode: 3,204.82 seconds in the native call,
-3,238.16 seconds overall (about 54 minutes), actual exit zero and no remaining
-owned processes or input drift. The same frozen default-mode reference did not
-complete within its 7,200-second allowance. This is representative bounded
-completion evidence, not a controlled speedup or full-nightly pass. After mode
-can use more memory; the observed Java high-water mark was about 3.125 GiB and
-the Go process about 2.528 GiB, separate peaks that must not be summed or compared
-with the sparsely sampled reference as a measured memory increase. No memory,
-step or wall-clock allowance changes accompany this policy.
+After mode can use more memory; no memory, step or wall-clock allowance changes
+accompany this policy. The [dated qualification](HISTORY.md#2026-11-09-adopt-one-owned-after-mode-native-policy)
+records representative completion evidence and its limits; it does not establish
+a controlled speedup or full-nightly recovery.
