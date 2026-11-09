@@ -644,10 +644,12 @@ In the model, each rule is two holes in `model/<app>_rules.qnt`:
 command's action with `<command>Ruled` (its decision's outcome, then,
 when ok, the first refusal of `rulesOf` over `<command>Events`), and
 requires the step's read set to cover every rule's needs that ran, as
-it does the decision's. gristtest's `Mutants{App: App}` adds a generated
-mutant per rule, `drop-<rule>` (the app with the rule dropped, no
-overlay), and `DroppedRule(App)` the claim that catches it: some run
-rejects a command it guards.
+it does the decision's. `qtest.Mutants{Generated: gristtest.RuleMutants(App)}`
+adds a generated mutant per rule, `drop-<rule>`: the callback still reads and
+checks operational errors, but its declared refusal is ignored.
+`DroppedRule(App)` requires a guarded successful command rejected for the
+model’s refusal with that exact rule’s identity, not an incidental missing-read
+rejection. Generated rule verdicts retain the first refusing rule’s name.
 
 ### 2.5 Queries
 

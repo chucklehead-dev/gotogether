@@ -278,10 +278,12 @@ that the application's eventual model or implementation is correct.
    `qtest.Mutant()`, as examples/counters' `blind` and
    `dispatchDirect`; a mutant carries the declarations its code needs;
    `qtest.Mutants{Generated: gristtest.RuleMutants(App)}` adds a generated `drop-<rule>` per rule, the
-   app with the rule dropped, which `TestMutant` handles before its
+   app ignoring that rule’s declared refusals while preserving reads and errors,
+   which `TestMutant` handles before its
    switch: `if _, caught, ok := gristtest.DroppedRule(App); ok {
    system(...).Explore(...).Expect(t, caught); return }`, at a workload
-   where the rule refuses, as examples/library's `drop-loan-limit`),
+   where the rule refuses, as examples/library's `drop-loan-limit`; the returned
+   claim requires the exact refusing rule in the structured verdict),
    and the faithful
    app at the mutant's configuration with the opposite claim
    (`None(Rejects("createCounter"))`): an `Unconditioned` create is

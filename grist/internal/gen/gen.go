@@ -1190,14 +1190,14 @@ func (g *gen) rulesDefs(b *strings.Builder) {
 		return
 	}
 	b.WriteString("\n" + comment("  ", "The rules (grist.NewRule), run on the events an ok decision appends, on its reads, before the append: their verdicts so far (the first refusal, \"\" for none, and the reads of every rule that ran), and a guarded command's (its decision's outcome, then its rules')"))
-	b.WriteString("  type RuleVerdict = { refusal: str, needs: Set[Read] }\n  type CommandVerdict = { decided: str, outcome: str, needs: Set[Read] }\n")
-	b.WriteString("  pure val noRule: RuleVerdict = { refusal: \"\", needs: Set() }\n")
+	b.WriteString("  type RuleVerdict = { refusal: str, rule: str, needs: Set[Read] }\n  type CommandVerdict = { decided: str, outcome: str, rule: str, needs: Set[Read] }\n")
+	b.WriteString("  pure val noRule: RuleVerdict = { refusal: \"\", rule: \"\", needs: Set() }\n")
 	for _, r := range g.c.Rules {
 		guard := fmt.Sprintf("acc.refusal != \"\" or e.typ != %q", r.On)
 		fmt.Fprintf(b, "\n  // rule %s on %s, after acc: no verdict once one refused\n", r.Name, r.On)
 		fmt.Fprintf(b, "  pure def %sRuled(log: List[Event], e: Event, acc: RuleVerdict): RuleVerdict =\n", r.Quint)
 		fmt.Fprintf(b, "    val refusal = if (%s) \"\" else %sRefusal(log, e)\n", guard, r.Quint)
-		fmt.Fprintf(b, "    if (%s) acc\n    else { refusal: refusal, needs: acc.needs.union(%sNeeds(e, refusal)) }\n", guard, r.Quint)
+		fmt.Fprintf(b, "    if (%s) acc\n    else { refusal: refusal, rule: if (refusal == \"\") \"\" else %q, needs: acc.needs.union(%sNeeds(e, refusal)) }\n", guard, r.Name, r.Quint)
 	}
 	apply := "acc"
 	for _, r := range g.c.Rules {
@@ -1212,7 +1212,7 @@ func (g *gen) rulesDefs(b *strings.Builder) {
 		b.WriteString("\n" + comment("  ", fmt.Sprintf("%s's outcome: its decision's (%sOutcome), then, when ok, the first refusal of its rules (%s) on what it appends (%sEvents)", c.Name, c.Quint, strings.Join(c.Rules, ", "), c.Quint)))
 		fmt.Fprintf(b, "  pure def %sRuled(log: List[Event], c: %sArgs): CommandVerdict =\n", c.Quint, upper(c.Quint))
 		fmt.Fprintf(b, "    val decided = %sOutcome(log, c)\n    val ruled = rulesOf(log, if (decided == \"ok\") %sEvents(log, c) else [])\n", c.Quint, c.Quint)
-		b.WriteString("    { decided: decided, outcome: if (ruled.refusal != \"\") ruled.refusal else decided, needs: ruled.needs }\n")
+		b.WriteString("    { decided: decided, outcome: if (ruled.refusal != \"\") ruled.refusal else decided, rule: ruled.rule, needs: ruled.needs }\n")
 	}
 }
 

@@ -9298,3 +9298,28 @@ fault must actually be consumed. All seven targeted lifecycle mutations
 (per-file ordinals 0, 1, 2, 27, 28, 29 and 31) fail behavioral assertions; the
 woven baseline and native race/shuffle controls pass. No production behavior,
 approvals, or mutation thresholds change. A fresh full gate is still required.
+
+
+### 2026-11-09: generated rule mutants establish the intended refusal
+
+A generated dropped-rule mutant previously skipped the rule callback entirely,
+losing its reads. The scaffold's first valid addition could then be rejected for
+missing read coverage, satisfying a generic rejection claim before the capacity
+guard was reached. Mutants now execute the callback and bypass only a declared
+refusal; read collection, store errors, misuse and undeclared errors remain checked.
+
+Generated rule and command verdicts carry the first refusing rule's identity.
+The stricter claim requires a successful recorded command and decision, the
+target rule's origin and one of its declared refusals. Another guard sharing
+the same refusal label does not count. Missing canonical explanation data is
+unjudged with a model-regeneration hint, rather than an unrelated rejection.
+The scaffold makes two serial additions of three units: the first is accepted,
+and the second is rejected for the capacity refusal. The former runtime supplied
+through a read-only overlay fails these stronger controls at its first missing
+read. Existing contended/faulted faithful workloads remain in the scaffold.
+
+All eight owned application generation commands were checked; only the library
+model has guarded rules and needed regeneration. Generated/faithful application
+checks and navigator grist diagnostics passed without golden changes. Runtime
+error controls, a fresh scaffold suite and TypeScript rule-origin controls passed.
+The grist root short suite used 219.2 CPU seconds and passed its unchanged budget.
