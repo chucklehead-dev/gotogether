@@ -255,7 +255,16 @@ func (r executionResult) validate() error {
 // Positional arguments carry paths literally. timeout retains the existing
 // 300-second limit; nonzero test statuses retain the operational kill policy.
 func execute(ctx context.Context, s suite, id string, mem int, mode runMode) (executionResult, error) {
-	c := groupCommand(ctx, "sh", "-c", `ulimit -v "$1" || exit 125; shift; exec timeout 300 "$@"`, "mutatecore", strconv.Itoa(mem), s.binary)
+	return runExecution(ctx, executionCommand(ctx, s, id, mem, mode, "300"), mode != mutantMode)
+}
+
+// The explicit limit is private to command construction so controls can exercise
+// the real deadline quickly; production execution always supplies 300 seconds.
+func executionCommand(ctx context.Context, s suite, id string, mem int, mode runMode, limit string) *exec.Cmd {
+	// TERM can be ignored indefinitely. KILL enforces the same deadline without
+	// adding a grace period. timeout may report exit 124 or kill itself too;
+	// neither status uniquely attributes the cause of an operational kill.
+	c := groupCommand(ctx, "sh", "-c", `ulimit -v "$1" || exit 125; shift; exec timeout --signal=KILL "$@"`, "mutatecore", strconv.Itoa(mem), limit, s.binary)
 	c.Dir = s.dir
 	c.Env = append(os.Environ(), "GOTOGETHER_MUTANT="+id)
 	if mode == inventoryMode {
@@ -263,7 +272,7 @@ func execute(ctx context.Context, s suite, id string, mem int, mode runMode) (ex
 	} else {
 		c.Args = append(c.Args, "-test.short", "-test.failfast")
 	}
-	return runExecution(ctx, c, mode != mutantMode)
+	return c
 }
 
 func runExecution(ctx context.Context, c *exec.Cmd, capture bool) (executionResult, error) {

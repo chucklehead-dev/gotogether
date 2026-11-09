@@ -77,3 +77,11 @@ ordinary nonzero exit is itself behavioral evidence. These additive fields are
 internal journal data; this slice does not integrate the separate draft journal
 reader or introduce a public report, compatibility reader, campaign resume,
 new limit, or approval policy.
+
+The 300-second test deadline sends SIGKILL to the owned process group so tests
+that ignore SIGTERM cannot outlive the cap. No grace allowance is added. GNU
+`timeout` may also kill itself in that group. Native runs have observed both
+actual SIGKILL and exit 124 at the hard deadline; the journal preserves whichever
+occurred. The regression checks the TERM-ignoring child is no longer running,
+independently of the wrapper's status. Neither status uniquely establishes a
+timeout cause or an assertion witness; these remain operational kills.
