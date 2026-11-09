@@ -53,7 +53,9 @@ func (w *responseWriter) WriteHeader(code int) {
 		if v, err := strconv.ParseInt(cl, 10, 64); err == nil && v >= 0 {
 			w.length = v
 		} else {
-			w.sent.Del("Content-Length") // net/http drops an invalid one
+			// net/http removes the handler's invalid header after taking the
+			// committed snapshot. Its presence there still prevents inference.
+			w.header.Del("Content-Length")
 		}
 	}
 }
@@ -96,6 +98,7 @@ func (w *responseWriter) wire(ctx context.Context) []byte {
 		h.Set("Date", qenv.Now(ctx).UTC().Format(http.TimeFormat))
 	}
 	te := h.Get("Transfer-Encoding")
+	declaredLength := h.Get("Content-Length")
 	h.Del("Transfer-Encoding")
 	h.Del("Content-Length") // written below, from what was declared
 	head := w.req.Method == http.MethodHead
@@ -103,11 +106,20 @@ func (w *responseWriter) wire(ctx context.Context) []byte {
 	var length string
 	switch {
 	case !bodyAllowed(code):
-		if code == http.StatusNotModified && w.length >= 0 {
-			length = strconv.FormatInt(w.length, 10)
+		if code == http.StatusNotModified {
+			h.Del("Content-Type")
 		}
 	case w.length >= 0:
-		length = strconv.FormatInt(w.length, 10)
+		length = declaredLength // net/http preserves the committed declaration
+	case declaredLength != "":
+		// An invalid committed length prevents an automatic one. A normal
+		// response chunks and drops it; HEAD sends no body and retains the
+		// declaration for the client's own Content-Length parsing.
+		if head {
+			length = declaredLength
+		} else {
+			chunked = true
+		}
 	case te == "chunked" || w.flushed || w.written > chunkingSize:
 		chunked = !head
 	case !head || w.written > 0:
