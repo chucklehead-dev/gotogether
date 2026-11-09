@@ -38,7 +38,7 @@ func TestMutant(t *testing.T) {
 					continue
 				}
 				found = true
-				if f.Index < 0 || f.Index > len(actor.Calls) {
+				if f.Index < 0 || f.Index >= len(actor.Calls) {
 					t.Fatalf("invalid failing call index %d", f.Index)
 				}
 				accepted := 0
