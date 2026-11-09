@@ -77,3 +77,10 @@ ordinary nonzero exit is itself behavioral evidence. These additive fields are
 internal journal data; this slice does not integrate the separate draft journal
 reader or introduce a public report, compatibility reader, campaign resume,
 new limit, or approval policy.
+
+The 300-second test deadline sends SIGKILL to the owned process group so tests
+that ignore SIGTERM cannot outlive the cap. No grace allowance is added. GNU
+`timeout` also kills itself in that group: the observed result is an actual
+signal, not necessarily exit 124. SIGKILL can also have other causes, so this
+result remains an operational kill and is never labeled an assertion witness
+or a uniquely established timeout.

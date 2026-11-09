@@ -9316,3 +9316,15 @@ The survivor count gate, memory cap and 300-second production timeout are
 unchanged. No mutation campaign or SMT work was run. The separate draft journal
 reader still needs to adopt this exact additive producer shape before integration;
 these internal execution records do not establish behavioral mutation kills.
+
+### 2026-11-09: enforce core mutation deadlines
+
+A bounded native control confirmed GNU timeout's default SIGTERM could be
+ignored beyond its deadline. Core mutation trials now send SIGKILL at the
+existing 300-second limit, with no grace allowance or survivor-policy change.
+A TERM-ignoring fixture exercises the production command builder with a short
+deadline, confirms its readiness and observed signal 9, and checks journal
+propagation. The old command fails the regression by requiring outer
+cancellation; the corrected full mutatecore race/shuffle suite passes twice.
+Signals remain operational evidence rather than proof of timeout causality or
+behavioral assertion detection.

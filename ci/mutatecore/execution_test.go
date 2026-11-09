@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
+	"time"
 )
 
 // Real tiny programs exercise the wrapper, not a guessed assertion classifier.
@@ -126,4 +128,32 @@ func TestCampaignRejectsUnresolvedExecutionEvidence(t *testing.T) {
 			t.Fatalf("manufactured completion: %+v", events)
 		}
 	}
+}
+
+// A TERM-ignoring test must be stopped by the owned deadline, rather than the
+// outer cancellation safety net. A captured marker confirms the fixture ran.
+func TestExecutionDeadlineStopsTermIgnoringTest(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "suite")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\ntrap '' TERM\necho ready\nexec sleep 30\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	cmd := executionCommand(ctx, suite{dir: dir, binary: binary}, "0", 3072*1024, mutantMode, "0.2")
+	started := time.Now()
+	result, err := runExecution(ctx, cmd, true)
+	if ctx.Err() != nil {
+		t.Fatal("owned deadline failed; outer cancellation was required")
+	}
+	if err != nil || result.Disposition != "signaled" || result.SignalNumber != 9 || result.ExitCode != nil {
+		t.Fatalf("result=%+v error=%v", result, err)
+	}
+	if !strings.Contains(result.Output, "ready") {
+		t.Fatal("TERM-ignoring fixture did not start")
+	}
+	if time.Since(started) > 3*time.Second {
+		t.Fatal("deadline did not stop promptly")
+	}
+	assertJournalExecution(t, result, err)
 }
