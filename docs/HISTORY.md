@@ -9322,4 +9322,5 @@ All eight owned application generation commands were checked; only the library
 model has guarded rules and needed regeneration. Generated/faithful application
 checks and navigator grist diagnostics passed without golden changes. Runtime
 error controls, a fresh scaffold suite and TypeScript rule-origin controls passed.
-The grist root short suite used 219.2 CPU seconds and passed its unchanged budget.
+After core-pin integration, the grist root short suite used 226.4 CPU seconds
+and passed its unchanged budget.
