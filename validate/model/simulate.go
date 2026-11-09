@@ -67,6 +67,7 @@ func (c *modelChecker) Simulate(ctx context.Context, opt SimulateOptions) (*Repo
 type SimulateOptions struct {
 	// Progress receives live phase progress and any emitted Quint diagnostics.
 	// Structured native verification suppresses Quint's inner checker console.
+	// Running native verification emits elapsed-only pulses every 30 seconds.
 	// Nil is silent. Write errors are ignored; diagnostics are not evidence.
 	// Callers sharing a writer between simulations must synchronize it.
 	Progress io.Writer
