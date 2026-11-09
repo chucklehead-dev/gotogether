@@ -133,8 +133,8 @@ func TestCampaignRejectsUnresolvedExecutionEvidence(t *testing.T) {
 }
 
 // A TERM-ignoring test must be stopped by the owned deadline, rather than the
-// outer cancellation safety net. Readiness yields a live process handle before
-// waiting, so cleanup cannot target a PID reused after the fixture exits.
+// outer cancellation safety net. Readiness lets cleanup retain a process handle
+// instead of finding a raw PID only after the command has finished.
 func TestExecutionDeadlineStopsTermIgnoringTest(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
@@ -213,7 +213,7 @@ func deadlineChildStopped(child *os.Process) bool {
 		return true
 	}
 	stat, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", child.Pid))
-	return err == nil && strings.Contains(string(stat), ") Z ")
+	return errors.Is(err, os.ErrNotExist) || err == nil && strings.Contains(string(stat), ") Z ")
 }
 
 func TestDeadlineChildStoppedRejectsLiveProcess(t *testing.T) {
