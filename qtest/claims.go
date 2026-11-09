@@ -45,9 +45,9 @@ type judgment struct {
 	ok   bool
 	show int
 	n    int // runs meeting (Some, None) or missing (All) the expectations
-	// unjudged are None's runs that meet none of its expectations but have
-	// no verdict to meet them with (a search out of budget): None holds of
-	// none of them, which once passed it over runs judged by nothing
+	// unjudged are runs that cannot decide this claim's expectations. Some
+	// still holds with a known witness; without one, these runs explain why
+	// the claim has no verdict rather than showing that its witness is absent.
 	unjudged int
 }
 
@@ -147,6 +147,8 @@ func (q quantified) judge(rs []*validate.Report) judgment {
 				if j.show < 0 {
 					j.show = i
 				}
+			} else if all == unknown {
+				j.unjudged++
 			}
 		case "all":
 			switch all {
@@ -173,7 +175,11 @@ func (q quantified) judge(rs []*validate.Report) judgment {
 	// over no runs, no claim has a verdict: All and None would hold of
 	// nothing (All once did), and Some fails for want of a run, not of a
 	// witness
-	j.ok = (q.kind == "some") == (j.n > 0) && j.unjudged == 0 && len(rs) > 0
+	if q.kind == "some" {
+		j.ok = j.n > 0 // one known witness decides existence despite unknown runs
+	} else {
+		j.ok = j.n == 0 && j.unjudged == 0 && len(rs) > 0
+	}
 	return j
 }
 
