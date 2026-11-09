@@ -9394,3 +9394,22 @@ a 600-second total supervisor, with no signals or remaining owned processes.
 This is configuration/semantic admission, not additional representative timing
 or a real solver-unknown control. Ordinary lifecycle/adverse/cancellation tests
 continue to reject incomplete or contradictory proof evidence.
+
+### 2026-11-09: retain binding scope while avoiding repeated native proofs
+
+The after-policy 51-binding verifier attempt completed six binding commands,
+including one intentional eventual-only skip, before the original two-hour
+budget interrupted counters.real. Its completed default counters proof and the
+interrupted real request had identical imported source bytes, group, bound and
+configuration; their constructed modules differed only by framework-generated
+possible observer declarations. This does not turn the interrupted command into
+a completed result or qualify the rest of the roster.
+
+Native invariant input now separates those observers, retaining each observer's
+validation and goal checks. A sequential multi-binding iterator can reuse an
+exact positive proof only within the current operation, after source and tool
+identity checks. Independent native reports and current report/2 documents retain
+typed proof provenance; errors, counterexamples and cancellation do not seed
+reuse. Repeated CLI bindings stop at the first failed analysis or report delivery;
+per-binding report files are unique. Nightly retains its same tracked binding
+selection, pretest, bounds and two-hour total, now within one invocation.

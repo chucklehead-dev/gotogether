@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/validate/model"
@@ -25,16 +26,43 @@ func simulate(ctx context.Context, args []string) (int, error) {
 	log := &simLog{}
 	simCapture = log
 	defer func() { simCapture = nil }()
-	code, err := simulateCmd(ctx, args, &mr, log)
-	return mr.write(log.document(), os.Stdout, code, err)
+	request, err := simulationRequest(args, &mr, log)
+	if err != nil {
+		return mr.write(log.document(), os.Stdout, 2, err)
+	}
+	index := 0
+	for rep, analysisErr := range model.SimulateMany(ctx, request.bindings, request.options) {
+		// Each attempted binding owns its display capture and existing report/2.
+		// No later result replaces an earlier binding or forms an aggregate verdict.
+		log = &simLog{binding: request.bindings[index], quiet: mr.json}
+		simCapture = log
+		index++
+		code := 2
+		if rep != nil {
+			log.result = rep.Doc()
+			simPrint(rep.Text)
+			code = rep.Code
+		} else if analysisErr == nil {
+			analysisErr = fmt.Errorf("simulate %s: analysis returned no report", log.binding)
+		}
+		code, deliveryErr := mr.write(log.document(), os.Stdout, code, analysisErr)
+		if code != 0 || deliveryErr != nil {
+			return code, deliveryErr
+		}
+	}
+	return 0, nil
 }
 
-// simulateCmd is the simulate command, its machine-readable reports'
-// flags in mr and its lines in log.
-func simulateCmd(ctx context.Context, args []string, mr *machineReports, log *simLog) (int, error) {
+type simulationPlan struct {
+	bindings []string
+	options  model.SimulateOptions
+}
+
+func simulationRequest(args []string, mr *machineReports, log *simLog) (*simulationPlan, error) {
 	fset := commandFlags("simulate")
 	mr.flags(fset)
-	bpath := fset.String("binding", "", "binding file: its spec, module, constants, defs, invariants and simulate section")
+	var paths repeated
+	fset.Var(&paths, "binding", "binding file: its spec, module, constants, defs, invariants and simulate section; repeat for sequential independent reports")
 	steps := fset.Int("steps", 0, "steps per trace (default: the binding's simulate.steps, else 30)")
 	samples := fset.Int("samples", 0, "traces per invariant (default: the binding's simulate.samples, else 1000)")
 	seed := fset.String("seed", "1", "quint run --seed: fixed, so the verdicts repeat")
@@ -52,11 +80,50 @@ func simulateCmd(ctx context.Context, args []string, mr *machineReports, log *si
 	fset.Parse(args)
 	var text io.Writer = os.Stdout
 	if err := mr.resolve(&text); err != nil {
-		return 2, err
+		return nil, err
 	}
-	log.quiet, log.binding = text != os.Stdout, *bpath
-	if *bpath == "" {
-		return 2, fmt.Errorf("simulate needs -binding b.yaml")
+	log.quiet = text != os.Stdout
+	if len(paths) == 1 {
+		log.binding = paths[0]
+	}
+	if len(paths) == 0 {
+		return nil, fmt.Errorf("simulate needs -binding b.yaml")
+	}
+	if fset.NArg() != 0 {
+		return nil, fmt.Errorf("simulate: unexpected argument %q; repeat -binding for each model", fset.Arg(0))
+	}
+	seen := map[string]bool{}
+	for _, path := range paths {
+		if path == "" {
+			return nil, fmt.Errorf("simulate: -binding needs a nonempty path")
+		}
+		canonical, err := filepath.Abs(path)
+		if err != nil {
+			return nil, err
+		}
+		if resolved, err := filepath.EvalSymlinks(canonical); err == nil {
+			canonical = resolved
+		} else if !os.IsNotExist(err) {
+			return nil, err
+		}
+		if seen[canonical] {
+			return nil, fmt.Errorf("simulate: duplicate binding %q", path)
+		}
+		seen[canonical] = true
+	}
+	if len(paths) > 1 {
+		if mr.json || len(mr.files) != 0 {
+			return nil, fmt.Errorf("simulate: multiple bindings have independent reports; use -report-dir DIR instead of -json or -report FORMAT=FILE")
+		}
+		if *out != "" {
+			return nil, fmt.Errorf("simulate: -out names one graph artifact; run each binding separately when exporting counterexamples")
+		}
+		// Diagnose an unusable report destination before starting expensive work.
+		if dir, label := mr.directory(); dir != "" {
+			if err := prepareSimulationReports(dir); err != nil {
+				return nil, fmt.Errorf("%s: %w", label, err)
+			}
+		}
 	}
 	opt := model.SimulateOptions{Quint: *quint, Seed: *seed, Steps: *steps, Samples: *samples, Constants: splitTop(*consts),
 		Verify: *verify, Graph: *graph, States: *states, Depth: *depth, Out: *out, Progress: os.Stderr}
@@ -69,13 +136,23 @@ func simulateCmd(ctx context.Context, args []string, mr *machineReports, log *si
 	if *stops != "" {
 		opt.Stops = splitList(*stops)
 	}
-	rep, err := model.Simulate(ctx, *bpath, opt)
-	if err != nil {
-		return 2, err
+	return &simulationPlan{bindings: append([]string(nil), paths...), options: opt}, nil
+}
+
+func prepareSimulationReports(dir string) error {
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
 	}
-	log.result = rep.Doc()
-	simPrint(rep.Text)
-	return rep.Code, nil
+	file, err := os.CreateTemp(dir, ".gotogether-report-probe-*")
+	if err != nil {
+		return err
+	}
+	closeErr := file.Close()
+	removeErr := os.Remove(file.Name())
+	if closeErr != nil {
+		return closeErr
+	}
+	return removeErr
 }
 
 func splitList(s string) []string {

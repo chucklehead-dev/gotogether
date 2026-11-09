@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -22,6 +21,7 @@ import (
 type machineReports struct {
 	json  bool
 	files repeated
+	dir   string
 }
 
 // reportFormats are -report's formats, each the document's rendering.
@@ -35,6 +35,15 @@ var reportFormats = map[string]func(*validate.Document) []byte{
 func (m *machineReports) flags(fset *flag.FlagSet) {
 	fset.BoolVar(&m.json, "json", false, "print the report as JSON (gotogether.report/2: the verdict, each failure's record with its wall time, recorder and trace, the model's expectation and the state's diff) instead of the text")
 	fset.Var(&m.files, "report", "FORMAT=FILE: also write the report to FILE as json (gotogether.report/2), junit (JUnit XML, a test case per check) or sarif (SARIF 2.1.0, a result per failure at its record's line); repeatable")
+	fset.StringVar(&m.dir, "report-dir", "", "write a separate JSON report into DIR for each completed or failed analysis (overrides GOTOGETHER_REPORT_DIR)")
+}
+
+func (m *machineReports) directory() (string, string) {
+	if m.dir != "" {
+		return m.dir, "-report-dir=" + m.dir
+	}
+	dir := os.Getenv("GOTOGETHER_REPORT_DIR")
+	return dir, "GOTOGETHER_REPORT_DIR=" + dir
 }
 
 // resolve checks the -report flags, and silences the text (*out) under
@@ -96,17 +105,28 @@ func (m *machineReports) write(d *validate.Document, stdout io.Writer, code int,
 			delivered = append(delivered, deliveredReport{file, reportFormats[format]})
 		}
 	}
-	if dir := os.Getenv("GOTOGETHER_REPORT_DIR"); dir != "" {
-		name := fmt.Sprintf("%d-%s-%d.json", time.Now().UnixNano(), d.Command, os.Getpid()) // in the order run
+	if dir, label := m.directory(); dir != "" {
 		werr := os.MkdirAll(dir, 0o755)
+		var path string
 		if werr == nil {
-			werr = os.WriteFile(filepath.Join(dir, name), d.JSON(), 0o644)
+			// A directory retains independent reports, even if clock readings repeat.
+			// Never overwrite a previous analysis with a later binding's result.
+			var file *os.File
+			file, werr = os.CreateTemp(dir, fmt.Sprintf("%d-%s-%d-*.json", time.Now().UnixNano(), d.Command, os.Getpid()))
+			if werr == nil {
+				path = file.Name()
+				_, werr = file.Write(d.JSON())
+				werr = errors.Join(werr, file.Close())
+				if werr != nil {
+					werr = errors.Join(werr, os.Remove(path))
+				}
+			}
 		}
 		if werr != nil {
-			recordError(fmt.Errorf("GOTOGETHER_REPORT_DIR=%s: %w", dir, werr))
+			recordError(fmt.Errorf("%s: %w", label, werr))
 			deliveryFailed = true
 		} else {
-			delivered = append(delivered, deliveredReport{filepath.Join(dir, name), (*validate.Document).JSON})
+			delivered = append(delivered, deliveredReport{path, (*validate.Document).JSON})
 		}
 	}
 	// Refresh successful destinations once to reflect later delivery failures.

@@ -306,9 +306,19 @@ jobs:
         run: |
           go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
           GOTOGETHER_VERIFY=1 go test -count=1 -run TestSimulateVerify ./cmd/gotogether
-          for b in $(git ls-files 'examples/*binding*.yaml' 'examples/**/*binding*.yaml' | sort -u); do
-            "$RUNNER_TEMP/gotogether" simulate -binding "$b" -verify 8 || exit 1
+          mapfile -d '' -t bindings < <(git ls-files -z 'examples/*binding*.yaml' 'examples/**/*binding*.yaml' | sort -zu)
+          args=()
+          for b in "${bindings[@]}"; do
+            args+=(-binding "$b")
           done
+          "$RUNNER_TEMP/gotogether" simulate "${args[@]}" -verify 8 -report-dir "$RUNNER_TEMP/verify-reports"
+      - name: Retain independent verifier reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-reports
+          path: ${{ runner.temp }}/verify-reports/
+          if-no-files-found: ignore
 
   evaluator-shadow:
     # the Go evaluator against quint (GOTOGETHER_EVAL=shadow) on every

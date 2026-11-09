@@ -120,7 +120,23 @@ AGENTS.md has the general requirements.
   `GOTOGETHER_KEEP=/dir` keeps generated modules and traces from qtest and
   qhegel. `GOTOGETHER_REPORT_DIR=/dir` makes every `gotogether validate`
   and `simulate` write its report as JSON there (`gotogether.report/2`,
-  a file per command, in the order run: the Action's job summary).
+  a file per analysis, in the order run: the Action's job summary).
+  `-report-dir DIR` selects that directory explicitly without changing the
+  environment. Files have unique names; existing reports are never overwritten.
+  Repeat `-binding` to check several bindings sequentially in one operation:
+  `gotogether simulate -binding a.yaml -binding b.yaml -verify 8 -report-dir reports`.
+  Every binding still checks its own goals and classifications and gets an
+  independent current `gotogether.report/2` document. The command stops on the
+  first nonzero result, model error or report-delivery error; unvisited bindings
+  have no report and no implied verdict. `-json` and `-report FORMAT=FILE` name
+  single reports, so use a report directory for multiple bindings. A single
+  `-out` graph destination cannot be shared either.
+  Matching native holds groups can reuse only a strictly validated positive
+  proof within this operation. JSON checks retain `nativeProof` with its producer
+  binding, exact request/source/tool/configuration digests, ordered group and
+  bound. A reused proof does not replace any binding's other checks. Unknowns,
+  errors and counterexamples never seed reuse; custom or unaccounted toolchains
+  run uncached. No persistent proof cache or new report format is introduced.
   `simulate` writes live binding/phase starts and elapsed completion status, plus
   any emitted Quint diagnostics, to stderr; `-json` keeps one final report on stdout.
   Bounded verification reads Quint's structured result and ITF counterexample;

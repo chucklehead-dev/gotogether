@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- Add `model.SimulateMany` for sequential independent binding reports, with
+  operation-local reuse of exact validated positive native group proofs and
+  typed `validate.NativeProof` provenance. `SourceGuard.Files` returns a verified
+  owned inventory. The CLI accepts repeated `-binding` and `-report-dir`.
+
 - History search recovers missing exact-prefix states within its existing
   candidate allowance, enabling state-equivalent prefix merging without
   repeated exact checks or borrowing longer-run states.

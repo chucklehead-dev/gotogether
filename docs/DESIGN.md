@@ -5788,10 +5788,11 @@ partitions folded as the text folds them (§66); simulate's checks.
 `-report junit=FILE` and `-report sarif=FILE` render it for CI's test
 and code-scanning views (SARIF's results at a record's file and line);
 `GOTOGETHER_REPORT_DIR` makes every validate and simulate write its JSON
-there, which the Action's job summary and annotations read instead of
-grepping the RESULT line. simulate's checks are read from the lines it
-prints (each "  <verdict> <name>: <detail>"), so its text and its
-document cannot disagree; a new kind of line must keep that shape. Its
+there; `-report-dir` takes precedence without changing process environment.
+Each analysis creates a unique file rather than overwriting another binding's
+report. The Action reads these documents instead of grepping the RESULT line.
+Simulation checks and proof provenance are projected from native results;
+display wording is never parsed as evidence. Its
 JSON Schema is generated from validate.Document as the binding's is from
 binding.Binding (schemas/gotogether.report-2.json, `schemas.Report`,
 I36's generator reading json tags), and a filled document is checked
@@ -7054,3 +7055,33 @@ After mode can use more memory; no memory, step or wall-clock allowance changes
 accompany this policy. The [dated qualification](HISTORY.md#2026-11-09-adopt-one-owned-after-mode-native-policy)
 records representative completion evidence and its limits; it does not establish
 a controlled speedup or full-nightly recovery.
+
+### Independent bindings and exact positive proof reuse
+
+`SimulateMany` is a sequential iterator of independent reports. Each iteration
+owns its proof store and discards it on completion, cancellation or consumer
+stop. A nonzero result or operational error stops the sequence. Sampling,
+graph exploration, allows/unclassified checks and every binding's own possible
+goals retain their existing semantics. A single graph output path cannot name
+multiple bindings' independent artifacts.
+
+Native invariant construction excludes only framework-owned possible observers;
+those observers retain their own frontend validation and evaluation. A reuse key
+contains the canonical constructed invariant input, complete captured model
+source inventory, ordered holds group, effective bound, fixed native configuration
+and accounted local tool closure. Guards are checked around publication and reuse.
+Only a strictly classified positive group proof enters the store. Counterexamples
+still require per-member fallback; errors and cancellation establish no reusable
+proof. Unsupported/custom tool layouts run normally without reuse. Source guards
+and local tool inventories are change detection, not hostile-host authentication
+or an atomic snapshot; external OS/shared libraries must remain stable.
+
+One shared `validate.NativeProof` value carries the producing binding and exact
+request/source/tool/configuration identities into native verdicts and current
+report/2 checks. Clones keep group storage private to each result. Human output
+identifies reuse, without pretending a fresh backend invocation occurred. The
+CLI accepts repeated `-binding` and writes each report before attempting the next;
+report-delivery failure stops work too. Plural runs use unique per-binding JSON
+files, not a combined model verdict or another report format. qnav's current-state
+invariants and history receipts are different scopes; they do not display these
+simulation reports.
