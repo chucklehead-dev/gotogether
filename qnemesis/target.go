@@ -229,6 +229,34 @@ func (p *Process) Pause(ctx context.Context) error {
 	return waitStopped(ctx, pid)
 }
 
+// PauseProcesses sends SIGSTOP to every process before waiting for any group
+// to stop. On Linux it returns after every thread in every group has stopped;
+// elsewhere it returns once the signals are sent. The signals are not atomic:
+// processes may still execute between their delivery. On error, processes
+// already signaled remain paused; the caller must resume or close them.
+func PauseProcesses(ctx context.Context, processes ...*Process) error {
+	return pauseProcesses(ctx, waitStopped, processes...)
+}
+
+// Keep signal dispatch separate from stopped confirmation: a slow group scan
+// must not leave the rest of a cluster running without its paused peers.
+func pauseProcesses(ctx context.Context, stopped func(context.Context, int) error, processes ...*Process) error {
+	groups := make([]int, 0, len(processes))
+	for _, p := range processes {
+		pid, err := p.signal(true)
+		if err != nil {
+			return err
+		}
+		groups = append(groups, pid)
+	}
+	for _, pid := range groups {
+		if err := stopped(ctx, pid); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Resume implements Target: SIGCONT to the incarnation's group; an
 // error, as Pause's, if it is not running.
 func (p *Process) Resume(context.Context) error { _, err := p.signal(false); return err }

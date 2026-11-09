@@ -9394,3 +9394,15 @@ a 600-second total supervisor, with no signals or remaining owned processes.
 This is configuration/semantic admission, not additional representative timing
 or a real solver-unknown control. Ordinary lifecycle/adverse/cancellation tests
 continue to reject incomplete or contradictory proof evidence.
+
+## Collective process pause for real-cluster capture (2026-11-09)
+
+The raftkv real-tier terminal capture paused its leader and waited for all of
+that process group's threads before signaling its followers. Main CI retained
+a follower campaign during that partial freeze, so `eventually hasLeader`
+correctly failed at the resulting settlement. `qnemesis.PauseProcesses` now
+sends each stop signal before waiting for any group confirmation, and this
+terminal capture uses it. Signals remain non-atomic; all pre-settlement records,
+stopped-thread confirmations, invariant requirements and deadlines remain.
+An ordering witness with real child groups rejects serial confirmation; a Linux
+integration check confirms every thread in each group has stopped at return.
