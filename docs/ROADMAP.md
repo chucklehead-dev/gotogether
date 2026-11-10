@@ -19,31 +19,44 @@ remain stable even when their first bounded increment is built.
 
 ## Current order
 
-Reviewed 2026-11-07 against [the twelfth review](https://github.com/chucklehead-dev/gotogether/issues/97).
-Correctness and failed admission gates take priority over the feature cadence.
-The navigation prototype is deferred while these issues are addressed.
+Updated 2026-11-10 from [the twelfth review](https://github.com/chucklehead-dev/gotogether/issues/97),
+its [revised priorities](https://github.com/chucklehead-dev/gotogether/issues/97#issuecomment-6760071125)
+and the [maintainer's decisions and independent re-check](https://github.com/chucklehead-dev/gotogether/issues/97#issuecomment-6760199201).
 
-| Priority | Work | Completion evidence |
+| Priority | Work | Completion evidence or exit criterion |
 |---|---|---|
-| Completed correction | J1: sound Hegel prefix caching under pinned model choices | Cached and direct verdicts agree on the native finite-choice counterexample, on both evaluator policies; ordinary exact-run caching remains useful. |
-| Completed correction | J2: preserve repeated same-key append order in history checks | Reversed, missing and interleaved transaction appends rejected appropriately; independent serialization oracle includes repeated appends. |
-| Completed coverage correction | J5: restore checkout's directed campaign assertion | All 30 pairs must be witnessed in normal execution; replay and filtered selections retain their scope. |
-| Now | J7: finish nightly admission recovery | FaultOrders/corpus, shadow configuration, browser admission and benchmarks have passing recovery evidence. PR #130 passed all 36 checks; its full verifier roster completed 23 bindings (six declared skips), then hit the unchanged deadline in inventory’s withinCapacity proof. Full verification remains unqualified. The latest frozen scheduler campaign on `4710e99b` completed all 1,749 mutations with 94 survivors at limit 22 and a validated completion receipt. Later observation controls need full-campaign qualification. Producer identity and completion receipts are built but remain ineligible for policy admission. Next: resolve the inventory proof bottleneck and survivor behavior/equivalence reviews before replacing the count gate. |
-| Completed tool correction | J3: enforce Quint admission | Stable CLI floor 0.33.1 before managed work, consistent doctor/artifact policy, and native trace-retention controls. |
-| Completed claim correction | J4: ordering quantifiers and evaluator provenance | Universal protocol claims are explicit across receipts, aggregate reasons and TUI; Go-only choice negatives cannot claim Quint confirmation. |
-| Completed correction | J6: generated mutant intent | Generated rule mutants retain reads and operational checks while bypassing only declared refusals. Directed controls require a valid prefix and the intended rule’s refusal, identified in structured model data; shared refusal labels, missing reads and stale model data cannot satisfy the claim. |
-| Then | J8–J11: differential gates and API consolidation | Green semantic gates first; reduce duplicated concepts and misplaced dependencies rather than enforcing an arbitrary API line count. |
+| Done | J1–J6: wrong verdicts, admission, claim scope and directed coverage | Regression controls are in the repository. The original reviewer independently re-checked J1/J2 on `aa8380b4`: cached/direct checks agree, reversed own appends are rejected, and the brute-force comparison found no mismatch. |
+| Now | J7a: direct survivor treatment | The frozen `4710e99b` campaign completed 1,749 mutations with 94 survivors at limit 22. Explain the 27 actual SIGKILLs first, using separately labeled diagnostic replays. Then address each remaining case with a public behavioral control or recorded equivalence argument. Arguments do not silently raise or bypass the count gate. Park further evidence machinery while direct treatment is outstanding, apart from fixes forced by a failing campaign. |
+| Next | J7b: native proof runtime and roster visibility | Measure inventory's cold withinCapacity proof on frozen inputs. Schedule or bound individual work so that it cannot starve the other bindings, within the same total allowance. All 51 bindings must be attempted and retain individual outcomes; declared skips, timeouts and unknown checks remain explicit and never count as proofs. The latest run completed 23 bindings (six declared skips), leaving 27 unvisited. |
+| J7 exit | J7c: one green scheduled nightly on current source | Per-PR green and isolated campaign completion do not satisfy this criterion. |
+| Then | J8: differential gates | Write the completion criterion first: evaluator pairs, case counts/bounds, agreement conditions and treatment of unsupported or inconclusive results. |
+| Then | J9–J11: API consolidation before tags | Resolve Grist concepts in core public types, Doc mirrors, status types and manifest/bundle/evidence vocabulary. No arbitrary API line cap. |
+| Pilot preparation | Current handoff and J13 replay parity | The [pilot guide](external-pilot.md) covers one finite-history contract. State the production-recording Go floor plainly; navigate hints, compiled bundle replay and distinct no-verdict exits remain J13 work. The present bundle walkthrough requires Go and Quint. |
+| Later | J14/J15, J18/J19, J21 | Durable rewind detection and safe redrive before Grist production claims; usability/vocabulary; GR4 consolidation. |
+| Proposed queue | J16/J17/J20/J22/J25–J27 | Retain the review's adoption, capacity, admission-tuning and process proposals without treating them as completed commitments. |
+| Dropped | J12 and J23 | Go 1.26 compatibility and pin batching are withdrawn. Go 1.27.3 and immediate required sibling pin alignment remain deliberate policies. |
 
-A green per-PR matrix does not establish nightly health. Keep known failing
-nightly gates visible and block unrelated feature work while they remain
-unresolved. Do not raise budgets or survivor allowances without measurement
-and an explanation of each affected case.
+**Red-nightly rule (maintainer decision):** while the nightly is red, feature
+work does not land, with two exceptions:
 
-The remainder of J12–J27 is a proposed review queue, not an implementation
-commitment. Go-floor changes require an adoption need; current Go 1.27.3
-admission remains in force. Keep required sibling-module pin updates immediate;
-review unnecessary pin churn separately. The [external pilot](external-pilot.md) remains alongside
-technical work. Tags and repository-setting changes remain maintainer decisions.
+1. The feature work unblocks something that cannot be fixed otherwise.
+2. A new feature is strongly preferable to a stopgap for getting the nightly green.
+
+A PR using an exception must identify which one applies and explain why in its
+description. Bug fixes and regression controls should identify the failed gate
+or concrete behavior they address. Infrastructure is not exempt merely because
+it could eventually help J7. The navigation prototype remains deferred.
+
+Existing admission limits remain unchanged. Raised-cap diagnostic experiments
+are separate from gate runs and cannot turn an operational kill into an
+assertion witness or establish a new survivor count. Any policy migration must
+make its acceptance criteria explicit rather than fall back to a count allowance.
+
+The external pilot supplies independent usability evidence alongside the
+technical work; this is not a production-readiness claim. Tags remain a
+maintainer decision. Delete-on-merge is enabled; the old merged branches still
+need one safe prune, preserving protected/open-PR references and published
+commit ancestry.
 
 Detailed older item sections retain dependencies and historical scope. Previous
 current-order chronology is in HISTORY under the twelfth-review handoff.

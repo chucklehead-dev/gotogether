@@ -15,8 +15,9 @@ before interpreting a verdict. A model should express the intended contract,
 not be weakened until an observed implementation passes.
 
 Pin a merged toolkit revision whose applicable CI and selected workflow pass.
-The current tooling floor is Go 1.27.3 and stable Quint 0.33.1; the incident
-walkthrough also uses jq. The [toolchain policy](go-toolchain.md) owns these
+The service that imports gotogether must use Go 1.27.3 or newer, even if it
+only records steps in production. The toolkit also requires Go 1.27.3; managed
+Quint work requires stable Quint 0.33.1 or newer. The incident walkthrough uses jq. The [toolchain policy](go-toolchain.md) owns these
 requirements. Keep the target-service revision separate from the toolkit pin.
 
 The maintainer should use published instructions for the initial attempt.
