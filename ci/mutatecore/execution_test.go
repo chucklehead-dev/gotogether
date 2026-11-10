@@ -200,8 +200,12 @@ func TestExecutionDeadlineStopsTermIgnoringTest(t *testing.T) {
 	if time.Since(started) > 3*time.Second {
 		t.Fatal("deadline did not stop promptly")
 	}
-	if !deadlineChildStopped(child) {
-		t.Fatal("timeout returned but TERM-ignoring child is still running")
+	// Waiting for the wrapper does not reap its grandchild. SIGKILL delivery
+	// and exit_notify are asynchronous, even after captured pipes close. Only
+	// observe termination within the already required promptness bound; do not
+	// send another signal or add grace to the owned deadline.
+	if stopped, last := awaitDeadlineChildStopped(ctx, child, started.Add(3*time.Second)); !stopped {
+		t.Fatalf("TERM-ignoring child not confirmed stopped within promptness bound: pid=%d elapsed=%s last=%s result=%+v", child.Pid, time.Since(started), last, result)
 	}
 	assertJournalExecution(t, result, got.err)
 }
@@ -209,11 +213,38 @@ func TestExecutionDeadlineStopsTermIgnoringTest(t *testing.T) {
 // A zombie is dead but may await reaping by the container's init. Signal uses
 // the process handle; procfs is read-only and never used to select a kill target.
 func deadlineChildStopped(child *os.Process) bool {
-	if err := child.Signal(syscall.Signal(0)); errors.Is(err, os.ErrProcessDone) || errors.Is(err, syscall.ESRCH) {
-		return true
+	stopped, _ := deadlineChildObservation(child)
+	return stopped
+}
+
+func deadlineChildObservation(child *os.Process) (bool, string) {
+	signalErr := child.Signal(syscall.Signal(0))
+	if errors.Is(signalErr, os.ErrProcessDone) || errors.Is(signalErr, syscall.ESRCH) {
+		return true, fmt.Sprintf("signal probe: %v", signalErr)
 	}
 	stat, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", child.Pid))
-	return errors.Is(err, os.ErrNotExist) || err == nil && strings.Contains(string(stat), ") Z ")
+	stopped := errors.Is(err, os.ErrNotExist) || err == nil && strings.Contains(string(stat), ") Z ")
+	return stopped, fmt.Sprintf("signal probe=%v proc error=%v proc stat=%q", signalErr, err, stat)
+}
+
+func awaitDeadlineChildStopped(ctx context.Context, child *os.Process, deadline time.Time) (bool, string) {
+	for {
+		stopped, last := deadlineChildObservation(child)
+		if stopped {
+			return true, last
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return false, last
+		}
+		timer := time.NewTimer(min(time.Millisecond, remaining))
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return false, last + fmt.Sprintf(" observation canceled: %v", context.Cause(ctx))
+		case <-timer.C:
+		}
+	}
 }
 
 func TestDeadlineChildStoppedRejectsLiveProcess(t *testing.T) {
@@ -224,6 +255,9 @@ func TestDeadlineChildStoppedRejectsLiveProcess(t *testing.T) {
 	defer func() { cmd.Process.Kill(); cmd.Wait() }()
 	if deadlineChildStopped(cmd.Process) {
 		t.Fatal("live process was accepted as stopped")
+	}
+	if stopped, last := awaitDeadlineChildStopped(t.Context(), cmd.Process, time.Now().Add(20*time.Millisecond)); stopped || last == "" {
+		t.Fatalf("bounded observation accepted live process or lost its state: stopped=%v last=%s", stopped, last)
 	}
 	if err := cmd.Process.Kill(); err != nil {
 		t.Fatal(err)

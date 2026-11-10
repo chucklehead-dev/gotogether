@@ -341,86 +341,86 @@ func main() {
 	}
 }
 
-func run(ctx context.Context) (runErr error) {
-	if len(os.Args) < 3 || len(os.Args) > 4 {
-		return errors.New("usage: mutatecore root core-package [max-survivors]")
-	}
-	root, pkg := os.Args[1], os.Args[2]
-	max := -1
-	if len(os.Args) == 4 {
-		var err error
-		max, err = strconv.Atoi(os.Args[3])
-		if err != nil || max < 0 {
-			return errors.New("max-survivors must be nonnegative")
-		}
-	}
-	jobs, err := positiveEnv("JOBS", 1)
+func runWorker(ctx context.Context, cfg workerConfig) (out workerResult, runErr error) {
+	root, pkg, max, jobs, memMB, work := cfg.Root, cfg.Package, cfg.Max, cfg.Jobs, cfg.MemMB, cfg.Work
+	j, err := openJournal(root, pkg, cfg.Journal)
 	if err != nil {
-		return err
-	}
-	memMB, err := positiveEnv("MEM_MB", 3072)
-	if err != nil {
-		return err
-	}
-	j, err := openJournal(root, pkg, os.Getenv("GOTOGETHER_MUTATION_LOG"))
-	if err != nil {
-		return fmt.Errorf("open campaign journal: %w", err)
+		return out, fmt.Errorf("open campaign journal: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "mutation campaign records: %s\n", j.path)
 	executionComplete := false
 	defer func() {
 		if runErr != nil && !executionComplete {
-			if err := j.append("aborted", map[string]any{"error": runErr.Error()}); err != nil {
-				runErr = errors.Join(runErr, err)
-			}
+			runErr = errors.Join(runErr, j.append("aborted", map[string]any{"error": runErr.Error()}))
 		}
-		if err := j.file.Close(); err != nil {
-			runErr = errors.Join(runErr, err)
-		}
+		runErr = errors.Join(runErr, j.finish())
 	}()
-	if err := j.append("start", map[string]any{"version": 1, "root": root, "package": pkg, "jobs": jobs, "mem_mb": memMB, "timeout_seconds": 300, "max_survivors": max}); err != nil {
-		return err
+	start := campaignStart(cfg)
+	if err := j.append("start", start); err != nil {
+		return out, err
 	}
-	work, err := os.MkdirTemp("", "mutate-core-")
+	suites, err := testSuites(strings.NewReader(string(cfg.Discovery)), work)
 	if err != nil {
-		return err
+		return out, err
 	}
-	defer os.RemoveAll(work)
-	list := groupCommand(ctx, "go", "list", "-json", "./"+pkg+"/...")
-	list.Dir = root
-	list.Stderr = os.Stderr
-	output, err := list.Output()
-	if err != nil {
-		return fmt.Errorf("list packages: %w", err)
+	// Build the actual generator once so its executed bytes have an identity.
+	qweave := filepath.Join(work, "qweave")
+	if err := command(ctx, filepath.Join(root, "qweave"), cfg.Go, "build", "-o", qweave, "./cmd/qweave"); err != nil {
+		return out, fmt.Errorf("build qweave: %w", err)
 	}
-	suites, err := testSuites(strings.NewReader(string(output)), work)
+	out.Qweave, err = identifyFile(qweave)
 	if err != nil {
-		return err
+		return out, err
+	}
+	wrapper, err := prepareCapture(cfg)
+	if err != nil {
+		return out, err
+	}
+	out.Wrapper, err = identifyFile(filepath.Join(wrapper, "go"))
+	if err != nil {
+		return out, err
+	}
+	out.Builds = expectedBuilds(cfg)
+	out.Manifest.InputDigest = cfg.InputDigest
+	out.Manifest.Start, err = json.Marshal(start)
+	if err != nil {
+		return out, err
 	}
 	for i := range suites {
 		s := &suites[i]
 		if err := os.MkdirAll(filepath.Dir(s.binary), 0700); err != nil {
-			return err
+			return out, err
 		}
 		fmt.Fprintf(os.Stderr, "building mutation suite %s\n", s.pkg)
-		err := command(ctx, root, "go", "run", "-C", filepath.Join(root, "qweave"), "./cmd/qweave", "-C", root, "-mutate", "-coverpkg", coreModule+"/"+pkg, "go", "test", "-c", "-o", s.binary, s.pkg)
+		build := groupCommand(ctx, qweave, "-C", root, "-mutate", "-coverpkg", coreModule+"/"+pkg, "go", "test", "-c", "-o", s.binary, s.pkg)
+		build.Dir = root
+		build.Env = append(os.Environ(), "PATH="+wrapper+string(os.PathListSeparator)+os.Getenv("PATH"))
+		build.Stdout = os.Stdout
+		build.Stderr = os.Stderr
+		err := build.Run()
 		if err != nil {
-			return fmt.Errorf("%s: compile: %w", s.pkg, err)
+			return out, fmt.Errorf("%s: compile: %w", s.pkg, err)
 		}
 		result, err := execute(ctx, *s, "list", memMB*1024, inventoryMode)
 		if err != nil {
-			return fmt.Errorf("%s: inventory: %w", s.pkg, err)
+			return out, fmt.Errorf("%s: inventory: %w", s.pkg, err)
 		}
 		if !result.passed() {
-			return fmt.Errorf("%s: inventory execution %s: %s", s.pkg, result.Disposition, result.Output)
+			return out, fmt.Errorf("%s: inventory execution %s: %s", s.pkg, result.Disposition, result.Output)
 		}
 		s.mutants, err = inventory(result.Output)
 		if err != nil {
-			return fmt.Errorf("%s: %w", s.pkg, err)
+			return out, fmt.Errorf("%s: %w", s.pkg, err)
 		}
 		if err := j.append("suite", suiteMetadata(i, *s)); err != nil {
-			return err
+			return out, err
 		}
+		out.Manifest.Suites = append(out.Manifest.Suites, suiteMetadata(i, *s))
+		identity, err := identifyFile(s.binary)
+		if err != nil {
+			return out, err
+		}
+		out.Manifest.Binaries = append(out.Manifest.Binaries, binaryIdentity{Suite: i, SHA256: identity.SHA256, Size: identity.Size})
 		fmt.Fprintf(os.Stderr, "registered %d mutations in %s\n", len(s.mutants), s.pkg)
 	}
 	candidates, err := admit(suites, func(s suite) error {
@@ -441,14 +441,14 @@ func run(ctx context.Context) (runErr error) {
 		return nil
 	})
 	if err != nil {
-		return err
+		return out, err
 	}
 	sources := make([]sourceRecord, len(candidates))
 	for i, c := range candidates {
 		sources[i] = sourceMetadata(c)
 	}
 	if err := j.append("admitted", map[string]any{"sources": sources, "suites": len(suites)}); err != nil {
-		return err
+		return out, err
 	}
 	fmt.Fprintf(os.Stderr, "admitted %d source mutants across %d test suites\n", len(candidates), len(suites))
 	started := time.Now()
@@ -464,7 +464,7 @@ func run(ctx context.Context) (runErr error) {
 		}
 	})
 	if err != nil {
-		return fmt.Errorf("mutant execution: %w", err)
+		return out, fmt.Errorf("mutant execution: %w", err)
 	}
 	executionComplete = true
 	survivors := 0
@@ -476,10 +476,13 @@ func run(ctx context.Context) (runErr error) {
 	}
 	fmt.Printf("%s: %d of %d mutants survived %d test suites\n", pkg, survivors, len(candidates), len(suites))
 	if ctx.Err() != nil {
-		return context.Cause(ctx)
+		return out, context.Cause(ctx)
 	}
-	if max >= 0 && survivors > max {
-		return fmt.Errorf("%d survivors exceed limit %d: review source mutations and missing behavioral controls", survivors, max)
+	out.Complete = completeRecord{Total: len(candidates), Survivors: survivors, GatePassed: max < 0 || survivors <= max}
+	out.Generated, err = captureManifest(cfg.Capture)
+	if err != nil {
+		return out, err
 	}
-	return nil
+	out.Journal = j.path
+	return out, nil
 }

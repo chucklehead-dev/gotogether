@@ -85,3 +85,60 @@ actual SIGKILL and exit 124 at the hard deadline; the journal preserves whicheve
 occurred. The regression checks the TERM-ignoring child is no longer running,
 independently of the wrapper's status. Neither status uniquely establishes a
 timeout cause or an assertion witness; these remain operational kills.
+
+The helper now supervises a separate instance of its own executable. The worker
+builds qweave once, executes the unchanged suite/candidate/count policy, and
+explicitly Syncs and Closes its journal before publishing its worker result.
+The parent observes that worker's actual Wait status, re-executes each built
+binary's inventory, checks independently discovered suite membership and exact
+binary identities, and validates the current journal before publishing
+`<journal>.receipt.json`. A complete campaign above its ceiling still publishes
+complete evidence and exits red; the worker's successful execution is distinct
+from that external count decision. A worker exit alone, a `complete` line alone,
+or a result without a successful Wait never establishes sealed completion.
+
+`<journal>.inputs.json` retains the initial content manifest even if execution
+aborts. Static Go discovery covers the selected suites, the root graph qweave
+actually loads, and qweave's separate tooling module/dependencies. Membership
+and actual source/embed/module/workspace/tool bytes are rechecked; dirty and
+ignored compiled inputs are accounted, while unrelated documentation and runtime
+outputs do not enter this static boundary. The parent records exact inherited
+environment as a digest, actual helper/generator/compiler/tool identities and
+build argv. An owned Go shim retains generated overlay payload bytes under
+`<journal>.build-inputs/` before the real Go command consumes them. Those files
+and their invocation manifests are retained for the final hash checks.
+
+These are private completion receipts, **never survivor approvals or
+admission-eligible policy evidence**. Selected cgo/native sources and compiler
+binaries are recorded, while transitive system headers/libraries/native helper
+executables remain explicitly unaccounted. VCS build metadata is reflected in
+the final binary hash but not independently collected. Arbitrary runtime file
+reads, external commands/services and hostile concurrent modification are not a
+closed or authenticated universe. This protection detects ordinary drift, not
+adversarial TOCTOU changes. Source contexts use absolute resolved paths and are
+not promised portable across checkouts.
+
+Unsupported collection settings (for example an external Go cache program,
+input-changing GOFLAGS or aspect-tool configuration) do not silently become
+complete identity evidence and do not disable the existing count gate. The
+helper records the exact unavailable-collection reason, runs the existing build
+and count policy unchanged, and marks input rechecking unavailable. No fallback
+changes CGO_ENABLED, tags, limits or test options. A collected source/binary drift,
+execution failure, incomplete journal or durability error prevents sealing and
+fails the command. Input/output sidecars are published without replacing prior
+evidence; all remain under the existing artifact retention tree by default.
+
+Completion publication checks cancellation again immediately before acquiring
+its final receipt name, after encoding and file Sync/Close. Journal directory
+creation syncs every ancestor as well as the leaf, including the parent entry
+of a new default campaign directory; explicit journal paths get the same
+ancestry durability checks. Failures prevent successful publication.
+
+The hard-deadline regression observes child termination within its existing
+three-second promptness allowance: reaping the timeout wrapper does not
+synchronize its grandchild's SIGKILL/exit transition. The observation sends no
+extra termination signal and adds no deadline grace. A live-child negative
+control remains, and failures retain the PID, last proc state and wrapper
+result. An earlier one-shot observation failure lacked that state, so it is
+consistent with an asynchronous observation race, not a proven diagnosis of
+that particular historical execution.

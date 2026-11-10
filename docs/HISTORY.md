@@ -9474,3 +9474,33 @@ and map semantics without greedy ambiguity or crossing map keys and values.
 The retained full seven-state pair and changed-state/exit/bound controls exercise
 the adapter offline. No model, search budget, proof gate, or global ITF decoding
 rule changed; the incomplete roster remains incomplete until rerun.
+
+## Mutation producer identities and externally observed completion (2026-11-09)
+
+The private mutatecore producer now binds actual discovered source/embed/module
+and tooling inputs, qweave's separate build closure, generated overlay payloads
+and built binary identities to its campaign. Its parent independently observes
+worker exit, rechecks binary inventories and inputs, and validates a complete
+journal after explicit Sync/Close before publishing a content-bound completion
+receipt. Complete execution above the unchanged survivor ceiling remains red.
+Tiny owned-generator fixtures cover that distinction, source drift and an
+unsupported-collection fallback that preserves count execution. Strict journal
+controls reject contradictory/missing/truncated evidence and altered manifests;
+file/directory durability failures and existing receipt names fail closed.
+
+Receipts are explicitly not admission eligible: native system headers/libraries,
+independent VCS metadata and arbitrary runtime dependencies remain disclosed
+boundaries. Unsupported provenance does not silently force another build mode
+or bypass the old gate. No survivor ledger, approvals, threshold changes or
+reviewpolicy admission wiring landed; draft PR114 remains a separate prototype.
+
+Review follow-up (2026-11-10) guarded final receipt publication against late
+cancellation and synced the full ancestry of newly created journal directories,
+including a default campaign directory's parent entry. Focused controls cover
+cancellation during final encoding and parent-directory Sync failure. The
+existing hard-deadline test now confirms the owned child's exit through a
+read-only observation within its original three-second promptness bound, rather
+than assuming wrapper Wait synchronizes grandchild exit. No production timeout,
+extra signal or grace changed. Its historical one-shot failure retained no
+child state, so asynchronous observation remains a possible cause, not a proven
+reconstruction.
