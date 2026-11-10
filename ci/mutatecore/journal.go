@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,7 +17,7 @@ import (
 // trial passed. An abrupt kill may also leave an incomplete final JSON line.
 type journal struct {
 	mu   sync.Mutex
-	file *os.File
+	file journalFile
 	path string
 }
 
@@ -87,7 +88,7 @@ func openJournal(root, pkg, explicit string) (*journal, error) {
 	var err error
 	if explicit == "" {
 		dir := filepath.Join(root, ".gotogether", "mutations")
-		if err = os.MkdirAll(dir, 0700); err != nil {
+		if err = durableMkdirAll(dir, 0700); err != nil {
 			return nil, err
 		}
 		file, err = os.CreateTemp(dir, strings.ReplaceAll(pkg, "/", "-")+"-*.jsonl")
@@ -95,7 +96,7 @@ func openJournal(root, pkg, explicit string) (*journal, error) {
 		if !filepath.IsAbs(explicit) {
 			explicit = filepath.Join(root, explicit)
 		}
-		if err = os.MkdirAll(filepath.Dir(explicit), 0700); err != nil {
+		if err = durableMkdirAll(filepath.Dir(explicit), 0700); err != nil {
 			return nil, err
 		}
 		// Never overwrite evidence from an earlier run. There is no resume mode.
@@ -117,4 +118,24 @@ func (j *journal) append(event string, data any) error {
 		return fmt.Errorf("sync campaign record: %w", err)
 	}
 	return nil
+}
+
+// journalFile permits direct fault controls for final Sync/Close failures.
+type journalFile interface {
+	Write([]byte) (int, error)
+	Sync() error
+	Close() error
+}
+
+func (j *journal) finish() error {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	syncErr := j.file.Sync()
+	closeErr := j.file.Close()
+	dir, err := os.Open(filepath.Dir(j.path))
+	if err != nil {
+		return errors.Join(syncErr, closeErr, err)
+	}
+	dirErr := dir.Sync()
+	return errors.Join(syncErr, closeErr, dirErr, dir.Close())
 }
