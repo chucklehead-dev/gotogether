@@ -105,7 +105,9 @@ func TestSimulateManyContinuesPastAnAttemptedBindingError(t *testing.T) {
 
 // A slow proof first must not leave the bindings after it unvisited: with
 // -timeout every binding reports, the slow one unfinished (no verdict,
-// never a pass or a skip), and the run is red.
+// never a pass or a skip), and the run is red. The deadline leaves each fast
+// binding a 15 s first share: they still start real quint processes, which a
+// loaded runner can hold past a second or two, while the slow one never ends.
 func TestSimulateManyTimeoutReportsEveryBinding(t *testing.T) {
 	skip.Quint(t)
 	t.Setenv("GOTOGETHER_REPORT_DIR", "")
@@ -128,7 +130,7 @@ func TestSimulateManyTimeoutReportsEveryBinding(t *testing.T) {
 	}
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'" }
 	script := "#!/bin/sh\nset -eu\nif [ \"$1\" != verify ]; then exec " + quote(real) + " \"$@\"; fi\n" +
-		"case \" $* \" in *\" --invariant slow \"*) sleep 60;; esac\n" +
+		"case \" $* \" in *\" --invariant slow \"*) sleep 600;; esac\n" +
 		"out=''\nwhile [ $# -gt 0 ]; do if [ \"$1\" = --out ]; then out=$2; shift; fi; shift; done\n" +
 		"printf '%s\\n' '{\"stage\":\"verifying\",\"status\":\"ok\",\"errors\":[]}' > \"$out\"\n"
 	fake := filepath.Join(dir, "quint-custom")
@@ -140,9 +142,9 @@ func TestSimulateManyTimeoutReportsEveryBinding(t *testing.T) {
 	var runErr error
 	start := time.Now()
 	captureStdout(t, func() {
-		code, runErr = simulate(t.Context(), []string{"-binding", paths[0], "-binding", paths[1], "-binding", paths[2], "-verify", "2", "-quint", fake, "-report-dir", reports, "-timeout", "6s"})
+		code, runErr = simulate(t.Context(), []string{"-binding", paths[0], "-binding", paths[1], "-binding", paths[2], "-verify", "2", "-quint", fake, "-report-dir", reports, "-timeout", "45s"})
 	})
-	if elapsed := time.Since(start); elapsed > 30*time.Second {
+	if elapsed := time.Since(start); elapsed > 90*time.Second {
 		t.Fatalf("the run outlived -timeout: %s", elapsed)
 	}
 	if code != 2 || runErr != nil {
