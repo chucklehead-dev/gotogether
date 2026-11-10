@@ -219,8 +219,23 @@ func TestTapeToolsAcquisitionFailuresCannotPass(t *testing.T) {
 }
 
 func TestTapeToolsSlowAcquisitionIsBounded(t *testing.T) {
+	// Drive the total-budget clock from the owned command's completion marker.
+	// Host scheduling before apt starts must not consume this test's budget:
+	// it is the active command's real GNU timeout that this control exercises.
+	// After unbounded apt finishes, the next phase observes an exhausted budget.
+	source := readPreflightFile(t, tapeToolScript(t))
+	clock := `left=$((deadline - SECONDS))`
+	if strings.Count(source, clock) != 1 {
+		t.Fatal("bootstrap remaining-budget clock changed")
+	}
+	source = strings.Replace(source, clock, `left=$budget
+  if [[ -f "$TAPE_FIXTURE_ROOT/slow-completed" ]]; then left=0; fi`, 1)
+	bounded := filepath.Join(t.TempDir(), "bounded.sh")
+	if err := os.WriteFile(bounded, []byte(source), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	fixture := newTapeToolFixture(t)
-	output, err := fixture.run(t, tapeToolScript(t), "TAPE_FIXTURE_APT=slow", "TAPE_TOOLS_TIMEOUT_SECONDS=1")
+	output, err := fixture.run(t, bounded, "TAPE_FIXTURE_APT=slow", "TAPE_TOOLS_TIMEOUT_SECONDS=1")
 	exit, ok := errors.AsType[*exec.ExitError](err)
 	if !ok || exit.ExitCode() != 124 || !strings.Contains(output, "apt-get update failed (exit 124)") {
 		t.Fatalf("slow package download escaped its deadline: %v\n%s", err, output)
@@ -235,7 +250,7 @@ func TestTapeToolsSlowAcquisitionIsBounded(t *testing.T) {
 	// Removing only apt's timeout lets the same delayed side effect happen.
 	// The remaining-budget check then fails, but cannot undo the late work:
 	// this control proves the hard bound actually stops the active command.
-	unbounded := strings.ReplaceAll(readPreflightFile(t, tapeToolScript(t)),
+	unbounded := strings.ReplaceAll(source,
 		`sudo -n timeout --kill-after=10s "${left}s" env`, `sudo -n env`)
 	if strings.Contains(unbounded, `sudo -n timeout`) {
 		t.Fatal("negative control did not remove apt's timeout")
