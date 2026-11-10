@@ -96,11 +96,13 @@ type Sim struct {
 	now       time.Time
 	start     time.Time
 	tasks     []*task // every task, in creation order (task id-1)
-	// the choice being made, while the scheduler or a nemesis makes it,
-	// whose options ChoiceOptions names: a scheduling choice among optN
-	// runnable tasks (optCands the predicate waiters among them), or a
-	// family's nemeses (optFam). (A closure made at every step cost a step
-	// an allocation.)
+	// The active chooser call (optKind, optCount) and the surrounding operation's
+	// naming metadata: optN runnable tasks (optCands are predicate waiters), or
+	// optFam's enabled nemeses. No per-choice naming closure is stored.
+	optDepth  int
+	optOwner  int // draw depth that owns scheduling/nemesis metadata
+	optKind   string
+	optCount  int
 	optSched  bool
 	optN      int
 	optCands  []*task
@@ -276,9 +278,13 @@ type simObserver interface{ ObserveSim(*Sim) }
 // chooser to read from its Choose (one New handed the simulation): a
 // scheduling choice's runnable tasks, option i the i-th; a nemesis
 // family's, "none" then the nemeses enabled; a declared fault kind's,
-// "nominal" then its options. nil for another choice, or outside one.
+// "nominal" then the options actually offered (including an Only prefix).
+// nil for another choice, outside one, or when not every option has a name.
 func (s *Sim) ChoiceOptions(kind string) []string {
-	if s.optSched {
+	if s.optKind == "" || kind != s.optKind {
+		return nil
+	}
+	if s.optSched && kind == "sched.task" && s.optOwner == s.optDepth && s.optCount == s.optN {
 		ids := s.runnableIDs(s.optN, s.optCands)
 		out := make([]string, len(ids))
 		for i, id := range ids {
@@ -286,12 +292,12 @@ func (s *Sim) ChoiceOptions(kind string) []string {
 		}
 		return out
 	}
-	if s.optFam != nil {
+	if s.optFam != nil && kind == s.optFam.kind && s.optOwner == s.optDepth && s.optCount == len(s.optFam.ns)+1 {
 		return append([]string{"none"}, s.optFam.names()...)
 	}
 	if IsFault(kind) {
-		if o := choice.Options(kind); o != nil {
-			return append([]string{"nominal"}, o...)
+		if o := choice.Options(kind); o != nil && s.optCount <= len(o)+1 {
+			return append([]string{"nominal"}, o[:s.optCount-1]...)
 		}
 	}
 	return nil
@@ -308,6 +314,9 @@ func (s *Sim) Choose(kind string, n int) int {
 
 // draw asks the Chooser.
 func (s *Sim) draw(kind string, n int) int {
+	previousKind, previousN, previousDepth := s.optKind, s.optCount, s.optDepth
+	s.optKind, s.optCount, s.optDepth = kind, n, previousDepth+1
+	defer func() { s.optKind, s.optCount, s.optDepth = previousKind, previousN, previousDepth }()
 	if IsFault(kind) {
 		choice.Seen(kind) // a kind, declared or not
 	}
@@ -319,6 +328,25 @@ func (s *Sim) draw(kind string, n int) int {
 		s.Log(fmt.Sprintf("%v %s=%d", s.Elapsed(), kind, v))
 	}
 	return v
+}
+
+// Scheduling and nemesis naming context belongs to one chooser call, including
+// nested choices and panic unwinding. No per-choice closure is stored.
+func (s *Sim) schedulingChoice(n int, cands []*task) int {
+	old, oldN, oldCands, oldOwner := s.optSched, s.optN, s.optCands, s.optOwner
+	s.optSched, s.optN, s.optCands, s.optOwner = true, n, cands, s.optDepth+1
+	defer func() { s.optSched, s.optN, s.optCands, s.optOwner = old, oldN, oldCands, oldOwner }()
+	return s.Choose("sched.task", n)
+}
+
+func (s *Sim) nemesisChoice(f *nemFam, n int) int {
+	old, oldOwner := s.optFam, s.optOwner
+	s.optFam, s.optOwner = f, s.optDepth+1
+	defer func() { s.optFam, s.optOwner = old, oldOwner }()
+	if s.core != nil {
+		return s.draw(f.kind, n)
+	}
+	return s.Choose(f.kind, n)
 }
 
 // fault makes a fault choice: whether (and which) fault of a kind happens
@@ -1213,9 +1241,7 @@ func (s *Sim) run(d time.Duration, done func() bool) (err error) {
 			}
 			eachLog(s.c, func(r *ChoiceLog) { r.Took("sched.task", n, k) }) // the choice it stands for: replays without it
 		} else {
-			s.optSched, s.optN, s.optCands = true, n, cands
-			k = s.Choose("sched.task", n)
-			s.optSched, s.optCands = false, nil
+			k = s.schedulingChoice(n, cands)
 		}
 		t := s.pick(k, cands)
 		s.ran = t.id
@@ -1672,12 +1698,8 @@ func (s *Sim) maybeNemesis() {
 		before := s.logLens[:0]
 		eachLog(s.c, func(r *ChoiceLog) { before = append(before, logLen{r, len(r.Choices)}) })
 		s.logLens = before
-		if by == nil && s.core != nil {
-			k = s.draw(f.kind, len(ns)+1) // a core settle: the nemeses left are outside the core
-		} else if by == nil {
-			s.optFam = f
-			k = s.Choose(f.kind, len(ns)+1)
-			s.optFam = nil
+		if by == nil {
+			k = s.nemesisChoice(f, len(ns)+1)
 		} else if i := slices.Index(ns, picked); i >= 0 {
 			k = i + 1
 		}
