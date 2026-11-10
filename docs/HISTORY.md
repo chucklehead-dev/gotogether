@@ -9498,3 +9498,21 @@ full scheduler campaign still reports 99 survivors of 1,749 mutations at limit
 remain the next proposed differential/API consolidation work after green semantic
 gates. J12–J27 remain a proposed queue subject to product need and maintainer
 choices; they are not 16 silently completed commitments.
+
+
+### Choice option observation contracts (2026-11-10)
+
+A public contract review following the retained 99/1749 mutation campaign found
+that `ChoiceOptions` exposed registered labels outside a choice and returned a
+full declaration when `FaultKind.Only` offered a shorter prefix. It now records
+the active kind/cardinality and restores the enclosing frame on return or panic.
+Scheduler and nemesis names belong to their own draw frame, so nested direct
+choices cannot borrow labels even with the same kind/cardinality. Core settlement
+names its enabled external nemeses through the same scoped helper.
+
+Public controls cover full/restricted actual fault selections, nominal-first
+ordering, unknown/wrong/nonfault kinds, insufficient labels, owned snapshots,
+nesting/panic restoration and core settlement. Six exact source overlays fail
+explicit public assertions, including the original source; no compile error or
+panic counts as a behavioral control. These are bounded observations, not a new
+mutation campaign or survivor-count improvement. Existing budgets are unchanged.
