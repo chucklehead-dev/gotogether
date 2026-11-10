@@ -221,7 +221,7 @@ func (g *gen) callActions(b *strings.Builder) {
 		b.WriteString(g.frame("      ", map[string]string{"appended": "[]", c.Quint + "Records": c.Quint + "Records.append(rec_)"}))
 		b.WriteString("    }\n  }\n")
 		b.WriteString("\n" + comment("  ", fmt.Sprintf("%s answered again from an application (grist.Replayed: a dependency answering a retry of a key from its first answer): an earlier served record, request and answer alike; it applies nothing", c.label())))
-		fmt.Fprintf(b, "  action %sReplayed(%s): bool = {\n    val rec_: %sRecord = %s\n    all {\n      %s,\n      %sRecords.indices().exists(i => %sRecords[i] == rec_),\n", c.Quint, ps, t, rec, or(replays), c.Quint, c.Quint)
+		fmt.Fprintf(b, "  action %sReplayed(%s): bool = {\n    val rec_: %sRecord = %s\n    all {\n      %s,\n      %sRecords.foldl(false, (found, r) => found or r == rec_),\n", c.Quint, ps, t, rec, or(replays), c.Quint)
 		b.WriteString(g.frame("      ", map[string]string{"appended": "[]"}))
 		b.WriteString("    }\n  }\n")
 	}

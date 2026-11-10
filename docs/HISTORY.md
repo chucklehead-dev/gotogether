@@ -9588,3 +9588,17 @@ README and pilot instructions now say so. J12 and J23 are dropped; required
 published-module pin alignment remains. Delete-on-merge is enabled, with a safe
 one-time prune still outstanding. Diagnostic memory-cap experiments are separate
 from the unchanged gate; no result from them changes the recorded 94 survivors.
+
+### The grist library's folds, 2026-11-10
+
+Counters' cold depth-8 proof took 3,426 s, spread over the generated
+transitions and, by depth 8, mostly the application's two invariant checks
+(docs/performance.md). grist.qnt's index quantifiers and its set fold in
+`nextOf` are now folds over the elements, the generated `nextID` and
+`Replayed` actions likewise, and every grist example is regenerated with
+the generator. `grist/model/testdata/folds.qnt` keeps the earlier
+definitions: `quint verify` proves them equal to the new ones for every
+trace of up to 10 steps, and grist's tests sample it. Counters proves in
+2,438 s, 1.4 times faster: still far above a fair share of the roster.
+Rewrites of its invariants did not help, their cost being the symbolic
+state's. No bound, model behaviour or check changed.

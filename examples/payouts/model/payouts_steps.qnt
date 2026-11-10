@@ -50,7 +50,8 @@ module payoutsGen {
   // unanswered, so that the model on its own never draws a used one (a
   // command that would be disabled) nor two that differ only by name
   pure def nextID(answered: Set[str]): Set[str] =
-    IDS.foldl(Set(), (s, i) => if (s == Set() and not(answered.contains(i))) Set(i) else s)
+    val first = IDS.foldl("", (s, i) => if (s == "" and not(answered.contains(i))) i else s)
+    if (first == "") Set() else Set(first)
 
   // a command's commit of b, answering id
   action appends(b: List[Event], id: str): bool = all {
@@ -321,7 +322,8 @@ module payoutsCallsGen {
   // unanswered, so that the model on its own never draws a used one (a
   // command that would be disabled) nor two that differ only by name
   pure def nextID(answered: Set[str]): Set[str] =
-    IDS.foldl(Set(), (s, i) => if (s == Set() and not(answered.contains(i))) Set(i) else s)
+    val first = IDS.foldl("", (s, i) => if (s == "" and not(answered.contains(i))) i else s)
+    if (first == "") Set() else Set(first)
 
   action answers(b: List[Event], id: str): bool = all {
     freshKey(answered, id),
