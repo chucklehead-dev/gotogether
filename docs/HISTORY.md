@@ -9563,3 +9563,28 @@ The source predates PR #133's choice-label and late-termination controls.
 Receipts remain explicitly ineligible for review-policy admission; arbitrary
 nonzero exits alone do not establish an assertion witness or failure cause.
 The verifier roster and full nightly remain unqualified separately.
+
+### Maintainer feedback and independent soundness re-check, 2026-11-10
+
+The original reviewer independently re-ran J1/J2's adversarial reproductions on
+`aa8380b4` with admitted Quint 0.33.1 and evaluator 0.7.1. They report agreement
+between cached/direct prefix checks on both policies, correct no-verdict for a
+Go-only negative under Quint policy, rejection of reversed own appends at every
+level, and zero brute-force history mismatches. Existing repository controls
+cover these failure classes in qhegel/prefix_witness_test.go and
+qhistory/append_order_test.go; the report is independent confirmation, not a
+new five-reviewer pass or a new local reproduction claim.
+
+The maintainer enforced the red-nightly rule with two explicit feature
+exceptions: indispensable unblockers, or features strongly preferable to a
+stopgap for nightly recovery. Exception PRs must explain their applicability.
+Work is now ordered as direct survivor/SIGKILL treatment (J7a), cold proof and
+roster visibility (J7b), then a green scheduled nightly on current source (J7c).
+Further evidence machinery is parked in favor of direct treatment. The local
+unfinished raw-output retention patch remains unmerged.
+
+Go 1.27.3 remains required in services that import even recording-only packages;
+README and pilot instructions now say so. J12 and J23 are dropped; required
+published-module pin alignment remains. Delete-on-merge is enabled, with a safe
+one-time prune still outstanding. Diagnostic memory-cap experiments are separate
+from the unchanged gate; no result from them changes the recorded 94 survivors.
