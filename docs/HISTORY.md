@@ -9546,3 +9546,20 @@ nesting/panic restoration and core settlement. Six exact source overlays fail
 explicit public assertions, including the original source; no compile error or
 panic counts as a behavioral control. These are bounded observations, not a new
 mutation campaign or survivor-count improvement. Existing budgets are unchanged.
+
+### Current-source scheduler campaign, 2026-11-10
+
+The frozen published `4710e99bdccebe9bf1d23286311270b502a578b9` campaign
+completed all 1,749 source mutants across seven passing test suites in 4,683.30
+seconds, within the original 7,200-second allowance. It used four workers, the
+existing 3,072 MiB per-test virtual-memory cap, 300-second test deadlines and
+survivor limit 22. The worker exited zero after completing its journal; the
+external count gate exited one with 94 survivors. Its hash-bound completion
+receipt validated. No cleanup was required and no owned processes remained.
+
+This supersedes the old 99/1,749 result as the latest complete qenv campaign,
+not as a green admission result or a controlled comparison proving five fixes.
+The source predates PR #133's choice-label and late-termination controls.
+Receipts remain explicitly ineligible for review-policy admission; arbitrary
+nonzero exits alone do not establish an assertion witness or failure cause.
+The verifier roster and full nightly remain unqualified separately.
