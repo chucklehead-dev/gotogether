@@ -8,6 +8,10 @@ and adds a line here.
 
 ## Unreleased
 
+- `Sim.ChoiceOptions` describes only the active chooser call, preserves restricted
+  fault-option prefixes, and names external nemeses during core settlement.
+  Nested choices cannot borrow outer labels; returned names remain owned snapshots.
+
 - Native counterexample validation recognizes Apalache's exact unit marker only
   where the structured trace expects an empty tuple, including nested variant
   payloads. Records, labels and other values remain strict; unordered collections

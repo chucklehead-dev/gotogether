@@ -85,6 +85,47 @@ func TestTerminateDrainsOrKills(t *testing.T) {
 	}
 }
 
+// A task may begin draining after the signal has already arrived. Its new
+// termination context must be cancelled immediately, while the process context
+// remains usable for work during the grace period.
+func TestTerminatingCreatedAfterSignal(t *testing.T) {
+	s := qenv.New(qenv.Nominal{})
+	s.Check = true
+	defer s.Close()
+	const grace = 10 * time.Second
+	ready, observed := false, false
+	p := s.Process("node", false, func(ctx context.Context) {
+		p := qenv.ProcessOf(ctx)
+		if p.Incarnation != 1 {
+			return
+		}
+		ready = true
+		qenv.Wait(ctx, p.Terminating)
+		term := qenv.Terminating(ctx)
+		if !errors.Is(term.Err(), context.Canceled) {
+			t.Errorf("late termination context error = %v, want immediate cancellation", term.Err())
+		}
+		if ctx.Err() != nil || p.Down() || s.Elapsed() >= grace {
+			t.Errorf("observation escaped grace: process error=%v down=%v elapsed=%v", ctx.Err(), p.Down(), s.Elapsed())
+		}
+		observed = true
+		qenv.Daemon(ctx)
+		qenv.Wait(ctx, func() bool { return false })
+	})
+	s.Terminations(qenv.Termination{Grace: grace}, p)
+	s.Spawn("operator", func(ctx context.Context) {
+		qenv.Wait(ctx, func() bool { return ready })
+		p.Terminate()
+		qenv.Wait(ctx, func() bool { return observed })
+	})
+	if err := s.Run(time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if !observed {
+		t.Fatal("process never observed its termination during grace")
+	}
+}
+
 // Option short of terminate.<name>.grace kills a drain that the full
 // grace would have let finish; option 0 is the full grace.
 func TestTerminateShortGrace(t *testing.T) {
