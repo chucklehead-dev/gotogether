@@ -999,6 +999,7 @@ every one's row; they are grouped in tracks, each read in order:
 | Migration | [`examples/migrate-payments`](examples/migrate-payments) → [`examples/edgepublish`](examples/edgepublish) | you have code, tests and logs but no model |
 | Metastability | [`examples/retrystorm`](examples/retrystorm), then checkout's and crossdb's load tests; [`examples/sktrace`](examples/sktrace) turns production traces into load | you choose retry, timeout or requeue policies |
 | Tutorials | [`docs/tutorials`](docs/tutorials): proofs over the state graph → liveness → scenarios → a grist app on Kubernetes → production at volume | you want a guided, step-by-step page with each command's real output |
+| External pilot | [One recorded operation](docs/external-pilot.md) | you want to try a real service contract and hand reproducible evidence to another maintainer |
 
 ```sh
 examples/hello/run-demo.sh                       # simulated runs, then gotogether on their step logs
