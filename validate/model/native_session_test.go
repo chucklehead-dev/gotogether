@@ -219,7 +219,8 @@ func TestSimulateManyStopsAndDoesNotPersist(t *testing.T) {
 				t.Fatal(err)
 			}
 			cancel()
-		} else if report != nil || !errors.Is(err, context.Canceled) {
+		} else if be, ok := errors.AsType[*BindingError](err); report != nil || !errors.Is(err, context.Canceled) || !ok || be.Binding != second {
+			// A canceled binding still reports, by name, with no verdict.
 			t.Fatalf("canceled hit returned report: %+v %v", report, err)
 		}
 	}
@@ -278,12 +279,21 @@ func TestNativeSessionRejectsPublicationDriftAndMalformedProof(t *testing.T) {
 			n := 0
 			for report, err := range simulateMany(ctx, []string{first, first}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2, Progress: progress}, identity, trustedTestBackend) {
 				n++
-				if report != nil || err == nil {
+				if n == 1 && (report != nil || err == nil) {
 					t.Fatalf("invalid proof published: %+v %v", report, err)
 				}
+				// The roster goes on, but the second request never reuses
+				// what failed: it verifies anew, or reports its own error.
+				if n == 2 && report != nil && report.Invariants[0].NativeProof != nil && report.Invariants[0].NativeProof.Reused {
+					t.Fatalf("invalid proof reused: %+v", report)
+				}
 			}
-			if n != 1 || len(batchInvocations(t, source)) != 1 {
-				t.Fatalf("failed proof continued: n%d calls%v", n, batchInvocations(t, source))
+			want := 2
+			if kind == "cancel" {
+				want = 1 // canceled: the second binding reports, starting no work
+			}
+			if n != 2 || len(batchInvocations(t, source)) != want {
+				t.Fatalf("failed proof reused or roster stopped: n%d calls%v", n, batchInvocations(t, source))
 			}
 		})
 	}
@@ -421,9 +431,14 @@ func TestSimulateManySkipAndClassificationRemainIndependent(t *testing.T) {
 				t.Fatalf("proof changed classifications: %+v", report)
 			}
 		}
+		// A nonzero report does not stop the roster; the third binding
+		// reuses only the first's exact proof.
+		if count == 3 && (report.Code != 0 || report.Binding != first || report.Invariants[0].NativeProof == nil || !report.Invariants[0].NativeProof.Reused) {
+			t.Fatalf("binding after a failure: %+v", report)
+		}
 	}
-	if count != 2 || len(batchInvocations(t, source)) != 4 {
-		t.Fatalf("nonzero report continued or reused incompatible group: %d %v", count, batchInvocations(t, source))
+	if count != 3 || len(batchInvocations(t, source)) != 4 {
+		t.Fatalf("roster stopped at a failure or reused an incompatible group: %d %v", count, batchInvocations(t, source))
 	}
 }
 
@@ -614,12 +629,15 @@ func TestNativeSessionOwnershipMissDoesNotEraseCapturedToolGuard(t *testing.T) {
 	n := 0
 	for report, err := range simulateMany(t.Context(), []string{first, second}, SimulateOptions{Quint: source.checker.Options.Quint, Verify: 2}, tool, factory) {
 		n++
-		if report != nil || err == nil || !strings.Contains(err.Error(), "tool identity changed") {
+		if n == 1 && (report != nil || err == nil || !strings.Contains(err.Error(), "tool identity changed")) {
 			t.Fatalf("ownership miss erased established guard: %+v %v", report, err)
 		}
+		if n == 2 && (err != nil || report.Invariants[0].NativeProof != nil) {
+			t.Fatalf("drift reached another binding's proof: %+v %v", report, err)
+		}
 	}
-	if n != 1 || len(batchInvocations(t, source)) != 1 {
-		t.Fatal("drift continued into another binding")
+	if n != 2 || len(batchInvocations(t, source)) != 2 {
+		t.Fatal("the next binding did not verify on its own")
 	}
 	// An initially unaccounted tool has no established identity to recheck.
 	unknown := func(context.Context, string) (string, bool) { calls++; return fmt.Sprint(calls), false }
@@ -628,7 +646,7 @@ func TestNativeSessionOwnershipMissDoesNotEraseCapturedToolGuard(t *testing.T) {
 			t.Fatalf("unaccounted tool lost ordinary semantics: %+v %v", report, err)
 		}
 	}
-	if len(batchInvocations(t, source)) != 3 {
+	if len(batchInvocations(t, source)) != 4 {
 		t.Fatal("unaccounted tool reused or refreshed an identity")
 	}
 }

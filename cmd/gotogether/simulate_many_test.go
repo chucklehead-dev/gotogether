@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/validate"
@@ -79,11 +80,13 @@ func TestSimulateManyIndependentReports(t *testing.T) {
 	}
 }
 
-func TestSimulateManyStopsWithAttemptedBindingError(t *testing.T) {
+// One binding's error does not stop the roster: every binding after it
+// still reports, and the run exits 2.
+func TestSimulateManyContinuesPastAnAttemptedBindingError(t *testing.T) {
 	dir := t.TempDir()
 	a := skippedSimulationBinding(t, dir, "first")
 	b := filepath.Join(dir, "missing.yaml")
-	c := skippedSimulationBinding(t, dir, "unvisited")
+	c := skippedSimulationBinding(t, dir, "visited")
 	reports := filepath.Join(dir, "reports")
 	t.Setenv("GOTOGETHER_REPORT_DIR", "")
 	var code int
@@ -91,12 +94,71 @@ func TestSimulateManyStopsWithAttemptedBindingError(t *testing.T) {
 	text := captureStdout(t, func() {
 		code, runErr = simulate(t.Context(), []string{"-binding", a, "-binding", b, "-binding", c, "-report-dir", reports})
 	})
-	if code != 2 || runErr == nil || strings.Contains(text, "unvisited") {
-		t.Fatalf("did not stop at missing binding: %d %v %s", code, runErr, text)
+	if code != 2 || runErr != nil || !strings.Contains(text, "visited") {
+		t.Fatalf("stopped at the missing binding: %d %v %s", code, runErr, text)
 	}
 	docs := simulationDocuments(t, reports)
-	if len(docs) != 2 || docs[a].SkipReason != "first" || docs[b].Binding != b || docs[b].Verdict != "error" || docs[b].Error == "" || len(docs[b].Checks) != 0 || docs[b].SkipReason != "" {
+	if len(docs) != 3 || docs[a].SkipReason != "first" || docs[c].SkipReason != "visited" || docs[b].Binding != b || docs[b].Verdict != "error" || docs[b].Error == "" || len(docs[b].Checks) != 0 || docs[b].SkipReason != "" {
 		t.Fatalf("error reused another binding's result: %+v", docs)
+	}
+}
+
+// A slow proof first must not leave the bindings after it unvisited: with
+// -timeout every binding reports, the slow one unfinished (no verdict,
+// never a pass or a skip), and the run is red.
+func TestSimulateManyTimeoutReportsEveryBinding(t *testing.T) {
+	skip.Quint(t)
+	t.Setenv("GOTOGETHER_REPORT_DIR", "")
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "tiny.qnt"), []byte("module tiny { var x: int action init = x' = 0 action step = x' = x val slow = x >= 0 val fast = x == 0 }"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var paths []string
+	for _, name := range []string{"slow", "fast", "fast2"} {
+		inv := strings.TrimSuffix(name, "2")
+		path := filepath.Join(dir, name+".yaml")
+		if err := os.WriteFile(path, []byte("spec: tiny.qnt\nmodule: tiny\ninvariants: ["+inv+"]\nsimulate:\n  holds: ["+inv+"]\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, path)
+	}
+	real, err := exec.LookPath("quint")
+	if err != nil {
+		t.Fatal(err)
+	}
+	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'" }
+	script := "#!/bin/sh\nset -eu\nif [ \"$1\" != verify ]; then exec " + quote(real) + " \"$@\"; fi\n" +
+		"case \" $* \" in *\" --invariant slow \"*) sleep 60;; esac\n" +
+		"out=''\nwhile [ $# -gt 0 ]; do if [ \"$1\" = --out ]; then out=$2; shift; fi; shift; done\n" +
+		"printf '%s\\n' '{\"stage\":\"verifying\",\"status\":\"ok\",\"errors\":[]}' > \"$out\"\n"
+	fake := filepath.Join(dir, "quint-custom")
+	if err := os.WriteFile(fake, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	reports := filepath.Join(dir, "reports")
+	var code int
+	var runErr error
+	start := time.Now()
+	captureStdout(t, func() {
+		code, runErr = simulate(t.Context(), []string{"-binding", paths[0], "-binding", paths[1], "-binding", paths[2], "-verify", "2", "-quint", fake, "-report-dir", reports, "-timeout", "6s"})
+	})
+	if elapsed := time.Since(start); elapsed > 30*time.Second {
+		t.Fatalf("the run outlived -timeout: %s", elapsed)
+	}
+	if code != 2 || runErr != nil {
+		t.Fatalf("an unfinished binding must leave the run red: %d %v", code, runErr)
+	}
+	docs := simulationDocuments(t, reports)
+	if len(docs) != 3 {
+		t.Fatalf("every binding must report: %+v", docs)
+	}
+	for _, fast := range paths[1:] {
+		if d := docs[fast]; d.Verdict != "pass" || d.Unfinished != "" || len(d.Checks) != 1 || d.Checks[0].Verdict != "holds" {
+			t.Fatalf("a binding after the slow one did not pass: %+v", d)
+		}
+	}
+	if d := docs[paths[0]]; d.Verdict != "no verdict" || d.Exit != 2 || d.Unfinished == "" || d.SkipReason != "" || len(d.Checks) != 0 {
+		t.Fatalf("the slow binding is not reported unfinished: %+v", d)
 	}
 }
 

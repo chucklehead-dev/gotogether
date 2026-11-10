@@ -8,6 +8,16 @@ and adds a line here.
 
 ## Unreleased
 
+- `model.SimulateMany` reports every binding: a failure, an error or a
+  cancellation no longer stops the roster (an error is a `model.BindingError`
+  naming its binding). `SimulateOptions.Deadline` (the CLI's `simulate
+  -timeout`) shares the time left fairly: each binding the same first share
+  (the time over their number), those that run out retried after the others
+  with what they leave, and one that still
+  does not finish is `Report.Unfinished` (`Document.Unfinished`): no verdict,
+  exit 2, never a pass or a skip. A multi-binding run exits 1 if one failed,
+  else 2 if one has no verdict.
+
 - `Sim.ChoiceOptions` describes only the active chooser call, preserves restricted
   fault-option prefixes, and names external nemeses during core settlement.
   Nested choices cannot borrow outer labels; returned names remain owned snapshots.

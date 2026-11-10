@@ -4449,6 +4449,10 @@
       "description": "SkipReason identifies an intentionally unperformed model check.",
       "type": "string"
     },
+    "unfinished": {
+      "description": "Unfinished says why a check was cut off with no verdict: its share of the run's deadline ran out. Never a pass or a skip.",
+      "type": "string"
+    },
     "verdict": {
       "description": "Verdict is \"pass\", \"fail\", \"no verdict\" (every failure has none: lost or dropped steps, a search's budget) or \"error\" (the tool failed: Error says how); Exit the command's exit status.",
       "enum": [

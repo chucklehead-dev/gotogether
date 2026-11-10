@@ -285,10 +285,20 @@ jobs:
   # simulate.verifySteps caps the depth for its model, and verifySkip
   # leaves a model out with the reason (grpcledger, twophase); their
   # sampling in CI stands.
+  #
+  # The roster shares what is left of the job's unchanged two hours, less
+  # five minutes for the reports' upload: each binding first gets the same
+  # share, the time over their number, and those that run out are retried
+  # after the others with what they leave (simulate -timeout).
+  # One cold proof cannot leave later bindings unvisited; a binding that
+  # does not finish is reported unfinished, with no verdict, and the job
+  # is red. Every binding has its own report in verify-reports.
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
+      - name: Record the job's start
+        run: echo "VERIFY_JOB_START=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
@@ -312,7 +322,10 @@ jobs:
           for b in "${bindings[@]}"; do
             args+=(-binding "$b")
           done
-          "$RUNNER_TEMP/gotogether" simulate "${args[@]}" -verify 8 -report-dir "$RUNNER_TEMP/verify-reports"
+          left=$(( VERIFY_JOB_START + 120*60 - 5*60 - $(date +%s) ))
+          if [ "$left" -le 0 ]; then echo "no time left for the roster"; exit 1; fi
+          echo "roster of ${#bindings[@]} bindings within ${left}s"
+          "$RUNNER_TEMP/gotogether" simulate "${args[@]}" -verify 8 -timeout "${left}s" -report-dir "$RUNNER_TEMP/verify-reports"
       - name: Retain independent verifier reports
         if: always()
         uses: actions/upload-artifact@v4

@@ -22,6 +22,9 @@ type machineReports struct {
 	json  bool
 	files repeated
 	dir   string
+	// undelivered is whether the last write failed to deliver a report
+	// (not whether the analysis it reports failed).
+	undelivered bool
 }
 
 // reportFormats are -report's formats, each the document's rendering.
@@ -67,6 +70,7 @@ func (m *machineReports) resolve(out *io.Writer) error {
 // or a report's write error (status 2).
 func (m *machineReports) write(d *validate.Document, stdout io.Writer, code int, err error) (int, error) {
 	d.Exit = code
+	m.undelivered = false
 	if err != nil {
 		d.Error = err.Error()
 	}
@@ -88,6 +92,7 @@ func (m *machineReports) write(d *validate.Document, stdout io.Writer, code int,
 			return
 		}
 		err = errors.Join(err, werr)
+		m.undelivered = true
 		code, d.Exit, d.Verdict, d.Error = 2, 2, "error", err.Error()
 	}
 	type deliveredReport struct {

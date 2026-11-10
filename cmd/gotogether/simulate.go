@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/validate/model"
 )
@@ -30,13 +32,22 @@ func simulate(ctx context.Context, args []string) (int, error) {
 	if err != nil {
 		return mr.write(log.document(), os.Stdout, 2, err)
 	}
-	index := 0
+	// Every binding reports, in the order the roster finishes them: a
+	// failure, an error or an unfinished share does not stop the others.
+	// The exit is 1 if one failed, else 2 if one has no verdict.
+	worst, attempted := 0, 0
+	var unpassed []string
 	for rep, analysisErr := range model.SimulateMany(ctx, request.bindings, request.options) {
 		// Each attempted binding owns its display capture and existing report/2.
 		// No later result replaces an earlier binding or forms an aggregate verdict.
-		log = &simLog{binding: request.bindings[index], quiet: mr.json}
+		log = &simLog{quiet: mr.json}
+		if rep != nil {
+			log.binding = rep.Binding
+		} else if be, ok := errors.AsType[*model.BindingError](analysisErr); ok {
+			log.binding = be.Binding
+		}
 		simCapture = log
-		index++
+		attempted++
 		code := 2
 		if rep != nil {
 			log.result = rep.Doc()
@@ -45,12 +56,33 @@ func simulate(ctx context.Context, args []string) (int, error) {
 		} else if analysisErr == nil {
 			analysisErr = fmt.Errorf("simulate %s: analysis returned no report", log.binding)
 		}
-		code, deliveryErr := mr.write(log.document(), os.Stdout, code, analysisErr)
-		if code != 0 || deliveryErr != nil {
-			return code, deliveryErr
+		doc := log.document()
+		code, writeErr := mr.write(doc, os.Stdout, code, analysisErr)
+		if mr.undelivered || len(request.bindings) == 1 {
+			// A report that cannot be delivered stops the roster; one
+			// binding's error is the command's, as it always was.
+			if writeErr != nil || code != 0 {
+				return code, writeErr
+			}
+		} else if writeErr != nil {
+			fmt.Fprintf(os.Stderr, "gotogether: simulate %s: %v\n", log.binding, writeErr)
+		}
+		if code != 0 {
+			label := doc.Verdict
+			if doc.Unfinished != "" {
+				label = "unfinished"
+			}
+			unpassed = append(unpassed, fmt.Sprintf("%s (%s)", log.binding, label))
+			if worst != 1 {
+				worst = code
+			}
 		}
 	}
-	return 0, nil
+	if len(request.bindings) > 1 && worst != 0 {
+		// The summary, not an error: an error would exit 2 over a failure's 1.
+		fmt.Fprintf(os.Stderr, "gotogether: simulate: %d of %d bindings did not pass: %s\n", len(unpassed), attempted, strings.Join(unpassed, ", "))
+	}
+	return worst, nil
 }
 
 type simulationPlan struct {
@@ -77,6 +109,8 @@ func simulationRequest(args []string, mr *machineReports, log *simLog) (*simulat
 	unfair := fset.String("unfair", "", "with -graph: comma-separated actions the liveness search does not oblige (default: the binding's simulate.unfair)")
 	stops := fset.String("stops", "", "with -graph: comma-separated actions the liveness search takes in no cycle (default: the binding's simulate.stops)")
 	quint := fset.String("quint", "quint", "quint binary")
+	timeout := fset.Duration("timeout", 0, "end the whole run within this: the bindings share it fairly (each the same first share, those that run out retried with what the others leave); "+
+		"one that does not finish is reported unfinished, with no verdict (exit 2)")
 	fset.Parse(args)
 	var text io.Writer = os.Stdout
 	if err := mr.resolve(&text); err != nil {
@@ -127,6 +161,12 @@ func simulationRequest(args []string, mr *machineReports, log *simLog) (*simulat
 	}
 	opt := model.SimulateOptions{Quint: *quint, Seed: *seed, Steps: *steps, Samples: *samples, Constants: splitTop(*consts),
 		Verify: *verify, Graph: *graph, States: *states, Depth: *depth, Out: *out, Progress: os.Stderr}
+	if *timeout < 0 {
+		return nil, fmt.Errorf("simulate: -timeout %s: want a positive duration", *timeout)
+	}
+	if *timeout > 0 {
+		opt.Deadline = time.Now().Add(*timeout)
+	}
 	if *invs != "" {
 		opt.Invariants = splitList(*invs)
 	}

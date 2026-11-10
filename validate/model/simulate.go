@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"iter"
@@ -11,6 +12,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/confidence"
@@ -52,14 +54,34 @@ func Simulate(ctx context.Context, bindingPath string, opt SimulateOptions) (*Re
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if !opt.Deadline.IsZero() {
+		report, _, err := simulateShare(ctx, bindingPath, opt, time.Until(opt.Deadline), false)
+		if be, ok := errors.AsType[*BindingError](err); ok {
+			return nil, be.Err
+		}
+		return report, nil
+	}
 	return simulate(ctx, bindingPath, nil, nil, opt)
 }
 
-// SimulateMany checks bindings sequentially and yields their independent reports.
-// It stops after the first error or nonzero report, cancellation, or an early
-// stop by its consumer. Each iteration owns an isolated, nonpersistent store of
-// exact positive native group proofs; unsupported tool identities do not reuse.
-// One graph output path cannot be shared by multiple binding requests.
+// SimulateMany checks bindings sequentially and yields one result per
+// binding: every binding reports, whatever the others' verdicts or errors.
+// A report names its binding (Report.Binding); an error is a *BindingError,
+// with no report. Each iteration owns an isolated, nonpersistent
+// store of exact positive native group proofs; unsupported tool identities do
+// not reuse. One graph output path cannot be shared by multiple binding
+// requests (nil and the error, once).
+//
+// With a Deadline, the bindings share the time left fairly, so that one slow
+// proof cannot starve the bindings after it: a first pass gives each binding,
+// in order, the same share, the time left over their number; a binding that
+// does not finish in it is retried after the others, in order, with the time
+// left divided by the retries not yet run. A binding that does not finish then is yielded as
+// Unfinished: no verdict, Code 2, never a pass or a skip. Retries come after
+// the first pass's reports, so the yield order is not the given order.
+//
+// After ctx is canceled, every binding not yet reported is yielded with
+// ctx's error and no work.
 func SimulateMany(ctx context.Context, bindingPaths []string, opt SimulateOptions) iter.Seq2[*Report, error] {
 	return simulateMany(ctx, slices.Clone(bindingPaths), opt, resolveNativeToolIdentity)
 }
@@ -73,12 +95,85 @@ func simulateMany(ctx context.Context, paths []string, opt SimulateOptions, iden
 		session := newNativeProofSession(identity, backends...)
 		defer clear(session.proofs)
 		ctx := context.WithValue(ctx, nativeProofSessionKey{}, session)
+		var retries []string
+		// Every binding's first share is the same, the time left over
+		// their number: a slow binding late in the roster would otherwise
+		// take whatever the fast ones before it left, all of it lost when
+		// it ran out, and starve the retries.
+		first := time.Until(opt.Deadline) / time.Duration(max(len(paths), 1))
 		for _, path := range paths {
-			report, err := Simulate(ctx, path, opt)
-			if !yield(report, err) || err != nil || report.Code != 0 {
+			report, spent, err := simulateShare(ctx, path, opt, first, false)
+			if spent && time.Until(opt.Deadline) > 0 && len(paths) > 1 {
+				// What the others leave is shared among the bindings that ran
+				// out, after every binding has had its first share.
+				progressf(opt.Progress, "simulate %s: its share of the deadline ran out; it is retried after the other bindings\n", path)
+				retries = append(retries, path)
+				continue
+			}
+			if !yield(report, err) {
 				return
 			}
 		}
+		for i, path := range retries {
+			report, _, err := simulateShare(ctx, path, opt, time.Until(opt.Deadline)/time.Duration(len(retries)-i), true)
+			if !yield(report, err) {
+				return
+			}
+		}
+	}
+}
+
+// A BindingError is SimulateMany's error for one binding: the binding
+// that has no report, and why (Err, whose message it is).
+type BindingError struct {
+	// Binding is the binding's path as given.
+	Binding string
+	// Err is why it has no report.
+	Err error
+}
+
+func (e *BindingError) Error() string { return e.Err.Error() }
+
+// Unwrap returns Err.
+func (e *BindingError) Unwrap() error { return e.Err }
+
+// shareSpent is the cause of a binding's context ending at its share of
+// the Deadline, told apart from the caller's cancellation.
+type shareSpent struct{}
+
+func (shareSpent) Error() string { return "its share of the deadline ran out" }
+
+// simulateShare is Simulate of path within share of opt.Deadline (no bound
+// with no Deadline). spent says the share ran out, and the report then is
+// Unfinished.
+func simulateShare(ctx context.Context, path string, opt SimulateOptions, share time.Duration, retried bool) (*Report, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, false, &BindingError{path, err}
+	}
+	bctx := ctx
+	if !opt.Deadline.IsZero() {
+		share = max(min(share, time.Until(opt.Deadline)), 0)
+		var cancel context.CancelFunc
+		bctx, cancel = context.WithTimeoutCause(ctx, share, shareSpent{})
+		defer cancel()
+	}
+	report, err := simulate(bctx, path, nil, nil, opt)
+	if err != nil && ctx.Err() == nil && errors.Is(context.Cause(bctx), shareSpent{}) {
+		why := fmt.Sprintf("unfinished: its share of the deadline (%s) ran out before its checks finished", share.Round(time.Second))
+		if retried {
+			why += ", in its first share and again when retried after the other bindings"
+		}
+		return &Report{Binding: path, Unfinished: why, Code: 2, Text: fmt.Sprintf("%s: %s; no verdict\n", path, why)}, true, nil
+	}
+	if err != nil {
+		return nil, false, &BindingError{path, err}
+	}
+	return report, false, nil
+}
+
+func progressf(w io.Writer, format string, a ...any) {
+	if w != nil {
+		fmt.Fprintf(w, format, a...)
 	}
 }
 
@@ -133,6 +228,9 @@ type SimulateOptions struct {
 	// Out, with Graph, is where to write a Quint module of the instance
 	// with a run replaying each counterexample (quint test --match 'gtg_').
 	Out string
+	// Deadline, if set, is when Simulate, or SimulateMany's whole roster,
+	// must end. A binding whose share of it runs out is Unfinished.
+	Deadline time.Time
 	// Replay, with Graph, replays each counterexample with quint test
 	// (InvariantVerdict's Replayed): a violation the Go evaluator found is
 	// then quint's too.
@@ -147,6 +245,10 @@ type Report struct {
 	// Skipped, if set, says why nothing was checked: the section's skip,
 	// or verifySkip with Verify, or eventual vals alone without Graph.
 	Skipped string
+	// Unfinished, if set, says why the binding has no verdict: its share
+	// of the Deadline ran out before its checks finished (Code 2). An
+	// unfinished binding is never a pass or a skip.
+	Unfinished string
 	// Graph is the evaluator's graph (with Graph).
 	Graph *GraphResult
 	// Invariants and Eventually are each one's verdict, in the order

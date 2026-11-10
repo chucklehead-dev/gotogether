@@ -38,6 +38,9 @@ type Document struct {
 	Comparison *DocComparison `json:"comparison,omitempty"`
 	// SkipReason identifies an intentionally unperformed model check.
 	SkipReason string `json:"skipReason,omitempty"`
+	// Unfinished says why a check was cut off with no verdict: its share
+	// of the run's deadline ran out. Never a pass or a skip.
+	Unfinished string `json:"unfinished,omitempty"`
 	// Graph is the native model-state exploration scope; absent for sampling or history validation.
 	Graph *DocGraph `json:"graph,omitempty"`
 	// Receipt describes the history judgment, including folded partitions.
