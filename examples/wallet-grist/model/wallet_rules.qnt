@@ -18,13 +18,26 @@ module walletRules {
   pure val INITIAL = 5
 
   // balances, keyed by account: INITIAL and its moves (0 for an account
-  // the bank does not hold)
+  // the bank does not hold). One fold over the log, adding each move of
+  // the account (a moved event's account is its tag's: moved, the only
+  // constructor, sets both), not the read model's events selected first
+  // (balancesEvents) and then folded: quint verify (Apalache) encodes a
+  // select over the symbolic log as a list of symbolic length, which made
+  // the noOverdraft proof take hours (docs/performance.md, wallet-grist's
+  // noOverdraft proof). testdata/balances.qnt keeps the
+  // earlier definitions and checks they agree.
   pure def balanceOf(log: List[Event], a: str): int =
-    if (ACCOUNTS.contains(a)) balancesEvents(log, a).foldl(INITIAL, (s, e) => s + movedAmount(e)) else 0
+    if (ACCOUNTS.contains(a)) log.foldl(INITIAL, (s, e) => if (e.typ == "moved" and movedAccount(e) == a) s + movedAmount(e) else s) else 0
+  // the credit line's balance: the sum of its accounts' (JOINT is a subset
+  // of ACCOUNTS), as one fold adding each move of one of them. A sum of
+  // per-account folds asks the solver to split every event on each
+  // account; one condition per event does not
+  pure def lineBalance(log: List[Event]): int =
+    log.foldl(JOINT.size() * INITIAL, (s, e) => if (e.typ == "moved" and JOINT.contains(movedAccount(e))) s + movedAmount(e) else s)
   // what a transfer from src may spend: its own balance, or its credit
   // line's
   pure def funds(log: List[Event], src: str): int =
-    if (JOINT.contains(src)) JOINT.fold(0, (s, a) => s + balanceOf(log, a)) else balanceOf(log, src)
+    if (JOINT.contains(src)) lineBalance(log) else balanceOf(log, src)
 
   // a transfer the bank refuses whatever the balances (before any read),
   // else one its funds do not cover
@@ -62,5 +75,5 @@ module walletRules {
   // no account outside the credit line goes negative, nor the line in sum
   pure def noOverdraftIn(log: List[Event]): bool =
     ACCOUNTS.forall(a => JOINT.contains(a) or balanceOf(log, a) >= 0) and
-    JOINT.fold(0, (s, a) => s + balanceOf(log, a)) >= 0
+    lineBalance(log) >= 0
 }
