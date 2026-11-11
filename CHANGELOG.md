@@ -39,6 +39,11 @@ and adds a line here.
   use one-to-one matching. This fixes rejection of valid edgepublish witnesses
   without changing models, bounds, or proof acceptance.
 
+- Network healing retains each ended cut's original callback arguments in one
+  active-edge map. A cut created by an `OnHeal` callback during Settle survives
+  independently: an older heal batch cannot replace its arguments or make its
+  later Heal report nil processes. Manual recuts still invalidate old timed healers.
+
 - Virtual-time profiles keep task kinds separate from stack identities, so a
   task name containing spaces and a return address cannot merge unrelated samples.
 
