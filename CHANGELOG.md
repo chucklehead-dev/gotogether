@@ -8,6 +8,14 @@ and adds a line here.
 
 ## Unreleased
 
+- `GOTOGETHER_EVAL_SAMPLE` (`Options.EvalSample`) chooses the Go
+  evaluator's passes quint judges too by the plan read up to the renaming of
+  its minted identifiers (qenv.NewID's 32 hex digits, UUIDs): a real run's
+  are random, and hashing them made each rerun of one real run judge its own
+  share (examples/payouts' span tests 1.3 to 16.9 CPU seconds). Simulated
+  plans keep a fixed choice, a different one than before. grist's freshKey
+  mutant mints each try's id with qenv.NewID, not the try's time.
+
 - `model.SimulateMany` reports every binding: a failure, an error or a
   cancellation no longer stops the roster (an error is a `model.BindingError`
   naming its binding). `SimulateOptions.Deadline` (the CLI's `simulate
