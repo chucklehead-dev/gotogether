@@ -3,7 +3,7 @@ module github.com/chucklehead-dev/gotogether/qanalysis
 go 1.27.3
 
 require (
-	github.com/chucklehead-dev/gotogether v0.0.0-20261109004319-11fce9178f61
+	github.com/chucklehead-dev/gotogether v0.0.0-20261111234025-c3942fe8e1fb
 	github.com/golangci/plugin-module-register v0.1.2
 	golang.org/x/tools v0.52.0
 )
