@@ -303,9 +303,17 @@ jobs:
       # Fresh repository commits bypass the module proxy; third-party vanity
       # hosts (gopkg.in) use Go's normal proxy/cache path, as a user's go
       # install does, so a runner's DNS failure for them cannot fail the
-      # job. Checksum verification stays on (the consumer job's settings).
+      # job (the consumer job's settings). Checksum verification stays on for
+      # every other module.
       GOPROXY: https://proxy.golang.org,direct
       GONOPROXY: github.com/chucklehead-dev/gotogether
+      # This repository's fresh pseudo-versions are not in sum.golang.org
+      # for up to about an hour after a push: its 404 for main's newest
+      # commit failed this job on every open PR (#145, #149). Only this
+      # repository's modules skip the checksum database; third-party
+      # modules stay verified, and the job still installs exactly this
+      # commit (by its hash, fetched direct).
+      GONOSUMDB: github.com/chucklehead-dev/gotogether
     steps:
       - uses: actions/setup-go@v5
         with:

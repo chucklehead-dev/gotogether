@@ -196,6 +196,12 @@ A filtered run is named `nightly (partial: core-mutants, mutants qenv)`;
 only an unfiltered one is `nightly`. A partial run, or any dispatch,
 does not count for J7c, which asks for a green *scheduled* full nightly.
 
+The per-push consumable job sets `GONOSUMDB` for this repository's own
+modules: their fresh pseudo-versions are not in sum.golang.org for up to
+about an hour after a push, and its 404 failed the job on open PRs.
+Third-party modules stay verified, and the job still installs exactly the
+pushed commit.
+
 ## Validating where there is no quint
 
 A canary, a CronJob or a laptop during an incident may have neither
