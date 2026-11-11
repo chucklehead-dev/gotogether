@@ -7,6 +7,9 @@ simulated environment full of faults, and in production.
 Pre-release: nothing is tagged yet. Where the work stands, what is left
 and how to resume it: [docs/STATUS.md](docs/STATUS.md).
 
+**Go 1.27.3 or newer is required in the service that imports gotogether,
+including a production service that only records steps.**
+
 ## Quickstart
 
 ```sh
