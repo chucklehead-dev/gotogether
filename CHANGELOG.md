@@ -313,6 +313,9 @@ and adds a line here.
 - qsql resolves committed schemas through each transaction’s Store view, so
   restored or lost DDL and recreated columns agree across warmed and fresh pools.
 
+- qsql releases terminal transactions from its cancellation roster on unwind,
+  preserving task-owned Store rollback and cancellation reaping.
+
 - qsql supports single-table `SELECT COUNT(*) [AS alias]` with its existing
   WHERE subset. Counts include NULL-valued rows, return zero for empty matches,
   and retain transaction visibility and predicate-conflict checks. Other
