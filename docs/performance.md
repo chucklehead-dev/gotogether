@@ -1103,10 +1103,9 @@ The nightly now runs counters (with its real and retiring variants in one
 session), library, library.calls, wallet-grist and wallet-grist.calls in
 `verify-alone`, one runner per group of `ci/verify-alone.txt`, each limit
 1.5 times its measurement plus 10 minutes, cited there. Wallet-grist's
-proofs fit no limit GitHub allows: their groups have its 360-minute
-ceiling and are expected to end unfinished, red, until their proofs get
-cheaper. Wallet-grist's slow query is `noOverdraft`'s sum over the credit
-line, arithmetic over every reachable sequence of transfers. Listing the
-line instead of folding over its set changed nothing at depth 4. The shared
+proofs, unfinished on this model, finish with #148's (its balances and
+credit line as single folds over the log): 3 h 28 min and 47 min alone,
+so their groups' limits are 322 and 81 minutes (the section on
+wallet-grist's noOverdraft proof has the measurement). The shared
 roster keeps inventory and the other 43 bindings: about 36 minutes of
 proofs measured in the earlier rosters, within its 100.

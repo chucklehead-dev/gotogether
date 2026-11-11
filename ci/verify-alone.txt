@@ -20,11 +20,12 @@ counters 183 examples/counters/counters.binding.yaml examples/counters/counters.
 library 160 examples/library/library.binding.yaml
 # library.calls 4,695 s (78 min). 78 x 1.5 + 10.
 library-calls 127 examples/library/library.calls.binding.yaml
-# wallet: no measured time fits. Alone, depth 5 took 2,428 s, and depth 6's
-# second invariant query had run 2 h 25 min unfinished when stopped (each
-# depth multiplies it about tenfold). GitHub's ceiling, not a measurement:
-# the binding is expected to end unfinished, no verdict, and its job red.
-wallet 360 examples/wallet-grist/wallet.binding.yaml
-# wallet.calls: likewise. Depth 5 took 1,684 s; depth 6's second invariant
-# query had run 2 h 48 min unfinished when stopped.
-wallet-calls 360 examples/wallet-grist/wallet.calls.binding.yaml
+# wallet and wallet.calls: measured with #148's model (balances and the
+# credit line as single folds over the log), each binding alone and cold
+# with -verify 8, up to three other Apalache jobs on the same 4-core
+# machine (docs/performance.md, wallet-grist's noOverdraft proof). Before
+# #148, depth 6 did not finish in hours.
+# wallet 12,505 s (208 min). 208 x 1.5 + 10.
+wallet 322 examples/wallet-grist/wallet.binding.yaml
+# wallet.calls 2,830 s (47 min). 47 x 1.5 + 10.
+wallet-calls 81 examples/wallet-grist/wallet.calls.binding.yaml
