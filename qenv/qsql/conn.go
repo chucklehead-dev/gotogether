@@ -337,9 +337,6 @@ func (c *connector) begin(ctx context.Context, readOnly bool) (*tx, error) {
 		t.proc, t.inc = p, p.Incarnation
 	}
 	t.txn.OnCommit(func() {
-		for _, tb := range t.created {
-			c.learnTable(tb)
-		}
 		if len(t.changes) > 0 && c.opt.OnCommit != nil {
 			c.opt.OnCommit(t.ctx, t.changes)
 		}
