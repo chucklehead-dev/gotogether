@@ -8,6 +8,9 @@ and adds a line here.
 
 ## Unreleased
 
+- Virtual-time profiles keep task kinds separate from stack identities, so a
+  task name containing spaces and a return address cannot merge unrelated samples.
+
 - `model.SimulateMany` reports every binding: a failure, an error or a
   cancellation no longer stops the roster (an error is a `model.BindingError`
   naming its binding). `SimulateOptions.Deadline` (the CLI's `simulate

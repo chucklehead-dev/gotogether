@@ -5,11 +5,11 @@ package profile
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/binary"
 	"io"
 	"maps"
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -22,8 +22,12 @@ import (
 // before Run; write it with WriteTo and read it with `go tool pprof`. It
 // is kept by qenv's own scheduler (qenv.New), not the native runtime's.
 type Profile struct {
-	samples map[string]*sample
+	samples map[sampleKey]*sample
 }
+
+// Keep the task kind separate from the fixed-width encoded stack: task names
+// may themselves contain spaces and hexadecimal return addresses.
+type sampleKey struct{ task, stack string }
 
 type sample struct {
 	pcs   []uintptr
@@ -33,7 +37,7 @@ type sample struct {
 }
 
 // New returns an empty profile.
-func New() *Profile { return &Profile{samples: map[string]*sample{}} }
+func New() *Profile { return &Profile{samples: map[sampleKey]*sample{}} }
 
 // Waited records a wait of task that starts now, at its caller's caller
 // (the seam that waits); the returned function, called when it ends, adds
@@ -49,13 +53,11 @@ func (p *Profile) Waited(task string, start time.Time, now func() time.Time) fun
 		if i := strings.LastIndex(kind, "."); i > 0 {
 			kind = kind[:i]
 		}
-		var key strings.Builder
-		key.WriteString(kind)
+		stack := make([]byte, 0, 8*len(pcs))
 		for _, pc := range pcs {
-			key.WriteByte(' ')
-			key.WriteString(strconv.FormatUint(uint64(pc), 16))
+			stack = binary.LittleEndian.AppendUint64(stack, uint64(pc))
 		}
-		k := key.String()
+		k := sampleKey{task: kind, stack: string(stack)}
 		smp := p.samples[k]
 		if smp == nil {
 			smp = &sample{pcs: pcs, task: kind}
@@ -138,9 +140,13 @@ func (p *Profile) WriteTo(w io.Writer) (int64, error) {
 		locBufs = append(locBufs, lb.b)
 		return id
 	}
-	keys := slices.Sorted(maps.Keys(p.samples))
-	for _, k := range keys {
-		s := p.samples[k]
+	samples := slices.SortedFunc(maps.Values(p.samples), func(a, b *sample) int {
+		if c := strings.Compare(a.task, b.task); c != 0 {
+			return c
+		}
+		return slices.Compare(a.pcs, b.pcs)
+	})
+	for _, s := range samples {
 		var sb pbuf
 		for _, pc := range s.pcs {
 			sb.uint(1, loc(pc))
