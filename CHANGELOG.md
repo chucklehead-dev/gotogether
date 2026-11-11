@@ -39,6 +39,9 @@ and adds a line here.
   use one-to-one matching. This fixes rejection of valid edgepublish witnesses
   without changing models, bounds, or proof acceptance.
 
+- Virtual-time profiles keep task kinds separate from stack identities, so a
+  task name containing spaces and a return address cannot merge unrelated samples.
+
 - Add `model.SimulateMany` for sequential independent binding reports, with
   operation-local reuse of exact validated positive native group proofs and
   typed `validate.NativeProof` provenance. `SourceGuard.Files` returns a verified
