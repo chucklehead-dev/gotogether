@@ -196,7 +196,9 @@ func writeRequest(req *http.Request) ([]byte, error) {
 			return nil, fmt.Errorf("qhttp: reading the body of %s %s: %w", req.Method, req.URL, err)
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
-		if req.ContentLength <= 0 && len(req.TransferEncoding) == 0 {
+		// CONNECT keeps Request.Write's special framing rule, which avoids
+		// the ordinary unknown-body probe without inventing chunking.
+		if req.Method != http.MethodConnect && req.ContentLength <= 0 && len(req.TransferEncoding) == 0 {
 			if len(body) == 0 && lacksBody(req.Method) {
 				r.Body, r.ContentLength = nil, 0
 			} else {
