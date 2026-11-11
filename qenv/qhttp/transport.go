@@ -59,8 +59,8 @@ type TimeoutError struct {
 	Host string
 	// After is how long the request waited, in virtual time.
 	After time.Duration
-	// Deadline is set when the request context's deadline, not the
-	// Transport's Timeout, bounded the wait.
+	// Deadline is set when the request context's deadline strictly shortens
+	// the effective transport timeout. Equal bounds retain the transport's provenance.
 	Deadline bool
 }
 
