@@ -73,7 +73,11 @@ type spanRun struct {
 
 // realSpanRun drives real processors and HTTP APIs; only the durable stores are
 // in-memory. "pending" stops the caller's recorder after the peer commits but
-// before its response; "lost" returns one proxy 502 after that commit.
+// before its response; "lost" returns one proxy 502 after that commit. Both
+// take tenant t1's first try, not whichever tenant's arrives first: the two
+// tenants' processors race, and which one's answer was lost changed the runs'
+// plans, so the share of them quint judged (GOTOGETHER_EVAL_SAMPLE) and the
+// test's cost.
 func realSpanRun(t *testing.T, mode string) spanRun {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -114,7 +118,7 @@ func realSpanRun(t *testing.T, mode string) spanRun {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var tries atomic.Int64
+	var tries atomic.Int64 // tenant t1's
 	applied := make(chan struct{})
 	bankServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		sc := propagation.TraceContext{}.Extract(req.Context(), propagation.HeaderCarrier(req.Header))
@@ -126,7 +130,10 @@ func realSpanRun(t *testing.T, mode string) spanRun {
 		if err := br.Flush(sc); err != nil {
 			t.Error(err)
 		}
-		n := tries.Add(1)
+		n := int64(0)
+		if strings.HasPrefix(req.URL.Path, "/t/t1/") {
+			n = tries.Add(1)
+		}
 		if n == 1 && mode == "pending" {
 			close(applied)
 			<-ctx.Done()
@@ -368,6 +375,9 @@ func TestDeclaredCallSpans(t *testing.T) {
 						invocations++
 					} else {
 						outcomes[s.Outcome]++
+						if s.Outcome == "unknown" && s.Actor != "payouts/t1" {
+							t.Errorf("the lost answer was %s's, want tenant t1's first try", s.Actor)
+						}
 					}
 				}
 				if strings.HasPrefix(s.Actor, "bank/") && s.Action == "pay" && s.Outcome == "ok" {

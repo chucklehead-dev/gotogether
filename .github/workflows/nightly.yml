@@ -156,23 +156,14 @@ jobs:
           # same verdicts.
           - pkg: qtrace
             max: 24
-          # qenv: 22 of 914, each read. Two need gosim's cooperative
-          # runtime, which only its module runs: a release dropped on a
-          # Platform (572: enqueue, 341: a task that crashes its own
-          # process). Equivalent: the history checker's rotation of a cycle
-          # that starts at its closer (22, 23); the profile key's separator
-          # (27: pcs and names never collide); a nominal option's name, ""
-          # either way (102); PCT's depth 1 set to 1 (158); sorts of what
-          # is handled one at a time (193: a disk's files, 837: a crashed
-          # process's transactions); a stopped timer nothing reads (305);
-          # bookkeeping kept past use (363, 904); IDs a queue never repeats
-          # (401); a Notify that wakes no one (433, 442); a step count never
-          # below 0 (470); a finished task never queued (548); stale timer
-          # entries popped elsewhere (711, 729); bounds a case before
-          # already decides (722: the run queue's k-th past its end is an
-          # id above every task's; 725: pos == k returned first); the
-          # watchdog's last task left after Run (789: Run returns only when
-          # every task handed back, and a parked task is skipped).
+          # qenv's ceiling remains 22 while J7a is requalified. Historical
+          # binary-local IDs and assumptions are not current source approvals:
+          # the former profile-key separator claim was disproved by a real
+          # task-name/stack collision, and redundant branches are being removed.
+          # Each remaining survivor needs a behavioral control or a recorded
+          # source-equivalence argument. Timeout/signal exits are not assertion
+          # witnesses. Cooperative-Platform release paths still need their
+          # translated-runtime test context.
           - pkg: qenv
             max: 22
           # One reviewed equivalent: <= for < in session-order edges.
@@ -193,7 +184,7 @@ jobs:
           go-version-file: go.mod
       - name: mutants of ${{ matrix.pkg }}
         env:
-          JOBS: 4 # qenv's 892 mutants, about ten seconds each
+          JOBS: 4 # bounded concurrent source mutations
         run: ci/mutate-core.sh ${{ matrix.pkg }} ${{ matrix.max }}
       - name: retain mutation campaign evidence
         if: always()
@@ -292,7 +283,9 @@ jobs:
   # after the others with what they leave (simulate -timeout).
   # One cold proof cannot leave later bindings unvisited; a binding that
   # does not finish is reported unfinished, with no verdict, and the job
-  # is red. Every binding has its own report in verify-reports.
+  # is red. Every binding has its own report in verify-reports. The grist
+  # apps' slow proofs, which no share of two hours holds, run in
+  # verify-alone instead (ci/verify-alone.txt, ci/verify-roster.sh).
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -317,7 +310,9 @@ jobs:
           go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
           GOTOGETHER_VERIFY=1 go test -count=1 -run TestSimulateVerify ./cmd/gotogether
           GOTOGETHER_NATIVE_VERIFY=1 go test -count=1 -run '^TestNativeManagedToolIdentity$' ./validate/model
-          mapfile -d '' -t bindings < <(git ls-files -z 'examples/*binding*.yaml' 'examples/**/*binding*.yaml' | sort -zu)
+          # every tracked binding but the grist apps' slow proofs, which
+          # run in verify-alone (ci/verify-alone.txt)
+          mapfile -t bindings < <(ci/verify-roster.sh shared)
           args=()
           for b in "${bindings[@]}"; do
             args+=(-binding "$b")
@@ -331,6 +326,72 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: verify-reports
+          path: ${{ runner.temp }}/verify-reports/
+          if-no-files-found: ignore
+
+  # The grist apps' slow proofs (ci/verify-alone.txt): each group on a
+  # runner of its own, in parallel, at the same bound with every check,
+  # its job's limit the group's measured cold time with a margin (the file
+  # cites the measurement). The roster in each job shares its limit as the
+  # shared roster does, less five minutes for the upload; a binding that
+  # does not finish is unfinished, with no verdict, and its job is red,
+  # which makes the nightly red. fail-fast is off: every group reports.
+  verify-alone-plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: plan
+        run: echo "matrix=$(ci/verify-roster.sh alone)" >> "$GITHUB_OUTPUT"
+
+  verify-alone:
+    needs: verify-alone-plan
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.minutes }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.verify-alone-plan.outputs.matrix) }}
+    name: verify-alone (${{ matrix.name }})
+    steps:
+      - name: Record the job's start
+        run: echo "VERIFY_JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Install quint
+        run: ci/install-quint.sh
+      - name: quint verify on the group's bindings
+        env:
+          GROUP_MINUTES: ${{ matrix.minutes }}
+          GROUP_BINDINGS: ${{ matrix.bindings }}
+        run: |
+          go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
+          # a group's later bindings reuse its first's exact proof only with
+          # an eligible managed tool: fail early, not after the budget
+          GOTOGETHER_NATIVE_VERIFY=1 go test -count=1 -run '^TestNativeManagedToolIdentity$' ./validate/model
+          args=()
+          for b in $GROUP_BINDINGS; do
+            args+=(-binding "$b")
+          done
+          left=$(( VERIFY_JOB_START + GROUP_MINUTES*60 - 5*60 - $(date +%s) ))
+          if [ "$left" -le 0 ]; then echo "no time left for the group"; exit 1; fi
+          echo "group of ${#args[@]} arguments within ${left}s"
+          "$RUNNER_TEMP/gotogether" simulate "${args[@]}" -verify 8 -timeout "${left}s" -report-dir "$RUNNER_TEMP/verify-reports"
+      - name: Retain independent verifier reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-reports-${{ matrix.name }}
           path: ${{ runner.temp }}/verify-reports/
           if-no-files-found: ignore
 

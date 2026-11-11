@@ -52,9 +52,7 @@ type PCT struct {
 //	base.Rates = sys.FaultRates()
 //	return qenv.NewPCT(base, seed, 3, 500)
 func NewPCT(base Chooser, seed uint64, depth, steps int) *PCT {
-	if depth < 1 {
-		depth = 1
-	}
+	depth = max(depth, 1)
 	if steps <= 0 {
 		steps = 1000
 	}

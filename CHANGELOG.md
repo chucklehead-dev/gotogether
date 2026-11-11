@@ -8,6 +8,14 @@ and adds a line here.
 
 ## Unreleased
 
+- `GOTOGETHER_EVAL_SAMPLE` (`Options.EvalSample`) chooses the Go
+  evaluator's passes quint judges too by the plan read up to the renaming of
+  its minted identifiers (qenv.NewID's 32 hex digits, UUIDs): a real run's
+  are random, and hashing them made each rerun of one real run judge its own
+  share (examples/payouts' span tests 1.3 to 16.9 CPU seconds). Simulated
+  plans keep a fixed choice, a different one than before. grist's freshKey
+  mutant mints each try's id with qenv.NewID, not the try's time.
+
 - `model.SimulateMany` reports every binding: a failure, an error or a
   cancellation no longer stops the roster (an error is a `model.BindingError`
   naming its binding). `SimulateOptions.Deadline` (the CLI's `simulate
@@ -21,6 +29,9 @@ and adds a line here.
 - `Sim.ChoiceOptions` describes only the active chooser call, preserves restricted
   fault-option prefixes, and names external nemeses during core settlement.
   Nested choices cannot borrow outer labels; returned names remain owned snapshots.
+
+- qhttp preserves net/http's CONNECT request framing: unknown lengths do not
+  invent chunking, while explicit lengths and transfer encodings are retained.
 
 - Native counterexample validation recognizes Apalache's exact unit marker only
   where the structured trace expects an empty tuple, including nested variant
