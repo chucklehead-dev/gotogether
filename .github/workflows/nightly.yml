@@ -13,10 +13,11 @@ name: nightly
 # nightly (J7c).
 
 run-name: >-
-  ${{ github.event_name == 'workflow_dispatch' && (inputs.jobs != '' || inputs.mutants != '' || inputs.bindings != '')
-  && format('nightly (partial: {0}{1}{2})', inputs.jobs != '' && inputs.jobs || 'every job',
+  ${{ github.event_name == 'workflow_dispatch' && (inputs.jobs != '' || inputs.mutants != '' || inputs.bindings != '' || inputs.groups != '')
+  && format('nightly (partial: {0}{1}{2}{3})', inputs.jobs != '' && inputs.jobs || 'every job',
   inputs.mutants != '' && format(', mutants {0}', inputs.mutants) || '',
-  inputs.bindings != '' && format(', bindings {0}', inputs.bindings) || '')
+  inputs.bindings != '' && format(', bindings {0}', inputs.bindings) || '',
+  inputs.groups != '' && format(', groups {0}', inputs.groups) || '')
   || 'nightly' }}
 
 on:
@@ -34,6 +35,10 @@ on:
         default: ""
       bindings:
         description: "verify's bindings, each term a substring of a path (empty: every binding)"
+        type: string
+        default: ""
+      groups:
+        description: "verify-alone's groups, by name (ci/verify-alone.txt; empty: every group)"
         type: string
         default: ""
 
@@ -62,6 +67,7 @@ jobs:
           JOBS: ${{ inputs.jobs }}
           MUTANTS: ${{ inputs.mutants }}
           BINDINGS: ${{ inputs.bindings }}
+          ALONE_GROUPS: ${{ inputs.groups }}
         run: ci/nightly-select.sh plan | tee -a "$GITHUB_OUTPUT"
 
   grist-full:
@@ -297,7 +303,9 @@ jobs:
   # after the others with what they leave (simulate -timeout).
   # One cold proof cannot leave later bindings unvisited; a binding that
   # does not finish is reported unfinished, with no verdict, and the job
-  # is red. Every binding has its own report in verify-reports.
+  # is red. Every binding has its own report in verify-reports. The grist
+  # apps' slow proofs, which no share of two hours holds, run in
+  # verify-alone instead (ci/verify-alone.txt, ci/verify-roster.sh).
   verify:
     needs: select
     if: github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'verify')
@@ -326,7 +334,9 @@ jobs:
           go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
           GOTOGETHER_VERIFY=1 go test -count=1 -run TestSimulateVerify ./cmd/gotogether
           GOTOGETHER_NATIVE_VERIFY=1 go test -count=1 -run '^TestNativeManagedToolIdentity$' ./validate/model
-          mapfile -d '' -t bindings < <(git ls-files -z 'examples/*binding*.yaml' 'examples/**/*binding*.yaml' | sort -zu)
+          # every tracked binding but the grist apps' slow proofs, which
+          # run in verify-alone (ci/verify-alone.txt)
+          mapfile -t bindings < <(ci/verify-roster.sh shared)
           # a dispatch's bindings filter keeps some (ci/nightly-select.sh);
           # the deadline below is the job's either way
           mapfile -t bindings < <(printf '%s\n' "${bindings[@]}" | ci/nightly-select.sh bindings)
@@ -343,6 +353,82 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: verify-reports
+          path: ${{ runner.temp }}/verify-reports/
+          if-no-files-found: ignore
+
+  # The grist apps' slow proofs (ci/verify-alone.txt): each group on a
+  # runner of its own, in parallel, at the same bound with every check,
+  # its job's limit the group's measured cold time with a margin (the file
+  # cites the measurement). The roster in each job shares its limit as the
+  # shared roster does, less five minutes for the upload; a binding that
+  # does not finish is unfinished, with no verdict, and its job is red,
+  # which makes the nightly red. fail-fast is off: every group reports.
+  verify-alone-plan:
+    needs: select
+    if: github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'verify-alone-plan')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: plan
+        # a dispatch's groups filter keeps some groups, each with its own
+        # minutes (select has checked the names); the assignment, unlike an
+        # echo of a substitution, fails the step if the roster fails
+        env:
+          ALONE_GROUPS: ${{ inputs.groups }}
+        run: |
+          matrix=$(ci/verify-roster.sh alone)
+          echo "matrix=$matrix" | tee -a "$GITHUB_OUTPUT"
+
+  verify-alone:
+    needs: [select, verify-alone-plan]
+    if: github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'verify-alone')
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ matrix.minutes }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.verify-alone-plan.outputs.matrix) }}
+    name: verify-alone (${{ matrix.name }})
+    steps:
+      - name: Record the job's start
+        run: echo "VERIFY_JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Install quint
+        run: ci/install-quint.sh
+      - name: quint verify on the group's bindings
+        env:
+          GROUP_MINUTES: ${{ matrix.minutes }}
+          GROUP_BINDINGS: ${{ matrix.bindings }}
+        run: |
+          go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
+          # a group's later bindings reuse its first's exact proof only with
+          # an eligible managed tool: fail early, not after the budget
+          GOTOGETHER_NATIVE_VERIFY=1 go test -count=1 -run '^TestNativeManagedToolIdentity$' ./validate/model
+          args=()
+          for b in $GROUP_BINDINGS; do
+            args+=(-binding "$b")
+          done
+          left=$(( VERIFY_JOB_START + GROUP_MINUTES*60 - 5*60 - $(date +%s) ))
+          if [ "$left" -le 0 ]; then echo "no time left for the group"; exit 1; fi
+          echo "group of ${#args[@]} arguments within ${left}s"
+          "$RUNNER_TEMP/gotogether" simulate "${args[@]}" -verify 8 -timeout "${left}s" -report-dir "$RUNNER_TEMP/verify-reports"
+      - name: Retain independent verifier reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-reports-${{ matrix.name }}
           path: ${{ runner.temp }}/verify-reports/
           if-no-files-found: ignore
 

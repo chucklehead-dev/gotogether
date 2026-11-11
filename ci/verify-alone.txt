@@ -1,0 +1,31 @@
+# The nightly's verify-alone groups: proofs too slow for the shared
+# roster's fair share, each group on a runner of its own (ci/verify-roster.sh,
+# .github/workflows/nightly.yml). A line: the group's name, its job's
+# limit in minutes, then its bindings, verified in one session (a group's
+# later bindings reuse its earlier ones' exact proofs). Each limit is the
+# group's measured cold time (docs/performance.md) with the margin given;
+# at most GitHub's 360.
+
+# Measured on main 514e93ff (Quint 0.33.1, Apalache 0.62.4), each binding
+# alone and cold through the CLI with -verify 8, four such proofs at once
+# on four cores (one Apalache server each). The margin is 1.5 times the
+# measurement, for a slower runner, plus 10 minutes for setup and the
+# reports' upload.
+#
+# counters 2,177 s, counters.real 2,313 s, counters.retiring 2,394 s: 6,884 s
+# (115 min) if real and retiring cannot reuse counters' exact proof (with
+# the managed tool they do, and the group takes about 40 min). 115 x 1.5 + 10.
+counters 183 examples/counters/counters.binding.yaml examples/counters/counters.real.binding.yaml examples/counters/counters.retiring.binding.yaml
+# library 6,013 s (100 min). 100 x 1.5 + 10.
+library 160 examples/library/library.binding.yaml
+# library.calls 4,695 s (78 min). 78 x 1.5 + 10.
+library-calls 127 examples/library/library.calls.binding.yaml
+# wallet and wallet.calls: measured with #148's model (balances and the
+# credit line as single folds over the log), each binding alone and cold
+# with -verify 8, up to three other Apalache jobs on the same 4-core
+# machine (docs/performance.md, wallet-grist's noOverdraft proof). Before
+# #148, depth 6 did not finish in hours.
+# wallet 12,505 s (208 min). 208 x 1.5 + 10.
+wallet 322 examples/wallet-grist/wallet.binding.yaml
+# wallet.calls 2,830 s (47 min). 47 x 1.5 + 10.
+wallet-calls 81 examples/wallet-grist/wallet.calls.binding.yaml

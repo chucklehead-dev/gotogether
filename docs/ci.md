@@ -162,6 +162,12 @@ With many bindings in one job, give `simulate` the job's time left as
 `-timeout`: each binding gets the same first share, those that run out are
 retried with what the others leave, and one that still does not finish is
 reported unfinished (no verdict, exit 2) instead of starving the rest.
+This repository's nightly does so in `verify`, and runs the proofs no fair
+share can hold (the grist apps' slow ones) in `verify-alone`: a runner per
+group of `ci/verify-alone.txt`, each with its measured cold time and a
+stated margin as its limit, at the same bound and with every check.
+`ci/verify-roster.sh` splits the bindings, and internal/ciconfig fails if
+one is in neither roster or in both.
 
 **Per release.** The real environment's runs, validated by the same
 binding (`gotogether validate`, or `-compiled` where quint is not
@@ -176,6 +182,7 @@ six hours), dispatch the nightly with filters:
 ```sh
 gh workflow run nightly.yml -f jobs=core-mutants -f mutants=qenv
 gh workflow run nightly.yml -f jobs=verify -f bindings=examples/hello/
+gh workflow run nightly.yml -f jobs=verify-alone -f groups=wallet-calls
 gh api repos/chucklehead-dev/gotogether/actions/workflows/nightly.yml/dispatches \
   -f ref=main -f 'inputs[jobs]=core-mutants' -f 'inputs[mutants]=qenv'
 ```
@@ -183,14 +190,17 @@ gh api repos/chucklehead-dev/gotogether/actions/workflows/nightly.yml/dispatches
 `jobs` takes job ids (`grist-full`, `fresh-seeds`, `core-mutants`,
 `verify`, ...: `ci/nightly-select.sh ids` lists them), comma- or
 space-separated; `mutants` keeps core-mutants' rows of those packages
-(`ci/core-mutants.txt`); `bindings` keeps verify's bindings whose paths
-contain a term. Empty means everything, and a schedule has no inputs, so
-it runs every job and row as before. A filter only removes jobs and rows:
-every row keeps its `max`, every job its limit, and verify's roster still
-shares the job's deadline. A name that matches nothing fails the `select`
-job rather than running nothing green. To run a branch's fix before it
-merges, dispatch on the branch (`gh workflow run nightly.yml --ref
-<branch> ...`, or the API's `ref`).
+(`ci/core-mutants.txt`); `bindings` keeps the bindings of verify's
+shared roster whose paths contain a term; `groups` keeps verify-alone's
+groups by name (`ci/verify-alone.txt`), each with its own minutes.
+Selecting `verify-alone` runs its plan job too. Empty means everything,
+and a schedule has no inputs, so it runs every job and row as before. A
+filter only removes jobs and rows: every row keeps its `max` or its
+minutes, every job its limit, and verify's roster still shares the job's
+deadline. A name that matches nothing fails the `select` job rather than
+running nothing green. To run a branch's fix before it merges, dispatch
+on the branch (`gh workflow run nightly.yml --ref <branch> ...`, or the
+API's `ref`).
 
 A filtered run is named `nightly (partial: core-mutants, mutants qenv)`;
 only an unfiltered one is `nightly`. A partial run, or any dispatch,

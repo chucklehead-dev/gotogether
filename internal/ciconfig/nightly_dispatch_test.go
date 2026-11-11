@@ -66,7 +66,7 @@ func readDispatch(t *testing.T) dispatchWorkflow {
 func selectPlan(t *testing.T, event string, inputs map[string]string) (map[string]string, error) {
 	t.Helper()
 	cmd := exec.Command("bash", "../../ci/nightly-select.sh", "plan")
-	cmd.Env = append(os.Environ(), "EVENT="+event, "JOBS="+inputs["jobs"], "MUTANTS="+inputs["mutants"], "BINDINGS="+inputs["bindings"])
+	cmd.Env = append(os.Environ(), "EVENT="+event, "JOBS="+inputs["jobs"], "MUTANTS="+inputs["mutants"], "BINDINGS="+inputs["bindings"], "ALONE_GROUPS="+inputs["groups"])
 	out, err := cmd.Output()
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {
@@ -109,7 +109,7 @@ func selected(t *testing.T, w dispatchWorkflow, event string, inputs map[string]
 func ghContext(event string, inputs map[string]string, outputs map[string]string) map[string]any {
 	ctx := map[string]any{"github.event_name": event}
 	if event == "workflow_dispatch" {
-		for _, k := range []string{"jobs", "mutants", "bindings"} {
+		for _, k := range []string{"jobs", "mutants", "bindings", "groups"} {
 			ctx["inputs."+k] = inputs[k] // a dispatch's inputs are strings, "" by default
 		}
 	} // a schedule has no inputs: they evaluate to null
@@ -152,7 +152,7 @@ func TestNightlyDispatchSelectsJobs(t *testing.T) {
 	if len(w.On.Schedule) == 0 {
 		t.Fatal("the nightly lost its schedule")
 	}
-	for _, name := range []string{"jobs", "mutants", "bindings"} {
+	for _, name := range []string{"jobs", "mutants", "bindings", "groups"} {
 		in, ok := w.On.Dispatch.Inputs[name]
 		if !ok || in.Type != "string" || in.Default != "" {
 			t.Fatalf("workflow_dispatch input %s must be a string defaulting to empty (every job, every row): %+v", name, in)
@@ -191,12 +191,23 @@ func TestNightlyDispatchSelectsJobs(t *testing.T) {
 			t.Errorf("%s with %v runs %v, not every job %v", run.event, run.inputs, got, ids)
 		}
 	}
+	// a job selected takes the jobs it needs with it, and only those
+	implied := map[string][]string{"verify-alone": {"verify-alone", "verify-alone-plan"}}
 	for _, id := range ids {
-		if got := selected(t, w, "workflow_dispatch", map[string]string{"jobs": id}); !slices.Equal(got, []string{id}) {
-			t.Errorf("dispatch of jobs=%s runs %v", id, got)
+		want := []string{id}
+		if l, ok := implied[id]; ok {
+			want = l
+		}
+		if got := selected(t, w, "workflow_dispatch", map[string]string{"jobs": id}); !slices.Equal(got, want) {
+			t.Errorf("dispatch of jobs=%s runs %v, not %v", id, got, want)
+		}
+		for _, need := range needsList(w.Jobs[id].Needs) {
+			if need != "select" && !slices.Contains(want, need) {
+				t.Errorf("jobs=%s would skip %s, which it needs", id, need)
+			}
 		}
 	}
-	two := []string{ids[0], ids[len(ids)-1]}
+	two := []string{"benchmarks", "core-mutants"}
 	for _, sep := range []string{",", " ", ", "} {
 		if got := selected(t, w, "workflow_dispatch", map[string]string{"jobs": strings.Join(two, sep)}); !slices.Equal(got, two) {
 			t.Errorf("dispatch of jobs=%q runs %v", strings.Join(two, sep), got)
@@ -209,6 +220,11 @@ func TestNightlyDispatchSelectsJobs(t *testing.T) {
 		{"jobs": "fuzz", "bindings": "hello"},
 		{"mutants": "nosuchpkg"},
 		{"bindings": "no/such/binding"},
+		// a verify-alone binding is chosen by its group, not in verify
+		{"jobs": "verify", "bindings": "examples/wallet-grist/wallet.binding.yaml"},
+		{"jobs": "verify", "groups": "wallet"},
+		{"groups": "no-such-group"},
+		{"jobs": "verify-alone", "groups": "*"},
 	} {
 		if _, err := selectPlan(t, "workflow_dispatch", bad); err == nil {
 			t.Errorf("select accepted %v: it would run less than asked and show green", bad)
@@ -315,18 +331,16 @@ func TestNightlyDispatchFiltersVerifyBindings(t *testing.T) {
 			}
 		}
 	}
-	list := `git ls-files -z 'examples/*binding*.yaml' 'examples/**/*binding*.yaml'`
+	list := `mapfile -t bindings < <(ci/verify-roster.sh shared)`
 	filter := `ci/nightly-select.sh bindings)`
 	if i, j := strings.Index(step, list), strings.Index(step, filter); i < 0 || j < i || j > strings.Index(step, "left=") {
 		t.Fatalf("verify must filter its listed bindings before the deadline is computed:\n%s", step)
 	}
-	out, err := exec.Command("git", "-C", "../..", "ls-files", "examples/*binding*.yaml", "examples/**/*binding*.yaml").Output()
+	out, err := exec.Command("../../ci/verify-roster.sh", "shared").Output()
 	if err != nil {
 		t.Fatal(err)
 	}
-	tracked := strings.Fields(string(out))
-	slices.Sort(tracked)
-	tracked = slices.Compact(tracked)
+	tracked := strings.Fields(string(out)) // verify's roster
 	filtered := func(bindings string) ([]string, error) {
 		cmd := exec.Command("bash", "../../ci/nightly-select.sh", "bindings")
 		cmd.Env = append(os.Environ(), "BINDINGS="+bindings)
@@ -348,6 +362,70 @@ func TestNightlyDispatchFiltersVerifyBindings(t *testing.T) {
 	}
 	if _, err := filtered("no/such/binding"); err == nil {
 		t.Fatal("a term naming no binding must fail, not verify nothing")
+	}
+}
+
+type aloneRow struct {
+	Name     string `json:"name"`
+	Minutes  int    `json:"minutes"`
+	Bindings string `json:"bindings"`
+}
+
+// verify-alone's rows are its plan's, every group of ci/verify-alone.txt
+// unless a dispatch's groups filter keeps some, each as it is: a filter
+// removes rows and never changes a group's minutes or bindings.
+func TestNightlyDispatchFiltersVerifyAloneGroups(t *testing.T) {
+	w := readDispatch(t)
+	var plan string
+	for _, s := range w.Jobs["verify-alone-plan"].Steps {
+		if strings.Contains(s.Run, "ci/verify-roster.sh alone") {
+			plan = s.Run
+			if s.Env["ALONE_GROUPS"] != "${{ inputs.groups }}" {
+				t.Fatalf("verify-alone-plan must read the groups input: %v", s.Env)
+			}
+		}
+	}
+	if !strings.Contains(plan, "matrix=$(ci/verify-roster.sh alone)\n") {
+		t.Fatalf("verify-alone-plan must fail when the roster does (an assignment, not an echo of a substitution):\n%s", plan)
+	}
+	job := w.Jobs["verify-alone"]
+	if job.Strategy.FailFast == nil || *job.Strategy.FailFast || job.Timeout != "${{ matrix.minutes }}" {
+		t.Fatal("verify-alone must keep fail-fast: false and each group's own minutes")
+	}
+	rows := func(groups string) ([]aloneRow, error) {
+		t.Helper()
+		cmd := exec.Command("bash", "-e", "-c", plan)
+		cmd.Dir = "../.."
+		cmd.Env = append(os.Environ(), "ALONE_GROUPS="+groups, "GITHUB_OUTPUT="+t.TempDir()+"/out")
+		out, err := cmd.Output()
+		if err != nil {
+			return nil, err
+		}
+		var m struct{ Include []aloneRow }
+		if err := json.Unmarshal([]byte(strings.TrimPrefix(strings.TrimSpace(string(out)), "matrix=")), &m); err != nil {
+			t.Fatalf("plan printed %q: %v", out, err)
+		}
+		return m.Include, nil
+	}
+	all, err := rows("")
+	if err != nil || len(all) < 2 {
+		t.Fatalf("every group: %v %v", all, err)
+	}
+	for _, g := range all {
+		if got, err := rows(g.Name); err != nil || !slices.Equal(got, []aloneRow{g}) {
+			t.Errorf("groups=%s keeps %v (%v), not its row %v", g.Name, got, err, g)
+		}
+	}
+	two := []aloneRow{all[0], all[len(all)-1]}
+	if got, err := rows(two[1].Name + ", " + two[0].Name); err != nil || !slices.Equal(got, two) {
+		t.Errorf("two groups keep %v (%v), not %v", got, err, two)
+	}
+	if _, err := rows("no-such-group"); err == nil {
+		t.Error("a name of no group must fail the plan, not run no group")
+	}
+	// a schedule has no inputs.groups; select ignores a stray value
+	if outputs, err := selectPlan(t, "schedule", map[string]string{"groups": "wallet"}); err != nil || outputs["jobs"] == "" {
+		t.Errorf("a schedule with a stray groups value: %v %v", outputs, err)
 	}
 }
 

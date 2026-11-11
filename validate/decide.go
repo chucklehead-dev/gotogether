@@ -10,6 +10,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -612,7 +613,11 @@ func (re *runEval) note(line string) {
 // (GOTOGETHER_EVAL_SAMPLE): a fraction of them, chosen by a hash of the
 // plan and a seed, so a run's choice is the same at every rerun of the
 // same code (its cost and verdict do not change, and a disagreement found
-// is found again).
+// is found again). The hash reads the plan's minted identifiers up to
+// renaming (sampleText): a real run's are random (qenv.NewID outside a
+// simulation, a UUID), and hashing them made each rerun of the same real
+// run sample its own share of passes (examples/payouts' span tests cost
+// 1.3 to 16.9 CPU seconds by how many of their traces quint judged).
 type sampling struct {
 	rate float64 // 0: none
 	seed string
@@ -694,17 +699,53 @@ func (s sampling) takes(plan *binding.Plan) bool {
 	if s.rate >= 1 {
 		return true
 	}
-	h := sha256.New()
-	fmt.Fprintf(h, "%s\x00%q\x00", s.seed, plan.ConstantList())
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s\x00%q\x00", s.seed, plan.ConstantList())
 	if st := plan.Start; st != nil {
-		fmt.Fprintf(h, "start %s %s\x00", st.Quint, st.Expect)
+		fmt.Fprintf(&b, "start %s %s\x00", st.Quint, st.Expect)
 	}
 	for _, c := range plan.Calls {
-		fmt.Fprintf(h, "%s\x00%s\x00", c.Quint, c.Expect)
+		fmt.Fprintf(&b, "%s\x00%s\x00", c.Quint, c.Expect)
 	}
-	sum := h.Sum(nil)
+	sum := sha256.Sum256([]byte(sampleText(b.String())))
 	x := binary.BigEndian.Uint64(sum[:8])
 	return float64(x)/float64(^uint64(0)) < s.rate
+}
+
+// mintedID is an identifier a run mints: qenv.NewID's 32 lowercase hex
+// digits (grist's event ids, in its effect keys) or a UUID, not inside a
+// longer word. Read-only.
+var mintedID = regexp.MustCompile(`(^|[^0-9A-Za-z])([0-9a-f]{32}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})($|[^0-9A-Za-z])`)
+
+// sampleText is text with each minted identifier replaced by its number
+// in order of first appearance: two runs that differ only in the
+// identifiers they drew read alike. Only the sample's choice reads it,
+// never a verdict, so a value that merely looks minted costs nothing but
+// that choice.
+func sampleText(text string) string {
+	names := map[string]int{}
+	var b strings.Builder
+	last := 0
+	// a separator may end one match and start the next: match from each
+	// identifier's end, not past its trailing separator
+	for at := 0; at < len(text); {
+		m := mintedID.FindStringSubmatchIndex(text[at:])
+		if m == nil {
+			break
+		}
+		start, end := at+m[4], at+m[5]
+		id := text[start:end]
+		n, ok := names[id]
+		if !ok {
+			n = len(names) + 1
+			names[id] = n
+		}
+		b.WriteString(text[last:start])
+		fmt.Fprintf(&b, "\x01id%d\x01", n)
+		last, at = end, end
+	}
+	b.WriteString(text[last:])
+	return b.String()
 }
 
 // sampledChoice is the no-verdict cause of a failure at or after a call

@@ -6,18 +6,27 @@
 # show green. internal/ciconfig runs this script against the workflow.
 #   ci/nightly-select.sh ids        the nightly's job ids, one per line
 #   ci/nightly-select.sh plan       jobs= and mutants= lines for $GITHUB_OUTPUT,
-#                                   from EVENT, JOBS, MUTANTS and BINDINGS
+#                                   from EVENT, JOBS, MUTANTS, BINDINGS and
+#                                   ALONE_GROUPS (verify-alone's groups, which
+#                                   ci/verify-roster.sh alone narrows)
 #   ci/nightly-select.sh bindings   the bindings on stdin (one per line) that
 #                                   BINDINGS names (each term a substring of
 #                                   a path); every one when BINDINGS is empty
-# JOBS, MUTANTS and BINDINGS are comma- or space-separated lists.
+# The filters are comma- or space-separated lists. (Not GROUPS: bash
+# keeps that name for the user's group ids and ignores an assignment.)
 set -euo pipefail
 # terms are split on white space, never expanded as globs
 set -f
 cd "$(dirname "$0")/.."
 
 # every job but select itself, in the workflow's order
-ids=(grist-full fresh-seeds core-properties volume core-mutants fuzz qeval-differential verify evaluator-shadow webjobs-live raftkv-real benchmarks)
+ids=(grist-full fresh-seeds core-properties volume core-mutants fuzz qeval-differential verify verify-alone-plan verify-alone evaluator-shadow webjobs-live raftkv-real benchmarks)
+# a job selected takes the jobs it needs with it
+implied() {
+  case "$1" in
+  verify-alone) echo verify-alone-plan ;;
+  esac
+}
 
 # a filter's terms, one per line: commas and white space separate them
 terms() {
@@ -50,7 +59,7 @@ filter_bindings() {
       [[ "$b" == *"$t"* ]] && hit=1
     done
     if [ "$hit" -eq 0 ]; then
-      echo "bindings filter: $t names no tracked binding (a term is a substring of a path, e.g. examples/hello/)" >&2
+      echo "bindings filter: $t names no binding of verify's roster (a term is a substring of a path, e.g. examples/hello/; verify-alone's bindings are chosen by group, with groups)" >&2
       exit 1
     fi
   done
@@ -72,7 +81,7 @@ ids)
 plan)
   if [ "${EVENT:-}" != workflow_dispatch ]; then
     # a scheduled run has no inputs: it takes everything
-    JOBS="" MUTANTS="" BINDINGS=""
+    JOBS="" MUTANTS="" BINDINGS="" ALONE_GROUPS=""
   fi
   mapfile -t asked < <(terms "${JOBS:-}")
   selected=()
@@ -84,6 +93,10 @@ plan)
         echo "jobs filter: $a is not a nightly job (one of: ${ids[*]})" >&2
         exit 1
       fi
+    done
+    for a in "${asked[@]}"; do
+      dep=$(implied "$a")
+      [ -n "$dep" ] && asked+=("$dep")
     done
     for id in "${ids[@]}"; do
       printf '%s\n' "${asked[@]}" | grep -qxF -- "$id" && selected+=("$id")
@@ -116,8 +129,16 @@ plan)
       echo "bindings filter given, but verify is not among the jobs selected" >&2
       exit 1
     fi
-    # fail here, in seconds, not after verify's setup
-    git ls-files 'examples/*binding*.yaml' 'examples/**/*binding*.yaml' | sort -u | filter_bindings >/dev/null
+    # fail here, in seconds, not after verify's setup; verify's roster is
+    # the shared one (verify-alone's groups have their own filter)
+    ci/verify-roster.sh shared | filter_bindings >/dev/null
+  fi
+  if [ -n "$(terms "${ALONE_GROUPS:-}")" ]; then
+    if ! in_selected verify-alone; then
+      echo "groups filter given, but verify-alone is not among the jobs selected" >&2
+      exit 1
+    fi
+    ALONE_GROUPS="$ALONE_GROUPS" ci/verify-roster.sh alone >/dev/null
   fi
 
   echo "jobs=$(json_list "${selected[@]}")"
