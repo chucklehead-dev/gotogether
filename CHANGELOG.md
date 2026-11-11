@@ -8,6 +8,9 @@ and adds a line here.
 
 ## Unreleased
 
+- qhttp rounds very distant deadlines without overflowing or hanging, saturating
+  at the largest duration when the next preferred grid point cannot fit.
+
 - `GOTOGETHER_EVAL_SAMPLE` (`Options.EvalSample`) chooses the Go
   evaluator's passes quint judges too by the plan read up to the renaming of
   its minted identifiers (qenv.NewID's 32 hex digits, UUIDs): a real run's
