@@ -130,8 +130,8 @@ func TestClassifyAgainstBruteForce(t *testing.T) {
 				if through != "" && (k == "" || strength[k] > strength[through] || strength[k] < strength[best]) {
 					t.Fatalf("trial %d: through %d: %s, the strongest simple cycle through it %s, the component's %s", trial, n, k, through, best)
 				}
-				if k != "" && (kindOf(walk) != k || !slices.ContainsFunc(walk, func(h Hop) bool { return h.From == n })) {
-					t.Fatalf("trial %d: through %d: %s walk %v", trial, n, k, walk)
+				if k != "" && (len(walk) == 0 || kindOf(walk) != k || walk[0].From != n) {
+					t.Fatalf("trial %d: through %d: %s walk %v; want a nonempty walk of that kind rooted at %d", trial, n, k, walk, n)
 				}
 				for i, h := range walk {
 					if next := walk[(i+1)%len(walk)].From; h.To != next || !slices.Contains(g.out[h.From], h.Edge) {

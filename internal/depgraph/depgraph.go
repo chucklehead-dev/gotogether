@@ -204,7 +204,7 @@ func (g *Graph) Classify(scc []int64) (string, []Hop) {
 // transaction just added, at a cost linear in the component (Classify's
 // is quadratic, and a component of cycles the level allows grows with
 // the history). Up to the kinds of most: "" when none of those is
-// through n (G2 if every kind may be).
+// through n (G2 if every kind may be). A returned walk starts at n.
 func (g *Graph) ClassifyThrough(scc []int64, n int64, most string) (string, []Hop) {
 	in := everyNode{}
 	if scc != nil {
