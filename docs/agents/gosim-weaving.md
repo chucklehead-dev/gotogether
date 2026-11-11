@@ -34,7 +34,7 @@ Gotchas for agents (and humans) before changing qgosim, qweave, qenv/weave, the 
   process (unit tests carry no run), `=list` prints them;
   `ci/mutate-core.sh <pkg> [max]` runs a package's tests once a mutant
   (`JOBS=n` at a time). There the nightly does hold a bar: a core
-  package's survivors are each read, and the matrix's `max` counts the
+  package's survivors are each read, and its `max` (ci/core-mutants.txt) counts the
   equivalent ones.
 - Woven code (`qenv/weave`): weaving rewrites calls of `sync` methods in
   the root module and `//qenv:go` go statements. A method value

@@ -136,7 +136,10 @@ func TestNightlyVerifyRostersPartitionTheBindings(t *testing.T) {
 		t.Fatal(err)
 	}
 	job := w.Jobs["verify-alone"]
-	if job.Needs != "verify-alone-plan" || job.Timeout != "${{ matrix.minutes }}" || job.Strategy.FailFast == nil || *job.Strategy.FailFast ||
+	// select gates it (a dispatch's jobs filter, nightly_dispatch_test.go);
+	// the plan gives its rows
+	needs, _ := job.Needs.([]any)
+	if !slices.Equal(needs, []any{"select", "verify-alone-plan"}) || job.Timeout != "${{ matrix.minutes }}" || job.Strategy.FailFast == nil || *job.Strategy.FailFast ||
 		job.Strategy.Matrix != "${{ fromJSON(needs.verify-alone-plan.outputs.matrix) }}" {
 		t.Fatalf("verify-alone must run every group of the plan, each within its own limit: %+v", job)
 	}

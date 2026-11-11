@@ -1,0 +1,47 @@
+# The nightly's core-mutants matrix (.github/workflows/nightly.yml): a
+# line is a package and its max, the survivors allowed, each one read and
+# equivalent. ci/nightly-select.sh turns the lines into the job's rows; a
+# dispatch's mutants filter keeps some rows and never changes a max.
+#
+# internal/depgraph: sorting the nodes Tarjan visits, whose components
+# are sorted after.
+
+# qtrace: 24 of 405, each read (ids as of the watermarks' and the
+# observation mutants' tests). Equivalent: realTime's loop bounds
+# (47, 49, 52: earliest[0] is never read, earliest[k] >= k); a seq
+# equal to a Call or to another step's of its recorder (61, 67, 279:
+# that record is never among the steps, seqs are deduplicated, and a
+# completion numbered as its invocation is that record's duplicate);
+# a rejected order's state (93: never read); a budget's last turn
+# (101, 129, 130: it checks nothing); a complete search that tried
+# nothing (126: needs a budget under 1, which Linearize never
+# passes); a move to the front of what is first (77, 110: nothing to
+# move); the comparator's < on values never equal (295, 296); the
+# time key left in a line's attributes (37: nothing reads it); the
+# assumed mark inverted for every step alike (44: the same groups of
+# equal keys); a recorder's first seq against an equal one (235: seqs
+# are deduplicated first); a merged loss's After set to the equal
+# value it has (249, 250); UncorruptedFields' two passes in the other
+# order (198: the same fields); a retime's tie with its own copy (208:
+# what the retime of either would break, wellFormed leaves out) and a
+# step moved past itself (215: the others are other actors'). 119
+# ties the guided search's best move otherwise: another path, the
+# same verdicts.
+qtrace 24
+# qenv's ceiling remains 22 while J7a is requalified. Historical
+# binary-local IDs and assumptions are not current source approvals:
+# the former profile-key separator claim was disproved by a real
+# task-name/stack collision, and redundant branches are being removed.
+# Each remaining survivor needs a behavioral control or a recorded
+# source-equivalence argument. Timeout/signal exits are not assertion
+# witnesses. Cooperative-Platform release paths still need their
+# translated-runtime test context.
+qenv 22
+# One reviewed equivalent: <= for < in session-order edges.
+# Distinct transactions have validated unique session positions;
+# equality can only add a self edge, ignored by graph traversal.
+# Actual current gate: 1/110 survives; locking-read recording and
+# Rollback-forwarding mutations are killed by semantic controls.
+qhistory 1
+internal/depgraph 1
+qsweep 0
