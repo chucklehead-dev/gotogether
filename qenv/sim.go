@@ -1536,10 +1536,10 @@ func (s *Sim) runnableIDs(n int, cands []*task) []int {
 func (s *Sim) pick(k int, cands []*task) *task {
 	for i, c := range cands {
 		pos := s.runq.count(c.id-1) + i
-		if pos == k {
+		switch cmp.Compare(pos, k) {
+		case 0:
 			return c
-		}
-		if pos > k {
+		case 1:
 			return s.tasks[s.runq.kth(k-i)-1]
 		}
 	}
