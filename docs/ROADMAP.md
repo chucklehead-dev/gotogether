@@ -34,6 +34,7 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Pilot preparation | Current handoff and J13 replay parity | The [pilot guide](external-pilot.md) covers one finite-history contract. State the production-recording Go floor plainly; navigate hints, compiled bundle replay and distinct no-verdict exits remain J13 work. The present bundle walkthrough requires Go and Quint. |
 | Later | J14/J15, J18/J19, J21 | Durable rewind detection and safe redrive before Grist production claims; usability/vocabulary; GR4 consolidation. |
 | Proposed queue | J16/J17/J20/J22/J25–J27 | Retain the review's adoption, capacity, admission-tuning and process proposals without treating them as completed commitments. |
+| Proposed queue | K1–K9: adoption feedback ([#144](https://github.com/chucklehead-dev/gotogether/issues/144)) | After J7c, under the red-nightly rule. First K1 (docs), K3, K4, then K6's design spike; the rest as projects ask. |
 | Dropped | J12 and J23 | Go 1.26 compatibility and pin batching are withdrawn. Go 1.27.3 and immediate required sibling pin alignment remain deliberate policies. |
 
 **Red-nightly rule (maintainer decision):** while the nightly is red, feature
@@ -60,6 +61,37 @@ commit ancestry.
 
 Detailed older item sections retain dependencies and historical scope. Previous
 current-order chronology is in HISTORY under the twelfth-review handoff.
+
+## Adoption feedback (K)
+
+From [#144](https://github.com/chucklehead-dev/gotogether/issues/144): an
+agent planning golem (a Go LLM gateway) read the README, the layout and
+`api/core.txt` to see where gotogether could be trialled. The assessment
+against the repository is in
+[its reply](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6806312674).
+Not commitments: each starts when a project needs it or the order above
+says so. The recording Go floor stays (J12 withdrawn); tags stay the
+maintainer's (R5).
+
+- **K1: the docs a newcomer needs first.**
+  - One golden path in the README, `qtest.System` + `Explore`, with the other tools introduced as additions to it.
+  - OTel span conversion (`convert`) as an entry point of its own: the path for services that already emit spans, and for those that cannot take the Go floor.
+  - What `qenv.Store` at `SnapshotIsolation` shares with Aurora DSQL (commit-time conflicts, the second writer aborted) and where it differs (`GetForUpdate` waits for the lock; no row or size limits).
+  - When `testing/synctest` fits and when qenv does.
+  - Why the Go floor holds for recording-only services.
+- **K2: the first hour's vocabulary.**
+  - A short default verdict and a "why" command, in place of the long one-line report.
+  - Each term introduced with the feature that needs it.
+  - Decide whether facade packages for the first project's ~20 identifiers are worth a second surface to keep in step.
+  - With J18/J19.
+- **K3: streaming faults in `qenv/qhttp`.** SSE and chunked responses with slow chunks, a cut mid-stream and keepalive gaps, as declared fault options (option 0 nominal), with an example.
+- **K4: a Redis/Valkey (RESP) double.** Scripts run atomically; failover and lost writes as faults. That is where rate limiters and budget counters live. It gets its contract checked after each operation, as `Queue`'s is.
+- **K5: a DSQL profile for `qenv.Store`.** Optimistic only: a `SELECT FOR UPDATE` that does not block, conflicts at commit (SQLSTATE 40001 through `qsql`), per-transaction row and size limits. Checked against the history classifier like the other levels.
+- **K6: a Go-native reference model (design spike first).** A plain Go state machine as the judge for teams that cannot write Quint yet, with a documented upgrade path to a Quint model. The spike decides what claims, evidence and Quint confirmation mean without a Quint model before any API exists.
+- **K7: no Quint at test time.** Extend the Go evaluator and J13's compiled replay to the whole fragment tests use, so CI runners need Quint only where models are written or proved.
+- **K8: `gotogether lint -sim -fix`.** A codemod for the mechanical rewrites onto qenv's seams (`go` to `qenv.Go`, `time.Now` to `qenv.Now`, ...); weaving remains the path for code that must stay unchanged.
+- **K9: the step log as a public contract.** Document and version the step-log format (its schema in `schemas/`, its major in internal/formats) so a service that cannot import the core can write steps itself.
+- **Parked:** Temporal workflows under qenv, until a project needs them.
 
 ## Eleventh review: integrity before tags (I)
 
