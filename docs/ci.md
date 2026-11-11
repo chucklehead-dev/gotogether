@@ -162,6 +162,12 @@ With many bindings in one job, give `simulate` the job's time left as
 `-timeout`: each binding gets the same first share, those that run out are
 retried with what the others leave, and one that still does not finish is
 reported unfinished (no verdict, exit 2) instead of starving the rest.
+This repository's nightly does so in `verify`, and runs the proofs no fair
+share can hold (the grist apps' slow ones) in `verify-alone`: a runner per
+group of `ci/verify-alone.txt`, each with its measured cold time and a
+stated margin as its limit, at the same bound and with every check.
+`ci/verify-roster.sh` splits the bindings, and internal/ciconfig fails if
+one is in neither roster or in both.
 
 **Per release.** The real environment's runs, validated by the same
 binding (`gotogether validate`, or `-compiled` where quint is not

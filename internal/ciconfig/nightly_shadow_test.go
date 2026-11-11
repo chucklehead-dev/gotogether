@@ -15,12 +15,24 @@ type nightlyWorkflow struct {
 	Jobs map[string]struct {
 		Env      map[string]string `yaml:"env"`
 		Strategy struct {
-			Matrix struct {
-				Include []struct{ Example, Seeds, Short string } `yaml:"include"`
-			} `yaml:"matrix"`
+			Matrix staticMatrix `yaml:"matrix"`
 		} `yaml:"strategy"`
 		Steps []struct{ Name, Run string } `yaml:"steps"`
 	} `yaml:"jobs"`
+}
+
+// staticMatrix is a job's literal matrix; a matrix computed by an
+// expression (verify-alone's fromJSON) decodes as empty.
+type staticMatrix struct {
+	Include []struct{ Example, Seeds, Short string } `yaml:"include"`
+}
+
+func (m *staticMatrix) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind != yaml.MappingNode {
+		return nil
+	}
+	type plain staticMatrix
+	return n.Decode((*plain)(m))
 }
 
 func readNightly(t *testing.T) nightlyWorkflow {
