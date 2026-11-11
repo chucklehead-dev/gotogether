@@ -1,5 +1,3 @@
-//go:build unix
-
 package walletgrist
 
 import (
@@ -7,10 +5,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
-	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/qtest"
 )
 
@@ -55,14 +52,10 @@ func TestBalancesAgree(t *testing.T) {
 	}
 }
 
-// quintRun runs quint by argv in spec's directory, in a process group of
-// its own that a canceled test kills whole (node and its Rust evaluator).
+// quintRun runs quint by argv in spec's directory through quintcmd: the
+// test's context cancels it whole (node and its Rust evaluator), and it
+// waits for a slot of quint's admission like every other launch.
 func quintRun(t *testing.T, spec string, args ...string) (string, error) {
-	cmd := exec.CommandContext(t.Context(), "quint", args...)
-	cmd.Dir = filepath.Dir(spec)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
-	cmd.WaitDelay = 5 * time.Second
-	out, err := cmd.CombinedOutput()
+	out, err := quintcmd.Command(t.Context(), "quint", filepath.Dir(spec), args...).CombinedOutput()
 	return string(out), err
 }
