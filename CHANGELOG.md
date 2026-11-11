@@ -25,6 +25,9 @@ and adds a line here.
   fault-option prefixes, and names external nemeses during core settlement.
   Nested choices cannot borrow outer labels; returned names remain owned snapshots.
 
+- qhttp preserves net/http's CONNECT request framing: unknown lengths do not
+  invent chunking, while explicit lengths and transfer encodings are retained.
+
 - Native counterexample validation recognizes Apalache's exact unit marker only
   where the structured trace expects an empty tuple, including nested variant
   payloads. Records, labels and other values remain strict; unordered collections
