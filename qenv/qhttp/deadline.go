@@ -12,23 +12,23 @@ import (
 )
 
 // deadlines holds, per simulation, the virtual instant of each request
-// context's deadline it has seen, keyed by the deadline's wall time:
-// converted once, so a deadline is used up in virtual time (a retry under
-// the same context sees the time its first attempts took), and so every
-// request under it, to any server, ends at the same instant. A simulation's
+// context's deadline it has seen. Keys are full UTC wall-time instants, without
+// monotonic readings. Each deadline is converted once and used up in virtual
+// time (a retry consumes the same context's remaining budget), so requests to
+// any server end at the same instant. A simulation's
 // table goes when the simulation is collected. Process-wide: simulations
 // run in parallel share the lock, each its own table.
 var deadlines = struct {
 	sync.Mutex
-	m map[weak.Pointer[qenv.Sim]]map[int64]time.Time
-}{m: map[weak.Pointer[qenv.Sim]]map[int64]time.Time{}}
+	m map[weak.Pointer[qenv.Sim]]map[time.Time]time.Time
+}{m: map[weak.Pointer[qenv.Sim]]map[time.Time]time.Time{}}
 
 // table is s's table of deadlines; the caller holds the lock.
-func table(s *qenv.Sim) map[int64]time.Time {
+func table(s *qenv.Sim) map[time.Time]time.Time {
 	key := weak.Make(s)
 	tab := deadlines.m[key]
 	if tab == nil {
-		tab = map[int64]time.Time{}
+		tab = map[time.Time]time.Time{}
 		deadlines.m[key] = tab
 		runtime.AddCleanup(s, func(k weak.Pointer[qenv.Sim]) {
 			deadlines.Lock()
@@ -48,10 +48,11 @@ func virtualDeadline(s *qenv.Sim, dl time.Time) time.Time {
 	deadlines.Lock()
 	defer deadlines.Unlock()
 	tab := table(s)
-	v, ok := tab[dl.UnixNano()]
+	key := dl.UTC() // canonical zone and no monotonic component
+	v, ok := tab[key]
 	if !ok {
 		v = s.Now().Add(ceilGrid(s.ToVirtual(dl).Sub(s.Now())))
-		tab[dl.UnixNano()] = v
+		tab[key] = v
 	}
 	return v
 }
@@ -71,7 +72,7 @@ func WithTimeout(ctx context.Context, d time.Duration) (context.Context, context
 		return c, cancel // outside a simulation, or the parent's deadline
 	}
 	deadlines.Lock()
-	table(s)[dl.UnixNano()] = s.Now().Add(d)
+	table(s)[dl.UTC()] = s.Now().Add(d)
 	deadlines.Unlock()
 	return c, cancel
 }

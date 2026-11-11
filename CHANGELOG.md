@@ -10,6 +10,8 @@ and adds a line here.
 
 - qhttp rounds very distant deadlines without overflowing or hanging, saturating
   at the largest duration when the next preferred grid point cannot fit.
+  Deadline caching distinguishes full instants while sharing one virtual budget
+  for equal wall-time deadlines across zones.
 
 - `GOTOGETHER_EVAL_SAMPLE` (`Options.EvalSample`) chooses the Go
   evaluator's passes quint judges too by the plan read up to the renaming of
