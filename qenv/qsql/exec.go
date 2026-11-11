@@ -304,9 +304,6 @@ func (t *tx) create(s *createStmt) (*result, error) {
 		}
 		tb.key = append(tb.key, i)
 		tb.cols[i].notNull = true
-		if len(s.key) == 1 {
-			tb.cols[i].primary = true // PRIMARY KEY (a) is a's PRIMARY KEY
-		}
 	}
 	if tb.key == nil {
 		return nil, &Error{Code: "42P16", Message: fmt.Sprintf("table %q has no PRIMARY KEY: qsql keys rows by it (mark one PRIMARY KEY: a column's, or PRIMARY KEY (a, b) for a key of several)", s.table)}
@@ -474,11 +471,13 @@ func keyRange(tb *table, cs []resolved, fixed int) qenv.KeyRange {
 		case "<=":
 			to = after
 		}
-		if from > r.From {
-			r.From = from
-		}
-		if to != "" && (r.To == "" || to < r.To) {
-			r.To = to
+		r.From = max(r.From, from)
+		if to != "" {
+			if r.To == "" {
+				r.To = to
+			} else {
+				r.To = min(r.To, to)
+			}
 		}
 	}
 	return r
