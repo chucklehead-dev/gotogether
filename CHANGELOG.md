@@ -304,6 +304,9 @@ and adds a line here.
   installation. Refresh shipped guidance after upgrading the CLI with
   `gotogether skills install -force`. Actual-install checks guard link targets.
 
+- qsql resolves committed schemas through each transaction’s Store view, so
+  restored or lost DDL and recreated columns agree across warmed and fresh pools.
+
 - qsql supports single-table `SELECT COUNT(*) [AS alias]` with its existing
   WHERE subset. Counts include NULL-valued rows, return zero for empty matches,
   and retain transaction visibility and predicate-conflict checks. Other
