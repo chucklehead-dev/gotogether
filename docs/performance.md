@@ -908,6 +908,122 @@ No CPU budget or benchmark threshold is raised. Unknown interpreters and runtime
 overrides deliberately use uncached probes and need separate cost measurements;
 only the reviewed stock CLI/interpreter identity uses this optimization.
 
+## Inventory's cold withinCapacity proof and the verifier roster (J7b, 2026-11-10)
+
+The nightly's verifier runs every tracked binding in one `gotogether simulate
+-verify 8` invocation within the job's two hours. PR #130's frozen roster
+completed 23 bindings, then spent the rest of the time in inventory's
+`withinCapacity` proof (interrupted after 50m50s), leaving 27 bindings
+unvisited. Measured on `9ff2478e` (Quint 0.33.1, evaluator 0.7.1, Apalache
+0.62.4 checksum-verified, OpenJDK 21, 4 cores), inventory's binding alone,
+cold, through the CLI.
+
+**Where the time goes.** All of it is Apalache's SMT solving. In the
+first 17.5 minutes the CLI process used 1 CPU second, quint's Node process
+4, the Apalache JVM 1,065 (one solver thread at 100%); all 215 stack
+samples of the checker thread, one per 10 s over 36 minutes, were in Z3's
+`solverCheck`. The run was stopped after 44 minutes, at depth 7 of 8.
+Nothing in Go is on the path: the Go evaluator, Key, interning and GC take
+no measurable share, and quint's confirmation is not involved (a native
+proof is Apalache's own). One invariant, one invocation: no proof is
+repeated across goals or bindings.
+
+Apalache's per-depth time (its `detailed.log`), the original model:
+
+| depth | transitions | invariant check |
+|---|---|---|
+| 4 | 5.8 s | 1.4 s |
+| 5 | 19.9 s | 21.0 s |
+| 6 | 74.9 s | 219.2 s |
+| 7 | 276 s | over 33 min, unfinished |
+
+Each step multiplies the invariant query by about ten (and the transitions
+by three or four): depth 8 would take hours, so the proof does not finish
+in any share of the nightly. Other loads ran on the machine during depth 7
+(see below), so its figure is a lower bound for the contended machine.
+
+**The algorithmic problem is the model's encoding, not the toolkit.**
+`withinCapacity` is `used(log) <= 2`, and `used` was the sum of `stock`'s
+values: a map built by `put` with symbolic keys inside a `foldl` over the
+symbolic log, then folded over its `keys()`. Apalache encodes each `put`
+over the previous map's possible keys and the set fold over every candidate
+key, so the formula grows superlinearly in the log, and the reserve rule
+(`reserveOutcome` refuses `full` from `used(log)`) carries the same term
+into every transition. Rewritten as the count of reservations no later
+cancellation of their order clears (equal on every log: `stock` puts 0 at a
+cancellation and adds 1 per reservation), the same check is:
+
+| depth | transitions | invariant check |
+|---|---|---|
+| 6 | 39.2 s | 7.7 s |
+| 7 | 90.4 s | 25.8 s |
+| 8 | 149.2 s | 55.3 s |
+
+The whole depth-8 proof completes in 414 s (about 7 minutes, on the same
+contended machine), where the original does not finish depth 7's check in
+33. Same bound, same instance, same invariant, same Apalache policy: the
+model's states and transitions are unchanged, only how one integer is
+computed. Equivalence evidence: the induction above; quint's sampler finds
+no list of up to 8 events over the model's orders and event types where
+the two disagree (20,000 traces); and `quint verify` proves them equal on
+every such list of up to 7 events (17 minutes for depth 7's query alone:
+the old formulation's cost, which is the point; depth 8's query was
+stopped unfinished after 3 hours). The inventory-grist suite passes, in
+shadow mode too (`GOTOGETHER_EVAL=shadow`: the Go evaluator and quint agree
+on the new definition in every judged run).
+
+Neither Apalache's array encoding (`smt-encoding: arrays`: slower, stuck in
+depth 2's transitions after a minute) nor a toolkit-side cache helps: the
+work is one cold query per depth.
+
+**Roster fairness.** Independently of any one model, `simulate -timeout D`
+now shares D among the bindings: each binding first gets the same share, D
+over their number; those that run out are retried after the others with
+what is left (the time left over the retries not yet run); a binding that
+still does not finish is reported `unfinished` (no verdict, exit 2, never a
+pass or a skip). Failures and errors no longer stop the roster. A three-binding run (inventory with the original model first, then
+hello and lease) under `-timeout 4m` ended at 240 s: hello and lease passed
+in 1.5 s each, inventory was cut at its 80 s share, retried with the 157 s
+left, and reported unfinished. The nightly passes the job's time left
+(from its recorded start, less five minutes for the reports' upload): the
+job's 120 minutes are unchanged.
+
+Two full local rosters (all 51 tracked bindings, `-verify 8`, `-timeout
+100m`, the rewritten inventory model, one other Apalache job on the
+machine) ended at exactly 6,000 s with every binding reported: 31 passes,
+12 declared skips, 8 unfinished, exit 2. The first ran an earlier share
+rule (each binding the time left over those not yet attempted): the slow
+wallet-grist bindings late in the roster took 12m42s each from what the
+fast ones had left and still ran out, and the retries had little. The
+equal first share (1m58s) keeps that time for the retries; the second run
+had the same eight unfinished, now with larger lower bounds on what each
+needs:
+
+| binding | passes | not finished within |
+|---|---|---|
+| counters (its proof is reused by real and retiring) | | 5m36s |
+| counters.real, counters.retiring | | 5m55s each |
+| inventory | | 6m30s (414 s alone, on a loaded machine) |
+| library, library.calls | | 7m14s each |
+| wallet-grist, wallet-grist.calls | | 12m42s (first run), 9m42s |
+| counters.calls, counters.terminating, kvstore, payouts | 2m20s, 1m56s, 2m49s, 2m17s on retry | |
+| the other 27 passes | 18.7 min in all | |
+
+Those eight need at least 64 minutes between them and the passes 19: 83
+of the 100 even if no attempt were lost, and a canceled attempt restarts
+its proof from scratch (Apalache cannot resume one), so 81 of the run's
+100 minutes went to canceled attempts. The roster fits the job only if
+these proofs become cheaper, measured as inventory's was, or by a
+maintainer decision on its budget; the scheduler makes the shortfall
+visible, binding by binding, instead of hiding 27 bindings behind one.
+
+Measurement caveat: that three-binding run's quint attached to the
+measurement's already-running Apalache server (stock Quint's default
+endpoint), so its two canceled inventory requests kept solving there after
+their clients were killed, on two of the four cores, until the measuring
+quint exited. In the nightly each invocation runs alone and starts its own
+server, which dies with its process group when its share ends.
+
 ## The grist library's folds, measured on counters (2026-11-10)
 
 Counters' default binding proves `uniqueNames` and `averageAsOfTrigger`

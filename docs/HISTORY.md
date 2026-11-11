@@ -9589,6 +9589,45 @@ published-module pin alignment remains. Delete-on-merge is enabled, with a safe
 one-time prune still outstanding. Diagnostic memory-cap experiments are separate
 from the unchanged gate; no result from them changes the recorded 94 survivors.
 
+### J7b: inventory's cold proof and a fair verifier roster, 2026-11-10
+
+Measured on `9ff2478e` with Quint 0.33.1, evaluator 0.7.1 and Apalache 0.62.4
+(details in [performance.md](performance.md#inventorys-cold-withincapacity-proof-and-the-verifier-roster-j7b-2026-11-10)).
+Inventory's binding alone, cold, spends all its time in Apalache's Z3 queries:
+the CLI used 1 CPU second, every checker-thread sample was in `solverCheck`, and
+there is one invariant in one invocation, so no proof is repeated. The invariant
+query grows about tenfold per depth (1.4 s at 4, 21 s at 5, 219 s at 6, over 33
+minutes unfinished at 7); depth 8 would take hours. The cause is the model's
+encoding: `used` summed a map built by `put` inside a fold over the symbolic log,
+then folded over its keys, and the reserve rule carries the same term into every
+transition. Apalache's array encoding was slower still.
+
+`used` is now the count of reservations that no later cancellation of their order
+clears, equal to the map's sum on every log (induction over the fold; quint's
+sampler on 20,000 lists of up to 8 events; `quint verify` of the equality on every
+list of up to 7 events over the model's orders and types). States, transitions,
+bound, invariant and Apalache policy are unchanged; depth 8 proves in about 7
+minutes. The inventory-grist suite passes, in shadow mode too.
+
+Independently, `simulate -timeout` shares one deadline among the bindings: each
+first gets the same share (the time over their number), those that run out are
+retried after the others with what is left, and one that still does not finish is reported
+`unfinished`: no verdict, exit 2, never a pass or a skip. Failures and errors no
+longer stop the roster, and every binding has its own report. The nightly passes
+the time left of the job's unchanged 120 minutes, less five for the upload. Tests
+fail with the share, the retry or the continuation removed.
+
+Two full local rosters (51 bindings, `-timeout 100m`) ended at 6,000 s with every
+binding reported: 31 passes, 12 declared skips and 8 unfinished (counters, its
+real and retiring variants, inventory, library and its calls binding, wallet-grist
+and its calls binding), exit 2. The first used an earlier share rule (the time
+left over the bindings not yet attempted), under which wallet-grist, late in the
+roster, took 12m42s of what the fast bindings had left and still ran out; the
+equal first share keeps that time for the retries. The eight need at least 64
+minutes between them; with every canceled attempt restarting from scratch, 81 of
+the 100 minutes went to canceled attempts. A green nightly (J7c) needs those
+proofs cheaper, or the maintainer's decision on the roster's budget.
+
 ### The grist library's folds, 2026-11-10
 
 Counters' cold depth-8 proof took 3,426 s, spread over the generated

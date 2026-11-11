@@ -9,8 +9,15 @@ module inventoryRules {
     if (e.typ == "cancelled") s.put(cancelledOrder(e), 0)
     else { val k = reservedOrder(e)
       s.put(k, 1 + (if (s.keys().contains(k)) s.get(k) else 0)) })
-  pure def used(log: List[Event]): int = { val s = stock(log)
-    s.keys().fold(0, (n,k) => n + s.get(k)) }
+  // The units held: the sum of stock's values, written as a count of the
+  // reservations no later cancellation of their order clears. The two are
+  // equal on every log (stock puts 0 at a cancellation and adds 1 at each
+  // reservation); the count keeps quint verify's encoding linear in the
+  // log, where a map built by a fold and folded over its keys made each
+  // step's SMT query grow about tenfold (docs/performance.md, J7b).
+  pure def used(log: List[Event]): int = { val st = stockEvents(log)
+    st.indices().filter(i => st[i].typ == "reserved" and st.indices().forall(j =>
+      j <= i or not(st[j].typ == "cancelled" and cancelledOrder(st[j]) == reservedOrder(st[i])))).size() }
   // Model the public query from this order's event history, independently of
   // the Go read model. Authorization keeps its units; cancellation clears them.
   pure def allocationAnswer(log: List[Event], q: AllocationArgs): AllocationResult = {
