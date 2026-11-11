@@ -1082,6 +1082,34 @@ depth 6. Their cost follows the symbolic state the steps build (a log of
 events with lists and tag sets, merged over 22 transitions), not their own
 expressions, so counters still needs about 40 minutes cold.
 
+## The grist proofs in a job of their own (2026-11-11)
+
+Measured on main `514e93ff` (the library folds and inventory's map-free
+`used` merged), each binding alone and cold through the CLI at depth 8,
+four proofs at once on four cores, each with its own Apalache server:
+
+| binding | cold time |
+|---|---|
+| inventory | 1,049 s |
+| counters | 2,177 s |
+| counters.real | 2,313 s (no reuse when run alone) |
+| counters.retiring | 2,394 s (likewise) |
+| library.calls | 4,695 s |
+| library | 6,013 s |
+| wallet-grist | unfinished: depth 5 in 2,428 s, then depth 6's second invariant query ran 2 h 25 min and was stopped |
+| wallet-grist.calls | unfinished: depth 5 in 1,684 s, then depth 6's second query ran 2 h 48 min and was stopped |
+
+The nightly now runs counters (with its real and retiring variants in one
+session), library, library.calls, wallet-grist and wallet-grist.calls in
+`verify-alone`, one runner per group of `ci/verify-alone.txt`, each limit
+1.5 times its measurement plus 10 minutes, cited there. Wallet-grist's
+proofs, unfinished on this model, finish with #148's (its balances and
+credit line as single folds over the log): 3 h 28 min and 47 min alone,
+so their groups' limits are 322 and 81 minutes (the section on
+wallet-grist's noOverdraft proof has the measurement). The shared
+roster keeps inventory and the other 43 bindings: about 36 minutes of
+proofs measured in the earlier rosters, within its 100.
+
 ## wallet-grist's noOverdraft proof (J7b, 2026-11-11)
 
 Wallet-grist's two bindings (`wallet.binding.yaml`, the store's side, and

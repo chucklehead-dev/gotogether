@@ -9642,6 +9642,23 @@ trace of up to 10 steps, and grist's tests sample it. Counters proves in
 Rewrites of its invariants did not help, their cost being the symbolic
 state's. No bound, model behaviour or check changed.
 
+### The grist proofs in a job of their own, 2026-11-11
+
+The maintainer moved the grist apps' slow proofs out of the shared verifier
+roster rather than trim them. `verify-alone` runs counters (with real and
+retiring in one session), library, library.calls, wallet-grist and
+wallet-grist.calls, a runner per group of `ci/verify-alone.txt`, each
+limit its measured cold time on main times 1.5 plus 10 minutes. Depth 8,
+every check and the unfinished-is-red rule are unchanged, and the shared
+roster's two hours are too. `ci/verify-roster.sh` splits the bindings, and
+internal/ciconfig fails if a binding is in neither roster or in both.
+Wallet-grist's two proofs did not finish alone in hours on its model then
+(depth 6's second invariant query ran over 2 h 25 min); with #148's
+(balances and the credit line as single folds over the log) they finish
+alone in 3 h 28 min and 47 min, and their groups' limits are 322 and 81
+minutes by the same rule. Inventory, now 1,049 s cold, stays in the shared roster
+(docs/performance.md).
+
 ### J7b: wallet-grist's noOverdraft proof, 2026-11-11
 
 Wallet-grist's depth-8 proofs (`wallet.binding.yaml` and
