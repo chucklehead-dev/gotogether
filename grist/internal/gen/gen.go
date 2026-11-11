@@ -887,7 +887,7 @@ func (g *gen) storeModule(b *strings.Builder) {
 	}
 	b.WriteString("  }\n\n")
 	b.WriteString("  // the identities, in the order commands take them, and the effect keys the\n  // model on its own draws\n")
-	b.WriteString("  pure val IDS = " + idList + "\n  pure val KEYS = Set(\"k1\", \"k2\", \"k3\")\n  // the next identity a command answers (none once all are): the first\n  // unanswered, so that the model on its own never draws a used one (a\n  // command that would be disabled) nor two that differ only by name\n  pure def nextID(answered: Set[str]): Set[str] =\n    IDS.foldl(Set(), (s, i) => if (s == Set() and not(answered.contains(i))) Set(i) else s)\n\n")
+	b.WriteString("  pure val IDS = " + idList + "\n  pure val KEYS = Set(\"k1\", \"k2\", \"k3\")\n  // the next identity a command answers (none once all are): the first\n  // unanswered, so that the model on its own never draws a used one (a\n  // command that would be disabled) nor two that differ only by name\n  pure def nextID(answered: Set[str]): Set[str] =\n    val first = IDS.foldl(\"\", (s, i) => if (s == \"\" and not(answered.contains(i))) i else s)\n    if (first == \"\") Set() else Set(first)\n\n")
 	b.WriteString("  // a command's commit of b, answering id\n  action appends(b: List[Event], id: str): bool = all {\n")
 	b.WriteString(g.frame("    ", map[string]string{"log": "log.concat(b)", "appended": "b", "answered": "answered.union(Set(id))"}))
 	b.WriteString("  }\n\n")
@@ -1309,7 +1309,7 @@ func (g *gen) callsModule(b *strings.Builder) {
 	fmt.Fprintf(b, "  import grist.* from \"./grist\"\n  import %sEvents.* from \"./%s_gen\"\n  import %sRules.* from \"./%s_rules\"\n", g.aq, g.c.Name, g.aq, g.c.Name)
 	fmt.Fprintf(b, "  export grist.*\n  export %sEvents.*\n  export %sRules.*\n\n", g.aq, g.aq)
 	b.WriteString("  var log: List[Event]\n  var answered: Set[str]\n\n  action init = all { log' = [], answered' = Set() }\n\n")
-	b.WriteString("  pure val IDS = " + idList + "\n  // the next identity a command answers (none once all are): the first\n  // unanswered, so that the model on its own never draws a used one (a\n  // command that would be disabled) nor two that differ only by name\n  pure def nextID(answered: Set[str]): Set[str] =\n    IDS.foldl(Set(), (s, i) => if (s == Set() and not(answered.contains(i))) Set(i) else s)\n\n")
+	b.WriteString("  pure val IDS = " + idList + "\n  // the next identity a command answers (none once all are): the first\n  // unanswered, so that the model on its own never draws a used one (a\n  // command that would be disabled) nor two that differ only by name\n  pure def nextID(answered: Set[str]): Set[str] =\n    val first = IDS.foldl(\"\", (s, i) => if (s == \"\" and not(answered.contains(i))) i else s)\n    if (first == \"\") Set() else Set(first)\n\n")
 	b.WriteString("  action answers(b: List[Event], id: str): bool = all {\n    freshKey(answered, id),\n    log' = log.concat(b),\n    answered' = answered.union(Set(id)),\n  }\n\n")
 	b.WriteString("  // a call the API refused (403: the block's policy refused the caller) ran\n  // nothing and answers nothing: its key stays unanswered\n")
 	b.WriteString("  action denied: bool = all { log' = log, answered' = answered }\n")

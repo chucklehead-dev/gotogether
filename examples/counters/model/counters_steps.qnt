@@ -58,7 +58,8 @@ module countersGen {
   // unanswered, so that the model on its own never draws a used one (a
   // command that would be disabled) nor two that differ only by name
   pure def nextID(answered: Set[str]): Set[str] =
-    IDS.foldl(Set(), (s, i) => if (s == Set() and not(answered.contains(i))) Set(i) else s)
+    val first = IDS.foldl("", (s, i) => if (s == "" and not(answered.contains(i))) i else s)
+    if (first == "") Set() else Set(first)
 
   // a command's commit of b, answering id
   action appends(b: List[Event], id: str): bool = all {
@@ -431,7 +432,7 @@ module countersGen {
       or {
         processor == "welcome" and (if (trigger > 0 and trigger <= log.length()) log[trigger - 1].typ == "counter-created" else false),
       },
-      mailerSendRecords.indices().exists(i => mailerSendRecords[i] == rec_),
+      mailerSendRecords.foldl(false, (found, r) => found or r == rec_),
       log' = log,
       checkpoints' = checkpoints,
       appended' = [],
@@ -523,7 +524,7 @@ module countersGen {
       or {
         processor == "payout" and (if (trigger > 0 and trigger <= log.length()) log[trigger - 1].typ == "counter-retired" else false),
       },
-      bankPayRecords.indices().exists(i => bankPayRecords[i] == rec_),
+      bankPayRecords.foldl(false, (found, r) => found or r == rec_),
       log' = log,
       checkpoints' = checkpoints,
       appended' = [],
@@ -726,7 +727,8 @@ module countersCallsGen {
   // unanswered, so that the model on its own never draws a used one (a
   // command that would be disabled) nor two that differ only by name
   pure def nextID(answered: Set[str]): Set[str] =
-    IDS.foldl(Set(), (s, i) => if (s == Set() and not(answered.contains(i))) Set(i) else s)
+    val first = IDS.foldl("", (s, i) => if (s == "" and not(answered.contains(i))) i else s)
+    if (first == "") Set() else Set(first)
 
   action answers(b: List[Event], id: str): bool = all {
     freshKey(answered, id),

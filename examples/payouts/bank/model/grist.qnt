@@ -59,17 +59,22 @@ module grist {
   // the read set the step recorded.
   // At the head every log index is earlier than readPos. Keep this inside
   // the function so callers still evaluate all three arguments normally.
+  // The log is folded with each event's position, never indexed by a
+  // quantified position: quint verify (Apalache) encodes log[i] at a
+  // symbolic i as a choice over every position, which made a per-event
+  // quantifier quadratic in the log (docs/performance.md, the grist
+  // library's folds); the same holds below.
   pure def conditionHolds(log: List[Event], readPos: int, reads: Set[Read]): bool =
     if (readPos == log.length()) true
     else and {
       0 <= readPos,
       readPos <= log.length(),
-      log.indices().forall(i => i < readPos or reads.forall(r => not(matches(log[i], r)))),
+      log.foldl((0, true), (acc, e) => (acc._1 + 1, acc._2 and (acc._1 < readPos or reads.forall(r => not(matches(e, r))))))._2,
     }
 
   // an event of typ tagged key=value exists in log
   pure def existsTagged(log: List[Event], typ: str, key: str, value: str): bool =
-    log.indices().exists(i => matches(log[i], { typ: typ, tags: Set((key, value)) }))
+    log.foldl(false, (found, e) => found or matches(e, { typ: typ, tags: Set((key, value)) }))
 
   // A key names at most one outcome: answered are the command ids answered so
   // far, by a commit or a committed refusal (a rejection, a conflict). A
@@ -77,10 +82,12 @@ module grist {
   pure def freshKey(answered: Set[str], id: str): bool = not(answered.contains(id))
 
   // the position (from 1) of the first event of typ after position from,
-  // 0 if there is none: a processor's next trigger
+  // 0 if there is none: a processor's next trigger. A fold over the log
+  // carrying (events seen, the first found), not the minimum of a set of
+  // positions: a set fold costs quint verify far more
   pure def nextOf(log: List[Event], from: int, typ: str): int =
-    val after = log.indices().filter(i => i >= from and log[i].typ == typ)
-    if (after.size() == 0) 0 else after.fold(log.length(), (m, i) => if (i < m) i else m) + 1
+    log.foldl((0, 0), (acc, e) =>
+      if (acc._2 == 0 and acc._1 >= from and e.typ == typ) (acc._1 + 1, acc._1 + 1) else (acc._1 + 1, acc._2))._2
 
   // a batch as a step records it: its types, string fields, integer
   // fields and causes
@@ -104,7 +111,7 @@ module grist {
   // every run, so a dependency that dedupes by key can make "at least
   // once" "once").
   pure def keyStable(effects: List[Effect], processor: str, trigger: int, key: str): bool =
-    effects.indices().forall(i => effects[i]._1 == processor implies ((effects[i]._2 == trigger) == (effects[i]._3 == key)))
+    effects.foldl(true, (ok, e) => ok and (e._1 == processor implies ((e._2 == trigger) == (e._3 == key))))
 
   // At least once, the checkpoint commits the outcome its run reached
   // (ok: the step's record of it): success after an ok effect step, a
@@ -125,7 +132,7 @@ module grist {
     effectsOf(effects, processor, trigger, true) + effectsOf(effects, processor, trigger, false)
 
   // log holds e
-  pure def holds(log: List[Event], e: Event): bool = log.indices().exists(i => log[i] == e)
+  pure def holds(log: List[Event], e: Event): bool = log.foldl(false, (found, x) => found or x == e)
 
   // At most once, the checkpoint commits first, before any effect step of
   // its trigger; its step records ok false (no outcome is known when it
@@ -148,7 +155,7 @@ module grist {
 
   // log holds an unknown outcome of processor's trigger, whatever its text
   pure def holdsUnknown(log: List[Event], processor: str, trigger: int): bool =
-    log.indices().exists(i => log[i].typ == "grist.unknown" and log[i].strs[0] == processor and log[i].ints == [trigger])
+    log.foldl(false, (found, e) => found or (e.typ == "grist.unknown" and e.strs[0] == processor and e.ints == [trigger]))
 
   // An at-most-once outcome, if present, agrees with the one effect step
   // (ok: the step's record of which outcome it appends) and is appended
@@ -179,9 +186,9 @@ module grist {
   // outcome conforms to the model's actions, the outcome being optional,
   // and is caught here.
   pure def atMostOnceOutcomesLogged(log: List[Event], effects: List[Effect], processor: str, success: int => List[Event]): bool =
-    effects.indices().forall(i => effects[i]._1 == processor implies (
-      if (effects[i]._4) success(effects[i]._2).foldl(true, (b, e) => b and holds(log, e))
-      else holds(log, failed(processor, effects[i]._2)) or holdsUnknown(log, processor, effects[i]._2)))
+    effects.foldl(true, (ok, f) => ok and (f._1 == processor implies (
+      if (f._4) success(f._2).foldl(true, (b, e) => b and holds(log, e))
+      else holds(log, failed(processor, f._2)) or holdsUnknown(log, processor, f._2))))
 
   // A declared call's step as its key (docs/grist-instrumentation.md
   // §3.3): (processor, trigger, key), the caller's (Call.Do) or the
@@ -194,13 +201,13 @@ module grist {
   // each key once (Keyed) applies an at-least-once effect's call once.
   pure def callKeyStable(effects: List[Effect], calls: List[CallKey], processor: str, trigger: int, key: str): bool = and {
     keyStable(effects, processor, trigger, key),
-    calls.indices().forall(i => calls[i]._1 == processor implies ((calls[i]._2 == trigger) == (calls[i]._3 == key))),
+    calls.foldl(true, (ok, c) => ok and (c._1 == processor implies ((c._2 == trigger) == (c._3 == key)))),
   }
 
   // some step of calls carries key: at most once, a second call of a key is
   // a second try, which an at-most-once effect never makes; a Keyed
   // dependency's second served record of a key is a second application
-  pure def keyCalled(calls: List[CallKey], key: str): bool = calls.indices().exists(i => calls[i]._3 == key)
+  pure def keyCalled(calls: List[CallKey], key: str): bool = calls.foldl(false, (found, c) => found or c._3 == key)
 
   // grist's default EffectTries: a failed effect is checkpointed with
   // grist.failed after this many failures
