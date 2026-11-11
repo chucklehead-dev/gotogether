@@ -355,6 +355,48 @@ func TestSampleRaisedForUnconfirmed(t *testing.T) {
 	}
 }
 
+// A real run's minted identifiers (qenv.NewID's outside a simulation,
+// UUIDs) are random: two runs of the same calls that drew other ones are
+// sampled alike, while runs whose identifiers relate otherwise (one id
+// used twice, or two) and other calls are sampled apart.
+func TestSampleIgnoresMintedIDs(t *testing.T) {
+	plan := func(i int, key, payment, request string) *binding.Plan {
+		return &binding.Plan{Calls: []binding.Call{
+			{Quint: fmt.Sprintf(`bankPay("send", %d, "payouts/send/t1/1@%s", "a", 7, "ok")`, i, key), Expect: fmt.Sprintf(`batchIs(appended, ["paid"], [("command", "payouts/send/t1/1@%s")])`, payment)},
+			{Quint: fmt.Sprintf(`request("%s", 7)`, request)},
+		}}
+	}
+	id := func(n int) string { return fmt.Sprintf("%032x", uint64(n)*0x9e3779b97f4a7c15) }
+	uuid := func(n int) string {
+		h := id(n)
+		return h[:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:]
+	}
+	s := sampling{rate: 0.5}
+	taken, related, called := 0, 0, 0
+	for i := range 400 {
+		x := s.takes(plan(i, id(i), id(i), uuid(i)))
+		if x != s.takes(plan(i, id(i+1000), id(i+1000), uuid(i+2000))) {
+			t.Fatalf("plan %d: sampled once and not with other minted identifiers", i)
+		}
+		if x {
+			taken++
+		}
+		if x != s.takes(plan(i, id(i), id(i+1000), uuid(i))) {
+			related++
+		}
+		if x != s.takes(plan(i+400, id(i), id(i), uuid(i))) {
+			called++
+		}
+	}
+	if taken < 150 || taken > 250 || related == 0 || called == 0 {
+		t.Errorf("%d of 400 plans taken at 1/2; %d moved by relating the identifiers otherwise, %d by other calls", taken, related, called)
+	}
+	// a word that holds hex digits is not an identifier
+	if got := sampleText("x" + id(1) + " " + id(2) + "@" + id(1)); got != "x"+id(1)+" \x01id1\x01@\x01id2\x01" {
+		t.Errorf("sampleText: %q", got)
+	}
+}
+
 // A pass is sampled by its plan's hash and the setting's seed: the same
 // choice every time for the same plan and seed (a rerun judges the same
 // passes), about the rate's share of plans, another seed another choice.
