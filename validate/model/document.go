@@ -28,6 +28,9 @@ func (r *Report) Doc() *validate.Document {
 		d.SkipReason, d.Reason, d.Verdict = r.Skipped, r.Skipped, "no verdict"
 		d.Notes = append(d.Notes, r.Skipped)
 	}
+	if r.Unfinished != "" {
+		d.Unfinished, d.Reason, d.Verdict = r.Unfinished, r.Unfinished, "no verdict"
+	}
 	if r.EvaluatorBug != "" {
 		d.Verdict = "error"
 		d.Error = r.EvaluatorBug

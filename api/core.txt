@@ -2706,6 +2706,7 @@ type DocStepActionReachability struct
 type Document struct
     field Comparison *DocComparison `json:"comparison,omitempty"`
     field SkipReason string `json:"skipReason,omitempty"`
+    field Unfinished string `json:"unfinished,omitempty"`
     field Graph *DocGraph `json:"graph,omitempty"`
     field Receipt *receipt.Summary `json:"receipt,omitempty"`
     field Format string `json:"format"`
@@ -3167,6 +3168,11 @@ type BehaviorWitness struct
     field NativeAttempts int
     field NativeSeed string
     field Replay *ComparisonReplay
+type BindingError struct
+    field Binding string
+    field Err error
+    method (*BindingError) Error() string
+    method (*BindingError) Unwrap() error
 type Bound struct
     field Kind string
     field States int
@@ -3330,6 +3336,7 @@ type PossibleWitnessStep struct
 type Report struct
     field Binding string
     field Skipped string
+    field Unfinished string
     field Graph *GraphResult
     field Invariants []Verdict
     field Eventually []Verdict
@@ -3357,6 +3364,7 @@ type SimulateOptions struct
     field Unfair []string
     field Stops []string
     field Out string
+    field Deadline time.Time
     field Replay bool
 type StepActionReachability struct
     field Status string

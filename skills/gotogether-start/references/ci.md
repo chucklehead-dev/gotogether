@@ -44,7 +44,9 @@ published to a registry yet).
   (`GOTOGETHER_SEEDS`, `GOTOGETHER_SEED_OFFSET`, failures kept with
   `GOTOGETHER_CORPUS`), `GOTOGETHER_HEGEL_SEED=random`,
   `GOTOGETHER_EVAL=shadow`, mutants (`qweave -mutate`),
-  `gotogether simulate -graph` and `-verify`.
+  `gotogether simulate -graph` and `-verify` (many `-binding`s in one job:
+  `-timeout` the job's time left, so a slow proof is reported unfinished
+  instead of leaving later bindings unvisited).
 - Per release: the real tier's runs validated by the same binding.
 
 ## Validating without quint or Node

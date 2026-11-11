@@ -158,6 +158,10 @@ evaluator does, a disagreement fails: the guard on the per-push tier's
 trust), mutation testing (a survivor is a check that cannot fail),
 `gotogether simulate -graph` (every reachable state of a small model) and
 `-verify` (Apalache, bounded). Expect hours; run them in parallel jobs.
+With many bindings in one job, give `simulate` the job's time left as
+`-timeout`: each binding gets the same first share, those that run out are
+retried with what the others leave, and one that still does not finish is
+reported unfinished (no verdict, exit 2) instead of starving the rest.
 
 **Per release.** The real environment's runs, validated by the same
 binding (`gotogether validate`, or `-compiled` where quint is not
