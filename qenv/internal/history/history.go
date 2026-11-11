@@ -29,7 +29,6 @@ package history
 
 import (
 	"fmt"
-	"slices"
 	"sort"
 	"strings"
 
@@ -220,9 +219,6 @@ func (h *History) cycle(id int64) error {
 		return nil
 	}
 	p := phenomena[kind]
-	if i := slices.IndexFunc(cyc, func(e depgraph.Hop) bool { return e.From == id }); i > 0 {
-		cyc = append(cyc[i:], cyc[:i]...)
-	}
 	path := make([]string, len(cyc))
 	for i, e := range cyc {
 		path[i] = fmt.Sprintf("T%d -%s(%s)-> T%d", e.From, e.Kind, e.Key, e.To)

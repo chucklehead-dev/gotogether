@@ -337,8 +337,10 @@ func TestPCTDefaultSteps(t *testing.T) {
 	if p := qenv.NewPCT(qenv.NewSeeded(1), 1, 3, 0); p.Steps != 1000 || p.Depth != 3 {
 		t.Errorf("steps %d, depth %d", p.Steps, p.Depth)
 	}
-	if p := qenv.NewPCT(qenv.NewSeeded(1), 1, 0, 50); p.Steps != 50 || p.Depth != 1 {
-		t.Errorf("steps %d, depth %d", p.Steps, p.Depth)
+	for _, tc := range []struct{ given, want int }{{-3, 1}, {0, 1}, {1, 1}, {3, 3}} {
+		if p := qenv.NewPCT(qenv.NewSeeded(1), 1, tc.given, 50); p.Steps != 50 || p.Depth != tc.want {
+			t.Errorf("depth %d: steps %d, depth %d; want 50, %d", tc.given, p.Steps, p.Depth, tc.want)
+		}
 	}
 }
 
