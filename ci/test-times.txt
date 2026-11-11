@@ -41,7 +41,7 @@ cmd/gotogether 412 # 411.1 CPU s in PR15 run 41165098703; 373.9 in green PR14 ru
 grist 180 # initial 176.0 CPU s/101.0 s wall; final 161.7/99.4
 grist/gristsim 200 # initial 190.8 CPU s/158.5 s wall; final 185.4/153.7
 grist/gristtest 70 # initial 69.3 CPU s/80.2 s wall; final 64.7/72.9
-grist/model 11 # initial 10.6 CPU s/9.3 s wall; final 9.6/10.8
+grist/model 22 # TestGristFoldsAgree (#142): quint run --max-samples=2000 --max-steps=10 of folds.qnt; CI printed 16.7, 17.1, 17.5, 22.2 CPU s (before: 10.6/9.3 s wall initial, 9.6/10.8 final)
 internal/qeval 531 # 531 CPU s on CI (run 524, its validate 980): TestDifferentialAgainstQuint's two push batches of generated expressions (I11), each three quint processes, added to TestAgreesWithQuint, which runs quint on every model of the repository; 473 in run 523 before them (its validate 1080), 340 and 358 in runs 447 and 460
 internal/simdeps 20 # 14.3 CPU s on CI (run 348), under 4 here with a warm build cache
 qenv/internal/profile 15 # 10.9 CPU s on CI (run 348)
