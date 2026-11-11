@@ -161,7 +161,7 @@ func (w *responseWriter) wire(ctx context.Context) []byte {
 // bodyAllowed is net/http's bodyAllowedForStatus.
 func bodyAllowed(code int) bool {
 	switch {
-	case code >= 100 && code <= 199, code == http.StatusNoContent, code == http.StatusNotModified:
+	case code/100 == 1, code == http.StatusNoContent, code == http.StatusNotModified:
 		return false
 	}
 	return true

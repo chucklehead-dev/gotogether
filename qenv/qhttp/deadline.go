@@ -2,6 +2,7 @@ package qhttp
 
 import (
 	"context"
+	"math"
 	"runtime"
 	"sync"
 	"time"
@@ -90,21 +91,23 @@ var grid = [...]time.Duration{10, 15, 20, 25, 30, 40, 50, 60, 80, 100} // read-o
 // 50% at 200 ms), against 10% at a power of ten for one significant digit,
 // where most timeouts are. A timeout off the grid is lengthened to the next
 // point on it (700 ms to 800 ms, 45 s to 50 s); WithTimeout keeps it exact.
+// A grid point beyond the duration range saturates at the largest duration.
 func ceilGrid(left time.Duration) time.Duration {
-	if left <= 0 {
-		return left
-	}
 	p := time.Duration(1)
-	for p*10 <= left {
-		p *= 10
+	for left/p >= 10 {
+		p *= 10 // the quotient proves this multiplication fits
 	}
-	if p < 10 {
-		return left // below 10 ns: no tenths of a decade to round to
+	if p == 1 {
+		return left // nonpositive or below 10 ns: no grid rounding
 	}
+	scale := p / 10
 	for _, m := range grid {
-		if v := m * p / 10; v >= left {
+		if m > math.MaxInt64/scale {
+			return time.Duration(math.MaxInt64) // the next grid point cannot fit
+		}
+		if v := m * scale; v >= left {
 			return v
 		}
 	}
-	return left // unreachable: 100 tenths of p is 10p > left
+	return left // unreachable: the final grid point exceeds left or saturates
 }
