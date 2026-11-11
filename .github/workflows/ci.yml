@@ -300,7 +300,12 @@ jobs:
     # that records steps pulls in no Hegel
     runs-on: ubuntu-latest
     env:
-      GOPROXY: direct
+      # Fresh repository commits bypass the module proxy; third-party vanity
+      # hosts (gopkg.in) use Go's normal proxy/cache path, as a user's go
+      # install does, so a runner's DNS failure for them cannot fail the
+      # job. Checksum verification stays on (the consumer job's settings).
+      GOPROXY: https://proxy.golang.org,direct
+      GONOPROXY: github.com/chucklehead-dev/gotogether
     steps:
       - uses: actions/setup-go@v5
         with:
