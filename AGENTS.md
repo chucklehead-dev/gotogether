@@ -260,7 +260,7 @@ versions; they are not compatibility promises.
   (ablate it before committing: a test that passes without the feature
   proves nothing of it). The nightly mutates the core's packages
   (`ci/mutate-core.sh <pkg>`, `JOBS=n`); a survivor is a test to write,
-  or an equivalent mutant the matrix's `max` names.
+  or an equivalent mutant its `max` names (ci/core-mutants.txt).
 - A planted mutant whose witness requires a particular input or fault gets a
   contrast that forces those prerequisites, with the faithful implementation
   checked under the same conditions. Keep broad exploration alongside it.

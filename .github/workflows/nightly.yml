@@ -5,11 +5,37 @@ name: nightly
 # A failure's report names its run (GOTOGETHER_RUN=... replays it) or its
 # fuzz input (testdata/fuzz), and its run is kept as a corpus entry (the
 # artifact): commit it as a regression once fixed.
+#
+# A dispatch may take part of it, to check a fix to one failing job
+# (docs/ci.md, "Targeted nightly runs"): its filters only remove jobs and
+# rows, never change a limit, and its run is named partial. A schedule
+# has no inputs and runs everything; only a scheduled run counts as a
+# nightly (J7c).
+
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch' && (inputs.jobs != '' || inputs.mutants != '' || inputs.bindings != '')
+  && format('nightly (partial: {0}{1}{2})', inputs.jobs != '' && inputs.jobs || 'every job',
+  inputs.mutants != '' && format(', mutants {0}', inputs.mutants) || '',
+  inputs.bindings != '' && format(', bindings {0}', inputs.bindings) || '')
+  || 'nightly' }}
 
 on:
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
+    inputs:
+      jobs:
+        description: "Job ids to run, comma- or space-separated (empty: every job)"
+        type: string
+        default: ""
+      mutants:
+        description: "core-mutants packages to mutate (ci/core-mutants.txt; empty: every package)"
+        type: string
+        default: ""
+      bindings:
+        description: "verify's bindings, each term a substring of a path (empty: every binding)"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -19,7 +45,28 @@ env:
   GOWORK: "off"
 
 jobs:
+  # What this run takes (ci/nightly-select.sh): every job and row unless a
+  # dispatch filters them. An unknown name fails here, so a typo cannot run
+  # nothing and show green.
+  select:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      jobs: ${{ steps.select.outputs.jobs }}
+      mutants: ${{ steps.select.outputs.mutants }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: select
+        env:
+          EVENT: ${{ github.event_name }}
+          JOBS: ${{ inputs.jobs }}
+          MUTANTS: ${{ inputs.mutants }}
+          BINDINGS: ${{ inputs.bindings }}
+        run: ci/nightly-select.sh plan | tee -a "$GITHUB_OUTPUT"
+
   grist-full:
+    needs: select
+    if: github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'grist-full')
     # Per-push grist uses -short and a CPU budget; keep all integration and
     # generated-model branches here with the same PostgreSQL contract tier.
     runs-on: ubuntu-latest
@@ -56,6 +103,8 @@ jobs:
         run: env -u GOTOGETHER_SEEDS GOTOGETHER_CHECK=1 GOTOGETHER_STRICT=1 go test -count=1 -timeout 30m ./...
 
   fresh-seeds:
+    needs: select
+    if: github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'fresh-seeds')
     env:
       GOTOGETHER_SEEDS: "500"
       GOTOGETHER_HEGEL_SEED: random
@@ -89,6 +138,8 @@ jobs:
           path: ${{ runner.temp }}/corpus
 
   core-properties:
+    needs: select
+    if: github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'core-properties')
     env:
       GOTOGETHER_HEGEL_SEED: random
     # the core's Hegel properties (internal/hegelprops) at a fresh Hegel seed
@@ -104,6 +155,8 @@ jobs:
         run: GOTOGETHER_CHECK=1 go test -count=1 -timeout 50m ./...
 
   volume:
+    needs: select
+    if: github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'volume')
     # validation at production volume (I19): a serial log of 10^5 steps
     # judged by entity under a time budget (every push runs 10^4)
     runs-on: ubuntu-latest
@@ -122,70 +175,18 @@ jobs:
         run: GOTOGETHER_SCALE_STEPS=100000 go test -count=1 -run '^TestPartitionAtVolume$' -v ./validate
 
   core-mutants:
+    needs: select
+    if: github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'core-mutants')
     # the toolkit's own mutation testing: each core package's unit tests run
     # once per woven mutant; survivors are code they do not constrain
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      matrix:
-        # max: the survivors allowed, each one read and equivalent
-        # (internal/depgraph: sorting the nodes Tarjan visits, whose
-        # components are sorted after)
-        include:
-          # qtrace: 24 of 405, each read (ids as of the watermarks' and the
-          # observation mutants' tests). Equivalent: realTime's loop bounds
-          # (47, 49, 52: earliest[0] is never read, earliest[k] >= k); a seq
-          # equal to a Call or to another step's of its recorder (61, 67, 279:
-          # that record is never among the steps, seqs are deduplicated, and a
-          # completion numbered as its invocation is that record's duplicate);
-          # a rejected order's state (93: never read); a budget's last turn
-          # (101, 129, 130: it checks nothing); a complete search that tried
-          # nothing (126: needs a budget under 1, which Linearize never
-          # passes); a move to the front of what is first (77, 110: nothing to
-          # move); the comparator's < on values never equal (295, 296); the
-          # time key left in a line's attributes (37: nothing reads it); the
-          # assumed mark inverted for every step alike (44: the same groups of
-          # equal keys); a recorder's first seq against an equal one (235: seqs
-          # are deduplicated first); a merged loss's After set to the equal
-          # value it has (249, 250); UncorruptedFields' two passes in the other
-          # order (198: the same fields); a retime's tie with its own copy (208:
-          # what the retime of either would break, wellFormed leaves out) and a
-          # step moved past itself (215: the others are other actors'). 119
-          # ties the guided search's best move otherwise: another path, the
-          # same verdicts.
-          - pkg: qtrace
-            max: 24
-          # qenv: 22 of 914, each read. Two need gosim's cooperative
-          # runtime, which only its module runs: a release dropped on a
-          # Platform (572: enqueue, 341: a task that crashes its own
-          # process). Equivalent: the history checker's rotation of a cycle
-          # that starts at its closer (22, 23); the profile key's separator
-          # (27: pcs and names never collide); a nominal option's name, ""
-          # either way (102); PCT's depth 1 set to 1 (158); sorts of what
-          # is handled one at a time (193: a disk's files, 837: a crashed
-          # process's transactions); a stopped timer nothing reads (305);
-          # bookkeeping kept past use (363, 904); IDs a queue never repeats
-          # (401); a Notify that wakes no one (433, 442); a step count never
-          # below 0 (470); a finished task never queued (548); stale timer
-          # entries popped elsewhere (711, 729); bounds a case before
-          # already decides (722: the run queue's k-th past its end is an
-          # id above every task's; 725: pos == k returned first); the
-          # watchdog's last task left after Run (789: Run returns only when
-          # every task handed back, and a parked task is skipped).
-          - pkg: qenv
-            max: 22
-          # One reviewed equivalent: <= for < in session-order edges.
-          # Distinct transactions have validated unique session positions;
-          # equality can only add a self edge, ignored by graph traversal.
-          # Actual current gate: 1/110 survives; locking-read recording and
-          # Rollback-forwarding mutations are killed by semantic controls.
-          - pkg: qhistory
-            max: 1
-          - pkg: internal/depgraph
-            max: 1
-          - pkg: qsweep
-            max: 0
+      # the rows and each one's max, the survivors allowed (each read and
+      # equivalent): ci/core-mutants.txt, all of them unless a dispatch's
+      # mutants filter keeps some
+      matrix: ${{ fromJSON(needs.select.outputs.mutants) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -205,6 +206,8 @@ jobs:
           if-no-files-found: ignore
 
   fuzz:
+    needs: select
+    if: github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'fuzz')
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
@@ -234,6 +237,8 @@ jobs:
           path: ${{ matrix.dir }}/testdata/fuzz
 
   qeval-differential:
+    needs: select
+    if: github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'qeval-differential')
     # the Go evaluator against quint's two backends on generated
     # expressions and actions (internal/qeval's TestDifferentialAgainstQuint,
     # ROADMAP I11): each batch a module of 200 well-typed random vals and
@@ -294,6 +299,8 @@ jobs:
   # does not finish is reported unfinished, with no verdict, and the job
   # is red. Every binding has its own report in verify-reports.
   verify:
+    needs: select
+    if: github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'verify')
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -313,11 +320,16 @@ jobs:
       - name: Install quint
         run: ci/install-quint.sh
       - name: quint verify on every binding
+        env:
+          BINDINGS: ${{ inputs.bindings }}
         run: |
           go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
           GOTOGETHER_VERIFY=1 go test -count=1 -run TestSimulateVerify ./cmd/gotogether
           GOTOGETHER_NATIVE_VERIFY=1 go test -count=1 -run '^TestNativeManagedToolIdentity$' ./validate/model
           mapfile -d '' -t bindings < <(git ls-files -z 'examples/*binding*.yaml' 'examples/**/*binding*.yaml' | sort -zu)
+          # a dispatch's bindings filter keeps some (ci/nightly-select.sh);
+          # the deadline below is the job's either way
+          mapfile -t bindings < <(printf '%s\n' "${bindings[@]}" | ci/nightly-select.sh bindings)
           args=()
           for b in "${bindings[@]}"; do
             args+=(-binding "$b")
@@ -335,6 +347,8 @@ jobs:
           if-no-files-found: ignore
 
   evaluator-shadow:
+    needs: select
+    if: github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'evaluator-shadow')
     # the Go evaluator against quint (GOTOGETHER_EVAL=shadow) on every
     # batch a search judges and on each actor of every run checked, in
     # every example: a disagreement fails the test, naming the candidate.
@@ -452,6 +466,8 @@ jobs:
           if grep '^DISAGREE ' "$log"; then echo "::error::the Go evaluator and quint disagree (above): the evaluator decides passing runs outside shadow"; exit 1; fi
 
   webjobs-live:
+    needs: select
+    if: github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'webjobs-live')
     # webjobs explored live by Bombadil (headless, ubuntu's Chrome): the
     # faithful app for 45s (a finished journey, its manifest replayed,
     # then --reproduce), and each mutant's server for 45s (its invariant
@@ -499,6 +515,8 @@ jobs:
           path: ${{ runner.temp }}/journeys
 
   raftkv-real:
+    needs: select
+    if: github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'raftkv-real')
     # raftkv's real tier under qnemesis at fresh seeds (schedules), more
     # runs: 10 faithful, 5 each of NoRequestID and SlowElection, with the
     # race detector
@@ -537,6 +555,8 @@ jobs:
           path: ${{ runner.temp }}/real
 
   benchmarks:
+    needs: select
+    if: github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'benchmarks')
     # the core's benchmarks (every root-module package with one) at HEAD
     # against the commit main was at a day before, both measured here,
     # interleaved (ci/bench.sh): a significant regression (p < 0.05) past

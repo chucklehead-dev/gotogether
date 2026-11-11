@@ -168,6 +168,34 @@ binding (`gotogether validate`, or `-compiled` where quint is not
 installed), and `gotogether doctor -strict -C <module>` so the CLI, the
 module's core, qweave and gotogether-nav agree.
 
+## Targeted nightly runs (this repository)
+
+To check a fix to one failing nightly job without the whole night (about
+six hours), dispatch the nightly with filters:
+
+```sh
+gh workflow run nightly.yml -f jobs=core-mutants -f mutants=qenv
+gh workflow run nightly.yml -f jobs=verify -f bindings=examples/hello/
+gh api repos/chucklehead-dev/gotogether/actions/workflows/nightly.yml/dispatches \
+  -f ref=main -f 'inputs[jobs]=core-mutants' -f 'inputs[mutants]=qenv'
+```
+
+`jobs` takes job ids (`grist-full`, `fresh-seeds`, `core-mutants`,
+`verify`, ...: `ci/nightly-select.sh ids` lists them), comma- or
+space-separated; `mutants` keeps core-mutants' rows of those packages
+(`ci/core-mutants.txt`); `bindings` keeps verify's bindings whose paths
+contain a term. Empty means everything, and a schedule has no inputs, so
+it runs every job and row as before. A filter only removes jobs and rows:
+every row keeps its `max`, every job its limit, and verify's roster still
+shares the job's deadline. A name that matches nothing fails the `select`
+job rather than running nothing green. To run a branch's fix before it
+merges, dispatch on the branch (`gh workflow run nightly.yml --ref
+<branch> ...`, or the API's `ref`).
+
+A filtered run is named `nightly (partial: core-mutants, mutants qenv)`;
+only an unfiltered one is `nightly`. A partial run, or any dispatch,
+does not count for J7c, which asks for a green *scheduled* full nightly.
+
 ## Validating where there is no quint
 
 A canary, a CronJob or a laptop during an incident may have neither
