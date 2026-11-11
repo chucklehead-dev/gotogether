@@ -907,3 +907,61 @@ predict hosted budgets tightly or establish a statistical regression threshold.
 No CPU budget or benchmark threshold is raised. Unknown interpreters and runtime
 overrides deliberately use uncached probes and need separate cost measurements;
 only the reviewed stock CLI/interpreter identity uses this optimization.
+
+## The grist library's folds, measured on counters (2026-11-10)
+
+Counters' default binding proves `uniqueNames` and `averageAsOfTrigger`
+together (one native batch) to depth 8. Cold, alone, through the CLI on
+`23be6eb2` (Quint 0.33.1, Apalache 0.62.4, 4 cores), it took 3,426 s:
+prepare 12 s, the Go evaluator's possibles 20 s, and the rest Apalache's
+Z3 queries. Per depth (transitions, then each invariant's check):
+
+| depth | transitions | uniqueNames | averageAsOfTrigger |
+|---|---|---|---|
+| 5 | 76 s | 23 s | 19 s |
+| 6 | 175 s | 77 s | 74 s |
+| 7 | 314 s | 174 s | 343 s |
+| 8 | 636 s | 527 s | about 950 s |
+
+Unlike inventory's, no single term dominates. Ablations at depth 4 (timing
+only, semantics changed): the eight call and effect transitions whose
+trigger is drawn from `1..log.length()+1` take about 45% of the time, and
+the welcome processor's outcome (an `if` between its success event and
+`grist.failed`) about 20%. Apalache's `before` invariant mode and its
+`funArrays` encoding were no faster.
+
+Several of the library's definitions quantified over `log.indices()` and
+read `log[i]`, which Apalache encodes at a symbolic position as a choice
+over every position, and `nextOf` took the minimum of a set of positions
+with a set fold. They are now folds over the elements (`conditionHolds`,
+`existsTagged`, `nextOf`, `holds`, `holdsUnknown`, `keyStable`,
+`callKeyStable`, `keyCalled`, `atMostOnceOutcomesLogged`), the generated
+`nextID` accumulates the first free id instead of comparing sets, and a
+generated `Replayed` action folds over its records. Equality with the
+earlier definitions: `grist/model/testdata/folds.qnt` keeps them and
+checks `agree` over a machine that grows logs, effect steps, call keys
+and answered ids of every shape they read; `quint verify` proves it for
+every trace of up to 10 steps (62 s), quint's sampler checks it in grist's
+tests, and three planted mistakes in the new folds are each caught. The
+regenerated examples' suites (counters, library, wallet-grist,
+inventory-grist, payouts) pass, in shadow mode too, as do grist's suite
+and `TestNewIsGreen`.
+
+Counters' depth-8 proof then takes 2,438 s (1.4 times faster), with other
+work on the machine for part of it:
+
+| depth | transitions | uniqueNames | averageAsOfTrigger |
+|---|---|---|---|
+| 5 | 52 s | 12 s | 7 s |
+| 6 | 105 s | 35 s | 46 s |
+| 7 | 226 s | 91 s | 253 s |
+| 8 | 435 s | 582 s | 569 s |
+
+Transitions are a third faster at depth 8; the invariants' checks now
+dominate, and they are the application's own. Rewriting them did not help:
+`namesUnique` as a fold accumulating seen names, or as a count of each
+name's creates, and `averageAsOfTrigger` as one fold with a counter, or
+with a nested fold for each average's prefix, were equal or slower at
+depth 6. Their cost follows the symbolic state the steps build (a log of
+events with lists and tag sets, merged over 22 transitions), not their own
+expressions, so counters still needs about 40 minutes cold.

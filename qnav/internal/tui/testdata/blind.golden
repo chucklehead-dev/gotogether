@@ -28,14 +28,12 @@ the run's next call, which the model rejects
         where log = [{ cause: ("command", "t1-c1-1"), ints: [], strs: ["c", "c",
           "client1"], tags: Set(("counter", "c"), ("name", "c")), typ: "counter-created" }], readPos
           = 0, reads_ = Set({ tags: Set(("name", "c")), typ: "counter-created" })
-      in conditionHolds, the else branch of if (readPos == log.length()):
-        log.indices().forall(i => (i < readPos) or reads.forall(r => not(matches(log[i], r)))) is
-        false
-        where log.indices() = Set(0), reads = Set({ tags: Set(("name", "c")), typ:
-          "counter-created" })
-      in conditionHolds, the else branch of if (readPos == log.length()), for i = 0 of
-        log.indices(): (i < readPos) or reads.forall(r => not(matches(log[i], r))) is false
-        where i < readPos = false, reads.forall(r => not(matches(log[i], r))) = false, i = 0
+      in conditionHolds, the else branch of if (readPos == log.length()): log.foldl((0,
+        true), (acc, e) => (acc._1 + 1, acc._2 and ((acc._1 < readPos) or reads.forall(r =>
+        not(matches(e, r))))))._2 is false
+        where log.foldl((0, true), (acc, e) => (acc._1 + 1, acc._2 and ((acc._1 < readPos)
+          or reads.forall(r => not(matches(e, r)))))) = (1, false), reads = Set({ tags: Set(("name",
+          "c")), typ: "counter-created" })
       grist: event 1 (counter-created events tagged counter="c", name="c"), appended after
         the decision read through position 0, matches its read of counter-created events tagged
         name="c": a concurrent append, which the commit should have conflicted on (its condition)
@@ -44,7 +42,9 @@ the run's next call, which the model rejects
         = 1), showCounter(counter = "b", readPos = 1), welcome(trigger = 1, ok = true), and 3 more
 
 state  (* changed by the last move)
-── lines 1–28 of 188 (pgup/pgdn scroll)
+  answered = Set("t1-c1-1")
+  appended = []
+── lines 1–28 of 172 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • e evidence • / filter • ? help • q quit
 
@@ -69,14 +69,12 @@ the run's next call, which the model rejects
         where log = [{ cause: ("command", "t1-c1-1"), ints: [], strs: ["c", "c",
           "client1"], tags: Set(("counter", "c"), ("name", "c")), typ: "counter-created" }], readPos
           = 0, reads_ = Set({ tags: Set(("name", "c")), typ: "counter-created" })
-      in conditionHolds, the else branch of if (readPos == log.length()):
-        log.indices().forall(i => (i < readPos) or reads.forall(r => not(matches(log[i], r)))) is
-        false
-        where log.indices() = Set(0), reads = Set({ tags: Set(("name", "c")), typ:
-          "counter-created" })
-      in conditionHolds, the else branch of if (readPos == log.length()), for i = 0 of
-        log.indices(): (i < readPos) or reads.forall(r => not(matches(log[i], r))) is false
-        where i < readPos = false, reads.forall(r => not(matches(log[i], r))) = false, i = 0
+      in conditionHolds, the else branch of if (readPos == log.length()): log.foldl((0,
+        true), (acc, e) => (acc._1 + 1, acc._2 and ((acc._1 < readPos) or reads.forall(r =>
+        not(matches(e, r))))))._2 is false
+        where log.foldl((0, true), (acc, e) => (acc._1 + 1, acc._2 and ((acc._1 < readPos)
+          or reads.forall(r => not(matches(e, r)))))) = (1, false), reads = Set({ tags: Set(("name",
+          "c")), typ: "counter-created" })
       grist: event 1 (counter-created events tagged counter="c", name="c"), appended after
         the decision read through position 0, matches its read of counter-created events tagged
         name="c": a concurrent append, which the commit should have conflicted on (its condition)
@@ -95,7 +93,9 @@ state  (* changed by the last move)
     Set(("counter", "c"), ("name", "c")), typ: "counter-created" }]
   mailerSendCalls = [{ key: "counters/welcome/t1/1", processor: "welcome", request: { counter:
     "c", name: "c" }, response: { unit: true }, result: "ok", trigger: 1 }]
-── lines 1–38 of 188 (pgup/pgdn scroll)
+  mailerSendRecords = [{ key: "counters/welcome/t1/1", processor: "welcome", request: { counter:
+    "c", name: "c" }, response: { unit: true }, result: "ok", trigger: 1 }]
+── lines 1–38 of 172 (pgup/pgdn scroll)
 
 [37m/[m[37mshowCounter[m 
 enter take • ←/⌫ back • f fold • g failing step • s save • e evidence • / filter • ? help • q quit

@@ -48,3 +48,16 @@ func TestGristModel(t *testing.T) {
 	quint(t, filepath.Dir(lib), "run", "--main=gristrun", "--max-samples=200", "--max-steps=12", "--seed=7",
 		"--invariant=unique and effected", lib)
 }
+
+// The library's folds equal the index quantifiers and set folds they
+// replaced (testdata/folds.qnt keeps the earlier definitions): sampled
+// here; quint verify of the same invariant bounds every trace
+// (docs/performance.md).
+func TestGristFoldsAgree(t *testing.T) {
+	requireQuint(t)
+	folds, err := filepath.Abs(filepath.Join("testdata", "folds.qnt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	quint(t, filepath.Dir(folds), "run", "--main=folds", "--max-samples=2000", "--max-steps=10", "--seed=7", "--invariant=agree", folds)
+}
