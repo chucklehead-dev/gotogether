@@ -44,8 +44,14 @@ func TestStepsInLeavesOutTheNemesis(t *testing.T) {
 	if c := steps(); c != 2 {
 		t.Fatalf("StepsIn counts %d; want 2 (the two starts)", c)
 	}
+	// the inc is the third system step, and the second crash follows it: the
+	// crash may land after the inc's step and before its reply, a reply
+	// lost by right (the effect happened). Only an inc that never took
+	// effect fails here.
 	if _, err := get(a2, "/inc", 5*time.Second); err != nil {
-		t.Fatal(err)
+		if c := steps(); c < 3 {
+			t.Fatalf("inc failed before its step was recorded (StepsIn %d): %v", c, err)
+		}
 	}
 	if err := <-done; err != nil {
 		t.Fatal(err)
