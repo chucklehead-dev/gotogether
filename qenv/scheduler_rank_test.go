@@ -1,9 +1,12 @@
 package qenv
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
-// Every rank in the merged queued/predicate-ready tasks selects the same task
-// as sorting all runnable IDs, including candidates on either side of queues.
+// Runnable IDs and every selected rank match the independent creation-order
+// enumeration, including empty, full and interleaved queue/candidate streams.
 func TestPickRanksAgainstMergedIDs(t *testing.T) {
 	const tasks = 7
 	states := 1
@@ -27,6 +30,9 @@ func TestPickRanksAgainstMergedIDs(t *testing.T) {
 			remaining /= 3
 		}
 		s.runq.grow(tasks, s)
+		if got := s.runnableIDs(len(want), candidates); !slices.Equal(got, want) {
+			t.Fatalf("state %d: runnable IDs %v, want %v", state, got, want)
+		}
 		for rank, id := range want {
 			if got := s.pick(rank, candidates).id; got != id {
 				t.Fatalf("state %d rank %d: task %d, want merged IDs %v", state, rank, got, want)
