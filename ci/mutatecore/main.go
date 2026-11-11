@@ -447,12 +447,24 @@ func runWorker(ctx context.Context, cfg workerConfig) (out workerResult, runErr 
 	for i, c := range candidates {
 		sources[i] = sourceMetadata(c)
 	}
-	if err := j.append("admitted", map[string]any{"sources": sources, "suites": len(suites)}); err != nil {
+	// Every shard admits the complete ordered inventory (every suite built,
+	// inventoried and its baseline passed) before selecting its share of it.
+	selection := cfg.Shard.selection(len(candidates))
+	if err := j.append("admitted", sealedAdmitted{Sources: sources, Suites: len(suites), Selected: selection}); err != nil {
 		return out, err
 	}
 	fmt.Fprintf(os.Stderr, "admitted %d source mutants across %d test suites\n", len(candidates), len(suites))
+	if cfg.Shard.Count > 1 {
+		fmt.Fprintf(os.Stderr, "shard %s runs %d of the %d source mutants (every %dth from %d), %d at a time\n", cfg.Shard, len(selection), len(candidates), cfg.Shard.Count, cfg.Shard.Index, jobs)
+	}
+	all := candidates
+	candidates = make([]candidate, len(selection))
+	for i, k := range selection {
+		candidates[i] = all[k]
+	}
+	gate := gatePolicy{Max: max, Shards: cfg.Shard.Count}
 	started := time.Now()
-	results, err := runCampaign(ctx, candidates, jobs, max, func(ctx context.Context, t target) (executionResult, error) {
+	results, err := runCampaign(ctx, candidates, jobs, gate, func(ctx context.Context, t target) (executionResult, error) {
 		result, err := execute(ctx, suites[t.suite], strconv.Itoa(t.id), memMB*1024, mutantMode)
 		if err != nil {
 			return result, fmt.Errorf("%s local mutant %d: %w", suites[t.suite].pkg, t.id, err)
@@ -474,11 +486,15 @@ func runWorker(ctx context.Context, cfg workerConfig) (out workerResult, runErr 
 			fmt.Printf("survived: %s [file ordinal %d]\n", c.descriptor, c.ordinal)
 		}
 	}
-	fmt.Printf("%s: %d of %d mutants survived %d test suites\n", pkg, survivors, len(candidates), len(suites))
+	if cfg.Shard.Count > 1 {
+		fmt.Printf("%s shard %s: %d of %d selected mutants (of %d) survived %d test suites\n", pkg, cfg.Shard, survivors, len(candidates), len(all), len(suites))
+	} else {
+		fmt.Printf("%s: %d of %d mutants survived %d test suites\n", pkg, survivors, len(candidates), len(suites))
+	}
 	if ctx.Err() != nil {
 		return out, context.Cause(ctx)
 	}
-	out.Complete = completeRecord{Total: len(candidates), Survivors: survivors, GatePassed: max < 0 || survivors <= max}
+	out.Complete = completeRecord{Total: len(candidates), Survivors: survivors, Gate: gate.verdict(survivors)}
 	out.Generated, err = captureManifest(cfg.Capture)
 	if err != nil {
 		return out, err

@@ -62,10 +62,14 @@ type outcomeRecord struct {
 	Attempts []attemptRecord `json:"attempts"`
 	Error    string          `json:"error,omitempty"`
 }
+
+// completeRecord counts this journal's own sources: every source of an
+// unsharded campaign, or a shard's selection. Gate is passed or failed only
+// where the limit is applied; a shard's is deferred to the aggregate.
 type completeRecord struct {
-	Total      int  `json:"total"`
-	Survivors  int  `json:"survivors"`
-	GatePassed bool `json:"gate_passed"`
+	Total     int    `json:"total"`
+	Survivors int    `json:"survivors"`
+	Gate      string `json:"gate"`
 }
 
 func sourceMetadata(c candidate) sourceRecord {

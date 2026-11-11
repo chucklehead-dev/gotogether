@@ -187,11 +187,13 @@ jobs:
     # once per woven mutant; survivors are code they do not constrain
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    name: core-mutants (${{ matrix.pkg }} ${{ matrix.shard }}/${{ matrix.shards }})
     strategy:
       fail-fast: false
       # the rows and each one's max, the survivors allowed (each read and
       # equivalent): ci/core-mutants.txt, all of them unless a dispatch's
-      # mutants filter keeps some
+      # mutants filter keeps some. A row split into shards is an entry per
+      # shard; its max is applied once, by core-mutants-gate, never here.
       matrix: ${{ fromJSON(needs.select.outputs.mutants) }}
     steps:
       - uses: actions/checkout@v4
@@ -200,14 +202,91 @@ jobs:
           go-version-file: go.mod
       - name: mutants of ${{ matrix.pkg }}
         env:
-          JOBS: 4 # bounded concurrent source mutations
-        run: ci/mutate-core.sh ${{ matrix.pkg }} ${{ matrix.max }}
+          JOBS: 4 # bounded concurrent source mutations (per shard)
+          PKG: ${{ matrix.pkg }}
+          MAX: ${{ matrix.max }}
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ matrix.shards }}
+        run: |
+          if [ "$SHARDS" -eq 1 ]; then
+            ci/mutate-core.sh "$PKG" "$MAX"
+          else
+            # a shard's verdict is deferred: core-mutants-gate applies $MAX
+            # once to every shard's survivors summed
+            ci/mutate-core.sh -shard "$SHARD/$SHARDS" "$PKG"
+          fi
       - name: retain mutation campaign evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mutations-${{ strategy.job-index }}
+          name: ${{ matrix.artifact }}
           path: .gotogether/mutations/
+          include-hidden-files: true
+          if-no-files-found: ignore
+
+  # A split package's one verdict: every shard's sealed evidence checked to
+  # be one complete campaign (each shard once, every journal sealed, one
+  # shared identity, the outcomes disjoint and their union the inventory),
+  # then the row's unchanged max applied once to the summed survivors. It
+  # runs whatever the shards did (a missing, failed or canceled shard fails
+  # it) and is the failing signal for a split package.
+  core-mutants-gate:
+    needs: [select, core-mutants]
+    if: always() && needs.select.result == 'success' && (github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'core-mutants-gate'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - id: gates
+        name: split packages selected
+        env:
+          EVENT: ${{ github.event_name }}
+          MUTANTS: ${{ inputs.mutants }}
+        run: |
+          # the same rows select took (ci/nightly-select.sh gates); the
+          # assignment fails the step if the script does
+          gates=$(ci/nightly-select.sh gates)
+          if [ -z "$gates" ]; then
+            echo "no split package selected: each row's job applied its own max"
+            echo "any=false" >> "$GITHUB_OUTPUT"
+          else
+            printf '%s\n' "$gates"
+            echo "any=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.gates.outputs.any == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: mutations-*-shard-*
+          path: ${{ runner.temp }}/mutations
+      - name: aggregate each split package
+        if: steps.gates.outputs.any == 'true'
+        env:
+          EVENT: ${{ github.event_name }}
+          MUTANTS: ${{ inputs.mutants }}
+        run: |
+          gates=$(ci/nightly-select.sh gates)
+          status=0
+          while read -r pkg max shards; do
+            slug=${pkg//\//-}
+            dir="$RUNNER_TEMP/gate/$slug"
+            mkdir -p "$dir"
+            # every artifact of the package, whatever its shard count: one
+            # missing, duplicated or of another split fails the aggregate
+            for a in "$RUNNER_TEMP/mutations/mutations-$slug-shard-"*; do
+              if [ -d "$a" ]; then mv "$a" "$dir/"; fi
+            done
+            ci/mutate-core.sh aggregate "$pkg" "$max" "$shards" "$dir" || status=1
+          done <<<"$gates"
+          exit "$status"
+      - name: retain aggregate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutations-aggregate
+          path: ${{ runner.temp }}/gate/
           include-hidden-files: true
           if-no-files-found: ignore
 

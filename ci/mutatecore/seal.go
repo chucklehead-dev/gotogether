@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 )
@@ -256,74 +257,71 @@ type sealedBaseline struct {
 	Error     string          `json:"error,omitempty"`
 }
 type sealedAdmitted struct {
-	Sources []sourceRecord `json:"sources"`
-	Suites  int            `json:"suites"`
+	Sources  []sourceRecord `json:"sources"`
+	Suites   int            `json:"suites"`
+	Selected []int          `json:"selected"`
 }
 
 func validateJournal(path string, manifest producerManifest) (completeRecord, error) {
-	var zero completeRecord
-	if decoded, err := hex.DecodeString(manifest.InputDigest); err != nil || len(decoded) != sha256.Size {
-		return zero, errors.New("manifest input digest missing or invalid")
-	}
 	if len(manifest.Suites) == 0 || len(manifest.Binaries) != len(manifest.Suites) {
-		return zero, errors.New("manifest suite/binary roster incomplete")
+		return completeRecord{}, errors.New("manifest suite/binary roster incomplete")
 	}
-	suites := make([]suite, len(manifest.Suites))
-	packages := map[string]bool{}
 	for i, s := range manifest.Suites {
-		if s.Index != i || s.Package == "" || packages[s.Package] {
-			return zero, errors.New("manifest suite roster invalid")
-		}
-		packages[s.Package] = true
 		b := manifest.Binaries[i]
 		hash, size, err := digestFile(s.Binary)
 		if err != nil {
-			return zero, err
+			return completeRecord{}, err
 		}
 		if b.Suite != i || b.SHA256 != hash || b.Size != size {
-			return zero, fmt.Errorf("suite %d binary identity changed", i)
+			return completeRecord{}, fmt.Errorf("suite %d binary identity changed", i)
 		}
-		suites[i] = suite{pkg: s.Package, dir: s.Directory, binary: s.Binary}
-		counts := map[string]int{}
-		for j, m := range s.Inventory {
-			if m.ID != j || m.File == "" || m.Descriptor == "" || m.Ordinal != counts[m.File] {
-				return zero, errors.New("manifest inventory invalid")
-			}
-			counts[m.File]++
-			suites[i].mutants = append(suites[i].mutants, mutant{source: source{m.File, m.Ordinal}, descriptor: m.Descriptor, id: m.ID})
-		}
+	}
+	complete, _, err := validateJournalContent(path, manifest)
+	return complete, err
+}
+
+// validateJournalContent checks a journal against an independent manifest
+// without its binaries (the aggregate has only the records): its settings,
+// suites and passing baselines, the complete ordered inventory admitted, the
+// shard's selection of it, a valid outcome for exactly each selected source,
+// and a completion that reconciles. It returns the journal's outcomes.
+func validateJournalContent(path string, manifest producerManifest) (completeRecord, []outcomeRecord, error) {
+	var zero completeRecord
+	if decoded, err := hex.DecodeString(manifest.InputDigest); err != nil || len(decoded) != sha256.Size {
+		return zero, nil, errors.New("manifest input digest missing or invalid")
+	}
+	if len(manifest.Binaries) != len(manifest.Suites) {
+		return zero, nil, errors.New("manifest suite/binary roster incomplete")
+	}
+	suites, err := manifestSuites(manifest)
+	if err != nil {
+		return zero, nil, err
 	}
 	candidates, err := admit(suites, func(suite) error { return nil })
 	if err != nil {
-		return zero, err
+		return zero, nil, err
 	}
 	expected := make([]sourceRecord, len(candidates))
-	bySource := map[source]int{}
 	for i, c := range candidates {
 		expected[i] = sourceMetadata(c)
-		bySource[c.source] = i
 	}
-	var settings map[string]json.RawMessage
-	if err := json.Unmarshal(manifest.Start, &settings); err != nil {
-		return zero, err
+	settings, err := decodeStart(manifest.Start)
+	if err != nil {
+		return zero, nil, err
 	}
-	var inputDigest string
-	if err := json.Unmarshal(settings["input_digest"], &inputDigest); err != nil || inputDigest != manifest.InputDigest {
-		return zero, errors.New("manifest start input digest differs")
+	if settings.InputDigest != manifest.InputDigest {
+		return zero, nil, errors.New("manifest start input digest differs")
 	}
-	var max int
-	if raw, ok := settings["max_survivors"]; !ok {
-		return zero, errors.New("manifest maximum missing")
-	} else if err := json.Unmarshal(raw, &max); err != nil {
-		return zero, err
+	gate := settings.gate()
+	selection := settings.Shard.selection(len(expected))
+	bySource := map[source]int{}
+	for _, k := range selection {
+		bySource[source{expected[k].File, expected[k].Ordinal}] = k
 	}
-	var version int
-	if err := json.Unmarshal(settings["version"], &version); err != nil || version != 1 {
-		return zero, errors.New("unsupported journal version")
-	}
+	var outcomes []outcomeRecord
 	f, err := os.Open(path)
 	if err != nil {
-		return zero, err
+		return zero, nil, err
 	}
 	defer f.Close()
 	dec := json.NewDecoder(f)
@@ -337,44 +335,44 @@ func validateJournal(path string, manifest producerManifest) (completeRecord, er
 			break
 		}
 		if err != nil {
-			return zero, fmt.Errorf("incomplete journal: %w", err)
+			return zero, nil, fmt.Errorf("incomplete journal: %w", err)
 		}
 		if complete {
-			return zero, errors.New("journal content after completion")
+			return zero, nil, errors.New("journal content after completion")
 		}
 		var e sealedEvent
 		if err := decodeJSON(raw, &e); err != nil {
-			return zero, err
+			return zero, nil, err
 		}
 		if e.At.IsZero() {
-			return zero, errors.New("journal event timestamp missing")
+			return zero, nil, errors.New("journal event timestamp missing")
 		}
 		switch phase {
 		case 0:
 			if e.Event != "start" {
-				return zero, errors.New("journal must start with start")
+				return zero, nil, errors.New("journal must start with start")
 			}
 			var actual, expectedStart any
 			if err := decodeJSON(e.Data, &actual); err != nil {
-				return zero, err
+				return zero, nil, err
 			}
 			if err := decodeJSON(manifest.Start, &expectedStart); err != nil {
-				return zero, err
+				return zero, nil, err
 			}
 			if !reflect.DeepEqual(actual, expectedStart) {
-				return zero, errors.New("journal start differs from manifest")
+				return zero, nil, errors.New("journal start differs from manifest")
 			}
 			phase = 1
 		case 1:
 			if e.Event != "suite" {
-				return zero, errors.New("missing suite record")
+				return zero, nil, errors.New("missing suite record")
 			}
 			var s suiteRecord
 			if err := decodeJSON(e.Data, &s); err != nil {
-				return zero, err
+				return zero, nil, err
 			}
 			if !reflect.DeepEqual(s, manifest.Suites[index]) {
-				return zero, errors.New("suite differs from independent manifest")
+				return zero, nil, errors.New("suite differs from independent manifest")
 			}
 			index++
 			if index == len(suites) {
@@ -383,14 +381,14 @@ func validateJournal(path string, manifest producerManifest) (completeRecord, er
 			}
 		case 2:
 			if e.Event != "baseline" {
-				return zero, errors.New("missing baseline")
+				return zero, nil, errors.New("missing baseline")
 			}
 			var b sealedBaseline
 			if err := decodeJSON(e.Data, &b); err != nil {
-				return zero, err
+				return zero, nil, err
 			}
 			if b.Package != suites[index].pkg || !b.Passed || b.Error != "" || b.Execution.validate() != nil || !b.Execution.passed() {
-				return zero, errors.New("baseline did not pass")
+				return zero, nil, errors.New("baseline did not pass")
 			}
 			index++
 			if index == len(suites) {
@@ -398,53 +396,57 @@ func validateJournal(path string, manifest producerManifest) (completeRecord, er
 			}
 		case 3:
 			if e.Event != "admitted" {
-				return zero, errors.New("missing admission")
+				return zero, nil, errors.New("missing admission")
 			}
 			var a sealedAdmitted
 			if err := decodeJSON(e.Data, &a); err != nil {
-				return zero, err
+				return zero, nil, err
 			}
 			if a.Suites != len(suites) || !reflect.DeepEqual(a.Sources, expected) {
-				return zero, errors.New("admission differs from independent union")
+				return zero, nil, errors.New("admission differs from independent union")
+			}
+			if !slices.Equal(a.Selected, selection) {
+				return zero, nil, fmt.Errorf("shard %s selection differs from every %dth source of the complete inventory", settings.Shard, settings.Shard.Count)
 			}
 			phase = 4
 		case 4:
 			if e.Event == "complete" {
 				var c completeRecord
 				if err := decodeJSON(e.Data, &c); err != nil {
-					return zero, err
+					return zero, nil, err
 				}
-				if len(seen) != len(expected) || c.Total != len(expected) || c.Survivors != survivors || c.GatePassed != (max < 0 || survivors <= max) {
-					return zero, errors.New("completion does not reconcile")
+				if len(seen) != len(selection) || c.Total != len(selection) || c.Survivors != survivors || c.Gate != gate.verdict(survivors) {
+					return zero, nil, errors.New("completion does not reconcile")
 				}
 				zero = c
 				complete = true
 				continue
 			}
 			if e.Event != "outcome" {
-				return zero, errors.New("unexpected execution event")
+				return zero, nil, errors.New("unexpected execution event")
 			}
 			var o outcomeRecord
 			if err := decodeJSON(e.Data, &o); err != nil {
-				return zero, err
+				return zero, nil, err
 			}
 			i, ok := bySource[source{o.Source.File, o.Source.Ordinal}]
 			if !ok || seen[i] || !reflect.DeepEqual(o.Source, expected[i]) {
-				return zero, errors.New("unknown/duplicate source outcome")
+				return zero, nil, errors.New("unknown/duplicate source outcome, or one outside the shard's selection")
 			}
 			if err := validateOutcome(o); err != nil {
-				return zero, err
+				return zero, nil, err
 			}
 			seen[i] = true
+			outcomes = append(outcomes, o)
 			if o.Outcome == "survived" {
 				survivors++
 			}
 		}
 	}
 	if !complete {
-		return zero, errors.New("journal lacks complete evidence")
+		return zero, nil, errors.New("journal lacks complete evidence")
 	}
-	return zero, nil
+	return zero, outcomes, nil
 }
 func validateOutcome(o outcomeRecord) error {
 	if o.Error != "" || len(o.Attempts) == 0 || len(o.Attempts) > len(o.Source.Targets) {

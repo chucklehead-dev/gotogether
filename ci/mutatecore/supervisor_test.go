@@ -67,7 +67,7 @@ func TestSupervisorSealsCompleteRedCampaignAndRejectsIncompleteWorker(t *testing
 			if err := readJSONFile(receiptPath, &receipt); err != nil {
 				t.Fatalf("missing valid sealed receipt: %v\n%s", err, output)
 			}
-			if receipt.Complete != (completeRecord{Total: 1, Survivors: 1, GatePassed: false}) || !receipt.WorkerExecution.passed() || receipt.AdmissionEligible {
+			if receipt.Complete != (completeRecord{Total: 1, Survivors: 1, Gate: gateFailed}) || !receipt.WorkerExecution.passed() || receipt.AdmissionEligible {
 				t.Fatalf("complete red campaign was reclassified: %+v", receipt)
 			}
 			if receipt.InputsRechecked != tc.rechecked {

@@ -190,7 +190,8 @@ gh api repos/chucklehead-dev/gotogether/actions/workflows/nightly.yml/dispatches
 `jobs` takes job ids (`grist-full`, `fresh-seeds`, `core-mutants`,
 `verify`, ...: `ci/nightly-select.sh ids` lists them), comma- or
 space-separated; `mutants` keeps core-mutants' rows of those packages
-(`ci/core-mutants.txt`); `bindings` keeps the bindings of verify's
+(`ci/core-mutants.txt`), a split package's every shard with its gate
+(`core-mutants` and `core-mutants-gate` are selected together); `bindings` keeps the bindings of verify's
 shared roster whose paths contain a term; `groups` keeps verify-alone's
 groups by name (`ci/verify-alone.txt`), each with its own minutes.
 Selecting `verify-alone` runs its plan job too. Empty means everything,
@@ -254,3 +255,14 @@ failures abort admission; setup failures cannot count as kills. Existing process
 memory caps, per-suite timeouts and survivor limits remain in force. Stderr
 reports suite admission and campaign progress; baseline failures retain their
 diagnostics. See [the harness contract](../ci/mutatecore/README.md).
+
+A package too large for one runner is split (`qenv 22 shards=4` in
+`ci/core-mutants.txt`): each shard admits the same complete ordered inventory,
+with every baseline, then runs every Nth source and applies no limit.
+`core-mutants-gate` checks that the shards are one complete campaign (each
+shard once and sealed, one shared source/candidate/generator/toolchain/config
+identity, the outcomes disjoint and their union the inventory) and applies the
+unchanged max once to the summed survivors; anything missing, unsealed,
+canceled or inconsistent fails it. Each runner's exact environment and path
+identity is kept per shard, not compared; aggregate concurrency is shards × JOBS.
+The README states the identity boundary and its limitations.

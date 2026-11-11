@@ -9,6 +9,9 @@
 #                                   from EVENT, JOBS, MUTANTS, BINDINGS and
 #                                   ALONE_GROUPS (verify-alone's groups, which
 #                                   ci/verify-roster.sh alone narrows)
+#   ci/nightly-select.sh gates      "package max shards" for each selected row
+#                                   split into shards (core-mutants-gate's
+#                                   aggregates), from EVENT and MUTANTS
 #   ci/nightly-select.sh bindings   the bindings on stdin (one per line) that
 #                                   BINDINGS names (each term a substring of
 #                                   a path); every one when BINDINGS is empty
@@ -20,11 +23,14 @@ set -f
 cd "$(dirname "$0")/.."
 
 # every job but select itself, in the workflow's order
-ids=(grist-full fresh-seeds core-properties volume core-mutants fuzz qeval-differential verify verify-alone-plan verify-alone evaluator-shadow webjobs-live raftkv-real benchmarks)
+ids=(grist-full fresh-seeds core-properties volume core-mutants core-mutants-gate fuzz qeval-differential verify verify-alone-plan verify-alone evaluator-shadow webjobs-live raftkv-real benchmarks)
 # a job selected takes the jobs it needs with it
 implied() {
   case "$1" in
   verify-alone) echo verify-alone-plan ;;
+  # a split package's verdict is its gate's, which needs its shards
+  core-mutants) echo core-mutants-gate ;;
+  core-mutants-gate) echo core-mutants ;;
   esac
 }
 
@@ -41,8 +47,40 @@ json_list() {
   printf '%s]' "$out"
 }
 
-# ci/core-mutants.txt's rows: a package and its max
-mutant_rows() { grep -v '^[[:space:]]*\(#\|$\)' ci/core-mutants.txt; }
+# ci/core-mutants.txt's rows, as "package max shards": a package, its max
+# and, given as shards=N (N >= 2), the runners its campaign is split over
+# (1 when not given). A malformed row fails rather than run something else.
+mutant_rows() {
+  local pkg max opt extra n
+  while read -r pkg max opt extra; do
+    if [ -n "$extra" ] || ! [[ "$max" =~ ^[0-9]+$ ]] || { [ -n "$opt" ] && ! [[ "$opt" =~ ^shards=([2-9]|[1-9][0-9]+)$ ]]; }; then
+      echo "ci/core-mutants.txt: \"$pkg $max $opt $extra\" is not a package, its max and an optional shards=N (N >= 2)" >&2
+      return 1
+    fi
+    n=1
+    [ -z "$opt" ] || n=${opt#shards=}
+    echo "$pkg $max $n"
+  done < <(grep -v '^[[:space:]]*\(#\|$\)' ci/core-mutants.txt)
+}
+
+# the rows a run takes: every one unless MUTANTS names some (each must be a row)
+selected_rows() {
+  local all pkgs p
+  all=$(mutant_rows) || exit 1
+  mapfile -t pkgs < <(terms "${MUTANTS:-}")
+  for p in "${pkgs[@]}"; do
+    if ! awk '{ print $1 }' <<<"$all" | grep -qxF -- "$p"; then
+      echo "mutants filter: $p has no core-mutants row (ci/core-mutants.txt: $(awk '{ print $1 }' <<<"$all" | xargs))" >&2
+      exit 1
+    fi
+  done
+  while read -r pkg max shards; do
+    if [ "${#pkgs[@]}" -gt 0 ] && ! printf '%s\n' "${pkgs[@]}" | grep -qxF -- "$pkg"; then
+      continue
+    fi
+    echo "$pkg $max $shards"
+  done <<<"$all"
+}
 
 filter_bindings() {
   local want
@@ -109,20 +147,19 @@ plan)
     echo "mutants filter given, but core-mutants is not among the jobs selected" >&2
     exit 1
   fi
-  for p in "${pkgs[@]}"; do
-    if ! mutant_rows | awk '{ print $1 }' | grep -qxF -- "$p"; then
-      echo "mutants filter: $p has no core-mutants row (ci/core-mutants.txt: $(mutant_rows | awk '{ print $1 }' | xargs))" >&2
-      exit 1
-    fi
-  done
+  chosen=$(selected_rows) || exit 1
+  # a row split into shards is a matrix entry per shard, each with the
+  # row's max (applied only by core-mutants-gate, to the shards' sum) and
+  # an artifact name the gate downloads by
   rows="" sep=""
-  while read -r pkg max; do
-    if [ "${#pkgs[@]}" -gt 0 ] && ! printf '%s\n' "${pkgs[@]}" | grep -qxF -- "$pkg"; then
-      continue
-    fi
-    rows+="$sep{\"pkg\":\"$pkg\",\"max\":$max}"
-    sep=","
-  done < <(mutant_rows)
+  while read -r pkg max shards; do
+    [ -n "$pkg" ] || continue
+    slug=${pkg//\//-}
+    for ((i = 0; i < shards; i++)); do
+      rows+="$sep{\"pkg\":\"$pkg\",\"max\":$max,\"shard\":$i,\"shards\":$shards,\"artifact\":\"mutations-$slug-shard-$i-of-$shards\"}"
+      sep=","
+    done
+  done <<<"$chosen"
 
   if [ -n "$(terms "${BINDINGS:-}")" ]; then
     if ! in_selected verify; then
@@ -144,11 +181,21 @@ plan)
   echo "jobs=$(json_list "${selected[@]}")"
   echo "mutants={\"include\":[$rows]}"
   ;;
+gates)
+  if [ "${EVENT:-}" != workflow_dispatch ]; then
+    MUTANTS=""
+  fi
+  chosen=$(selected_rows) || exit 1
+  while read -r pkg max shards; do
+    [ -n "$pkg" ] && [ "$shards" -gt 1 ] && echo "$pkg $max $shards"
+  done <<<"$chosen"
+  true
+  ;;
 bindings)
   filter_bindings
   ;;
 *)
-  echo "usage: ci/nightly-select.sh ids|plan|bindings" >&2
+  echo "usage: ci/nightly-select.sh ids|plan|gates|bindings" >&2
   exit 2
   ;;
 esac

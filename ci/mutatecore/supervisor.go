@@ -26,6 +26,7 @@ type workerConfig struct {
 	Root        string
 	Package     string
 	Max         int
+	Shard       shardSpec
 	Jobs        int
 	MemMB       int
 	Work        string
@@ -66,6 +67,9 @@ type completionReceipt struct {
 	Generated         []capturedInvocation `json:"generated"`
 	Wrapper           fileIdentity         `json:"wrapper"`
 	Version           int                  `json:"version"`
+	Shard             shardSpec            `json:"shard"`
+	Shared            *sharedIdentity      `json:"shared,omitempty"`
+	SharedUnavailable string               `json:"shared_unavailable,omitempty"`
 	AdmissionEligible bool                 `json:"admission_eligible"`
 	Limitations       []string             `json:"limitations"`
 	InputDigest       string               `json:"input_digest"`
@@ -117,8 +121,55 @@ func readJSONFile(path string, v any) error {
 	}
 	return nil
 }
-func campaignStart(c workerConfig) map[string]any {
-	return map[string]any{"version": 1, "root": c.Root, "package": c.Package, "jobs": c.Jobs, "mem_mb": c.MemMB, "timeout_seconds": 300, "max_survivors": c.Max, "input_digest": c.InputDigest}
+
+// startRecord is a campaign's settings. A shard of a split campaign records
+// no max: its survivors are counted by the aggregate, against the package's
+// max, once.
+type startRecord struct {
+	Version        int       `json:"version"`
+	Root           string    `json:"root"`
+	Package        string    `json:"package"`
+	Jobs           int       `json:"jobs"`
+	MemMB          int       `json:"mem_mb"`
+	TimeoutSeconds int       `json:"timeout_seconds"`
+	MaxSurvivors   *int      `json:"max_survivors,omitempty"`
+	Shard          shardSpec `json:"shard"`
+	InputDigest    string    `json:"input_digest"`
+}
+
+func campaignStart(c workerConfig) startRecord {
+	s := startRecord{Version: journalVersion, Root: c.Root, Package: c.Package, Jobs: c.Jobs, MemMB: c.MemMB, TimeoutSeconds: 300, Shard: c.Shard, InputDigest: c.InputDigest}
+	if c.Shard.Count == 1 {
+		max := c.Max
+		s.MaxSurvivors = &max
+	}
+	return s
+}
+
+// decodeStart reads recorded settings in the current strict shape only.
+func decodeStart(raw []byte) (startRecord, error) {
+	var s startRecord
+	if err := decodeJSON(raw, &s); err != nil {
+		return s, fmt.Errorf("campaign start: %w", err)
+	}
+	switch {
+	case s.Version != journalVersion:
+		return s, fmt.Errorf("unsupported journal version %d (current %d): rerun the campaign with the current helper", s.Version, journalVersion)
+	case s.Shard.Count < 1 || s.Shard.Index < 0 || s.Shard.Index >= s.Shard.Count:
+		return s, fmt.Errorf("invalid shard %s", s.Shard)
+	case (s.MaxSurvivors == nil) != (s.Shard.Count > 1):
+		return s, errors.New("campaign start: a max is recorded exactly when the campaign is unsharded")
+	case s.MaxSurvivors != nil && *s.MaxSurvivors < -1:
+		return s, errors.New("campaign start: invalid max")
+	}
+	return s, nil
+}
+
+func (s startRecord) gate() gatePolicy {
+	if s.MaxSurvivors == nil {
+		return gatePolicy{Max: -1, Shards: s.Shard.Count}
+	}
+	return gatePolicy{Max: *s.MaxSurvivors, Shards: s.Shard.Count}
 }
 func discover(ctx context.Context, root, pkg string) ([]byte, error) {
 	c := groupCommand(ctx, "go", discoveryArguments(pkg)...)
@@ -170,20 +221,12 @@ func run(ctx context.Context) error {
 		// actual exit before publishing the externally checked completion receipt.
 		return publishJSONContext(ctx, cfg.Result, result)
 	}
-	if len(os.Args) < 3 || len(os.Args) > 4 {
-		return errors.New("usage: mutatecore root core-package [max-survivors]")
+	if len(os.Args) >= 2 && os.Args[1] == "aggregate" {
+		return runAggregate(ctx, os.Args[2:])
 	}
-	cfg := workerConfig{Root: os.Args[1], Package: os.Args[2], Max: -1}
-	var err error
-	cfg.Root, err = filepath.Abs(cfg.Root)
+	cfg, err := parseCampaign(os.Args[1:])
 	if err != nil {
 		return err
-	}
-	if len(os.Args) == 4 {
-		cfg.Max, err = strconv.Atoi(os.Args[3])
-		if err != nil || cfg.Max < 0 {
-			return errors.New("max-survivors must be nonnegative")
-		}
 	}
 	cfg.Jobs, err = positiveEnv("JOBS", 1)
 	if err != nil {
@@ -313,19 +356,77 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	receipt := completionReceipt{Builds: result.Builds, Generated: result.Generated, Wrapper: result.Wrapper, Version: 1, AdmissionEligible: false, Limitations: []string{"completion evidence only; no reviewpolicy admission or survivor approval", "arbitrary runtime files and external services are not a closed input universe"}, InputDigest: cfg.InputDigest, InputsRechecked: before.Unavailable == "", Inputs: before, Producer: producer, WorkerExecution: execution, Qweave: result.Qweave, ExecutionTools: tools, Manifest: result.Manifest, Journal: journal, Complete: complete}
+	receipt := completionReceipt{Builds: result.Builds, Generated: result.Generated, Wrapper: result.Wrapper, Version: receiptVersion, Shard: cfg.Shard, AdmissionEligible: false, Limitations: []string{"completion evidence only; no reviewpolicy admission or survivor approval", "arbitrary runtime files and external services are not a closed input universe"}, InputDigest: cfg.InputDigest, InputsRechecked: before.Unavailable == "", Inputs: before, Producer: producer, WorkerExecution: execution, Qweave: result.Qweave, ExecutionTools: tools, Manifest: result.Manifest, Journal: journal, Complete: complete}
 	receipt.Limitations = append(receipt.Limitations, before.Inputs.Limitations...)
 	if before.Unavailable != "" {
 		receipt.Limitations = append(receipt.Limitations, before.Unavailable)
+	}
+	receipt.Limitations = append(receipt.Limitations, identityBoundary...)
+	if shared, err := sharedIdentityOf(receipt); err != nil {
+		// The count gate is unchanged; such a shard cannot be aggregated.
+		receipt.SharedUnavailable = err.Error()
+	} else {
+		receipt.Shared = &shared
 	}
 	if err := publishJSONContext(ctx, cfg.Journal+".receipt.json", receipt); err != nil {
 		return fmt.Errorf("seal completion receipt: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "mutation completion receipt: %s.receipt.json (not admission eligible)\n", cfg.Journal)
-	if !complete.GatePassed {
+	switch complete.Gate {
+	case gateFailed:
 		return fmt.Errorf("%d survivors exceed limit %d: review source mutations and missing behavioral controls", complete.Survivors, cfg.Max)
+	case gateDeferred:
+		fmt.Fprintf(os.Stderr, "shard %s complete: %d of its %d source mutants survived; no limit applied here (the aggregate applies the package's max once to every shard's sum)\n", cfg.Shard, complete.Survivors, complete.Total)
 	}
 	return nil
+}
+
+// identityBoundary says what a shared identity does and does not establish.
+// identityBoundary is read-only after initialization.
+var identityBoundary = []string{
+	"shared identity: source files, Go discovery, candidate inventory, suite roster and binaries, generator, compiler and execution tools, and campaign configuration, by content, with the checkout root, GOROOT and GOMODCACHE path prefixes made relative and nothing else relaxed",
+	"execution identity (input_digest: the exact inherited environment and absolute paths) is per runner and is not compared across shards; tests reading environment variables outside go env may behave differently on different runners",
+}
+
+const usage = "usage: mutatecore root [-shard i/n] core-package [max-survivors]\n       mutatecore aggregate core-package max-survivors shards evidence-dir"
+
+// parseCampaign reads root, an optional -shard i/n and the package with its
+// optional max. A shard of n > 1 takes no max: the aggregate applies it once.
+func parseCampaign(args []string) (workerConfig, error) {
+	cfg := workerConfig{Max: -1, Shard: shardSpec{0, 1}}
+	if len(args) < 2 {
+		return cfg, errors.New(usage)
+	}
+	cfg.Root, args = args[0], args[1:]
+	if args[0] == "-shard" {
+		if len(args) < 2 {
+			return cfg, errors.New(usage)
+		}
+		var err error
+		if cfg.Shard, err = parseShard(args[1]); err != nil {
+			return cfg, err
+		}
+		args = args[2:]
+	}
+	if len(args) < 1 || len(args) > 2 || strings.HasPrefix(args[0], "-") {
+		return cfg, errors.New(usage)
+	}
+	cfg.Package = args[0]
+	var err error
+	cfg.Root, err = filepath.Abs(cfg.Root)
+	if err != nil {
+		return cfg, err
+	}
+	if len(args) == 2 {
+		if cfg.Shard.Count > 1 {
+			return cfg, fmt.Errorf("shard %s takes no max-survivors: the package's max is applied once, to every shard's survivors summed (mutatecore aggregate %s %s %d <evidence-dir>)", cfg.Shard, cfg.Package, args[1], cfg.Shard.Count)
+		}
+		cfg.Max, err = strconv.Atoi(args[1])
+		if err != nil || cfg.Max < 0 {
+			return cfg, errors.New("max-survivors must be nonnegative")
+		}
+	}
+	return cfg, nil
 }
 
 func verifyOwnedBuild(ctx context.Context, cfg workerConfig, result workerResult, producer fileIdentity, tools []fileIdentity) error {
