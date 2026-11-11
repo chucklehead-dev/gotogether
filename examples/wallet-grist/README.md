@@ -35,6 +35,7 @@ What examples/wallet writes by hand, grist has by construction:
 | [sim_test.go](sim_test.go), [mutants_test.go](mutants_test.go), [real_test.go](real_test.go) | the claims in simulation (gristsim), the mutants, the real tier over HTTP on SQLite |
 | [cmd/wallet](cmd/wallet/main.go) | the app's binary (`grist.Main`) |
 | [testdata/mutants](testdata/mutants) | each mutant a file replacing the app's of its name (a `go test -overlay`) |
+| [testdata/balances.qnt](testdata/balances.qnt), [balances_test.go](balances_test.go) | the balances' earlier definitions (the read model's events selected, then folded; the credit line a sum of folds), kept to check that the rules' single folds, cheaper for `quint verify`, equal them ([docs/performance.md](../../docs/performance.md#wallet-grists-nooverdraft-proof-j7b-2026-11-11)) |
 | [TRIAL.md](TRIAL.md) | how building this went: a newcomer's friction log |
 
 ## What each test catches
@@ -57,6 +58,7 @@ Rates from one full run (2026-10-27); `-short` runs fewer seeds.
 | `TestOneRequestExhaust` | none | `Exhaust` within one fault: one client, one transfer (full mode) | `Conforms`, `All(Settles)`: 49 of 49 |
 | `TestRestoreReplays` | none (`ledgerNoDedupe` in `TestMutant`) | one client depositing, no faults; the store loses its 4th, then (another run) its 6th commit, a post's checkpoint its relay had recorded (`gristsim.Managed.LoseAfter`: a restore from a backup just before it); the operator resumes the tenant 5 s later | the node records the rewind (`gristRewound`), stops the post (`grist.ErrRewound`), and once resumed (`gristResumed`) posts the move again under its key, which the ledger replays (`ledgerPostReplayed`): `Conforms` at the store and at the clients, `All(Settles)` (3 of 3 each). `ledgerNoDedupe` posts it twice: `All(Rejects("ledgerPostServed"))` (3 of 3) |
 | `TestLostTail` | none | the same, the 2nd commit lost: a deposit acknowledged before any node read it | the store's side conforms (its steps are the history that remains); the clients' names it, a later read missing the deposit: `All(Mismatch("read"))` (3 of 3) |
+| `TestBalancesAgree` | two planted mistakes in the balances' definitions (the credit line over every account, a balance counting posted events) | `quint run` of testdata/balances.qnt: a machine appending every event the models make, and the states both models reach | the rules' balances, funds, credit line and `noOverdraftIn` equal the earlier definitions (1,000 traces of up to 10 steps each); each planted mistake is caught |
 | `TestRealHTTP` | none | the real tier: `grist.NewHandler` on a real HTTP server over a SQLite file, the ledger's default double in process (`TierConfig.Local`: one `grist.Local` for the tier), three clients (`grist/client`), every fifth command's answer lost after it was served; the steps to a `PerStep` file | the file conforms to `wallet.binding.yaml` and settles, and linearized to `wallet.calls.binding.yaml`; every client's answer has its store-side step; lost answers retried under their key and replayed from the marker (counted) |
 
 `TestMutants` builds the test binary with each mutant's overlay and runs

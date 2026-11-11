@@ -1109,3 +1109,120 @@ so their groups' limits are 322 and 81 minutes (the section on
 wallet-grist's noOverdraft proof has the measurement). The shared
 roster keeps inventory and the other 43 bindings: about 36 minutes of
 proofs measured in the earlier rosters, within its 100.
+
+## wallet-grist's noOverdraft proof (J7b, 2026-11-11)
+
+Wallet-grist's two bindings (`wallet.binding.yaml`, the store's side, and
+`wallet.calls.binding.yaml`, the clients') each prove one invariant,
+`noOverdraft`, to depth 8. On `514e93ff` neither finished alone: depth 5
+took 2,428 s (calls 1,684 s), and depth 6's second invariant query ran
+over 2 h 25 min and was stopped. Measured here on `514e93ff` and this
+change (Quint 0.33.1, evaluator 0.7.1, Apalache 0.62.4, 4 cores), each
+binding through `gotogether simulate -verify N` alone in its process with
+its own Apalache server (each run in a network namespace of its own, so
+that two runs' quints could not share one server on the default port). Up
+to three such runs, and at times one more Apalache job, ran on the machine
+together: every figure is for a contended machine, an upper bound for one
+run alone.
+
+**Where the time goes.** All of it is Apalache's Z3 queries, and almost
+all of that the invariant's: Apalache splits `noOverdraftIn` into its two
+conjuncts, inv0 (no account outside the credit line negative: `c`) and
+inv1 (the credit line's sum not negative), and checks each at every state.
+The clients' model has two variables (the log and the answered ids), yet
+its depth-5 proof took 1,684 s: the model's states are small, the cost was
+the balances' definitions. Ablations on the clients' model (timing only;
+semantics changed in the last two), inv1's query:
+
+| formulation | depth 4 | depth 5 |
+|---|---|---|
+| original: `balancesEvents(log, a)` (a `select` of the log), then folded; the line a `JOINT.fold` of two such balances | 158 s | about 1,720 s |
+| each balance one fold over the log adding the account's moves (by its tag; by its first string, 86 s) | 9 s | 91 s |
+| the same, the line one fold adding both accounts' moves (two conditions per event) | 8 s | 113 s |
+| the line one fold with one condition per event: the move's account in `JOINT` | 1.3 s | 5.5 s |
+| ablation of the third: inv1's bound loosened to −100 (the guard's arithmetic not needed) | | 8 s |
+| ablation of the second: every step appends exactly two events (no symbolic lengths) | | 26 s |
+
+Two terms dominated. Quint's `select` over the symbolic log is a list of
+symbolic length, each of its positions a choice over the log's, folded
+again: removing it took depth 5 from about 1,720 s to 91 s. What remained
+was the solver's case split: the line's sum as two folds (or one fold of
+two conditions) splits every event on each account, where one condition
+(`JOINT.contains(movedAccount(e))`) does not, another twentyfold. The
+loosened bound shows that what is left is the proof itself (that each
+transfer's guard keeps the sum non-negative), not the encoding of the
+sums, and fixed batch lengths show the log's symbolic positions cost a
+factor of three to four, not the growth. A funds rule choosing among
+per-account folds (`ACCOUNTS.fold` on `src`) was slower (39 s against 31 s
+for inv0 at depth 6) and was not kept.
+
+**The rewrite** (`model/wallet_rules.qnt`, written by hand; nothing
+generated changed): `balanceOf` is one fold over the log adding each moved
+event whose account (`movedAccount`, its first string) is the account, and
+`lineBalance`, the credit line's, one fold adding each moved event whose
+account is in `JOINT`, from `JOINT.size() × INITIAL`; `funds` and
+`noOverdraftIn` read it. The earlier definitions selected the events
+tagged with the account. The two are equal on every log the models hold:
+each event either model appends is made by a generated constructor
+(`moved`, `posted`, `grist.failed`, the batch stamped with its cause by
+`caused`), and `moved` tags the event with the account it stores; one move
+has one account, so a fold of one condition per event equals the sum of
+the per-account folds. Evidence:
+`examples/wallet-grist/testdata/balances.qnt` keeps the earlier
+definitions verbatim and a machine appending every such event, with every
+account (`a`, `b`, `c`, `z`), amount (−6 to 6) and cause, whose invariant
+`agree` says that every balance, every source's funds, the line's sum and
+`noOverdraftIn` itself equal the earlier ones. `quint verify` proves
+`agree` for every log of up to 7 events (each of its four conjuncts in its
+own query, 0.6, 13, 13 and 23 s at depth 6, 1.3, 85, 75 and 271 s at depth
+7; at depth 8 the first three took 3, 1,964 and 1,842 s, and the fourth,
+`noOverdraftIn`'s own equality, the earlier definition's cost, was stopped
+unfinished after 53 minutes). `TestBalancesAgree` samples it with quint
+(1,000 traces of up to 10 steps), and samples the same equality in every
+state the store's and the clients' models reach; two planted mistakes (the
+line summed over every account, a balance counting every event with the
+account's string, posted ones included) are each reported violated, by the
+test and by `quint verify` at depth 4. States, transitions, bound,
+invariant and Apalache policy are unchanged.
+
+Per depth (Apalache's `detailed.log`: the step's transitions, then each
+conjunct's check), before (`-verify 5`, the original model) and after
+(`-verify 8`):
+
+| clients' side | before: transitions | inv0 | inv1 | after: transitions | inv0 | inv1 |
+|---|---|---|---|---|---|---|
+| 3 | 2.2 s | 1.9 s | 12 s | 0.6 s | 0.2 s | 0.2 s |
+| 4 | 4.9 s | 12 s | 173 s | 0.5 s | 1.3 s | 1.1 s |
+| 5 | 8.4 s | 102 s | about 1,720 s | 0.9 s | 7.0 s | 5.8 s |
+| 6 | | | | 1.3 s | 28 s | 35 s |
+| 7 | | | | 3.5 s | 145 s | 219 s |
+| 8 | | | | 2.5 s | 890 s | about 1,460 s |
+| total | 34 min 13 s (depth 5) | | | 47 min 10 s | | |
+
+| store's side | before: transitions | inv0 | inv1 | after: transitions | inv0 | inv1 |
+|---|---|---|---|---|---|---|
+| 3 | 8.2 s | 3.2 s | 10 s | 5.0 s | 0.6 s | 0.5 s |
+| 4 | 31 s | 29 s | 152 s | 18 s | 6.2 s | 4.5 s |
+| 5 | 60 s | 161 s | about 2,340 s | 41 s | 28 s | 24 s |
+| 6 | | | | 79 s | 111 s | 142 s |
+| 7 | | | | 125 s | 744 s | 709 s |
+| 8 | | | | 224 s | 4,561 s | about 5,650 s |
+| total | 47 min 17 s (depth 5) | | | 3 h 28 min 25 s | | |
+
+A figure "about" is the invariant phase's elapsed time less the others
+logged. The clients' total before is Apalache's own (its log's first and
+last lines): the run waited 47 minutes for one of quint's two machine-wide
+slots (internal/quintcmd's admission) behind the other two. Each depth
+still multiplies the invariant queries by five or six: what is left is the
+proof's arithmetic, each transfer's guard carried to the state checked,
+which none of the formulations tried removed.
+
+Both proofs now finish depth 8 within GitHub's six-hour job: the clients'
+in 47 minutes, the store's in 3 h 28 min (its last query, inv1 at depth 8,
+about 94 minutes; the clients' model, with the same rules and fewer
+transitions, answers the same queries in a quarter to a fifth of the
+time). By the rule PR #145's `ci/verify-alone.txt` states for its groups
+(the measured cold time × 1.5 + 10 minutes), these give 81 minutes for
+wallet-grist.calls and 322 for wallet-grist, under the 360-minute ceiling,
+where #145 gave both the ceiling, expecting them unfinished. Measured on a
+contended machine; a run alone may be faster.

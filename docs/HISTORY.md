@@ -9658,3 +9658,31 @@ Wallet-grist's two proofs did not finish alone in hours on its model then
 alone in 3 h 28 min and 47 min, and their groups' limits are 322 and 81
 minutes by the same rule. Inventory, now 1,049 s cold, stays in the shared roster
 (docs/performance.md).
+
+### J7b: wallet-grist's noOverdraft proof, 2026-11-11
+
+Wallet-grist's depth-8 proofs (`wallet.binding.yaml` and
+`wallet.calls.binding.yaml`, one invariant each, `noOverdraft`) did not
+finish alone in hours on `514e93ff`: depth 6's second invariant query ran
+over 2 h 25 min. Measured with Quint 0.33.1, evaluator 0.7.1 and Apalache
+0.62.4 (details in [performance.md](performance.md#wallet-grists-nooverdraft-proof-j7b-2026-11-11)),
+all of the time is Apalache's Z3 queries on `noOverdraftIn`'s two conjuncts,
+and the cost was the balances' definitions, not the model's state: the
+clients' model, two variables, took 1,720 s for one query at depth 5.
+`balanceOf` selected the read model's events from the symbolic log (a list
+of symbolic length) and folded them, and the credit line summed two such
+balances, so that the solver split every event on each account.
+
+`balanceOf` is now one fold over the log adding the account's moves, and
+the credit line's sum (`lineBalance`) one fold with one condition per event
+(the move's account in `JOINT`). They equal the earlier definitions on every
+log the models hold, every event being a generated constructor's and a
+move's account its tag's: `examples/wallet-grist/testdata/balances.qnt`
+keeps the earlier definitions, `quint verify` proves the equality for every
+log of up to 7 events, `TestBalancesAgree` samples it there and in every
+state both models reach, and two planted mistakes are caught. States,
+transitions, bound, invariant and Apalache policy are unchanged; nothing
+generated changed. The clients' depth-8 proof now takes 47 minutes and the
+store's 3 h 28 min, on a machine shared with up to three other proofs. Each
+depth still multiplies the invariant queries by five or six: the rest is
+the proof's own arithmetic.
