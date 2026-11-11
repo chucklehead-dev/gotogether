@@ -72,6 +72,10 @@ and adds a line here.
   mutation to its local ID in every binary, and require every suite baseline
   to pass before reporting mutant results.
 
+- Store crash and reset cleanup releases transaction ownership directly, without
+  allocating and sorting a temporary handle list. Lifecycle controls cover roster,
+  lock and admission ownership across completion, reset and process crashes.
+
 - Integer set folds prove that every ordering fits bounded model integers,
   including intermediate arithmetic. Potential overflow falls back to Quint
   instead of returning a value from one backend-specific order.

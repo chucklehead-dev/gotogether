@@ -1,7 +1,6 @@
 package qenv
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -182,15 +181,12 @@ func NewStore(s *Sim, name string, iso Isolation) *Store {
 		st.hist = history.New([...]int{history.Serializable, history.SnapshotIsolation, history.ReadCommitted}[iso])
 	}
 	s.OnCrash(func(p *Process) {
-		var txs []*tx
+		// Ending owners has no scheduling seam or callback. Deleting the
+		// current roster entry during iteration leaves other owners untouched.
 		for tx := range st.open {
 			if tx.proc == p {
-				txs = append(txs, tx)
+				tx.end()
 			}
-		}
-		slices.SortFunc(txs, func(a, b *tx) int { return cmp.Compare(a.id, b.id) })
-		for _, tx := range txs {
-			tx.end()
 		}
 	})
 	return st
