@@ -200,7 +200,7 @@ jobs:
           go-version-file: go.mod
       - name: mutants of ${{ matrix.pkg }}
         env:
-          JOBS: 4 # qenv's 892 mutants, about ten seconds each
+          JOBS: 4 # bounded concurrent source mutations
         run: ci/mutate-core.sh ${{ matrix.pkg }} ${{ matrix.max }}
       - name: retain mutation campaign evidence
         if: always()
