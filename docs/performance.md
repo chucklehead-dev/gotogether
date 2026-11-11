@@ -1081,3 +1081,32 @@ with a nested fold for each average's prefix, were equal or slower at
 depth 6. Their cost follows the symbolic state the steps build (a log of
 events with lists and tag sets, merged over 22 transitions), not their own
 expressions, so counters still needs about 40 minutes cold.
+
+## The grist proofs in a job of their own (2026-11-11)
+
+Measured on main `514e93ff` (the library folds and inventory's map-free
+`used` merged), each binding alone and cold through the CLI at depth 8,
+four proofs at once on four cores, each with its own Apalache server:
+
+| binding | cold time |
+|---|---|
+| inventory | 1,049 s |
+| counters | 2,177 s |
+| counters.real | 2,313 s (no reuse when run alone) |
+| counters.retiring | 2,394 s (likewise) |
+| library.calls | 4,695 s |
+| library | 6,013 s |
+| wallet-grist | unfinished: depth 5 in 2,428 s, then depth 6's second invariant query ran 2 h 25 min and was stopped |
+| wallet-grist.calls | unfinished: depth 5 in 1,684 s, then depth 6's second query ran 2 h 48 min and was stopped |
+
+The nightly now runs counters (with its real and retiring variants in one
+session), library, library.calls, wallet-grist and wallet-grist.calls in
+`verify-alone`, one runner per group of `ci/verify-alone.txt`, each limit
+1.5 times its measurement plus 10 minutes, cited there. Wallet-grist's
+proofs fit no limit GitHub allows: their groups have its 360-minute
+ceiling and are expected to end unfinished, red, until their proofs get
+cheaper. Wallet-grist's slow query is `noOverdraft`'s sum over the credit
+line, arithmetic over every reachable sequence of transfers. Listing the
+line instead of folding over its set changed nothing at depth 4. The shared
+roster keeps inventory and the other 43 bindings: about 36 minutes of
+proofs measured in the earlier rosters, within its 100.

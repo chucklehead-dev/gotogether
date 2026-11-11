@@ -9641,3 +9641,19 @@ trace of up to 10 steps, and grist's tests sample it. Counters proves in
 2,438 s, 1.4 times faster: still far above a fair share of the roster.
 Rewrites of its invariants did not help, their cost being the symbolic
 state's. No bound, model behaviour or check changed.
+
+### The grist proofs in a job of their own, 2026-11-11
+
+The maintainer moved the grist apps' slow proofs out of the shared verifier
+roster rather than trim them. `verify-alone` runs counters (with real and
+retiring in one session), library, library.calls, wallet-grist and
+wallet-grist.calls, a runner per group of `ci/verify-alone.txt`, each
+limit its measured cold time on main times 1.5 plus 10 minutes. Depth 8,
+every check and the unfinished-is-red rule are unchanged, and the shared
+roster's two hours are too. `ci/verify-roster.sh` splits the bindings, and
+internal/ciconfig fails if a binding is in neither roster or in both.
+Wallet-grist's two proofs did not finish alone in hours (depth 6's second
+invariant query ran over 2 h 25 min). Their groups get GitHub's 360-minute
+ceiling and are expected to stay unfinished and red: an open cost, not a
+pass. Inventory, now 1,049 s cold, stays in the shared roster
+(docs/performance.md).
