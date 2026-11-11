@@ -1522,13 +1522,20 @@ func (s *Sim) turn(n int, cands []*task) int {
 // waiters, merged by id.
 func (s *Sim) runnableIDs(n int, cands []*task) []int {
 	ids := make([]int, 0, n)
-	q, c := s.runq.total(), 0
-	for j := 0; j < q || c < len(cands); {
-		if c < len(cands) && (j >= q || cands[c].id < s.runq.kth(j)) {
+	q, j, c := s.runq.total(), 0, 0
+	for j < q && c < len(cands) {
+		id := s.runq.kth(j)
+		if cands[c].id < id {
 			ids, c = append(ids, cands[c].id), c+1
 		} else {
-			ids, j = append(ids, s.runq.kth(j)), j+1
+			ids, j = append(ids, id), j+1
 		}
+	}
+	for ; j < q; j++ {
+		ids = append(ids, s.runq.kth(j))
+	}
+	for ; c < len(cands); c++ {
+		ids = append(ids, cands[c].id)
 	}
 	return ids
 }
