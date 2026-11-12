@@ -215,26 +215,70 @@ checkout root, `GOROOT`, `GOMODCACHE`) and nothing else dropped or relaxed:
   Go toolchain binaries, `go`, `sh` and `timeout`, each by content; the Go
   version; the digest of qweave's generated overlay bytes;
 - configuration: the journal version, JOBS, MEM_MB, the per-test timeout, the
-  discovery arguments and the recorded `go env` settings.
+  discovery arguments and the recorded `go env` settings;
+- semantic environment: every variable that can change what a test checks,
+  by value, with unset distinguished from set-empty (`env.go`'s
+  `semanticKeys`, always listed; and any present variable with a prefix of
+  `semanticPrefixes`, listed when set). It covers Go's runtime and build mode
+  (`GODEBUG`, `GOFLAGS`, `GOEXPERIMENT`, `CGO_ENABLED`, `GOMAXPROCS`, `GOGC`,
+  ...), `TZ` and locale, `CI`, `JOBS`, `MEM_MB`, every `GOTOGETHER_*` and
+  `QUINT_*` variable the module names (`GOTOGETHER_CHECK`, `_STRICT`,
+  `_EVAL`, `_EVAL_SAMPLE`, `_SEEDS`, `_RUN`, ...), native-tool settings
+  validate checks (`NODE_OPTIONS`, `LD_PRELOAD`, `JAVA_TOOL_OPTIONS`, ...),
+  the fixture switches tests read in their child processes, and
+  `GITHUB_RUN_ID`/`GITHUB_RUN_ATTEMPT`, so the shards are one run's one
+  attempt;
+- tools on PATH: the external programs tests look up and skip or change on
+  (`quint`, `node`, `java`, `docker`, `kind`, `kwok`, ...), found or not and by
+  content.
 
 Each shard's *execution identity* stays its own: its `input_digest` (the exact
-inherited environment and absolute paths, unchanged), runtime environment
-digest, root, tool paths, journal and worker execution. It differs between
-runners and is retained, per shard, in the aggregate receipt; it is not
-compared. Limitations of this boundary:
+inherited environment, every value, and absolute paths, unchanged), runtime
+environment digest, root, tool paths, journal, worker execution, and the names
+of its present runner-only variables (`PATH`, `HOME`, `TMPDIR`, `XDG_*`,
+`GOPATH`, `GOCACHE`, `GOPROXY`, proxies and certificates, `RUNNER_*`,
+`GITHUB_*` but the run and attempt, `GOTOGETHER_MUTATION_LOG`, ...) and of its
+unclassified ones. These differ between runners and are retained, per shard,
+in the aggregate receipt; they are not compared.
 
-- a test reading an environment variable outside `go env` may behave
-  differently on different runners, and that difference is not detected;
+The boundary, precisely:
+
+- every variable the module's code reads by a literal name is classified, and
+  every toolkit or quint name is a semantic key (`TestEnvironmentReadsAreClassified`
+  scans the root module; a new read must be classified to pass). A variable
+  read through a name built at run time, or by a dependency, and not
+  classified, is unclassified: recorded by name per shard, not compared;
+- a runner-only variable that a test nonetheless depends on (a different
+  `HOME`'s configuration, a proxy) is not compared, nor the files such
+  variables point to beyond the collected inputs;
 - built binaries embed the checkout path, so shards must run from the same
   path (GitHub's runners check out at one fixed path); a different path fails
-  closed as a generator or binary disagreement, not silently;
+  closed as a generator or binary disagreement, and so does any other absolute
+  path outside the three anchors;
 - a shard whose input collection was unavailable (an unsupported `GOFLAGS`,
-  `GOCACHEPROG` or aspect tool) is sealed as before but has no shared identity,
-  and fails any aggregate;
+  `GOCACHEPROG` or aspect tool) is sealed as before, admission-ineligible, but
+  has no shared identity, and fails any aggregate;
+- qweave's generated overlays are compared as a sorted multiset of builds
+  (each build's replaced sources by anchored path and content): capture order
+  is ignored, multiplicity is not;
 - the closure limitations above (native headers and libraries, VCS metadata,
   runtime reads, external services, hostile concurrent modification) apply to
-  each shard and so to the aggregate; receipts are not authenticated, and the
-  aggregate checks their consistency, not who wrote them.
+  each shard and so to the aggregate. Receipts are not authenticated: the
+  canonical re-encoding is a shape check, alongside the consistency checks,
+  not a signature.
+
+### Retries
+
+Shard artifacts are named by package and shard, not by attempt. A re-run
+attempt (`github.run_attempt` > 1) of a split package's shard fails at its
+first step, and the helper refuses it too, with the fix: dispatch a fresh run
+of the package, `gh workflow run nightly.yml --ref <ref> -f jobs=core-mutants
+-f mutants=<package>`. Such a run is partial and does not count for J7c. The
+aggregate refuses shards of any run or attempt other than its own (it reads
+the gate job's `GITHUB_RUN_ID` and `GITHUB_RUN_ATTEMPT`), so a re-run gate
+never aggregates an earlier attempt's evidence. Each shard keeps the job's
+120-minute allowance; JOBS must be the same on every shard, and the aggregate
+reports the total concurrency, shards × JOBS.
 
 In the nightly, `ci/core-mutants.txt` gives a row `shards=N`; `ci/nightly-select.sh`
 expands it into a matrix entry per shard (artifact

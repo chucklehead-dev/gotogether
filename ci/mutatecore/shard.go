@@ -159,6 +159,10 @@ type sharedConfig struct {
 	TimeoutSeconds int               `json:"timeout_seconds"`
 	Discovery      []string          `json:"discovery_arguments"`
 	GoEnv          map[string]string `json:"go_env"`
+	// Environment is every semantic variable, set or unset (env.go), and
+	// PathTools the external programs tests look up, by content.
+	Environment []envSetting `json:"semantic_environment"`
+	PathTools   []pathTool   `json:"path_tools"`
 }
 
 // sourceIdentity digests the static input files (content, size, mode, link)
@@ -253,6 +257,7 @@ func sharedIdentityOf(r completionReceipt) (sharedIdentity, error) {
 	for k, v := range in.Settings {
 		id.Config.GoEnv[k] = a.path(v)
 	}
+	id.Config.Environment, id.Config.PathTools = r.Inputs.Environment.Semantic, r.Inputs.Environment.Tools
 	files := make([]inputFile, len(in.Files))
 	for i, f := range in.Files {
 		f.Path, f.Resolved = a.path(f.Path), a.path(f.Resolved)
@@ -344,7 +349,10 @@ func differingBlock(a, b sharedIdentity) string {
 		name string
 		x, y any
 	}{
-		{"package", a.Package, b.Package}, {"shard count", a.Shards, b.Shards}, {"configuration (journal version, JOBS, MEM_MB, per-test timeout, discovery, go env)", a.Config, b.Config},
+		{"package", a.Package, b.Package}, {"shard count", a.Shards, b.Shards},
+		{"semantic environment " + differingSetting(a.Config.Environment, b.Config.Environment), a.Config.Environment, b.Config.Environment},
+		{"tools on PATH (" + differingTool(a.Config.PathTools, b.Config.PathTools) + ")", a.Config.PathTools, b.Config.PathTools},
+		{"configuration (journal version, JOBS, MEM_MB, per-test timeout, discovery, go env)", a.Config, b.Config},
 		{"source files", a.Source, b.Source}, {"candidate inventory", a.Candidates, b.Candidates}, {"suite roster and binaries", a.Suites, b.Suites},
 		{"generator, compiler and execution tools", a.Generator, b.Generator},
 	} {
@@ -352,6 +360,57 @@ func differingBlock(a, b sharedIdentity) string {
 		dy, _ := valueDigest(block.y)
 		if dx != dy {
 			return block.name
+		}
+	}
+	return ""
+}
+
+// differingSetting names the first semantic variable two shards disagree on.
+func differingSetting(a, b []envSetting) string {
+	show := func(s envSetting, ok bool) string {
+		switch {
+		case !ok:
+			return "not classified"
+		case !s.Set:
+			return "unset"
+		}
+		return fmt.Sprintf("%q", s.Value)
+	}
+	byName := func(l []envSetting) map[string]envSetting {
+		m := map[string]envSetting{}
+		for _, s := range l {
+			m[s.Name] = s
+		}
+		return m
+	}
+	ma, mb := byName(a), byName(b)
+	var names []string
+	for k := range ma {
+		names = append(names, k)
+	}
+	for k := range mb {
+		if _, ok := ma[k]; !ok {
+			names = append(names, k)
+		}
+	}
+	slices.Sort(names)
+	for _, k := range names {
+		x, okx := ma[k]
+		y, oky := mb[k]
+		if okx != oky || x != y {
+			return fmt.Sprintf("(%s: %s, then %s)", k, show(x, okx), show(y, oky))
+		}
+	}
+	return ""
+}
+
+func differingTool(a, b []pathTool) string {
+	for i := range max(len(a), len(b)) {
+		if i >= len(a) || i >= len(b) || a[i] != b[i] {
+			if i < len(a) {
+				return a[i].Name
+			}
+			return b[i].Name
 		}
 	}
 	return ""

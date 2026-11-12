@@ -61,6 +61,9 @@ type provenanceContext struct {
 	Unavailable              string        `json:"unavailable,omitempty"`
 	Discovery                []byte        `json:"discovery"`
 	RuntimeEnvironmentDigest string        `json:"runtime_environment_digest"`
+	// Environment classifies the same inherited environment: semantic
+	// variables by value (shared by every shard), the rest by name.
+	Environment semanticEnvironment `json:"environment"`
 }
 type completionReceipt struct {
 	Builds            []buildInvocation    `json:"builds"`
@@ -201,6 +204,7 @@ func collectContext(ctx context.Context, root, pkg string) (provenanceContext, e
 	// Sorting makes this independent of the process environment's enumeration.
 	slices.Sort(env)
 	c.RuntimeEnvironmentDigest, _ = valueDigest(env)
+	c.Environment = currentEnvironment()
 	return c, nil
 }
 
@@ -385,7 +389,8 @@ func run(ctx context.Context) error {
 // identityBoundary is read-only after initialization.
 var identityBoundary = []string{
 	"shared identity: source files, Go discovery, candidate inventory, suite roster and binaries, generator, compiler and execution tools, and campaign configuration, by content, with the checkout root, GOROOT and GOMODCACHE path prefixes made relative and nothing else relaxed",
-	"execution identity (input_digest: the exact inherited environment and absolute paths) is per runner and is not compared across shards; tests reading environment variables outside go env may behave differently on different runners",
+	"shared semantic environment: every classified semantic variable by value (unset distinct from empty) and the tools on PATH tests look up, by content; runner-only and unclassified variables are recorded by name per shard and not compared",
+	"execution identity (input_digest: the exact inherited environment and absolute paths) is per runner and is not compared across shards",
 }
 
 const usage = "usage: mutatecore root [-shard i/n] core-package [max-survivors]\n       mutatecore aggregate core-package max-survivors shards evidence-dir"
@@ -412,6 +417,9 @@ func parseCampaign(args []string) (workerConfig, error) {
 		return cfg, errors.New(usage)
 	}
 	cfg.Package = args[0]
+	if err := refuseRerun(cfg, os.Getenv("GITHUB_RUN_ATTEMPT"), os.Getenv("GITHUB_REF_NAME")); err != nil {
+		return cfg, err
+	}
 	var err error
 	cfg.Root, err = filepath.Abs(cfg.Root)
 	if err != nil {
@@ -427,6 +435,20 @@ func parseCampaign(args []string) (workerConfig, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// refuseRerun: a shard's artifact is named by its package and shard alone,
+// so a re-run attempt of one shard job would meet its earlier attempt's
+// evidence. The supported retry is a fresh dispatch of the package, whose
+// shards are all one run's first attempt.
+func refuseRerun(cfg workerConfig, attempt, ref string) error {
+	if cfg.Shard.Count == 1 || attempt == "" || attempt == "1" {
+		return nil
+	}
+	if ref == "" {
+		ref = "<ref>"
+	}
+	return fmt.Errorf("shard %s of %s is attempt %s of its workflow run: a split campaign is not re-run in place (its shards would mix attempts). Dispatch a fresh run of the package instead: gh workflow run nightly.yml --ref %s -f jobs=core-mutants -f mutants=%s", cfg.Shard, cfg.Package, attempt, ref, cfg.Package)
 }
 
 func verifyOwnedBuild(ctx context.Context, cfg workerConfig, result workerResult, producer fileIdentity, tools []fileIdentity) error {

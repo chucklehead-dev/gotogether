@@ -27,6 +27,7 @@ type aggregateReceipt struct {
 	JobsPerShard         int              `json:"jobs_per_shard"`
 	AggregateConcurrency int              `json:"aggregate_concurrency"`
 	Shared               sharedIdentity   `json:"shared"`
+	Run                  workflowRun      `json:"run"`
 	Executions           []shardExecution `json:"executions"`
 	Total                int              `json:"total"`
 	Survivors            int              `json:"survivors"`
@@ -49,6 +50,35 @@ type shardExecution struct {
 	WorkerExecution          executionResult `json:"worker_execution"`
 	Selected                 int             `json:"selected"`
 	Survivors                int             `json:"survivors"`
+	RunnerOnlyEnvironment    []string        `json:"runner_only_environment"`
+	UnclassifiedEnvironment  []string        `json:"unclassified_environment"`
+}
+
+// workflowRun is the run and attempt every shard (and the gate, when it runs
+// in one) belongs to. Locally, outside a workflow, both are unset.
+type workflowRun struct {
+	ID      envSetting `json:"id"`
+	Attempt envSetting `json:"attempt"`
+}
+
+func runOf(env []envSetting) workflowRun {
+	var r workflowRun
+	for _, s := range env {
+		switch s.Name {
+		case "GITHUB_RUN_ID":
+			r.ID = s
+		case "GITHUB_RUN_ATTEMPT":
+			r.Attempt = s
+		}
+	}
+	return r
+}
+
+func (r workflowRun) String() string {
+	if !r.ID.Set {
+		return "no workflow run"
+	}
+	return fmt.Sprintf("run %s attempt %s", r.ID.Value, r.Attempt.Value)
 }
 
 type shardEvidence struct {
@@ -79,7 +109,8 @@ func runAggregate(ctx context.Context, args []string) error {
 	if err != nil || shards < 2 {
 		return errors.New("aggregate: shards must be 2 or more (an unsharded campaign applies its own max)")
 	}
-	receipt, err := aggregate(pkg, max, shards, dir)
+	gate := runOf(classifyEnvironment(os.Environ(), func(string) (string, error) { return "", errors.New("unused") }).Semantic)
+	receipt, err := aggregate(pkg, max, shards, dir, gate)
 	if err != nil {
 		return fmt.Errorf("aggregate %s: %w", pkg, err)
 	}
@@ -103,7 +134,10 @@ func runAggregate(ctx context.Context, args []string) error {
 // of each index, every journal sealed, one shared identity, every recorded
 // outcome valid, and the shards' outcomes disjoint with their union exactly
 // the full inventory. Only then is max applied, once, to the summed survivors.
-func aggregate(pkg string, max, shards int, dir string) (aggregateReceipt, error) {
+//
+// gate is the aggregate's own workflow run: when it has one, every shard must
+// be of that run and attempt, so evidence of an earlier attempt is refused.
+func aggregate(pkg string, max, shards int, dir string, gate workflowRun) (aggregateReceipt, error) {
 	var result aggregateReceipt
 	receipts, unsealed, err := scanEvidence(dir)
 	if err != nil {
@@ -153,6 +187,11 @@ func aggregate(pkg string, max, shards int, dir string) (aggregateReceipt, error
 			problems = append(problems, fmt.Sprintf("shard %s's shared identity differs from shard %s's: %s", e.receipt.Shard, ordered[0].receipt.Shard, block))
 		}
 	}
+	for _, e := range ordered {
+		if run := runOf(e.shared.Config.Environment); gate.ID.Set && run != gate {
+			problems = append(problems, fmt.Sprintf("shard %s is of %s, the gate of %s: evidence of another run or attempt is never aggregated (dispatch a fresh run: gh workflow run nightly.yml --ref <ref> -f jobs=core-mutants -f mutants=%s)", e.receipt.Shard, run, gate, pkg))
+		}
+	}
 	if len(problems) > 0 {
 		return result, errors.New(strings.Join(problems, "\n  "))
 	}
@@ -166,7 +205,7 @@ func aggregate(pkg string, max, shards int, dir string) (aggregateReceipt, error
 		slices.Sort(problems)
 		return result, errors.New(strings.Join(problems, "\n  "))
 	}
-	result = aggregateReceipt{Version: receiptVersion, Package: pkg, Max: max, Shards: shards, Shared: ordered[0].shared}
+	result = aggregateReceipt{Version: receiptVersion, Package: pkg, Max: max, Shards: shards, Shared: ordered[0].shared, Run: runOf(ordered[0].shared.Config.Environment)}
 	result.JobsPerShard = result.Shared.Config.Jobs
 	result.AggregateConcurrency = shards * result.JobsPerShard
 	survived := map[source]bool{}
@@ -183,7 +222,7 @@ func aggregate(pkg string, max, shards int, dir string) (aggregateReceipt, error
 			}
 		}
 		r := e.receipt
-		result.Executions = append(result.Executions, shardExecution{Shard: r.Shard.Index, Receipt: e.file, Journal: e.journal, RecordedJournalPath: r.Journal.Path, InputDigest: r.InputDigest, RuntimeEnvironmentDigest: r.Inputs.RuntimeEnvironmentDigest, Root: e.start.Root, Producer: r.Producer, ExecutionTools: r.ExecutionTools, WorkerExecution: r.WorkerExecution, Selected: r.Complete.Total, Survivors: r.Complete.Survivors})
+		result.Executions = append(result.Executions, shardExecution{Shard: r.Shard.Index, Receipt: e.file, Journal: e.journal, RecordedJournalPath: r.Journal.Path, InputDigest: r.InputDigest, RuntimeEnvironmentDigest: r.Inputs.RuntimeEnvironmentDigest, Root: e.start.Root, Producer: r.Producer, ExecutionTools: r.ExecutionTools, WorkerExecution: r.WorkerExecution, Selected: r.Complete.Total, Survivors: r.Complete.Survivors, RunnerOnlyEnvironment: r.Inputs.Environment.RunnerOnly, UnclassifiedEnvironment: r.Inputs.Environment.Unclassified})
 		result.Total += r.Complete.Total
 	}
 	for _, c := range inventory.Sources {

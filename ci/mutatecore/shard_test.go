@@ -1,10 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"syscall"
@@ -116,10 +119,10 @@ func TestUnionIsExactAndDisjoint(t *testing.T) {
 const shardedGenerator = `package main
 import("os";"strings")
 func main(){
- var out string
- for i,a:=range os.Args {if a=="-o"&&i+1<len(os.Args){out=os.Args[i+1]}}
+ var out,root string
+ for i,a:=range os.Args {if i+1<len(os.Args){if a=="-o"{out=os.Args[i+1]};if a=="-C"{root=os.Args[i+1]}}}
  lines:=[]string{"qmut: mutant 0 sample/source.go:1 f: drop call (f())","qmut: mutant 1 sample/source.go:1 f: drop call (f())","qmut: mutant 2 sample/source.go:2 g: negate if (x)","qmut: mutant 3 sample/other.go:1 h: drop call (h())","qmut: mutant 4 sample/other.go:2 h: drop call (k())"}
- if os.Getenv("FIXTURE_EXTRA")!=""{lines=append(lines,"qmut: mutant 5 sample/other.go:3 z: drop call (z())")}
+ if _,err:=os.Stat(root+"/extra-mutant");err==nil{lines=append(lines,"qmut: mutant 5 sample/other.go:3 z: drop call (z())")}
  script:="#!/bin/sh\ncase \"$GOTOGETHER_MUTANT\" in\nlist) printf '%s\\n' '"+strings.Join(lines,"' '")+"'; exit 0;;\n0|3) exit 1;;\n1|2|4) [ -n \"$FIXTURE_SLEEP\" ] && exec sleep 60;;\nesac\nexit 0\n"
  if err:=os.WriteFile(out,[]byte(script),0700);err!=nil{panic(err)}
 }
@@ -188,7 +191,9 @@ func TestShardedCampaignAggregatesOnceAndFailsClosed(t *testing.T) {
 	}
 	root := shardedFixture(t)
 	env := func(extra ...string) map[string]string {
-		m := map[string]string{"FIXTURE_EXTRA": "", "FIXTURE_SLEEP": ""}
+		// one workflow run's first attempt; test modes unset unless a case
+		// sets one (the inherited environment is the same for every run)
+		m := map[string]string{"FIXTURE_EXTRA": "", "FIXTURE_SLEEP": "", "GITHUB_RUN_ID": "7", "GITHUB_RUN_ATTEMPT": "1", "GOTOGETHER_CHECK": unsetEnv, "RUNNER_NAME": "runner-a", "ZZ_LOCAL_ONLY": unsetEnv}
 		for i := 0; i+1 < len(extra); i += 2 {
 			m[extra[i]] = extra[i+1]
 		}
@@ -199,7 +204,8 @@ func TestShardedCampaignAggregatesOnceAndFailsClosed(t *testing.T) {
 		t.Fatalf("unsharded campaign over its max not red: %d\n%s", whole.exit, whole.output)
 	}
 	s0 := runFixtureCampaign(t, helper, root, "s0", env(), "-shard", "0/2", "sample")
-	s1 := runFixtureCampaign(t, helper, root, "s1", env(), "-shard", "1/2", "sample")
+	// another runner: its own runner-only and unclassified variables
+	s1 := runFixtureCampaign(t, helper, root, "s1", env("RUNNER_NAME", "runner-b", "ZZ_LOCAL_ONLY", "x"), "-shard", "1/2", "sample")
 	for _, s := range []campaignRun{s0, s1} {
 		if s.exit != 0 || !strings.Contains(s.output, "no limit applied here") {
 			t.Fatalf("a complete shard applied a limit or failed: %d\n%s", s.exit, s.output)
@@ -254,16 +260,58 @@ func TestShardedCampaignAggregatesOnceAndFailsClosed(t *testing.T) {
 		if receipt.Total != rw.Complete.Total || receipt.Survivors != rw.Complete.Survivors {
 			t.Fatal("aggregate differs from the unsharded campaign")
 		}
-		if receipt.Executions[0].InputDigest == receipt.Executions[1].InputDigest {
+		// distinct execution identities are retained, each shard's own, and
+		// not compared: the shards ran with different runner-only and
+		// unclassified variables
+		for i, r := range []completionReceipt{r0, r1} {
+			e := receipt.Executions[i]
+			if e.Shard != i || e.InputDigest != r.InputDigest || e.RuntimeEnvironmentDigest != r.Inputs.RuntimeEnvironmentDigest || e.RecordedJournalPath != r.Journal.Path || !slices.Contains(e.RunnerOnlyEnvironment, "RUNNER_NAME") {
+				t.Fatalf("shard %d's execution identity not retained: %+v", i, e)
+			}
+		}
+		if receipt.Executions[0].InputDigest == receipt.Executions[1].InputDigest || receipt.Executions[0].RuntimeEnvironmentDigest == receipt.Executions[1].RuntimeEnvironmentDigest {
 			t.Fatal("execution identities collapsed")
 		}
-		if got, err := aggregate("sample", 3, 2, evidence(t, s0, s1)); err != nil || !got.GatePassed {
+		if slices.Contains(receipt.Executions[0].UnclassifiedEnvironment, "ZZ_LOCAL_ONLY") || !slices.Contains(receipt.Executions[1].UnclassifiedEnvironment, "ZZ_LOCAL_ONLY") {
+			t.Fatal("unclassified variables not retained per shard")
+		}
+		if got, err := aggregate("sample", 3, 2, evidence(t, s0, s1), workflowRun{}); err != nil || !got.GatePassed {
 			t.Fatalf("summed survivors at the max: %+v %v", got, err)
 		}
 	})
 
-	extra := runFixtureCampaign(t, helper, root, "extra", env("FIXTURE_EXTRA", "1"), "-shard", "1/2", "sample")
-	jobs := runFixtureCampaign(t, helper, root, "jobs", map[string]string{"JOBS": "2", "FIXTURE_EXTRA": "", "FIXTURE_SLEEP": ""}, "-shard", "1/2", "sample")
+	// a file the generator reads, outside the collected Go inputs: the
+	// inventory differs while source, environment and tools agree
+	writeInputFixture(t, root, "extra-mutant", "1")
+	extra := runFixtureCampaign(t, helper, root, "extra", env(), "-shard", "1/2", "sample")
+	mustRemove(t, filepath.Join(root, "extra-mutant"))
+	jobs := runFixtureCampaign(t, helper, root, "jobs", env("JOBS", "2"), "-shard", "1/2", "sample")
+	checked := runFixtureCampaign(t, helper, root, "checked", env("GOTOGETHER_CHECK", "1"), "-shard", "1/2", "sample")
+	checkEmpty := runFixtureCampaign(t, helper, root, "check-empty", env("GOTOGETHER_CHECK", ""), "-shard", "1/2", "sample")
+	otherRun := runFixtureCampaign(t, helper, root, "other-run", env("GITHUB_RUN_ID", "8"), "-shard", "1/2", "sample")
+	writeInputFixture(t, root, "sample/source.go", "package sample\nfunc f() { _ = 1 }\n")
+	changedSource := runFixtureCampaign(t, helper, root, "changed-source", env(), "-shard", "1/2", "sample")
+	writeInputFixture(t, root, "sample/source.go", "package sample\nfunc f() {}\n")
+	// the same helper source built otherwise: another producer executable
+	helper2 := filepath.Join(t.TempDir(), "mutatecore")
+	build2 := exec.CommandContext(t.Context(), "go", "build", "-trimpath", "-o", helper2, ".")
+	build2.Env = supervisorFixtureEnv(nil)
+	if b, err := build2.CombinedOutput(); err != nil {
+		t.Fatalf("build second supervisor: %v\n%s", err, b)
+	}
+	otherProducer := runFixtureCampaign(t, helper2, root, "other-producer", env(), "-shard", "1/2", "sample")
+	rerun := runFixtureCampaign(t, helper, root, "rerun", env("GITHUB_RUN_ATTEMPT", "2", "GITHUB_REF_NAME", "main"), "-shard", "1/2", "sample")
+	if rerun.exit != 1 || !strings.Contains(rerun.output, "attempt 2 of its workflow run") || !strings.Contains(rerun.output, "gh workflow run nightly.yml --ref main -f jobs=core-mutants -f mutants=sample") {
+		t.Fatalf("a re-run attempt of a shard was not refused with the fresh-dispatch fix: %d\n%s", rerun.exit, rerun.output)
+	}
+	if _, err := os.Stat(rerun.dir); !os.IsNotExist(err) {
+		t.Fatal("a refused re-run started a journal")
+	}
+	for _, r := range []campaignRun{checked, checkEmpty, otherRun, changedSource, otherProducer} {
+		if r.exit != 0 {
+			t.Fatalf("fixture shard failed: %s", r.output)
+		}
+	}
 	of3 := runFixtureCampaign(t, helper, root, "of3", env(), "-shard", "1/3", "sample")
 	for _, r := range []campaignRun{extra, jobs, of3} {
 		if r.exit != 0 {
@@ -281,7 +329,7 @@ func TestShardedCampaignAggregatesOnceAndFailsClosed(t *testing.T) {
 		{"missing shard", func() string { return evidence(t, s0) }, 2, "missing shard 1/2"},
 		{"duplicate shard", func() string { return evidence(t, s0, s1, s1) }, 2, "duplicate shard 1/2"},
 		{"inventory differs", func() string { return evidence(t, s0, extra) }, 2, "candidate inventory"},
-		{"shared configuration differs", func() string { return evidence(t, s0, jobs) }, 2, "configuration"},
+		{"JOBS differs", func() string { return evidence(t, s0, jobs) }, 2, `semantic environment (JOBS: "1", then "2")`},
 		{"shard of another split", func() string { return evidence(t, s0, s1, of3) }, 2, "not one of 2"},
 		{"row's shard count differs", func() string { return evidence(t, s0, s1) }, 3, "missing shard 2/3"},
 		{"canceled shard", func() string { return evidence(t, s0, s1, canceled) }, 2, "aborted (canceled or failed)"},
@@ -319,6 +367,38 @@ func TestShardedCampaignAggregatesOnceAndFailsClosed(t *testing.T) {
 			return dir
 		}, 2, "not in the current strict shape"},
 		{"no evidence", func() string { return t.TempDir() }, 2, "no sealed shard receipt"},
+		{"test mode differs", func() string { return evidence(t, s0, checked) }, 2, `semantic environment (GOTOGETHER_CHECK: unset, then "1")`},
+		{"unset differs from empty", func() string { return evidence(t, s0, checkEmpty) }, 2, `semantic environment (GOTOGETHER_CHECK: unset, then "")`},
+		{"another workflow run", func() string { return evidence(t, s0, otherRun) }, 2, `semantic environment (GITHUB_RUN_ID: "7", then "8")`},
+		{"source file changed", func() string { return evidence(t, s0, changedSource) }, 2, "source files"},
+		{"producer executable changed", func() string { return evidence(t, s0, otherProducer) }, 2, "generator, compiler and execution tools"},
+		{"compiler binary changed", func() string {
+			dir := evidence(t, s0, s1)
+			reseal(t, filepath.Join(dir, "mutations-sample-shard-b"), func(r *completionReceipt) { r.Inputs.Inputs.Tools[0].SHA256 = strings.Repeat("0", 64) })
+			return dir
+		}, 2, "generator, compiler and execution tools"},
+		{"qweave binary changed", func() string {
+			dir := evidence(t, s0, s1)
+			reseal(t, filepath.Join(dir, "mutations-sample-shard-b"), func(r *completionReceipt) { r.Qweave.SHA256 = strings.Repeat("0", 64) })
+			return dir
+		}, 2, "generator, compiler and execution tools"},
+		{"generated overlay bytes changed", func() string {
+			dir := evidence(t, s0, s1)
+			reseal(t, filepath.Join(dir, "mutations-sample-shard-a"), withOverlay("11", 1))
+			reseal(t, filepath.Join(dir, "mutations-sample-shard-b"), withOverlay("22", 1))
+			return dir
+		}, 2, "generator, compiler and execution tools"},
+		{"generated overlay multiplicity changed", func() string {
+			dir := evidence(t, s0, s1)
+			reseal(t, filepath.Join(dir, "mutations-sample-shard-a"), withOverlay("11", 1))
+			reseal(t, filepath.Join(dir, "mutations-sample-shard-b"), withOverlay("11", 2))
+			return dir
+		}, 2, "generator, compiler and execution tools"},
+		{"suite binary changed", func() string {
+			dir := evidence(t, s0, s1)
+			reseal(t, filepath.Join(dir, "mutations-sample-shard-b"), func(r *completionReceipt) { r.Manifest.Binaries[0].SHA256 = strings.Repeat("0", 64) })
+			return dir
+		}, 2, "suite roster and binaries"},
 		{"another package", func() string { return evidence(t, s0, s1) }, 2, "not other"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -327,7 +407,7 @@ func TestShardedCampaignAggregatesOnceAndFailsClosed(t *testing.T) {
 				pkg = "other"
 			}
 			dir := tc.runs()
-			_, err := aggregate(pkg, 9, tc.shards, dir)
+			_, err := aggregate(pkg, 9, tc.shards, dir, workflowRun{})
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("want a failure naming %q, got %v", tc.want, err)
 			}
@@ -335,6 +415,89 @@ func TestShardedCampaignAggregatesOnceAndFailsClosed(t *testing.T) {
 				t.Fatal("a failed aggregate published a receipt")
 			}
 		})
+	}
+
+	t.Run("resealed evidence with nothing changed aggregates", func(t *testing.T) {
+		// the control for the resealed mismatches: only their change fails them
+		dir := evidence(t, s0, s1)
+		reseal(t, filepath.Join(dir, "mutations-sample-shard-a"), withOverlay("11", 1))
+		reseal(t, filepath.Join(dir, "mutations-sample-shard-b"), withOverlay("11", 1))
+		if got, err := aggregate("sample", 3, 2, dir, workflowRun{}); err != nil || got.Survivors != 3 {
+			t.Fatalf("faithfully resealed shards refused: %v", err)
+		}
+	})
+
+	t.Run("the gate's run and attempt", func(t *testing.T) {
+		run := func(id, attempt string) workflowRun {
+			return workflowRun{ID: envSetting{"GITHUB_RUN_ID", true, id}, Attempt: envSetting{"GITHUB_RUN_ATTEMPT", true, attempt}}
+		}
+		got, err := aggregate("sample", 3, 2, evidence(t, s0, s1), run("7", "1"))
+		if err != nil || got.Run != run("7", "1") {
+			t.Fatalf("shards of the gate's own attempt refused: %+v %v", got.Run, err)
+		}
+		for _, gate := range []workflowRun{run("7", "2"), run("8", "1")} {
+			_, err := aggregate("sample", 3, 2, evidence(t, s0, s1), gate)
+			if err == nil || !strings.Contains(err.Error(), "evidence of another run or attempt is never aggregated") || !strings.Contains(err.Error(), "gh workflow run nightly.yml") {
+				t.Fatalf("gate of %s aggregated run 7 attempt 1's shards: %v", gate, err)
+			}
+		}
+	})
+}
+
+// reseal rewrites a shard's evidence after mutate, consistently: its input
+// digest, journal start, inputs sidecar, journal identity and recorded shared
+// identity, as a producer that changed only that would have sealed it. The
+// shard's own checks then pass, and only the comparison across shards can
+// tell (receipts are not authenticated).
+func reseal(t *testing.T, dir string, mutate func(*completionReceipt)) {
+	t.Helper()
+	path := filepath.Join(dir, "journal.jsonl")
+	r, _, err := readReceipt(path + receiptSuffix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := r.InputDigest
+	mutate(&r)
+	digest, err := valueDigest(r.Inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.InputDigest, r.Manifest.InputDigest = digest, digest
+	r.Manifest.Start = []byte(strings.ReplaceAll(string(r.Manifest.Start), old, digest))
+	journal, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(strings.ReplaceAll(string(journal), old, digest)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if r.Journal.SHA256, r.Journal.Size, err = digestFile(path); err != nil {
+		t.Fatal(err)
+	}
+	for name, v := range map[string]any{path + inputsSuffix: r.Inputs} {
+		b, _ := json.Marshal(v)
+		if err := os.WriteFile(name, append(b, '\n'), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	shared, err := sharedIdentityOf(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Shared = &shared
+	b, _ := json.Marshal(r)
+	if err := os.WriteFile(path+receiptSuffix, append(b, '\n'), 0600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// withOverlay records a build whose overlay replaced source.go with bytes of
+// the given digest, copies times.
+func withOverlay(sha string, copies int) func(*completionReceipt) {
+	return func(r *completionReceipt) {
+		for range copies {
+			r.Generated = append(r.Generated, capturedInvocation{Arguments: []string{"test", "-overlay=/tmp/o.json"}, Inputs: []generatedInput{{Source: r.Inputs.Inputs.Settings["GOMOD"][:len(r.Inputs.Inputs.Settings["GOMOD"])-len("go.mod")] + "sample/source.go", File: fileIdentity{Path: "/capture/input-000000", SHA256: strings.Repeat(sha, 32), Size: 9}}}})
+		}
 	}
 }
 
@@ -398,5 +561,94 @@ func TestGeneratedIdentityIgnoresCaptureOrderOnly(t *testing.T) {
 	d3, _ := generatedDigest(a, []capturedInvocation{build("/one/root", "11"), build("/one/root", "33")})
 	if d3 == d1 {
 		t.Fatal("different generated bytes have one identity")
+	}
+}
+
+func TestRerunAttemptsOfShardsAreRefused(t *testing.T) {
+	shard := workerConfig{Package: "qenv", Shard: shardSpec{1, 4}}
+	for _, attempt := range []string{"", "1"} {
+		if err := refuseRerun(shard, attempt, "main"); err != nil {
+			t.Fatalf("attempt %q refused: %v", attempt, err)
+		}
+	}
+	if err := refuseRerun(workerConfig{Package: "qtrace", Shard: shardSpec{0, 1}}, "3", "main"); err != nil {
+		t.Fatalf("an unsharded campaign has no shards to mix: %v", err)
+	}
+	err := refuseRerun(shard, "2", "ci/x")
+	if err == nil || !strings.Contains(err.Error(), "gh workflow run nightly.yml --ref ci/x -f jobs=core-mutants -f mutants=qenv") {
+		t.Fatalf("re-run not refused with the fix: %v", err)
+	}
+}
+
+// Every variable the module's code reads by name is classified: a new one
+// must be added to semanticKeys (it can change what a test checks) or
+// runnerOnlyKeys (a runner's own location or bookkeeping) in env.go.
+func TestEnvironmentReadsAreClassified(t *testing.T) {
+	read := regexp.MustCompile(`(?:Getenv|LookupEnv|Setenv)\("([A-Za-z_][A-Za-z_0-9]*)"`)
+	named := regexp.MustCompile(`"((?:GOTOGETHER|QUINT|QNEMESIS)_[A-Z_0-9]+)"`)
+	root := "../.."
+	found := 0
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if path != root && (strings.HasPrefix(d.Name(), ".") || d.Name() == "testdata") {
+				return filepath.SkipDir
+			}
+			if _, err := os.Stat(filepath.Join(path, "go.mod")); path != root && err == nil {
+				return filepath.SkipDir // another module: not linked into a core suite
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, m := range named.FindAllStringSubmatch(string(b), -1) {
+			// a toolkit name must be an exact key, so unset is recorded as unset
+			if !slices.Contains(semanticKeys, m[1]) && !slices.Contains(runnerOnlyKeys, m[1]) {
+				t.Errorf("%s names %s, which env.go does not list: add it to semanticKeys (or runnerOnlyKeys)", path, m[1])
+			}
+		}
+		for _, m := range read.FindAllStringSubmatch(string(b), -1) {
+			found++
+			if classify(m[1]) == unclassified {
+				t.Errorf("%s reads %s, which env.go does not classify: add it to semanticKeys or runnerOnlyKeys", path, m[1])
+			}
+		}
+		return nil
+	})
+	if err != nil || found < 50 {
+		t.Fatalf("scanned %d reads: %v", found, err)
+	}
+	for _, k := range []string{"GOTOGETHER_CHECK", "GOTOGETHER_STRICT", "GOTOGETHER_EVAL_SAMPLE", "GODEBUG", "TZ", "GOFLAGS", "GOEXPERIMENT", "CGO_ENABLED", "GITHUB_RUN_ATTEMPT"} {
+		if classify(k) != semantic {
+			t.Errorf("%s is not semantic", k)
+		}
+	}
+	for _, k := range []string{"PATH", "HOME", "GOTOGETHER_MUTATION_LOG", "RUNNER_NAME", "GITHUB_SHA"} {
+		if classify(k) != runnerOnly {
+			t.Errorf("%s is not runner-only", k)
+		}
+	}
+	fresh := "GOTOGETHER" + "_NOT_YET_NAMED" // a later variable, by its prefix
+	e := classifyEnvironment([]string{"GOTOGETHER_CHECK=", "PATH=/x", "ZZ=1", fresh + "=2"}, func(string) (string, error) { return "", errors.New("absent") })
+	var check, tz, added envSetting
+	for _, s := range e.Semantic {
+		switch s.Name {
+		case "GOTOGETHER_CHECK":
+			check = s
+		case "TZ":
+			tz = s
+		case fresh:
+			added = s
+		}
+	}
+	if check != (envSetting{"GOTOGETHER_CHECK", true, ""}) || tz != (envSetting{"TZ", false, ""}) || added != (envSetting{fresh, true, "2"}) || !slices.Equal(e.RunnerOnly, []string{"PATH"}) || !slices.Equal(e.Unclassified, []string{"ZZ"}) {
+		t.Fatalf("classification: %+v", e)
 	}
 }

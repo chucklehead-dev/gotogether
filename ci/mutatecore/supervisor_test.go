@@ -118,10 +118,16 @@ func supervisorFixtureEnv(extra map[string]string) []string {
 		}
 	}
 	for k, v := range values {
-		result = append(result, k+"="+v)
+		if v != unsetEnv {
+			result = append(result, k+"="+v)
+		}
 	}
 	return result
 }
+
+// unsetEnv, as a supervisorFixtureEnv value, removes the variable instead.
+const unsetEnv = "\x00unset"
+
 func supervisorFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()

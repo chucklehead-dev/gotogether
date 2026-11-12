@@ -431,6 +431,26 @@ func TestNightlyMutantsGateAggregatesSplitRows(t *testing.T) {
 	if !strings.Contains(shardStep, `ci/mutate-core.sh "$PKG" "$MAX"`) || !strings.Contains(shardStep, `ci/mutate-core.sh -shard "$SHARD/$SHARDS" "$PKG"`+"\n") {
 		t.Fatalf("an unsharded row applies its max; a shard takes none:\n%s", shardStep)
 	}
+	// a re-run attempt of a split package's shard fails first, with the
+	// fresh dispatch to run instead; the first attempt and unsplit rows run
+	steps := w.Jobs["core-mutants"].Steps
+	if len(steps) == 0 || steps[0].Env["ATTEMPT"] != "${{ github.run_attempt }}" || steps[0].Env["SHARDS"] != "${{ matrix.shards }}" {
+		t.Fatalf("core-mutants' first step must refuse a re-run attempt: %+v", steps)
+	}
+	guard := func(attempt, shards string) (string, error) {
+		cmd := exec.Command("bash", "-e", "-c", steps[0].Run)
+		cmd.Env = append(os.Environ(), "ATTEMPT="+attempt, "SHARDS="+shards, "PKG=qenv", "REF=main")
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+	if out, err := guard("2", "4"); err == nil || !strings.Contains(out, "gh workflow run nightly.yml --ref main -f jobs=core-mutants -f mutants=qenv") {
+		t.Errorf("attempt 2 of a shard ran (%v): %s", err, out)
+	}
+	for _, ok := range [][2]string{{"1", "4"}, {"2", "1"}, {"1", "1"}} {
+		if out, err := guard(ok[0], ok[1]); err != nil {
+			t.Errorf("attempt %s of a %s-shard row refused: %s", ok[0], ok[1], out)
+		}
+	}
 	file := coreMutantRows(t)
 	var split []fileRow
 	for _, r := range file {

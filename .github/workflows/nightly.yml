@@ -196,6 +196,21 @@ jobs:
       # shard; its max is applied once, by core-mutants-gate, never here.
       matrix: ${{ fromJSON(needs.select.outputs.mutants) }}
     steps:
+      # A shard's artifact is named by package and shard, not by attempt: a
+      # re-run of one shard job would meet an earlier attempt's evidence.
+      # The supported retry is a fresh dispatch of the package (a partial
+      # run, which does not count for J7c); the helper refuses too.
+      - name: refuse a re-run attempt of a split package
+        env:
+          ATTEMPT: ${{ github.run_attempt }}
+          SHARDS: ${{ matrix.shards }}
+          PKG: ${{ matrix.pkg }}
+          REF: ${{ github.ref_name }}
+        run: |
+          if [ "$SHARDS" -gt 1 ] && [ "$ATTEMPT" -gt 1 ]; then
+            echo "::error::$PKG is split into $SHARDS shards and this is attempt $ATTEMPT of the run: shards are not re-run in place. Dispatch a fresh run: gh workflow run nightly.yml --ref $REF -f jobs=core-mutants -f mutants=$PKG"
+            exit 1
+          fi
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
@@ -229,7 +244,9 @@ jobs:
   # shared identity, the outcomes disjoint and their union the inventory),
   # then the row's unchanged max applied once to the summed survivors. It
   # runs whatever the shards did (a missing, failed or canceled shard fails
-  # it) and is the failing signal for a split package.
+  # it) and is the failing signal for a split package. The aggregate reads
+  # this job's GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT and refuses shards of any
+  # other run or attempt, so a re-run gate never aggregates stale evidence.
   core-mutants-gate:
     needs: [select, core-mutants]
     if: always() && needs.select.result == 'success' && (github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'core-mutants-gate'))

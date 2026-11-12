@@ -263,6 +263,11 @@ with every baseline, then runs every Nth source and applies no limit.
 shard once and sealed, one shared source/candidate/generator/toolchain/config
 identity, the outcomes disjoint and their union the inventory) and applies the
 unchanged max once to the summed survivors; anything missing, unsealed,
-canceled or inconsistent fails it. Each runner's exact environment and path
-identity is kept per shard, not compared; aggregate concurrency is shards × JOBS.
-The README states the identity boundary and its limitations.
+canceled or inconsistent fails it. The semantic environment (test modes such as
+`GOTOGETHER_CHECK`, `GODEBUG`, `TZ`, the run and attempt) must agree; each
+runner's exact environment and path identity is kept per shard, not compared.
+Aggregate concurrency is shards × JOBS, each shard with its own 120 minutes. A
+re-run attempt of a shard is refused: retry with a fresh dispatch of the
+package (`gh workflow run nightly.yml -f jobs=core-mutants -f mutants=qenv`),
+which is partial and does not count for J7c. The README states the identity
+boundary and its limitations.
