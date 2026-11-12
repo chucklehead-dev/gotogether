@@ -1607,14 +1607,9 @@ func (s *Sim) selfCheck() {
 	// counted by the run queue and not here, which the count check
 	// reports). Every task ever spawned, at every step, made a run of many
 	// short tasks (a Service's calls) quadratic.
-	live := s.checking[:0]
-	for _, t := range s.checking {
-		if t.queued || !t.done && !t.killed {
-			live = append(live, t)
-		}
-	}
-	clear(s.checking[len(live):])
-	s.checking = live
+	s.checking = slices.DeleteFunc(s.checking, func(t *task) bool {
+		return !t.queued && (t.done || t.killed)
+	})
 	queued := 0
 	for _, t := range s.checking {
 		if t.queued {
