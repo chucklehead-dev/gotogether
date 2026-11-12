@@ -8,6 +8,11 @@
   the checker treats it as OK. In a machine whose every rule can be refused
   (a refusal records nothing), a shrunk case of refusals alone is the first
   failure to expect: set `AllowEmpty`.
+- A model whose `init` makes a choice (`nondet first = REPLICAS.oneOf()`)
+  makes every case's check search the initial states and confirm with a quint
+  process: the test logs it once (`InitChoiceNote`). Record a snapshot step
+  at the head of each case (`snapshot:`), or make init deterministic where
+  the choice is symmetric (`init = initWith("r1")`).
 - The machine produces the whole run: every step the model checks,
   the environment's included. Where the code needs a value another
   component would produce (a publisher's publication), the machine

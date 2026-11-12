@@ -123,10 +123,12 @@ Already in place and to be documented: `qtest.Model` claims (`Proves`,
   the evaluator is missing or cannot be fetched; a `quint test` gotogether
   runs that matches nothing is an error, not a pass (quint's own CLI: an
   upstream issue, drafted in [upstream/quint-test-no-match.md](upstream/quint-test-no-match.md)).
-- **L5: an `init` with a nondet choice.** Say at the start that each run
-  searches N initial candidates, with progress while it does; a binding may
-  pin the init call; lift (or explain where it is hit) the
-  snapshot-with-pinned-choices limit.
+- **L5: an `init` with a nondet choice.** Done: `Binding.InitChoiceNote`,
+  reported by `gotogether lint` and logged once per binding by qtest and
+  qhegel (each run's check then searches the initial states and confirms with
+  a quint process); a run starting from a snapshot is no longer refused for
+  init's choice, so recording one avoids it. Left: progress while a long
+  check searches, and a binding-level pinned init call.
 - **L6: docs.** Done: the traces skill's table of how each field type
   renders in a template; the Hegel skill's pitfalls (a machine produces the
   whole run, the environment's steps included; `AllowEmpty` where every rule
