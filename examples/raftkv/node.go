@@ -241,6 +241,9 @@ func (n *Node) loop(ctx context.Context, inc *incarnation) {
 			qenv.WaitFor(ctx, inc.work, wait)
 		}
 		now := qenv.Mono(ctx)
+		if now-next > 20*time.Millisecond {
+			diagnostic("tick node=%s lag=%s", n.Name, now-next)
+		}
 		inc.mu.Lock()
 		if now >= next {
 			inc.rn.Tick()
@@ -293,6 +296,9 @@ func (n *Node) ready(ctx context.Context, inc *incarnation, rd raft.Ready) {
 	n.recordLeadership(ctx, inc)
 	for _, m := range rd.Messages {
 		to := int(m.GetTo()) - 1
+		if electionMessage(m) {
+			diagnostic("enqueue node=%s peer=%s type=%s term=%d", n.Name, Nodes[to], m.GetType(), m.GetTerm())
+		}
 		q := append(inc.outbox[to], m)
 		if len(q) > 256 { // a peer long unreachable: raft resends what matters
 			q = q[len(q)-256:]
@@ -410,7 +416,24 @@ func (n *Node) send(ctx context.Context, inc *incarnation, to int) {
 			must(err)
 			env.Msgs = append(env.Msgs, b)
 		}
-		if err := n.Peers.Send(ctx, to, env); err != nil {
+		var started time.Time
+		describe := ""
+		election := false
+		if diagnosticEnabled {
+			started = time.Now()
+			for _, m := range msgs {
+				describe += fmt.Sprintf("%s/%d,", m.GetType(), m.GetTerm())
+				election = election || electionMessage(m)
+			}
+		}
+		if election {
+			diagnostic("send-begin node=%s peer=%s msgs=%s", n.Name, Nodes[to], describe)
+		}
+		err := n.Peers.Send(ctx, to, env)
+		if diagnosticEnabled && (election || time.Since(started) > 50*time.Millisecond) {
+			diagnostic("send-end node=%s peer=%s duration=%s msgs=%s err=%v", n.Name, Nodes[to], time.Since(started), describe, err)
+		}
+		if err != nil {
 			snap := slices.ContainsFunc(msgs, func(m *pb.Message) bool { return m.GetType() == pb.MessageType_MsgSnap })
 			inc.mu.Lock()
 			inc.failed = append(inc.failed, sendFailure{to: uint64(to + 1), snap: snap})

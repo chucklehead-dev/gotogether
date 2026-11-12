@@ -9,6 +9,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -178,7 +179,16 @@ func (t *Toxiproxy) Cut(ctx context.Context, a, b string) error { return t.enabl
 
 // Heal implements Network: the links' proxies enabled, listening on
 // the ports they had.
-func (t *Toxiproxy) Heal(ctx context.Context, a, b string) error { return t.enable(ctx, a, b, true) }
+func (t *Toxiproxy) Heal(ctx context.Context, a, b string) error {
+	if os.Getenv("RAFTKV_DIAG") != "1" {
+		return t.enable(ctx, a, b, true)
+	}
+	start := time.Now()
+	fmt.Fprintf(os.Stderr, "DIAG heal-begin at=%s pair=%s,%s\n", start.Format(time.RFC3339Nano), a, b)
+	err := t.enable(ctx, a, b, true)
+	fmt.Fprintf(os.Stderr, "DIAG heal-end at=%s pair=%s,%s duration=%s err=%v\n", time.Now().Format(time.RFC3339Nano), a, b, time.Since(start), err)
+	return err
+}
 
 const (
 	latencyToxic = "qnemesis_latency"
