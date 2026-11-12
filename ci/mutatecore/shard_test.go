@@ -3,12 +3,16 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -720,5 +724,85 @@ func TestEnvironmentReadsAreClassified(t *testing.T) {
 	}
 	if check != (envSetting{"GOTOGETHER_CHECK", true, ""}) || tz != (envSetting{"TZ", false, ""}) || added != (envSetting{fresh, true, "2"}) || !slices.Equal(e.RunnerOnly, []string{"PATH"}) || !slices.Equal(e.Unclassified, []string{"ZZ"}) {
 		t.Fatalf("classification: %+v", e)
+	}
+}
+
+// TestPathToolsAreTheCoresLookups keeps pathTools to the programs the core
+// module runs or looks up by name: every exec.LookPath, exec.Command and
+// exec.CommandContext of a literal name (not a path) in the module (other modules, ci/ and
+// testdata aside) names a pathTools or baseTools entry, and every pathTools
+// entry is named by a string literal in the module, so an example's tool
+// does not enter a core campaign's identity.
+func TestPathToolsAreTheCoresLookups(t *testing.T) {
+	root := "../.."
+	run := map[string]bool{}
+	literal := map[string]bool{}
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if path != root && (strings.HasPrefix(d.Name(), ".") || d.Name() == "testdata" || path == filepath.Join(root, "ci")) {
+				return filepath.SkipDir
+			}
+			if _, err := os.Stat(filepath.Join(path, "go.mod")); path != root && err == nil {
+				return filepath.SkipDir // another module: not linked into a core suite
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution)
+		if err != nil {
+			return err
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *ast.BasicLit:
+				if v, err := strconv.Unquote(n.Value); n.Kind == token.STRING && err == nil {
+					literal[v] = true
+				}
+			case *ast.CallExpr:
+				sel, ok := n.Fun.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				if x, ok := sel.X.(*ast.Ident); !ok || x.Name != "exec" {
+					return true
+				}
+				arg := 0
+				switch sel.Sel.Name {
+				case "LookPath", "Command":
+				case "CommandContext":
+					arg = 1
+				default:
+					return true
+				}
+				if len(n.Args) > arg {
+					if lit, ok := n.Args[arg].(*ast.BasicLit); ok && lit.Kind == token.STRING {
+						// a path is run as is, not looked up on PATH
+						if v, err := strconv.Unquote(lit.Value); err == nil && !strings.ContainsRune(v, '/') {
+							run[v] = true
+						}
+					}
+				}
+			}
+			return true
+		})
+		return nil
+	})
+	if err != nil || len(run) < 5 {
+		t.Fatalf("scanned %d programs: %v", len(run), err)
+	}
+	for name := range run {
+		if !slices.Contains(pathTools, name) && !slices.Contains(baseTools, name) {
+			t.Errorf("the core runs %s by name, which env.go does not list: add it to pathTools (or baseTools, if its absence fails a test)", name)
+		}
+	}
+	for _, name := range pathTools {
+		if !literal[name] {
+			t.Errorf("pathTools lists %s, which nothing in the core module names: remove it, so its build on a runner is no campaign input", name)
+		}
 	}
 }
