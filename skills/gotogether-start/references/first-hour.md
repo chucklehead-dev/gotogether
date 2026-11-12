@@ -18,12 +18,15 @@ ordinary observed-call tests and an immutable-snapshot source contrast;
 in your own module, `go get
 github.com/chucklehead-dev/gotogether@latest` (and `.../qhegel@latest`
 for Hegel) and start from `gotogether scaffold`; the examples' `replace`
-lines are only for working inside the repository. To run the CLI without
-installing it, add it to the module as a tool (`go get -tool
-github.com/chucklehead-dev/gotogether/cmd/gotogether`), then `go tool gotogether
-...`: `go mod tidy` keeps a tool's requirements, where a plain `go get`
-of the CLI is pruned by the next tidy (`missing go.sum entry for module
-providing package go.opentelemetry.io/otel/sdk/trace`).
+lines are only for working inside the repository. Install the CLI with
+`go install github.com/chucklehead-dev/gotogether/cmd/gotogether@latest`:
+it keeps the CLI's own requirements (OpenTelemetry's SDK among them) out
+of your module. To pin it to the module instead, add it as a tool (`go get -tool
+github.com/chucklehead-dev/gotogether/cmd/gotogether`, then `go tool gotogether
+...`), which records those requirements in your go.mod; `go mod tidy` keeps a
+tool's requirements, where a plain `go get` or `go run` of the CLI from a module
+that does not list it fails (`missing go.sum entry for module providing package
+go.opentelemetry.io/otel/sdk/trace`).
 
 1. Run the smallest example: `git clone
    https://github.com/chucklehead-dev/gotogether && cd

@@ -35,7 +35,7 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Later | J14/J15, J18/J19, J21 | Durable rewind detection and safe redrive before Grist production claims; usability/vocabulary; GR4 consolidation. |
 | Proposed queue | J16/J17/J20/J22/J25–J27 | Retain the review's adoption, capacity, admission-tuning and process proposals without treating them as completed commitments. |
 | Proposed queue | K1–K9: adoption feedback ([#144](https://github.com/chucklehead-dev/gotogether/issues/144)) | K1 (docs) done: README's one path and spans entry point, [fit.md](fit.md). The rest after J7c, under the red-nightly rule: K3, K4, then K6's design spike; the rest as projects ask. |
-| Proposed queue | L1–L8: golem's first use ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6833092588)) | After J7c, under the red-nightly rule (L6, docs, may land before). First L1, then L5's warning and progress, then L3; the rest as projects ask. |
+| Proposed queue | L1–L8: golem's first use ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6833092588)) | After J7c, under the red-nightly rule (L6's docs done). First L1, then L5's warning and progress, then L3; the rest as projects ask. |
 | Dropped | J12 and J23 | Go 1.26 compatibility and pin batching are withdrawn. Go 1.27.3 and immediate required sibling pin alignment remain deliberate policies. |
 
 **Red-nightly rule (maintainer decision):** while the nightly is red, feature
@@ -127,12 +127,13 @@ Already in place and to be documented: `qtest.Model` claims (`Proves`,
   searches N initial candidates, with progress while it does; a binding may
   pin the init call; lift (or explain where it is hit) the
   snapshot-with-pinned-choices limit.
-- **L6: docs.** The traces skill's table of field types and how each renders
-  (strings quoted, `toSet`, records, `args:`); the Hegel skill: a machine
-  produces the whole run, the environment's steps included; a connect test
-  reading unexported state lives in the package; a `go install`'d CLI first for
-  consumers, not `go get -tool` (which pulls the CLI's OTel into their module);
-  `connect.GetAs[T]` beside `MustPick`.
+- **L6: docs.** Done: the traces skill's table of how each field type
+  renders in a template; the Hegel skill's pitfalls (a machine produces the
+  whole run, the environment's steps included; `AllowEmpty` where every rule
+  can be refused); the mbt driver reference (`itf.DecodeAs` for `Step.Get`; a
+  driver reading unexported state lives in the package); first-hour's
+  `go install`'d CLI first. Left: `connect.GetAs[T]` beside `MustPick`, an API
+  addition after J7c.
 - **L7: the empty-case failure.** When every rule of a machine can no-op, the
   "recorded no model steps" message says so, with the count of empty cases.
 - **Parked: L8, literate `.md` models** (tangling with errors mapped to
