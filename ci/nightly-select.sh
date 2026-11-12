@@ -15,6 +15,10 @@
 # The filters are comma- or space-separated lists. (Not GROUPS: bash
 # keeps that name for the user's group ids and ignores an assignment.)
 set -euo pipefail
+# Membership tests read all of their input (grep >/dev/null, never grep -q):
+# under pipefail, grep -q's early exit can kill the writer with SIGPIPE and
+# fail the pipeline though the line matched, which dropped a job or refused
+# a valid filter now and then.
 # terms are split on white space, never expanded as globs
 set -f
 cd "$(dirname "$0")/.."
@@ -89,7 +93,7 @@ plan)
     selected=("${ids[@]}")
   else
     for a in "${asked[@]}"; do
-      if ! printf '%s\n' "${ids[@]}" | grep -qxF -- "$a"; then
+      if ! printf '%s\n' "${ids[@]}" | grep -xF -- "$a" >/dev/null; then
         echo "jobs filter: $a is not a nightly job (one of: ${ids[*]})" >&2
         exit 1
       fi
@@ -99,10 +103,10 @@ plan)
       [ -n "$dep" ] && asked+=("$dep")
     done
     for id in "${ids[@]}"; do
-      printf '%s\n' "${asked[@]}" | grep -qxF -- "$id" && selected+=("$id")
+      printf '%s\n' "${asked[@]}" | grep -xF -- "$id" >/dev/null && selected+=("$id")
     done
   fi
-  in_selected() { printf '%s\n' "${selected[@]}" | grep -qxF -- "$1"; }
+  in_selected() { printf '%s\n' "${selected[@]}" | grep -xF -- "$1" >/dev/null; }
 
   mapfile -t pkgs < <(terms "${MUTANTS:-}")
   if [ "${#pkgs[@]}" -gt 0 ] && ! in_selected core-mutants; then
@@ -110,14 +114,14 @@ plan)
     exit 1
   fi
   for p in "${pkgs[@]}"; do
-    if ! mutant_rows | awk '{ print $1 }' | grep -qxF -- "$p"; then
+    if ! mutant_rows | awk '{ print $1 }' | grep -xF -- "$p" >/dev/null; then
       echo "mutants filter: $p has no core-mutants row (ci/core-mutants.txt: $(mutant_rows | awk '{ print $1 }' | xargs))" >&2
       exit 1
     fi
   done
   rows="" sep=""
   while read -r pkg max; do
-    if [ "${#pkgs[@]}" -gt 0 ] && ! printf '%s\n' "${pkgs[@]}" | grep -qxF -- "$pkg"; then
+    if [ "${#pkgs[@]}" -gt 0 ] && ! printf '%s\n' "${pkgs[@]}" | grep -xF -- "$pkg" >/dev/null; then
       continue
     fi
     rows+="$sep{\"pkg\":\"$pkg\",\"max\":$max}"

@@ -11,6 +11,10 @@
 #                                groups, each line as it is; a name of no group
 #                                fails
 set -euo pipefail
+# Membership tests read all of their input (grep >/dev/null, never grep -q):
+# under pipefail, grep -q's early exit can kill the writer with SIGPIPE and
+# fail the pipeline though the line matched, which dropped a job or refused
+# a valid filter now and then.
 cd "$(dirname "$0")/.."
 alone=ci/verify-alone.txt
 # a group's line: its name, its job's minutes, then its bindings
@@ -26,7 +30,7 @@ kept() {
     return
   fi
   for n in "${names[@]}"; do
-    if ! groups | awk '{ print $1 }' | grep -qxF -- "$n"; then
+    if ! groups | awk '{ print $1 }' | grep -xF -- "$n" >/dev/null; then
       echo "groups filter: $n is not a verify-alone group (ci/verify-alone.txt: $(groups | awk '{ print $1 }' | xargs))" >&2
       return 1
     fi
