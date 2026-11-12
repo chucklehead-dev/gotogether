@@ -324,7 +324,7 @@
       "type": "string"
     },
     "spec": {
-      "description": "Spec is the .qnt file (relative to the binding file) and Module the parameterised module in it to instantiate.",
+      "description": "Spec is the .qnt file (relative to the binding file) and Module the parameterised module in it to instantiate, or an instance module (`module design { import M(C = ...).* }`), which binds M with the instance's constants.",
       "type": "string"
     },
     "within": {
