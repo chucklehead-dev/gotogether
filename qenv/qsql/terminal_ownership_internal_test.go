@@ -153,6 +153,9 @@ func TestSQLUnwoundTransactionLeavesCancellationRoster(t *testing.T) {
 		qenv.Wait(ctx, func() bool { return held })
 		entered = true
 		_, got = tx.ExecContext(ctx, `UPDATE accounts SET value=3 WHERE id='one'`)
+		// Ownership ends at the driver's terminal response, before the caller's
+		// deferred Rollback or cancellation can perform any later cleanup.
+		assertNoOwnedSQLTransactions(t, c)
 		returned = true
 	})
 	s.Spawn("crash", func(ctx context.Context) {
