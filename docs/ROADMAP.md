@@ -35,6 +35,7 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Later | J14/J15, J18/J19, J21 | Durable rewind detection and safe redrive before Grist production claims; usability/vocabulary; GR4 consolidation. |
 | Proposed queue | J16/J17/J20/J22/J25–J27 | Retain the review's adoption, capacity, admission-tuning and process proposals without treating them as completed commitments. |
 | Proposed queue | K1–K9: adoption feedback ([#144](https://github.com/chucklehead-dev/gotogether/issues/144)) | K1 (docs) done: README's one path and spans entry point, [fit.md](fit.md). The rest after J7c, under the red-nightly rule: K3, K4, then K6's design spike; the rest as projects ask. |
+| Proposed queue | L1–L8: golem's first use ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6833092588)) | After J7c, under the red-nightly rule (L6, docs, may land before). First L1, then L5's warning and progress, then L3; the rest as projects ask. |
 | Dropped | J12 and J23 | Go 1.26 compatibility and pin batching are withdrawn. Go 1.27.3 and immediate required sibling pin alignment remain deliberate policies. |
 
 **Red-nightly rule (maintainer decision):** while the nightly is red, feature
@@ -94,6 +95,48 @@ maintainer's (R5).
 - **K8: `gotogether lint -sim -fix`.** A codemod for the mechanical rewrites onto qenv's seams (`go` to `qenv.Go`, `time.Now` to `qenv.Now`, ...); weaving remains the path for code that must stay unchanged.
 - **K9: the step log as a public contract.** Document and version the step-log format (its schema in `schemas/`, its major in internal/formats) so a service that cannot import the core can write steps itself.
 - **Parked:** Temporal workflows under qenv, until a project needs them.
+
+## golem's first use (L)
+
+From [#144](https://github.com/chucklehead-dev/gotogether/issues/144): golem
+wrote two design-phase models (literate Quint, no code yet), then checked its
+gateway's snapshot holder against one of them with `connect` and `qhegel`. The
+connect test found a real bug at step 0 (a strict floor where the model's is
+inclusive); qhegel caught the two guard ablations connect cannot. The
+assessment is in [its reply](https://github.com/chucklehead-dev/gotogether/issues/144).
+Already in place and to be documented: `qtest.Model` claims (`Proves`,
+`Refutes`, `Possible`, `NoDeadlocks`) for design-phase checks,
+`simulate -graph -out` (counterexamples as shortest Quint runs),
+`itf.DecodeAs`, and doctor's missing-evaluator report.
+
+- **L1: a binding's `module:` names an instance module.** Read its constants
+  and imported definitions (`binding.InstanceConstants` parses the form; only
+  ITF import uses it) instead of the binding copying them. Unblocks the
+  one-instance-per-design style, and model-only mutant instances with it.
+- **L2: the design phase as a report.** The skills document the model-only
+  path for design work; new: a story × instance matrix generated from
+  scenarios and named instances (which mechanism each bug story needs).
+- **L3: `gotogether lint -model`, without a binding.** A primed assignment
+  followed by `or`/`and` (`x' = x or y`); an action's unassigned variables by
+  name; reserved names from `internal/quintnames`.
+- **L4: Quint's environment.** doctor names `QUINT_BACKEND=typescript` when
+  the evaluator is missing or cannot be fetched; a `quint test` gotogether
+  runs that matches nothing is an error, not a pass (quint's own CLI: an
+  upstream issue).
+- **L5: an `init` with a nondet choice.** Say at the start that each run
+  searches N initial candidates, with progress while it does; a binding may
+  pin the init call; lift (or explain where it is hit) the
+  snapshot-with-pinned-choices limit.
+- **L6: docs.** The traces skill's table of field types and how each renders
+  (strings quoted, `toSet`, records, `args:`); the Hegel skill: a machine
+  produces the whole run, the environment's steps included; a connect test
+  reading unexported state lives in the package; a `go install`'d CLI first for
+  consumers, not `go get -tool` (which pulls the CLI's OTel into their module);
+  `connect.GetAs[T]` beside `MustPick`.
+- **L7: the empty-case failure.** When every rule of a machine can no-op, the
+  "recorded no model steps" message says so, with the count of empty cases.
+- **Parked: L8, literate `.md` models** (tangling with errors mapped to
+  markdown lines), until a second project asks.
 
 ## Eleventh review: integrity before tags (I)
 
