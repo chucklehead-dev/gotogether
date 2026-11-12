@@ -337,7 +337,7 @@ type ChoiceLog struct {
 func (r *ChoiceLog) Choose(kind string, n int) int {
 	v := r.C.Choose(kind, n)
 	c := Choice{Kind: kind, N: n, Value: v, Step: r.progress()}
-	if IsFault(kind) && v > 0 {
+	if IsFault(kind) {
 		c.Name = OptionName(kind, v)
 	}
 	r.Choices = append(r.Choices, c)
