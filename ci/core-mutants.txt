@@ -2,6 +2,11 @@
 # line is a package and its max, the survivors allowed, each one read and
 # equivalent. ci/nightly-select.sh turns the lines into the job's rows; a
 # dispatch's mutants filter keeps some rows and never changes a max.
+# shards=N splits a package's campaign over N runners: each builds every
+# suite, passes every baseline and admits the full ordered inventory, then
+# runs every Nth source; core-mutants-gate checks the shards are one
+# campaign and applies the max once, to their survivors summed
+# (ci/mutatecore/README.md). Aggregate concurrency is N x JOBS.
 #
 # internal/depgraph: sorting the nodes Tarjan visits, whose components
 # are sorted after.
@@ -35,8 +40,9 @@ qtrace 24
 # Each remaining survivor needs a behavioral control or a recorded
 # source-equivalence argument. Timeout/signal exits are not assertion
 # witnesses. Cooperative-Platform release paths still need their
-# translated-runtime test context.
-qenv 22
+# translated-runtime test context. Its 914-1738 candidates outgrew one
+# 120-minute runner at JOBS=4: four shards, 16 concurrent source mutants.
+qenv 22 shards=4
 # One reviewed equivalent: <= for < in session-order edges.
 # Distinct transactions have validated unique session positions;
 # equality can only add a self edge, ignored by graph traversal.

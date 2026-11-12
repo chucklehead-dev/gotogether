@@ -31,7 +31,7 @@ func TestExecutionStatusesAndJournalPropagation(t *testing.T) {
 			}
 			j := testJournal(t)
 			candidates := []candidate{{targets: []target{{0, 0}}}}
-			results, err := runCampaign(t.Context(), candidates, 1, 0, func(ctx context.Context, _ target) (executionResult, error) {
+			results, err := runCampaign(t.Context(), candidates, 1, unsharded(0), func(ctx context.Context, _ target) (executionResult, error) {
 				return execute(ctx, suite{dir: dir, binary: binary}, "0", 3072*1024, mutantMode)
 			}, j, func(int) {})
 			setup := code >= 125 && code <= 127
@@ -96,7 +96,7 @@ func TestExecutionActualSignalTimeoutStartAndCancellation(t *testing.T) {
 func assertJournalExecution(t *testing.T, result executionResult, executionErr error) {
 	t.Helper()
 	j := testJournal(t)
-	_, err := runCampaign(t.Context(), []candidate{{targets: []target{{0, 0}}}}, 1, 0, func(context.Context, target) (executionResult, error) { return result, executionErr }, j, func(int) {})
+	_, err := runCampaign(t.Context(), []candidate{{targets: []target{{0, 0}}}}, 1, unsharded(0), func(context.Context, target) (executionResult, error) { return result, executionErr }, j, func(int) {})
 	if (err != nil) != (executionErr != nil) {
 		t.Fatalf("campaign changed execution error: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestCampaignRejectsUnresolvedExecutionEvidence(t *testing.T) {
 	code := 0
 	for _, r := range []executionResult{{}, {Disposition: "canceled"}, {Disposition: "execution_error"}, exited(125), {Disposition: "timeout_status", ExitCode: &code}, {Disposition: "exited", ExitCode: &code, Signal: "killed"}, {Disposition: "signaled", SignalNumber: 15, Signal: "killed"}, {Disposition: "signaled", SignalNumber: 65, Signal: syscall.Signal(65).String()}, {Disposition: "signaled", SignalNumber: -1, Signal: syscall.Signal(-1).String()}} {
 		j := testJournal(t)
-		_, err := runCampaign(t.Context(), []candidate{{targets: []target{{0, 0}}}}, 1, 0, func(context.Context, target) (executionResult, error) { return r, nil }, j, func(int) { t.Fatal("unresolved attempt completed") })
+		_, err := runCampaign(t.Context(), []candidate{{targets: []target{{0, 0}}}}, 1, unsharded(0), func(context.Context, target) (executionResult, error) { return r, nil }, j, func(int) { t.Fatal("unresolved attempt completed") })
 		if err == nil {
 			t.Fatalf("accepted %+v", r)
 		}

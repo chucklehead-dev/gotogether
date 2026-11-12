@@ -107,7 +107,8 @@ func selected(t *testing.T, w dispatchWorkflow, event string, inputs map[string]
 }
 
 func ghContext(event string, inputs map[string]string, outputs map[string]string) map[string]any {
-	ctx := map[string]any{"github.event_name": event}
+	// select succeeded: these runs are the ones its plan printed
+	ctx := map[string]any{"github.event_name": event, "needs.select.result": "success"}
 	if event == "workflow_dispatch" {
 		for _, k := range []string{"jobs", "mutants", "bindings", "groups"} {
 			ctx["inputs."+k] = inputs[k] // a dispatch's inputs are strings, "" by default
@@ -192,7 +193,8 @@ func TestNightlyDispatchSelectsJobs(t *testing.T) {
 		}
 	}
 	// a job selected takes the jobs it needs with it, and only those
-	implied := map[string][]string{"verify-alone": {"verify-alone", "verify-alone-plan"}}
+	gated := []string{"core-mutants", "core-mutants-gate"}
+	implied := map[string][]string{"verify-alone": {"verify-alone", "verify-alone-plan"}, "core-mutants": gated, "core-mutants-gate": gated}
 	for _, id := range ids {
 		want := []string{id}
 		if l, ok := implied[id]; ok {
@@ -209,7 +211,7 @@ func TestNightlyDispatchSelectsJobs(t *testing.T) {
 	}
 	two := []string{"benchmarks", "core-mutants"}
 	for _, sep := range []string{",", " ", ", "} {
-		if got := selected(t, w, "workflow_dispatch", map[string]string{"jobs": strings.Join(two, sep)}); !slices.Equal(got, two) {
+		if got := selected(t, w, "workflow_dispatch", map[string]string{"jobs": strings.Join(two, sep)}); !slices.Equal(got, append(slices.Clone(two), "core-mutants-gate")) {
 			t.Errorf("dispatch of jobs=%q runs %v", strings.Join(two, sep), got)
 		}
 	}
@@ -233,13 +235,105 @@ func TestNightlyDispatchSelectsJobs(t *testing.T) {
 }
 
 type mutantRow struct {
-	Pkg string `json:"pkg"`
-	Max int    `json:"max"`
+	Pkg      string `json:"pkg"`
+	Max      int    `json:"max"`
+	Shard    int    `json:"shard"`
+	Shards   int    `json:"shards"`
+	Artifact string `json:"artifact"`
+}
+
+type fileRow struct {
+	pkg         string
+	max, shards int
+}
+
+// coreMutantRows reads ci/core-mutants.txt: a package, its max and an
+// optional shards=N.
+func coreMutantRows(t *testing.T) []fileRow {
+	t.Helper()
+	b, err := os.ReadFile("../../ci/core-mutants.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file []fileRow
+	for line := range strings.Lines(string(b)) {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		f := strings.Fields(line)
+		r := fileRow{shards: 1}
+		var err error
+		if len(f) >= 2 {
+			r.pkg = f[0]
+			r.max, err = strconv.Atoi(f[1])
+		}
+		if len(f) == 3 {
+			n, ok := strings.CutPrefix(f[2], "shards=")
+			r.shards, _ = strconv.Atoi(n)
+			if !ok || r.shards < 2 {
+				err = fmt.Errorf("bad shards %q", f[2])
+			}
+		}
+		if len(f) < 2 || len(f) > 3 || err != nil || r.max < 0 {
+			t.Fatalf("ci/core-mutants.txt: %q is not a package, its max and an optional shards=N", line)
+		}
+		file = append(file, r)
+	}
+	if len(file) == 0 {
+		t.Fatal("ci/core-mutants.txt has no rows")
+	}
+	return file
+}
+
+// expand is the matrix a row runs as: an entry per shard, each with the
+// row's max.
+func (r fileRow) expand() []mutantRow {
+	var l []mutantRow
+	for i := range r.shards {
+		l = append(l, mutantRow{r.pkg, r.max, i, r.shards, fmt.Sprintf("mutations-%s-shard-%d-of-%d", strings.ReplaceAll(r.pkg, "/", "-"), i, r.shards)})
+	}
+	return l
+}
+
+func expandAll(rows []fileRow) []mutantRow {
+	var l []mutantRow
+	for _, r := range rows {
+		l = append(l, r.expand()...)
+	}
+	return l
+}
+
+func mutantMatrix(t *testing.T, event string, inputs map[string]string) []mutantRow {
+	t.Helper()
+	outputs, err := selectPlan(t, event, inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m struct {
+		Include []map[string]any `json:"include"`
+	}
+	if err := json.Unmarshal([]byte(outputs["mutants"]), &m); err != nil {
+		t.Fatalf("mutants output %q: %v", outputs["mutants"], err)
+	}
+	var l []mutantRow
+	for _, r := range m.Include {
+		if len(r) != 5 {
+			t.Fatalf("a row carries other than its package, max, shard, shards and artifact: %v", r)
+		}
+		b, _ := json.Marshal(r)
+		var row mutantRow
+		if err := json.Unmarshal(b, &row); err != nil {
+			t.Fatalf("row %v: %v", r, err)
+		}
+		l = append(l, row)
+	}
+	return l
 }
 
 // core-mutants' rows are ci/core-mutants.txt's, every one unless the
 // mutants filter keeps some, each with its own max: a filter removes rows
-// and never changes a limit.
+// and never changes a limit. A row split into shards keeps all its shards.
 func TestNightlyDispatchFiltersMutantsRows(t *testing.T) {
 	w := readDispatch(t)
 	job := w.Jobs["core-mutants"]
@@ -252,69 +346,150 @@ func TestNightlyDispatchFiltersMutantsRows(t *testing.T) {
 	if job.Timeout != 120 {
 		t.Fatalf("core-mutants' limit changed: %v", job.Timeout)
 	}
-	b, err := os.ReadFile("../../ci/core-mutants.txt")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var file []mutantRow
-	for line := range strings.Lines(string(b)) {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		f := strings.Fields(line)
-		n, err := strconv.Atoi(f[len(f)-1])
-		if len(f) != 2 || err != nil || n < 0 {
-			t.Fatalf("ci/core-mutants.txt: %q is not a package and its max", line)
-		}
-		file = append(file, mutantRow{f[0], n})
-	}
-	if len(file) == 0 {
-		t.Fatal("ci/core-mutants.txt has no rows")
-	}
-	rows := func(event string, inputs map[string]string) []mutantRow {
-		t.Helper()
-		outputs, err := selectPlan(t, event, inputs)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var m struct {
-			Include []map[string]any `json:"include"`
-		}
-		if err := json.Unmarshal([]byte(outputs["mutants"]), &m); err != nil {
-			t.Fatalf("mutants output %q: %v", outputs["mutants"], err)
-		}
-		var l []mutantRow
-		for _, r := range m.Include {
-			if len(r) != 2 {
-				t.Fatalf("a row carries more than its package and max: %v", r)
-			}
-			max, ok := r["max"].(float64)
-			if !ok {
-				t.Fatalf("row %v: max is not a number", r)
-			}
-			l = append(l, mutantRow{r["pkg"].(string), int(max)})
-		}
-		return l
+	file := coreMutantRows(t)
+	if !slices.ContainsFunc(file, func(r fileRow) bool { return r.shards > 1 }) {
+		t.Fatal("no split row: the gate's tests would test nothing")
 	}
 	for _, event := range []string{"schedule", "workflow_dispatch"} {
-		if got := rows(event, nil); !slices.Equal(got, file) {
-			t.Errorf("%s's rows %v, not ci/core-mutants.txt's %v", event, got, file)
+		if got := mutantMatrix(t, event, nil); !slices.Equal(got, expandAll(file)) {
+			t.Errorf("%s's rows %v, not ci/core-mutants.txt's %v", event, got, expandAll(file))
 		}
 	}
 	for _, r := range file {
 		for _, inputs := range []map[string]string{
-			{"mutants": r.Pkg},
-			{"jobs": "core-mutants", "mutants": r.Pkg},
+			{"mutants": r.pkg},
+			{"jobs": "core-mutants", "mutants": r.pkg},
+			{"jobs": "core-mutants-gate", "mutants": r.pkg},
 		} {
-			if got := rows("workflow_dispatch", inputs); !slices.Equal(got, []mutantRow{r}) {
-				t.Errorf("mutants=%s keeps %v, not its row %v", r.Pkg, got, r)
+			if got := mutantMatrix(t, "workflow_dispatch", inputs); !slices.Equal(got, r.expand()) {
+				t.Errorf("mutants=%s keeps %v, not its rows %v", r.pkg, got, r.expand())
 			}
 		}
 	}
-	both := []mutantRow{file[0], file[len(file)-1]}
-	if got := rows("workflow_dispatch", map[string]string{"mutants": both[1].Pkg + "," + both[0].Pkg}); !slices.Equal(got, both) {
-		t.Errorf("two packages keep %v, not %v", got, both)
+	both := []fileRow{file[0], file[len(file)-1]}
+	if got := mutantMatrix(t, "workflow_dispatch", map[string]string{"mutants": both[1].pkg + "," + both[0].pkg}); !slices.Equal(got, expandAll(both)) {
+		t.Errorf("two packages keep %v, not %v", got, expandAll(both))
+	}
+}
+
+// selectGates runs ci/nightly-select.sh gates as core-mutants-gate does.
+func selectGates(t *testing.T, event, mutants string) ([]fileRow, error) {
+	t.Helper()
+	cmd := exec.Command("bash", "../../ci/nightly-select.sh", "gates")
+	cmd.Env = append(os.Environ(), "EVENT="+event, "MUTANTS="+mutants)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	var l []fileRow
+	for line := range strings.Lines(string(out)) {
+		f := strings.Fields(line)
+		if len(f) != 3 {
+			t.Fatalf("gates printed %q", line)
+		}
+		max, _ := strconv.Atoi(f[1])
+		n, _ := strconv.Atoi(f[2])
+		l = append(l, fileRow{f[0], max, n})
+	}
+	return l, nil
+}
+
+// A split package's verdict is core-mutants-gate's: it runs after every
+// shard whatever they did, aggregates exactly the split rows the run took,
+// each with its unchanged max, and no shard is given a max of its own.
+func TestNightlyMutantsGateAggregatesSplitRows(t *testing.T) {
+	w := readDispatch(t)
+	gate := w.Jobs["core-mutants-gate"]
+	if needs := needsList(gate.Needs); !slices.Equal(needs, []string{"select", "core-mutants"}) {
+		t.Fatalf("core-mutants-gate needs %v", needs)
+	}
+	if !strings.HasPrefix(gate.If, "always() && needs.select.result == 'success' && ") {
+		t.Fatalf("core-mutants-gate must run after failed or canceled shards (a missing shard fails it), and only after select: %q", gate.If)
+	}
+	var plan, aggregate string
+	for _, s := range gate.Steps {
+		if strings.Contains(s.Run, "ci/nightly-select.sh gates") {
+			if s.Env["MUTANTS"] != "${{ inputs.mutants }}" || s.Env["EVENT"] != "${{ github.event_name }}" {
+				t.Fatalf("a gate step must take select's inputs: %v", s.Env)
+			}
+			if strings.Contains(s.Run, "ci/mutate-core.sh aggregate") {
+				aggregate = s.Run
+			} else {
+				plan = s.Run
+			}
+		}
+	}
+	if !strings.Contains(plan, "gates=$(ci/nightly-select.sh gates)\n") || !strings.Contains(aggregate, `ci/mutate-core.sh aggregate "$pkg" "$max" "$shards" "$dir" || status=1`) || !strings.Contains(aggregate, `exit "$status"`) {
+		t.Fatalf("the gate must fail when the plan or any package's aggregate does:\n%s\n%s", plan, aggregate)
+	}
+	var shardStep string
+	for _, s := range w.Jobs["core-mutants"].Steps {
+		if strings.Contains(s.Run, "ci/mutate-core.sh") {
+			shardStep = s.Run
+		}
+	}
+	if !strings.Contains(shardStep, `ci/mutate-core.sh "$PKG" "$MAX"`) || !strings.Contains(shardStep, `ci/mutate-core.sh -shard "$SHARD/$SHARDS" "$PKG"`+"\n") {
+		t.Fatalf("an unsharded row applies its max; a shard takes none:\n%s", shardStep)
+	}
+	// a re-run attempt of a split package's shard fails first, with the
+	// fresh dispatch to run instead; the first attempt and unsplit rows run
+	steps := w.Jobs["core-mutants"].Steps
+	if len(steps) == 0 || steps[0].Env["ATTEMPT"] != "${{ github.run_attempt }}" || steps[0].Env["SHARDS"] != "${{ matrix.shards }}" {
+		t.Fatalf("core-mutants' first step must refuse a re-run attempt: %+v", steps)
+	}
+	guard := func(attempt, shards string) (string, error) {
+		cmd := exec.Command("bash", "-e", "-c", steps[0].Run)
+		cmd.Env = append(os.Environ(), "ATTEMPT="+attempt, "SHARDS="+shards, "PKG=qenv", "REF=main")
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+	if out, err := guard("2", "4"); err == nil || !strings.Contains(out, "gh workflow run nightly.yml --ref main -f jobs=core-mutants -f mutants=qenv") {
+		t.Errorf("attempt 2 of a shard ran (%v): %s", err, out)
+	}
+	for _, ok := range [][2]string{{"1", "4"}, {"2", "1"}, {"1", "1"}} {
+		if out, err := guard(ok[0], ok[1]); err != nil {
+			t.Errorf("attempt %s of a %s-shard row refused: %s", ok[0], ok[1], out)
+		}
+	}
+	file := coreMutantRows(t)
+	var split []fileRow
+	for _, r := range file {
+		if r.shards > 1 {
+			split = append(split, r)
+		}
+	}
+	for _, event := range []string{"schedule", "workflow_dispatch"} {
+		if got, err := selectGates(t, event, ""); err != nil || !slices.Equal(got, split) {
+			t.Errorf("%s gates %v (%v), not the split rows %v", event, got, err, split)
+		}
+	}
+	if got, err := selectGates(t, "schedule", file[0].pkg); err != nil || !slices.Equal(got, split) {
+		t.Errorf("a schedule's gates ignore a stray filter: %v %v", got, err)
+	}
+	for _, r := range file {
+		got, err := selectGates(t, "workflow_dispatch", r.pkg)
+		want := []fileRow(nil)
+		if r.shards > 1 {
+			want = []fileRow{r}
+		}
+		if err != nil || !slices.Equal(got, want) {
+			t.Errorf("mutants=%s gates %v (%v), not %v", r.pkg, got, err, want)
+		}
+	}
+	if _, err := selectGates(t, "workflow_dispatch", "nosuchpkg"); err == nil {
+		t.Error("gates accepted a package with no row")
+	}
+	// the gate runs exactly when core-mutants does
+	for _, inputs := range []map[string]string{nil, {"jobs": "core-mutants"}, {"mutants": split[0].pkg}, {"jobs": "fuzz"}, {"jobs": "core-mutants-gate"}} {
+		got := selected(t, w, "workflow_dispatch", inputs)
+		if slices.Contains(got, "core-mutants") != slices.Contains(got, "core-mutants-gate") {
+			t.Errorf("dispatch %v runs %v: core-mutants and its gate run together", inputs, got)
+		}
+	}
+	ctx := ghContext("workflow_dispatch", map[string]string{"jobs": "core-mutants"}, map[string]string{"jobs": `["core-mutants","core-mutants-gate"]`})
+	ctx["needs.select.result"] = "failure"
+	if truthy(evalGH(t, gate.If, ctx)) {
+		t.Error("the gate runs when select failed")
 	}
 }
 
@@ -640,6 +815,9 @@ func (p *ghParser) primary() any {
 		}
 	}
 	switch word {
+	case "always":
+		// the expressions here describe a run's jobs, never a cancellation
+		return true
 	case "format":
 		if len(args) == 0 {
 			return p.fail("format needs a string")

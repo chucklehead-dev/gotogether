@@ -23,7 +23,7 @@ func sealedFixture(t *testing.T) (string, producerManifest) {
 		t.Fatal(err)
 	}
 	digest := strings.Repeat("a", 64)
-	start, _ := json.Marshal(map[string]any{"version": 1, "root": dir, "package": "qenv", "jobs": 1, "mem_mb": 3072, "timeout_seconds": 300, "max_survivors": 0, "input_digest": digest})
+	start, _ := json.Marshal(startRecord{Version: journalVersion, Root: dir, Package: "qenv", Jobs: 1, MemMB: 3072, TimeoutSeconds: 300, MaxSurvivors: new(0), Shard: shardSpec{0, 1}, InputDigest: digest})
 	manifest := producerManifest{InputDigest: digest, Start: start, Suites: []suiteRecord{sr}, Binaries: []binaryIdentity{{Suite: 0, SHA256: hash, Size: size}}}
 	j, err := openJournal(dir, "qenv", "")
 	if err != nil {
@@ -42,10 +42,10 @@ func sealedFixture(t *testing.T) (string, producerManifest) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := j.append("admitted", sealedAdmitted{Sources: []sourceRecord{sourceMetadata(candidates[0])}, Suites: 1}); err != nil {
+	if err := j.append("admitted", sealedAdmitted{Sources: []sourceRecord{sourceMetadata(candidates[0])}, Suites: 1, Selected: []int{0}}); err != nil {
 		t.Fatal(err)
 	}
-	_, err = runCampaign(t.Context(), candidates, 1, 0, func(context.Context, target) (executionResult, error) { return exited(0), nil }, j, func(int) {})
+	_, err = runCampaign(t.Context(), candidates, 1, unsharded(0), func(context.Context, target) (executionResult, error) { return exited(0), nil }, j, func(int) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func sealedFixture(t *testing.T) (string, producerManifest) {
 func TestValidateJournalPreservesRedComplete(t *testing.T) {
 	path, m := sealedFixture(t)
 	c, err := validateJournal(path, m)
-	if err != nil || c.Total != 1 || c.Survivors != 1 || c.GatePassed {
+	if err != nil || c.Total != 1 || c.Survivors != 1 || c.Gate != gateFailed {
 		t.Fatalf("complete=%+v error=%v", c, err)
 	}
 }

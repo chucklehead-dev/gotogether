@@ -58,7 +58,7 @@ func syntheticCandidates() []candidate {
 func TestJournalCapturesSourceIDsActualAttemptsAndRedComplete(t *testing.T) {
 	j := testJournal(t)
 	c := syntheticCandidates()
-	results, err := runCampaign(t.Context(), c, 1, 0, func(_ context.Context, t target) (executionResult, error) {
+	results, err := runCampaign(t.Context(), c, 1, unsharded(0), func(_ context.Context, t target) (executionResult, error) {
 		if t.id == 35 {
 			return exited(1), nil
 		}
@@ -84,14 +84,14 @@ func TestJournalCapturesSourceIDsActualAttemptsAndRedComplete(t *testing.T) {
 	if err := json.Unmarshal(raw, &complete); err != nil {
 		t.Fatal(err)
 	}
-	if complete.Total != 2 || complete.Survivors != 1 || complete.GatePassed {
+	if complete.Total != 2 || complete.Survivors != 1 || complete.Gate != gateFailed {
 		t.Fatalf("red gate manufactured green: %+v", complete)
 	}
 }
 
 func TestCampaignErrorsNeverBecomeKillsOrComplete(t *testing.T) {
 	j := testJournal(t)
-	result, err := runCampaign(t.Context(), syntheticCandidates(), 1, 0, func(context.Context, target) (executionResult, error) {
+	result, err := runCampaign(t.Context(), syntheticCandidates(), 1, unsharded(0), func(context.Context, target) (executionResult, error) {
 		return executionResult{Disposition: "execution_error"}, errors.New("fixture execution failed")
 	}, j, func(int) { t.Fatal("error counted as completion") })
 	if err == nil || result != nil {
@@ -115,7 +115,7 @@ func TestJournalWriteAndSyncFailuresFailClosed(t *testing.T) {
 	t.Run("write", func(t *testing.T) {
 		j := testJournal(t)
 		j.file.Close()
-		results, err := runCampaign(t.Context(), syntheticCandidates(), 1, 0, func(context.Context, target) (executionResult, error) { return exited(0), nil }, j, func(int) { t.Fatal("failed record counted") })
+		results, err := runCampaign(t.Context(), syntheticCandidates(), 1, unsharded(0), func(context.Context, target) (executionResult, error) { return exited(0), nil }, j, func(int) { t.Fatal("failed record counted") })
 		if err == nil || results != nil {
 			t.Fatalf("write failure returned success: %v %v", results, err)
 		}
@@ -175,7 +175,7 @@ func TestJournalCancellationProcess(t *testing.T) {
 		if err := j.append("admitted", []sourceRecord{sourceMetadata(candidates[0]), sourceMetadata(candidates[1])}); err != nil {
 			panic(err)
 		}
-		_, err = runCampaign(ctx, candidates, 1, 0, func(ctx context.Context, t target) (executionResult, error) {
+		_, err = runCampaign(ctx, candidates, 1, unsharded(0), func(ctx context.Context, t target) (executionResult, error) {
 			if t.id == 35 {
 				return exited(1), nil
 			}

@@ -67,7 +67,7 @@ func TestSupervisorSealsCompleteRedCampaignAndRejectsIncompleteWorker(t *testing
 			if err := readJSONFile(receiptPath, &receipt); err != nil {
 				t.Fatalf("missing valid sealed receipt: %v\n%s", err, output)
 			}
-			if receipt.Complete != (completeRecord{Total: 1, Survivors: 1, GatePassed: false}) || !receipt.WorkerExecution.passed() || receipt.AdmissionEligible {
+			if receipt.Complete != (completeRecord{Total: 1, Survivors: 1, Gate: gateFailed}) || !receipt.WorkerExecution.passed() || receipt.AdmissionEligible {
 				t.Fatalf("complete red campaign was reclassified: %+v", receipt)
 			}
 			if receipt.InputsRechecked != tc.rechecked {
@@ -118,10 +118,16 @@ func supervisorFixtureEnv(extra map[string]string) []string {
 		}
 	}
 	for k, v := range values {
-		result = append(result, k+"="+v)
+		if v != unsetEnv {
+			result = append(result, k+"="+v)
+		}
 	}
 	return result
 }
+
+// unsetEnv, as a supervisorFixtureEnv value, removes the variable instead.
+const unsetEnv = "\x00unset"
+
 func supervisorFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()

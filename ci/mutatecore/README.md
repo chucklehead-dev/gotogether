@@ -47,8 +47,9 @@ to disk before progress is reported. Execution errors and cancellation are
 errors, never killed mutations. Owned build, discovery and test commands run in
 separate process groups so cancellation also stops their ordinary descendants.
 
-A `complete` event means every admitted source has a durable outcome;
-`gate_passed` separately reports whether the survivor limit passed. A complete
+A `complete` event means every source the journal runs (all of them, or a
+shard's selection) has a durable outcome; `gate` separately reports whether the
+survivor limit passed (`passed`, `failed`, or a shard's `deferred_to_aggregate`). A complete
 campaign can therefore be red. An `aborted` event reports graceful failure, while
 an abrupt kill may leave only earlier records and a partial final line. Without
 `complete`, the campaign is incomplete. Unrecorded sources remain unknown; no
@@ -142,3 +143,149 @@ control remains, and failures retain the PID, last proc state and wrapper
 result. An earlier one-shot observation failure lacked that state, so it is
 consistent with an asynchronous observation race, not a proven diagnosis of
 that particular historical execution.
+
+## Shards and their aggregate
+
+A campaign too long for one runner is split: `ci/mutate-core.sh -shard i/n
+<package>` (0 ≤ i < n) runs shard i of n. With no `-shard` (or `-shard 0/1`) the
+campaign is exactly the unsharded one above: the same candidates in the same
+order, its max applied, its exit status. A shard of n > 1 takes no max and is
+refused one: it never applies the limit.
+
+Every shard builds every suite, executes every inventory, requires every
+unmutated baseline and admits the complete ordered inventory (sorted by source
+file and file-local ordinal) before it selects anything. It then runs the
+sources whose index in that inventory is ≡ i (mod n). Its journal's `admitted`
+event records the full inventory with its suite targets and the selected
+indices; outcomes are recorded for exactly the selection, and its `complete`
+event counts the selection with gate `deferred_to_aggregate` (an unsharded
+campaign's gate is `passed` or `failed`). The parent seals each shard as
+before, with its receipt.
+
+`ci/mutate-core.sh aggregate <package> <max> <n> <evidence-dir>` is the one
+verdict of a split campaign. It reads every `*.receipt.json` and `*.inputs.json`
+under the directory (one directory per shard artifact) and fails closed, naming
+each problem, unless all of these hold:
+
+- one sealed receipt for each shard 0..n-1: a missing or duplicate shard, or a
+  shard of another split, fails;
+- every journal that was started is sealed: a journal without a receipt fails,
+  reported as aborted (canceled or failed, with its error), complete but never
+  sealed, or incomplete;
+- each receipt is in the current strict shape (exactly what the helper writes:
+  no field missing, null, aliased, duplicated or unknown), of the package
+  asked, not admission eligible, its worker exit 0, its execution identity
+  matching its recorded inputs and inputs sidecar, and its journal the bytes it
+  sealed;
+- each journal revalidates against its own manifest without the deleted
+  binaries: settings, suites, every baseline passed, the full inventory
+  admitted (recomputed from the manifest's suite inventories), the modulo
+  selection, a valid outcome (execution evidence, attempt order) for exactly
+  each selected source, and a completion that reconciles;
+- one shared identity across shards (below), recomputed by the aggregate from
+  each receipt's evidence and equal to the one the shard recorded;
+- the shards' resolved sources are disjoint, and their union is exactly the
+  full inventory, by source identity (file and file-local ordinal, so repeated
+  identical descriptors stay distinct) with matching descriptors. Local binary
+  IDs take no part.
+
+Only then is the package's unchanged max applied, once, to the survivors of
+every shard summed. A complete red aggregate still publishes
+`<evidence-dir>/<package>.aggregate.json` and exits 1; a failed verification
+publishes nothing. The aggregate receipt lists the survivors, each shard's
+execution identity, and the aggregate concurrency: n shards × JOBS concurrent
+source mutants, on separate runners, each test process with its own memory cap
+and 300-second limit. Like every receipt here it is completion evidence, never a
+survivor approval or admission. There is no reader for older journals or
+receipts: rerun with the current helper.
+
+### The identity boundary
+
+The *shared identity* is what every shard must have in common. It is computed
+from a receipt's recorded evidence, with three path prefixes made relative (the
+checkout root, `GOROOT`, `GOMODCACHE`) and nothing else dropped or relaxed:
+
+- source: every collected static input file (content, size, mode, link) and the
+  Go discovery membership that selected them;
+- candidates: the full ordered inventory (file, ordinal, descriptor, linked
+  suites by package), its count and digest;
+- suites: each package, its directory, its mutant count and its built test
+  binary's digest;
+- generator and toolchain: this helper's executable, the qweave it built, the
+  Go toolchain binaries, `go`, `sh` and `timeout`, each by content; the Go
+  version; the digest of qweave's generated overlay bytes;
+- configuration: the journal version, JOBS, MEM_MB, the per-test timeout, the
+  discovery arguments and the recorded `go env` settings;
+- semantic environment: every variable that can change what a test checks,
+  by value, with unset distinguished from set-empty (`env.go`'s
+  `semanticKeys`, always listed; and any present variable with a prefix of
+  `semanticPrefixes`, listed when set). It covers Go's runtime and build mode
+  (`GODEBUG`, `GOFLAGS`, `GOEXPERIMENT`, `CGO_ENABLED`, `GOMAXPROCS`, `GOGC`,
+  ...), `TZ` and locale, `CI`, `JOBS`, `MEM_MB`, every `GOTOGETHER_*` and
+  `QUINT_*` variable the module names (`GOTOGETHER_CHECK`, `_STRICT`,
+  `_EVAL`, `_EVAL_SAMPLE`, `_SEEDS`, `_RUN`, ...), native-tool settings
+  validate checks (`NODE_OPTIONS`, `LD_PRELOAD`, `JAVA_TOOL_OPTIONS`, ...),
+  the fixture switches tests read in their child processes, and
+  `GITHUB_RUN_ID`/`GITHUB_RUN_ATTEMPT`, so the shards are one run's one
+  attempt;
+- tools on PATH: the external programs tests look up and skip or change on
+  (`quint`, `node`, `java`, `docker`, `kind`, `kwok`, ...), found or not and by
+  content.
+
+Each shard's *execution identity* stays its own: its `input_digest` (the exact
+inherited environment, every value, and absolute paths, unchanged), runtime
+environment digest, root, tool paths, journal, worker execution, and the names
+of its present runner-only variables (`PATH`, `HOME`, `TMPDIR`, `XDG_*`,
+`GOPATH`, `GOCACHE`, `GOPROXY`, proxies and certificates, `RUNNER_*`,
+`GITHUB_*` but the run and attempt, `GOTOGETHER_MUTATION_LOG`, ...) and of its
+unclassified ones. These differ between runners and are retained, per shard,
+in the aggregate receipt; they are not compared.
+
+The boundary, precisely:
+
+- every variable the module's code reads by a literal name is classified, and
+  every toolkit or quint name is a semantic key (`TestEnvironmentReadsAreClassified`
+  scans the root module; a new read must be classified to pass). A variable
+  read through a name built at run time, or by a dependency, and not
+  classified, is unclassified: recorded by name per shard, not compared;
+- a runner-only variable that a test nonetheless depends on (a different
+  `HOME`'s configuration, a proxy) is not compared, nor the files such
+  variables point to beyond the collected inputs;
+- built binaries embed the checkout path, so shards must run from the same
+  path (GitHub's runners check out at one fixed path); a different path fails
+  closed as a generator or binary disagreement, and so does any other absolute
+  path outside the three anchors;
+- a shard whose input collection was unavailable (an unsupported `GOFLAGS`,
+  `GOCACHEPROG` or aspect tool) is sealed as before, admission-ineligible, but
+  has no shared identity, and fails any aggregate;
+- likewise a shard on which a PATH tool was found but its content could not be
+  read (an execute-only binary, a target gone between lookup and read): the tool
+  is recorded found, with no digest and the reason, and the shard has no shared
+  identity. Shards that fail alike never agree on their error text;
+- qweave's generated overlays are compared as a sorted multiset of builds
+  (each build's replaced sources by anchored path and content): capture order
+  is ignored, multiplicity is not;
+- the closure limitations above (native headers and libraries, VCS metadata,
+  runtime reads, external services, hostile concurrent modification) apply to
+  each shard and so to the aggregate. Receipts are not authenticated: the
+  canonical re-encoding is a shape check, alongside the consistency checks,
+  not a signature.
+
+### Retries
+
+Shard artifacts are named by package and shard, not by attempt. A re-run
+attempt (`github.run_attempt` > 1) of a split package's shard fails at its
+first step, and the helper refuses it too, with the fix: dispatch a fresh run
+of the package, `gh workflow run nightly.yml --ref <ref> -f jobs=core-mutants
+-f mutants=<package>`. Such a run is partial and does not count for J7c. The
+aggregate refuses shards of any run or attempt other than its own (it reads
+the gate job's `GITHUB_RUN_ID` and `GITHUB_RUN_ATTEMPT`), so a re-run gate
+never aggregates an earlier attempt's evidence. Each shard keeps the job's
+120-minute allowance; JOBS must be the same on every shard, and the aggregate
+reports the total concurrency, shards × JOBS.
+
+In the nightly, `ci/core-mutants.txt` gives a row `shards=N`; `ci/nightly-select.sh`
+expands it into a matrix entry per shard (artifact
+`mutations-<package>-shard-<i>-of-<N>`), and `core-mutants-gate` (after every
+shard, whatever they did) runs the aggregate for each split row the run took.
+It is the split package's failing signal.

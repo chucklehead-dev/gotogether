@@ -78,6 +78,12 @@ and adds a line here.
 - Strengthen trace encoder, clock-ordering and span-source regression controls;
   simplify redundant encoder checks and use the builtin minimum for clock gaps.
 
+- Core mutation campaigns split over runners (`ci/mutate-core.sh -shard i/n`,
+  `shards=N` in ci/core-mutants.txt): every shard admits the full ordered
+  inventory with every baseline, and one aggregate gate checks the shards
+  are one campaign and applies the unchanged max once to their summed
+  survivors. Journals and receipts are version 2; older ones are refused.
+
 - Core mutation campaigns include descendant test suites, map each source
   mutation to its local ID in every binary, and require every suite baseline
   to pass before reporting mutant results.
