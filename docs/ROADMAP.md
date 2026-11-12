@@ -122,7 +122,7 @@ Already in place and to be documented: `qtest.Model` claims (`Proves`,
 - **L4: Quint's environment.** doctor names `QUINT_BACKEND=typescript` when
   the evaluator is missing or cannot be fetched; a `quint test` gotogether
   runs that matches nothing is an error, not a pass (quint's own CLI: an
-  upstream issue).
+  upstream issue, drafted in [upstream/quint-test-no-match.md](upstream/quint-test-no-match.md)).
 - **L5: an `init` with a nondet choice.** Say at the start that each run
   searches N initial candidates, with progress while it does; a binding may
   pin the init call; lift (or explain where it is hit) the
