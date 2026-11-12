@@ -35,6 +35,10 @@ and adds a line here.
   fault-option prefixes, and names external nemeses during core settlement.
   Nested choices cannot borrow outer labels; returned names remain owned snapshots.
 
+- Fault-option naming handles nominal values before registry lookup, and choice
+  logs use that same naming contract. Declared option names and recorded choices
+  are unchanged.
+
 - qhttp preserves net/http's CONNECT request framing: unknown lengths do not
   invent chunking, while explicit lengths and transfer encodings are retained.
 

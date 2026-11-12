@@ -166,7 +166,10 @@ func Options(name string) []string {
 
 // OptionName is the name of a kind's option v (1-based), or "".
 func OptionName(name string, v int) string {
-	if o := Options(name); v >= 1 && v <= len(o) {
+	if v <= 0 {
+		return "" // nominal choices have no fault-option name
+	}
+	if o := Options(name); v <= len(o) {
 		return o[v-1]
 	}
 	return ""
