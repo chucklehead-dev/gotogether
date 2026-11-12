@@ -347,6 +347,12 @@ jobs:
       # hosts use Go's normal proxy/cache path. Checksum verification stays on.
       GOPROXY: https://proxy.golang.org,direct
       GONOPROXY: github.com/chucklehead-dev/gotogether
+      # The same sum.golang.org lag as consumable's: this repository's
+      # fresh pseudo-versions (here qenv/simgrpc's at this commit) are not
+      # in the checksum database for up to about an hour after a push, and
+      # its 404 failed this job (#173). Only this repository's modules skip
+      # it; third-party modules stay verified.
+      GONOSUMDB: github.com/chucklehead-dev/gotogether
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
