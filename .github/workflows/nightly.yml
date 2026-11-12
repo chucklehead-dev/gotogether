@@ -509,6 +509,9 @@ jobs:
           GROUP_BINDINGS: ${{ matrix.bindings }}
         run: |
           go build -o "$RUNNER_TEMP/gotogether" ./cmd/gotogether
+          # quint fetches Apalache on its first verify, as verify's own
+          # first test does; the managed tool's identity needs it present
+          GOTOGETHER_VERIFY=1 go test -count=1 -run TestSimulateVerify ./cmd/gotogether
           # a group's later bindings reuse its first's exact proof only with
           # an eligible managed tool: fail early, not after the budget
           GOTOGETHER_NATIVE_VERIFY=1 go test -count=1 -run '^TestNativeManagedToolIdentity$' ./validate/model

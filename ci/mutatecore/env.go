@@ -78,10 +78,22 @@ var runnerOnlyKeys = []string{
 // runnerOnlyPrefixes is read-only after initialization.
 var runnerOnlyPrefixes = []string{"RUNNER_", "GITHUB_", "ACTIONS_", "SSH_"}
 
-// pathTools are external programs tests look up on PATH, skipping or
-// changing what they check by their presence. Each is identified by content.
+// pathTools are the external programs the core module's code and tests look
+// up on PATH, skipping or changing what they check by their presence. Each is
+// identified by content, so it is exactly that set
+// (TestPathToolsAreTheCoresLookups): a tool only an example module looks up
+// (kubectl, kind, kwok, maelstrom) is no input of a core campaign, and
+// listing it once failed an aggregate whose runners' images carried two
+// kubectl builds. ttyd, ffmpeg and vhs are looked up by the tape tools'
+// installer, which internal/ciconfig tests.
 // pathTools is read-only after initialization.
-var pathTools = []string{"quint", "node", "java", "apalache-mc", "docker", "kind", "kubectl", "kwok", "kwokctl", "maelstrom", "ttyd", "ffmpeg", "vhs"}
+var pathTools = []string{"quint", "node", "java", "docker", "toxiproxy-server", "qweave", "gotogether-nav", "ttyd", "ffmpeg", "vhs"}
+
+// baseTools are programs the core runs by name that pathTools does not
+// identify: the runner's base system, whose absence fails a test rather than
+// skipping it, and Go's toolchain, which the generator identity carries.
+// baseTools is read-only after initialization.
+var baseTools = []string{"bash", "sh", "sleep", "true", "git", "go", "gofmt"}
 
 type envClass int
 
