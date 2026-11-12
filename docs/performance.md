@@ -1226,3 +1226,43 @@ time). By the rule PR #145's `ci/verify-alone.txt` states for its groups
 wallet-grist.calls and 322 for wallet-grist, under the 360-minute ceiling,
 where #145 gave both the ceiling, expecting them unfinished. Measured on a
 contended machine; a run alone may be faster.
+
+## Inventory's proof before and after the grist library's folds (2026-11-12)
+
+The J7b roster measurements put inventory's cold depth-8 proof at 414 s on
+`a86405b4` (the map-free `used`, before #142's folds reached the examples)
+and 1,049 s on `514e93ff` (after both), which read as a 2.5x slowdown from
+the folds. Those two runs were not alike: the 1,049 s ran with three other
+proofs on the machine's four cores. Rerun cold and alone (each its own
+Apalache server, a fresh cache and temporary directory, nothing else heavy
+on the machine: load average about 1.1 at the start), with
+`gotogether simulate -binding examples/inventory-grist/inventory/inventory.binding.yaml -verify 8`:
+
+| run | commit | wall | depth 6 (transitions / invariant) | depth 7 | depth 8 |
+|---|---|---|---|---|---|
+| a1 | `a86405b4` (before the folds) | 734 s | 42.3 / 19.3 s | 112.1 / 71.9 s | 151.3 / 282.5 s |
+| b1 | `4d4f237d` (main, with them) | 818 s | 43.9 / 17.3 s | 96.0 / 55.7 s | 145.0 / 408.7 s |
+| a2 | `a86405b4` | (cut at depth 8) | 27.7 / 18.6 s | 85.2 / 80.5 s | — |
+
+Times are Apalache's own (its `detailed.log`); both complete runs pass.
+The folds cost nothing measurable through depth 7: main's transitions are
+equal or faster at every depth, and its invariant checks at depths 5 to 7
+too. The whole difference between the complete runs is one query, depth
+8's invariant check (409 s against 283 s), and a single Z3 query of that
+size varies by that much between runs; the load average had risen to
+about 1.7 by the end of b1. So the earlier 414 s against 1,049 s does not
+show a slowdown from the folds, and these runs show none beyond one
+query's variance. A repeated pair (a2 and b2) to settle depth 8 was cut
+short twice by the measuring container's restarts, during a2's depth 8.
+
+Inventory's model uses these of #142's definitions: `conditionHolds`
+(authorize, cancel, reserve), `nextOf` (the ship triggers), `keyStable`,
+`callKeyStable`, `holds` through `failed`, and the regenerated `nextID`;
+`used` and `withinCapacity` are unchanged. If a later cold pair shows
+main's depth-8 invariant check repeatably slower, those are where to
+ablate first. Inventory stays in the shared roster either way: about 14
+minutes cold alone, retried with the roster's time left after its first
+share.
+
+The 414 s run's depth-8 invariant check (55 s, on the same transitions'
+cost) remains unexplained; it is not reproduced by either commit cold.
