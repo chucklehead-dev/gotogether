@@ -68,6 +68,10 @@ and adds a line here.
   inconclusive instead of treating them as rejected prefixes or absence proofs.
   Confirmed witnesses, actor scope and operational errors retain their meaning.
 
+- Service capacity checks bound waiter ownership across crash/restart generations
+  and preserve reuse after expired requests are shed. Shedding creates no new
+  worker capacity, so its redundant notification is removed.
+
 - Failed exploration claims with no verdict retain the responsible run's seed,
   choices, history, corpus entry and navigation links. Diagnostics preserve the
   unknown judgment and point to replay evidence before changing search bounds.

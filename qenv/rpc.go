@@ -112,7 +112,8 @@ func (svc *Service[Req, Resp]) serve(ctx context.Context, deadline time.Time) (o
 	}
 	if c.Shed && svc.sim.Now().After(deadline) {
 		svc.Shed++
-		svc.free.Notify()
+		// No worker was acquired: shedding creates no new capacity. Any queued
+		// peers were already notified when capacity became available.
 		return false, false
 	}
 	svc.busy++
