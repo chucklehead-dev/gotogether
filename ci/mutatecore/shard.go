@@ -258,6 +258,17 @@ func sharedIdentityOf(r completionReceipt) (sharedIdentity, error) {
 		id.Config.GoEnv[k] = a.path(v)
 	}
 	id.Config.Environment, id.Config.PathTools = r.Inputs.Environment.Semantic, r.Inputs.Environment.Tools
+	for _, t := range id.Config.PathTools {
+		// a tool found without a content digest establishes no identity:
+		// agreeing on the same collection error is not agreeing on a tool
+		if t.Found && (t.Unavailable != "" || !isSHA256(t.SHA256)) {
+			reason := t.Unavailable
+			if reason == "" {
+				reason = fmt.Sprintf("digest %q", t.SHA256)
+			}
+			return id, fmt.Errorf("PATH tool %s was found but its content digest is unavailable (%s): an aggregate cannot establish that its shards ran the same tool", t.Name, reason)
+		}
+	}
 	files := make([]inputFile, len(in.Files))
 	for i, f := range in.Files {
 		f.Path, f.Resolved = a.path(f.Path), a.path(f.Resolved)
@@ -414,4 +425,17 @@ func differingTool(a, b []pathTool) string {
 		}
 	}
 	return ""
+}
+
+// isSHA256 reports whether s is a lowercase hex SHA-256 digest.
+func isSHA256(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if !('0' <= c && c <= '9' || 'a' <= c && c <= 'f') {
+			return false
+		}
+	}
+	return true
 }

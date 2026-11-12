@@ -258,6 +258,10 @@ The boundary, precisely:
 - a shard whose input collection was unavailable (an unsupported `GOFLAGS`,
   `GOCACHEPROG` or aspect tool) is sealed as before, admission-ineligible, but
   has no shared identity, and fails any aggregate;
+- likewise a shard on which a PATH tool was found but its content could not be
+  read (an execute-only binary, a target gone between lookup and read): the tool
+  is recorded found, with no digest and the reason, and the shard has no shared
+  identity. Shards that fail alike never agree on their error text;
 - qweave's generated overlays are compared as a sorted multiset of builds
   (each build's replaced sources by anchored path and content): capture order
   is ignored, multiplicity is not;

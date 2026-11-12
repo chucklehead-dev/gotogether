@@ -385,6 +385,23 @@ func TestShardedCampaignAggregatesOnceAndFailsClosed(t *testing.T) {
 			reseal(t, filepath.Join(dir, "mutations-sample-shard-b"), func(r *completionReceipt) { r.Qweave.SHA256 = strings.Repeat("0", 64) })
 			return dir
 		}, 2, "generator, compiler and execution tools"},
+		{"the same unreadable PATH tool on every shard", func() string {
+			// agreeing on one collection error is not agreeing on a tool
+			dir := evidence(t, s0, s1)
+			for _, d := range []string{"mutations-sample-shard-a", "mutations-sample-shard-b"} {
+				reseal(t, filepath.Join(dir, d), withUnreadableTool("quint", "open /usr/local/bin/quint: permission denied"))
+			}
+			return dir
+		}, 2, "PATH tool quint was found but its content digest is unavailable"},
+		{"a found PATH tool with a malformed digest", func() string {
+			dir := evidence(t, s0, s1)
+			for _, d := range []string{"mutations-sample-shard-a", "mutations-sample-shard-b"} {
+				reseal(t, filepath.Join(dir, d), func(r *completionReceipt) {
+					r.Inputs.Environment.Tools = append(r.Inputs.Environment.Tools, pathTool{Name: "node", Found: true, SHA256: "unreadable: open: permission denied"})
+				})
+			}
+			return dir
+		}, 2, "PATH tool node was found but its content digest is unavailable"},
 		{"generated overlay bytes changed", func() string {
 			dir := evidence(t, s0, s1)
 			reseal(t, filepath.Join(dir, "mutations-sample-shard-a"), withOverlay("11", 1))
@@ -483,14 +500,64 @@ func reseal(t *testing.T, dir string, mutate func(*completionReceipt)) {
 			t.Fatal(err)
 		}
 	}
-	shared, err := sharedIdentityOf(r)
-	if err != nil {
-		t.Fatal(err)
+	// as the supervisor seals it: a receipt whose shared identity cannot
+	// be established says why, and has none
+	r.Shared, r.SharedUnavailable = nil, ""
+	if shared, err := sharedIdentityOf(r); err != nil {
+		r.SharedUnavailable = err.Error()
+	} else {
+		r.Shared = &shared
 	}
-	r.Shared = &shared
 	b, _ := json.Marshal(r)
 	if err := os.WriteFile(path+receiptSuffix, append(b, '\n'), 0600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// withUnreadableTool records a PATH tool found but unreadable, as
+// classifyEnvironment does.
+func withUnreadableTool(name, reason string) func(*completionReceipt) {
+	return func(r *completionReceipt) {
+		tools := r.Inputs.Environment.Tools[:0:0]
+		for _, t := range r.Inputs.Environment.Tools {
+			if t.Name != name {
+				tools = append(tools, t)
+			}
+		}
+		r.Inputs.Environment.Tools = append(tools, pathTool{Name: name, Found: true, Unavailable: reason})
+	}
+}
+
+// A tool lookPath finds but whose content cannot be read is recorded found,
+// with no digest and its reason; a tool not found is recorded so.
+func TestClassifyEnvironmentRecordsUnreadableTools(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "quint") // found by the stub, then gone
+	present := filepath.Join(dir, "node")
+	if err := os.WriteFile(present, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	e := classifyEnvironment(nil, func(name string) (string, error) {
+		switch name {
+		case "quint":
+			return missing, nil
+		case "node":
+			return present, nil
+		}
+		return "", exec.ErrNotFound
+	})
+	got := map[string]pathTool{}
+	for _, tool := range e.Tools {
+		got[tool.Name] = tool
+	}
+	if q := got["quint"]; !q.Found || q.SHA256 != "" || q.Unavailable == "" {
+		t.Errorf("an unreadable tool: %+v, want found with no digest and a reason", q)
+	}
+	if n := got["node"]; !n.Found || !isSHA256(n.SHA256) || n.Unavailable != "" {
+		t.Errorf("a readable tool: %+v, want its digest", n)
+	}
+	if j := got["java"]; j.Found || j.SHA256 != "" || j.Unavailable != "" {
+		t.Errorf("a tool not found: %+v", j)
 	}
 }
 

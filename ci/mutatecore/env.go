@@ -135,6 +135,10 @@ type pathTool struct {
 	Found  bool   `json:"found"`
 	SHA256 string `json:"sha256,omitempty"`
 	Size   int64  `json:"size,omitempty"`
+	// Unavailable is why a tool found on PATH has no content digest (an
+	// execute-only binary, a target that vanished): such a tool has no
+	// identity, and its shard cannot be aggregated (sharedIdentityOf).
+	Unavailable string `json:"unavailable,omitempty"`
 }
 
 func classifyEnvironment(environ []string, lookPath func(string) (string, error)) semanticEnvironment {
@@ -167,11 +171,13 @@ func classifyEnvironment(environ []string, lookPath func(string) (string, error)
 	for _, name := range pathTools {
 		t := pathTool{Name: name}
 		if p, err := lookPath(name); err == nil {
-			// a tool found but unreadable has no identity: record it so
+			// a tool found but unreadable has no identity: no digest, and
+			// the reason, so that two shards failing alike never compare
+			// equal on their error text
 			if sum, size, err := digestFile(p); err == nil {
 				t.Found, t.SHA256, t.Size = true, sum, size
 			} else {
-				t.Found, t.SHA256 = true, "unreadable: "+err.Error()
+				t.Found, t.Unavailable = true, err.Error()
 			}
 		}
 		e.Tools = append(e.Tools, t)
