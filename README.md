@@ -8,7 +8,8 @@ Pre-release: nothing is tagged yet. Where the work stands, what is left
 and how to resume it: [docs/STATUS.md](docs/STATUS.md).
 
 **Go 1.27.3 or newer is required in the service that imports gotogether,
-including a production service that only records steps.**
+including a production service that only records steps.** Why, and the
+paths that need no import (a service's existing spans): [docs/fit.md](docs/fit.md#why-the-go-floor-holds-for-a-recording-only-service).
 
 ## Quickstart
 
@@ -47,9 +48,53 @@ hello_test.go:104: qhegel: shrunk to 5 steps, faults: rpc.counter.request=duplic
 Those failures are the mutant's, expected: the test passes.
 `GOTOGETHER_VERBOSE=1 go test -v .` prints each catch's whole report.
 
-Read `hello.go` and `hello_test.go` (189 lines together), then pick a
-workflow from the table below. Agents start from the `gotogether-start`
-skill (`gotogether skills install`).
+Read `hello.go` and `hello_test.go` (189 lines together). Agents start
+from the `gotogether-start` skill (`gotogether skills install`).
+
+### One path, then additions
+
+Every workflow here is the path hello takes, with additions. The system
+is a `qtest.System`: its binding, and a function that deploys it on a
+chooser (seeds or Hegel make every choice). An exploration runs it many
+times under faults, and the model judges every run:
+
+```go
+sys := qtest.System{Binding: "hello.binding.yaml", Run: Run}
+sys.WithRates(qenv.Rates{Default: 0.2}).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms())
+```
+
+Each addition works on that same System, when its question comes up:
+
+- **Can the check fail?** Plant a bug (a mutant: `testdata/mutants/<name>/`,
+  run by `qtest.Mutants`) and expect it caught:
+  `.Expect(t, qtest.Some(qtest.Rejects("apply")))`.
+- **Every run, not a sample:** `sys.Exhaust` (every run within a
+  `qtest.Bound` of faults and delays), `sys.Sweep`, `sys.Fuzz`; Hegel
+  (`qhegel.Shrink`) shrinks a failure to the faults it needs.
+- **The model before the code:** `qtest.Model(t, binding).Expect(t,
+  qtest.Proves("exactlyOnce"))`, and `gotogether simulate`.
+- **The real environment:** the same binding checks runs recorded outside
+  the simulation (`qtest.Record`, `gotogether validate`).
+- **Another question:** the model's traces driving the code (`connect`),
+  Hegel driving it (`qhegel.Test`), recovery after a load spike (`qload`,
+  `qmeta`): the table under [What it does](#what-it-does).
+
+Whether `qenv.Store` stands in for your database (Aurora DSQL, compared),
+and when `testing/synctest` is enough instead: [docs/fit.md](docs/fit.md).
+
+### Already emitting OpenTelemetry spans?
+
+A service whose spans say what it did can be checked against a model
+without importing gotogether, on whatever Go version it builds with: a
+rule file maps its spans to model steps, and CI checks an OTLP/JSON
+export of them:
+
+```sh
+gotogether validate -binding b.yaml -convert rules.yaml spans.jsonl
+```
+
+What the spans must carry, and what they cannot show:
+[docs/fit.md](docs/fit.md#a-service-that-already-emits-opentelemetry-spans).
 
 An HTTP service of your own starts green, its wiring written:
 

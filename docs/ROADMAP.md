@@ -34,7 +34,7 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Pilot preparation | Current handoff and J13 replay parity | The [pilot guide](external-pilot.md) covers one finite-history contract. State the production-recording Go floor plainly; navigate hints, compiled bundle replay and distinct no-verdict exits remain J13 work. The present bundle walkthrough requires Go and Quint. |
 | Later | J14/J15, J18/J19, J21 | Durable rewind detection and safe redrive before Grist production claims; usability/vocabulary; GR4 consolidation. |
 | Proposed queue | J16/J17/J20/J22/J25–J27 | Retain the review's adoption, capacity, admission-tuning and process proposals without treating them as completed commitments. |
-| Proposed queue | K1–K9: adoption feedback ([#144](https://github.com/chucklehead-dev/gotogether/issues/144)) | After J7c, under the red-nightly rule. First K1 (docs), K3, K4, then K6's design spike; the rest as projects ask. |
+| Proposed queue | K1–K9: adoption feedback ([#144](https://github.com/chucklehead-dev/gotogether/issues/144)) | K1 (docs) done: README's one path and spans entry point, [fit.md](fit.md). The rest after J7c, under the red-nightly rule: K3, K4, then K6's design spike; the rest as projects ask. |
 | Dropped | J12 and J23 | Go 1.26 compatibility and pin batching are withdrawn. Go 1.27.3 and immediate required sibling pin alignment remain deliberate policies. |
 
 **Red-nightly rule (maintainer decision):** while the nightly is red, feature
@@ -73,12 +73,14 @@ Not commitments: each starts when a project needs it or the order above
 says so. The recording Go floor stays (J12 withdrawn); tags stay the
 maintainer's (R5).
 
-- **K1: the docs a newcomer needs first.**
-  - One golden path in the README, `qtest.System` + `Explore`, with the other tools introduced as additions to it.
-  - OTel span conversion (`convert`) as an entry point of its own: the path for services that already emit spans, and for those that cannot take the Go floor.
-  - What `qenv.Store` at `SnapshotIsolation` shares with Aurora DSQL (commit-time conflicts, the second writer aborted) and where it differs (`GetForUpdate` waits for the lock; no row or size limits).
-  - When `testing/synctest` fits and when qenv does.
-  - Why the Go floor holds for recording-only services.
+- **K1: the docs a newcomer needs first.** Done: the README's one path
+  (`qtest.System` + `Explore`, the rest as additions to it) and its
+  entry point for services that already emit spans; [fit.md](fit.md):
+  spans and `convert` without an import, why the Go floor holds for
+  recording-only services, `qenv.Store` at `SnapshotIsolation` against
+  Aurora DSQL (the same commit-time conflicts; `GetForUpdate` waits where
+  DSQL's `FOR UPDATE` does not; no limits), and `testing/synctest` or
+  qenv.
 - **K2: the first hour's vocabulary.**
   - A short default verdict and a "why" command, in place of the long one-line report.
   - Each term introduced with the feature that needs it.
