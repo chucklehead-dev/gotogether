@@ -1475,8 +1475,8 @@ func (s *Sim) runnable() (int, []*task) {
 		if s.now.Before(e.at) {
 			break
 		}
-		heap.Pop(&s.timers)
-		s.enqueue(e.t)
+		due := heap.Pop(&s.timers).(timer)
+		s.enqueue(due.t)
 	}
 	cands := s.cands[:0] // (valid until the next call: a step's)
 	keep := s.pred[:0]
