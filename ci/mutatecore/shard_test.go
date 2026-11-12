@@ -246,6 +246,9 @@ func TestShardedCampaignAggregatesOnceAndFailsClosed(t *testing.T) {
 	t.Run("max applied once to the sum", func(t *testing.T) {
 		dir := evidence(t, s0, s1)
 		cmd := exec.CommandContext(t.Context(), helper, "aggregate", "sample", "2", "2", dir)
+		// the gate is of the shards' run and attempt: on CI the inherited
+		// GITHUB_RUN_ID is the real run's, which the shards' fixture is not
+		cmd.Env = supervisorFixtureEnv(env())
 		out, err := cmd.CombinedOutput()
 		if exit, ok := errors.AsType[*exec.ExitError](err); !ok || exit.ExitCode() != 1 || !strings.Contains(string(out), "3 survivors across 2 shards exceed limit 2") {
 			t.Fatalf("summed survivors over the max not red: %v\n%s", err, out)
