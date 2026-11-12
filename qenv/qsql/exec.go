@@ -243,19 +243,14 @@ func (e expr) value(args []any) any {
 	return e.lit
 }
 
-// table is the schema of name: one this transaction created, one already
-// known, or the Store's.
+// table is the schema of name in this transaction's Store view, including
+// tables it created itself. Committed schemas can disappear on restore.
 func (t *tx) table(name string) (*table, error) {
 	if tb, ok := t.created[name]; ok {
 		return tb, nil
 	}
-	if tb := t.c.knownTable(name); tb != nil {
-		return tb, nil
-	}
 	if v, ok := t.txn.Get(schemaPrefix + name); ok {
-		tb := v.(*table)
-		t.c.learnTable(tb) // committed (not this transaction's, which created holds): a schema never changes
-		return tb, nil
+		return v.(*table), nil
 	}
 	return nil, &Error{Code: "42P01", Message: fmt.Sprintf("relation %q does not exist in store %s (create it with CREATE TABLE first)", name, t.c.st.Name)}
 }

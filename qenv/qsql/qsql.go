@@ -144,7 +144,7 @@ func open(s *qenv.Sim, st *qenv.Store, opt Options) (*sql.DB, *connector) {
 	if opt.Name == "" {
 		opt.Name = st.Name
 	}
-	c := &connector{sim: s, st: st, opt: opt, stmts: map[string]statement{}, tables: map[string]*table{}, live: map[*tx]bool{}, killed: map[int64]*killedTask{},
+	c := &connector{sim: s, st: st, opt: opt, stmts: map[string]statement{}, live: map[*tx]bool{}, killed: map[int64]*killedTask{},
 		badConn: qenv.DeclareFaults("sql."+opt.Name+".conn", "badConn")} // a broken connection, found before anything ran
 	db := sql.OpenDB(c)
 	s.Spawn("qsql."+opt.Name+".reaper", func(ctx context.Context) {
@@ -185,9 +185,8 @@ type connector struct {
 	opt     Options
 	badConn qenv.FaultKind
 
-	mu     sync.Mutex            // stmts and tables: database/sql may prepare from any goroutine
+	mu     sync.Mutex            // stmts: database/sql may prepare from any goroutine
 	stmts  map[string]statement  // parsed statements, by text
-	tables map[string]*table     // committed schemas (they never change)
 	txs    int64                 // transactions begun: their ids, the reaper's order
 	killed map[int64]*killedTask // the goroutines of tasks the driver saw unwinding (unwound)
 
@@ -244,18 +243,6 @@ func (c *connector) parse(q string) (statement, error) {
 	c.stmts[q] = st
 	c.mu.Unlock()
 	return st, nil
-}
-
-func (c *connector) knownTable(name string) *table {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.tables[name]
-}
-
-func (c *connector) learnTable(tb *table) {
-	c.mu.Lock()
-	c.tables[tb.name] = tb
-	c.mu.Unlock()
 }
 
 // cancelled reports whether a live transaction's context is done: the

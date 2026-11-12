@@ -1,7 +1,6 @@
 package qenv
 
 import (
-	"cmp"
 	"errors"
 	"fmt"
 	"slices"
@@ -201,12 +200,9 @@ func (st *Store) rewind(seq int64) {
 // reset resets every open transaction's connection: its locks released,
 // its next GetForUpdate or Commit ErrUnavailable.
 func (st *Store) reset() {
-	txs := make([]*tx, 0, len(st.open))
+	// Releasing these owners has no scheduling seam or callback, so reset
+	// need not impose an order on the unfinished handles it leaves readable.
 	for tx := range st.open {
-		txs = append(txs, tx)
-	}
-	slices.SortFunc(txs, func(a, b *tx) int { return cmp.Compare(a.id, b.id) })
-	for _, tx := range txs {
 		tx.releaseAdmission()
 		tx.reset = true
 		for _, k := range tx.locked {

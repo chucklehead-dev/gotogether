@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- qhttp rounds very distant deadlines without overflowing or hanging, saturating
+  at the largest duration when the next preferred grid point cannot fit.
+  Deadline caching distinguishes full instants while sharing one virtual budget
+  for equal wall-time deadlines across zones.
+
 - `GOTOGETHER_EVAL_SAMPLE` (`Options.EvalSample`) chooses the Go
   evaluator's passes quint judges too by the plan read up to the renaming of
   its minted identifiers (qenv.NewID's 32 hex digits, UUIDs): a real run's
@@ -38,6 +43,11 @@ and adds a line here.
   payloads. Records, labels and other values remain strict; unordered collections
   use one-to-one matching. This fixes rejection of valid edgepublish witnesses
   without changing models, bounds, or proof acceptance.
+
+- Network healing retains each ended cut's original callback arguments in one
+  active-edge map. A cut created by an `OnHeal` callback during Settle survives
+  independently: an older heal batch cannot replace its arguments or make its
+  later Heal report nil processes. Manual recuts still invalidate old timed healers.
 
 - Virtual-time profiles keep task kinds separate from stack identities, so a
   task name containing spaces and a return address cannot merge unrelated samples.
@@ -77,6 +87,10 @@ and adds a line here.
 - Core mutation campaigns include descendant test suites, map each source
   mutation to its local ID in every binary, and require every suite baseline
   to pass before reporting mutant results.
+
+- Store crash and reset cleanup releases transaction ownership directly, without
+  allocating and sorting a temporary handle list. Lifecycle controls cover roster,
+  lock and admission ownership across completion, reset and process crashes.
 
 - Integer set folds prove that every ordering fits bounded model integers,
   including intermediate arithmetic. Potential overflow falls back to Quint
@@ -315,6 +329,12 @@ and adds a line here.
   portable GitHub URLs, retaining local and cross-skill links within the
   installation. Refresh shipped guidance after upgrading the CLI with
   `gotogether skills install -force`. Actual-install checks guard link targets.
+
+- qsql resolves committed schemas through each transaction’s Store view, so
+  restored or lost DDL and recreated columns agree across warmed and fresh pools.
+
+- qsql releases terminal transactions from its cancellation roster on unwind,
+  preserving task-owned Store rollback and cancellation reaping.
 
 - qsql supports single-table `SELECT COUNT(*) [AS alias]` with its existing
   WHERE subset. Counts include NULL-valued rows, return zero for empty matches,

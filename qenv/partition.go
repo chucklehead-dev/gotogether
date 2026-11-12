@@ -40,15 +40,12 @@ type Network struct {
 	// end it sooner. Cuts made with Partition last until Heal.
 	CutLength time.Duration
 
-	sim   *Sim
-	cuts  map[[2]string]bool    // partitioned pairs of processes, by name
-	hand  map[[2]string]bool    // the cuts Partition made, which only Heal ends
-	gen   map[[2]string]int     // per pair, the cuts made: a healer heals only its own
-	onCut []func(a, b *Process) // OnCut's hooks
-	// onHeal are OnHeal's hooks, and procs each cut pair's processes, for
-	// them
+	sim    *Sim
+	cuts   map[[2]string][2]*Process // active edges, retaining each first cut's argument order
+	hand   map[[2]string]bool        // the cuts Partition made, which only Heal ends
+	gen    map[[2]string]int         // per pair, the cuts made: a healer heals only its own
+	onCut  []func(a, b *Process)     // OnCut's hooks
 	onHeal []func(a, b *Process)
-	procs  map[[2]string][2]*Process
 }
 
 // Net is the simulation's network.
@@ -69,20 +66,17 @@ func (n *Network) Partition(a, b *Process) {
 // cut cuts the network between a and b, by hand or by the nemesis.
 func (n *Network) cut(a, b *Process) {
 	if n.cuts == nil {
-		n.cuts = map[[2]string]bool{}
+		n.cuts = map[[2]string][2]*Process{}
 	}
 	if n.gen == nil {
 		n.gen = map[[2]string]int{}
 	}
-	n.gen[pairOf(a, b)]++ // a cut made over the nemesis's: its timed healer's generation is past
-	if n.cuts[pairOf(a, b)] {
+	k := pairOf(a, b)
+	n.gen[k]++ // a cut made over the nemesis's: its timed healer's generation is past
+	if _, cut := n.cuts[k]; cut {
 		return
 	}
-	n.cuts[pairOf(a, b)] = true
-	if n.procs == nil {
-		n.procs = map[[2]string][2]*Process{}
-	}
-	n.procs[pairOf(a, b)] = [2]*Process{a, b}
+	n.cuts[k] = [2]*Process{a, b}
 	for _, h := range n.onCut {
 		h(a, b)
 	}
@@ -92,17 +86,16 @@ func (n *Network) cut(a, b *Process) {
 func (n *Network) Heal(a, b *Process) {
 	k := pairOf(a, b)
 	delete(n.hand, k)
-	if !n.cuts[k] {
+	p, cut := n.cuts[k]
+	if !cut {
 		return
 	}
 	delete(n.cuts, k)
-	n.healed(k)
+	n.healed(p)
 }
 
-// healed runs OnHeal's hooks for the pair k, its cut just ended.
-func (n *Network) healed(k [2]string) {
-	p := n.procs[k]
-	delete(n.procs, k)
+// healed runs OnHeal's hooks with the ended cut's original arguments.
+func (n *Network) healed(p [2]*Process) {
 	for _, h := range n.onHeal {
 		h(p[0], p[1])
 	}
@@ -111,16 +104,19 @@ func (n *Network) healed(k [2]string) {
 // healAll restores the whole network (Settle), its pairs' OnHeal hooks
 // run in the pairs' order.
 func (n *Network) healAll() {
-	keys := make([][2]string, 0, len(n.cuts))
-	for k := range n.cuts {
+	ended := n.cuts
+	keys := make([][2]string, 0, len(ended))
+	for k := range ended {
 		keys = append(keys, k)
 	}
 	sort.Slice(keys, func(i, j int) bool {
 		return keys[i][0] < keys[j][0] || keys[i][0] == keys[j][0] && keys[i][1] < keys[j][1]
 	})
+	// Detach the ended batch before callbacks. A callback can cut a new edge,
+	// including one of these pairs, without replacing the old batch's arguments.
 	n.cuts, n.hand = nil, nil
 	for _, k := range keys {
-		n.healed(k)
+		n.healed(ended[k])
 	}
 }
 
@@ -130,7 +126,8 @@ func (n *Network) Partitioned(a, b *Process) bool {
 	if a == nil || b == nil || a == b {
 		return false
 	}
-	return n.cuts[pairOf(a, b)]
+	_, cut := n.cuts[pairOf(a, b)]
+	return cut
 }
 
 // OnCut registers a hook run when the network between a and b is cut, by

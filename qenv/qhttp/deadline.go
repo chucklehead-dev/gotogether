@@ -2,6 +2,7 @@ package qhttp
 
 import (
 	"context"
+	"math"
 	"runtime"
 	"sync"
 	"time"
@@ -11,23 +12,23 @@ import (
 )
 
 // deadlines holds, per simulation, the virtual instant of each request
-// context's deadline it has seen, keyed by the deadline's wall time:
-// converted once, so a deadline is used up in virtual time (a retry under
-// the same context sees the time its first attempts took), and so every
-// request under it, to any server, ends at the same instant. A simulation's
+// context's deadline it has seen. Keys are full UTC wall-time instants, without
+// monotonic readings. Each deadline is converted once and used up in virtual
+// time (a retry consumes the same context's remaining budget), so requests to
+// any server end at the same instant. A simulation's
 // table goes when the simulation is collected. Process-wide: simulations
 // run in parallel share the lock, each its own table.
 var deadlines = struct {
 	sync.Mutex
-	m map[weak.Pointer[qenv.Sim]]map[int64]time.Time
-}{m: map[weak.Pointer[qenv.Sim]]map[int64]time.Time{}}
+	m map[weak.Pointer[qenv.Sim]]map[time.Time]time.Time
+}{m: map[weak.Pointer[qenv.Sim]]map[time.Time]time.Time{}}
 
 // table is s's table of deadlines; the caller holds the lock.
-func table(s *qenv.Sim) map[int64]time.Time {
+func table(s *qenv.Sim) map[time.Time]time.Time {
 	key := weak.Make(s)
 	tab := deadlines.m[key]
 	if tab == nil {
-		tab = map[int64]time.Time{}
+		tab = map[time.Time]time.Time{}
 		deadlines.m[key] = tab
 		runtime.AddCleanup(s, func(k weak.Pointer[qenv.Sim]) {
 			deadlines.Lock()
@@ -47,10 +48,11 @@ func virtualDeadline(s *qenv.Sim, dl time.Time) time.Time {
 	deadlines.Lock()
 	defer deadlines.Unlock()
 	tab := table(s)
-	v, ok := tab[dl.UnixNano()]
+	key := dl.UTC() // canonical zone and no monotonic component
+	v, ok := tab[key]
 	if !ok {
 		v = s.Now().Add(ceilGrid(s.ToVirtual(dl).Sub(s.Now())))
-		tab[dl.UnixNano()] = v
+		tab[key] = v
 	}
 	return v
 }
@@ -70,7 +72,7 @@ func WithTimeout(ctx context.Context, d time.Duration) (context.Context, context
 		return c, cancel // outside a simulation, or the parent's deadline
 	}
 	deadlines.Lock()
-	table(s)[dl.UnixNano()] = s.Now().Add(d)
+	table(s)[dl.UTC()] = s.Now().Add(d)
 	deadlines.Unlock()
 	return c, cancel
 }
@@ -90,21 +92,23 @@ var grid = [...]time.Duration{10, 15, 20, 25, 30, 40, 50, 60, 80, 100} // read-o
 // 50% at 200 ms), against 10% at a power of ten for one significant digit,
 // where most timeouts are. A timeout off the grid is lengthened to the next
 // point on it (700 ms to 800 ms, 45 s to 50 s); WithTimeout keeps it exact.
+// A grid point beyond the duration range saturates at the largest duration.
 func ceilGrid(left time.Duration) time.Duration {
-	if left <= 0 {
-		return left
-	}
 	p := time.Duration(1)
-	for p*10 <= left {
-		p *= 10
+	for left/p >= 10 {
+		p *= 10 // the quotient proves this multiplication fits
 	}
-	if p < 10 {
-		return left // below 10 ns: no tenths of a decade to round to
+	if p == 1 {
+		return left // nonpositive or below 10 ns: no grid rounding
 	}
+	scale := p / 10
 	for _, m := range grid {
-		if v := m * p / 10; v >= left {
+		if m > math.MaxInt64/scale {
+			return time.Duration(math.MaxInt64) // the next grid point cannot fit
+		}
+		if v := m * scale; v >= left {
 			return v
 		}
 	}
-	return left // unreachable: 100 tenths of p is 10p > left
+	return left // unreachable: the final grid point exceeds left or saturates
 }

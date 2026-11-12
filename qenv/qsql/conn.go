@@ -181,7 +181,7 @@ func (c *connector) unwound(cn *conn, t *tx, err *error) {
 		cn.bad.Store(true)
 	}
 	if t != nil {
-		t.ended = true
+		t.markEnded()
 		if t.failed == nil {
 			t.failed = killedErr()
 		}
@@ -337,9 +337,6 @@ func (c *connector) begin(ctx context.Context, readOnly bool) (*tx, error) {
 		t.proc, t.inc = p, p.Incarnation
 	}
 	t.txn.OnCommit(func() {
-		for _, tb := range t.created {
-			c.learnTable(tb)
-		}
 		if len(t.changes) > 0 && c.opt.OnCommit != nil {
 			c.opt.OnCommit(t.ctx, t.changes)
 		}
@@ -363,12 +360,19 @@ func (t *tx) fail(err error) {
 	t.end()
 }
 
+// markEnded releases cancellation ownership without touching the Store. Unwind
+// paths leave the Store's aborted transaction to its crash or simulation Close.
+func (t *tx) markEnded() {
+	t.ended = true
+	delete(t.c.live, t)
+}
+
 func (t *tx) end() {
-	if !t.ended {
-		t.ended = true
+	rollback := !t.ended
+	t.markEnded()
+	if rollback {
 		t.txn.Rollback() // after a commit, or after the Store ended it, a no-op
 	}
-	delete(t.c.live, t)
 }
 
 // usable is the error a statement or Commit gets on a transaction that
@@ -423,7 +427,7 @@ func (t *tx) statement(ctx context.Context, st statement, args []any) (*result, 
 // nothing committed.
 func (t *tx) Commit() (err error) {
 	if err := t.c.dead(); err != nil {
-		t.ended = true // the task is unwinding: the Store's transaction is left to its crash or Close
+		t.markEnded() // the task is unwinding: the Store's transaction is left to its crash or Close
 		return err
 	}
 	defer t.c.unwound(t.cn, t, &err)
@@ -449,8 +453,7 @@ func (t *tx) commit() error {
 			err = unusable
 		}
 	}
-	t.ended = true
-	delete(t.c.live, t)
+	t.markEnded()
 	if errors.Is(err, qenv.ErrUnknownOutcome) {
 		t.cn.bad.Store(true) // the connection is gone: database/sql must not reuse it, nor retry on ErrBadConn
 	}
@@ -465,7 +468,7 @@ func (t *tx) Rollback() error {
 		return nil
 	}
 	if t.c.dead() != nil {
-		t.ended = true // unwinding: the Store is not the dead task's to touch
+		t.markEnded() // unwinding: the Store is not the dead task's to touch
 		return nil
 	}
 	if t.cn != nil && t.cn.cur == t {
