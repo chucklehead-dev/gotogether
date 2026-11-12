@@ -19,6 +19,13 @@ import (
 const nativeManagedCLIHash = "952a50a28932282528b5c9b86ac5542405d85da4f80876aabe8cb8c7d5a6d0e8"
 const nativeManagedNodeHash = "94efd062ed066c1a0b332e18249859c905e920eeada5df55d24c99b919629a90"
 
+// nativeManagedNodeVersion is the Node release whose linux-x64 binary
+// nativeManagedNodeHash names. The nightly jobs that check the managed tool's
+// identity install exactly it (TestNightlyManagedToolJobsPinNode): a floating
+// major would take Node's next patch, change the hash, and turn off proof
+// reuse on every runner at once.
+const nativeManagedNodeVersion = "22.23.4"
+
 func resolveNativeToolIdentity(ctx context.Context, quint string) (string, bool) {
 	for _, name := range []string{"NODE_OPTIONS", "NODE_PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH", "APALACHE_JAR", "JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS", "JVM_ARGS", "JVM_GC_ARGS", "JAVA_OPTS", "CLASSPATH"} {
 		if os.Getenv(name) != "" {
