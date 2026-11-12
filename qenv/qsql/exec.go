@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"math"
 	"slices"
 	"strings"
 	"time"
@@ -1037,21 +1036,37 @@ func assign(tb *table, old map[string]any, sets []resolvedSet, excluded map[stri
 			continue
 		}
 		d := val.(int64)
+		var next int64
+		var ok bool
 		if st.op == '-' {
-			if d == math.MinInt64 {
-				return nil, outOfRange(st.col)
-			}
-			d = -d
+			next, ok = subtractInt64(cur, d)
+		} else {
+			next, ok = addInt64(cur, d)
 		}
-		if (d > 0 && cur > math.MaxInt64-d) || (d < 0 && cur < math.MinInt64-d) {
+		if !ok {
 			return nil, outOfRange(st.col)
 		}
-		nr[st.col.name] = cur + d
+		nr[st.col.name] = next
 	}
 	if err := notNull(tb, nr); err != nil {
 		return nil, err
 	}
 	return nr, nil
+}
+
+// addInt64 returns the sum and whether it fits in int64. Go's signed
+// overflow wraps; a negative addend must move the result below a, and a
+// nonnegative addend must not. Overflow reverses that direction.
+func addInt64(a, b int64) (int64, bool) {
+	r := a + b
+	return r, (r < a) == (b < 0)
+}
+
+// subtractInt64 checks the result directly, without negating b: MinInt64
+// has no positive int64 counterpart, but subtracting it can still fit.
+func subtractInt64(a, b int64) (int64, bool) {
+	r := a - b
+	return r, (r > a) == (b < 0)
 }
 
 // rewrite writes r's new value nr: its UNIQUE columns' index entries
