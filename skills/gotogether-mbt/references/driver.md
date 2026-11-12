@@ -78,6 +78,12 @@ are not replay coverage; skipped/filtered traces supply no conformance evidence.
 - A sum type with payloads → a struct with `Tag string \`itf:",tag"\`` and a
   `\`itf:",value"\`` field, or a field named like each variant.
 - A type with `UnmarshalITF(itf.Value) error` decodes itself.
+- A value read from the model's state for the code to use (an environment's
+  output: `s.Get("pointer")`) decodes with `itf.DecodeAs[Pointer](v)` or
+  `itf.Decode(v, &dst)`.
+- A driver that compares the model's state with the code's unexported state
+  (a field the API does not return) lives in the package, as an internal
+  test file (`package snapshot`, not `snapshot_test`).
 
 ## The TDD loop (one action at a time)
 

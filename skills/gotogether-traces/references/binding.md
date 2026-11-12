@@ -1,5 +1,19 @@
 # Binding rules, lint and analyzers
 
+How a step field renders in a template (`{{.x}}`, `{{.obs.x}}`): as a
+Quint literal, so a template never adds quotes of its own. An action's
+parameters are mapped under `args:`; a parameter with no mapping is the
+field of its name, converted by its type in the model.
+
+| Recorded in Go | `{{.x}}` renders | Write |
+|---|---|---|
+| string | `"alice"`, quoted | `balances.get({{.account}})`, never `"{{.account}}"`; a string holding a double quote is refused |
+| int (any size), bool | `5`, `true` | `{{.amount}}` |
+| slice or map (recorded as JSON) | a quoted string of the JSON, not a collection | `{{toSet .revoked}}`, `{{toList .x}}`, `{{toMap .x}}`; an unmapped parameter of a collection type converts by itself |
+| record, sum, or a collection of them | a quoted string | `{{ toQuint "List[Event]" .obs.events }}`, by a type of the model |
+| struct | its `fmt.Sprint` text | record its `json.Marshal` text, then `toQuint` |
+| float, time | refused where an int goes | record an integer unit (cents, `time.UnixMilli`) |
+
 Rules:
 - A parameter with no template is the step field of its name, rendered as
   a Quint literal. Set, list and map parameters (type aliases included)
