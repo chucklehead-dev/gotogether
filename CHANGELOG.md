@@ -330,6 +330,10 @@ and adds a line here.
   installation. Refresh shipped guidance after upgrading the CLI with
   `gotogether skills install -force`. Actual-install checks guard link targets.
 
+- qsql checks BIGINT addition and subtraction directly, including representable
+  subtractions of the minimum int64 value. Overflow still returns SQLSTATE `22003`
+  and aborts the update; NULL arithmetic remains NULL.
+
 - qsql resolves committed schemas through each transaction’s Store view, so
   restored or lost DDL and recreated columns agree across warmed and fresh pools.
 
