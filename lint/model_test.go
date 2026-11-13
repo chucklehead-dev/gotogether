@@ -88,3 +88,51 @@ func TestInspectModelWithoutBinding(t *testing.T) {
 		t.Fatal("a failing model lint exited 0")
 	}
 }
+
+// Review of #195 (on #97): quint that cannot start judged nothing, so the
+// check is blocked and the lint exits 2, with no finding against the model.
+func TestInspectModelQuintUnavailable(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "m.qnt")
+	if err := os.WriteFile(p, []byte("module m {\n  var x: int\n  action init = x' = 0\n  action step = x' = x\n}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := Inspect(t.Context(), Options{Models: []string{p}, Quint: filepath.Join(t.TempDir(), "no-such-quint")})
+	for _, f := range r.Findings {
+		if f.Code != "model.typecheck.unavailable" {
+			t.Errorf("a missing quint produced a finding against the model: %+v", f)
+		}
+	}
+	if r.ExitCode() != 2 {
+		t.Fatalf("exit %d with quint unavailable; want 2: %+v", r.ExitCode(), r.Checks)
+	}
+}
+
+// The mismatch is reported in the file quint names: an imported module's,
+// not the root's. Combining actions that assign different variables with
+// all { } is no mismatch.
+func TestInspectModelMismatchInImport(t *testing.T) {
+	skip.Quint(t)
+	dir := t.TempDir()
+	child := "module child {\n  var a: int\n  var b: int\n  action incA = a' = a + 1\n  action init = all { a' = 0, b' = 0 }\n  action step = any { incA, all { a' = a, b' = b + 1 } }\n}\n"
+	root := "module root {\n  import child.* from \"./child\"\n}\n"
+	disjoint := "module disjoint {\n  var a: int\n  var b: int\n  action setA = a' = 1\n  action setB = b' = 2\n  action init = all { setA, setB }\n  action step = all { a' = a, b' = b }\n}\n"
+	for name, src := range map[string]string{"child.qnt": child, "root.qnt": root, "disjoint.qnt": disjoint} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := Inspect(t.Context(), Options{Models: []string{filepath.Join(dir, "root.qnt"), filepath.Join(dir, "disjoint.qnt")}, Quint: "quint"})
+	var mismatch []Diagnostic
+	for _, f := range r.Findings {
+		if filepath.Base(f.Path) == "disjoint.qnt" {
+			t.Errorf("all { } of actions assigning different variables was flagged: %+v", f)
+		}
+		if f.Code == "model.assignment.mismatch" {
+			mismatch = append(mismatch, f)
+		}
+	}
+	if len(mismatch) != 1 || filepath.Base(mismatch[0].Path) != "child.qnt" || mismatch[0].Line != 6 ||
+		!strings.Contains(mismatch[0].Message, "alternatives") || strings.Contains(mismatch[0].Fix, "all { } must") {
+		t.Fatalf("mismatch not reported in child.qnt:6 as alternatives: %+v", mismatch)
+	}
+}

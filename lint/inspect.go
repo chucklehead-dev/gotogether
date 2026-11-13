@@ -94,7 +94,7 @@ func Inspect(ctx context.Context, o Options) *Report {
 		ds, err := modelTypecheck(ctx, o.Quint, p)
 		switch {
 		case err != nil:
-			r.fail(x[1], "model.typecheck", err, p, "install quint (gotogether doctor) or name the model's path", "tool", true)
+			r.fail(x[1], "model.typecheck.unavailable", err, p, "install quint (gotogether doctor) or name the quint binary (-quint)", "tool", true)
 		case len(ds) > 0:
 			r.Findings = append(r.Findings, ds...)
 			r.pass(x[1])

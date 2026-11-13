@@ -2,8 +2,10 @@ package lint
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -193,15 +195,20 @@ func modelTypecheck(ctx context.Context, quint, path string) ([]Diagnostic, erro
 		return nil, ctx.Err()
 	}
 	text := string(out)
+	// quint that did not start, or exited saying nothing, judged nothing:
+	// the tool is unavailable, not the model wrong
+	if _, exited := errors.AsType[*exec.ExitError](err); !exited || strings.TrimSpace(text) == "" {
+		return nil, fmt.Errorf("quint typecheck of %s: %w", path, err)
+	}
 	var ds []Diagnostic
 	for _, m := range unification.FindAllStringSubmatch(text, -1) {
 		a, b := names(m[1]), names(m[2])
 		line, col := 0, 0
 		fmt.Sscan(m[4], &line)
 		fmt.Sscan(m[5], &col)
-		ds = append(ds, Diagnostic{Code: "model.assignment.mismatch", Severity: Error, Path: path, Line: line, Column: col, Confidence: "typecheck",
-			Message: fmt.Sprintf("actions combined here assign different variables: one assigns %s, another %s (quint's QNT000 effect unification)", a, b),
-			Fix:     "every action combined by any { } or all { } must assign the same variables: give the one that leaves a variable unchanged its x' = x"})
+		ds = append(ds, Diagnostic{Code: "model.assignment.mismatch", Severity: Error, Path: reported(path, abs, m[3]), Line: line, Column: col, Confidence: "typecheck",
+			Message: fmt.Sprintf("alternatives here assign different variables (the branches of an any { }, an if/else or a match): one assigns %s, another %s (quint's QNT000 effect unification)", a, b),
+			Fix:     "every alternative must assign the same variables: give the branch that leaves a variable unchanged its x' = x (actions combined by all { } may assign different ones)"})
 	}
 	if len(ds) == 0 {
 		first := strings.TrimSpace(text)
@@ -211,6 +218,21 @@ func modelTypecheck(ctx context.Context, quint, path string) ([]Diagnostic, erro
 		ds = append(ds, Diagnostic{Code: "model.typecheck", Severity: Error, Path: path, Message: first, Fix: "fix the model as quint says", Confidence: "typecheck"})
 	}
 	return ds, nil
+}
+
+// reported is the file quint reported the error in: the model as the
+// request named it, or the file it imports where the error is.
+func reported(path, abs, file string) string {
+	if !filepath.IsAbs(file) {
+		file = filepath.Join(filepath.Dir(abs), file)
+	}
+	if filepath.Clean(file) == abs {
+		return path
+	}
+	if rel, err := filepath.Rel(filepath.Dir(abs), file); err == nil && !strings.HasPrefix(rel, "..") {
+		return filepath.Join(filepath.Dir(path), rel)
+	}
+	return file
 }
 
 func names(list string) string {
