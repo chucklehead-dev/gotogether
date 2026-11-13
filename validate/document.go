@@ -232,21 +232,25 @@ type DocCheck struct {
 // DocGraph describes a model-state graph, not recorded executions. Complete
 // means exploration finished within Bound; a depth bound still limits its scope.
 type DocGraph struct {
-	Scope       string                     `json:"scope"`
-	States      int                        `json:"states"`
-	Starts      int                        `json:"starts"`
-	Transitions int                        `json:"transitions"`
-	Depth       int                        `json:"depth"`
-	Complete    bool                       `json:"complete"`
-	Cut         string                     `json:"cut,omitempty"`
-	Stopped     string                     `json:"stopped,omitempty"`
-	Bound       DocGraphBound              `json:"bound"`
-	Deadlocks   int                        `json:"deadlocks"`
-	Terminals   int                        `json:"terminals"`
-	Quiescent   int                        `json:"quiescent"`
-	Unfair      []string                   `json:"unfair,omitempty"`
-	Stops       []string                   `json:"stops,omitempty"`
-	StepActions *DocStepActionReachability `json:"stepActions,omitempty"`
+	Scope       string `json:"scope"`
+	States      int    `json:"states"`
+	Starts      int    `json:"starts"`
+	Transitions int    `json:"transitions"`
+	Depth       int    `json:"depth"`
+	Complete    bool   `json:"complete"`
+	// CompleteDepth is the depth every state within which the graph found
+	// and checked (-1: none known): for a graph the state bound cut, the
+	// deepest level explored in full
+	CompleteDepth int                        `json:"completeDepth"`
+	Cut           string                     `json:"cut,omitempty"`
+	Stopped       string                     `json:"stopped,omitempty"`
+	Bound         DocGraphBound              `json:"bound"`
+	Deadlocks     int                        `json:"deadlocks"`
+	Terminals     int                        `json:"terminals"`
+	Quiescent     int                        `json:"quiescent"`
+	Unfair        []string                   `json:"unfair,omitempty"`
+	Stops         []string                   `json:"stops,omitempty"`
+	StepActions   *DocStepActionReachability `json:"stepActions,omitempty"`
 }
 
 // DocStepActionReachability describes calls to step's statically identified

@@ -8,6 +8,12 @@ and adds a line here.
 
 ## Unreleased
 
+- `simulate -graph` cut by the state bound reports the deepest depth it
+  explored in full (`complete to depth N`; `GraphResult.CompleteDepth`,
+  `qeval.Graph.CompleteDepth`, `completeDepth` in `-json`), and the graph's
+  invariant verdicts are bounded proofs to that depth, as `-depth N` gives,
+  instead of no proof at all (golem's first use, #144; ROADMAP M2).
+
 - qhttp rounds very distant deadlines without overflowing or hanging, saturating
   at the largest duration when the next preferred grid point cannot fit.
   Deadline caching distinguishes full instants while sharing one virtual budget

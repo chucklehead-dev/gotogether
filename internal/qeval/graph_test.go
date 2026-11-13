@@ -300,3 +300,65 @@ func TestTransitionsOperatorArguments(t *testing.T) {
 		t.Fatalf("step from x = 1 reaches %v, want [2 3]", got)
 	}
 }
+
+// CompleteDepth against the full graph, at every state bound from 1 to
+// the graph's size: every state of the full graph within CompleteDepth
+// steps is in the truncated one (the claim a bounded proof rests on), and
+// when the state bound cut, some state one step deeper is not (the depth
+// is the deepest so: a state at CompleteDepth was being expanded when the
+// bound refused a new one). Ablated, a depth one deeper fails the first,
+// one shallower the second.
+func TestCompleteDepthAgainstFullGraph(t *testing.T) {
+	gm := compile(t, "../../../validate/testdata/graph.qnt", "graph", "init", "step")
+	vm, vconsts, _ := vending(t)
+	for _, c := range []struct {
+		name   string
+		m      *Model
+		consts map[string]Value
+		depth  int
+	}{{"graph", gm, map[string]Value{}, 9}, {"vending", vm, vconsts, 6}} {
+		t.Run(c.name, func(t *testing.T) {
+			full, err := c.m.Explore(c.consts, "init", "step", Bound{Depth: c.depth}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if full.CompleteDepth < 0 {
+				t.Fatalf("the reference graph has no complete depth: cut %q", full.Cut)
+			}
+			least := map[string]int{}
+			for id, s := range full.States {
+				least[c.m.Key(s)] = full.Depth[id]
+			}
+			cuts := 0
+			for n := 1; n <= len(full.States); n++ {
+				g, err := c.m.Explore(c.consts, "init", "step", Bound{Depth: c.depth, States: n}, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if g.Cut != "states" {
+					continue
+				}
+				cuts++
+				have := map[string]bool{}
+				for _, s := range g.States {
+					have[c.m.Key(s)] = true
+				}
+				deeper := false
+				for k, d := range least {
+					if d <= g.CompleteDepth && !have[k] {
+						t.Fatalf("states %d: complete to depth %d, but a state at depth %d is missing", n, g.CompleteDepth, d)
+					}
+					if d == g.CompleteDepth+1 && !have[k] {
+						deeper = true
+					}
+				}
+				if !deeper {
+					t.Fatalf("states %d: complete to depth %d, and every state at depth %d is found too: the depth is not the deepest", n, g.CompleteDepth, g.CompleteDepth+1)
+				}
+			}
+			if cuts == 0 {
+				t.Fatal("no state bound cut the search: the test checked nothing")
+			}
+		})
+	}
+}
