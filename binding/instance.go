@@ -65,8 +65,9 @@ func balanced(s string, open, close byte) (string, bool) {
 	return "", false
 }
 
-// splitTop splits a constant list at its top-level commas, each part's
-// whitespace collapsed; empty parts are dropped.
+// splitTop splits a constant list at its top-level commas, each part
+// trimmed of the space around it and kept as written inside (a string
+// literal's spaces are its value); empty parts are dropped.
 func splitTop(s string) []string {
 	var parts []string
 	depth, quoted, start := 0, false, 0
@@ -87,7 +88,7 @@ func splitTop(s string) []string {
 	parts = append(parts, s[start:])
 	var out []string
 	for _, p := range parts {
-		if p = strings.Join(strings.Fields(p), " "); p != "" {
+		if p = strings.TrimSpace(p); p != "" {
 			out = append(out, p)
 		}
 	}
@@ -164,7 +165,8 @@ func InstanceConstants(spec, instance string) (module string, constants []string
 	}
 	parts = append(parts, s[start:i-1])
 	for _, p := range parts {
-		if p = strings.Join(strings.Fields(p), " "); p != "" {
+		// trimmed, not collapsed: a string literal's spaces are its value
+		if p = strings.TrimSpace(p); p != "" {
 			constants = append(constants, p)
 		}
 	}

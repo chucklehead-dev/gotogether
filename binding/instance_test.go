@@ -81,3 +81,30 @@ func TestInstanceModuleForms(t *testing.T) {
 		}
 	}
 }
+
+// A constant's expression is kept as written: only the space around it is
+// trimmed, never what a string literal holds (a review of #191 found
+// LABEL = "two  spaces" loaded as "two spaces").
+func TestInstanceConstantsKeepLiterals(t *testing.T) {
+	src := "module d {\n  import m(LABEL = \"two  spaces\",\n    SET = Set(1,   2)).*\n}"
+	base, consts, ok := instanceModule(src, "d")
+	if !ok || base != "m" || len(consts) != 2 || consts[0] != `LABEL = "two  spaces"` || consts[1] != "SET = Set(1,   2)" {
+		t.Fatalf("got %q %q %v", base, consts, ok)
+	}
+	dir := t.TempDir()
+	spec := filepath.Join(dir, "m.qnt")
+	if err := os.WriteFile(spec, []byte("module m {\n  const LABEL: str\n  var x: int\n  action init = x' = 0\n  action step = x' = x\n}\n"+src+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, "b.yaml")
+	if err := os.WriteFile(p, []byte("spec: m.qnt\nmodule: d\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	b, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Constants["LABEL"] != `"two  spaces"` {
+		t.Fatalf("LABEL = %q", b.Constants["LABEL"])
+	}
+}
