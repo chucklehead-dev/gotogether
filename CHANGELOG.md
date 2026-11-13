@@ -8,6 +8,14 @@ and adds a line here.
 
 ## Unreleased
 
+- `gotogether lint -model m.qnt` checks a Quint model with no binding, as a
+  design-phase model is written (golem's first use, #144; ROADMAP L3): a
+  primed assignment whose right side holds a bare `or`/`and` (`x' = x or y`
+  reads as `(x' = x) or y`), a declaration or parameter quint refuses as a
+  built-in or keyword (`internal/quintnames`), then quint's typecheck, its
+  effect-unification dump for branches that assign different variables
+  turned into the variables each assigns (`lint.Options.Models`).
+
 - qhttp rounds very distant deadlines without overflowing or hanging, saturating
   at the largest duration when the next preferred grid point cannot fit.
   Deadline caching distinguishes full instants while sharing one virtual budget

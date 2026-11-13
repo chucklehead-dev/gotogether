@@ -24,7 +24,10 @@ type Options struct {
 	Simulation  string
 	Weave       string
 	Conversions []string
-	Quint       string
+	// Models are Quint files checked without a binding: source checks (an
+	// assignment's precedence, reserved names), then quint's typecheck.
+	Models []string
+	Quint  string
 }
 
 // Inspect performs selected nonwriting checks and retains every requested phase,
@@ -45,7 +48,10 @@ func Inspect(ctx context.Context, o Options) *Report {
 	}
 	type phases struct{ schema, load, spec, model, lint, choices int }
 	var bindings []phases
-	var conversions [][2]int
+	var conversions, models [][2]int
+	for _, p := range o.Models {
+		models = append(models, [2]int{plan("model.source", p), plan("model.typecheck", p)})
+	}
 	for _, p := range o.Conversions {
 		conversions = append(conversions, [2]int{plan("conversion.schema", p), plan("conversion.load", p)})
 	}
@@ -68,8 +74,35 @@ func Inspect(ctx context.Context, o Options) *Report {
 	if len(r.Checks) == 0 {
 		at := plan("request", "")
 		r.block(at, "select at least one lint target", true)
-		r.find("request.invalid", Error, "select at least one lint target", "", "select -binding, -convert, -sim or -weave", "request")
+		r.find("request.invalid", Error, "select at least one lint target", "", "select -binding, -model, -convert, -sim or -weave", "request")
 		return r
+	}
+	for i, p := range o.Models {
+		x := models[i]
+		src, err := os.ReadFile(p)
+		if err != nil {
+			r.fail(x[0], "model.read", err, p, "name an existing .qnt file", "request", true)
+			r.block(x[1], "the model could not be read", true)
+			continue
+		}
+		fs := modelSourceFindings(p, string(src))
+		r.Findings = append(r.Findings, fs...)
+		r.pass(x[0])
+		if len(fs) > 0 {
+			r.Checks[x[0]].Status = CheckFail
+		}
+		ds, err := modelTypecheck(ctx, o.Quint, p)
+		switch {
+		case err != nil:
+			r.fail(x[1], "model.typecheck", err, p, "install quint (gotogether doctor) or name the model's path", "tool", true)
+		case len(ds) > 0:
+			r.Findings = append(r.Findings, ds...)
+			r.pass(x[1])
+			r.Checks[x[1]].Status = CheckFail
+		default:
+			r.pass(x[1])
+			r.Evidence = append(r.Evidence, Evidence{Kind: "model", Target: p, Count: 1})
+		}
 	}
 	for i, p := range o.Conversions {
 		x := conversions[i]

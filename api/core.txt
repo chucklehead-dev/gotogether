@@ -482,6 +482,7 @@ type Options struct
     field Simulation string
     field Weave string
     field Conversions []string
+    field Models []string
     field Quint string
 type Report struct
     field Format string `json:"format"`
