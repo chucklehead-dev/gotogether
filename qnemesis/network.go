@@ -180,7 +180,7 @@ func (t *Toxiproxy) Cut(ctx context.Context, a, b string) error { return t.enabl
 // Heal implements Network: the links' proxies enabled, listening on
 // the ports they had.
 func (t *Toxiproxy) Heal(ctx context.Context, a, b string) error {
-	if os.Getenv("RAFTKV_DIAG") != "1" {
+	if os.Getenv("QNEMESIS_DIAG") != "1" {
 		return t.enable(ctx, a, b, true)
 	}
 	start := time.Now()

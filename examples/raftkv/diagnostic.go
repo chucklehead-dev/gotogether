@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-var diagnosticEnabled = os.Getenv("RAFTKV_DIAG") == "1"
+var diagnosticEnabled = os.Getenv("QNEMESIS_DIAG") == "1"
 
 func diagnostic(format string, args ...any) {
 	if diagnosticEnabled {

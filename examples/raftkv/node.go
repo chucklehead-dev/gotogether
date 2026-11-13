@@ -416,11 +416,11 @@ func (n *Node) send(ctx context.Context, inc *incarnation, to int) {
 			must(err)
 			env.Msgs = append(env.Msgs, b)
 		}
-		var started time.Time
+		var started time.Duration
 		describe := ""
 		election := false
 		if diagnosticEnabled {
-			started = time.Now()
+			started = qenv.Mono(ctx)
 			for _, m := range msgs {
 				describe += fmt.Sprintf("%s/%d,", m.GetType(), m.GetTerm())
 				election = election || electionMessage(m)
@@ -430,8 +430,8 @@ func (n *Node) send(ctx context.Context, inc *incarnation, to int) {
 			diagnostic("send-begin node=%s peer=%s msgs=%s", n.Name, Nodes[to], describe)
 		}
 		err := n.Peers.Send(ctx, to, env)
-		if diagnosticEnabled && (election || time.Since(started) > 50*time.Millisecond) {
-			diagnostic("send-end node=%s peer=%s duration=%s msgs=%s err=%v", n.Name, Nodes[to], time.Since(started), describe, err)
+		if diagnosticEnabled && (election || (qenv.Mono(ctx)-started) > 50*time.Millisecond) {
+			diagnostic("send-end node=%s peer=%s duration=%s msgs=%s err=%v", n.Name, Nodes[to], (qenv.Mono(ctx) - started), describe, err)
 		}
 		if err != nil {
 			snap := slices.ContainsFunc(msgs, func(m *pb.Message) bool { return m.GetType() == pb.MessageType_MsgSnap })
