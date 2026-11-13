@@ -119,7 +119,11 @@ func TestHegelSchedulesConverge(t *testing.T) {
 }
 
 // Hegel finds, and shrinks, a schedule in which NoRetry loses a value for
-// good: a broadcast, its gossip lost, and settle.
+// good: a broadcast, its gossip lost, and settle. Its seed is pinned, but
+// the nightly's fresh seeds (GOTOGETHER_HEGEL_SEED=random) replace it:
+// 40 cases missed in about one search of 20 there (2026-11-13), so it
+// may draw 120, a miss about once in 10,000. The search stops at the
+// first violation, so the extra cases cost only a search that is missing.
 func TestHegelShrinksNoRetry(t *testing.T) {
 	qtest.RequireQuint(t)
 	if testing.Short() {
@@ -127,6 +131,6 @@ func TestHegelShrinksNoRetry(t *testing.T) {
 	}
 	v := qhegel.FindViolation(t, qhegel.ViolationConfig{Binding: "broadcast.binding.yaml", Opts: []qtest.Option{qtest.Global()}}, func(tc hegel.TestCase, _ *qhegel.Case) {
 		scenario(tc, NoRetry, 20)
-	}, hegel.WithTestCases(40), hegel.WithSeed(2))
+	}, hegel.WithTestCases(120), hegel.WithSeed(2))
 	v.Expect(t, qtest.Violates("convergedWhenSettled"))
 }
