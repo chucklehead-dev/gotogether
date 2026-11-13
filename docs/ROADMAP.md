@@ -36,6 +36,7 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Proposed queue | J16/J17/J20/J22/J25–J27 | Retain the review's adoption, capacity, admission-tuning and process proposals without treating them as completed commitments. |
 | Proposed queue | K1–K9: adoption feedback ([#144](https://github.com/chucklehead-dev/gotogether/issues/144)) | K1 (docs) done: README's one path and spans entry point, [fit.md](fit.md). The rest after J7c, under the red-nightly rule: K3, K4, then K6's design spike; the rest as projects ask. |
 | Proposed queue | L1–L8: golem's first use ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6833092588)) | After J7c, under the red-nightly rule (L6's docs done; L1 done). Next L5's warning and progress, then L3; the rest as projects ask. |
+| Proposed queue | M1–M6: golem's graph search and Valkey ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6835911012)) | After J7c. First M1 and M2 (a bounded result and the deepest complete level instead of an out-of-memory kill), then M3; the rest as projects ask. |
 | Dropped | J12 and J23 | Go 1.26 compatibility and pin batching are withdrawn. Go 1.27.3 and immediate required sibling pin alignment remain deliberate policies. |
 
 **Red-nightly rule (maintainer decision):** while the nightly is red, feature
@@ -124,7 +125,7 @@ Already in place and to be documented: `qtest.Model` claims (`Proves`,
 - **L4: Quint's environment.** doctor names `QUINT_BACKEND=typescript` when
   the evaluator is missing or cannot be fetched; a `quint test` gotogether
   runs that matches nothing is an error, not a pass (quint's own CLI: an
-  upstream issue).
+  upstream issue, drafted in [upstream/quint-test-no-match.md](upstream/quint-test-no-match.md)).
 - **L5: an `init` with a nondet choice.** Say at the start that each run
   searches N initial candidates, with progress while it does; a binding may
   pin the init call; lift (or explain where it is hit) the
@@ -140,6 +141,37 @@ Already in place and to be documented: `qtest.Model` claims (`Proves`,
   "recorded no model steps" message says so, with the count of empty cases.
 - **Parked: L8, literate `.md` models** (tangling with errors mapped to
   markdown lines), until a second project asks.
+
+## golem's graph search, Valkey and authentication (M)
+
+From [#144](https://github.com/chucklehead-dev/gotogether/issues/144):
+golem's four models each got a small instance checked by `simulate -graph`
+(two accounting bugs random simulation missed in tens of thousands of runs
+were found in seconds; a `never` line caught a vacuous pass); its limiter
+was driven by connect over a real Valkey; a benchmark found a bug the model
+could not show, because a step took effect for every gateway at once (the
+lesson is in the patterns and MBT skills). Already there: `simulate -json`
+carries the graph's extent (`complete`, `cut`, `depth`) and every verdict.
+
+- **M1: a bounded graph, never an out-of-memory kill.** A 1.5M-state bound
+  killed a 4-core container. Report the search cut by memory as it is cut by
+  states (a `-memory` cap, or an estimate before the search), and measure
+  the bytes a state costs. Fingerprints (TLC's) only with exact states kept
+  for collisions: a fingerprint collision must not prove anything.
+- **M2: the deepest level the graph completed.** When the state bound cuts
+  the search, report the deepest depth explored in full ("complete to depth
+  7; cut at 8"), the claim a design-phase check can make, instead of
+  probing depths by hand.
+- **M3: symmetry.** `symmetry: [REPLICAS, GATEWAYS]` in a binding reduces
+  states equal up to permuting the set's values (an orbit's canonical
+  representative), checked against the unreduced graph on small instances.
+- **M4: scripting.** Document `simulate -json`'s shape for graph checks;
+  add `-expect` (`holds=x`, `breaks=y`) with an exit status, so a check
+  script parses nothing.
+- **M5: a replay from a nondet `init` names the choice** (the picks that
+  led to it), not the whole initial state as an `all { }` block.
+- **M6: K4's RESP double keeps a server clock the simulation controls**
+  (`TIME`), as golem's limiter reads time from the server.
 
 ## Eleventh review: integrity before tags (I)
 

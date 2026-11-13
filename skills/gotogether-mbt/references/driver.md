@@ -160,6 +160,10 @@ could not follow its trace (`Script.Remaining`), and checks every run.
 - Model-driven testing never exercises what the model forbids: the model
   does not take disabled steps. To find code that accepts forbidden inputs,
   let Hegel drive and the model judge (see the gotogether-hegel skill).
+- A driver that applies one model step to every instance at once (every
+  gateway takes the new snapshot in one call) hides the skew between them,
+  as the model's own atomic step does (gotogether-patterns, §2): drive one
+  instance per step, as the model should take them.
 - `quint test` traces have no `mbt::` annotations. Use `connect.Run`, or
   `NondetPath` when the spec records the action in its state (Choreo's
   `extensions.actionTaken`).
