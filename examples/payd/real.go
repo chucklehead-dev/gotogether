@@ -32,9 +32,10 @@ func OpenSQLite(path string) (*sql.DB, error) {
 // RealProcessor is the processor's double for real runs: captures in
 // memory, deduped by Idempotency-Key, each recorded where it is made.
 type RealProcessor struct {
-	mu   sync.Mutex
-	byID map[string]string
-	n    int
+	mu    sync.Mutex
+	byID  map[string]string
+	n     int
+	asked map[string]int // capture requests by reference, deduped or not
 }
 
 func (p *RealProcessor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -48,6 +49,10 @@ func (p *RealProcessor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	key := r.Header.Get("Idempotency-Key")
 	p.mu.Lock()
+	if p.asked == nil {
+		p.asked = map[string]int{}
+	}
+	p.asked[req.Reference]++
 	id, ok := p.byID[key]
 	if !ok || key == "" {
 		p.n++
@@ -67,9 +72,15 @@ func (p *RealProcessor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // RealResult is what a real run left: its charges, as the table holds
-// them.
+// them, and the keys two attempts raced on.
 type RealResult struct {
 	Charges []RealCharge
+	// Raced are the keys whose capture the processor was asked for more
+	// than once: two attempts drove the key past its claim, and one of
+	// them lost the complete step's compare-and-set. The steps cannot say
+	// so (a deduped capture is not recorded); whether a key races is the
+	// scheduling's.
+	Raced []string
 }
 
 // RealCharge is a row of payd's charges table.
@@ -104,7 +115,8 @@ func RunReal(ctx context.Context, dir string, workload [][]Op) (*RealResult, err
 			return nil, err
 		}
 	}
-	proc := httptest.NewServer(&RealProcessor{})
+	processor := &RealProcessor{}
+	proc := httptest.NewServer(processor)
 	srv := httptest.NewServer(payd.New(db, &http.Client{Timeout: 5 * time.Second}, proc.URL))
 
 	together := newBarrier(workload)
@@ -132,6 +144,11 @@ func RunReal(ctx context.Context, dir string, workload [][]Op) (*RealResult, err
 	}
 	defer rows.Close()
 	res := &RealResult{}
+	for _, k := range slices.Sorted(maps.Keys(processor.asked)) {
+		if processor.asked[k] > 1 {
+			res.Raced = append(res.Raced, k)
+		}
+	}
 	for rows.Next() {
 		var c RealCharge
 		if err := rows.Scan(&c.Key, &c.ID, &c.Account, &c.Amount); err != nil {

@@ -121,7 +121,7 @@ func TestMutant(t *testing.T) {
 		// two tabs: the second is told no while the first charges (40 of 40)
 		twoTabs().Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 1}).Expect(t, qtest.Some(qtest.Violates("noRefusalOfCharged")))
 		if !testing.Short() {
-			realMutant(t, 16, "noRefusalOfCharged") // 15 of 15
+			realMutant(t, 16, "noRefusalOfCharged")
 		}
 	case "debitFirst":
 		// two tabs: the attempt that loses the compare-and-set has debited
@@ -140,7 +140,7 @@ func TestMutant(t *testing.T) {
 		twoTabs().Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 1}).
 			Expect(t, qtest.Some(qtest.Violates("noRefusalOfCharged")), qtest.None(qtest.Violates("noDoubleCharge")))
 		if !testing.Short() {
-			realMutant(t, 16, "noRefusalOfCharged") // 15 of 15
+			realMutant(t, 16, "noRefusalOfCharged")
 		}
 	case "centsInBody":
 		// any successful charge: its response names the key's charge by
