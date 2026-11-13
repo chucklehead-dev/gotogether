@@ -48,14 +48,23 @@ func TestReal(t *testing.T) {
 
 // realMutant is a mutant's real run (from TestMutant): keys keys, each
 // sent by three clients at once, violating invariant. A key's tabs race
-// in some runs only (lostRace's loser must have captured before the
-// winner completes: about one key in four), so a run of many keys misses
-// rarely: none of 15 runs of 10 keys did, for any mutant (2026-10-26).
+// in some runs only (the loser must have captured before the winner
+// completes: about one key in four), which the scheduling makes or not:
+// a run where no key raced (RealResult.Raced) has no attempt that lost
+// the compare-and-set, so it is no witness (CI's runners once made one,
+// and the mutant passed), and payd runs again.
 func realMutant(t *testing.T, keys int, invariant string) {
 	t.Run("real", func(t *testing.T) {
-		run, res := realRun(t, keys, 3)
-		run.Expect(t, qtest.Violates(invariant))
-		t.Logf("%d charges for %d keys", len(res.Charges), keys)
+		for range 5 {
+			run, res := realRun(t, keys, 3)
+			if len(res.Raced) == 0 {
+				continue
+			}
+			run.Expect(t, qtest.Violates(invariant))
+			t.Logf("%d charges for %d keys, %d raced", len(res.Charges), keys, len(res.Raced))
+			return
+		}
+		t.Fatalf("five runs of %d keys, none raced on a key: the mutant has no witness", keys)
 	})
 }
 
