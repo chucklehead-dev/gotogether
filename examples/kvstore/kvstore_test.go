@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -484,10 +485,22 @@ func TestMutant(t *testing.T) {
 		// between two logs would bring it: the last log alone shows the
 		// failed CAS that advanced the revision, judged from the state at
 		// its head (the logs before it are the faithful store's).
-		logs := rotatedLoad(t, 40)
-		run := qtest.Validate(t, "kv.binding.yaml", logs[len(logs)-1])
-		run.Expect(t, qtest.Mismatch("cas"))
-		fromHead(t, run)
+		// The bug shows only at a failed CAS in that last log, which the
+		// load's concurrent clients make or not by their scheduling: a load
+		// whose last log has none is no witness (CI's runners once made
+		// one, and the mutant passed), so it is loaded again.
+		for attempt := 0; attempt < 10; attempt++ {
+			logs := rotatedLoad(t, 40)
+			last := logs[len(logs)-1]
+			if !slices.ContainsFunc(last, func(s qtrace.Step) bool { return s.Action == "cas" && s.Error != "" }) {
+				continue
+			}
+			run := qtest.Validate(t, "kv.binding.yaml", last)
+			run.Expect(t, qtest.Mismatch("cas"))
+			fromHead(t, run)
+			return
+		}
+		t.Fatal("ten loads never put a failed CAS in the last log: the mutant has no witness")
 	case "staleSnapshot":
 		// Each log is headed by the previous rotation's state (the first,
 		// the empty store's): the log's first operation disagrees with the
