@@ -62,7 +62,9 @@ def check(mode, report, status, steps=None):
         require(graph.get('complete') is True, 'graph exploration is incomplete')
         require(all(type(graph.get(k)) is int for k in ('states', 'starts', 'transitions', 'depth')), 'graph extent must use integer counts')
         require(graph.get('states') == 17 and graph.get('starts') == 1 and graph.get('transitions') == 272 and graph.get('depth') == 1, 'frozen graph extent changed')
-        require(isinstance(graph.get('bound'), dict) and all(type(graph['bound'].get(k)) is int for k in ('states', 'depth')) and graph['bound'] == {'states': 100000, 'depth': 0}, 'graph search limits changed')
+        require(isinstance(graph.get('bound'), dict) and all(type(graph['bound'].get(k)) is int for k in ('states', 'depth', 'memoryBytes')) and graph['bound'] == {'states': 100000, 'depth': 0, 'memoryBytes': 256 << 20}, 'graph search limits changed')
+        require(type(graph.get('memoryUsed')) is int and 0 < graph['memoryUsed'] <= graph['bound']['memoryBytes'], 'graph storage estimate is missing or exceeds its budget')
+        require(graph.get('memoryScope') == 'estimated_retained_graph_storage_excluding_compilation_temporary_evaluation_and_process_heap', 'wrong graph memory scope')
         require(graph.get('cut', '') == '' and graph.get('stopped', '') == '', 'graph was cut or stopped')
         return
     require(report.get('command') == 'validate', 'wrong validation command')

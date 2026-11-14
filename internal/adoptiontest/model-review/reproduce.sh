@@ -44,7 +44,9 @@ for side, transitions in [("before", 24), ("after", 25)]:
     assert graph["complete"] and not graph.get("cut")
     assert graph["states"] == 8 and graph["starts"] == 1
     assert graph["transitions"] == transitions and graph["depth"] == 3
-    assert graph["bound"] == {"states": 100, "depth": 0}
+    assert graph["bound"] == {"states": 100, "depth": 0, "memoryBytes": 256 << 20}
+    assert type(graph["memoryUsed"]) is int and 0 < graph["memoryUsed"] <= graph["bound"]["memoryBytes"]
+    assert graph["memoryScope"] == "estimated_retained_graph_storage_excluding_compilation_temporary_evaluation_and_process_heap"
     assert graph["constants"] == [{"name": "REQUESTS", "value": "1.to(3)"}]
 for name in ["added", "removed"]:
     direction = c[name]
