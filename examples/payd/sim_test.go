@@ -96,7 +96,7 @@ func TestMutant(t *testing.T) {
 		}
 		// and for real, on SQLite, three tabs at once (15 of 15 runs)
 		if !testing.Short() {
-			realMutant(t, 16, "noDoubleCharge")
+			realMutant(t, 16, "noDoubleCharge", raced)
 		}
 	case "noForwardKey":
 		// one fault is enough: a capture's answer lost, payd's retry
@@ -106,7 +106,7 @@ func TestMutant(t *testing.T) {
 		// for real, without a fault: two tabs' requests for one key both
 		// drive it, and both capture (15 of 15 runs)
 		if !testing.Short() {
-			realMutant(t, 16, "noDoubleCapture")
+			realMutant(t, 16, "noDoubleCapture", raced)
 		}
 	case "pendingConflict":
 		// one fault is enough: a capture's answer lost, payd answers 502,
@@ -121,7 +121,7 @@ func TestMutant(t *testing.T) {
 		// two tabs: the second is told no while the first charges (40 of 40)
 		twoTabs().Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 1}).Expect(t, qtest.Some(qtest.Violates("noRefusalOfCharged")))
 		if !testing.Short() {
-			realMutant(t, 16, "noRefusalOfCharged") // 15 of 15
+			realMutant(t, 16, "noRefusalOfCharged", refused)
 		}
 	case "debitFirst":
 		// two tabs: the attempt that loses the compare-and-set has debited
@@ -132,7 +132,7 @@ func TestMutant(t *testing.T) {
 		// for real, where no debit is seen, the balances read after the
 		// run show it (15 of 15)
 		if !testing.Short() {
-			realMutant(t, 16, "balanceMatchesCharges")
+			realMutant(t, 16, "balanceMatchesCharges", raced)
 		}
 	case "lostRace":
 		// two tabs: the attempt that loses the compare-and-set answers 409
@@ -140,7 +140,7 @@ func TestMutant(t *testing.T) {
 		twoTabs().Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 1}).
 			Expect(t, qtest.Some(qtest.Violates("noRefusalOfCharged")), qtest.None(qtest.Violates("noDoubleCharge")))
 		if !testing.Short() {
-			realMutant(t, 16, "noRefusalOfCharged") // 15 of 15
+			realMutant(t, 16, "noRefusalOfCharged", raced)
 		}
 	case "centsInBody":
 		// any successful charge: its response names the key's charge by

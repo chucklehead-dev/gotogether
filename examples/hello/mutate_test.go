@@ -14,7 +14,7 @@ import (
 //
 // Without the client's done step a client that sent two requests of
 // three survived: nothing said the client finished. Unwoven, it skips.
-// The three marked mutants are equivalent under this environment.
+// The two marked mutants are equivalent under this environment.
 func TestMutationOfTheCounter(t *testing.T) {
 	qtest.RequireQuint(t)
 	// besides conforming, every run ends with the client done: a mutant
@@ -23,7 +23,6 @@ func TestMutationOfTheCounter(t *testing.T) {
 	system().WithRates(lossy).Mutate(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.PerMutant(done), qtest.NoSurvivors(
 		// the replay step unrecorded: a replay changes nothing the model sees
 		`(Counter).Add: drop call: qobs.Record(ctx, "replay", nil, "id", id, "obs.count", c....`,
-		"Send: <= for <: attempt < 10", // one more retry: the run differs only if ten attempts all fail
-		"Run: negate if: rerr != nil",  // the run's error check negated: it differs only if the client gave up
+		"Run: negate if: rerr != nil", // the run's error check negated: it differs only if the client's call failed
 	))
 }

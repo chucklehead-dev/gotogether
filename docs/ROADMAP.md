@@ -37,6 +37,8 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Proposed queue | K1–K9: adoption feedback ([#144](https://github.com/chucklehead-dev/gotogether/issues/144)) | K1 (docs) done: README's one path and spans entry point, [fit.md](fit.md). The rest after J7c, under the red-nightly rule: K3, K4, then K6's design spike; the rest as projects ask. |
 | Proposed queue | L1–L8: golem's first use ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6833092588)) | After J7c, under the red-nightly rule (L6's docs done; L1 done). Next L5's warning and progress, then L3; the rest as projects ask. |
 | Proposed queue | M1–M6: golem's graph search and Valkey ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6835911012)) | After J7c. First M1 and M2 (a bounded result and the deepest complete level instead of an out-of-memory kill), then M3; the rest as projects ask. |
+| Proposed queue | N1–N5: golem's driver asks ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6843138891)) | After J7c. golem's order: K4 (with hang faults), N1, L1, then N2 and N3. |
+| Proposed queue | Q0–Q11: a Go Quint | A design item, each its own decision. Q0 first (no quint for consumers, small); Q2's front end only once Q3's corpus and ill-typed generator exist. Upstream first. |
 | Dropped | J12 and J23 | Go 1.26 compatibility and pin batching are withdrawn. Go 1.27.3 and immediate required sibling pin alignment remain deliberate policies. |
 
 **Red-nightly rule (maintainer decision):** while the nightly is red, feature
@@ -88,8 +90,8 @@ maintainer's (R5).
   - Each term introduced with the feature that needs it.
   - Decide whether facade packages for the first project's ~20 identifiers are worth a second surface to keep in step.
   - With J18/J19.
-- **K3: streaming faults in `qenv/qhttp`.** SSE and chunked responses with slow chunks, a cut mid-stream and keepalive gaps, as declared fault options (option 0 nominal), with an example.
-- **K4: a Redis/Valkey (RESP) double.** Scripts run atomically; failover and lost writes as faults. That is where rate limiters and budget counters live. It gets its contract checked after each operation, as `Queue`'s is.
+- **K3: streaming faults in `qenv/qhttp`.** SSE and chunked responses with slow chunks, a cut mid-stream and keepalive gaps, as declared fault options (option 0 nominal), with an example. HTTP/2's own: a write deadline left set resets the stream when it passes, though nothing is written (golem lost healthy clients so; HTTP/1 does not), and flow control.
+- **K4: a Redis/Valkey (RESP) double.** Scripts run atomically; failover and lost writes as faults. That is where rate limiters and budget counters live. It gets its contract checked after each operation, as `Queue`'s is. Its faults include a **hang** (a call that never answers, not only one that fails) and the caller's cancellation, told apart from an outage; its server clock (`TIME`) the simulation's (M6). golem's top vote: with `System.Explore` on its limiter, it would have found five of the seven bugs two reviews found in code its green connect and Hegel tests drive (#144).
 - **K5: a DSQL profile for `qenv.Store`.** Optimistic only: a `SELECT FOR UPDATE` that does not block, conflicts at commit (SQLSTATE 40001 through `qsql`), per-transaction row and size limits. Checked against the history classifier like the other levels.
 - **K6: a Go-native reference model (design spike first).** A plain Go state machine as the judge for teams that cannot write Quint yet, with a documented upgrade path to a Quint model. The spike decides what claims, evidence and Quint confirmation mean without a Quint model before any API exists.
 - **K7: no Quint at test time.** Extend the Go evaluator and J13's compiled replay to the whole fragment tests use, so CI runners need Quint only where models are written or proved.
@@ -172,6 +174,131 @@ carries the graph's extent (`complete`, `cut`, `depth`) and every verdict.
   led to it), not the whole initial state as an `all { }` block.
 - **M6: K4's RESP double keeps a server clock the simulation controls**
   (`TIME`), as golem's limiter reads time from the server.
+
+## golem's drivers and reviews (N)
+
+From [#144](https://github.com/chucklehead-dev/gotogether/issues/144): two
+pairs of reviews found bugs in code golem's green connect and Hegel tests
+drive (an admission read and taken in two round trips, a mutex held across
+store I/O, a cancellation taken for an outage, a copy-then-register race,
+a stale timer, HTTP/2 deadline resets, a lifecycle's drain, two clocks).
+Their lessons are in the patterns and MBT skills; most need K4, K3 and
+qenv. Already there, now documented in the MBT driver reference: `"_":
+connect.Skip`, a driver with no projection (no `State()`),
+`qtest.RequireQuint`, `qtest.Mutants` from a consumer's repository, and
+virtual time by generating traces outside a synctest bubble and replaying
+them inside.
+
+- **N1: required states for connect.** `connect.Config.Require` names
+  boolean vals the run's traces must reach, with each one's count in the
+  report, and fails when one is never reached (golem's mutant passed at 100
+  samples: 26 of 4,609 publications had the gap it shows at). Then steering:
+  seed generation from `-graph`'s shortest witnesses of each.
+- **N2: `connect.Compose(a, b)`.** One model run driving several drivers,
+  each action to the driver that implements it, so a gateway and a control
+  plane forbidden to import each other share one test.
+- **N3: `s.Eval(expr)` in a driver.** A def of the model (`knownOf("g1")`)
+  evaluated in the step's state by the Go evaluator, so a projection
+  compares with the model's own definition instead of a copy.
+- **N4: the evaluator's fallback in connect and qhegel.** Where the Rust
+  evaluator cannot be fetched, fall back to the TypeScript backend with one
+  warning, as L4 makes doctor say so.
+- **N5: a lint for one model action, several calls to shared state.** A
+  connect driver step making more than one store call for one action
+  (where the interleavings of the patterns skill's §2 hide).
+
+## A Go Quint (Q)
+
+Quint's front end (parse, resolve, flatten, type and effect check) and its
+evaluator as a Go library, so a consumer's tests need neither Node nor the
+Rust evaluator, with quint's own implementations kept as the oracle. Builds
+on K7 (no Quint at test time), I50 (Quint text off the hot path) and the Go
+evaluator (`internal/qeval`, which already reads `quint compile`'s IR). Each
+item is its own decision before it starts; the red-nightly rule applies.
+
+**The library.**
+
+- **Q0: compiled IR as an artifact (S).** A model's `quint compile` output
+  checked in beside it (`model.qnt.json`, a format in internal/formats), a
+  CI check that recompiling changes nothing, and qtest, connect and validate
+  loading it when no quint is on PATH. A verdict the Go evaluator gives alone
+  says so; quint confirms where it is installed. Consumers stop needing quint;
+  authors still do.
+- **Q1: the evaluator's whole fragment (M).** qeval's refusals
+  (`qeval.Unsupported`) closed, and `quint run`'s random simulation in Go.
+  Seeds cannot match quint's generator, so parity is by meaning: every trace
+  Go makes replays in quint, every trace quint makes replays in Go, and
+  small models' reachable sets agree.
+- **Q2: the front end (L).** Parser (from Quint's ANTLR grammar or by hand,
+  for quint's error positions), name resolution, imports, instances and
+  `export` flattened to the IR `quint compile` writes, then the type and
+  effect checker with quint's QNT codes. Most of the risk is here.
+- **Q3: the oracle (M, with Q1 and Q2).** A differential job like
+  `qeval-differential`: a corpus (quint's examples and fixtures, every
+  example's model, qeval's generator grown to ill-typed programs) compiled
+  both ways, the IR compared after canonical renumbering, errors by code and
+  position; disagreements shrunk by `qshrink`. `evaluator-shadow` judges every
+  verdict both ways. `ci/mutate-core.sh` on the port: a survivor is a program
+  the corpus lacks. Bumping `QUINT_VERSION` re-runs it.
+- **Stays external:** Apalache (`verify`, `simulate -prove`); the bounded
+  graph covers small models in Go. Upstream first: Informal Systems may want
+  the library, or prefer the Rust evaluator to grow a front end.
+
+**What it removes.** Today the core reaches quint through processes: replay
+modules rendered as Quint text (internal/replay, `RenderModule`, the relative
+import gotcha), `.then` segments of 20 for the Rust evaluator and QNT511's
+mapping back to a step, tool failures told apart from verdicts, the
+compile cache and batching, process groups killed on cancel, `RequireQuint`
+skips, the CI installs. In process, a replay is the evaluator stepping the
+trace: the first step it cannot take is the divergence, with its state, and
+no segment, module or process stands between. These remain only behind the
+oracle (Q3) and the confirmation of a failure where quint is installed.
+
+**What it makes possible.**
+
+- **Q4: bindings typed at load (S-M).** Each action's parameters have Quint
+  types the binding sees at `binding.Load`: a template's value is converted
+  to the parameter's type and refused there, naming the field, instead of
+  failing in a replay. Templates build values, not Quint text. `lint -binding
+  -src` checks a `//quint:action`'s arguments against the parameter types.
+  N3 (`s.Eval(expr)` in a driver) is a call.
+- **Q5: one model-driven Hegel machine (M).** The model as the state machine:
+  its enabled actions are Hegel's rules, each `nondet` a draw from a
+  generator derived from its Quint type (sets, maps, records, sum types), the
+  step applied to the code by a connect driver. Hegel shrinks the model's
+  trace and the code's run together. connect's traces and qhegel's varied
+  traces become one path; `quint run --mbt`'s "every nondet in a step"
+  gotcha disappears (picks are known exactly). Model coverage (actions,
+  states, boolean vals reached: N1's `Require`) is Hegel's target.
+- **Q6: judged as recorded (M).** A recorder with the model attached
+  (`qobs.WithModel`): each step is checked when it is recorded, and the
+  first that the model refuses fails there, with the goroutine's stack and the
+  model's state, instead of after the run. Batched mode and qhegel's case
+  checker's prefix reuse (one actor, no `order.*` keys) give way to it for
+  runs whose order is the recording order; reconstructed orders stay
+  post-hoc. Pure computation, so it runs inside a `testing/synctest` bubble
+  (no process to wait on): qenv's native runtime under synctest is judged
+  inline.
+- **Q7: fuzzing at evaluator speed (M).** `testing.F` targets whose bytes are
+  the run's choices (qenv's byte rule, `qhegel.Choices`'s chunks), each input
+  judged in process fast enough for the fuzzer's throughput; the corpus is
+  choice files (`GOTOGETHER_CORPUS`). A model state never reached before
+  keeps an input, beside the fuzzer's code coverage.
+- **Q8: model-guided exploration (M-L).** qenv's choosers steered by the
+  model: prefer the fault or interleaving whose recorded step reaches a model
+  state (or action, or val) no run has, from the graph's shortest witnesses
+  (N1's steering); Exhaust's and PCT's budgets spent where the model says
+  something new can happen.
+- **Q9: grist without Quint text (M).** grist's generator builds the model's
+  IR from the catalog and checks the user's rules in process (I50's first
+  half), its typecheck at `go test` instead of a 7-40 s quint process.
+- **Q10: a monitor in production (M, after I46).** The library in a sidecar
+  or in the service: a step stream checked online, conformance as a metric,
+  no export of logs to a CI job. Its bounds (a window, the state's size)
+  are the design question.
+- **Q11: one binary (S).** `go install` gives the whole CLI, validate and
+  nav included, with no runtime to fetch; doctor reports quint only as the
+  oracle.
 
 ## Eleventh review: integrity before tags (I)
 
