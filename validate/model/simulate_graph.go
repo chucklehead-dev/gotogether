@@ -386,7 +386,7 @@ func (s *sim) replay(ctx context.Context, b *binding.Binding, overrides []string
 			x.v.Replayed = fmt.Sprintf("not replayed: steps %v have other successors, which quint's replay may draw instead", x.drawn)
 			continue
 		}
-		out, err := runQuint(ctx, quint, dir, []string{"test", "--main", "simulate", "--match", "^" + x.name + "$", "--max-samples", "1", file})
+		out, err := runQuint(ctx, quint, dir, witnessReplayArgs(x.name, file))
 		if isAnalysisCancellation(err) {
 			return err
 		}
@@ -742,4 +742,12 @@ func cycleOf(l *HotLasso) string {
 		cs = append(cs, st.Call)
 	}
 	return "(" + strings.Join(cs, ", ") + ")"
+}
+
+// witnessReplayArgs is the quint test that replays the graph's witness
+// run name in file, on QUINT_BACKEND's backend as every other quint run
+// of a simulation (it once ran on quint's default, rust, whatever
+// QUINT_BACKEND said: issue #220).
+func witnessReplayArgs(name, file string) []string {
+	return backendArgs([]string{"test", "--main", "simulate", "--match", "^" + name + "$", "--max-samples", "1", file})
 }

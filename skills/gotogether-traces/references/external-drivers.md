@@ -103,6 +103,42 @@ stays whole. Its steps keep the driver's times
 and order: `Seq` is the record's line among records, a completion's
 `Call` its request's, its `Invoked` the request's time.
 
+### Page text the model cannot hold: `intern`
+
+A driver's arguments are often the page's own text: a question's JSON,
+a selected item's label, a DOM string with quotes in it. A Quint string
+has no escapes, so such a value has no literal, and validation refuses
+it (`itf.UnquotableError`, naming the field) rather than mangle it.
+Where the model compares the value only for equality (is this the
+question shown before?), keep the text in the log and give the model
+an identity: list the field under `intern:` in the binding.
+
+```yaml
+intern:
+  question: actor   # one numbering for the whole run
+  detail: actor
+```
+
+- Each interned argument is numbered 1, 2, 3, ... by first appearance,
+  its own table per argument name (`question`'s 1 and `detail`'s 1 are
+  unrelated), over the run (`actor`) or per process (`process`). The
+  model declares the field an `int` and compares identities.
+- 0 is never a number given, so the model may use it for "nothing yet"
+  in its initial state. An empty string the driver sent is a value like
+  any other and gets a number: send no field (or a model-level flag)
+  where the page showed nothing, if the model must tell "empty" apart.
+- Only arguments are interned (a request's `args`, a step's, a
+  response's answer fields), not `obs`: observe identities through an
+  argument, or observe something the model can hold.
+- The log keeps the original text, so a counterexample's ref and the
+  log line show what the page said; the report's step shows the number.
+- Interning is for equality only. A model that reads the text (its
+  length, a prefix, its order) needs it admitted as a value it can
+  hold: a bounded vocabulary the driver maps to, checked where the
+  driver writes the log. Grow a journey's input text through one or the
+  other, never by escaping it yourself (an encoding the model compares
+  is a second, hidden equality).
+
 In Go: `qdriver.ReadFile(path)` (a `*qtrace.TornTail` error with the log
 for a torn one), `Log.Steps()` for `qtest.Validate`, `qdriver.New(header,
 records)` to build one (checked as Read checks it), `Log.Write(w)`.
@@ -145,6 +181,14 @@ log, err := bombadil.LogFile("journey/trace.jsonl", bombadil.Options{ // log.Ste
   500's) with `""`, so every completion has its action's arguments.
 - Refs are `trace.jsonl:N screenshot=screenshots/F`: the line and the
   screenshot of the state.
+- A show step is written when what a Key shows differs from what it
+  showed last, over the whole trace, not from the previous state: show
+  A, leave, come back to an unchanged A writes one show step, the first.
+  A model that needs the return as a step of its own (a retained
+  display seen again) needs the page to say it is another visit: keep a
+  navigation epoch in the extract (incremented on each navigation) and
+  list it in `Show.Fields`, so the return differs from the first visit
+  and is shown again.
 - Refused, naming the line: a click with no snapshot, requests that fell
   out of the page's log between two snapshots (it lists only the last
   few), a log out of order. A torn last line is a lost tail.
@@ -234,6 +278,36 @@ or `Synced`), or state how far the pipeline has delivered: a watermark
 in. A settle it does not reach then settles nothing, and a step due
 after it is uncollected, no verdict, never a FAIL (partial-logs.md,
 "Absent steps").
+
+### A driver's own settle: drained, then settled
+
+A journey a driver ran ends where the driver knows nothing is left in
+flight. The driver establishes that quiet itself, and a closed page or
+an end of file is not it. Its steps are then:
+
+1. drain what it owns: the adapter's pending answer bodies (Playwright's
+   `log.close()` waits for the answers being read), its own meters and
+   observers;
+2. check that every request it sent has its response line (or knowingly
+   leave one pending: a call never answered is the run's to judge,
+   `qtest.Finishes()` fails it);
+3. then record the settle, after every other step of the journey. The
+   request log (`gotogether.requests/1`) has no settle record: the one
+   who knows the journey is quiet records it. In Go, append to the
+   log's steps a settle record of the log's recorder, after its last
+   (`qtrace.Step{Recorder: ..., Seq: last+1, Time: ..., Settled: true}`,
+   what `qobs.Settled` records); or, where the server knows (webjobs:
+   the driver exited, the server stopped taking requests, every job
+   ended), call `qobs.Settled` there. A model step before it (`drained`)
+   is the model's own, if the model has an end action.
+
+The binding's `eventually` vals are then judged in that last state, and
+`complete: true` (or `Finishes()`) fails a run that has none. The settle
+says the journey was quiet. It is not a telemetry watermark and does not
+say no other producer's steps were lost: those are the collector's and
+the recorders' to say (above, "What a settle covers"). Keep the checks
+that need the journey finished explicit beside it: a final display
+actually observed, every invocation completed.
 
 ## A journey's manifest
 

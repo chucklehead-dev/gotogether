@@ -130,3 +130,15 @@ func TestModelPossible(t *testing.T) {
 		t.Errorf("an invariant claimed live: %s", f.errs)
 	}
 }
+
+// Refutes' witness replay runs on the TypeScript backend when
+// QUINT_BACKEND asks for it, end to end (issue #220's reproduction): not
+// parallel, for Setenv.
+func TestRefutesOnTheTypeScriptBackend(t *testing.T) {
+	RequireQuint(t)
+	t.Setenv("QUINT_BACKEND", "typescript")
+	f := modelExpect(t, "../validate/testdata/graph.yaml", Refutes("small").InAtMost(5))
+	if f.failed || !strings.Contains(strings.Join(f.logs, "\n"), "(replayed by quint test)") {
+		t.Fatalf("refuting small on typescript: %s\n%s", f.errs, strings.Join(f.logs, "\n"))
+	}
+}
