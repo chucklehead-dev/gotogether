@@ -27,8 +27,9 @@ compared with the model's. The Go counterpart of quint-connect.
 4. One action at a time, until a run of 50 samples passes; then raise
    `MaxSteps`.
 5. A state a bug hides at, rare in the samples: name its boolean val in
-   `Config.Require`; the run logs how often each was reached and fails
-   when one never was.
+   `Config.Require`; the run replays the shortest path to it first
+   (`witness_<name>`), logs how often the samples reached it, and fails
+   when nothing did.
 6. A program that runs by itself: `sys.FollowTraces(t, cfg,
    qtest.FaultMap{...})`, the trace choosing only its faults.
 
@@ -50,7 +51,9 @@ compared with the model's. The Go counterpart of quint-connect.
 | `the trace has no mbt::actionTaken` | a `quint test` trace | `connect.Run`, or `NondetPath` |
 | `QUINT_MAX_SAMPLES="many"` or another numeric configuration error | invalid selected environment value or explicit field; generation did not start | correct the named value; check the error from `Config.FromEnv()` |
 | a fault left in `Script.Remaining()` | the program could not follow its trace | where it stopped short |
-| `never reached the required x in N traces` | no sampled state had the val true: the run proved nothing there | raise `MaxSamples` or `MaxSteps`, or steer `step` toward it |
+| `never reached the required x in N traces, and no witness trace reached it` | no state had the val true: the run proved nothing there | raise `MaxSteps`, or check it is reachable (`gotogether simulate`) |
+| `the witness trace of required x` on a divergence | the shortest path to the required state failed | fix the code at that state; the trace is the whole reproduction |
+| `required x: no witness trace (...)` | the evaluator found no path within its bounds | the samples still count; raise `MaxSteps` |
 | `required x: reached in k of N traces` | how often the run reached it | a small k: raise the samples before trusting a pass |
 | `reproduce with QUINT_SEED=0x...` | the failing trace | rerun with it, `QUINT_VERBOSE=2` |
 

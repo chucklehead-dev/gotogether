@@ -17,9 +17,16 @@ type bank struct {
 	balances map[string]int
 	ops      int
 	buggy    bool // transfers credit the destination twice
+	capped   bool // a deposit past 5 leaves the balance at 5: wrong only at bobSaves's states
 }
 
-func (b *bank) deposit(a string, n int) { b.balances[a] += n; b.ops++ }
+func (b *bank) deposit(a string, n int) {
+	b.balances[a] += n
+	if b.capped && b.balances[a] > 5 {
+		b.balances[a] = 5
+	}
+	b.ops++
+}
 func (b *bank) withdraw(a string, n int) error {
 	if b.balances[a] < n {
 		return errors.New("insufficient funds")
@@ -46,14 +53,15 @@ type bankState struct {
 }
 
 type bankDriver struct {
-	b     *bank
-	buggy bool
+	b      *bank
+	buggy  bool
+	capped bool
 }
 
 func (d *bankDriver) Step(s *Step) error {
 	return Switch{
 		"init": func(*Step) error {
-			d.b = &bank{balances: map[string]int{"alice": 0, "bob": 0}, buggy: d.buggy}
+			d.b = &bank{balances: map[string]int{"alice": 0, "bob": 0}, buggy: d.buggy, capped: d.capped}
 			return nil
 		},
 		"deposit": func(s *Step) error {

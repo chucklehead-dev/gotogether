@@ -3,6 +3,7 @@ package qeval
 import (
 	"fmt"
 	"maps"
+	"math/big"
 	"slices"
 	"strings"
 
@@ -105,4 +106,69 @@ func StateOf(m *Model, st itf.State) (State, error) {
 		out[v] = val
 	}
 	return out, nil
+}
+
+// ToITF is a Value as an ITF value, FromITF's inverse: what a trace the
+// evaluator found (a graph's path) carries, as quint would write it. An
+// operator or an infinite set has no ITF form.
+func ToITF(v Value) (itf.Value, error) {
+	elems := func(vs []Value) ([]itf.Value, error) {
+		out := make([]itf.Value, len(vs))
+		for i, e := range vs {
+			x, err := ToITF(e)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = x
+		}
+		return out, nil
+	}
+	switch x := v.(type) {
+	case Int:
+		return itf.Value{Kind: itf.Int, I: big.NewInt(int64(x))}, nil
+	case Bool:
+		return itf.Value{Kind: itf.Bool, B: bool(x)}, nil
+	case Str:
+		return itf.Value{Kind: itf.Str, S: string(x)}, nil
+	case List:
+		es, err := elems(x)
+		return itf.Value{Kind: itf.List, Elems: es}, err
+	case Tup:
+		es, err := elems(x)
+		return itf.Value{Kind: itf.Tuple, Elems: es}, err
+	case *Set:
+		es, err := elems(x.Elems)
+		return itf.Value{Kind: itf.Set, Elems: es}, err
+	case *Map:
+		pairs := make([][2]itf.Value, len(x.Keys))
+		for i := range x.Keys {
+			k, err := ToITF(x.Keys[i])
+			if err != nil {
+				return itf.Value{}, err
+			}
+			val, err := ToITF(x.Vals[i])
+			if err != nil {
+				return itf.Value{}, err
+			}
+			pairs[i] = [2]itf.Value{k, val}
+		}
+		return itf.Value{Kind: itf.Map, Pairs: pairs}, nil
+	case *Rec:
+		fields := make(map[string]itf.Value, len(x.Names))
+		for i, n := range x.Names {
+			f, err := ToITF(x.Vals[i])
+			if err != nil {
+				return itf.Value{}, err
+			}
+			fields[n] = f
+		}
+		return itf.Value{Kind: itf.Record, Fields: fields}, nil
+	case Variant:
+		inner, err := ToITF(x.Val)
+		if err != nil {
+			return itf.Value{}, err
+		}
+		return itf.Value{Kind: itf.Variant, Tag: x.Label, Inner: &inner}, nil
+	}
+	return itf.Value{}, fmt.Errorf("qeval: %s has no ITF form", short(String(v)))
 }

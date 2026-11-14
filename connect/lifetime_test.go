@@ -139,6 +139,8 @@ func TestConnectProcessHelper(t *testing.T) {
 		Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 1, MaxSteps: 1, Seed: "0x1", Require: []string{"bobSpends"}}, func(testing.TB) Driver { return &bankDriver{} })
 	case "require-int":
 		Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 1, MaxSteps: 1, Seed: "0x1", Require: []string{"MAX"}}, func(testing.TB) Driver { return &bankDriver{} })
+	case "require-capped":
+		Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 1, MaxSteps: 2, Seed: "0x1", Require: []string{"bobSaves"}}, func(testing.TB) Driver { return &bankDriver{capped: true} })
 	case "nondet":
 		Test(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 1}, "aliceSavesTest", func(testing.TB) Driver { return &bankDriver{} })
 	case "selected":

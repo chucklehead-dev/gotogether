@@ -37,7 +37,7 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Proposed queue | K1–K9: adoption feedback ([#144](https://github.com/chucklehead-dev/gotogether/issues/144)) | K1 (docs) done: README's one path and spans entry point, [fit.md](fit.md). The rest after J7c, under the red-nightly rule: K3, K4, then K6's design spike; the rest as projects ask. |
 | Proposed queue | L1–L8: golem's first use ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6833092588)) | L1 (#191), L3 (#195), L5 (#194) and L6's docs landed after J7c; the rest as projects ask. |
 | Proposed queue | M1–M6: golem's graph search and Valkey ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6835911012)) | M2 landed after J7c (#198: the deepest complete depth of a state-bound graph). Next M1 (a bounded result instead of an out-of-memory kill), then M3; the rest as projects ask. |
-| Proposed queue | N1–N5: golem's driver asks ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6843138891)) | golem's order: K4 (with hang faults), N1, L1 (landed), then N2 and N3. N1's `Config.Require` landed (counts, failure when never reached); its steering from `-graph`'s witnesses is open. Next K4. |
+| Proposed queue | N1–N5: golem's driver asks ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6843138891)) | golem's order: K4 (with hang faults), N1, L1 (landed), then N2 and N3. N1 done: `Config.Require` (counts, failure when never reached) and its steering (the shortest witness of each replayed first). Next K4. |
 | Proposed queue | Q0–Q11: a Go Quint | A design item, each its own decision. Q0 first (no quint for consumers, small); Q2's front end only once Q3's corpus and ill-typed generator exist. Upstream first. |
 | Dropped | J12 and J23 | Go 1.26 compatibility and pin batching are withdrawn. Go 1.27.3 and immediate required sibling pin alignment remain deliberate policies. |
 
@@ -199,9 +199,10 @@ them inside.
 - **N1: required states for connect.** `connect.Config.Require` names
   boolean vals the run's traces must reach, with each one's count in the
   report, and fails when one is never reached (golem's mutant passed at 100
-  samples: 26 of 4,609 publications had the gap it shows at). Landed:
-  each val evaluated by the Go evaluator in every state, its count logged.
-  Open: steering, seed generation from `-graph`'s shortest witnesses of each.
+  samples: 26 of 4,609 publications had the gap it shows at). Done: each
+  val evaluated by the Go evaluator in every state, its count logged, and
+  steering: the shortest path to each (the evaluator's search, within
+  MaxSteps) replayed before the samples as a witness trace.
 - **N2: `connect.Compose(a, b)`.** One model run driving several drivers,
   each action to the driver that implements it, so a gateway and a control
   plane forbidden to import each other share one test.
