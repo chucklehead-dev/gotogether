@@ -63,6 +63,10 @@ func TestSimulateGraph(t *testing.T) {
 		t.Errorf("want %q in\n%s", want, got)
 	}
 	replayInQuint(t, must(filepath.Abs(rel)))
+	unclassified := filepath.Join(t.TempDir(), "unclassified.yaml")
+	if err := os.WriteFile(unclassified, []byte("spec: "+must(filepath.Abs("../../validate/testdata/graph.qnt"))+"\nmodule: graph\nactions: {inc: {}, bump: {}, reset: {}, never: {}}\ninvariants: [positive]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	// what the report says beside the verdicts: an invariant of a graph a
 	// bound cut is bounded, never holds; a state only a stutter leaves is
 	// quiet; an action of the binding's that step never calls is outside
@@ -71,6 +75,9 @@ func TestSimulateGraph(t *testing.T) {
 		want, absent string
 	}{
 		{[]string{"-binding", "../../validate/testdata/graph.yaml", "-states", "5"}, "  bounded positive: none of the 5 states explored", "  holds   positive"},
+		// a depth bound proves every trace up to it, classified or not
+		{[]string{"-binding", "../../validate/testdata/graph.yaml", "-depth", "2"}, "  bounded positive: no state within 2 steps of init violates it (complete to depth 2: a bounded proof, every trace of up to 2 steps)\n", "proves nothing past them"},
+		{[]string{"-binding", unclassified, "-depth", "2"}, "  bounded positive: no state within 2 steps of init violates it (complete to depth 2: a bounded proof, every trace of up to 2 steps; unclassified: add it to simulate.holds to keep it so)", "proves nothing past them"},
 		{[]string{"-binding", "../../validate/testdata/graph_partial.yaml"}, "  quiet   1 reachable state only a stutter leaves", ""},
 		{[]string{"-binding", "../../validate/testdata/graph_wrap.yaml"}, "  outside reset: the binding's, never called by step", ""},
 	} {

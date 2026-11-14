@@ -169,10 +169,18 @@ From golem's use (#144):
   it with what the model's own action computed (`s.Get` after the step).
   The model's traces bring the inputs no hand-written case would: out of
   order, after a failover, at any point.
-- **Reach the state that matters.** Count the steps where the bug could
-  show (a publication with a gap in the ledger) and fail the test when
-  none occurred: golem's mutant passed at 100 samples, where 26 of 4,609
-  publications had a gap. Raise `MaxSamples` until the count is safe.
+- **Reach the state that matters.** Name a boolean val true where the
+  bug could show (a publication with a gap in the ledger) in
+  `Config.Require`: the run replays the shortest path to it first, counts
+  the sampled states where it held, and fails when nothing reached it.
+  golem's mutant passed at 100 samples, where 26 of 4,609 publications had
+  a gap.
+- **Arrange the clocks a guard needs.** Where the model enables an action
+  the code guards by time (`takeLease` fires whenever; the code takes a
+  lease only once it has lapsed by the taker's clock), give each replica
+  its own clock and move the taker's past the lease before the code
+  tries, as golem's elector driver does. A clock the driver leaves still
+  (a paused leader's) keeps that node's belief, as in the model.
 - **History ghosts belong in the driver.** A model's ghost (every call
   ever waived) is the driver's to accumulate from the steps it drives;
   code that keeps one to be projected keeps it for ever (a leak in

@@ -63,6 +63,14 @@ interleaves tasks at every seam. And:
 - code with a lifecycle (a deploy's drain, a shutdown) needs a model
   action for it, or no check sees what is lost at its end.
 
+List the model's trusted inputs, and where the deployment guarantees
+each. A model that assumes an input is trusted (golem's `TRUSTED_FLOOR`,
+a checkpoint only the control plane's role may write) cannot see a
+deployment that lets anyone else write it: a wrong bucket policy is
+invisible to every check. Each assumption is a requirement on the
+deployment, checked there (a policy test), or modelled as an input an
+adversary may also write.
+
 ## 3. Record where effects happen: linearization points
 
 A step must be recorded where it takes effect, in the order effects take

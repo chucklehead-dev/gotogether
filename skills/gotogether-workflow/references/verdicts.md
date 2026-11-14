@@ -254,9 +254,9 @@ graph's, which proves nothing past the states explored.
   `possible`, `terminal`), judged by `gotogether simulate`. With
   `-graph`, `holds` is printed only for a complete graph (a proof for
   the instance); a truncated one says `bounded` (no state explored
-  violates it, which proves nothing past them; where the state bound cut
-  after whole levels, `complete to depth N` and a proof to that depth,
-  as `-depth N` gives: `completeDepth` in `-json`), an invariant the
+  violates it, which proves nothing past them; where `-depth N` cut it,
+  or the state bound cut after whole levels, `complete to depth N` and a
+  proof to that depth, classified or not: `completeDepth` in `-json`), an invariant the
   evaluator cannot evaluate somewhere `unchecked` (exit 2), a state the
   step cannot leave `deadlock` (exit 1) unless `terminal` holds there
   (`ends`), and states only a stutter leaves `quiet` (never a failure:
