@@ -220,6 +220,16 @@ them inside.
 - **N5: a lint for one model action, several calls to shared state.** A
   connect driver step making more than one store call for one action
   (where the interleavings of the patterns skill's §2 hide).
+- **N6: line-level mutants in the repository.** A mutant as a small
+  replacement patch beside the code (not a whole-file copy under
+  `testdata/mutants`), re-run after any refactor; a run reports "did not
+  build" apart from "survived" (golem: six of its `sed` ablations did not
+  compile and read as survivors).
+- **N7: a differential mode.** Two implementations of one interface
+  replayed on the same trace, their projections compared with each other
+  as well as with the model: golem's memory and Valkey limiter stores each
+  agreed with the model and disagreed with each other where it never goes
+  (a negative budget, spend after the counter's history is trimmed).
 
 ## A Go Quint (Q)
 

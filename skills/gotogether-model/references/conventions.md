@@ -43,7 +43,8 @@ run. See [the executable walkthrough](https://github.com/chucklehead-dev/gotoget
    `connect.Config{Spec: "bank.qnt", Main: "bankDesign"}` generates traces
    of the instance; a binding either names the instance (`module:
    bankDesign`: it binds `bank` with the instance's constants, and gives
-   none of them itself) or instantiates `bank` with constants sized to each
+   none of them itself; a run's override, `-const LIMIT_ON=false` or
+   `WithConstants`, still replaces one of them) or instantiates `bank` with constants sized to each
    recorded run (`constants:` templates such as `{{ max "amount" }}`). One
    binding per design, each naming its instance, checks the designs
    without copying their switches. An instance is a module whose body is a
