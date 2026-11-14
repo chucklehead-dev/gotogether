@@ -145,7 +145,7 @@ isolates nodes (three faults, one every 800ms, each undone after
 300ms) while four client calls in five lose their response (each call a
 new connection, since toxiproxy draws a loss per connection and a
 kept-alive one would lose all or none). Then every node is cut off from
-the others for 2.5s, three times, each when the nodes agree, as the
+the others for 2.5s, six times, each when the nodes agree, as the
 simulation's `TestElectionAfterHeal` does. The nemesis (and the cuts)
 record `stop`, `isolate` and `heal` in the cluster's process (one
 actor's trace, one process); `Stop` heals and restarts, the nodes agree,
@@ -162,9 +162,9 @@ heal, not 300ms. The faithful cluster's first leader after a heal came
 
 | test | mutant | claim | measured (this shape, `-race`) |
 |---|---|---|---|
-| `TestRealNemesis` | none | both histories conform and settle in every run; a second leader of a term added after the crashes violates `electionSafety` | 24 of 24 runs (18 with `-race`) |
+| `TestRealNemesis` | none | both histories conform and settle in every run; a second leader of a term added after the crashes violates `electionSafety` | 24 of 24 runs (18 with `-race`) with three cuts a run; with six, 3 of 3 with `-race` |
 | `TestRealNoRequestID` | `NoRequestID` (the client's) | some run fails as the simulation's does (a read, cas or transfer mismatched, or `converged` violated); the cluster's history conforms | per seed 5: 3 of 3, 9: 2 of 3, 10: 3 of 3; together they miss at most 3.7% (each at its worst measured rate) |
-| `TestRealSlowElection` | `SlowElection` (the node's) | some run violates `within 500ms after healed: leaderOrSplit`, none `electionSafety`; the clients' history conforms | 11 of 12 runs over six seeds; per seed 5: 5 of 5, 9: 4 of 5, 10: 5 of 5; together at most 0.8% |
+| `TestRealSlowElection` | `SlowElection` (the node's) | some run violates `within 500ms after healed: leaderOrSplit`, none `electionSafety`; the clients' history conforms | with six cuts a run, 14 of 15 runs; per seed 5: 5 of 5, 9: 5 of 5, 10: 4 of 5 (with three cuts CI once missed all three seeds, and locally 3 of 18 runs missed) |
 | `TestRealFaultsInSimulation` | none | the per-PR runs' journals (`Journal.Script`) re-made in the simulation: every fault happens (`qnemesis.Unmade`), the runs conform, real and simulated | 15 of 15 journals re-made whole |
 
 The per-PR seeds are 5, 9 and 10, each a schedule with a crash; the
