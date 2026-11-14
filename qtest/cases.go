@@ -65,10 +65,7 @@ func (c settings) checker(t testing.TB, bindingPath string) *validate.Checker {
 	t.Helper()
 	o := c.Options
 	o.Dir = filepath.Join(c.Dir, "quint")
-	ch := checkerFor(t, bindingPath, o, c)
-	cc := *ch
-	cc.Options = o
-	return &cc
+	return withOptions(checkerFor(t, bindingPath, o, c), o)
 }
 
 // Judge runs the system once on ch and checks the run against the model

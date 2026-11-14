@@ -11,6 +11,7 @@ back; a model that says every request counts once. The whole system is
 | [hello.binding.yaml](hello.binding.yaml) | the recorded steps as calls of the model's actions (`id` is the step's field of that name); what the model must be able to do (`simulate.possible`: a retry recognised, the client done) |
 | [hello.go](hello.go) | the service (`Counter.Add`, which records `apply` or `replay`), the retrying client, `Run` on a qenv simulation |
 | [hello_test.go](hello_test.go) | one `qtest.System`, explored by seeds; `TestMutant` says what catches each mutant |
+| [hello.model.json](hello.model.json) | the model compiled for the Go evaluator (`gotogether compile -binding hello.binding.yaml`): where quint is not installed, the trace tests are judged by it (`qtest.RequireModel`); CI checks it is current (`gotogether compile -binding hello.binding.yaml -check`) |
 | [testdata/mutants](testdata/mutants) | `noDedupe`: a `hello.go` whose `Add` counts a retried or duplicated request again, the bug planted by hand (a `go test -overlay`, built and run by `qtest.Mutants`) |
 
 ## What each test catches
@@ -41,7 +42,8 @@ thought of.
 ## Run it
 
 ```sh
-go test -v .                    # needs quint on PATH: each test's summary, the mutant's catch in three lines
+go test -v .                    # each test's summary, the mutant's catch in three lines
+GOTOGETHER_COMPILED=1 go test -v .   # no quint needed: the trace tests judged by hello.model.json alone; the model's own tests skip
 GOTOGETHER_VERBOSE=1 go test -v .   # each catch's whole report
 ./run-demo.sh                   # simulate 20 seeds, check the step logs with gotogether
 MUTANT=noDedupe ./run-demo.sh   # the same, built with the mutant's overlay

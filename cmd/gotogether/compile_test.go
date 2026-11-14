@@ -134,3 +134,44 @@ func TestDoctorCompiled(t *testing.T) {
 		t.Errorf("a later binding format: %+v", p)
 	}
 }
+
+// gotogether compile without -o writes beside the binding
+// (validate.CompiledFor), and -check passes on that file, then fails,
+// naming what differs and the fix, once the binding changes; it writes
+// nothing either way.
+func TestCompileCheck(t *testing.T) {
+	skip.Quint(t)
+	dir := t.TempDir()
+	for _, f := range []string{"account.yaml", "account.qnt"} {
+		if err := os.WriteFile(filepath.Join(dir, f), mustRead(t, filepath.Join("../../validate/testdata", f)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bind := filepath.Join(dir, "account.yaml")
+	model := filepath.Join(dir, "account.model.json")
+	var out bytes.Buffer
+	if err := compileTo(&out, []string{"-binding", bind}); err != nil {
+		t.Fatal(err)
+	}
+	written := mustRead(t, model)
+	out.Reset()
+	if err := compileTo(&out, []string{"-binding", bind, "-check"}); err != nil || !strings.Contains(out.String(), "is current for") {
+		t.Fatalf("-check on a fresh compile: %v\n%s", err, out.String())
+	}
+	if err := os.WriteFile(bind, append(mustRead(t, bind), "\n# edited\n"...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := compileTo(&out, []string{"-binding", bind, "-check"})
+	if err == nil || !strings.Contains(err.Error(), "is stale") || !strings.Contains(err.Error(), "the binding") || !strings.Contains(err.Error(), "gotogether compile -binding "+bind) {
+		t.Fatalf("-check after the binding changed: %v", err)
+	}
+	if !bytes.Equal(mustRead(t, model), written) {
+		t.Error("-check rewrote the compiled model")
+	}
+	if err := os.Remove(model); err != nil {
+		t.Fatal(err)
+	}
+	if err := compileTo(&out, []string{"-binding", bind, "-check"}); err == nil || !strings.Contains(err.Error(), "has no compiled model") {
+		t.Fatalf("-check without the file: %v", err)
+	}
+}

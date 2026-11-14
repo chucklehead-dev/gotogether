@@ -16,7 +16,7 @@ import (
 // three survived: nothing said the client finished. Unwoven, it skips.
 // The two marked mutants are equivalent under this environment.
 func TestMutationOfTheCounter(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "hello.binding.yaml")
 	// besides conforming, every run ends with the client done: a mutant
 	// that loses the step (or the requests it needs) is killed by that
 	done := qtest.Takes("done").InAtLeast(0.9)

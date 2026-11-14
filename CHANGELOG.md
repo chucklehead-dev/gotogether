@@ -8,6 +8,16 @@ and adds a line here.
 
 ## Unreleased
 
+- Tests without quint (ROADMAP Q0): a binding's compiled model kept beside it
+  (`gotogether compile -binding B`, now writing `<stem>.model.json` by default,
+  `validate.CompiledFor`) judges its qtest and qhegel runs by the Go evaluator
+  alone where quint is not installed; `GOTOGETHER_COMPILED=1` always, and
+  fails a binding without one; `=0` never. `qtest.RequireModel(t, binding)`
+  skips only without quint and without a compiled model. `gotogether compile
+  -check` (in CI, where quint is) writes nothing and fails, naming what differs,
+  when the checked-in model is stale (`CompiledModel.Differs`: meaning, not the
+  versions that compiled it). examples/hello keeps its compiled model and runs
+  its trace tests with no quint.
 - qhttp rounds very distant deadlines without overflowing or hanging, saturating
   at the largest duration when the next preferred grid point cannot fit.
   Deadline caching distinguishes full instants while sharing one virtual budget

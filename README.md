@@ -341,7 +341,11 @@ A pipeline with no Node or quint (a canary, a CronJob) validates with a
 compiled model: `gotogether compile -binding b.yaml -o model.json` where
 quint is, then `gotogether validate -binding b.yaml -compiled model.json
 runs/*.jsonl`, the Go evaluator alone judging, a run it cannot decide no
-verdict, a stale artifact refused (DESIGN §64).
+verdict, a stale artifact refused (DESIGN §64). The same file kept beside the
+binding (`gotogether compile -binding b.yaml` writes `b.model.json`) lets
+the binding's tests run where quint is not installed (`GOTOGETHER_COMPILED`,
+`qtest.RequireModel`), with `gotogether compile -binding b.yaml -check` in a
+CI job that has quint keeping it current.
 
 Every file format is named and versioned (`gotogether.steps/1`,
 `gotogether.binding/2`, ...); pre-release, only the current major is

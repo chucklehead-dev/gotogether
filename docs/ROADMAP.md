@@ -216,12 +216,17 @@ item is its own decision before it starts; the red-nightly rule applies.
 
 **The library.**
 
-- **Q0: compiled IR as an artifact (S).** A model's `quint compile` output
-  checked in beside it (`model.qnt.json`, a format in internal/formats), a
-  CI check that recompiling changes nothing, and qtest, connect and validate
-  loading it when no quint is on PATH. A verdict the Go evaluator gives alone
-  says so; quint confirms where it is installed. Consumers stop needing quint;
-  authors still do.
+- **Q0: compiled IR as an artifact (S). First slice built:** J13's
+  compiled model (`gotogether.model/1`) kept beside the binding
+  (`validate.CompiledFor`: `stock.model.json`, `gotogether compile`'s default)
+  judges qtest's and qhegel's runs where quint is not installed
+  (`GOTOGETHER_COMPILED`: unset, `1` always and failing without one, `0`);
+  `qtest.RequireModel`; `gotogether compile -check` fails on a stale
+  checked-in model by meaning (`CompiledModel.Differs`). hello keeps its model,
+  CI checks it current where quint is and runs its tests where quint is not.
+  Left: the other examples' models and their tests on `RequireModel`, doctor
+  listing bindings without one, and Q1's fragment (`qtest.Model`, simulate and
+  connect still need quint).
 - **Q1: the evaluator's whole fragment (M).** qeval's refusals
   (`qeval.Unsupported`) closed, and `quint run`'s random simulation in Go.
   Seeds cannot match quint's generator, so parity is by meaning: every trace

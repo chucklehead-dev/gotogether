@@ -204,6 +204,70 @@ func (cm *CompiledModel) Write(path string) error {
 	return os.WriteFile(path, append(data, '\n'), 0o644)
 }
 
+// CompiledFor is where bindingPath's compiled model is kept by
+// convention: beside the binding, its name's stem (the name without .yaml
+// or .yml, then without .binding) with .model.json, so stock.binding.yaml's
+// is stock.model.json. qtest finds it there (a test without quint), and
+// gotogether compile writes and checks it there when -o is not given.
+func CompiledFor(bindingPath string) string {
+	dir, name := filepath.Split(bindingPath)
+	for _, ext := range []string{".yaml", ".yml"} {
+		if strings.HasSuffix(name, ext) {
+			name = strings.TrimSuffix(name, ext)
+			break
+		}
+	}
+	name = strings.TrimSuffix(name, ".binding")
+	return filepath.Join(dir, name+".model.json")
+}
+
+// Differs lists what differs in meaning between cm and other: the binding
+// and the sources they were compiled from, the module, quint's typecheck,
+// the evaluation module and its IR. The quint and gotogether versions that
+// compiled them are provenance, not meaning: a compile by another quint that
+// writes the same IR is the same model. Empty when they agree; compile
+// -check fails on any.
+func (cm *CompiledModel) Differs(other *CompiledModel) []string {
+	var d []string
+	if cm.Format != other.Format {
+		d = append(d, fmt.Sprintf("format (%s, %s)", cm.Format, other.Format))
+	}
+	if cm.Binding.SHA256 != other.Binding.SHA256 {
+		d = append(d, fmt.Sprintf("the binding (sha256 %s, %s)", short12(cm.Binding.SHA256), short12(other.Binding.SHA256)))
+	}
+	if len(cm.Sources) != len(other.Sources) {
+		d = append(d, fmt.Sprintf("the sources (%d files, %d)", len(cm.Sources), len(other.Sources)))
+	} else {
+		for i, s := range cm.Sources {
+			if o := other.Sources[i]; s != o {
+				d = append(d, fmt.Sprintf("source %s (sha256 %s; %s, sha256 %s)", s.Path, short12(s.SHA256), o.Path, short12(o.SHA256)))
+			}
+		}
+	}
+	if cm.Module != other.Module {
+		d = append(d, fmt.Sprintf("the module (%s, %s)", cm.Module, other.Module))
+	}
+	if !sameJSON(cm.Typecheck, other.Typecheck) {
+		d = append(d, "quint's typecheck")
+	}
+	if (cm.Eval == nil) != (other.Eval == nil) || cm.Eval != nil && cm.Eval.Text != other.Eval.Text {
+		d = append(d, "the evaluation module")
+	}
+	if !sameJSON(cm.IR, other.IR) {
+		d = append(d, "the evaluation module's IR")
+	}
+	return d
+}
+
+// sameJSON reports whether a and b are the same JSON, whitespace aside.
+func sameJSON(a, b json.RawMessage) bool {
+	var ca, cb bytes.Buffer
+	if json.Compact(&ca, a) != nil || json.Compact(&cb, b) != nil {
+		return bytes.Equal(a, b)
+	}
+	return bytes.Equal(ca.Bytes(), cb.Bytes())
+}
+
 // LoadCompiled reads a compiled model (Compile's), refusing another
 // format or a later major than this gotogether reads, and a Quint version
 // outside the current stable admission policy.
