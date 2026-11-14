@@ -100,6 +100,7 @@ func (r *Report) Doc() *validate.Document {
 		for i := range d.Checks {
 			d.Checks[i].Verdict = "unchecked"
 			d.Checks[i].Detail = "evaluator disagreement voids graph verdicts: " + r.EvaluatorBug
+			d.Checks[i].Counterexample = nil
 			if b := d.Checks[i].Bound; b != nil {
 				b.Kind = "stopped"
 				b.Proves = false
@@ -172,7 +173,32 @@ func modelDocCheck(v Verdict, kind string) validate.DocCheck {
 	if v.NativeProof != nil && v.NativeProof.Reused {
 		detail += fmt.Sprintf("; reused exact bounded native proof from %s (request %s)", v.NativeProof.ProducerBinding, v.NativeProof.RequestSHA256)
 	}
-	return validate.DocCheck{NativeProof: v.NativeProof.Clone(), Name: v.Name, Kind: kind, Verdict: verdict, Detail: detail, Bound: &validate.DocBound{Kind: v.Bound.Kind, States: v.Bound.States, Depth: v.Bound.Depth, Traces: v.Bound.Traces, Steps: v.Bound.Steps, Stopped: v.Bound.Stopped, Proves: v.Bound.Proves()}}
+	return validate.DocCheck{NativeProof: v.NativeProof.Clone(), Name: v.Name, Kind: kind, Verdict: verdict, Detail: detail, Counterexample: counterexampleDoc(v.Counterexample, v.Lasso), Bound: &validate.DocBound{Kind: v.Bound.Kind, States: v.Bound.States, Depth: v.Bound.Depth, Traces: v.Bound.Traces, Steps: v.Bound.Steps, Stopped: v.Bound.Stopped, Proves: v.Bound.Proves()}}
+}
+
+// counterexampleDoc is cx (or lasso's prefix and cycle) as the report's
+// data, nil when the verdict rests on neither.
+func counterexampleDoc(cx *Counterexample, lasso *HotLasso) *validate.DocCounterexample {
+	var d *validate.DocCounterexample
+	switch { // a lasso first: an eventual val's path is its prefix and cycle
+	case lasso != nil && lasso.Prefix != nil:
+		d = &validate.DocCounterexample{Steps: stepsDoc(lasso.Prefix.Steps), Cycle: stepsDoc(lasso.Cycle), Stutter: lasso.Stutter, Ends: lasso.Ends,
+			Replay: lasso.Replay, Sampled: slices.Clone(lasso.Prefix.Sampled)}
+	case cx != nil:
+		d = &validate.DocCounterexample{Steps: stepsDoc(cx.Steps), Replay: cx.Replay, Sampled: slices.Clone(cx.Sampled)}
+	}
+	return d
+}
+
+func stepsDoc(steps []GraphStep) []validate.DocCounterexampleStep {
+	if len(steps) == 0 {
+		return nil
+	}
+	out := make([]validate.DocCounterexampleStep, len(steps))
+	for i, st := range steps {
+		out[i] = validate.DocCounterexampleStep{Call: st.Call, Picks: slices.Clone(st.Picks), State: slices.Clone(st.State)}
+	}
+	return out
 }
 
 func possibleGoalDoc(g PossibleGoal) *validate.DocPossibleGoal {
