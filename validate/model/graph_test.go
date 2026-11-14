@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -148,5 +149,32 @@ func TestCheckerGraphPartlyUnsupported(t *testing.T) {
 	}
 	if r.Deadlocks != 0 || r.Quiescent != 1 {
 		t.Fatalf("deadlocks %d, quiescent %d", r.Deadlocks, r.Quiescent)
+	}
+}
+
+// A graph the state bound cut after whole levels is a bounded proof to
+// the deepest one (complete to depth N), as a depth bound of N is: its
+// verdicts' bound is a depth bound of the states within N steps, which
+// proves. A cut among the first level proves nothing, as before.
+func TestCheckerGraphCompleteDepth(t *testing.T) {
+	skip.Quint(t)
+	full := graphOf(t, "../testdata/vending.yaml", GraphSearch{})
+	cut := graphOf(t, "../testdata/vending.yaml", GraphSearch{States: full.States - 1})
+	if cut.Cut != "states" || cut.CompleteDepth < 1 || !strings.Contains(cut.Extent(), fmt.Sprintf("complete to depth %d", cut.CompleteDepth)) {
+		t.Fatalf("cut: %s, complete to depth %d", cut.Extent(), cut.CompleteDepth)
+	}
+	b := graphBound(cut)
+	within := 0
+	for _, d := range full.graph.Depth {
+		if d <= cut.CompleteDepth {
+			within++
+		}
+	}
+	if b.Kind != "depth" || b.Depth != cut.CompleteDepth || b.States != within || !b.Proves() {
+		t.Fatalf("bound %+v; want a depth-%d proof over the %d states within it", b, cut.CompleteDepth, within)
+	}
+	first := graphOf(t, "../testdata/graph.yaml", GraphSearch{States: 2})
+	if first.CompleteDepth > 0 || graphBound(first).Proves() {
+		t.Fatalf("a cut in the first level proves: complete to depth %d, bound %+v", first.CompleteDepth, graphBound(first))
 	}
 }
