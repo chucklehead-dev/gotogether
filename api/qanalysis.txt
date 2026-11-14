@@ -10,6 +10,8 @@ var Weave = &analysis.Analyzer{Name: "quintweave", URL: "https://github.com/chuc
 func Compare(m *Map, s *qcover.Summary) []Gap
 func Name(fn *ssa.Function) string
 func Report(gaps []Gap) string
+func RoundTrips(dir string, patterns ...string) ([]Split, error)
+func SplitReport(splits []Split) string
 func Static(dir string, patterns ...string) (*Map, error)
 func UntriedErrorPaths(m *Map, s *qcover.Summary, cov *qenv.Coverage) []ErrorPath
 type ErrorPath struct
@@ -29,6 +31,15 @@ type Map struct
     field Callers map[string]map[string]bool
     field Dead []string
     method (*Map) Actions() []string
+type RoundTrip struct
+    field Call string
+    field At string
+    field In string
+type Split struct
+    field Action string
+    field Driver string
+    field At string
+    field Trips []RoundTrip
 
 == github.com/chucklehead-dev/gotogether/qanalysis/golangci
 func New(conf any) (register.LinterPlugin, error)

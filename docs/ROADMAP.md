@@ -219,7 +219,13 @@ them inside.
   warning, as L4 makes doctor say so.
 - **N5: a lint for one model action, several calls to shared state.** A
   connect driver step making more than one store call for one action
-  (where the interleavings of the patterns skill's §2 hide).
+  (where the interleavings of the patterns skill's §2 hide). Done:
+  `actionmap -roundtrips` (qanalysis), each `connect.Switch` action's
+  round trips (a context-taking method of an interface or another
+  module's type) through the module's own code, the test's own calls
+  aside. On golem it lists complete, cancel, recover and the
+  publication's poll and publish. Open: an exemption comment for a
+  reviewed split, and the same over a qtest.System's steps.
 - **N6: line-level mutants in the repository.** A mutant as a small
   replacement patch beside the code (not a whole-file copy under
   `testdata/mutants`), re-run after any refactor; a run reports "did not

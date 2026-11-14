@@ -6,7 +6,15 @@
 // TestCodeCoverage writes). It lists dead functions
 // first: the ones no root (main, init, exported API) reaches.
 //
+// With -roundtrips it lists instead each connect driver's action (a
+// connect.Switch case, tests included) whose code makes more than one
+// round trip into shared state: a store's, a client's or a peer's method
+// taking a context. The model takes such an action in one step, so no
+// connect trace interleaves another between its round trips
+// (actionmap.RoundTrips; the patterns skill's §2).
+//
 //	actionmap [-C dir] [-coverage EVIDENCE] packages...
+//	actionmap [-C dir] -roundtrips packages...
 package main
 
 import (
@@ -21,10 +29,24 @@ import (
 func main() {
 	dir := flag.String("C", ".", "directory to load the packages from")
 	cov := flag.String("coverage", "", "an evidence.json or qcover.Summary JSON to compare with")
+	trips := flag.Bool("roundtrips", false, "list connect actions whose code makes more than one round trip into shared state")
 	flag.Parse()
 	if flag.NArg() == 0 {
-		fmt.Fprintln(os.Stderr, "usage: actionmap [-C dir] [-coverage evidence.json] packages...")
+		fmt.Fprintln(os.Stderr, "usage: actionmap [-C dir] [-coverage evidence.json] packages...\n       actionmap [-C dir] -roundtrips packages...")
 		os.Exit(2)
+	}
+	if *trips {
+		splits, err := actionmap.RoundTrips(*dir, flag.Args()...)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if len(splits) == 0 {
+			fmt.Println("no connect action makes more than one round trip")
+			return
+		}
+		fmt.Print(actionmap.SplitReport(splits))
+		return
 	}
 	m, err := actionmap.Static(*dir, flag.Args()...)
 	if err != nil {
