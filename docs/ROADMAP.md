@@ -35,7 +35,7 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Later | J14/J15, J18/J19, J21 | Durable rewind detection and safe redrive before Grist production claims; usability/vocabulary; GR4 consolidation. |
 | Proposed queue | J16/J17/J20/J22/J25–J27 | Retain the review's adoption, capacity, admission-tuning and process proposals without treating them as completed commitments. |
 | Proposed queue | K1–K9: adoption feedback ([#144](https://github.com/chucklehead-dev/gotogether/issues/144)) | K1 (docs) done: README's one path and spans entry point, [fit.md](fit.md). The rest after J7c, under the red-nightly rule: K3, K4, then K6's design spike; the rest as projects ask. |
-| Proposed queue | L1–L8: golem's first use ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6833092588)) | After J7c, under the red-nightly rule (L6's docs done). First L1, then L5's warning and progress, then L3; the rest as projects ask. |
+| Proposed queue | L1–L8: golem's first use ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6833092588)) | After J7c, under the red-nightly rule (L6's docs done; L1 done). Next L5's warning and progress, then L3; the rest as projects ask. |
 | Proposed queue | M1–M6: golem's graph search and Valkey ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6835911012)) | After J7c. First M1 and M2 (a bounded result and the deepest complete level instead of an out-of-memory kill), then M3; the rest as projects ask. |
 | Proposed queue | N1–N5: golem's driver asks ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6843138891)) | After J7c. golem's order: K4 (with hang faults), N1, L1, then N2 and N3. |
 | Proposed queue | Q0–Q11: a Go Quint | A design item, each its own decision. Q0 first (no quint for consumers, small); Q2's front end only once Q3's corpus and ill-typed generator exist. Upstream first. |
@@ -112,10 +112,12 @@ Already in place and to be documented: `qtest.Model` claims (`Proves`,
 `simulate -graph -out` (counterexamples as shortest Quint runs),
 `itf.DecodeAs`, and doctor's missing-evaluator report.
 
-- **L1: a binding's `module:` names an instance module.** Read its constants
-  and imported definitions (`binding.InstanceConstants` parses the form; only
-  ITF import uses it) instead of the binding copying them. Unblocks the
-  one-instance-per-design style, and model-only mutant instances with it.
+- **L1: a binding's `module:` names an instance module.** Done: `Load`
+  binds the module an instance imports (a body of one `import M(...).*`)
+  with the instance's constants; a constant both set is refused; a module
+  with definitions beside its import is its own. `qtest.Model` proves the
+  design and refutes a broken design's instance, neither binding copying a
+  constant (`TestModelClaimsByInstanceModule`).
 - **L2: the design phase as a report.** The skills document the model-only
   path for design work; new: a story × instance matrix generated from
   scenarios and named instances (which mechanism each bug story needs).

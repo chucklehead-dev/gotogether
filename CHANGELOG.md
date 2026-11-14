@@ -8,6 +8,13 @@ and adds a line here.
 
 ## Unreleased
 
+- A binding's `module` may name an instance module (`module design {
+  import publication(N = 3, ...).* }`): the binding binds `publication` with
+  the instance's constants and gives none of them itself, so one binding per
+  design names its instance instead of copying its switches. A constant set
+  by both is refused, naming both values. Before, every action was "not an
+  action of design" (golem's first use, #144; ROADMAP L1).
+
 - qhttp rounds very distant deadlines without overflowing or hanging, saturating
   at the largest duration when the next preferred grid point cannot fit.
   Deadline caching distinguishes full instants while sharing one virtual budget

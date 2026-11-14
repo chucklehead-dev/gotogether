@@ -45,7 +45,9 @@ type Binding struct {
 	// with its keys "unknown". Empty: the current one.
 	Format string `yaml:"format,omitempty"`
 	// Spec is the .qnt file (relative to the binding file) and Module the
-	// parameterised module in it to instantiate.
+	// parameterised module in it to instantiate, or an instance module
+	// (`module design { import M(C = ...).* }`), which binds M with the
+	// instance's constants.
 	Spec   string `yaml:"spec"`
 	Module string `yaml:"module"`
 	// Constants of the instance, as Quint expressions. They are templates
@@ -293,6 +295,9 @@ func Load(path string) (*Binding, error) {
 	if bd.Spec == "" || bd.Module == "" {
 		return nil, fmt.Errorf("%s: spec and module are required", path)
 	}
+	if err := bd.resolveInstance(); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	if err := bd.checkEvidence(nil); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
@@ -308,6 +313,41 @@ func Load(path string) (*Binding, error) {
 		w.Bound = d
 	}
 	return &bd, nil
+}
+
+// resolveInstance binds the module an instance module imports: a binding
+// naming `design`, where the model says `module design { import
+// publication(N = 3, ...).* }`, binds publication with design's constants,
+// so the binding does not copy them (and drift from them). A constant set
+// both by the instance and by the binding is refused: the instance is the
+// design, and two values for one constant would be a guess. A module that
+// is not of that form, or a spec not yet readable, is left as it is
+// (LoadModel reports what it finds).
+func (b *Binding) resolveInstance() error {
+	src, err := os.ReadFile(b.SpecPath())
+	if err != nil {
+		return nil
+	}
+	base, consts, ok := instanceModule(string(src), b.Module)
+	if !ok {
+		return nil
+	}
+	if b.Constants == nil {
+		b.Constants = map[string]string{}
+	}
+	for _, c := range consts {
+		name, expr, found := strings.Cut(c, "=")
+		name, expr = strings.TrimSpace(name), strings.TrimSpace(expr)
+		if !found || name == "" {
+			return fmt.Errorf("module %s: constant %q of its import of %s is not NAME = expr", b.Module, c, base)
+		}
+		if mine, set := b.Constants[name]; set {
+			return fmt.Errorf("constant %s is set by instance module %s (%s) and by the binding (%s): remove it from the binding, or name module %s and give every constant", name, b.Module, expr, mine, base)
+		}
+		b.Constants[name] = expr
+	}
+	b.Module = base
+	return nil
 }
 
 // FormatName is the binding format this version reads and writes, the
