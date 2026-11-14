@@ -538,7 +538,7 @@ func NewManifest(r RunRecord) (*Manifest, error) {
 	}
 	o := r.Search
 	m.Check.Linearize, m.Check.Key, m.Check.Budget, m.Check.ResolvePending, m.Check.ResolveBudget = o.Linearize || o.Key != "", o.Key, o.Budget, o.ResolvePending, o.ResolveBudget
-	report := &Report{Actors: r.Results, Composition: r.Composition}
+	report := &Report{Actors: r.Results, Composition: r.Composition, sources: sourcesOf(r.Binding)}
 	m.Verdict = report.Verdict()
 	summary := report.Receipt()
 	m.Receipt = &summary

@@ -57,13 +57,13 @@ func (r *Report) Doc() *validate.Document {
 		if v.Error != "" {
 			d.Verdict, d.Error = "error", v.Error
 		}
-		d.Checks = append(d.Checks, modelDocCheck(v, "invariant"))
+		d.Checks = append(d.Checks, sourcedCheck(modelDocCheck(v, "invariant"), r.Sources))
 	}
 	for _, v := range r.Eventually {
 		if v.Error != "" {
 			d.Verdict, d.Error = "error", v.Error
 		}
-		d.Checks = append(d.Checks, modelDocCheck(v, "eventually"))
+		d.Checks = append(d.Checks, sourcedCheck(modelDocCheck(v, "eventually"), r.Sources))
 	}
 	if r.Deadlocks != nil {
 		if r.Deadlocks.Error != "" {
@@ -200,4 +200,10 @@ func possiblePathDoc(path []PossibleWitnessStep) []validate.DocPossibleStep {
 		out[i] = validate.DocPossibleStep{Kind: s.Kind, Action: s.Action, Args: possibleArgsDoc(s.Args)}
 	}
 	return out
+}
+
+// sourcedCheck is c with where its definition is, when sources know it.
+func sourcedCheck(c validate.DocCheck, sources map[string]string) validate.DocCheck {
+	c.Source = sources[c.Name]
+	return c
 }

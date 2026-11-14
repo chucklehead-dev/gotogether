@@ -1,0 +1,10 @@
+# A literate model's binding: spec names the Markdown document
+# (literate_test.go); belowMax is deliberately broken.
+spec: counter.md
+module: counter
+actions:
+  inc: {}
+invariants: [nonNegative, belowMax]
+simulate:
+  holds: [nonNegative, belowMax]
+  terminal: n == MAX

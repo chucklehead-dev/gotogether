@@ -227,6 +227,9 @@ type DocCheck struct {
 	Kind    string    `json:"kind"` // "invariant", "eventually", "possible", "graph"
 	Verdict string    `json:"verdict"`
 	Detail  string    `json:"detail,omitempty"`
+	// Source is where the check's definition is in the model, "file:line"
+	// (a literate model's document line), when the report knows.
+	Source string `json:"source,omitempty"`
 }
 
 // DocGraph describes a model-state graph, not recorded executions. Complete

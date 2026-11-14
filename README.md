@@ -226,6 +226,11 @@ testing, where Quint traces drive the implementation). It adds:
   Quint run; deadlocks; actions never enabled; each eventual val's fair
   cycles, a lasso that keeps it false forever), and what it must be able
   to do (`possible`);
+- **models kept in their design documents** (`spec: design.md`): a
+  Markdown document's ```` ```quint ```` blocks are the model, and quint's
+  errors and the reports name the document's lines; `gotogether tangle
+  -check` keeps a checked-in `.qnt` current
+  ([reference](skills/gotogether-model/references/literate.md));
 - **model behavior comparison** (`gotogether model-diff`): compare two finite
   instances on explicit observed variables, with added/removed sequence witnesses,
   native source replay, portable confirmed-witness exports and explicit inconclusive

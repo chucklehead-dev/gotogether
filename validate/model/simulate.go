@@ -16,6 +16,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/confidence"
+	"github.com/chucklehead-dev/gotogether/internal/literate"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
@@ -270,6 +271,9 @@ type Report struct {
 	Code int
 	// Text is the report as `gotogether simulate` prints it.
 	Text string
+	// Sources are where each definition of the model is, "file:line" (a
+	// literate model's document line): each check names its own.
+	Sources map[string]string
 }
 
 // A Verdict is one invariant's or eventual val's verdict in the
@@ -398,7 +402,7 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 	defer func() { prepared(phaseStatus(ctx, err)) }()
 	defer func() {
 		if rep != nil {
-			rep.Text = s.b.String()
+			rep.Text = sourced(s.b.String(), rep.Sources)
 		}
 	}()
 	if b == nil {
@@ -407,6 +411,11 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 			return nil, err
 		}
 	}
+	shown := b.Spec // the model as this report names it: beside the binding as given
+	if !filepath.IsAbs(shown) {
+		shown = filepath.Join(filepath.Dir(bpath), shown)
+	}
+	s.rep.Sources = literate.Sources(b.SpecPath(), shown)
 	if opt.Quint == "" {
 		opt.Quint = "quint"
 	}
@@ -814,4 +823,25 @@ func constantList(b *binding.Binding, overrides []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// sourced is a report's text with each failing check's line naming
+// where its definition is (`FAIL    small (counter.md:21): ...`), and
+// every position in a literate model's generated file its document's.
+func sourced(text string, sources map[string]string) string {
+	if len(sources) == 0 {
+		return text
+	}
+	lines := strings.SplitAfter(text, "\n")
+	for i, line := range lines {
+		rest, ok := strings.CutPrefix(line, "  FAIL    ")
+		if !ok {
+			continue
+		}
+		name, after, ok := strings.Cut(rest, ":")
+		if src, known := sources[name]; ok && known {
+			lines[i] = "  FAIL    " + name + " (" + src + "):" + after
+		}
+	}
+	return literate.Rewrite(strings.Join(lines, ""), "")
 }

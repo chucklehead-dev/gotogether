@@ -104,6 +104,8 @@ func main() {
 		code, err = nav(os.Stdout, os.Args[2:])
 	case "compile":
 		err = compileTo(os.Stdout, os.Args[2:])
+	case "tangle":
+		code, err = tangle(os.Stdout, os.Args[2:])
 	case "doctor":
 		code, err = doctor(os.Stdout, os.Args[2:])
 	case "help", "-h", "-help", "--help":
@@ -129,8 +131,7 @@ func usage() {
 }
 
 func usageTo(w io.Writer) {
-	fmt.Fprint(w, `gotogether checks Go code against a Quint model.
-grist generates a model and bindings: go run github.com/chucklehead-dev/gotogether/grist/cmd/grist@latest new <name> (docs/grist.md)
+	fmt.Fprint(w, `gotogether checks Go code against a Quint model; grist generates a model and bindings: go run github.com/chucklehead-dev/gotogether/grist/cmd/grist@latest new <name> (docs/grist.md)
 commands (gotogether <command> -h: what it does, an example, every flag):
 `)
 	for _, name := range helpOrder {

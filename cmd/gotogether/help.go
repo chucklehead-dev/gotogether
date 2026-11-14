@@ -17,7 +17,7 @@ type command struct{ purpose, example, short string }
 
 // helpOrder is the order gotogether help lists the commands in: a
 // newcomer's first ones first. Read-only.
-var helpOrder = []string{"init", "scaffold", "lint", "simulate", "model-diff", "validate", "bundle", "nav", "evidence", "steps", "shrink", "itf", "convert", "cover", "compile", "skills", "doctor"}
+var helpOrder = []string{"init", "scaffold", "lint", "simulate", "model-diff", "validate", "bundle", "nav", "evidence", "steps", "shrink", "itf", "convert", "cover", "compile", "tangle", "skills", "doctor"}
 
 var commands = map[string]command{
 	"init": {"write a new project, green as written: a synchronous library with observed-call tests, or an HTTP service (its handler recording each step, a client that retries a refused connection), its model and binding, a test in a simulation on qenv/qhttp (the server's process before the client), one over a real socket through qobshttp, and a mutant the tests catch",
@@ -63,6 +63,9 @@ var commands = map[string]command{
 	"compile": {"compile a binding's model for the Go evaluator (quint's typecheck and IR, the binding's and the sources' hashes), by default beside the binding (stock.model.json): validate -compiled, and qtest where quint is not installed, then judge its runs with no quint or Node, a run the evaluator cannot decide no verdict; -check (in CI, where quint is) fails if the checked-in file is stale",
 		"gotogether compile -binding stock.binding.yaml\n  gotogether compile -binding stock.binding.yaml -check\n  gotogether validate -binding stock.binding.yaml -compiled stock.model.json runs/*.jsonl",
 		"validate without quint or Node? the model compiled once, for the Go evaluator alone"},
+	"tangle": {"write each literate model (a Markdown design document whose ```quint blocks, in order, are the model) to its .qnt beside it, as a binding naming the document does when it loads; positions in the .qnt are reported at the document's lines; -check (in CI, where the .qnt is checked in) fails if one is missing or stale",
+		"gotogether tangle design/acquisition.md\n  gotogether tangle -check design/*.md",
+		"a model kept in its design document? the document's quint blocks as its model, positions at its lines"},
 	"skills": {"list the agent skills (skills list, the default), or install them into a project (skills install; its -h)",
 		"gotogether skills install -target all",
 		"the agent skills: list them, or install them into a project"},
@@ -128,7 +131,7 @@ func isZeroValue(f *flag.Flag) bool {
 
 // commandNames are main's commands, for the unknown command's
 // did-you-mean.
-var commandNames = []string{"init", "scaffold", "simulate", "model-diff", "evidence", "lint", "steps", "validate", "bundle", "shrink", "nav", "itf", "convert", "cover", "compile", "skills", "doctor", "help", "version"}
+var commandNames = []string{"init", "scaffold", "simulate", "model-diff", "evidence", "lint", "steps", "validate", "bundle", "shrink", "nav", "itf", "convert", "cover", "compile", "tangle", "skills", "doctor", "help", "version"}
 
 // unknownCommand says that name is no command, with the nearest one if
 // it is a likely misspelling, and where the list is: the whole usage

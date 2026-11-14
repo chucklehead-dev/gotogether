@@ -12,6 +12,7 @@ judges Hegel's runs (`qhegel`), and it replays recorded runs
 ## Choose your path
 
 - The nine conventions in full, cheap replays, Choreo models, the commands, the errors' table: [references/conventions.md](references/conventions.md).
+- The model kept in its Markdown design document (`spec: design.md`, positions at its lines, `tangle -check`): [references/literate.md](references/literate.md).
 - What the model should allow (requirement vs solution, the environment, ghosts, settles): the gotogether-patterns skill.
 - The order of work (scenarios, safety, liveness, then code): the gotogether-workflow skill.
 
