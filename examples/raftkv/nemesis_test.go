@@ -406,7 +406,7 @@ var realMix = qnemesis.Mix{Kinds: append(append(qnemesis.Kinds("crash", Nodes...
 
 func realConfig(seed int64, m Mutation) nemesisRun {
 	return nemesisRun{Seed: seed, Mutation: m, Mix: realMix, Interval: 800 * time.Millisecond, For: 300 * time.Millisecond, ClientLoss: 0.8,
-		Cut: 2500 * time.Millisecond, Cuts: 3}
+		Cut: 2500 * time.Millisecond, Cuts: 6}
 }
 
 // realRuns runs the real cluster under the nemesis at seeds (seedsOf),
