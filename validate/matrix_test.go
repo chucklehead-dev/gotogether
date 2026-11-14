@@ -65,9 +65,10 @@ var (
 		"Spec":               "the model's file", "Module": "the model's module", "Constants": "the instance", "Intern": "naming",
 		"Outcomes": "templates' values", "Restart": "an inferred step, judged as conformance", "Defs": "templates' helpers",
 		"Antecedents": "vacuity, qtest's report", "Complete": "the CLI's exit (validate -require-finish), not the report", "Simulate": "the model alone (gotogether simulate)", "Dir": "the file's place", "Path": "the file a manifest hashes (validate.Manifest), no verdict",
-		"Partition": "the same verdicts, an entity at a time (TestPartitionAgreesWithWhole)",
-		"Actors":    "which traces are checked (another binding judges the rest), no verdict of its own",
-		"Format":    "the file's format version, checked when it loads, no verdict",
+		"Partition":     "the same verdicts, an entity at a time (TestPartitionAgreesWithWhole)",
+		"Actors":        "which traces are checked (another binding judges the rest), no verdict of its own",
+		"Format":        "the file's format version, checked when it loads, no verdict",
+		"runtimeConsts": "how a compiled model takes the instance's constants (parameters, not inline): the same values, the same verdicts (TestCompiledConstantOverrideRecipe)",
 	}
 )
 
