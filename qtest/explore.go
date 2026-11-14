@@ -712,9 +712,7 @@ func instanceChecker(t testing.TB, bindingPath string, o validate.Options, c set
 	for k, v := range c.Constants {
 		constants[k] = v
 	}
-	cc := *ch
-	cc.Options = o
-	return &cc, fmt.Sprintf("%s|%v|%v\n", bindingPath, sortedKV(constants), c.Invariants), constants
+	return withOptions(ch, o), fmt.Sprintf("%s|%v|%v\n", bindingPath, sortedKV(constants), c.Invariants), constants
 }
 
 // judge judges runs against the model with cc (validate.Checker.JudgeBatch,

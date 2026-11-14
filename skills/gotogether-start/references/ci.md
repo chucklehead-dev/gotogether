@@ -67,3 +67,22 @@ quint). Read the verdicts so:
 | `... is not here: ... unchecked` | a model source is absent, so the artifact's hash is trusted | ship the sources to check them |
 
 `gotogether doctor -compiled stock.model.json` says whether it is stale.
+
+## Tests without quint
+
+A binding's compiled model kept beside it (`stock.model.json` for
+`stock.binding.yaml`, the default of `gotogether compile -binding
+stock.binding.yaml`) judges the binding's qtest and qhegel runs where quint
+is not installed: Record, Validate, Explore, Exhaust, Mutants. Use
+`qtest.RequireModel(t, "stock.binding.yaml")` in those tests instead of
+`RequireQuint`; tests of the model itself (`qtest.Model`, simulate, connect's
+traces) still need quint.
+
+```sh
+gotogether compile -binding stock.binding.yaml -check   # CI, where quint is: fails when stale
+GOTOGETHER_COMPILED=1 go test ./...                     # CI, without quint: every check compiled
+```
+
+`GOTOGETHER_COMPILED=1` fails a test whose binding has no compiled model, so a
+quint left on PATH cannot hide a missing one; unset, the compiled model is used
+only where quint is absent; `0` never uses it.

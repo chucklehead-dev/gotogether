@@ -379,6 +379,9 @@ func (r *Run) adjust(cc *validate.Checker) {
 
 func checker(t testing.TB, bindingPath string, o validate.Options) *validate.Checker {
 	t.Helper()
+	if path, ok := compiledFor(t, bindingPath, o); ok {
+		return compiledChecker(t, bindingPath, path, o)
+	}
 	c, err := validate.Cached(t.Context(), bindingPath, o) // typechecks the model and lints the binding once
 	if err != nil {
 		t.Fatalf("gotogether: %v", err)

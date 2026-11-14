@@ -131,7 +131,7 @@ func system() qtest.System {
 var lossy = qenv.Rates{Default: 0.2}
 
 func TestFaithfulConforms(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "hello.binding.yaml")
 	system().WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms(),
 		// ...
 		qtest.Reaches("rpc.counter.request").Faulted().InAtLeast(0.3),
@@ -163,7 +163,11 @@ func TestMutants(t *testing.T) {
 }
 ```
 
-In Go tests, `qtest.RequireQuint(t)` skips without quint; state what
+In Go tests, `qtest.RequireModel(t, binding)` skips only without quint
+and without the binding's compiled model (`gotogether compile -binding
+hello.binding.yaml` writes `hello.model.json`, which judges the runs where
+quint is not installed); `qtest.RequireQuint(t)` stays for tests of the
+model itself (`qtest.Model`). State what
 each test expects with `.Expect(t, claims...)` on its run or
 exploration, never by matching report text.
 

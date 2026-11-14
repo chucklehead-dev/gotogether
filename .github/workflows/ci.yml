@@ -885,8 +885,9 @@ jobs:
     needs: preflight
     # the Action (.github/actions/gotogether) as an adopter uses it, on
     # hello: quint pinned and cached, the CLI built from the action's own
-    # source, doctor strict, a validation and a compile; a mutant's runs
-    # fail the step. action-compiled then judges with no quint or Node
+    # source, doctor strict, a validation and the checked-in compiled
+    # model checked current (compile -check); a mutant's runs fail the step.
+    # action-compiled then judges with no quint or Node
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -898,7 +899,7 @@ jobs:
           run: |
             go run ./cmd/hello-sim -seeds 5 -out runs
             gotogether validate -binding hello.binding.yaml runs/*.jsonl
-            gotogether compile -binding hello.binding.yaml -o hello.model.json
+            gotogether compile -binding hello.binding.yaml -check
       - name: the Action's result is the validation's
         run: test "${{ steps.validate.outputs.result }}" = PASS
       - id: mutant
@@ -954,6 +955,14 @@ jobs:
           run: gotogether validate -binding hello.binding.yaml -compiled hello.model.json mruns/*.jsonl
       - name: and fails the mutant's
         run: test "${{ steps.mutant.outcome }}" = failure && test "${{ steps.mutant.outputs.result }}" = FAIL
+      - name: hello's tests with no quint, every check by its compiled model (ROADMAP Q0)
+        working-directory: examples/hello
+        run: |
+          if command -v quint; then echo "quint is installed: these tests must need none"; exit 1; fi
+          # the trace tests by name: GOTOGETHER_STRICT fails a skip, and the
+          # model's own tests (TestRetryPossible, TestModelProves) need quint,
+          # the mutation test qweave; none of these may skip
+          GOTOGETHER_COMPILED=1 go test -short -count=1 -run '^(TestFaithfulConforms|TestExhaustive|TestMutants)$' .
 
   image:
     needs: preflight

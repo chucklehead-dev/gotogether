@@ -158,6 +158,13 @@ AGENTS.md has the general requirements.
   undefined, and a successful backend result does not diagnose it. A skipped
   binding may exit 0 without checking anything; partial solver output is not a
   completed verdict. Library callers opt in with `model.SimulateOptions.Progress`.
+  `GOTOGETHER_COMPILED`: a binding's compiled model beside it
+  (`gotogether compile -binding B` writes `<stem>.model.json`) judges its
+  qtest and qhegel runs with no quint, the Go evaluator alone. Unset: where
+  quint is not on PATH and the file exists; `1`: always, and a binding
+  without one fails the test (a job without quint); `0`: never. Keep it
+  current with `gotogether compile -binding B -check` where quint is.
+  `qtest.RequireModel(t, binding)` skips only without both.
   `GOTOGETHER_RUN='TestX#2:seed=n'` (or `:schedule=...`,
   `:corpus=<file>`, `:choices=<file>` for a steered run) runs one run of one exploration alone, the test's
   explorations numbered in order; each failing run's report prints it.

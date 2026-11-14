@@ -1880,6 +1880,7 @@ func Record(t testing.TB, bindingPath string, scenario func(rec *qobs.Recorder),
 func RecorderOptions(opts ...qobs.Option) Option
 func Refutes(name string) RefutesClaim
 func Rejects(action string) Expectation
+func RequireModel(t testing.TB, bindingPath string)
 func RequireQuint(t testing.TB)
 func ResolvePending() Option
 func RowOf(c qenv.Chooser) (qsweep.Row, bool)
@@ -2415,6 +2416,7 @@ func CacheDir() string
 func Cached(ctx context.Context, bindingPath string, o Options) (*Checker, error)
 func CaptureModelSources(spec string) (*SourceGuard, error)
 func Compile(bindingPath string, opt Options) (*CompiledModel, error)
+func CompiledFor(bindingPath string) string
 func CurrentTools(o Options) Tools
 func EventuallyName(val string) string
 func Finishable(b *binding.Binding) error
@@ -2492,6 +2494,7 @@ type CompiledModel struct
     field Typecheck json.RawMessage `json:"typecheck"`
     field Eval *binding.EvalModule `json:"eval"`
     field IR json.RawMessage `json:"ir"`
+    method (*CompiledModel) Differs(other *CompiledModel) []string
     method (*CompiledModel) Write(path string) error
 type Condition struct
     field In string `json:"in"`

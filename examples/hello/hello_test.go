@@ -49,7 +49,7 @@ func TestModelProves(t *testing.T) {
 // Through lost requests, lost responses and duplicates, every request
 // counts once.
 func TestFaithfulConforms(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "hello.binding.yaml")
 	system().WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).Expect(t, qtest.Conforms(),
 		// and the faults happened: a pass with no duplicates says nothing of
 		// dedupe. Measured, 56% of runs fault a request (2000 seeds); the bar
@@ -67,7 +67,7 @@ func TestFaithfulConforms(t *testing.T) {
 // counter conforms in all 4430, late requests among them (the Go
 // evaluator judges them, quint a sample).
 func TestExhaustive(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "hello.binding.yaml")
 	system().Exhaust(t, qtest.Bound{Delays: 2, Faults: 2, MaxRuns: 5000}).Expect(t, qtest.Conforms())
 }
 
@@ -75,7 +75,7 @@ func TestExhaustive(t *testing.T) {
 // at lossy's rates too, it finds nothing (noDedupe's shrink is
 // TestMutant's).
 func TestHegelFindsNothing(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "hello.binding.yaml")
 	if testing.Short() {
 		t.Skip("shrinks against the model")
 	}
@@ -95,7 +95,7 @@ func TestMutant(t *testing.T) {
 		// no apply of a request already applied, so some run's apply is
 		// rejected. With no faults there is no retry, and the bug is
 		// invisible.
-		qtest.RequireQuint(t)
+		qtest.RequireModel(t, "hello.binding.yaml")
 		system().WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).
 			Expect(t, qtest.Some(qtest.Rejects("apply")), qtest.Some(qtest.Conforms()),
 				// it never recognises a retry: no run follows the scenario
