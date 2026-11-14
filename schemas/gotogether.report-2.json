@@ -1676,6 +1676,10 @@
                 "depth": {
                   "type": "integer"
                 },
+                "memoryBytes": {
+                  "description": "MemoryBytes bounds estimated retained graph storage, not process heap/RSS.",
+                  "type": "integer"
+                },
                 "states": {
                   "type": "integer"
                 }
@@ -1711,6 +1715,13 @@
               "type": "string"
             },
             "depth": {
+              "type": "integer"
+            },
+            "memoryScope": {
+              "type": "string"
+            },
+            "memoryUsed": {
+              "description": "MemoryUsed is estimated retained graph storage, not process heap/RSS.",
               "type": "integer"
             },
             "module": {
@@ -1764,6 +1775,10 @@
                 "depth": {
                   "type": "integer"
                 },
+                "memoryBytes": {
+                  "description": "MemoryBytes bounds estimated retained graph storage, not process heap/RSS.",
+                  "type": "integer"
+                },
                 "states": {
                   "type": "integer"
                 }
@@ -1799,6 +1814,13 @@
               "type": "string"
             },
             "depth": {
+              "type": "integer"
+            },
+            "memoryScope": {
+              "type": "string"
+            },
+            "memoryUsed": {
+              "description": "MemoryUsed is estimated retained graph storage, not process heap/RSS.",
               "type": "integer"
             },
             "module": {
@@ -2147,6 +2169,10 @@
             "depth": {
               "type": "integer"
             },
+            "memoryBytes": {
+              "description": "MemoryBytes bounds estimated retained graph storage, not process heap/RSS.",
+              "type": "integer"
+            },
             "states": {
               "type": "integer"
             }
@@ -2170,6 +2196,13 @@
           "type": "integer"
         },
         "depth": {
+          "type": "integer"
+        },
+        "memoryScope": {
+          "type": "string"
+        },
+        "memoryUsed": {
+          "description": "MemoryUsed estimates retained graph storage, excluding compilation, temporary evaluation and heap/RSS.",
           "type": "integer"
         },
         "quiescent": {

@@ -15,6 +15,10 @@ import "fmt"
 // transitions from the start. 0 is no bound.
 type Bound struct {
 	States, Depth int
+	// MemoryBytes bounds Explore's modelled retained graph storage (0: none).
+	// It does not bound transient evaluation, Go heap or process RSS. Reach does
+	// not retain a graph and rejects this graph-specific limit.
+	MemoryBytes int64
 }
 
 // A Goal is what a search looks for: a state where Holds is true, or a
@@ -48,6 +52,9 @@ type Reached struct {
 // found in as many expansions as it has steps. The transitions of a
 // state are computed once for every search.
 func (m *Model) Reach(consts map[string]Value, start State, step string, goals []Goal, b Bound) ([]Reached, error) {
+	if b.MemoryBytes != 0 {
+		return nil, fmt.Errorf("qeval: retained graph memory budget applies to Explore, not Reach")
+	}
 	if err := m.contextErr(); err != nil {
 		return nil, err
 	}

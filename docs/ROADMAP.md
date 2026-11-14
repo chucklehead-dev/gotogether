@@ -159,11 +159,16 @@ could not show, because a step took effect for every gateway at once (the
 lesson is in the patterns and MBT skills). Already there: `simulate -json`
 carries the graph's extent (`complete`, `cut`, `depth`) and every verdict.
 
-- **M1: a bounded graph, never an out-of-memory kill.** A 1.5M-state bound
-  killed a 4-core container. Report the search cut by memory as it is cut by
-  states (a `-memory` cap, or an estimate before the search), and measure
-  the bytes a state costs. Fingerprints (TLC's) only with exact states kept
-  for collisions: a fingerprint collision must not prove anything.
+- **M1: graph memory bounds.** The first increment bounds the graph's
+  estimated retained storage (`simulate -graph -memory 256`, MiB; the default).
+  The result reports charged bytes, `cut: memory`, and any fully explored
+  depth; it never turns an incomplete graph into a whole-graph proof.
+  Accounting is conservative and may charge shared values more than once.
+  Compilation, temporary evaluator allocations and the process heap/RSS are
+  outside this budget: a 1.5M-state search's earlier OOM motivates the work,
+  but a hard process-memory guarantee is still open. Measure bytes per state
+  before tuning. Exact state equality remains; fingerprints would require
+  exact collision checks, since a collision must not prove anything.
 - **M2: the deepest level the graph completed.** Done: a graph the state
   bound cuts reports the depth it was expanding (breadth first, every state
   within it found and checked: `complete to depth N`, `completeDepth` in

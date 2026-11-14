@@ -57,6 +57,8 @@ type ComparisonGraph struct {
 	States, Starts        int
 	Transitions, Depth    int
 	Bound                 GraphBound
+	// MemoryUsed estimates retained graph storage, excluding transient/process allocations.
+	MemoryUsed int64
 }
 
 // BehaviorInclusion is one direction: included, witness, bounded or inconclusive.
@@ -233,7 +235,7 @@ func comparisonInput(ctx context.Context, r *GraphResult, vars []string) (tracec
 
 func comparisonExtent(r *GraphResult) ComparisonGraph {
 	x := ComparisonGraph{Complete: r.graph.Complete, Cut: r.graph.Cut, Stopped: r.Stopped, States: len(r.graph.States),
-		Starts: r.graph.Starts, Transitions: r.graph.Edges(), Bound: r.Bound}
+		Starts: r.graph.Starts, Transitions: r.graph.Edges(), Bound: r.Bound, MemoryUsed: r.MemoryUsed}
 	for _, depth := range r.graph.Depth {
 		x.Depth = max(x.Depth, depth)
 	}

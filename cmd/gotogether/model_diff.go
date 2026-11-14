@@ -26,6 +26,7 @@ func modelDiff(ctx context.Context, stdout io.Writer, args []string) (int, error
 	states := fs.Int("states", model.DefaultSearchStates, "maximum states in each model graph; incomplete graphs give no comparison verdict")
 	pairs := fs.Int("pairs", 100000, "maximum product nodes admitted in each directional trace-inclusion search")
 	work := fs.Int("work", 1000000, "maximum target candidate operations in each directional trace-inclusion search")
+	memory := fs.Int64("memory", model.DefaultGraphMemoryBytes>>20, "estimated retained graph storage budget in MiB for each graph; excludes compilation, temporary evaluation allocations and process heap/RSS")
 	depth := fs.Int("depth", 0, "maximum model-graph path depth (default: binding's simulate.search.depth, else unbounded)")
 	constants := fs.String("const", "", "constant expressions NAME=expr,... applied to both instances over each binding's configured constants")
 	out := fs.String("out", "", "export report.json and portable confirmed source replays into a fresh directory; cannot combine with -report or GOTOGETHER_REPORT_DIR")
@@ -46,7 +47,11 @@ func modelDiff(ctx context.Context, stdout io.Writer, args []string) (int, error
 			return modelDiffExportError(reports, doc, stdout, err)
 		}
 	}
-	fields, err := comparisonFields(*observe)
+	memoryBytes, err := graphMemoryBytes(*memory)
+	fields, fieldErr := comparisonFields(*observe)
+	if err == nil {
+		err = fieldErr
+	}
 	var constantValues []string
 	if err == nil {
 		constantValues, err = comparisonConstants(*constants)
@@ -79,7 +84,7 @@ func modelDiff(ctx context.Context, stdout io.Writer, args []string) (int, error
 		return reports.write(doc, stdout, 2, fmt.Errorf("model-diff after %s: %w", *after, err))
 	}
 	defer right.Close()
-	cfg := model.GraphSearch{Constants: constantValues, States: *states, Depth: *depth, Invariants: []string{}, Eventually: []string{}}
+	cfg := model.GraphSearch{Constants: constantValues, States: *states, Depth: *depth, MemoryBytes: memoryBytes, Invariants: []string{}, Eventually: []string{}}
 	lg, err := model.For(left).Graph(ctx, cfg)
 	if err != nil {
 		return reports.write(doc, stdout, 2, fmt.Errorf("model-diff before %s: %w", *before, err))
@@ -257,6 +262,7 @@ func writeModelComparison(out io.Writer, comparison *validate.DocComparison) {
 			instance = append(instance, constant.Name+"="+constant.Value)
 		}
 		fmt.Fprintf(out, "  %s %s: %s(%s), %d states, %d starts, %d transitions, complete=%v; bounds states=%d depth=%d", graph.name, graph.data.Binding, graph.data.Module, strings.Join(instance, ", "), graph.data.States, graph.data.Starts, graph.data.Transitions, graph.data.Complete, graph.data.Bound.States, graph.data.Bound.Depth)
+		fmt.Fprintf(out, "; retained graph estimate %d/%d bytes (excludes compilation, temporary evaluation and process heap/RSS)", graph.data.MemoryUsed, graph.data.Bound.MemoryBytes)
 		if graph.data.Cut != "" {
 			fmt.Fprintf(out, "; cut=%s %s", graph.data.Cut, graph.data.Stopped)
 		}
