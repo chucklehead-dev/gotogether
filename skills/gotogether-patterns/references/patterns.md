@@ -42,6 +42,27 @@ at-least-once queue, a network that loses responses. Run each property
 under every contract you might deploy on (the gotogether-faults
 skill).
 
+The same holds for the system's own nodes. An action the model takes for
+every node at once, where the real system does it node by node, hides
+every bug of the skew between them: a snapshot applied to all gateways in
+one step cannot show a gateway still on the previous one. golem's limiter
+deleted from a shared counter the events a new snapshot included, so a
+gateway on the old snapshot lost them; the model had a mutant for exactly
+that, and could not show it, because `publishSnapshot` applied to everyone
+at once (#144). Give each node its own step (`applySnapshot(gw)`), and let
+the model interleave them.
+
+The same holds within one node. Code that does in several operations on
+shared state what the model does in one action (read the budget, then
+take a slot, in two round trips) can be interleaved inside that action,
+which no model trace and no connect replay does: split the action where
+the code has a round trip, or run the code in qenv, whose scheduler
+interleaves tasks at every seam. And:
+- what the model abstracts away (budget periods, tenants), the driver
+  pins and a unit test covers (the period's rollover);
+- code with a lifecycle (a deploy's drain, a shutdown) needs a model
+  action for it, or no check sees what is lost at its end.
+
 ## 3. Record where effects happen: linearization points
 
 A step must be recorded where it takes effect, in the order effects take
@@ -254,6 +275,8 @@ says when a real run hit the design's limit.
 
 - [ ] Does it allow every strategy the requirement allows? (1)
 - [ ] Are the environment's guarantees as weak as documented? (2)
+- [ ] Does each node take its own steps, not one step for all at once? (2)
+- [ ] Is an action the code does in several round trips split, or run in qenv? (2)
 - [ ] Is every step recorded at its linearization point? (3)
 - [ ] Is each history property checked on arrival, with a ghost? (4)
 - [ ] Is each eventual property conditioned on `settled`, and recorded? (5)

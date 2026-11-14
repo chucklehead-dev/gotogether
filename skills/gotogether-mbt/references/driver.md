@@ -155,11 +155,72 @@ could not follow its trace (`Script.Remaining`), and checks every run.
   fails means it followed the trace's faults but did the wrong thing
   (connect/faults_test.go: a restart that forgot the durable count).
 
+## Drivers for one part of a system
+
+From golem's use (#144):
+
+- **A driver for one action.** `connect.Switch{"publishSnapshot": check,
+  "_": connect.Skip}`: `"_"` handles every action the switch does not
+  name. A driver that does not implement `State()` (is no
+  `connect.StateDriver`) is compared with nothing: return no projection
+  by not having one, not by returning `nil`.
+- **The model as an oracle.** For a pure function (a ledger in, a snapshot
+  out), compute the function at every state the model reaches and compare
+  it with what the model's own action computed (`s.Get` after the step).
+  The model's traces bring the inputs no hand-written case would: out of
+  order, after a failover, at any point.
+- **Reach the state that matters.** Count the steps where the bug could
+  show (a publication with a gap in the ledger) and fail the test when
+  none occurred: golem's mutant passed at 100 samples, where 26 of 4,609
+  publications had a gap. Raise `MaxSamples` until the count is safe.
+- **History ghosts belong in the driver.** A model's ghost (every call
+  ever waived) is the driver's to accumulate from the steps it drives;
+  code that keeps one to be projected keeps it for ever (a leak in
+  production).
+- **When the code chooses.** Where the model picks (`replayOne(gw, e)`)
+  and the code decides on its own (FIFO), make the code's choice
+  controllable from the test, or let the code drive and the model judge
+  (qhegel, trace validation): a driver that rearranges the code's internal
+  queue to match the model's pick tests the rearrangement.
+- **Virtual time.** quint is external I/O, which a `testing/synctest`
+  bubble cannot wait on. Generate and read the traces outside the bubble,
+  then replay them inside it, where the code's timers run on the bubble's
+  clock:
+
+  ```go
+  files, cfg, err := connect.GenerateRun(t.Context(), connect.Config{Spec: "model.qnt", MaxSamples: 50})
+  if err != nil {
+  	t.Fatal(err)
+  }
+  traces, err := connect.ReadTraces(t.Context(), cfg, files)
+  if err != nil {
+  	t.Fatal(err)
+  }
+  synctest.Test(t, func(t *testing.T) {
+  	for _, tr := range traces {
+  		if err := connect.Replay(tr, newDriver(), connect.ReplayOptions{}); err != nil {
+  			t.Fatal(err)
+  		}
+  	}
+  })
+  ```
+- **Skipping without quint.** `qtest.RequireQuint(t)` skips a connect
+  test as qtest's and qhegel's own skip.
+- **Ablation from your repository.** A mutant is a file of
+  `testdata/mutants/<name>/` built in its package's place; `qtest.Mutants`
+  runs any test (a connect test too) in each mutant's binary
+  (examples/hello's `TestMutant`). qweave `-mutate` generates them for a
+  `qtest.System` (gotogether-faults' coverage-and-mutants reference).
+
 ## Limits
 
 - Model-driven testing never exercises what the model forbids: the model
   does not take disabled steps. To find code that accepts forbidden inputs,
   let Hegel drive and the model judge (see the gotogether-hegel skill).
+- A driver that applies one model step to every instance at once (every
+  gateway takes the new snapshot in one call) hides the skew between them,
+  as the model's own atomic step does (gotogether-patterns, §2): drive one
+  instance per step, as the model should take them.
 - `quint test` traces have no `mbt::` annotations. Use `connect.Run`, or
   `NondetPath` when the spec records the action in its state (Choreo's
   `extensions.actionTaken`).

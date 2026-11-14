@@ -42,15 +42,17 @@ func (c *Counter) Add(ctx context.Context, id int) (int, error) {
 
 // Send calls the service until it answers, waiting timeout for each
 // attempt: a lost request or response looks the same to the client, so it
-// retries both, and the service sees the request again.
+// retries both, and the service sees the request again. It does not give
+// up after some number of attempts: a client that did would end some run
+// of a fresh seed's faults unanswered (ten timeouts in a row, once in 500
+// seeds of a nightly), an error of the run, not a verdict.
 func Send(ctx context.Context, svc *qenv.Service[int, int], id int, timeout time.Duration) error {
-	for attempt := 0; attempt < 10; attempt++ {
+	for {
 		_, err := svc.Call(ctx, id, timeout)
 		if !errors.Is(err, qenv.ErrTimeout) {
 			return err
 		}
 	}
-	return errors.New("hello: no answer after 10 attempts")
 }
 
 // Run deploys the counter and one client on c and runs them until quiet.

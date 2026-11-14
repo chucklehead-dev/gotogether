@@ -8,12 +8,21 @@
   the checker treats it as OK. In a machine whose every rule can be refused
   (a refusal records nothing), a shrunk case of refusals alone is the first
   failure to expect: set `AllowEmpty`.
+- A model whose `init` makes a choice (`nondet first = REPLICAS.oneOf()`)
+  makes every case's check search the initial states and confirm with a quint
+  process: the test logs it once (`InitChoiceNote`). Record a snapshot step
+  at the head of each case (`snapshot:`), or make init deterministic where
+  the choice is symmetric (`init = initWith("r1")`).
 - The machine produces the whole run: every step the model checks,
   the environment's included. Where the code needs a value another
   component would produce (a publisher's publication), the machine
   produces it, often with a few lines that mirror the model's action.
   connect avoids that: the model's state hands the value to the code
   (`Step.Get`), and the environment's actions are `connect.Skip`.
+- A separate test module for qhegel (`replace => ../..`, keeping Hegel and
+  purego out of the service's module) needs `go mod tidy` after a root
+  dependency changes, or `go vet` fails in it: tidy it in the same change,
+  and let CI run `go mod tidy -diff` there.
 - `hegel-go` needs Go ≥ 1.26.1. Its engine is embedded (no Python, no
   server), and runs offline after the first download, which it keeps
   under `os.UserCacheDir()`: where `$HOME` is read-only (a sandbox, some

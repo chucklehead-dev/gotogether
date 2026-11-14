@@ -1,10 +1,12 @@
 package harness
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -12,6 +14,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtest"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
 // realRun runs payd for real on SQLite under load and checks the steps.
@@ -48,14 +51,36 @@ func TestReal(t *testing.T) {
 
 // realMutant is a mutant's real run (from TestMutant): keys keys, each
 // sent by three clients at once, violating invariant. A key's tabs race
-// in some runs only (lostRace's loser must have captured before the
-// winner completes: about one key in four), so a run of many keys misses
-// rarely: none of 15 runs of 10 keys did, for any mutant (2026-10-26).
-func realMutant(t *testing.T, keys int, invariant string) {
+// in some runs only (about one key in four), which the scheduling makes
+// or not: a run without the race the mutant needs is no witness (CI's
+// runners once made one, and the mutant passed), and payd runs again.
+// witness says whether a run had it.
+func realMutant(t *testing.T, keys int, invariant string, witness func(*qtest.Run, *RealResult) bool) {
 	t.Run("real", func(t *testing.T) {
-		run, res := realRun(t, keys, 3)
-		run.Expect(t, qtest.Violates(invariant))
-		t.Logf("%d charges for %d keys", len(res.Charges), keys)
+		for range 5 {
+			run, res := realRun(t, keys, 3)
+			if !witness(run, res) {
+				continue
+			}
+			run.Expect(t, qtest.Violates(invariant))
+			t.Logf("%d charges for %d keys, %d raced", len(res.Charges), keys, len(res.Raced))
+			return
+		}
+		t.Fatalf("five runs of %d keys, none with the race the mutant needs: it has no witness", keys)
+	})
+}
+
+// raced is the witness of a mutant whose losing attempt captures: two
+// attempts drove one key to capture (RealResult.Raced), and one of them
+// lost the complete step's compare-and-set.
+func raced(_ *qtest.Run, res *RealResult) bool { return len(res.Raced) > 0 }
+
+// refused is pendingConflict's witness: an attempt that found its key
+// pending was refused (a 409), without capturing, so no key races at the
+// processor. Whether the refused key was charged is the invariant's.
+func refused(run *qtest.Run, _ *RealResult) bool {
+	return slices.ContainsFunc(run.Steps, func(s qtrace.Step) bool {
+		return s.Action == "response" && fmt.Sprint(s.Args["status"]) == "409"
 	})
 }
 
