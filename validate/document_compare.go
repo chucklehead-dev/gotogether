@@ -36,7 +36,10 @@ type DocComparisonGraph struct {
 	Module  string `json:"module,omitempty"`
 	// Constants are the effective configured Quint expressions for the compared
 	// finite instance, not a claim that arbitrary expressions were reduced.
-	Constants   []NamedValue  `json:"constants,omitempty"`
+	Constants []NamedValue `json:"constants,omitempty"`
+	// MemoryUsed is estimated retained graph storage, not process heap/RSS.
+	MemoryUsed  int64         `json:"memoryUsed"`
+	MemoryScope string        `json:"memoryScope"`
 	Complete    bool          `json:"complete"`
 	Cut         string        `json:"cut,omitempty"`
 	Stopped     string        `json:"stopped,omitempty"`

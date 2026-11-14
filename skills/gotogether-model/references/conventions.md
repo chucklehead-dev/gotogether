@@ -174,3 +174,15 @@ gotogether reads `QUINT_BACKEND`.
 The spec is ground truth. When the code and the model disagree, decide from
 the requirements which is wrong; never weaken the model just to make a test
 pass without saying so.
+
+### Graph storage budget
+
+`gotogether simulate -graph -binding model.binding.yaml -memory 256` bounds
+estimated retained graph storage in MiB (256 by default). Read `cut: memory`,
+`memoryUsed`, `bound.memoryBytes`, `memoryScope` and `completeDepth` in the
+structured graph report. A truncated graph proves nothing beyond its completed
+depth; its observed counterexamples remain real paths. The estimate can charge
+shared values more than once and excludes model compilation, temporary
+evaluator allocations and process heap/RSS. It is not a hard process memory cap.
+`model-diff -memory` applies the same per-graph budget; either incomplete input
+makes comparison inconclusive, never equivalent.

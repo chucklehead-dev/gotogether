@@ -115,13 +115,15 @@ class SemanticVerifierTest(unittest.TestCase):
                 'checks': [{'kind': 'possible', 'name': case, 'verdict': 'reached'} for case in CASES] +
                           [{'kind': 'invariant', 'name': prop, 'verdict': 'holds'} for prop in ('boundedCase', 'acceptedShape')],
                 'graph': {'scope': 'model_state_graph', 'states': 17, 'starts': 1, 'transitions': 272,
-                          'depth': 1, 'complete': True, 'bound': {'states': 100000, 'depth': 0}},
+                          'depth': 1, 'complete': True, 'memoryUsed': 4096,
+                          'memoryScope': 'estimated_retained_graph_storage_excluding_compilation_temporary_evaluation_and_process_heap',
+                          'bound': {'states': 100000, 'depth': 0, 'memoryBytes': 256 << 20}},
                 'notes': ['graph   complete: 17 states, 272 transitions, depth 1, 0.0s']}
 
     def test_structured_graph_scope(self):
         report = self.graph()
         check('graph', report, 0)
-        for mutation in ('absent', 'incomplete', 'wrong_bound', 'wrong_count', 'stopped', 'wrong_scope'):
+        for mutation in ('absent', 'incomplete', 'wrong_bound', 'wrong_count', 'stopped', 'wrong_scope', 'missing_memory', 'over_budget', 'wrong_memory_scope', 'missing_memory_bound'):
             with self.subTest(mutation=mutation):
                 report = self.graph()
                 if mutation == 'absent':
@@ -132,6 +134,14 @@ class SemanticVerifierTest(unittest.TestCase):
                     report['graph']['bound']['states'] = 1
                 elif mutation == 'wrong_count':
                     report['graph']['transitions'] = 271
+                elif mutation == 'missing_memory':
+                    del report['graph']['memoryUsed']
+                elif mutation == 'over_budget':
+                    report['graph']['memoryUsed'] = (256 << 20) + 1
+                elif mutation == 'wrong_memory_scope':
+                    report['graph']['memoryScope'] = 'process_heap'
+                elif mutation == 'missing_memory_bound':
+                    del report['graph']['bound']['memoryBytes']
                 elif mutation == 'wrong_scope':
                     report['graph']['scope'] = 'sampled_traces'
                 else:

@@ -32,9 +32,9 @@ func (r *Comparison) Doc() *validate.Document {
 
 func comparisonGraphDoc(g ComparisonGraph) validate.DocComparisonGraph {
 	return validate.DocComparisonGraph{Binding: g.Binding, Spec: g.Spec, Module: g.Module,
-		Constants: slices.Clone(g.Constants), Complete: g.Complete, Cut: g.Cut, Stopped: g.Stopped,
+		Constants: slices.Clone(g.Constants), MemoryUsed: g.MemoryUsed, MemoryScope: "estimated_retained_graph_storage_excluding_compilation_temporary_evaluation_and_process_heap", Complete: g.Complete, Cut: g.Cut, Stopped: g.Stopped,
 		States: g.States, Starts: g.Starts, Transitions: g.Transitions, Depth: g.Depth,
-		Bound: validate.DocGraphBound{States: g.Bound.States, Depth: g.Bound.Depth}}
+		Bound: validate.DocGraphBound{States: g.Bound.States, Depth: g.Bound.Depth, MemoryBytes: g.Bound.MemoryBytes}}
 }
 
 func comparisonDirectionDoc(d BehaviorInclusion) validate.DocComparisonDirection {

@@ -241,16 +241,19 @@ type DocGraph struct {
 	// CompleteDepth is the depth every state within which the graph found
 	// and checked (-1: none known): for a graph the state bound cut, the
 	// deepest level explored in full
-	CompleteDepth int                        `json:"completeDepth"`
-	Cut           string                     `json:"cut,omitempty"`
-	Stopped       string                     `json:"stopped,omitempty"`
-	Bound         DocGraphBound              `json:"bound"`
-	Deadlocks     int                        `json:"deadlocks"`
-	Terminals     int                        `json:"terminals"`
-	Quiescent     int                        `json:"quiescent"`
-	Unfair        []string                   `json:"unfair,omitempty"`
-	Stops         []string                   `json:"stops,omitempty"`
-	StepActions   *DocStepActionReachability `json:"stepActions,omitempty"`
+	CompleteDepth int `json:"completeDepth"`
+	// MemoryUsed estimates retained graph storage, excluding compilation, temporary evaluation and heap/RSS.
+	MemoryUsed  int64                      `json:"memoryUsed"`
+	MemoryScope string                     `json:"memoryScope"`
+	Cut         string                     `json:"cut,omitempty"`
+	Stopped     string                     `json:"stopped,omitempty"`
+	Bound       DocGraphBound              `json:"bound"`
+	Deadlocks   int                        `json:"deadlocks"`
+	Terminals   int                        `json:"terminals"`
+	Quiescent   int                        `json:"quiescent"`
+	Unfair      []string                   `json:"unfair,omitempty"`
+	Stops       []string                   `json:"stops,omitempty"`
+	StepActions *DocStepActionReachability `json:"stepActions,omitempty"`
 }
 
 // DocStepActionReachability describes calls to step's statically identified
@@ -277,6 +280,8 @@ type DocStepActionCoverage struct {
 type DocGraphBound struct {
 	States int `json:"states"`
 	Depth  int `json:"depth"`
+	// MemoryBytes bounds estimated retained graph storage, not process heap/RSS.
+	MemoryBytes int64 `json:"memoryBytes"`
 }
 
 // DocBound is a model check's scope. Proves describes coverage, not success:

@@ -35,6 +35,8 @@ func TestModelDiffPreflightReportsErrorsBeforeQuint(t *testing.T) {
 		"zero pairs":          {"-pairs", "0"},
 		"negative work":       {"-work", "-1"},
 		"negative depth":      {"-depth", "-1"},
+		"zero memory":         {"-memory", "0"},
+		"overflow memory":     {"-memory", "9223372036854775807"},
 		"malformed constant":  {"-const", "N"},
 		"empty constant":      {"-const", "N="},
 		"duplicate constant":  {"-const", "N=1,N=2"},

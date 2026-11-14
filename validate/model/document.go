@@ -39,7 +39,7 @@ func (r *Report) Doc() *validate.Document {
 		d.Notes = append(d.Notes, strings.TrimSpace(r.Text))
 	}
 	if g := r.Graph; g != nil {
-		d.Graph = &validate.DocGraph{Scope: "model_state_graph", States: g.States, Starts: g.Starts, Transitions: g.Transitions, Depth: g.Depth, Complete: g.Complete, CompleteDepth: g.CompleteDepth, Cut: g.Cut, Stopped: g.Stopped, Bound: validate.DocGraphBound{States: g.Bound.States, Depth: g.Bound.Depth}, Deadlocks: g.Deadlocks, Terminals: g.Terminals, Quiescent: g.Quiescent, Unfair: slices.Clone(g.Unfair), Stops: slices.Clone(g.Stops)}
+		d.Graph = &validate.DocGraph{Scope: "model_state_graph", States: g.States, Starts: g.Starts, Transitions: g.Transitions, Depth: g.Depth, Complete: g.Complete, CompleteDepth: g.CompleteDepth, MemoryUsed: g.MemoryUsed, MemoryScope: "estimated_retained_graph_storage_excluding_compilation_temporary_evaluation_and_process_heap", Cut: g.Cut, Stopped: g.Stopped, Bound: validate.DocGraphBound{States: g.Bound.States, Depth: g.Bound.Depth, MemoryBytes: g.Bound.MemoryBytes}, Deadlocks: g.Deadlocks, Terminals: g.Terminals, Quiescent: g.Quiescent, Unfair: slices.Clone(g.Unfair), Stops: slices.Clone(g.Stops)}
 		reach := r.StepActionReachability()
 		stepActions := &validate.DocStepActionReachability{
 			Status: reach.Status, Reason: reach.Reason,
@@ -75,6 +75,8 @@ func (r *Report) Doc() *validate.Document {
 		verdict := "fail"
 		if p.Found {
 			verdict = "reached"
+		} else if p.Unchecked != "" {
+			verdict = "unchecked"
 		}
 		goal := p.Goal
 		if goal.Kind == "" && p.Eval != nil {

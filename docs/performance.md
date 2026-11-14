@@ -1266,3 +1266,34 @@ share.
 
 The 414 s run's depth-8 invariant check (55 s, on the same transitions'
 cost) remains unexplained; it is not reproduced by either commit cold.
+
+## Retained graph storage accounting (M1, 2026-11-14)
+
+The first memory-bound increment charges a deterministic estimate before a
+state, label or edge is retained. It keeps exact state keys. The estimate
+includes state values, indexes, search/graph bookkeeping, labels and edges;
+shared values may be charged repeatedly. It is neither measured live Go heap
+nor RSS. Compilation and temporary successor evaluation remain outside it, so
+this is not a hard process-memory guarantee.
+
+On Go 1.27.3, `BenchmarkGraphStorageEstimate` (three samples, three iterations
+per sample) reported these costs for the existing exploration fixtures:
+
+| Model | States | Estimated retained bytes / state | Total Go allocations / exploration |
+| --- | ---: | ---: | ---: |
+| bank | 2,000 | 5,476 | 284 MB |
+| kvstore | 1,000 | 12,349 | 320 MB |
+| payd | 1,000 | 12,484 | 198 MB |
+
+The last column includes temporary work across the entire exploration, not
+simultaneously retained data. The estimate is stable across those samples;
+it must not be interpreted as a universal bytes-per-state constant. Different
+values, branching and labels change it. Total allocations in the existing
+`BenchmarkExplore` stayed approximately the same as the baseline; timings
+from concurrent diagnostic runs are not used for a throughput claim.
+
+`simulate -graph -memory 256` and `model-diff -memory 256` use a 256 MiB
+estimate budget by default. A memory cutoff retains real states and edges,
+reports its charged estimate and any complete depth, and gives an incomplete
+result instead of a whole-graph proof. Preventing an individual evaluator
+expansion or compiler process from exhausting memory remains separate work.

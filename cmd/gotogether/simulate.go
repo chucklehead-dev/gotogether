@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -102,6 +103,7 @@ func simulationRequest(args []string, mr *machineReports, log *simLog) (*simulat
 	invs := fset.String("invariants", "", "comma-separated invariants instead of the binding's (classified as the binding says)")
 	verify := fset.Int("verify", 0, "check each invariant in every trace of up to this many steps with quint verify (Apalache), instead of sampling with quint run")
 	states := fset.Int("states", 0, fmt.Sprintf("states the Go evaluator's searches visit at most, the possibles' and -graph's (default: the binding's simulate.search.states, else %d)", model.DefaultSearchStates))
+	memory := fset.Int64("memory", model.DefaultGraphMemoryBytes>>20, "with -graph: retained graph storage estimate budget in MiB; excludes compilation, temporary evaluation allocations and process heap/RSS")
 	graph := fset.Bool("graph", false, "explore the model's state graph with the Go evaluator instead of sampling with quint: every invariant in every reachable state "+
 		"(within -states and -depth), deadlocks, actions never enabled, the shortest counterexamples, and each eventual val as cycles (a fair one keeping it false forever)")
 	depth := fset.Int("depth", 0, "the longest path from init the Go evaluator's searches explore, the possibles' and -graph's (default: the binding's simulate.search.depth, else none)")
@@ -159,8 +161,20 @@ func simulationRequest(args []string, mr *machineReports, log *simLog) (*simulat
 			}
 		}
 	}
+	memoryGiven := false
+	fset.Visit(func(f *flag.Flag) { memoryGiven = memoryGiven || f.Name == "memory" })
+	if memoryGiven && !*graph {
+		return nil, fmt.Errorf("simulate: -memory requires -graph")
+	}
+	memoryBytes, err := graphMemoryBytes(*memory)
+	if err != nil {
+		return nil, fmt.Errorf("simulate: %w", err)
+	}
+	if !*graph {
+		memoryBytes = 0
+	}
 	opt := model.SimulateOptions{Quint: *quint, Seed: *seed, Steps: *steps, Samples: *samples, Constants: splitTop(*consts),
-		Verify: *verify, Graph: *graph, States: *states, Depth: *depth, Out: *out, Progress: os.Stderr}
+		Verify: *verify, Graph: *graph, States: *states, Depth: *depth, MemoryBytes: memoryBytes, Out: *out, Progress: os.Stderr}
 	if *timeout < 0 {
 		return nil, fmt.Errorf("simulate: -timeout %s: want a positive duration", *timeout)
 	}

@@ -50,8 +50,11 @@ type search struct {
 	// cut the search, -1 if it cut among the starts: breadth first, every
 	// node shallower was expanded already, so every state within cutAt
 	// steps was found
-	cutAt int
+	cutAt     int
+	expanding int // row whose successor batch is currently being admitted
 
+	// admit runs before a new node or its incoming edge is retained.
+	admit    func(st State, key string) bool
 	added    func(j int) (stop bool, err error)
 	edge     func(i int, t Transition, j int) (stop bool)
 	expanded func(i int, ts []Transition)
@@ -100,6 +103,10 @@ func (s *search) run(starts []State) (err error) {
 			s.complete, s.cut, s.cutAt = false, "states", -1
 			return nil
 		}
+		if s.admit != nil && !s.admit(st, k) {
+			s.complete, s.cut, s.cutAt = false, "memory", -1
+			return nil
+		}
 		s.seen[seenKey{k, 0}] = len(s.nodes)
 		s.nodes = append(s.nodes, node{s: st, key: k, parent: -1})
 		if s.added != nil {
@@ -119,6 +126,7 @@ func (s *search) run(starts []State) (err error) {
 			s.complete, s.cut = false, "depth"
 			continue
 		}
+		s.expanding = i
 		ts, err := s.succ(nd.s, nd.key)
 		if err != nil {
 			return err
@@ -151,6 +159,10 @@ func (s *search) run(starts []State) (err error) {
 				if s.edge != nil {
 					s.edge(i, t, -1)
 				}
+				return nil
+			}
+			if s.admit != nil && !s.admit(t.State, k) {
+				s.complete, s.cut, s.cutAt = false, "memory", nd.depth
 				return nil
 			}
 			// the edge first, with the id the node will have: a goal it meets
@@ -224,12 +236,12 @@ type Graph struct {
 	// Complete: no bound cut the search and the evaluator evaluated every
 	// state it reached, so every state reachable from the starts (within
 	// Bound.Depth, if one is set) is in States. Else Cut says what cut it:
-	// "states", "depth", or "unsupported" (Explore's error says why).
+	// "states", "depth", "memory", or "unsupported" (Explore's error says why).
 	Complete bool
 	Cut      string
 	// CompleteDepth is the depth every state within which is in States:
 	// the deepest state's for a complete graph, Bound.Depth for one the
-	// depth bound cut, and for one the state bound cut, the depth it was
+	// depth bound cut, and for a state/storage bound cut, the depth it was
 	// expanding (breadth first, every state shallower was expanded). -1
 	// when no depth is known complete (the bound cut among the starts, or
 	// the evaluator stopped).
@@ -237,6 +249,11 @@ type Graph struct {
 	// Transitions are the transitions the evaluator computed: the edges
 	// before labels merged them (Edges counts the edges kept)
 	Transitions int
+	// MemoryUsed is the charged retained-storage estimate in bytes. It counts
+	// shared values on each occurrence and excludes transient evaluation and
+	// model compilation; it is not a heap/RSS measurement.
+	MemoryUsed int64
+	memory     graphMemory
 
 	ids    map[string]int
 	labels map[string]int
@@ -262,7 +279,8 @@ type Edge struct {
 // not Complete, cut "unsupported" for an Unsupported one, and holds only
 // real states and edges (a path in it is a trace of the model).
 func (m *Model) Explore(consts map[string]Value, init, step string, b Bound, label func([]Event) []Event) (g *Graph, err error) {
-	g = &Graph{ids: map[string]int{}, labels: map[string]int{}, m: m.detached()}
+	g = &Graph{ids: map[string]int{}, labels: map[string]int{}, m: m.detached(), memory: graphMemory{limit: b.MemoryBytes}}
+	defer func() { g.MemoryUsed = g.memory.used }()
 	defer func() {
 		if canceled := m.contextErr(); canceled != nil {
 			g.Complete, g.Cut, err = false, "canceled", canceled
@@ -277,7 +295,17 @@ func (m *Model) Explore(consts map[string]Value, init, step string, b Bound, lab
 		return g, err
 	}
 	s := &search{m: m, b: b, succ: func(st State, _ string) ([]Transition, error) { return m.Transitions(consts, st, step) }}
+	var pending int64
+	s.admit = func(st State, key string) bool {
+		n := stateMemory(st, key)
+		if !g.memory.reserve(n) {
+			return false
+		}
+		pending = n
+		return true
+	}
 	s.added = func(j int) (bool, error) {
+		pending = 0
 		nd := s.nodes[j]
 		g.States = append(g.States, nd.s)
 		g.Parent = append(g.Parent, nd.parent)
@@ -307,14 +335,39 @@ func (m *Model) Explore(consts map[string]Value, init, step string, b Bound, lab
 		if label != nil {
 			evs = label(evs)
 		}
-		e := Edge{Label: g.label(evs), To: j}
+		g.buf = appendEvents(g.buf[:0], evs)
+		labelID, exists := g.labels[string(g.buf)]
+		if !exists {
+			labelID = len(g.Labels)
+		}
+		e := Edge{Label: labelID, To: j}
 		if !kept[e] || j < 0 {
+			cost := int64(80) // edge slice and per-expanded-node dedup entry
+			if !exists {
+				cost = memorySum(cost, labelMemory(evs, g.buf))
+			}
+			if !g.memory.reserve(cost) {
+				g.memory.used -= pending
+				pending = 0
+				g.buf = nil // a refused label must not retain its scratch buffer
+				g.Expanded[i] = false
+				s.complete, s.cut, s.cutAt = false, "memory", s.nodes[i].depth
+				return true
+			}
+			if !exists {
+				g.labels[string(g.buf)] = labelID
+				g.Labels = append(g.Labels, evs)
+			}
 			kept[e] = true
 			g.Out[i] = append(g.Out[i], e)
 		}
 		return false
 	}
 	err = s.run(starts)
+	if s.cut == "memory" && s.cutAt >= 0 {
+		// A partial row cannot establish a deadlock or complete enabledness.
+		g.Expanded[s.expanding] = false
+	}
 	g.Complete, g.Cut = s.complete && err == nil, s.cut
 	if err != nil {
 		g.Cut = cutOf(err)
@@ -325,7 +378,7 @@ func (m *Model) Explore(consts map[string]Value, init, step string, b Bound, lab
 		g.CompleteDepth = slices.Max(append([]int{0}, g.Depth...))
 	case g.Cut == "depth":
 		g.CompleteDepth = b.Depth
-	case g.Cut == "states":
+	case g.Cut == "states" || g.Cut == "memory":
 		g.CompleteDepth = s.cutAt
 	}
 	// the starts are the first nodes: those distinct, within the bound
