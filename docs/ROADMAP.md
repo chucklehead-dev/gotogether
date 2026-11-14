@@ -38,6 +38,7 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Proposed queue | L1–L8: golem's first use ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6833092588)) | L1 (#191), L3 (#195), L5 (#194) and L6's docs landed after J7c; the rest as projects ask. |
 | Proposed queue | M1–M6: golem's graph search and Valkey ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6835911012)) | M2 landed after J7c (#198: the deepest complete depth of a state-bound graph). Next M1 (a bounded result instead of an out-of-memory kill), then M3; the rest as projects ask. |
 | Proposed queue | N1–N5: golem's driver asks ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6843138891)) | golem's order: K4 (with hang faults), N1, L1 (landed), then N2 and N3. N1 done: `Config.Require` (counts, failure when never reached) and its steering (the shortest witness of each replayed first). Next K4. |
+| Proposed queue | CW1–CW10: a contract from design to operation ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6885259328), [#220](https://github.com/chucklehead-dev/gotogether/issues/220#issuecomment-6884857732)) | CW4 (docs) first; then CW1 (L8, unparked) on Goo's acquisition contract, CW2 on it, CW3. CW5 and CW7 decided (2026-11-14): the driver's mapping a runtime binding in core, static generation and the alignment lint in qanalysis; Hegel tests in the package's own files behind a build tag. |
 | Proposed queue | Q0–Q11: a Go Quint | A design item, each its own decision. Q0 first (no quint for consumers, small); Q2's front end only once Q3's corpus and ill-typed generator exist. Upstream first. |
 | Dropped | J12 and J23 | Go 1.26 compatibility and pin batching are withdrawn. Go 1.27.3 and immediate required sibling pin alignment remain deliberate policies. |
 
@@ -151,8 +152,9 @@ Already in place and to be documented: `qtest.Model` claims (`Proves`,
   addition after J7c.
 - **L7: the empty-case failure.** When every rule of a machine can no-op, the
   "recorded no model steps" message says so, with the count of empty cases.
-- **Parked: L8, literate `.md` models** (tangling with errors mapped to
-  markdown lines), until a second project asks.
+- **L8, literate `.md` models** (tangling with errors mapped to
+  markdown lines): unparked 2026-11-14, when a second project asked (Goo,
+  beside golem's lmt tangle). Now CW1.
 
 ## golem's graph search, Valkey and authentication (M)
 
@@ -277,6 +279,164 @@ return, and the driver's own drained-then-settled bridge.
   control with its intended diagnosis, and a code-0 completion; raw page
   text interned. webjobs has most of it, spread over Bombadil and
   Playwright.
+
+## A contract from design to operation (CW)
+
+From golem's and Goo's "ideal scene" write-ups ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6885259328),
+[#220](https://github.com/chucklehead-dev/gotogether/issues/220#issuecomment-6884857732)), each after its own
+architecture, authoring and lifecycle reviews. Both reach one picture: a
+small behavioral contract is the unit of work, written once in the design
+document, settling design arguments there, checking the code through
+generated plumbing, and checking production. Both projects got each part,
+by hand: golem through lmt tangling, five check scripts, a text parser of
+gotogether's output and a 250-line driver per model; Goo through
+projections and drain logic of its own. What they ask is less maintained
+glue, not more framework: success is fewer lines a consumer keeps aligned,
+clearer counterexamples, cheaper routine checks.
+
+Two rules hold across the track, both projects' and already the
+toolkit's:
+- **The model stays independent.** Generate what only maps between model
+  and code (types, codecs, argument plumbing, tables); never the model's
+  transitions from the code's branches, whose agreement would then prove
+  nothing.
+- **Effects are observed where they happen.** Weaving sees a call and its
+  return, not when an operation takes effect (a held bank swapped, a
+  commit): those stay explicit observations at their sites.
+
+Items, each its own decision before it starts:
+
+- **CW1: literate models (L8, unparked).** Quint fences in Markdown read
+  natively: a binding's `spec:` may name the `.md`, gotogether extracts its
+  `quint` blocks (by module, in order) into a generated `.qnt` beside a
+  line map, and every position quint or gotogether reports (typecheck
+  errors, a violated invariant, a counterexample's action) names the
+  document's line. The generated file carries the document's digest and
+  is refused when stale. First slice, Goo's experiment: its acquisition
+  contract read from its Markdown, a deliberately broken invariant
+  reported at the document's line, stale output refused, its existing
+  recorded log replayed, its native source gate kept. golem's leadership
+  and exposure documents (lmt today) are the second case. Go doc-comment
+  blocks are for links to the model, not the model: one state machine cut
+  across packages is unreadable whole (both projects).
+- **CW2: the design matrix (L2's story × instance matrix).** A model
+  declares its switches once (`DESIGN`, `GUARD`, `ROLLBACK`, constants of an
+  instance) and a table of expectations: which variants must hold which
+  properties, which must break which, with which named scenarios possible.
+  `gotogether design doc.md` runs it and writes the table into the
+  document between markers, each counterexample linked and shortest. A
+  "breaks" runs breadth first and stops at its first violation; a "holds"
+  searches to its stated depth inside M1's budget and says how far it got
+  ("complete to depth N"). golem settled its lease placement this way, by
+  hand (check-leadership.sh, graph.sh's text parsing): the toolkit's most
+  valuable use in golem, by its own account. Necessity runs (each
+  mechanism switched off breaks a named property) are rows of the same
+  table, and are the design's record of why each piece of code exists.
+- **CW3: listed assumptions.** A model names what it leaves out
+  (`unboundedRetention`, `oneSigningKey`, `unboundedQueue`), each a
+  reviewed line like a property. Each is a target: N7's varied
+  differential aims inputs at it, and it becomes a cheap production check
+  (CW10). golem's four worst bugs (a retention undercount, a replay queue
+  over-counting at its cap, key rotation halting publication, a deleted
+  document adopted at restart) were four unlisted assumptions: the models
+  were right about what they said, and nothing said what they left out. A
+  doc lint flags a prose claim in a design document that cites no property
+  (golem's ADR sentence that was false).
+- **CW4: results for scripts (docs, S).** `simulate -json` (and
+  `lint -json`, `validate -json`) already carry every verdict, the graph's
+  extent and `completeDepth`, with exit codes 0, 1 and 2 (incomplete):
+  golem's graph.sh parses the prose with grep and sed. Document the
+  documents' schemas as the scripting surface in the skills, with an
+  example of a matrix script over them; add a field wherever a script
+  still needs the prose.
+- **CW5: generated alignment.** From annotations, never from the code's
+  logic: `//quint:action exposure.admit(request, gateway)` on the method
+  that implements it, `//quint:state exposure` on the projection,
+  `//quint:enforces exposure.limitsHonoured` where a property is enforced,
+  `// checks: exposure.noLostIncrements` on a test. `go generate` writes
+  the connect driver's plumbing (action to call, picks to arguments by
+  name, the state projection's decoding), the types crossing once (Quint
+  records and sums to Go structs or back, with ITF codecs: golem's
+  hand-written `expState` and `event` decoders), the walkthrough's
+  invariant table, and a lint (an action without an implementation, a
+  property nothing enforces or no test checks). Types carry declared
+  meaning (instant or duration, units, optionality, identity); a
+  conversion it cannot make is refused, never truncated or defaulted
+  (Goo). grist's generator and actionmap already read the pieces.
+  Decided (maintainer, 2026-11-14), a split by what each part needs:
+  - **the driver's mapping is a typed runtime binding in core**, not
+    generated code: actions bound to methods, picks to parameters by
+    name, the projection's decoding (`connect.Bind(impl).Action("admit",
+    (*Limiter).Admit)` or its like), so the compiler checks renames and no
+    generated file goes stale. It needs nothing the core does not have;
+  - **what needs the code's types read statically** (Quint types and ITF
+    codecs generated from Go structs or back, the walkthrough's invariant
+    tables, the alignment lint) **is qanalysis's**, which already has
+    x/tools and reads `//quint:action`, pinned by consumers with Go's
+    `tool` directive; generated code carries a version stamp of the core
+    API it targets, as woven code carries `woven.ABI1`.
+  Not core: x/tools is large, releases with Go itself and would raise
+  every consumer's version of it (minimal version selection), all for a
+  development-time tool. Not a new module: it would repeat qanalysis's
+  loading and add a pin. grist's generator stays grist's.
+- **CW6: an environment library.** Quint models of the environments
+  projects keep remodelling (an object store with conditional puts,
+  version rollback and lost replies; a key-value store that fails over and
+  loses recent writes; clocks with skew; a lease), with named fault
+  actions, each matched by a qenv double making the same faults:
+  `qenv/simvalkey` (K4) is the key-value one's; an object-store double is
+  new. golem wrote all of these from scratch, and five hand-rolled fakes,
+  each a little different.
+- **CW7: one entry, several modes.** One driver of a model, run as
+  connect, Hegel, differential and varied (inputs the model never picks,
+  aimed at CW3's assumptions) from one test entry: the public story
+  "contract, run, finding" (Goo) instead of four packages and their
+  vocabularies. golem wrote a driver per mode and per module: Hegel's
+  native library keeps its machines in a module of their own
+  (`test/props`), so production packages export test-only methods.
+  Decided (maintainer, 2026-11-14): Hegel stays out of core (native code
+  through purego: the dependency rule's reason, and gosim's), and a
+  package's own tests use it. The pattern, documented with an example:
+  its Hegel test files behind a build tag (`//go:build hegel`) in the
+  package itself, so they see internals (no exported test-only methods)
+  and a plain `go test ./...`, or a platform libhegel does not ship for,
+  is unaffected; CI runs the tag. go.mod still lists hegel (`go mod tidy`
+  reads every tag); test-only, it is not linked into production binaries.
+  Asked of golem first: what forced `test/props` (go.mod, platforms, CI),
+  in case the tag does not answer it. A pure-Go shrinker (over qenv's
+  recorded choice bytes, beside qshrink) waits until a project needs
+  Hegel-free shrinking; it would not cover the varied differential, which
+  needs Hegel's input drawing.
+- **CW8: causal observation links.** A request, its effect, the
+  application's adoption of the result and its display are four events
+  (Goo: an HTTP 200 for a retired read gains no right to update the
+  display); a link between them, recorded where each happens, lets a model
+  judge adoption, not only completion. A cancelled caller does not prove
+  the server did no work. Browser checks of what is actually rendered stay
+  independent.
+- **CW9: one name for a broken variant.** A model's broken switch
+  (`HANDOFF="sum"`) and the code's planted bug are the same idea under two
+  names: name it once, the code's side a qmut schema, and check that the
+  test the model's counterexample predicts is the one that catches it
+  (with N6's repository mutants).
+- **CW10: into operation.** A compiled contract deployed with its release
+  (Q10's monitor): typed observations or existing spans, partitioned by
+  identity, reported, not halting a service on incomplete evidence.
+  Findings carry the producer's build, the contract's revision and the
+  converter's. A versioned object's history (golem's bucket versions of
+  its state document) validated nightly against its model; bounded
+  `eventually`s as SLOs and safety properties as alert rules (qmeta's rules,
+  extended); each environment fault a named qnemesis drill; each listed
+  assumption a production check. A reviewed finding becomes a sanitized
+  regression case. Browser drain, producer settlement and collection
+  completeness stay three contracts (O1).
+
+Kept on purpose, both projects say: the model as an independent text,
+Apalache for proofs, necessity runs, native source and arithmetic oracles
+beside the model. Not proposed: a fluent Go DSL to avoid a model file, a
+universal product state machine, grist as a requirement, a double in place
+of a real backend's acceptance (ClickHouse). Removing Node and Rust is the
+Q track (Q0–Q3), in the order both projects endorse.
 
 ## A Go Quint (Q)
 
