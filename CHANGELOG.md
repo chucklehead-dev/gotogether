@@ -18,6 +18,15 @@ and adds a line here.
   when the checked-in model is stale (`CompiledModel.Differs`: meaning, not the
   versions that compiled it). examples/hello keeps its compiled model and runs
   its trace tests with no quint.
+- A compiled model carries every boolean val of the model as a candidate
+  invariant, and each candidate's antecedent witness
+  (`validate.AntecedentWitnesses`, `gotogetherNot_<inv>`): with no quint,
+  `qtest.Invariants` and `Checker.WithInvariants` choose any of them, and
+  qtest's vacuity check (`NotVacuous`, `Exploration.Vacuous`) judges the
+  witnesses by the Go evaluator (`Checker.WithWitnesses`) where it refused,
+  "needs quint". The checker judges the binding's own invariants as before.
+  Compiled models of bindings with other vals or antecedents need compiling
+  again.
 - qhttp rounds very distant deadlines without overflowing or hanging, saturating
   at the largest duration when the next preferred grid point cannot fit.
   Deadline caching distinguishes full instants while sharing one virtual budget

@@ -2410,6 +2410,8 @@ const NotEvaluated Verdict = "n/a"
 const Pass Verdict = "pass"
 const ReportFormat = "gotogether.report/2"
 const Uncollected Cause = "uncollected"
+const WitnessPrefix = "gotogetherNot_"
+func AntecedentWitnesses(b *binding.Binding, m *binding.Model, invariants []string) (defs string, witnessOf map[string]string)
 func CacheDir() string
 func Cached(ctx context.Context, bindingPath string, o Options) (*Checker, error)
 func CaptureModelSources(spec string) (*SourceGuard, error)
@@ -2479,6 +2481,7 @@ type Checker struct
     method (*Checker) VerifySource() error
     method (*Checker) WithConstants(constants map[string]string) (*Checker, error)
     method (*Checker) WithInvariants(invariants ...string) (*Checker, error)
+    method (*Checker) WithWitnesses(names ...string) (*Checker, error)
 type ChoiceInitialization = receipt.ChoiceInitialization
 type ChoiceSearch = receipt.ChoiceSearch
 type ChoiceStep = receipt.ChoiceStep

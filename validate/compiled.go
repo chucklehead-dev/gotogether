@@ -130,7 +130,7 @@ func Compile(bindingPath string, opt Options) (*CompiledModel, error) {
 		return nil, fmt.Errorf("compile: the evaluation module is written beside the model, for its import: %w", err)
 	}
 	defer os.RemoveAll(dir)
-	em, err := b.EvalModule(m, filepath.Join(dir, "eval.qnt"))
+	em, err := compiledBinding(b, m).EvalModule(m, filepath.Join(dir, "eval.qnt"))
 	if err != nil {
 		return nil, fmt.Errorf("compile: the binding has no evaluation module, so the Go evaluator cannot judge its runs (%v): validate them with quint", err)
 	}
@@ -375,7 +375,7 @@ func NewCompiledChecker(bindingPath, compiledPath string, opt Options) (*Checker
 	// the evaluation module this gotogether writes for the binding: one
 	// another wrote (an older toolkit's, its vals or expects otherwise)
 	// is another check
-	em, err := b.EvalModule(m, filepath.Join(filepath.Dir(b.SpecPath()), compiledEvalDir, "eval.qnt"))
+	em, err := compiledBinding(b, m).EvalModule(m, filepath.Join(filepath.Dir(b.SpecPath()), compiledEvalDir, "eval.qnt"))
 	if err != nil {
 		return nil, fmt.Errorf("compiled model %s: the binding has no evaluation module (%v)", compiledPath, err)
 	}

@@ -105,9 +105,6 @@ func (x *Exploration) findVacuous() (result vacuityResult) {
 	if len(ante) == 0 {
 		return vacuityResult{}
 	}
-	if ch.Compiled() != nil {
-		return vacuityResult{antecedent: len(ante), err: fmt.Errorf("antecedent witness probes: %w; validate with source to evaluate derived predicates", validate.ErrNeedsQuint)}
-	}
 	invs := slices.Sorted(maps.Keys(ante))
 	// the runs where each invariant passed
 	passed := map[string][]int{}
@@ -126,33 +123,35 @@ func (x *Exploration) findVacuous() (result vacuityResult) {
 	}
 	// a checker whose invariants are the antecedents' negations: one that
 	// fails in a run is witnessed there
-	b := *ch.Binding
-	var defs strings.Builder
-	defs.WriteString(b.Defs)
-	names := map[string]string{}
-	for _, inv := range invs {
-		n := "gotogetherNot_" + inv
-		names[n] = inv
-		fmt.Fprintf(&defs, "\nval %s = not(%s)", n, ante[inv])
+	defs, names := validate.AntecedentWitnesses(ch.Binding, ch.Model, invs)
+	witnessNames := slices.Sorted(maps.Keys(names))
+	var wc *validate.Checker
+	if ch.Compiled() != nil {
+		// the compiled model carries every candidate invariant's witness:
+		// judged by the Go evaluator, no quint
+		c, err := ch.WithWitnesses(witnessNames...)
+		if err != nil {
+			return vacuityResult{antecedent: len(invs), err: err}
+		}
+		wc = c
+	} else {
+		b := *ch.Binding
+		b.Defs = b.Defs + defs
+		b.Invariants, b.Eventually = witnessNames, nil // the witnesses alone: an eventual failure is no witness
+		// This is a derived diagnostic probe, not the loaded source judgment.
+		// Keep its generated predicates out of the original checker and source
+		// provenance; only the witness booleans below escape this scope. The original
+		// source inventory is guarded before and after every exit from this function.
+		wc = &validate.Checker{Binding: &b, Model: ch.Model, Options: ch.Options}
+		wc.Options.NoITF = true
+		dir, err := os.MkdirTemp("", "gotogether-vacuity-")
+		if err != nil {
+			return vacuityResult{antecedent: len(invs), err: err}
+		}
+		defer os.RemoveAll(dir)
+		defer wc.Close()
+		wc.Options.Dir = dir
 	}
-	b.Defs = defs.String()
-	b.Invariants, b.Eventually = nil, nil // the witnesses alone: an eventual failure is no witness
-	for _, inv := range invs {
-		b.Invariants = append(b.Invariants, "gotogetherNot_"+inv)
-	}
-	// This is a derived diagnostic probe, not the loaded source judgment.
-	// Keep its generated predicates out of the original checker and source
-	// provenance; only the witness booleans below escape this scope. The original
-	// source inventory is guarded before and after every exit from this function.
-	wc := validate.Checker{Binding: &b, Model: ch.Model, Options: ch.Options}
-	wc.Options.NoITF = true
-	dir, err := os.MkdirTemp("", "gotogether-vacuity-")
-	if err != nil {
-		return vacuityResult{antecedent: len(invs), err: err}
-	}
-	defer os.RemoveAll(dir)
-	defer wc.Close()
-	wc.Options.Dir = dir
 	witnessed := map[string]bool{}
 	todo := map[int]bool{}
 	for _, inv := range invs {

@@ -224,7 +224,13 @@ item is its own decision before it starts; the red-nightly rule applies.
   `qtest.RequireModel`; `gotogether compile -check` fails on a stale
   checked-in model by meaning (`CompiledModel.Differs`). hello keeps its model,
   CI checks it current where quint is and runs its tests where quint is not.
-  Left: the other examples' models and their tests on `RequireModel`, doctor
+  Second slice: the compiled model carries every boolean val as a candidate
+  invariant and each one's antecedent witness, so `qtest.Invariants` and the
+  vacuity check need no quint. The inventory (2026-11-14) found those two
+  blocking 5 of the examples (checkout, streams, crossdb, fleetrollout,
+  jobqueue); golem's suites ran whole on compiled models. Left: constants a
+  test overrides (bank's `ACCOUNTS`) as runtime parameters of the compiled
+  model, the other examples' models and their tests on `RequireModel`, doctor
   listing bindings without one, and Q1's fragment (`qtest.Model`, simulate and
   connect still need quint).
 - **Q1: the evaluator's whole fragment (M).** qeval's refusals
