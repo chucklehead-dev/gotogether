@@ -527,7 +527,7 @@ func envInt(name string, def int) int {
 // runs measured.
 var prSeeds = []int64{5, 9, 10}
 
-// Under crashes, pauses and isolated nodes, every node cut off three
+// Under crashes, pauses and isolated nodes, every node cut off six
 // times, and clients that lose four responses in five, the real
 // cluster's clients see a linearizable store (with the calls a client
 // gave up on placed, ResolvePending) that converges after the faults;
@@ -600,12 +600,16 @@ func TestRealNoRequestID(t *testing.T) {
 // An election timeout ten times as long (SlowElection, the node's) still
 // elects, too late: after every node was cut off, past the 500ms bound
 // after the heal (cluster.real.binding.yaml), as in the simulation's
-// TestElectionAfterHeal. Measured with this shape and -race: 11 of 12
-// runs over seeds 5, 9, 10, 13, 14, 15; per seed 5 caught it in 5 of 5,
-// 9 in 4 of 5, 10 in 5 of 5 (the faithful cluster's first leader came
-// 10 to 170ms after a heal, SlowElection's 317ms to 1.1s). At each
-// seed's worst measured miss rate (1 in 5) the three miss together 0.8%
-// of the time.
+// TestElectionAfterHeal. Not after every heal: raft draws each node's
+// timeout afresh and a node cut off pre-campaigns at each, so at the
+// heal it is part-way through its cycle, and the first leader can come
+// early (the faithful cluster's 10 to 170ms after a heal, SlowElection's
+// 317ms to 1.1s). Each cut is a chance, so the real runs cut six times:
+// with three, CI once saw all three seeds elect in time after every
+// heal (main after #203), and locally 3 of 18 runs missed (seed 10 3 of
+// 6). With six, measured with -race: 14 of 15 runs caught it, per seed
+// 5: 5 of 5, 9: 5 of 5, 10: 4 of 5; the three missed together in none
+// of five tries, which needs 5 and 9 to miss, never seen in ten runs.
 func TestRealSlowElection(t *testing.T) {
 	vs := realRuns(t, seedsOf(t, "RAFTKV_REAL_MUTANT_RUNS", prSeeds), func(seed int64) nemesisRun { return realConfig(seed, SlowElection) })
 	qtest.Runs(clusterOf(vs)...).Expect(t, qtest.Some(qtest.Violates("within 500ms after healed: leaderOrSplit")),
