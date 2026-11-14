@@ -55,7 +55,8 @@ type Config struct {
 	// that never did proved nothing of it. Run steers to each: the
 	// shortest path to it the evaluator finds (within MaxSteps) is
 	// replayed first, as subtest witness_<name>, so a state one sample in
-	// thousands reaches is tested every run.
+	// thousands reaches is tested every run. A val of an instance module
+	// (module design { import m(N = 3).* }) is named bare, as in m.
 	Require []string
 
 	// Verbose: 0 quiet, 1 logs every step (action and picks), 2 also the
@@ -316,7 +317,7 @@ func replayAll(t *testing.T, c Config, files []string, newDriver func(testing.TB
 	// compiled at the first Eval, so a run that never asks pays nothing
 	ev := &evaluator{ctx: t.Context(), c: c}
 	if req != nil {
-		ev.m = req.m
+		ev.m, ev.keep = req.m, c.Require
 	}
 	judged := 0 // traces whose states req has seen: all, unless -run skips some
 	if req != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -13,23 +14,49 @@ import (
 
 // evaluator is a run's model for Step.Eval: compiled by quint and loaded
 // by the Go evaluator the first time a driver asks, once per Run or Test,
-// or handed the model Config.Require compiled.
+// or handed the model Config.Require compiled. quint keeps only the
+// definitions init, step and the names it is given use (compileModel), so
+// a name the model lacks is compiled for once, with every name asked
+// before it: a few compiles per run, each kept for every later step.
 type evaluator struct {
-	ctx  context.Context
-	c    Config
-	once sync.Once
-	m    *qeval.Model
-	err  error
+	ctx     context.Context
+	c       Config
+	mu      sync.Mutex
+	m       *qeval.Model
+	err     error    // the last compile's failure, when m is nil
+	keep    []string // the names m was compiled to keep
+	missing map[string]bool
 }
 
-// model is the run's model, compiled on the first call.
-func (e *evaluator) model() (*qeval.Model, error) {
-	e.once.Do(func() {
-		if e.m == nil {
-			e.m, e.err = compileModel(e.ctx, e.c)
+// model is the run's model with a definition name, compiled again for
+// it when the one at hand lacks it. A model that has none of that name
+// in quint's scope is returned as it is: Eval's lookup then says so.
+func (e *evaluator) model(name string) (*qeval.Model, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.m == nil && e.err == nil {
+		e.m, e.err = compileModel(e.ctx, e.c, e.keep)
+	}
+	if e.m == nil {
+		return nil, e.err
+	}
+	if _, ok := e.m.Decl(name); ok || e.missing[name] {
+		return e.m, nil
+	}
+	keep := append(slices.Clone(e.keep), name)
+	m, err := compileModel(e.ctx, e.c, keep)
+	if _, ok := errors.AsType[*notFound](err); ok {
+		if e.missing == nil {
+			e.missing = map[string]bool{}
 		}
-	})
-	return e.m, e.err
+		e.missing[name] = true
+		return e.m, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	e.m, e.keep = m, keep
+	return m, nil
 }
 
 // Eval is the value of the model's definition name in the step's
@@ -52,7 +79,7 @@ func (s *Step) Eval(name string, args ...any) (itf.Value, error) {
 	if s.eval == nil {
 		return itf.Value{}, fail("this step has no model to evaluate in: Replay compiles none; replay through connect.Run or connect.Test, which compile the model once for Eval")
 	}
-	m, err := s.eval.model()
+	m, err := s.eval.model(name)
 	if err != nil {
 		return itf.Value{}, fail("%v", err)
 	}
@@ -92,12 +119,12 @@ func (s *Step) Eval(name string, args ...any) (itf.Value, error) {
 			return itf.Value{}, fail("argument %s (%T): %v: pass a value itf.Encode takes, as the parameter's Quint type", params[i], a, err)
 		}
 	}
-	if s.state == nil {
+	if s.state == nil || s.stateOf != m {
 		st, err := qeval.StateOf(m, itf.State{Vars: s.After})
 		if err != nil {
 			return itf.Value{}, fail("the step's state is not %s's: %v: set Config.Main to the module the traces come from", spec, err)
 		}
-		s.state = st
+		s.state, s.stateOf = st, m
 	}
 	v, err := m.Eval(nil, s.state, name, vals...)
 	if u, ok := errors.AsType[*qeval.Unsupported](err); ok {

@@ -1,6 +1,8 @@
 package connect
 
 import (
+	"math/big"
+	"slices"
 	"strings"
 	"testing"
 
@@ -75,3 +77,46 @@ func TestRequireWitnessCatchesWhatSamplesMiss(t *testing.T) {
 		}
 	}
 }
+
+// Require's vals and Eval's definitions in an instance module, which
+// quint's flattening drops when nothing init or step uses reads them
+// (golem's publication design): Require keeps its names, Eval compiles
+// again for a name the model at hand lacks.
+func TestRequireAndEvalInAnInstanceModule(t *testing.T) {
+	needQuint(t)
+	c := Config{Spec: "testdata/instance.qnt", Main: "design", Dir: t.TempDir()}
+	req, err := compileRequired(t.Context(), Config{Spec: c.Spec, Main: c.Main, Dir: c.Dir, Require: []string{"atMax", "half"}})
+	if err != nil {
+		t.Fatalf("an instance module's vals: %v", err)
+	}
+	tr := &itf.Trace{States: []itf.State{{Vars: map[string]itf.Value{"n": intValue(2)}}, {Vars: map[string]itf.Value{"n": intValue(4)}}}}
+	if err := req.trace(tr); err != nil {
+		t.Fatal(err)
+	}
+	if lines, _ := req.report(1); req.reached[0].States != 1 || req.reached[1].States != 1 {
+		t.Errorf("atMax and half each hold in one state:\n%s", strings.Join(lines, "\n"))
+	}
+	_, err = compileRequired(t.Context(), Config{Spec: c.Spec, Main: c.Main, Dir: c.Dir, Require: []string{"atMax", "atMx"}})
+	if want := "Config.Require names atMx, which is no val of testdata/instance.qnt: name a boolean val of the model"; err == nil || err.Error() != want {
+		t.Errorf("a misspelled val: %v, want %q", err, want)
+	}
+
+	// Eval's first compile keeps nothing: twice is compiled for when asked
+	ev := &evaluator{ctx: t.Context(), c: c}
+	s := &Step{Index: 1, Action: "inc", After: tr.States[1].Vars, eval: ev}
+	if v, err := Eval[int](s, "twice", 3); err != nil || v != 6 {
+		t.Errorf("twice(3): %v, %v", v, err)
+	}
+	if v, err := Eval[bool](s, "atMax"); err != nil || !v {
+		t.Errorf("atMax: %v, %v", v, err)
+	}
+	if !slices.Equal(ev.keep, []string{"twice", "atMax"}) {
+		t.Errorf("compiled to keep %v, want twice and atMax", ev.keep)
+	}
+	_, err = s.Eval("twise", 3)
+	if want := `connect: Eval("twise") at step 1 (inc): twise is no definition of testdata/instance.qnt: name a val or a def of the model`; err == nil || err.Error() != want {
+		t.Errorf("a misspelled def: %v, want %q", err, want)
+	}
+}
+
+func intValue(i int64) itf.Value { return itf.Value{Kind: itf.Int, I: big.NewInt(i)} }

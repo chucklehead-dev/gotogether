@@ -167,8 +167,10 @@ connect.Run(t, cfg, func(testing.TB) connect.Driver {
 A step fails where one implementation fails and another does not, or
 where their observations differ: `Observe() (any, error)` (an
 `Observer`: replies, errors chosen, more than the model's state), else
-`State()`. Each `StateDriver` is still compared with the model, unless
-`IgnoreModel` is set. The design's own traces rarely reach the
+`State()`. Each `StateDriver` is still compared with the model, and each
+`StepChecker`'s own `CheckStep` run, unless `IgnoreModel` is set: a
+driver's check usually compares with the model, which a varied input
+leaves behind. The design's own traces rarely reach the
 difference, since its guards keep inputs inside it: generate traces of a
 looser model (the same actions without their guards, as
 `connect/testdata/bank_inputs.qnt` drops the balance check) and set
