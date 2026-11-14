@@ -245,6 +245,7 @@ type Config struct
     field Dir string
     field StatePath []string
     field NondetPath []string
+    field Require []string
     field Verbose int
     method (Config) FromEnv() (Config, error)
 type Driver interface

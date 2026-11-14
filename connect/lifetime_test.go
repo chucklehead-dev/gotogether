@@ -131,6 +131,14 @@ func TestConnectProcessHelper(t *testing.T) {
 				return d.Step(s)
 			})
 		})
+	case "require":
+		Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 10, MaxSteps: 15, Seed: "0x1", Require: []string{"nonNegative", "bobSaves"}}, func(testing.TB) Driver { return &bankDriver{} })
+	case "require-missed":
+		Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 10, MaxSteps: 1, Seed: "0x1", Require: []string{"nonNegative", "bobSaves"}}, func(testing.TB) Driver { return &bankDriver{} })
+	case "require-unknown":
+		Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 1, MaxSteps: 1, Seed: "0x1", Require: []string{"bobSpends"}}, func(testing.TB) Driver { return &bankDriver{} })
+	case "require-int":
+		Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 1, MaxSteps: 1, Seed: "0x1", Require: []string{"MAX"}}, func(testing.TB) Driver { return &bankDriver{} })
 	case "nondet":
 		Test(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 1}, "aliceSavesTest", func(testing.TB) Driver { return &bankDriver{} })
 	case "selected":
