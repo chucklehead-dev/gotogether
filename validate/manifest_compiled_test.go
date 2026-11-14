@@ -262,7 +262,11 @@ func TestCompiledManifestRefusesBrokenArtifactBindingLink(t *testing.T) {
 }
 
 // Constants inlined into IR cannot be changed by only relabeling the binding.
-// Runtime constant slots remain legitimate parameters of that same artifact.
+// Runtime constant slots remain legitimate parameters of that same artifact:
+// a template's, and a literal's (a compiled model takes a constant the
+// binding gives as a literal as a parameter, compiledBinding), whose override
+// must judge as quint's with the same override does. An expression stays
+// inlined.
 func TestCompiledConstantOverrideRecipe(t *testing.T) {
 	t.Parallel()
 	skip.Quint(t)
@@ -271,8 +275,12 @@ func TestCompiledConstantOverrideRecipe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := compiled.WithConstants(map[string]string{"LIMIT": "1"}); err == nil || !strings.Contains(err.Error(), "inlines constant LIMIT") {
-		t.Fatalf("inlined constant changed without recompilation: %v", err)
+	lowered, err := compiled.WithConstants(map[string]string{"LIMIT": "1"})
+	if err != nil {
+		t.Fatalf("a literal constant is a compiled model's parameter: %v", err)
+	}
+	if r, err := lowered.Check(t.Context(), compiledSteps("deposit", 5, 5)); err != nil || r.OK() {
+		t.Fatalf("compiled LIMIT 1 did not reject the deposit quint's LIMIT 1 rejects: %v %v", err, r)
 	}
 	subset, err := compiled.WithInvariants("underLimit")
 	if err != nil {
@@ -296,6 +304,25 @@ func TestCompiledConstantOverrideRecipe(t *testing.T) {
 	body, err := os.ReadFile(bp)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// an expression is no literal the evaluator reads: inlined, refused
+	expr := bytes.Replace(body, []byte("LIMIT: '100'"), []byte("LIMIT: '50 + 50'"), 1)
+	if err := os.WriteFile(bp, expr, 0644); err != nil {
+		t.Fatal(err)
+	}
+	ecm, err := Compile(bp, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ecm.Write(artifact); err != nil {
+		t.Fatal(err)
+	}
+	inlined, err := NewCompiledChecker(bp, artifact, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := inlined.WithConstants(map[string]string{"LIMIT": "1"}); err == nil || !strings.Contains(err.Error(), "inlines constant LIMIT") {
+		t.Fatalf("inlined constant changed without recompilation: %v", err)
 	}
 	body = bytes.Replace(body, []byte("LIMIT: '100'"), []byte("LIMIT: '{{ 100 }}'"), 1)
 	if err := os.WriteFile(bp, body, 0644); err != nil {

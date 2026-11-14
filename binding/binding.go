@@ -156,6 +156,10 @@ type Binding struct {
 	// hashes (validate.Manifest).
 	Path   string `yaml:"-"`
 	sha256 string
+	// runtimeConsts are constants the evaluation module takes as
+	// parameters though the binding gives them as Quint
+	// (WithRuntimeConstants)
+	runtimeConsts map[string]bool
 }
 
 // A Within is a bounded-response obligation (Binding.Within): after After

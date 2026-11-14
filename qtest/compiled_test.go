@@ -133,3 +133,45 @@ func TestCompiledFor(t *testing.T) {
 		}
 	}
 }
+
+// A constant the binding gives as a literal (account's LIMIT: '100') is a
+// parameter of its compiled model, so a test may give it another literal
+// with no quint: a deposit of 150 violates underLimit with LIMIT 100 and
+// conforms with 200, both judged by the compiled model. An override that
+// is no literal is refused with the fix, not left to fail as "needs
+// quint". It once refused every override ("inlines constant"). Not
+// parallel: it sets the environment.
+func TestCompiledModelConstantsOverride(t *testing.T) {
+	skip.Quint(t)
+	dir := t.TempDir()
+	for _, f := range []string{"account.qnt", "account.yaml"} {
+		data, err := os.ReadFile(filepath.Join("../validate/testdata", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, f), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b := filepath.Join(dir, "account.yaml")
+	cm, err := validate.Compile(b, validate.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cm.Write(validate.CompiledFor(b)); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(compiledEnv, "1")
+	big := []qtrace.Step{{Action: "deposit", Seq: 1, Args: map[string]any{"amount": 150}, Obs: map[string]any{"balance": 150}}}
+	over := Validate(t, b, big)
+	over.Expect(t, Violates("underLimit"))
+	if got := judgedBy(t, over); got != "evaluator" {
+		t.Errorf("LIMIT 100: judged by %q, want the compiled model's evaluator", got)
+	}
+	Validate(t, b, big, Constants(map[string]string{"LIMIT": "200"})).Expect(t, Conforms())
+	f := &failTB{TB: t}
+	runFail(func() { Validate(f, b, big, Constants(map[string]string{"LIMIT": "100 + 100"})) })
+	if !f.failed || len(f.errs) == 0 || !strings.Contains(f.errs[0], "no Quint literal the Go evaluator reads") {
+		t.Errorf("a non-literal override: errors %q", f.errs)
+	}
+}

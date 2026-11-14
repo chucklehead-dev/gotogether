@@ -27,6 +27,13 @@ and adds a line here.
   "needs quint". The checker judges the binding's own invariants as before.
   Compiled models of bindings with other vals or antecedents need compiling
   again.
+- A constant the binding gives as a Quint literal (`LIMIT: '100'`,
+  `ACCOUNTS: 'Set("alice", "bob")'`) is a parameter of its compiled model
+  (`Binding.WithRuntimeConstants`), so `qtest.Constants` and
+  `Checker.WithConstants` give it another literal with no quint, judged as quint
+  judges the same override. An override that is no literal is refused with the
+  fix; a constant given as an expression (`1.to(3)`) stays inlined, and its
+  override is refused as before.
 - qhttp rounds very distant deadlines without overflowing or hanging, saturating
   at the largest duration when the next preferred grid point cannot fit.
   Deadline caching distinguishes full instants while sharing one virtual budget
