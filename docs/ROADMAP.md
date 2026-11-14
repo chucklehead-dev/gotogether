@@ -237,9 +237,10 @@ item is its own decision before it starts; the red-nightly rule applies.
   invariant and each one's antecedent witness, so `qtest.Invariants` and the
   vacuity check need no quint. The inventory (2026-11-14) found those two
   blocking 5 of the examples (checkout, streams, crossdb, fleetrollout,
-  jobqueue); golem's suites ran whole on compiled models. Left: constants a
-  test overrides (bank's `ACCOUNTS`) as runtime parameters of the compiled
-  model, the other examples' models and their tests on `RequireModel`, doctor
+  jobqueue); golem's suites ran whole on compiled models. Third: a constant
+  the binding gives as a literal is a parameter of the compiled model, so a
+  test's override (bank's `ACCOUNTS`) needs no quint. Left: the other
+  examples' models and their tests on `RequireModel`, doctor
   listing bindings without one, and Q1's fragment (`qtest.Model`, simulate and
   connect still need quint).
 - **Q1: the evaluator's whole fragment (M).** qeval's refusals

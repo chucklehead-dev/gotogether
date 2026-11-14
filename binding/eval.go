@@ -59,6 +59,24 @@ func (b *Binding) PossibleModule(m *Model, qntPath string, preds []string) (*Eva
 	return b.evalModule(m, qntPath, preds)
 }
 
+// WithRuntimeConstants is b with these constants passed to its evaluation
+// module as parameters, as a constant the binding computes from the steps
+// is, though the binding gives them as Quint: a compiled model's
+// (validate), so that a check may give one another value (qtest.Constants,
+// Checker.WithConstants) where quint is not installed. Their values must
+// then be literals the Go evaluator reads.
+func (b *Binding) WithRuntimeConstants(names ...string) *Binding {
+	cb := *b
+	cb.runtimeConsts = map[string]bool{}
+	for k := range b.runtimeConsts {
+		cb.runtimeConsts[k] = true
+	}
+	for _, n := range names {
+		cb.runtimeConsts[n] = true
+	}
+	return &cb
+}
+
 func (b *Binding) evalModule(m *Model, qntPath string, preds []string) (*EvalModule, error) {
 	em := &EvalModule{Possible: map[string]string{}, Name: evalPrefix + "eval", Init: evalPrefix + "init", Consts: map[string]string{},
 		Expects: map[string]string{}, Invariants: map[string]string{}, Eventually: map[string]string{}, Vals: map[string]string{}}
@@ -70,7 +88,7 @@ func (b *Binding) evalModule(m *Model, qntPath string, preds []string) (*EvalMod
 	// value per instance a literal
 	var overrides []string
 	for _, c := range slices.Sorted(maps.Keys(m.Consts)) {
-		if tpl, ok := b.Constants[c]; ok && !strings.Contains(tpl, "{{") {
+		if tpl, ok := b.Constants[c]; ok && !strings.Contains(tpl, "{{") && !b.runtimeConsts[c] {
 			overrides = append(overrides, c+" = "+tpl)
 			continue
 		}

@@ -75,7 +75,10 @@ A binding's compiled model kept beside it (`stock.model.json` for
 stock.binding.yaml`) judges the binding's qtest and qhegel runs where quint
 is not installed: Record, Validate, Explore, Exhaust, Mutants, an invariant
 the binding does not declare (`qtest.Invariants`) and the vacuity check
-(`NotVacuous`), whose antecedent witnesses the compiled model carries. Use
+(`NotVacuous`), whose antecedent witnesses the compiled model carries, and
+another literal for a constant the binding gives as a literal
+(`qtest.Constants`); a constant given as an expression needs compiling again.
+Use
 `qtest.RequireModel(t, "stock.binding.yaml")` in those tests instead of
 `RequireQuint`; tests of the model itself (`qtest.Model`, simulate, connect's
 traces) still need quint.

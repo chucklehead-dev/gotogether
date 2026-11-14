@@ -212,7 +212,10 @@ func (c *Checker) WithConstants(constants map[string]string) (*Checker, error) {
 		}
 		if c.compiled != nil && v != c.Binding.Constants[k] {
 			if _, dynamic := c.compiled.model.Eval.Consts[k]; !dynamic {
-				return nil, fmt.Errorf("compiled model %s inlines constant %s as %s: overriding it to %s changes the compiled instance; compile a binding with that constant, or make it a runtime template before compiling", c.compiled.path, k, c.Binding.Constants[k], v)
+				return nil, fmt.Errorf("compiled model %s inlines constant %s as %s: overriding it to %s changes the compiled instance; compile a binding with that constant, or make it a runtime template before compiling (a constant the binding gives as a literal is a parameter of a compiled model; %s is not one)", c.compiled.path, k, c.Binding.Constants[k], v, c.Binding.Constants[k])
+			}
+			if !strings.Contains(v, "{{") && !isLiteral(v) {
+				return nil, fmt.Errorf("compiled model %s takes constant %s as a parameter, and %s is no Quint literal the Go evaluator reads: give a literal (Set(\"a\", \"b\"), 3), or validate with quint", c.compiled.path, k, v)
 			}
 		}
 		b.Constants[k] = v

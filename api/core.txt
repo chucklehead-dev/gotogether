@@ -77,6 +77,7 @@ type Binding struct
     method (*Binding) StartIssues(tr *qtrace.Trace) []qtrace.Issue
     method (*Binding) StepsToITF(steps []qtrace.Step) (map[string][]byte, []qtrace.Issue, error)
     method (*Binding) UsedFields(m *Model) map[string][]string
+    method (*Binding) WithRuntimeConstants(names ...string) *Binding
 type Bound struct
     field Binding *Binding
     field Model *Model

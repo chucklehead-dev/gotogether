@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/itf"
 )
 
 // WitnessPrefix names an antecedent's witness val: gotogetherNot_<inv> is
@@ -61,5 +62,24 @@ func compiledBinding(b *binding.Binding, m *binding.Model) *binding.Binding {
 	defs, witnessOf := AntecedentWitnesses(b, m, cands)
 	cb.Defs = b.Defs + defs
 	cb.Invariants = append(cands, slices.Sorted(maps.Keys(witnessOf))...)
-	return &cb
+	// a constant given as a literal is a parameter, so that a check may
+	// give another literal (qtest.Constants): one given as an expression
+	// (1.to(3), a def) stays inline, the evaluator reading literals only
+	var runtime []string
+	for _, c := range slices.Sorted(maps.Keys(b.Constants)) {
+		if _, ok := m.Consts[c]; ok && isLiteral(b.Constants[c]) {
+			runtime = append(runtime, c)
+		}
+	}
+	return cb.WithRuntimeConstants(runtime...)
+}
+
+// isLiteral reports whether s is a Quint literal the Go evaluator reads
+// (itf.ParseQuint), not a template the binding computes from the steps.
+func isLiteral(s string) bool {
+	if strings.Contains(s, "{{") {
+		return false
+	}
+	_, err := itf.ParseQuint(s)
+	return err == nil
 }
