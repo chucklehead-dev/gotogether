@@ -237,8 +237,8 @@ type Report struct {
 	// run had it settle (qenv.Settle): a run that never reached quiescence
 	// is not OK, whatever its steps. Set by the caller that ran it (qtest).
 	Unsettled string
-	// sources are where each definition of the model is ("doc.md:23" for
-	// a literate model): a failing invariant's line names its own.
+	// sources are where each definition of a literate model is
+	// ("doc.md:23"): a failing invariant's line names its own.
 	sources map[string]string
 }
 
@@ -346,7 +346,9 @@ func sourcedSummary(text string, sources map[string]string) string {
 // for a literate model, named as the working directory sees them; nil
 // without a binding.
 func sourcesOf(b *binding.Binding) map[string]string {
-	if b == nil || b.Spec == "" {
+	// a literate model's alone: a .qnt model's report text stays as it
+	// was, which scripts and tests read
+	if b == nil || !literate.IsDoc(b.Spec) {
 		return nil
 	}
 	shown := b.DocPath()
