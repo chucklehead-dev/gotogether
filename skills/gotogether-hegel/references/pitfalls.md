@@ -19,6 +19,10 @@
   produces it, often with a few lines that mirror the model's action.
   connect avoids that: the model's state hands the value to the code
   (`Step.Get`), and the environment's actions are `connect.Skip`.
+- A separate test module for qhegel (`replace => ../..`, keeping Hegel and
+  purego out of the service's module) needs `go mod tidy` after a root
+  dependency changes, or `go vet` fails in it: tidy it in the same change,
+  and let CI run `go mod tidy -diff` there.
 - `hegel-go` needs Go ≥ 1.26.1. Its engine is embedded (no Python, no
   server), and runs offline after the first download, which it keeps
   under `os.UserCacheDir()`: where `$HOME` is read-only (a sandbox, some

@@ -41,9 +41,14 @@ run. See [the executable walkthrough](https://github.com/chucklehead-dev/gotoget
    module bankDesign { import bank(ACCOUNTS = Set("alice", "bob")).* }
    ```
    `connect.Config{Spec: "bank.qnt", Main: "bankDesign"}` generates traces
-   of the instance; a binding instantiates `bank` with constants sized to
-   each recorded run (`constants:` templates such as `{{ max "amount" }}`).
-   `-instance bankDesign` must be a single `import M(...).*`.
+   of the instance; a binding either names the instance (`module:
+   bankDesign`: it binds `bank` with the instance's constants, and gives
+   none of them itself) or instantiates `bank` with constants sized to each
+   recorded run (`constants:` templates such as `{{ max "amount" }}`). One
+   binding per design, each naming its instance, checks the designs
+   without copying their switches. An instance is a module whose body is a
+   single `import M(...).*` (`-instance bankDesign` too); a module with
+   definitions beside its import is bound as a module of its own.
 5. **Properties are boolean `val`s** (`val noOverdraft = ...`). They are
    `quint run --invariant` targets for the design, and `invariants:` of the
    binding for recorded runs. The binding's `simulate` section says which
