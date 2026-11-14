@@ -14,6 +14,10 @@ and adds a line here.
   in k of N traces (s of S states)") and fail when one was never reached.
   A name that is no val, or a val that is not a boolean, fails before any
   replay.
+  Run steers to each: the shortest path to it the Go evaluator finds within
+  MaxSteps is replayed before the samples, as subtest `witness_<name>`, so a
+  rare state is tested every run; one it cannot find is noted and left to the
+  samples.
 - Tests without quint (ROADMAP Q0): a binding's compiled model kept beside it
   (`gotogether compile -binding B`, now writing `<stem>.model.json` by default,
   `validate.CompiledFor`) judges its qtest and qhegel runs by the Go evaluator
