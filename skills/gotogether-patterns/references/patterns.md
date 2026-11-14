@@ -57,7 +57,8 @@ shared state what the model does in one action (read the budget, then
 take a slot, in two round trips) can be interleaved inside that action,
 which no model trace and no connect replay does: split the action where
 the code has a round trip, or run the code in qenv, whose scheduler
-interleaves tasks at every seam. And:
+interleaves tasks at every seam. `actionmap -roundtrips` (qanalysis)
+lists the connect actions whose code makes several such round trips. And:
 - what the model abstracts away (budget periods, tenants), the driver
   pins and a unit test covers (the period's rollover);
 - code with a lifecycle (a deploy's drain, a shutdown) needs a model

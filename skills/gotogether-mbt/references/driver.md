@@ -210,6 +210,13 @@ From golem's use (#144):
   its own clock and move the taker's past the lease before the code
   tries, as golem's elector driver does. A clock the driver leaves still
   (a paused leader's) keeps that node's belief, as in the model.
+- **Find the round trips inside one action.** `actionmap -roundtrips
+  ./...` (qanalysis/cmd/actionmap) lists each `connect.Switch` action
+  whose code makes more than one call into shared state (a store's or a
+  client's method taking a context): golem's `complete` reaches the
+  store's Complete and Add, then a reacquire and a replay. Each list is an
+  interleaving no connect trace makes; split the action there or run the
+  code in qenv.
 - **History ghosts belong in the driver.** A model's ghost (every call
   ever waived) is the driver's to accumulate from the steps it drives;
   code that keeps one to be projected keeps it for ever (a leak in

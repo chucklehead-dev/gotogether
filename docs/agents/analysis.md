@@ -28,3 +28,11 @@ Gotchas for agents (and humans) before changing qanalysis or the binding lint; A
   `gristPath`; the simgrist fixture), with grist's fixes; quintraw
   (raw.go) is typed only, its stubs of grist and gRPC under
   testdata/src.
+- actionmap's `RoundTrips` loads tests (`Tests: true`), and the VTA call
+  graph built from `ssautil.AllFunctions` has no node for a test
+  variant's functions (a driver's closures and methods): it follows a
+  static call by its callee and uses the graph's edges only for dynamic
+  calls, and finds a `Switch` case's literal by `ssa.EnclosingFunction`.
+  "Own" is every package of the loaded patterns' modules, not only the
+  loaded packages, so a call into the module's other packages is
+  followed, never counted.

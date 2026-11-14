@@ -77,6 +77,26 @@ GOTOGETHER_KEEP=/tmp/k go run -C qweave ./cmd/qweave -C .. -cover \
 cd qanalysis && go run ./cmd/actionmap -C .. -coverage /tmp/k/checkout-coverage.json ./examples/checkout/...
 ```
 
+### Round trips inside one connect action (`-roundtrips`)
+
+A connect driver's action (a `connect.Switch` case) whose code makes
+several round trips into shared state, a read of a budget and then a
+reservation against it, is one step of the model: no connect trace
+interleaves another action between them, so a race there passes every
+connect test (the patterns skill's §2). `actionmap -roundtrips` lists each
+such action with its round trips: calls whose first parameter is a
+`context.Context`, to an interface's method or another module's type's
+method, followed through the module's own code (its other packages too)
+and stopped at the round trip. A call made from a `_test.go` file (a
+fault the driver injects, a seed) is the environment's and not counted.
+It over-approximates: calls on exclusive branches both count, a call in a
+loop once. Split the model's action at the round trips that matter, or
+run the code in qenv, whose scheduler interleaves at every seam.
+
+```sh
+cd qanalysis && go run ./cmd/actionmap -C /path/to/module -roundtrips ./...
+```
+
 Tests: `go test ./...` (analysistest fixtures in `testdata/src`, with
 stubs of qenv, qobs, grist and gRPC; the binding test and the checkout comparison need
 quint, and the latter skips under `-short`).
