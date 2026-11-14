@@ -175,6 +175,23 @@ looser model (the same actions without their guards, as
 `IgnoreModel`, so its states only drive the inputs. An input every
 implementation refuses is then agreement, not a failure.
 
+Or keep the design's traces and vary their inputs: `Vary` runs once per
+step before the implementations and may replace its picks (a copy), so
+every implementation gets the same one. Inside Hegel, with
+`qhegel.VaryTraces`, it draws them, and Hegel shrinks a disagreement to
+the smallest input:
+
+```go
+qhegel.VaryTraces(ht, traces, func(tc hegel.TestCase) connect.Driver {
+	return &connect.Differential{Impls: impls(), IgnoreModel: true, Vary: func(s *connect.Step) error {
+		if s.Has("budget") {
+			s.Picks["budget"] = itf.Value{Kind: itf.Int, I: big.NewInt(int64(hegel.Draw(tc, hegel.Integers(-100, 100))))}
+		}
+		return nil
+	}}
+}, qhegel.VaryOptions{})
+```
+
 ## Driving a whole program through its faults (`qtest.FaultScript`)
 
 A driver calls the code once per step. For a program that runs by

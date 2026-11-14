@@ -245,9 +245,10 @@ them inside.
   implementation and fails where one fails and another does not, or their
   observations (`Observer.Observe`, else `State`) differ; with
   `IgnoreModel`, traces of a looser model (its inputs past the design's
-  guards) reach what the model never does. Open: inputs Hegel draws (a
-  differential qhegel state machine), and a looser model generated from
-  the design's by dropping its guards.
+  guards) reach what the model never does, and `Vary` takes the design's
+  own traces past them: one input per step for every implementation,
+  drawn by Hegel inside `qhegel.VaryTraces` and shrunk by it. Open: a
+  looser model generated from the design's by dropping its guards.
 
 ## A Go Quint (Q)
 

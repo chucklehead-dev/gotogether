@@ -5,6 +5,8 @@ import (
 	"maps"
 	"slices"
 	"strings"
+
+	"github.com/chucklehead-dev/gotogether/itf"
 )
 
 // An Observer is a Driver that reports, after each step, what its
@@ -23,7 +25,7 @@ type Observer interface {
 // Two implementations that each agree with the model can still disagree
 // with each other where the model never goes (a negative budget, a
 // trimmed history): replay traces of a looser model, whose inputs go
-// there, with IgnoreModel.
+// there, with IgnoreModel, or vary the design's own inputs (Vary).
 //
 // Make a fresh one per trace, as a Driver (Run's newDriver).
 type Differential struct {
@@ -34,6 +36,13 @@ type Differential struct {
 	// not each StateDriver's state with the model's: for traces of a model
 	// whose states describe the inputs, not the design.
 	IgnoreModel bool
+	// Vary, if set, runs once per step before the implementations and may
+	// replace the step's picks (s.Picks, a copy of the trace's), so every
+	// implementation gets the same input, one the model may never pick: a
+	// withdrawal past the balance, a negative budget. Inside a Hegel test
+	// case (qhegel.VaryTraces) it draws them, and Hegel shrinks them. A
+	// varied input leaves the model's state behind: set IgnoreModel.
+	Vary func(s *Step) error
 }
 
 func (d *Differential) names() []string { return slices.Sorted(maps.Keys(d.Impls)) }
@@ -45,6 +54,15 @@ func (d *Differential) names() []string { return slices.Sorted(maps.Keys(d.Impls
 func (d *Differential) Step(s *Step) error {
 	if len(d.Impls) < 2 {
 		return fmt.Errorf("a Differential compares at least two implementations, and has %d: add another to Impls", len(d.Impls))
+	}
+	if d.Vary != nil {
+		s.Picks = maps.Clone(s.Picks) // the trace's own stay as they are, for the next replay of it
+		if s.Picks == nil {
+			s.Picks = map[string]itf.Value{}
+		}
+		if err := recovered(func() error { return d.Vary(s) }); err != nil {
+			return fmt.Errorf("varying the step's inputs: %w", err)
+		}
 	}
 	var failed, succeeded []string
 	for _, n := range d.names() {

@@ -2,6 +2,8 @@ package connect
 
 import (
 	"errors"
+	"fmt"
+	"math/big"
 	"strings"
 	"testing"
 
@@ -75,5 +77,39 @@ func TestDifferentialNeedsTwo(t *testing.T) {
 	d := &Differential{Impls: map[string]Driver{"one": &bankDriver{}}}
 	if err := d.Step(&Step{Action: "init"}); err == nil || !strings.Contains(err.Error(), "at least two implementations, and has 1") {
 		t.Fatalf("one implementation: %v", err)
+	}
+}
+
+// Vary takes the design's own traces past its guard: each withdrawal asks
+// for 10 more than the model picked, for every bank alike. The overdraft
+// is caught on bank.qnt's traces, where without Vary it never is, two
+// faithful banks still agree, and the traces' own picks are unchanged.
+func TestDifferentialVaryTakesTheModelsInputsFurther(t *testing.T) {
+	traces := sharedBankRun(t).traces
+	further := func(s *Step) error {
+		if s.Action == "withdraw" {
+			s.Picks["amount"] = itf.Value{Kind: itf.Int, I: new(big.Int).Add(s.Picks["amount"].I, big.NewInt(10))}
+		}
+		return nil
+	}
+	before := fmt.Sprint(traces[0].States)
+	caught := map[string]int{}
+	for i, tr := range traces {
+		for name, other := range map[string]*bankDriver{"overdraft": {overdraft: true}, "faithful": {}} {
+			d := pair(&bankDriver{}, other)
+			d.IgnoreModel, d.Vary = true, further
+			if err := Replay(tr, d, ReplayOptions{Trace: i}); err != nil {
+				if !strings.Contains(err.Error(), "faithful (insufficient funds) failed, other did not") {
+					t.Fatalf("%s: %v", name, err)
+				}
+				caught[name]++
+			}
+		}
+	}
+	if caught["overdraft"] == 0 || caught["faithful"] != 0 {
+		t.Fatalf("disagreements over %d traces: %v; want the overdraft caught, the faithful pair never", len(traces), caught)
+	}
+	if after := fmt.Sprint(traces[0].States); after != before {
+		t.Fatal("Vary changed the trace's own picks")
 	}
 }

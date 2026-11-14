@@ -253,6 +253,7 @@ type Config struct
 type Differential struct
     field Impls map[string]Driver
     field IgnoreModel bool
+    field Vary func(s *Step) error
     method (*Differential) CheckStep(s *Step) error
     method (*Differential) Step(s *Step) error
 type Driver interface
