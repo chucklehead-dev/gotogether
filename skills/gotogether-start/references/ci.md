@@ -73,7 +73,9 @@ quint). Read the verdicts so:
 A binding's compiled model kept beside it (`stock.model.json` for
 `stock.binding.yaml`, the default of `gotogether compile -binding
 stock.binding.yaml`) judges the binding's qtest and qhegel runs where quint
-is not installed: Record, Validate, Explore, Exhaust, Mutants. Use
+is not installed: Record, Validate, Explore, Exhaust, Mutants, an invariant
+the binding does not declare (`qtest.Invariants`) and the vacuity check
+(`NotVacuous`), whose antecedent witnesses the compiled model carries. Use
 `qtest.RequireModel(t, "stock.binding.yaml")` in those tests instead of
 `RequireQuint`; tests of the model itself (`qtest.Model`, simulate, connect's
 traces) still need quint.

@@ -1,7 +1,6 @@
 package qtest
 
 import (
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
+	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
@@ -67,23 +67,64 @@ func TestVacuityProbeGuardsOriginalSource(t *testing.T) {
 	}
 }
 
-func TestVacuityProbeCompiledNeedsSource(t *testing.T) {
-	RequireQuint(t)
-	artifact, err := validate.Compile("testdata/gate.yaml", validate.Options{})
+// The vacuity check by a compiled model alone: the model carries every
+// candidate invariant's antecedent witness (validate.AntecedentWitnesses),
+// so with GOTOGETHER_COMPILED=1 idle runs find passedWhenOpen vacuous and
+// NotVacuous fails, as with quint, and runs that pass make it hold. An
+// invariant the binding does not declare (neverNegative) is checked by the
+// compiled model too (Invariants). It once refused, "needs quint". Not
+// parallel: it sets the environment.
+func TestVacuityByCompiledModel(t *testing.T) {
+	RequireQuint(t) // to compile
+	dir := t.TempDir()
+	for _, name := range []string{"gate.yaml", "gate.qnt"} {
+		data, err := os.ReadFile(filepath.Join("testdata", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b := filepath.Join(dir, "gate.yaml")
+	artifact, err := validate.Compile(b, validate.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(t.TempDir(), "gate.model.json")
-	if err := artifact.Write(path); err != nil {
+	if err := artifact.Write(validate.CompiledFor(b)); err != nil {
 		t.Fatal(err)
 	}
-	checker, err := validate.NewCompiledChecker("testdata/gate.yaml", path, validate.Options{Quint: filepath.Join(t.TempDir(), "no-quint")})
-	if err != nil {
-		t.Fatal(err)
+	t.Setenv(compiledEnv, "1")
+	scenario := func(pass bool) func(qenv.Chooser) error {
+		return func(c qenv.Chooser) error {
+			ctx := qenv.ContextOf(c)
+			qobs.Record(ctx, "open", nil)
+			if pass {
+				qobs.Record(ctx, "pass", nil)
+			}
+			return nil
+		}
 	}
-	defer checker.Close()
-	x := &Exploration{checker: checker}
-	if result := x.findVacuous(); !errors.Is(result.err, validate.ErrNeedsQuint) {
-		t.Fatalf("derived artifact predicate silently fell back to source: %+v", result)
+	idle := System{Binding: b, Run: scenario(false)}.Explore(t, ExploreConfig{Seeds: 3})
+	if idle.checker.Compiled() == nil {
+		t.Fatal("the exploration was not judged by the compiled model")
 	}
+	idle.Expect(t, Conforms())
+	r := idle.vacuous()
+	if r.err != nil || len(r.found) != 1 || r.found[0].Invariant != "passedWhenOpen" {
+		t.Fatalf("vacuity by the compiled model: %+v", r)
+	}
+	f := &failTB{TB: t}
+	done := make(chan struct{})
+	go func() { //qenv:ok failTB's FailNow ends the goroutine (runtime.Goexit)
+		defer close(done)
+		idle.Expect(f, NotVacuous())
+	}()
+	<-done
+	if !f.failed || !strings.Contains(strings.Join(f.errs, "\n"), "held vacuously: passedWhenOpen") {
+		t.Errorf("NotVacuous on idle runs, compiled: %q", f.errs)
+	}
+	System{Binding: b, Run: scenario(true)}.Explore(t, ExploreConfig{Seeds: 3}).Expect(t, Conforms(), NotVacuous())
+	// an invariant outside the binding's, by the compiled model
+	Validate(t, b, []qtrace.Step{{Action: "open", Seq: 1}, {Action: "pass", Seq: 2}}, Invariants("neverNegative")).Expect(t, Conforms())
 }

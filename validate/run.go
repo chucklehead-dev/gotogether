@@ -412,6 +412,28 @@ func (c *Checker) WithInvariants(invariants ...string) (*Checker, error) {
 	return &cc, nil
 }
 
+// WithWitnesses returns a copy of a compiled checker that checks the
+// antecedent witnesses named (AntecedentWitnesses' names) as its only
+// invariants, with no eventual vals: a run in which a witness fails met
+// its antecedent. A compiled model carries every candidate invariant's
+// witness, so qtest's vacuity check needs no quint. A checker that is not
+// compiled refuses: its witnesses are written and compiled by quint.
+func (c *Checker) WithWitnesses(names ...string) (*Checker, error) {
+	if c.compiled == nil {
+		return nil, fmt.Errorf("witnesses of a checker that is not compiled are compiled by quint: write them into the binding's defs")
+	}
+	for _, n := range names {
+		if _, ok := c.compiled.model.Eval.Invariants[n]; !ok {
+			return nil, fmt.Errorf("compiled model %s does not include the witness %s: compile it again (gotogether compile -binding %s)", c.compiled.path, n, c.Binding.Path)
+		}
+	}
+	b := *c.Binding
+	b.Invariants, b.Eventually = append([]string{}, names...), nil
+	cc := *c
+	cc.Binding = &b
+	return &cc, nil
+}
+
 // WithoutRefs is r with its failing steps' refs (qtrace.Step.Ref) left
 // out, on a copy: what a verdict cached for every run of the same steps
 // says (its Summary), since each run's refs are its own and no verdict
