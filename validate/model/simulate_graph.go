@@ -46,7 +46,7 @@ func (s *sim) graph(ctx context.Context, bpath string, b *binding.Binding, check
 	if evs == nil {
 		evs = []string{}
 	}
-	r, err := checker.Graph(ctx, GraphSearch{Constants: overrides, Invariants: invariants, Eventually: evs, States: opt.States, Depth: opt.Depth, Unfair: opt.Unfair, Stops: opt.Stops})
+	r, err := checker.Graph(ctx, GraphSearch{Constants: overrides, Invariants: invariants, Eventually: evs, States: opt.States, Depth: opt.Depth, MemoryBytes: opt.MemoryBytes, Unfair: opt.Unfair, Stops: opt.Stops})
 	if err != nil {
 		return fmt.Errorf("simulate -graph: %w", err)
 	}
@@ -83,6 +83,9 @@ func (s *sim) graph(ctx context.Context, bpath string, b *binding.Binding, check
 		where = fmt.Sprintf("none of the %d states explored", r.States)
 	}
 	raise := "raise -states or -depth (simulate.search.states, simulate.search.depth) for a proof"
+	if r.Cut == "memory" {
+		raise = "raise -memory for the retained graph estimate budget, or set -depth for a smaller bounded proof"
+	}
 	if r.Cut == "unsupported" || r.Cut == "error" {
 		raise = "simulate without -graph samples the model with quint, bounded too"
 	}
@@ -92,8 +95,15 @@ func (s *sim) graph(ctx context.Context, bpath string, b *binding.Binding, check
 		inv := v.Name
 		mv := Verdict{Name: inv, Class: classOf(inv, holds, allows), Held: v.Held(), Violated: v.Violated, Bound: bound,
 			Counterexample: v.Counterexample, Error: v.Error, Unchecked: v.Unsupported}
+		if r.Cut == "memory" && allows[inv] && !v.Violated && v.Error == "" {
+			mv.Unchecked = "the retained graph storage estimate budget stopped the search before a permitted violation was witnessed"
+		}
 		s.rep.Invariants = append(s.rep.Invariants, mv)
 		switch {
+		case r.Cut == "memory" && allows[inv] && !v.Violated && v.Error == "":
+			unchecked = true
+			s.printf("  unchecked %s: the graph storage estimate budget stopped the search before a permitted violation was witnessed; %s\n", inv, raise)
+			continue
 		case v.Unsupported != "" && !v.Violated:
 			unchecked = true
 			s.printf("  unchecked %s: the Go evaluator cannot evaluate it in %s (%s), and it holds in the %d it could; simulate without -graph samples it with quint\n",
@@ -107,8 +117,8 @@ func (s *sim) graph(ctx context.Context, bpath string, b *binding.Binding, check
 		switch {
 		case holds[inv] && v.Held() && r.Complete:
 			s.printf("  holds   %s: no reachable state violates it (the whole graph, %d states%s)\n", inv, r.States, depthNote(r))
-		case holds[inv] && v.Held() && r.Cut == "states" && bound.Kind == "depth":
-			s.printf("  bounded %s: no state within %s of init violates it (complete to depth %d: a bounded proof, every trace of up to %s; the state bound cut deeper: %s)\n", inv, nOf(bound.Depth, "step"), bound.Depth, nOf(bound.Depth, "step"), raise)
+		case holds[inv] && v.Held() && (r.Cut == "states" || r.Cut == "memory") && bound.Kind == "depth":
+			s.printf("  bounded %s: no state within %s of init violates it (complete to depth %d: a bounded proof, every trace of up to %s; the %s bound cut deeper: %s)\n", inv, nOf(bound.Depth, "step"), bound.Depth, nOf(bound.Depth, "step"), r.Cut, raise)
 		case holds[inv] && v.Held():
 			s.printf("  bounded %s: %s violates it, which proves nothing past them (the graph is truncated: %s)\n", inv, where, raise)
 		case allows[inv] && v.Violated:
@@ -197,7 +207,17 @@ func (s *sim) graph(ctx context.Context, bpath string, b *binding.Binding, check
 	}
 	ec, eu := s.reportEventually(r, holds, allows, bound)
 	code, unchecked = max(code, ec), unchecked || eu
-	if len(possibles) > 0 {
+	if len(possibles) > 0 && r.Cut == "memory" {
+		// Resource exhaustion must stop new searches too: restarting Reach
+		// or sampling here would bypass the graph's budget entirely.
+		unchecked = true
+		for _, c := range possibles {
+			reason := "not searched or sampled: the retained graph storage estimate budget was exhausted"
+			line := fmt.Sprintf("  unchecked possible %s: %s\n", c.p.Text(), reason)
+			s.printf("%s", line)
+			s.rep.Possibles = append(s.rep.Possibles, PossibleVerdict{Possible: c.p, Goal: possibleGoal(c.when, c.steps), Unchecked: reason, Verdict: reason, Line: line})
+		}
+	} else if len(possibles) > 0 {
 		// the evaluator's search first, within the graph's bound; quint
 		// samples what it did not find, as simulate does without -graph (a
 		// deep scenario the graph's breadth cannot reach)
@@ -266,7 +286,7 @@ func (s *sim) graph(ctx context.Context, bpath string, b *binding.Binding, check
 	switch {
 	case evalBug:
 		s.rep.Code = 1
-	case code == 0 && (unchecked || r.Cut == "unsupported" || r.Cut == "error"):
+	case code == 0 && (unchecked || r.Cut == "unsupported" || r.Cut == "error" || r.Cut == "memory"):
 		if r.Cut == "unsupported" || r.Cut == "error" {
 			s.printf("  stopped %s\n", r.Stopped)
 		}
@@ -285,12 +305,12 @@ func graphBound(r *GraphResult) Bound {
 		b.Kind = "complete"
 	case r.Cut == "depth":
 		b.Kind = "depth"
-	case r.Cut == "states" && r.CompleteDepth > 0:
+	case (r.Cut == "states" || r.Cut == "memory") && r.CompleteDepth > 0:
 		// every state within CompleteDepth steps was found and checked, as
 		// a depth bound of that depth leaves them: the same bounded proof
 		b.Kind, b.Depth, b.States = "depth", r.CompleteDepth, r.statesWithin(r.CompleteDepth)
-	case r.Cut == "states":
-		b.Kind = "states"
+	case r.Cut == "states" || r.Cut == "memory":
+		b.Kind = r.Cut
 	default:
 		b.Kind, b.Stopped = "stopped", r.Stopped
 	}

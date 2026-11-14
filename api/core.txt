@@ -2571,6 +2571,8 @@ type DocComparisonGraph struct
     field Spec string `json:"spec,omitempty"`
     field Module string `json:"module,omitempty"`
     field Constants []NamedValue `json:"constants,omitempty"`
+    field MemoryUsed int64 `json:"memoryUsed"`
+    field MemoryScope string `json:"memoryScope"`
     field Complete bool `json:"complete"`
     field Cut string `json:"cut,omitempty"`
     field Stopped string `json:"stopped,omitempty"`
@@ -2627,6 +2629,8 @@ type DocGraph struct
     field Depth int `json:"depth"`
     field Complete bool `json:"complete"`
     field CompleteDepth int `json:"completeDepth"`
+    field MemoryUsed int64 `json:"memoryUsed"`
+    field MemoryScope string `json:"memoryScope"`
     field Cut string `json:"cut,omitempty"`
     field Stopped string `json:"stopped,omitempty"`
     field Bound DocGraphBound `json:"bound"`
@@ -2639,6 +2643,7 @@ type DocGraph struct
 type DocGraphBound struct
     field States int `json:"states"`
     field Depth int `json:"depth"`
+    field MemoryBytes int64 `json:"memoryBytes"`
 type DocInput struct
     field Path string `json:"path"`
     field Format string `json:"format"`
@@ -3145,6 +3150,7 @@ type Result struct
 
 == github.com/chucklehead-dev/gotogether/validate/model
 const ComparisonReplayAttempts = 8
+const DefaultGraphMemoryBytes int64 = 256 << 20
 const DefaultSearchStates = 100000
 func Compare(ctx context.Context, before, after *GraphResult, opt CompareOptions) (*Comparison, error)
 func ConfirmComparison(ctx context.Context, comparison *Comparison) error
@@ -3221,6 +3227,7 @@ type ComparisonGraph struct
     field Transitions int
     field Depth int
     field Bound GraphBound
+    field MemoryUsed int64
 type ComparisonReplay struct
     field Module validate.File
     field Sources []validate.File
@@ -3249,6 +3256,7 @@ type EventualVerdict struct
 type GraphBound struct
     field States int
     field Depth int
+    field MemoryBytes int64
 type GraphResult struct
     field States int
     field Starts int
@@ -3259,6 +3267,7 @@ type GraphResult struct
     field Stopped string
     field CompleteDepth int
     field Bound GraphBound
+    field MemoryUsed int64
     field Invariants []InvariantVerdict
     field Deadlocks int
     field Terminals int
@@ -3278,6 +3287,7 @@ type GraphSearch struct
     field Terminal string
     field States int
     field Depth int
+    field MemoryBytes int64
     field Eventually []string
     field Unfair []string
     field Stops []string
@@ -3335,6 +3345,7 @@ type PossibleVerdict struct
     field Possible binding.Possible
     field Found bool
     field Impossible bool
+    field Unchecked string
     field Eval *PossibleResult
     field EvalErr string
     field Quint string
@@ -3372,6 +3383,7 @@ type SimulateOptions struct
     field Graph bool
     field States int
     field Depth int
+    field MemoryBytes int64
     field Unfair []string
     field Stops []string
     field Out string

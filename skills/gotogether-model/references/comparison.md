@@ -31,3 +31,8 @@ The exact historical hello completion change is a scope control: adding `done`
 and occurrence claims leaves `applied,count` state sequences equivalent because
 an existing action already stuttered at completion. Retain those action/finish
 checks; do not treat state-language equivalence as approval of a changed contract.
+
+Each graph has a default 256 MiB estimated retained-storage budget. Set
+`-memory N` in MiB to change it. The graph's `memoryUsed`, `memoryScope` and
+`bound.memoryBytes` retain that evidence; compilation, transient evaluation and
+process heap/RSS are excluded. A memory-truncated input is inconclusive.

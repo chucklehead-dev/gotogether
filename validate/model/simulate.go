@@ -222,6 +222,9 @@ type SimulateOptions struct {
 	// and no depth bound; with Verify and no depth, the possibles' search
 	// goes Verify steps deep).
 	States, Depth int
+	// MemoryBytes, with Graph, bounds estimated retained graph storage
+	// (0: DefaultGraphMemoryBytes), excluding compilation, transient evaluation and heap/RSS.
+	MemoryBytes int64
 	// Unfair and Stops are the actions the liveness search does not hold
 	// to weak fairness (nil: simulate.unfair and simulate.stops).
 	Unfair, Stops []string
@@ -321,6 +324,8 @@ func (b Bound) String() string {
 		return fmt.Sprintf("the states within %d steps of init (%d; a bounded proof: every trace of up to %d steps)", b.Depth, b.States, b.Depth)
 	case "states":
 		return fmt.Sprintf("the first %d states breadth first, truncated by the state bound: no proof past them (raise simulate.search.states, or set search.depth for a bounded proof)", b.States)
+	case "memory":
+		return fmt.Sprintf("%d states, truncated by the retained graph storage estimate budget: no proof past them", b.States)
 	case "stopped":
 		return fmt.Sprintf("%d states, then the Go evaluator stopped (%s)", b.States, b.Stopped)
 	case "verified":
@@ -340,6 +345,8 @@ type PossibleVerdict struct {
 	Possible   binding.Possible
 	Found      bool
 	Impossible bool
+	// Unchecked says why no search or sampling was attempted.
+	Unchecked string
 	// Eval is the evaluator's search (nil: none, EvalErr says why).
 	Eval    *PossibleResult
 	EvalErr string
@@ -409,8 +416,8 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 	if opt.Graph && opt.Verify > 0 {
 		return nil, fmt.Errorf("simulate: -graph and -verify are two ways to check every trace: pick one")
 	}
-	if !opt.Graph && (opt.Out != "" || opt.Unfair != nil || opt.Stops != nil || opt.Replay) {
-		return nil, fmt.Errorf("simulate: -out, -unfair and -stops are -graph's: add -graph")
+	if !opt.Graph && (opt.MemoryBytes != 0 || opt.Out != "" || opt.Unfair != nil || opt.Stops != nil || opt.Replay) {
+		return nil, fmt.Errorf("simulate: -memory, -out, -unfair and -stops are -graph's: add -graph")
 	}
 	if err := b.CheckSpec(); err != nil {
 		return nil, err
