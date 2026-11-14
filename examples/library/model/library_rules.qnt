@@ -18,21 +18,31 @@ module libraryRules {
 
   // books, keyed by book: its copies (each addition's count), and how
   // many are on loan. The model knows book-added's newest shape only: an
-  // addition stored at version 1 is judged as its upcast (upcast.go)
+  // addition stored at version 1 is judged as its upcast (upcast.go).
+  // Each fold is one pass over the log with the event's own book (its
+  // string) as the condition, not the read model's selection (booksEvents,
+  // loansEvents) folded again: equal on every log the models hold, since
+  // each generated constructor tags an event with the strings it stores
+  // (testdata/loans.qnt proves it), and about ten times cheaper for
+  // Apalache at depth 6 (docs/performance.md, the library's proofs)
   pure def copies(log: List[Event], b: str): int =
-    booksEvents(log, b).foldl(0, (s, e) => if (e.typ == "book-added") s + bookAddedCount(e) else s)
+    log.foldl(0, (s, e) => if (e.typ == "book-added" and bookAddedBook(e) == b) s + bookAddedCount(e) else s)
   pure def onLoan(log: List[Event], b: str): int =
-    booksEvents(log, b).foldl(0, (s, e) =>
-      if (e.typ == "book-borrowed") s + 1 else if (e.typ == "book-returned") s - 1 else s)
-
-  // loans, keyed by member: how many copies of b m holds, and how many loans
-  pure def held(log: List[Event], m: str, b: str): int =
-    loansEvents(log, m).foldl(0, (s, e) =>
+    log.foldl(0, (s, e) =>
       if (e.typ == "book-borrowed" and bookBorrowedBook(e) == b) s + 1
-      else if (e.typ == "book-returned" and bookReturnedBook(e) == b) s - 1
+      else if (e.typ == "book-returned" and bookReturnedBook(e) == b) s - 1 else s)
+
+  // loans, keyed by member: how many copies of b m holds, and how many
+  // loans, one pass each with the event's member as the condition
+  pure def held(log: List[Event], m: str, b: str): int =
+    log.foldl(0, (s, e) =>
+      if (e.typ == "book-borrowed" and bookBorrowedMember(e) == m and bookBorrowedBook(e) == b) s + 1
+      else if (e.typ == "book-returned" and bookReturnedMember(e) == m and bookReturnedBook(e) == b) s - 1
       else s)
   pure def loanCount(log: List[Event], m: str): int =
-    loansEvents(log, m).foldl(0, (s, e) => if (e.typ == "book-borrowed") s + 1 else s - 1)
+    log.foldl(0, (s, e) =>
+      if (e.typ == "book-borrowed" and bookBorrowedMember(e) == m) s + 1
+      else if (e.typ == "book-returned" and bookReturnedMember(e) == m) s - 1 else s)
 
   // join: refused for a member who joined, on the member's join
   pure def joinOutcome(log: List[Event], c: JoinArgs): str =
@@ -74,9 +84,10 @@ module libraryRules {
       if (not(s.removed) and b == book) { books: s.books, removed: true }
       else { books: s.books.append(b), removed: s.removed }).books
   pure def loanBooks(log: List[Event], m: str): List[str] =
-    loansEvents(log, m).foldl([], (books, e) =>
-      if (e.typ == "book-borrowed") books.append(bookBorrowedBook(e))
-      else removeFirst(books, bookReturnedBook(e)))
+    log.foldl([], (books, e) =>
+      if (e.typ == "book-borrowed" and bookBorrowedMember(e) == m) books.append(bookBorrowedBook(e))
+      else if (e.typ == "book-returned" and bookReturnedMember(e) == m) removeFirst(books, bookReturnedBook(e))
+      else books)
 
   // member-loans: ordered identities, including repeated copies.
   pure def memberLoansAnswer(log: List[Event], q: MemberLoansArgs): MemberLoansResult =
