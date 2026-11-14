@@ -2619,6 +2619,7 @@ type DocGraph struct
     field Transitions int `json:"transitions"`
     field Depth int `json:"depth"`
     field Complete bool `json:"complete"`
+    field CompleteDepth int `json:"completeDepth"`
     field Cut string `json:"cut,omitempty"`
     field Stopped string `json:"stopped,omitempty"`
     field Bound DocGraphBound `json:"bound"`
@@ -3249,6 +3250,7 @@ type GraphResult struct
     field Complete bool
     field Cut string
     field Stopped string
+    field CompleteDepth int
     field Bound GraphBound
     field Invariants []InvariantVerdict
     field Deadlocks int

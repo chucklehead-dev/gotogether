@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- `simulate -graph` cut by the state bound reports the deepest depth it
+  explored in full (`complete to depth N`; `GraphResult.CompleteDepth`,
+  `qeval.Graph.CompleteDepth`, `completeDepth` in `-json`), and the graph's
+  invariant verdicts are bounded proofs to that depth, as `-depth N` gives,
+  instead of no proof at all (golem's first use, #144; ROADMAP M2).
 - `gotogether lint -model m.qnt` checks a Quint model with no binding, as a
   design-phase model is written (golem's first use, #144; ROADMAP L3): a
   primed assignment whose right side holds a bare `or`/`and` (`x' = x or y`

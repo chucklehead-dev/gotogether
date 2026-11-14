@@ -164,10 +164,13 @@ carries the graph's extent (`complete`, `cut`, `depth`) and every verdict.
   states (a `-memory` cap, or an estimate before the search), and measure
   the bytes a state costs. Fingerprints (TLC's) only with exact states kept
   for collisions: a fingerprint collision must not prove anything.
-- **M2: the deepest level the graph completed.** When the state bound cuts
-  the search, report the deepest depth explored in full ("complete to depth
-  7; cut at 8"), the claim a design-phase check can make, instead of
-  probing depths by hand.
+- **M2: the deepest level the graph completed.** Done: a graph the state
+  bound cuts reports the depth it was expanding (breadth first, every state
+  within it found and checked: `complete to depth N`, `completeDepth` in
+  `-json`), and its invariants are bounded proofs to that depth, as `-depth
+  N` gives (`qtest.Proves` holds; deadlocks as under a depth bound).
+  Checked against the full graph at every state bound
+  (`TestCompleteDepthAgainstFullGraph`).
 - **M3: symmetry.** `symmetry: [REPLICAS, GATEWAYS]` in a binding reduces
   states equal up to permuting the set's values (an orbit's canonical
   representative), checked against the unreduced graph on small instances.

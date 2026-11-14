@@ -65,6 +65,10 @@ type GraphResult struct {
 	Complete bool
 	Cut      string
 	Stopped  string
+	// CompleteDepth is the depth every state within which was found and
+	// checked (qeval.Graph's): for a graph the state bound cut, the deepest
+	// depth explored in full, the bounded proof it still gives. -1: none.
+	CompleteDepth int
 	// Bound is the search's bounds as given
 	Bound GraphBound
 	// Invariants are each invariant's verdict, in the order asked
@@ -328,6 +332,9 @@ func (r *GraphResult) Extent() string {
 	case "":
 		return "complete: " + n
 	case "states":
+		if r.CompleteDepth > 0 {
+			return fmt.Sprintf("truncated by the state bound (%d): %s, complete to depth %d", r.Bound.States, n, r.CompleteDepth)
+		}
 		return fmt.Sprintf("truncated by the state bound (%d): %s", r.Bound.States, n)
 	case "depth":
 		return fmt.Sprintf("truncated by the depth bound (%d): %s, states at the bound not expanded", r.Bound.Depth, n)
@@ -406,7 +413,7 @@ func (c *modelChecker) Graph(ctx context.Context, cfg GraphSearch) (result *Grap
 		return evs
 	}
 	g, err := e.Model.Explore(consts, e.Module.Init, step, bound, label)
-	r := &GraphResult{States: len(g.States), Starts: g.Starts, Transitions: g.Edges(), Complete: g.Complete, Cut: g.Cut,
+	r := &GraphResult{States: len(g.States), Starts: g.Starts, Transitions: g.Edges(), Complete: g.Complete, Cut: g.Cut, CompleteDepth: g.CompleteDepth,
 		Bound: GraphBound{bound.States, bound.Depth}, graph: g, e: original, checker: cc, sourceChecker: c}
 	if err != nil {
 		var u *qeval.Unsupported
@@ -422,6 +429,7 @@ func (c *modelChecker) Graph(ctx context.Context, cfg GraphSearch) (result *Grap
 		if len(g.States) == 0 {
 			r.Stopped = "init: " + r.Stopped
 		}
+		r.CompleteDepth = -1
 	}
 	for _, d := range g.Depth {
 		if err := ctx.Err(); err != nil {
@@ -744,4 +752,17 @@ func branchIndex(m *binding.Model, t qeval.Transition) int {
 		return i
 	}
 	return -1
+}
+
+// statesWithin is the number of r's states within d steps of a start.
+func (r *GraphResult) statesWithin(d int) int {
+	n := 0
+	if r.graph != nil {
+		for _, x := range r.graph.Depth {
+			if x <= d {
+				n++
+			}
+		}
+	}
+	return n
 }

@@ -2159,6 +2159,10 @@
         "complete": {
           "type": "boolean"
         },
+        "completeDepth": {
+          "description": "CompleteDepth is the depth every state within which the graph found and checked (-1: none known): for a graph the state bound cut, the deepest level explored in full",
+          "type": "integer"
+        },
         "cut": {
           "type": "string"
         },
