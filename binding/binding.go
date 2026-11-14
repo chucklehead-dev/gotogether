@@ -45,7 +45,9 @@ type Binding struct {
 	// with its keys "unknown". Empty: the current one.
 	Format string `yaml:"format,omitempty"`
 	// Spec is the .qnt file (relative to the binding file) and Module the
-	// parameterised module in it to instantiate.
+	// parameterised module in it to instantiate, or an instance module
+	// (`module design { import M(C = ...).* }`), which binds M with the
+	// instance's constants.
 	Spec   string `yaml:"spec"`
 	Module string `yaml:"module"`
 	// Constants of the instance, as Quint expressions. They are templates
@@ -297,6 +299,9 @@ func Load(path string) (*Binding, error) {
 	if bd.Spec == "" || bd.Module == "" {
 		return nil, fmt.Errorf("%s: spec and module are required", path)
 	}
+	if err := bd.resolveInstance(); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	if err := bd.checkEvidence(nil); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
@@ -312,6 +317,41 @@ func Load(path string) (*Binding, error) {
 		w.Bound = d
 	}
 	return &bd, nil
+}
+
+// resolveInstance binds the module an instance module imports: a binding
+// naming `design`, where the model says `module design { import
+// publication(N = 3, ...).* }`, binds publication with design's constants,
+// so the binding does not copy them (and drift from them). A constant set
+// both by the instance and by the binding is refused: the instance is the
+// design, and two values for one constant would be a guess. A module that
+// is not of that form, or a spec not yet readable, is left as it is
+// (LoadModel reports what it finds).
+func (b *Binding) resolveInstance() error {
+	src, err := os.ReadFile(b.SpecPath())
+	if err != nil {
+		return nil
+	}
+	base, consts, ok := instanceModule(string(src), b.Module)
+	if !ok {
+		return nil
+	}
+	if b.Constants == nil {
+		b.Constants = map[string]string{}
+	}
+	for _, c := range consts {
+		name, expr, found := strings.Cut(c, "=")
+		name, expr = strings.TrimSpace(name), strings.TrimSpace(expr)
+		if !found || name == "" {
+			return fmt.Errorf("module %s: constant %q of its import of %s is not NAME = expr", b.Module, c, base)
+		}
+		if mine, set := b.Constants[name]; set {
+			return fmt.Errorf("constant %s is set by instance module %s (%s) and by the binding (%s): remove it from the binding, or name module %s and give every constant", name, b.Module, expr, mine, base)
+		}
+		b.Constants[name] = expr
+	}
+	b.Module = base
+	return nil
 }
 
 // FormatName is the binding format this version reads and writes, the
@@ -518,6 +558,10 @@ func (b *Binding) LintChoices(m *Model) []string { return lintMessages(b.LintCho
 // LintChoiceFindings describes internal-choice sites and their supported validation scope.
 func (b *Binding) LintChoiceFindings(m *Model) []LintFinding {
 	var out []LintFinding
+	if note := b.InitChoiceNote(m); note != "" {
+		out = append(out, LintFinding{Code: "binding.init.internal_choice", Severity: "warning", Symbol: "init", Confidence: "model_metadata",
+			Fix: "Record a snapshot step at the head of each run (snapshot:), or make init deterministic where its choice is symmetric.", Message: note})
+	}
 	for _, name := range slices.Sorted(maps.Keys(b.Actions)) {
 		a := b.Actions[name]
 		if a.Expect == "" {
@@ -530,6 +574,22 @@ func (b *Binding) LintChoiceFindings(m *Model) []LintFinding {
 		}
 	}
 	return out
+}
+
+// InitChoiceNote says what a choice the model's init makes costs each run's
+// check, and how to avoid it, or is "" when init makes none or every run
+// starts from a recorded snapshot (which replaces init). Such a run's check
+// searches init's admitted states for one its steps can follow and confirms
+// that path with a quint process: the Go evaluator's pass alone never
+// decides it, so a Hegel test of many cases runs a quint process per case.
+func (b *Binding) InitChoiceNote(m *Model) string {
+	cs := m.Chooses("init")
+	if len(cs) == 0 || b.Snapshot != "" {
+		return ""
+	}
+	return fmt.Sprintf("%s's init makes a choice of its own (%s): every run's check searches its initial states for one the steps can follow and confirms that path with a quint process, never the Go evaluator's pass alone (a process per Hegel case); "+
+		"record a snapshot step at the head of each run (snapshot: an action that sets the whole state), or make init deterministic where the choice is symmetric (init = initWith(...))",
+		b.Module, strings.Join(cs, ", "))
 }
 
 // Lint checks the binding against the model: every bound action exists and

@@ -284,15 +284,17 @@ simulate quorumkv.binding.yaml: quorumkv(KEYS = Set("a", "b"), REPLICAS = Set("r
 
 Depth 3 is 3360 states in under a second; depth 6 hits the state bound
 after 35 s. Truncated, an invariant no explored state breaks is
-`bounded`, never `holds`. quorumkv's only property is an eventual one
+`bounded`, never `holds`; where the search finished whole levels before
+the state bound cut it, the graph line says how deep (`complete to depth
+N`) and `bounded` is a proof to that depth, every trace of up to N steps. quorumkv's only property is an eventual one
 (the next tutorial's), so see it on hello with a tiny bound:
 
 ```console
 $ cd ../hello
 $ gotogether simulate -graph -states 5 -binding hello.binding.yaml
 simulate hello.binding.yaml: hello(REQUESTS = 1.to(3)), its state graph by the Go evaluator (at most 5 states)
-  graph   truncated by the state bound (5): 5 states, 6 transitions, depth 2, 0.0s
-  bounded exactlyOnce: none of the 5 states explored violates it, which proves nothing past them (the graph is truncated: raise -states or -depth (simulate.search.states, simulate.search.depth) for a proof)
+  graph   truncated by the state bound (5): 5 states, 6 transitions, depth 2, complete to depth 1, 0.0s
+  bounded exactlyOnce: no state within 1 step of init violates it (complete to depth 1: a bounded proof, every trace of up to 1 step; the state bound cut deeper: raise -states or -depth (simulate.search.states, simulate.search.depth) for a proof)
   never   done: no state explored enables it (within the bound)
   covered apply 5 in 2 states, replay 1 in 1 state
   sampling 1 possible the Go evaluator did not find with quint (1000 traces of 30 steps): not part of the graph's verdicts
