@@ -16,8 +16,14 @@ const maxDiff = 20
 // implementation) differ, as "path: model X, implementation Y". Equal
 // values give nil.
 func diffValues(want, got any) []string {
+	return diffNamed(want, got, "model", "implementation")
+}
+
+// diffNamed is diffValues with the two sides named (two implementations
+// of a Differential).
+func diffNamed(want, got any, wantName, gotName string) []string {
 	var out []string
-	diff(reflect.ValueOf(want), reflect.ValueOf(got), "", &out)
+	diff(reflect.ValueOf(want), reflect.ValueOf(got), "", &out, [2]string{wantName, gotName})
 	if len(out) > maxDiff {
 		out = append(out[:maxDiff], fmt.Sprintf("... and %d more", len(out)-maxDiff))
 	}
@@ -48,7 +54,7 @@ func show(v reflect.Value) string {
 	return fmt.Sprintf("%#v", v.Interface())
 }
 
-func diff(a, b reflect.Value, path string, out *[]string) {
+func diff(a, b reflect.Value, path string, out *[]string, names [2]string) {
 	if len(*out) > maxDiff {
 		return
 	}
@@ -57,7 +63,7 @@ func diff(a, b reflect.Value, path string, out *[]string) {
 		if p == "" {
 			p = "(state)"
 		}
-		*out = append(*out, fmt.Sprintf("%s: model %s, implementation %s", p, show(a), show(b)))
+		*out = append(*out, fmt.Sprintf("%s: %s %s, %s %s", p, names[0], show(a), names[1], show(b)))
 	}
 	if !a.IsValid() || !b.IsValid() {
 		if a.IsValid() != b.IsValid() {
@@ -93,25 +99,25 @@ func diff(a, b reflect.Value, path string, out *[]string) {
 			}
 			return
 		}
-		diff(a.Elem(), b.Elem(), path, out)
+		diff(a.Elem(), b.Elem(), path, out, names)
 	case reflect.Struct:
 		t := a.Type()
 		for i := 0; i < t.NumField(); i++ {
 			if !t.Field(i).IsExported() || skipped(t.Field(i)) {
 				continue
 			}
-			diff(a.Field(i), b.Field(i), path+"."+t.Field(i).Name, out)
+			diff(a.Field(i), b.Field(i), path+"."+t.Field(i).Name, out, names)
 		}
 	case reflect.Slice, reflect.Array:
 		if a.Kind() == reflect.Slice && a.Len() != b.Len() {
 			if !reflect.DeepEqual(a.Interface(), b.Interface()) {
-				*out = append(*out, fmt.Sprintf("%s: model has %d elements, implementation %d: model %s, implementation %s",
-					orState(path), a.Len(), b.Len(), show(a), show(b)))
+				*out = append(*out, fmt.Sprintf("%s: %s has %d elements, %s %d: %s %s, %s %s",
+					orState(path), names[0], a.Len(), names[1], b.Len(), names[0], show(a), names[1], show(b)))
 			}
 			return
 		}
 		for i := 0; i < a.Len(); i++ {
-			diff(a.Index(i), b.Index(i), fmt.Sprintf("%s[%d]", path, i), out)
+			diff(a.Index(i), b.Index(i), fmt.Sprintf("%s[%d]", path, i), out, names)
 		}
 	case reflect.Map:
 		keys := map[string]reflect.Value{}
@@ -121,10 +127,9 @@ func diff(a, b reflect.Value, path string, out *[]string) {
 		for _, k := range b.MapKeys() {
 			keys[fmt.Sprint(k.Interface())] = k
 		}
-		names := slices.Sorted(maps.Keys(keys))
-		for _, n := range names {
+		for _, n := range slices.Sorted(maps.Keys(keys)) {
 			k := keys[n]
-			diff(a.MapIndex(k), b.MapIndex(k), fmt.Sprintf("%s[%v]", path, n), out)
+			diff(a.MapIndex(k), b.MapIndex(k), fmt.Sprintf("%s[%v]", path, n), out, names)
 		}
 	default:
 		if !reflect.DeepEqual(a.Interface(), b.Interface()) {

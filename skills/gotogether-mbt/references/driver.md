@@ -149,6 +149,32 @@ driver).
   at the effect seam (each write blocks until the handler of that model step
   releases it). See `examples/edgepublish/mbt`.
 
+## Two implementations of one interface (`connect.Differential`)
+
+Two implementations that each agree with the model can disagree with
+each other where the model never goes: golem's memory and Valkey stores,
+on a negative budget. Replay both on the same traces:
+
+```go
+connect.Run(t, cfg, func(testing.TB) connect.Driver {
+	return &connect.Differential{Impls: map[string]connect.Driver{
+		"memory": &driver{store: newMemory()},
+		"valkey": &driver{store: newValkey()},
+	}}
+})
+```
+
+A step fails where one implementation fails and another does not, or
+where their observations differ: `Observe() (any, error)` (an
+`Observer`: replies, errors chosen, more than the model's state), else
+`State()`. Each `StateDriver` is still compared with the model, unless
+`IgnoreModel` is set. The design's own traces rarely reach the
+difference, since its guards keep inputs inside it: generate traces of a
+looser model (the same actions without their guards, as
+`connect/testdata/bank_inputs.qnt` drops the balance check) and set
+`IgnoreModel`, so its states only drive the inputs. An input every
+implementation refuses is then agreement, not a failure.
+
 ## Driving a whole program through its faults (`qtest.FaultScript`)
 
 A driver calls the code once per step. For a program that runs by
