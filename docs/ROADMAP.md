@@ -92,6 +92,12 @@ maintainer's (R5).
   - With J18/J19.
 - **K3: streaming faults in `qenv/qhttp`.** SSE and chunked responses with slow chunks, a cut mid-stream and keepalive gaps, as declared fault options (option 0 nominal), with an example. HTTP/2's own: a write deadline left set resets the stream when it passes, though nothing is written (golem lost healthy clients so; HTTP/1 does not), and flow control.
 - **K4: a Redis/Valkey (RESP) double.** Scripts run atomically; failover and lost writes as faults. That is where rate limiters and budget counters live. It gets its contract checked after each operation, as `Queue`'s is. Its faults include a **hang** (a call that never answers, not only one that fails) and the caller's cancellation, told apart from an outage; its server clock (`TIME`) the simulation's (M6). golem's top vote: with `System.Explore` on its limiter, it would have found five of the seven bugs two reviews found in code its green connect and Hegel tests drive (#144).
+  The first profile, `qenv/simvalkey` (a separate module), runs valkey-go
+  commands and actual Lua sources at the client seam. Atomic means isolation,
+  not rollback after a script error. Its supported command subset and
+  replication profile are explicit; it does not simulate socket framing,
+  client pools, cluster routing or a full replica protocol. Keep extending
+  the command profile only with concrete consumer cases and semantic tests.
 - **K5: a DSQL profile for `qenv.Store`.** Optimistic only: a `SELECT FOR UPDATE` that does not block, conflicts at commit (SQLSTATE 40001 through `qsql`), per-transaction row and size limits. Checked against the history classifier like the other levels.
 - **K6: a Go-native reference model (design spike first).** A plain Go state machine as the judge for teams that cannot write Quint yet, with a documented upgrade path to a Quint model. The spike decides what claims, evidence and Quint confirmation mean without a Quint model before any API exists.
 - **K7: no Quint at test time.** Extend the Go evaluator and J13's compiled replay to the whole fragment tests use, so CI runners need Quint only where models are written or proved.

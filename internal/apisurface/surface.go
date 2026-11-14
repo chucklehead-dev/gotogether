@@ -49,6 +49,7 @@ var Modules = []Module{
 	{Dir: "grist", Path: "github.com/chucklehead-dev/gotogether/grist", File: "api/grist.txt"},
 	{Dir: "qnav", Path: "github.com/chucklehead-dev/gotogether/qnav", File: "api/qnav.txt"},
 	{Dir: "qenv/simgrpc", Path: "github.com/chucklehead-dev/gotogether/qenv/simgrpc", File: "api/simgrpc.txt"},
+	{Dir: "qenv/simvalkey", Path: "github.com/chucklehead-dev/gotogether/qenv/simvalkey", File: "api/simvalkey.txt"},
 	{Dir: "qenv/kubesim", Path: "github.com/chucklehead-dev/gotogether/qenv/kubesim", File: "api/kubesim.txt"},
 	{Dir: "qenv/simlog/kafkalog", Path: "github.com/chucklehead-dev/gotogether/qenv/simlog/kafkalog", File: "api/kafkalog.txt"},
 	{Dir: "qenv/simlog/kinesislog", Path: "github.com/chucklehead-dev/gotogether/qenv/simlog/kinesislog", File: "api/kinesislog.txt"},

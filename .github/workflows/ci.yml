@@ -284,7 +284,7 @@ jobs:
         run: ci/install-quint.sh
       - name: vet and test each published module in the workspace
         run: |
-          for m in qhegel qweave qanalysis qgosim grist qnav qenv/simgrpc qenv/kubesim qenv/simlog/kafkalog qenv/simlog/kinesislog; do
+          for m in qhegel qweave qanalysis qgosim grist qnav qenv/simgrpc qenv/simvalkey qenv/kubesim qenv/simlog/kafkalog qenv/simlog/kinesislog; do
             echo "::group::$m"
             (cd $m && go vet ./... && go test -short -count=1 -timeout 30m ./...) || exit 1
             echo "::endgroup::"
@@ -384,13 +384,13 @@ jobs:
   doubles:
     needs: preflight
     # the published doubles whose dependencies the core does not take
-    # (gRPC, client-go and controller-runtime, franz-go, the AWS SDK):
+    # (gRPC, Valkey and Lua, client-go and controller-runtime, franz-go, the AWS SDK):
     # each a module of its own, tested on its own go.mod and pinned core,
     # with the scheduler's and the doubles' self-checks on
     strategy:
       fail-fast: false
       matrix:
-        module: [qenv/simgrpc, qenv/kubesim, qenv/simlog/kafkalog, qenv/simlog/kinesislog]
+        module: [qenv/simgrpc, qenv/simvalkey, qenv/kubesim, qenv/simlog/kafkalog, qenv/simlog/kinesislog]
     name: doubles (${{ matrix.module }})
     runs-on: ubuntu-latest
     defaults:
@@ -402,6 +402,13 @@ jobs:
         with:
           go-version-file: ${{ matrix.module }}/go.mod
           cache-dependency-path: ${{ matrix.module }}/go.sum
+      - uses: actions/setup-node@v4
+        if: matrix.module == 'qenv/simvalkey'
+        with:
+          node-version: 22
+      - name: Install quint for the Valkey contract model
+        if: matrix.module == 'qenv/simvalkey'
+        run: ../../ci/install-quint.sh
       - name: gofmt, vet
         run: |
           test -z "$(gofmt -l . | tee /dev/stderr)"
@@ -410,6 +417,26 @@ jobs:
         run: |
           GOTOGETHER_CHECK=1 go test -count=1 ./...
           go test -race -count=1 ./...
+
+      - name: Start pinned real Valkey oracle
+        if: matrix.module == 'qenv/simvalkey'
+        run: |
+          oracle=$(docker run -d --rm -p 127.0.0.1::6379 valkey/valkey@sha256:3add1a336a920ea54770a001ab6feb3da5fceea96a40373a3a2cd469b815f0b7 valkey-server --save '' --appendonly no --protected-mode no)
+          echo "SIMVALKEY_CONTAINER=$oracle" >> "$GITHUB_ENV"
+          echo "GOTOGETHER_VALKEY_ADDR=$(docker port "$oracle" 6379/tcp)" >> "$GITHUB_ENV"
+          for attempt in {1..30}; do
+            if docker exec "$oracle" valkey-cli ping | grep -x PONG; then exit 0; fi
+            sleep 1
+          done
+          docker logs "$oracle"
+          exit 1
+      - name: Compare the supported profile with Valkey 9.1.3
+        if: matrix.module == 'qenv/simvalkey'
+        run: GOTOGETHER_CHECK=1 go test -race -tags valkeyreal -run '^TestRealContract$' -count=1 -v .
+      - name: Stop real Valkey oracle
+        if: always() && matrix.module == 'qenv/simvalkey'
+        run: |
+          if [ -n "${SIMVALKEY_CONTAINER:-}" ]; then docker rm -f "$SIMVALKEY_CONTAINER"; fi
 
   edgepublish:
     needs: preflight
