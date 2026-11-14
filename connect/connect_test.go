@@ -18,6 +18,10 @@ type bank struct {
 	ops      int
 	buggy    bool // transfers credit the destination twice
 	capped   bool // a deposit past 5 leaves the balance at 5: wrong only at bobSaves's states
+	// overdraft lets a withdrawal past the balance through, and
+	// countRefusals counts a refused one as an operation: each differs from
+	// the faithful bank only where the model's guard never lets it go
+	overdraft, countRefusals bool
 }
 
 func (b *bank) deposit(a string, n int) {
@@ -28,7 +32,10 @@ func (b *bank) deposit(a string, n int) {
 	b.ops++
 }
 func (b *bank) withdraw(a string, n int) error {
-	if b.balances[a] < n {
+	if b.balances[a] < n && !b.overdraft {
+		if b.countRefusals {
+			b.ops++
+		}
 		return errors.New("insufficient funds")
 	}
 	b.balances[a] -= n
@@ -56,12 +63,14 @@ type bankDriver struct {
 	b      *bank
 	buggy  bool
 	capped bool
+	// overdraft and countRefusals: bank's
+	overdraft, countRefusals bool
 }
 
 func (d *bankDriver) Step(s *Step) error {
 	return Switch{
 		"init": func(*Step) error {
-			d.b = &bank{balances: map[string]int{"alice": 0, "bob": 0}, buggy: d.buggy, capped: d.capped}
+			d.b = &bank{balances: map[string]int{"alice": 0, "bob": 0}, buggy: d.buggy, capped: d.capped, overdraft: d.overdraft, countRefusals: d.countRefusals}
 			return nil
 		},
 		"deposit": func(s *Step) error {

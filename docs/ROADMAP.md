@@ -246,7 +246,15 @@ them inside.
   replayed on the same trace, their projections compared with each other
   as well as with the model: golem's memory and Valkey limiter stores each
   agreed with the model and disagreed with each other where it never goes
-  (a negative budget, spend after the counter's history is trimmed).
+  (a negative budget, spend after the counter's history is trimmed). First
+  slice done: `connect.Differential` replays each step on every
+  implementation and fails where one fails and another does not, or their
+  observations (`Observer.Observe`, else `State`) differ; with
+  `IgnoreModel`, traces of a looser model (its inputs past the design's
+  guards) reach what the model never does, and `Vary` takes the design's
+  own traces past them: one input per step for every implementation,
+  drawn by Hegel inside `qhegel.VaryTraces` and shrunk by it. Open: a
+  looser model generated from the design's by dropping its guards.
 
 ## A Go Quint (Q)
 

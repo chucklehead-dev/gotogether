@@ -250,11 +250,20 @@ type Config struct
     field Require []string
     field Verbose int
     method (Config) FromEnv() (Config, error)
+type Differential struct
+    field Impls map[string]Driver
+    field IgnoreModel bool
+    field Vary func(s *Step) error
+    method (*Differential) CheckStep(s *Step) error
+    method (*Differential) Step(s *Step) error
 type Driver interface
     Step(s *Step) error
 type DriverFunc func(s *Step) error
     method (DriverFunc) Step(s *Step) error
 type Handler func(s *Step) error
+type Observer interface
+    embed Driver
+    Observe() (any, error)
 type QuintError struct
     field Args []string
     field Output string

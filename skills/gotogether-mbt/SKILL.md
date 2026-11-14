@@ -58,6 +58,7 @@ compared with the model's. The Go counterpart of quint-connect.
 | `required x: no witness trace (...)` | the evaluator found no path within its bounds | the samples still count; raise `MaxSteps` |
 | `required x: reached in k of N traces` | how often the run reached it | a small k: raise the samples before trusting a pass |
 | `Eval("x") at step N (a): ...` | the def is misspelt, takes other arguments, is undefined there, or is outside the Go evaluator | the fix the message names (driver.md, `Step.Eval`) |
+| `the implementations disagree` | a `connect.Differential`'s implementations differ, where the model may say nothing | decide which is right, fix the other |
 | `reproduce with QUINT_SEED=0x...` | the failing trace | rerun with it, `QUINT_VERBOSE=2` |
 
 ## Run it, do not infer it
