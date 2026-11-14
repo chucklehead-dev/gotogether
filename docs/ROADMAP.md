@@ -211,9 +211,14 @@ them inside.
 - **N2: `connect.Compose(a, b)`.** One model run driving several drivers,
   each action to the driver that implements it, so a gateway and a control
   plane forbidden to import each other share one test.
-- **N3: `s.Eval(expr)` in a driver.** A def of the model (`knownOf("g1")`)
-  evaluated in the step's state by the Go evaluator, so a projection
-  compares with the model's own definition instead of a copy.
+- **N3: `s.Eval(name, args...)` in a driver.** A def of the model
+  (`knownOf("g1")`) evaluated in the step's state by the Go evaluator, so a
+  projection compares with the model's own definition instead of a copy.
+  Done: `Step.Eval`, `Eval[T]` and `MustEval[T]` take a val's or a def's
+  name and Go arguments (`itf.Encode`d), not an expression's text: a def
+  names any projection, and no Quint parser is needed. The model is
+  compiled once per Run or Test, at the first Eval or with
+  `Config.Require`'s compile; a plain `Replay`'s steps have none.
 - **N4: the evaluator's fallback in connect and qhegel.** Where the Rust
   evaluator cannot be fetched, fall back to the TypeScript backend with one
   warning, as L4 makes doctor say so.

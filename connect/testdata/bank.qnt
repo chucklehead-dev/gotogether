@@ -42,6 +42,8 @@ module bank {
   val nonNegative = ACCOUNTS.forall(a => balances.get(a) >= 0)
   // a state Config.Require's tests reach in a few steps and never in one
   val bobSaves = balances.get("bob") > MAX
+  // a projection Step.Eval's tests compare the implementation with
+  def balanceOf(a: str): int = balances.get(a)
 
   run aliceSavesTest = init.then(deposit("alice", 3)).then(withdraw("alice", 1)).then(transfer("alice", "bob", 2))
 }

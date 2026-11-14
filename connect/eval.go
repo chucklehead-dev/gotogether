@@ -1,0 +1,154 @@
+package connect
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+
+	"github.com/chucklehead-dev/gotogether/internal/qeval"
+	"github.com/chucklehead-dev/gotogether/itf"
+)
+
+// evaluator is a run's model for Step.Eval: compiled by quint and loaded
+// by the Go evaluator the first time a driver asks, once per Run or Test,
+// or handed the model Config.Require compiled.
+type evaluator struct {
+	ctx  context.Context
+	c    Config
+	once sync.Once
+	m    *qeval.Model
+	err  error
+}
+
+// model is the run's model, compiled on the first call.
+func (e *evaluator) model() (*qeval.Model, error) {
+	e.once.Do(func() {
+		if e.m == nil {
+			e.m, e.err = compileModel(e.ctx, e.c)
+		}
+	})
+	return e.m, e.err
+}
+
+// Eval is the value of the model's definition name in the step's
+// post-state (After, whole: Config.StatePath does not narrow it): a val,
+// or a def applied to args, each a Go value as itf.Encode encodes it.
+// A driver's projection can then compare with the model's own definition
+// (s.Eval("balanceOf", "alice")) instead of a copy of it in Go.
+//
+// The Go evaluator computes it, on the model connect.Run or connect.Test
+// compiled with quint once (the compile Config.Require makes, when it is
+// set; else on the first Eval of the run). A step that Replay made
+// without them has no model, and Eval says so. Constants are the
+// instance's (Config.Main). A name, its arity and what the evaluator
+// cannot compute are errors naming the step and the fix; prefer the
+// typed Eval[T] / MustEval[T].
+func (s *Step) Eval(name string, args ...any) (itf.Value, error) {
+	fail := func(format string, a ...any) error {
+		return fmt.Errorf("connect: Eval(%q) at step %d (%s): %s", name, s.Index, s.Action, fmt.Sprintf(format, a...))
+	}
+	if s.eval == nil {
+		return itf.Value{}, fail("this step has no model to evaluate in: Replay compiles none; replay through connect.Run or connect.Test, which compile the model once for Eval")
+	}
+	m, err := s.eval.model()
+	if err != nil {
+		return itf.Value{}, fail("%v", err)
+	}
+	spec := s.eval.c.Spec
+	d, ok := m.Decl(name)
+	switch {
+	case ok && d.Kind == "var":
+		return itf.Value{}, fail("%s is a variable of %s, not a definition: read it with s.Get(%q)", name, spec, name)
+	case !ok || d.Kind != "def":
+		return itf.Value{}, fail("%s is no definition of %s: name a val or a def of the model", name, spec)
+	}
+	switch d.Qualifier {
+	case "val", "def", "pureval", "puredef":
+	default:
+		return itf.Value{}, fail("%s is %s %s of %s, not a value: name a val or a def of the model", name, article(d.Qualifier), d.Qualifier, spec)
+	}
+	var params []string
+	if d.Expr != nil && d.Expr.Kind == "lambda" {
+		for _, p := range d.Expr.Params {
+			params = append(params, m.Display(p.Name))
+		}
+	}
+	if len(params) != len(args) {
+		takes := "no arguments"
+		if len(params) > 0 {
+			takes = fmt.Sprintf("%d argument%s (%s)", len(params), plural(len(params)), strings.Join(params, ", "))
+		}
+		return itf.Value{}, fail("%s takes %s, not %d: pass one Go value per parameter", name, takes, len(args))
+	}
+	vals := make([]qeval.Value, len(args))
+	for i, a := range args {
+		x, err := itf.Encode(a)
+		if err == nil {
+			vals[i], err = qeval.FromITF(x)
+		}
+		if err != nil {
+			return itf.Value{}, fail("argument %s (%T): %v: pass a value itf.Encode takes, as the parameter's Quint type", params[i], a, err)
+		}
+	}
+	if s.state == nil {
+		st, err := qeval.StateOf(m, itf.State{Vars: s.After})
+		if err != nil {
+			return itf.Value{}, fail("the step's state is not %s's: %v: set Config.Main to the module the traces come from", spec, err)
+		}
+		s.state = st
+	}
+	v, err := m.Eval(nil, s.state, name, vals...)
+	if u, ok := errors.AsType[*qeval.Unsupported](err); ok {
+		return itf.Value{}, fail("%s is outside the Go evaluator's fragment (%s: %s): compute this one in the driver", name, u.Op, u.Why)
+	}
+	if ee, ok := errors.AsType[*qeval.EvalError](err); ok {
+		return itf.Value{}, fail("%s is undefined in this state (%s, the model's own error, as quint would report it): call it only where the model defines it", name, strings.TrimPrefix(ee.Error(), "qeval: "))
+	}
+	if err != nil {
+		return itf.Value{}, fail("%v", err)
+	}
+	out, err := qeval.ToITF(v)
+	if err != nil {
+		return itf.Value{}, fail("%s's value %s has no ITF form (%v): name a definition whose value is data", name, qeval.String(v), err)
+	}
+	return out, nil
+}
+
+// Eval is Step.Eval decoded into T (see itf.Decode).
+func Eval[T any](s *Step, name string, args ...any) (T, error) {
+	var t T
+	v, err := s.Eval(name, args...)
+	if err != nil {
+		return t, err
+	}
+	if err := itf.Decode(v, &t); err != nil {
+		return t, fmt.Errorf("connect: Eval(%q) at step %d (%s): decoding %s into %T: %w: decode into a type of the definition's value", name, s.Index, s.Action, v, t, err)
+	}
+	return t, nil
+}
+
+// MustEval is Eval, panicking on error. Replay turns a handler's panic
+// into a step failure, so handlers and CheckStep can use it freely.
+func MustEval[T any](s *Step, name string, args ...any) T {
+	t, err := Eval[T](s, name, args...)
+	if err != nil {
+		panic(err)
+	}
+	return t
+}
+
+func article(word string) string {
+	if word != "" && strings.ContainsRune("aeiou", rune(word[0])) {
+		return "an"
+	}
+	return "a"
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}

@@ -47,6 +47,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/internal/qeval"
 	"github.com/chucklehead-dev/gotogether/itf"
 )
 
@@ -65,6 +66,9 @@ type Step struct {
 	// State is the part of After that a StateDriver is compared with
 	// (Config.StatePath; the whole state when the path is empty).
 	State itf.Value
+
+	eval  *evaluator  // the run's model, for Eval; nil outside Run and Test
+	state qeval.State // After as the model's state, made by the first Eval
 }
 
 // Has reports whether a pick was made in this step.
@@ -247,6 +251,8 @@ type ReplayOptions struct {
 	Trace int
 	// OnStep is called before each step is driven, e.g. to log it.
 	OnStep func(s *Step)
+
+	eval *evaluator // the run's model for Step.Eval: Run and Test set it
 }
 
 // StepError is a failed step of a replay.
@@ -289,7 +295,7 @@ func Replay(tr *itf.Trace, d Driver, opt ReplayOptions) error {
 	sc, _ := d.(StepChecker)
 	var before map[string]itf.Value
 	for i, st := range tr.States {
-		s := &Step{Trace: opt.Trace, Index: i, Before: before, After: st.Vars, Picks: st.Picks, Action: st.Action}
+		s := &Step{Trace: opt.Trace, Index: i, Before: before, After: st.Vars, Picks: st.Picks, Action: st.Action, eval: opt.eval}
 		before = st.Vars
 		fail := func(kind string, err error, diff []string) error {
 			return &StepError{Trace: opt.Trace, Step: s, Kind: kind, Err: err, Diff: diff}
@@ -331,7 +337,7 @@ func Replay(tr *itf.Trace, d Driver, opt ReplayOptions) error {
 			}
 		}
 		if sc != nil {
-			if err := sc.CheckStep(s); err != nil {
+			if err := recovered(func() error { return sc.CheckStep(s) }); err != nil {
 				return fail("check", err, nil)
 			}
 		}
@@ -354,7 +360,11 @@ func hasMBT(tr *itf.Trace) bool {
 }
 
 // call runs a handler, turning a panic (MustPick, a failed assertion) into an error.
-func call(d Driver, s *Step) (err error) {
+func call(d Driver, s *Step) error { return recovered(func() error { return d.Step(s) }) }
+
+// recovered runs f, turning its panic (MustPick, MustEval, a failed
+// assertion) into an error: a handler's, and a CheckStep's.
+func recovered(f func() error) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if e, ok := r.(error); ok {
@@ -364,7 +374,7 @@ func call(d Driver, s *Step) (err error) {
 			}
 		}
 	}()
-	return d.Step(s)
+	return f()
 }
 
 func walk(vars map[string]itf.Value, path []string) (itf.Value, error) {

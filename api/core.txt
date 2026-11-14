@@ -222,7 +222,9 @@ type Within struct
     method (Within) Name() string
 
 == github.com/chucklehead-dev/gotogether/connect
+func Eval[T any](s *Step, name string, args ...any) (T, error)
 func GenerateRun(ctx context.Context, c Config) ([]string, Config, error)
+func MustEval[T any](s *Step, name string, args ...any) T
 func MustPick[T any](s *Step, name string) T
 func OptPick[T any](s *Step, name string) (*T, error)
 func Pick[T any](s *Step, name string) (T, error)
@@ -275,6 +277,7 @@ type Step struct
     field Before map[string]itf.Value
     field After map[string]itf.Value
     field State itf.Value
+    method (*Step) Eval(name string, args ...any) (itf.Value, error)
     method (*Step) Get(path ...string) itf.Value
     method (*Step) Has(name string) bool
     method (*Step) Pick(name string) itf.Value

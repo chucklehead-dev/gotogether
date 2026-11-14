@@ -87,7 +87,9 @@ func needQuint(t *testing.T) {
 
 func TestRunBank(t *testing.T) {
 	needQuint(t)
-	Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 10, MaxSteps: 15}, func(testing.TB) Driver { return &bankDriver{} })
+	// the state compared, and each balance with the model's balanceOf:
+	// Run compiles the model at the first Eval, once for every trace
+	Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 10, MaxSteps: 15}, func(testing.TB) Driver { return evalStateDriver{evalChecker{&bankDriver{}}} })
 }
 
 func TestRunFindsBug(t *testing.T) {

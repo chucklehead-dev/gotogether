@@ -38,6 +38,17 @@ func compileRequired(ctx context.Context, c Config) (*required, error) {
 	if len(c.Require) == 0 {
 		return nil, nil
 	}
+	m, err := compileModel(ctx, c)
+	if err != nil {
+		return nil, fmt.Errorf("Config.Require needs the Go evaluator: %w", err)
+	}
+	return newRequired(m, c.Spec, c.Require)
+}
+
+// compileModel is c's model (c.Spec, its c.Main, c.Init and c.StepName)
+// compiled by quint and loaded by the Go evaluator, for Config.Require
+// and Step.Eval alike: replayAll compiles it once for both.
+func compileModel(ctx context.Context, c Config) (*qeval.Model, error) {
 	spec, err := filepath.Abs(c.Spec)
 	if err != nil {
 		return nil, err
@@ -71,9 +82,9 @@ func compileRequired(ctx context.Context, c Config) (*required, error) {
 	}
 	m, err := qeval.Load(data)
 	if err != nil {
-		return nil, fmt.Errorf("Config.Require needs the Go evaluator, which cannot read %s: %w", c.Spec, err)
+		return nil, fmt.Errorf("the Go evaluator cannot read %s: %w", c.Spec, err)
 	}
-	return newRequired(m, c.Spec, c.Require)
+	return m, nil
 }
 
 // newRequired counts names in m's states, refusing a name that is no

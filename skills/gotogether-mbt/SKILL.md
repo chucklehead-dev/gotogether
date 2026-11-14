@@ -11,7 +11,7 @@ compared with the model's. The Go counterpart of quint-connect.
 
 ## Choose your path
 
-- The skeleton, decoding model values, the TDD loop, `CheckStep`, concurrency gates, fault scripts and the limits: [references/driver.md](references/driver.md).
+- The skeleton, decoding model values, the TDD loop, `CheckStep`, `Step.Eval`, concurrency gates, fault scripts and the limits: [references/driver.md](references/driver.md).
 - Inputs the model forbids: let Hegel drive (the gotogether-hegel skill).
 - The model itself fails to typecheck or names nothing: the gotogether-model skill.
 
@@ -20,7 +20,9 @@ compared with the model's. The Go counterpart of quint-connect.
 1. A driver: `Step` dispatching with `connect.Switch` (`"init"` first),
    picks decoded with `connect.MustPick[T](s, "param")`.
 2. A projection: `State() (any, error)`, exported fields named after the
-   model's.
+   model's. One the model defines (`def balanceOf(a)`): compare in
+   `CheckStep` with `connect.MustEval[int](s, "balanceOf", "alice")`, not a
+   copy of the def in Go.
 3. `connect.Run(t, connect.Config{Spec: ..., Main: ..., MaxSamples: 50,
    MaxSteps: 30}, newDriver)`. The factory takes the trace's `testing.TB`;
    use its `Context` and `Cleanup` for resources, not the outer test's.
@@ -55,6 +57,7 @@ compared with the model's. The Go counterpart of quint-connect.
 | `the witness trace of required x` on a divergence | the shortest path to the required state failed | fix the code at that state; the trace is the whole reproduction |
 | `required x: no witness trace (...)` | the evaluator found no path within its bounds | the samples still count; raise `MaxSteps` |
 | `required x: reached in k of N traces` | how often the run reached it | a small k: raise the samples before trusting a pass |
+| `Eval("x") at step N (a): ...` | the def is misspelt, takes other arguments, is undefined there, or is outside the Go evaluator | the fix the message names (driver.md, `Step.Eval`) |
 | `reproduce with QUINT_SEED=0x...` | the failing trace | rerun with it, `QUINT_VERBOSE=2` |
 
 ## Run it, do not infer it
