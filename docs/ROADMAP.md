@@ -38,7 +38,7 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Proposed queue | L1–L8: golem's first use ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6833092588)) | L1 (#191), L3 (#195), L5 (#194) and L6's docs landed after J7c; the rest as projects ask. |
 | Proposed queue | M1–M6: golem's graph search and Valkey ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6835911012)) | M2 landed after J7c (#198: the deepest complete depth of a state-bound graph). Next M1 (a bounded result instead of an out-of-memory kill), then M3; the rest as projects ask. |
 | Proposed queue | N1–N5: golem's driver asks ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6843138891)) | golem's order: K4 (with hang faults), N1, L1 (landed), then N2 and N3. N1 done: `Config.Require` (counts, failure when never reached) and its steering (the shortest witness of each replayed first). Next K4. |
-| Proposed queue | CW1–CW10: a contract from design to operation ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6885259328), [#220](https://github.com/chucklehead-dev/gotogether/issues/220#issuecomment-6884857732)) | CW4 (docs) first; then CW1 (L8, unparked) on Goo's acquisition contract, CW2 on it, CW3. CW5 and CW7 wait on the maintainer's decision of where generation and Hegel live. |
+| Proposed queue | CW1–CW10: a contract from design to operation ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6885259328), [#220](https://github.com/chucklehead-dev/gotogether/issues/220#issuecomment-6884857732)) | CW4 (docs) first; then CW1 (L8, unparked) on Goo's acquisition contract, CW2 on it, CW3. CW5 and CW7 decided (2026-11-14): the driver's mapping a runtime binding in core, static generation and the alignment lint in qanalysis; Hegel tests in the package's own files behind a build tag. |
 | Proposed queue | Q0–Q11: a Go Quint | A design item, each its own decision. Q0 first (no quint for consumers, small); Q2's front end only once Q3's corpus and ill-typed generator exist. Upstream first. |
 | Dropped | J12 and J23 | Go 1.26 compatibility and pin batching are withdrawn. Go 1.27.3 and immediate required sibling pin alignment remain deliberate policies. |
 
@@ -362,9 +362,23 @@ Items, each its own decision before it starts:
   property nothing enforces or no test checks). Types carry declared
   meaning (instant or duration, units, optionality, identity); a
   conversion it cannot make is refused, never truncated or defaulted
-  (Goo). grist's generator and actionmap already read the pieces. Open
-  for the maintainer: core or a generator module of its own, under the
-  core's no-heavy-dependencies rule.
+  (Goo). grist's generator and actionmap already read the pieces.
+  Decided (maintainer, 2026-11-14), a split by what each part needs:
+  - **the driver's mapping is a typed runtime binding in core**, not
+    generated code: actions bound to methods, picks to parameters by
+    name, the projection's decoding (`connect.Bind(impl).Action("admit",
+    (*Limiter).Admit)` or its like), so the compiler checks renames and no
+    generated file goes stale. It needs nothing the core does not have;
+  - **what needs the code's types read statically** (Quint types and ITF
+    codecs generated from Go structs or back, the walkthrough's invariant
+    tables, the alignment lint) **is qanalysis's**, which already has
+    x/tools and reads `//quint:action`, pinned by consumers with Go's
+    `tool` directive; generated code carries a version stamp of the core
+    API it targets, as woven code carries `woven.ABI1`.
+  Not core: x/tools is large, releases with Go itself and would raise
+  every consumer's version of it (minimal version selection), all for a
+  development-time tool. Not a new module: it would repeat qanalysis's
+  loading and add a pin. grist's generator stays grist's.
 - **CW6: an environment library.** Quint models of the environments
   projects keep remodelling (an object store with conditional puts,
   version rollback and lost replies; a key-value store that fails over and
@@ -379,9 +393,20 @@ Items, each its own decision before it starts:
   "contract, run, finding" (Goo) instead of four packages and their
   vocabularies. golem wrote a driver per mode and per module: Hegel's
   native library keeps its machines in a module of their own
-  (`test/props`), so production packages export test-only methods. Open
-  for the maintainer: Hegel behind a build tag in the package's own tests,
-  or a pure-Go shrinker for the common case, beside qhegel's split.
+  (`test/props`), so production packages export test-only methods.
+  Decided (maintainer, 2026-11-14): Hegel stays out of core (native code
+  through purego: the dependency rule's reason, and gosim's), and a
+  package's own tests use it. The pattern, documented with an example:
+  its Hegel test files behind a build tag (`//go:build hegel`) in the
+  package itself, so they see internals (no exported test-only methods)
+  and a plain `go test ./...`, or a platform libhegel does not ship for,
+  is unaffected; CI runs the tag. go.mod still lists hegel (`go mod tidy`
+  reads every tag); test-only, it is not linked into production binaries.
+  Asked of golem first: what forced `test/props` (go.mod, platforms, CI),
+  in case the tag does not answer it. A pure-Go shrinker (over qenv's
+  recorded choice bytes, beside qshrink) waits until a project needs
+  Hegel-free shrinking; it would not cover the varied differential, which
+  needs Hegel's input drawing.
 - **CW8: causal observation links.** A request, its effect, the
   application's adoption of the result and its display are four events
   (Goo: an HTTP 200 for a retired read gains no right to update the
