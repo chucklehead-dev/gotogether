@@ -22,6 +22,7 @@ func lint(ctx context.Context, args []string) (int, error) {
 	simulation := fs.String("sim", "", "Go source tree to inspect for escapes from simulation")
 	weave := fs.String("weave", "", "Go source tree to inspect for unsupported weaving")
 	conversions := fs.String("convert", "", "span conversion rule files, comma-separated")
+	models := fs.String("model", "", "Quint model files checked without a binding (an assignment's precedence, reserved names, quint's typecheck), comma-separated")
 	quint := fs.String("quint", "quint", "Quint binary for model metadata compilation")
 	asJSON := false
 	fs.BoolFunc("json", "emit the structured lint report, including blocked checks and fixes; put first for request errors", func(value string) error {
@@ -52,9 +53,9 @@ func lint(ctx context.Context, args []string) (int, error) {
 	case parseErr != nil:
 		report = lintRequestError("request.flags", parseErr.Error(), "use gotogether lint -h for valid flags; put -json first for machine-readable request errors")
 	case fs.NArg() > 0:
-		report = lintRequestError("request.arguments", "unexpected positional arguments: "+strings.Join(fs.Args(), " "), "select input paths with -binding, -src, -sim, -weave or -convert")
+		report = lintRequestError("request.arguments", "unexpected positional arguments: "+strings.Join(fs.Args(), " "), "select input paths with -binding, -model, -src, -sim, -weave or -convert")
 	default:
-		report = lintcheck.Inspect(ctx, lintcheck.Options{Bindings: split(*bindings), Source: *source, Simulation: *simulation, Weave: *weave, Conversions: split(*conversions), Quint: *quint})
+		report = lintcheck.Inspect(ctx, lintcheck.Options{Bindings: split(*bindings), Source: *source, Simulation: *simulation, Weave: *weave, Conversions: split(*conversions), Models: split(*models), Quint: *quint})
 	}
 	if asJSON {
 		encoder := json.NewEncoder(os.Stdout)

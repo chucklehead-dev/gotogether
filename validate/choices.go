@@ -20,7 +20,9 @@ func (c *Checker) hasChoiceCalls(p *binding.Plan) bool {
 	if p.Start != nil && len(c.Model.Chooses(p.Start.Action)) > 0 {
 		return true
 	}
-	if len(c.Model.Chooses("init")) != 0 {
+	// a plan with a start (a snapshot step, a resume's witness) begins
+	// there, not at init: init's choice is no choice of this run's
+	if p.Start == nil && len(c.Model.Chooses("init")) != 0 {
 		return true
 	}
 	for _, call := range p.Calls {

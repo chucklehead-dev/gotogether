@@ -7,6 +7,122 @@ import (
 	"strings"
 )
 
+// instanceModule reports whether module, in the Quint source src, is an
+// instance module: a module whose whole body is one import of another
+// module, instantiated (`import M(C = expr, ...).*`) or not (`import M.*`).
+// It returns the imported module and the instance's "NAME = expr" constants.
+// A module with anything beside that import (definitions, a second import)
+// is an ordinary module of its own: ok is false. Quint does not re-export
+// what an instance module imports, so a binding naming one would find none
+// of the model's actions in it (Load binds the imported module instead).
+func instanceModule(src, module string) (base string, constants []string, ok bool) {
+	src = stripComments(src)
+	head := regexp.MustCompile(`(?m)^\s*module\s+` + regexp.QuoteMeta(module) + `\s*\{`).FindStringIndex(src)
+	if head == nil {
+		return "", nil, false
+	}
+	body, ok := balanced(src[head[1]:], '{', '}')
+	if !ok {
+		return "", nil, false
+	}
+	body = strings.TrimSpace(body)
+	m := regexp.MustCompile(`^import\s+([A-Za-z_][A-Za-z0-9_]*)\s*`).FindStringSubmatchIndex(body)
+	if m == nil {
+		return "", nil, false
+	}
+	base, rest := body[m[2]:m[3]], body[m[1]:]
+	if strings.HasPrefix(rest, "(") {
+		args, ok := balanced(rest[1:], '(', ')')
+		if !ok {
+			return "", nil, false
+		}
+		rest = strings.TrimSpace(rest[1+len(args)+1:])
+		constants = splitTop(args)
+	}
+	if rest != ".*" {
+		return "", nil, false
+	}
+	return base, constants, true
+}
+
+// balanced is s up to the close that ends the open already read, outside
+// string literals (Quint strings have no escapes); ok is false if none does.
+func balanced(s string, open, close byte) (string, bool) {
+	depth, quoted := 1, false
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case c == '"':
+			quoted = !quoted
+		case quoted:
+		case c == open:
+			depth++
+		case c == close:
+			if depth--; depth == 0 {
+				return s[:i], true
+			}
+		}
+	}
+	return "", false
+}
+
+// splitTop splits a constant list at its top-level commas, each part
+// trimmed of the space around it and kept as written inside (a string
+// literal's spaces are its value); empty parts are dropped.
+func splitTop(s string) []string {
+	var parts []string
+	depth, quoted, start := 0, false, 0
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case c == '"':
+			quoted = !quoted
+		case quoted:
+		case c == '(' || c == '{' || c == '[':
+			depth++
+		case c == ')' || c == '}' || c == ']':
+			depth--
+		case c == ',' && depth == 0:
+			parts = append(parts, s[start:i])
+			start = i + 1
+		}
+	}
+	parts = append(parts, s[start:])
+	var out []string
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// stripComments removes Quint's line and block comments outside strings.
+func stripComments(s string) string {
+	var b strings.Builder
+	quoted := false
+	for i := 0; i < len(s); i++ {
+		switch {
+		case s[i] == '"':
+			quoted = !quoted
+			b.WriteByte(s[i])
+		case !quoted && strings.HasPrefix(s[i:], "//"):
+			for i < len(s) && s[i] != '\n' {
+				i++
+			}
+			b.WriteByte('\n')
+		case !quoted && strings.HasPrefix(s[i:], "/*"):
+			if end := strings.Index(s[i+2:], "*/"); end >= 0 {
+				i += 2 + end + 1
+			} else {
+				i = len(s)
+			}
+			b.WriteByte(' ')
+		default:
+			b.WriteByte(s[i])
+		}
+	}
+	return b.String()
+}
+
 // InstanceConstants reads the constant overrides of an instance module, i.e.
 // a module of the form
 //
@@ -49,7 +165,8 @@ func InstanceConstants(spec, instance string) (module string, constants []string
 	}
 	parts = append(parts, s[start:i-1])
 	for _, p := range parts {
-		if p = strings.Join(strings.Fields(p), " "); p != "" {
+		// trimmed, not collapsed: a string literal's spaces are its value
+		if p = strings.TrimSpace(p); p != "" {
 			constants = append(constants, p)
 		}
 	}

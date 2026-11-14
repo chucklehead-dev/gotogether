@@ -206,10 +206,14 @@ type TriggerSpace struct {
 type Target func(tr Trigger, seed uint64) Recovery
 
 // OfSimulation is a qload simulation as a System: Recovers with the seed.
+// Each call sets the seed on a copy of cfg: Runs calls a Target in
+// parallel, and a seed set on the cfg every call shares was raced for
+// (runs took each other's seeds, so one trigger was judged two ways).
 func OfSimulation(cfg SimConfig, base float64, within time.Duration) Target {
 	return func(tr Trigger, seed uint64) Recovery {
-		cfg.Seed = seed
-		return Recovers(cfg, base, tr, within)
+		run := cfg
+		run.Seed = seed
+		return Recovers(run, base, tr, within)
 	}
 }
 
