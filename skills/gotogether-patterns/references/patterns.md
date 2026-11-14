@@ -72,6 +72,14 @@ invisible to every check. Each assumption is a requirement on the
 deployment, checked there (a policy test), or modelled as an input an
 adversary may also write.
 
+To choose between designs, make the design a constant and let the search
+compare them: one model with `DESIGN` a string constant (`"doc"`,
+`"fence"`, `"object"`) and each mechanism a switch on it, searched under
+every value with `-const DESIGN=...`. golem's two proposals for its
+leadership lease were settled so: the search found a precondition one
+design stated and the other missed, and a case neither covered, which
+argument had not.
+
 ## 3. Record where effects happen: linearization points
 
 A step must be recorded where it takes effect, in the order effects take

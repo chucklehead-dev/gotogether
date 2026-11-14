@@ -48,10 +48,11 @@ func sharedBankRun(t *testing.T) *bankRun {
 			if err != nil {
 				return nil, err
 			}
-			m, err := compileModel(t.Context(), c)
+			m, err := compileModel(t.Context(), c, nil)
 			if err != nil {
 				return nil, err
 			}
+			c.Dir = "" // removed on return: an Eval's later compile writes to os.TempDir
 			return &bankRun{c: c, traces: traces, m: m}, nil
 		}()
 	})
@@ -84,7 +85,7 @@ func (e evalStateDriver) State() (any, error) { return e.d.State() }
 
 func TestEvalCatchesWhatTheProjectionMisses(t *testing.T) {
 	r := sharedBankRun(t)
-	ev := &evaluator{c: r.c, m: r.m}
+	ev := &evaluator{ctx: t.Context(), c: r.c, m: r.m}
 	caught := 0
 	for i, tr := range r.traces {
 		if err := Replay(tr, evalChecker{&bankDriver{}}, ReplayOptions{Trace: i, eval: ev}); err != nil {
@@ -108,7 +109,7 @@ func TestEvalCatchesWhatTheProjectionMisses(t *testing.T) {
 func TestEvalRefusals(t *testing.T) {
 	r := sharedBankRun(t)
 	tr := r.traces[0]
-	s := &Step{Index: 1, Action: tr.States[1].Action, After: tr.States[1].Vars, eval: &evaluator{c: r.c, m: r.m}}
+	s := &Step{Index: 1, Action: tr.States[1].Action, After: tr.States[1].Vars, eval: &evaluator{ctx: t.Context(), c: r.c, m: r.m}}
 	at := fmt.Sprintf("at step 1 (%s)", s.Action)
 	if v, err := s.Eval("MAX"); err != nil || v.I.Int64() != 5 {
 		t.Errorf("a val: %v, %v", v, err)

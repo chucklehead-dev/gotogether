@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/internal/qeval"
@@ -38,17 +40,34 @@ func compileRequired(ctx context.Context, c Config) (*required, error) {
 	if len(c.Require) == 0 {
 		return nil, nil
 	}
-	m, err := compileModel(ctx, c)
+	m, err := compileModel(ctx, c, c.Require)
+	if nf, ok := errors.AsType[*notFound](err); ok {
+		return nil, fmt.Errorf("Config.Require names %s, which is no val of %s: name a boolean val of the model", nf.name, c.Spec)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("Config.Require needs the Go evaluator: %w", err)
 	}
 	return newRequired(m, c.Spec, c.Require)
 }
 
+// notFound is quint's refusal of a name compileModel was asked to keep:
+// no definition in the main module's scope has it.
+type notFound struct{ name string }
+
+func (e *notFound) Error() string { return fmt.Sprintf("quint finds no definition %s", e.name) }
+
+// quintNotFound reads the name out of quint's "[QNT404] Name 'x' not found".
+var quintNotFound = regexp.MustCompile(`QNT404\] Name '([^']+)' not found`)
+
 // compileModel is c's model (c.Spec, its c.Main, c.Init and c.StepName)
 // compiled by quint and loaded by the Go evaluator, for Config.Require
-// and Step.Eval alike: replayAll compiles it once for both.
-func compileModel(ctx context.Context, c Config) (*qeval.Model, error) {
+// and Step.Eval alike: replayAll compiles it once for both. quint's
+// flattening drops every definition init and step do not use, which in
+// an instance module (module design { import m(N = 3).* }) is every val
+// of m, so the names a run needs are passed as --invariant (any
+// definition, not only a boolean, is kept so), keep. A name of keep
+// that quint cannot resolve is a *notFound.
+func compileModel(ctx context.Context, c Config, keep []string) (*qeval.Model, error) {
 	spec, err := filepath.Abs(c.Spec)
 	if err != nil {
 		return nil, err
@@ -68,12 +87,18 @@ func compileModel(ctx context.Context, c Config) (*qeval.Model, error) {
 	if c.StepName != "" {
 		args = append(args, "--step", c.StepName)
 	}
+	if len(keep) > 0 {
+		args = append(args, "--invariant", strings.Join(keep, ","))
+	}
 	cmd := quintcmd.Command(ctx, c.Quint, filepath.Dir(spec), append(args, spec)...)
 	var stderr strings.Builder
 	cmd.Stdout, cmd.Stderr = out, &stderr
 	err = cmd.Run()
 	out.Close()
 	if err != nil {
+		if m := quintNotFound.FindStringSubmatch(stderr.String()); m != nil && slices.Contains(keep, m[1]) {
+			return nil, &notFound{m[1]}
+		}
 		return nil, &QuintError{Args: args, Output: stderr.String(), Err: err}
 	}
 	data, err := os.ReadFile(out.Name())

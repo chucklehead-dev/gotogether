@@ -113,3 +113,23 @@ func TestDifferentialVaryTakesTheModelsInputsFurther(t *testing.T) {
 		t.Fatal("Vary changed the trace's own picks")
 	}
 }
+
+// modelChecker is a bank whose own CheckStep compares with the model, as
+// golem's drivers' do: here it always fails, so it shows when it runs.
+type modelChecker struct{ *bankDriver }
+
+func (modelChecker) CheckStep(s *Step) error { return errors.New("compared with the model") }
+
+// Under IgnoreModel a driver's own check is the model's, which a varied
+// input leaves behind: it does not run. Without IgnoreModel it does.
+func TestDifferentialIgnoreModelSkipsStepCheckers(t *testing.T) {
+	tr := sharedBankRun(t).traces[0]
+	d := &Differential{Impls: map[string]Driver{"a": modelChecker{&bankDriver{}}, "b": modelChecker{&bankDriver{}}}, IgnoreModel: true}
+	if err := Replay(tr, d, ReplayOptions{}); err != nil {
+		t.Fatalf("under IgnoreModel: %v", err)
+	}
+	d = &Differential{Impls: map[string]Driver{"a": modelChecker{&bankDriver{}}, "b": modelChecker{&bankDriver{}}}}
+	if err := Replay(tr, d, ReplayOptions{}); err == nil || !strings.Contains(err.Error(), "a: compared with the model") {
+		t.Fatalf("with the model: %v", err)
+	}
+}
