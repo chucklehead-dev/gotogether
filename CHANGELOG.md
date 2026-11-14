@@ -133,6 +133,8 @@ and adds a line here.
 
 - Scheduler deadline delivery uses the timer entry removed from the queue;
   early signal wakes, later deadlines and creation-order ties retain their behavior.
+  One eligibility rule now prunes stale timer heads at both delivery and deadline
+  discovery, retaining normalization after intervening callbacks.
 
 - History search recovers missing exact-prefix states within its existing
   candidate allowance, enabling state-equivalent prefix merging without

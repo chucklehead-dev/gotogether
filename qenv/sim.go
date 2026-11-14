@@ -1458,6 +1458,21 @@ func (s *Sim) pending() []string {
 	return out
 }
 
+// timerHead discards stale entries and returns the first live timer. Both
+// scheduling and deadline discovery normalize at use: callbacks between the
+// two phases need not preserve the validity of a previously observed head.
+func (s *Sim) timerHead() (timer, bool) {
+	for len(s.timers) > 0 {
+		e := s.timers[0]
+		if e.t.gen != e.gen || e.t.done || e.t.killed || !e.t.waiting {
+			heap.Pop(&s.timers)
+			continue
+		}
+		return e, true
+	}
+	return timer{}, false
+}
+
 // runnable reports how many tasks are runnable: the queued ones (yielded,
 // new, woken by a Signal or their deadline) and the predicate waiters
 // whose predicate holds now, which it returns in creation order. A
@@ -1466,13 +1481,9 @@ func (s *Sim) pending() []string {
 // transaction stays taken).
 func (s *Sim) runnable() (int, []*task) {
 	s.release()
-	for len(s.timers) > 0 {
-		e := s.timers[0]
-		if e.t.gen != e.gen || e.t.done || e.t.killed || !e.t.waiting {
-			heap.Pop(&s.timers) // stale
-			continue
-		}
-		if s.now.Before(e.at) {
+	for {
+		e, ok := s.timerHead()
+		if !ok || s.now.Before(e.at) {
 			break
 		}
 		due := heap.Pop(&s.timers).(timer)
@@ -1564,16 +1575,8 @@ func (s *Sim) dequeue(t *task) {
 
 func (s *Sim) nextDeadline() (time.Time, bool) {
 	at, ok := s.nextRelease()
-	for len(s.timers) > 0 {
-		e := s.timers[0]
-		if e.t.gen != e.gen || e.t.done || e.t.killed || !e.t.waiting {
-			heap.Pop(&s.timers)
-			continue
-		}
-		if !ok || e.at.Before(at) {
-			at, ok = e.at, true
-		}
-		break
+	if e, exists := s.timerHead(); exists && (!ok || e.at.Before(at)) {
+		at, ok = e.at, true
 	}
 	return at, ok
 }
