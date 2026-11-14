@@ -103,9 +103,9 @@ func (c *timeoutContext) AfterFunc(f func()) func() bool {
 	c.mu.Lock()
 	if c.err != nil {
 		c.mu.Unlock()
-		go f()
+		go f() //qenv:ok context.AfterFunc requires async dispatch here to avoid child propagation-lock deadlock
 		return func() bool { return false }
-	} //qenv:ok standard context callback after cancellation
+	}
 	c.next++
 	id := c.next
 	c.callbacks[id] = f
