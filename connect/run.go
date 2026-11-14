@@ -312,6 +312,12 @@ func replayAll(t *testing.T, c Config, files []string, newDriver func(testing.TB
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
+	// Step.Eval's model: Require's compile when there is one, else
+	// compiled at the first Eval, so a run that never asks pays nothing
+	ev := &evaluator{ctx: t.Context(), c: c}
+	if req != nil {
+		ev.m = req.m
+	}
 	judged := 0 // traces whose states req has seen: all, unless -run skips some
 	if req != nil {
 		defer func() {
@@ -343,7 +349,7 @@ func replayAll(t *testing.T, c Config, files []string, newDriver func(testing.TB
 			for j, w := range ws {
 				if !t.Run("witness_"+w.name, func(t *testing.T) {
 					req.witnessed(w.name, len(w.trace.States)-1)
-					replayOne(t, c, w.trace, len(files)+j, newDriver, fmt.Sprintf("\nthe witness trace of required %s: the shortest path to it the Go evaluator found (%d steps)", w.name, len(w.trace.States)-1))
+					replayOne(t, c, ev, w.trace, len(files)+j, newDriver, fmt.Sprintf("\nthe witness trace of required %s: the shortest path to it the Go evaluator found (%d steps)", w.name, len(w.trace.States)-1))
 				}) {
 					t.FailNow()
 				}
@@ -371,7 +377,7 @@ func replayAll(t *testing.T, c Config, files []string, newDriver func(testing.TB
 			if c.Seed != "" && what == "run" {
 				repro = fmt.Sprintf("\nreproduce with QUINT_SEED=%s (trace file %s)", c.Seed, f)
 			}
-			replayOne(t, c, tr, i, newDriver, repro)
+			replayOne(t, c, ev, tr, i, newDriver, repro)
 		}) {
 			t.FailNow()
 		}
@@ -380,9 +386,9 @@ func replayAll(t *testing.T, c Config, files []string, newDriver func(testing.TB
 
 // replayOne replays trace number i on a fresh driver, failing t with the
 // step and repro at the first divergence.
-func replayOne(t *testing.T, c Config, tr *itf.Trace, i int, newDriver func(testing.TB) Driver, repro string) {
+func replayOne(t *testing.T, c Config, ev *evaluator, tr *itf.Trace, i int, newDriver func(testing.TB) Driver, repro string) {
 	t.Helper()
-	opt := ReplayOptions{Trace: i, StatePath: c.StatePath, NondetPath: c.NondetPath}
+	opt := ReplayOptions{Trace: i, StatePath: c.StatePath, NondetPath: c.NondetPath, eval: ev}
 	if c.Verbose > 0 {
 		opt.OnStep = func(s *Step) {
 			if c.Verbose > 1 {

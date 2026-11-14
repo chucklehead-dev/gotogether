@@ -111,11 +111,40 @@ are not replay coverage; skipped/filtered traces supply no conformance evidence.
   `QUINT_MAX_STEPS`, `QUINT_BACKEND=rust|typescript`, `QUINT_BIN`.
 - Each trace gets a fresh driver, but `init` still runs first: reset there
   too if the driver holds external resources.
-- A handler's panic (a failed `MustPick`, an assertion) fails that step with
-  its message.
+- A handler's or a `CheckStep`'s panic (a failed `MustPick` or `MustEval`,
+  an assertion) fails that step with its message.
 - For something that is not a plain state comparison (learned id mappings,
   reading a store), implement `CheckStep(s *connect.Step) error`
   (`connect.StepChecker`).
+
+## Comparing with the model's own definitions (`Step.Eval`)
+
+A projection the model defines (`def balanceOf(a: str): int`, `val
+leader`) is compared with the model's definition, not with a copy of it
+in Go: `connect.MustEval[int](s, "balanceOf", "alice")` evaluates the
+def in the step's post-state (the whole of `After`, whatever
+`StatePath` says), each Go argument encoded with `itf.Encode`.
+
+```go
+func (d *bank) CheckStep(s *connect.Step) error {
+	for _, a := range []string{"alice", "bob"} {
+		if model, impl := connect.MustEval[int](s, "balanceOf", a), d.sut.Balance(a); model != impl {
+			return fmt.Errorf("balanceOf(%s): model %d, implementation %d", a, model, impl)
+		}
+	}
+	return nil
+}
+```
+
+The Go evaluator computes it, on the model `connect.Run` or
+`connect.Test` compiled once (with `Config.Require`'s compile when it is
+set, else at the first `Eval`; a run that never calls it compiles
+nothing). Steps of a plain `connect.Replay` have no model: replay through
+`Run` or `Test`. Errors name the step, the def and the fix: `no definition
+of` (a misspelling), `is a variable` (use `s.Get`), `takes 1 argument (a),
+not 0`, `is undefined in this state` (the model's own error: a key the
+map lacks), `outside the Go evaluator's fragment` (compute that one in the
+driver).
 - For concurrent implementations, make the effects schedulable: put a gate
   at the effect seam (each write blocks until the handler of that model step
   releases it). See `examples/edgepublish/mbt`.

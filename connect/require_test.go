@@ -7,20 +7,13 @@ import (
 	"github.com/chucklehead-dev/gotogether/itf"
 )
 
-// One quint run and one compile judge the counts and both refusals: a
-// subprocess for each case cost connect's budget twice over.
+// One quint run and one compile (shared with Eval's tests) judge the
+// counts and both refusals: a subprocess for each case cost connect's
+// budget twice over.
 func TestRequireCountsAndRefusals(t *testing.T) {
-	needQuint(t)
-	c := Config{Spec: "testdata/bank.qnt", MaxSamples: 10, MaxSteps: 15, Seed: "0x1", Dir: t.TempDir(), Require: []string{"nonNegative", "bobSaves", "MAX"}}
-	files, c, err := GenerateRun(t.Context(), c)
-	if err != nil {
-		t.Fatal(err)
-	}
-	traces, err := ReadTraces(t.Context(), c, files)
-	if err != nil {
-		t.Fatal(err)
-	}
-	req, err := compileRequired(t.Context(), c)
+	r := sharedBankRun(t)
+	c, traces := r.c, r.traces
+	req, err := newRequired(r.m, c.Spec, []string{"nonNegative", "bobSaves", "MAX"})
 	if err != nil {
 		t.Fatal(err)
 	}
