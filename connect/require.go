@@ -71,11 +71,17 @@ func compileRequired(ctx context.Context, c Config) (*required, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Config.Require needs the Go evaluator, which cannot read %s: %w", c.Spec, err)
 	}
+	return newRequired(m, c.Spec, c.Require)
+}
+
+// newRequired counts names in m's states, refusing a name that is no
+// definition of spec's model.
+func newRequired(m *qeval.Model, spec string, names []string) (*required, error) {
 	r := &required{m: m}
-	for _, name := range c.Require {
+	for _, name := range names {
 		d, ok := m.Decl(name)
 		if !ok || d.Kind != "def" {
-			return nil, fmt.Errorf("Config.Require names %s, which is no val of %s: name a boolean val of the model", name, c.Spec)
+			return nil, fmt.Errorf("Config.Require names %s, which is no val of %s: name a boolean val of the model", name, spec)
 		}
 		r.reached = append(r.reached, reached{Name: name})
 	}
