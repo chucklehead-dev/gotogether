@@ -16,10 +16,14 @@
 # (115 min) if real and retiring cannot reuse counters' exact proof (with
 # the managed tool they do, and the group takes about 40 min). 115 x 1.5 + 10.
 counters 183 examples/counters/counters.binding.yaml examples/counters/counters.real.binding.yaml examples/counters/counters.retiring.binding.yaml
-# library 6,013 s (100 min). 100 x 1.5 + 10.
-library 160 examples/library/library.binding.yaml
-# library.calls 4,695 s (78 min). 78 x 1.5 + 10.
-library-calls 127 examples/library/library.calls.binding.yaml
+# library and library.calls: measured with J7b's model (each read model's
+# count one fold over the log), each binding alone and cold with -verify 8
+# (docs/performance.md, the library's proofs); on 514e93ff, before it,
+# 6,013 s and 4,695 s.
+# library 884 s (15 min). 15 x 1.5 + 10.
+library 33 examples/library/library.binding.yaml
+# library.calls 291 s (5 min). 5 x 1.5 + 10.
+library-calls 18 examples/library/library.calls.binding.yaml
 # wallet and wallet.calls: measured with #148's model (balances and the
 # credit line as single folds over the log), each binding alone and cold
 # with -verify 8, up to three other Apalache jobs on the same 4-core
