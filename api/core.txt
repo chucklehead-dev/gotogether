@@ -2561,6 +2561,7 @@ type DocCheck struct
     field Kind string `json:"kind"`
     field Verdict string `json:"verdict"`
     field Detail string `json:"detail,omitempty"`
+    field Counterexample *DocCounterexample `json:"counterexample,omitempty"`
 type DocComparison struct
     field Scope string `json:"scope"`
     field Basis string `json:"basis"`
@@ -2618,6 +2619,17 @@ type DocComparisonWitness struct
     field NativeSeed string `json:"nativeSeed,omitempty"`
     field ExclusionBasis string `json:"exclusionBasis"`
     field Replay *DocComparisonReplay `json:"replay,omitempty"`
+type DocCounterexample struct
+    field Steps []DocCounterexampleStep `json:"steps"`
+    field Cycle []DocCounterexampleStep `json:"cycle,omitempty"`
+    field Stutter bool `json:"stutter,omitempty"`
+    field Ends bool `json:"ends,omitempty"`
+    field Replay string `json:"replay,omitempty"`
+    field Sampled []int `json:"sampled,omitempty"`
+type DocCounterexampleStep struct
+    field Call string `json:"call"`
+    field Picks []NamedValue `json:"picks,omitempty"`
+    field State []NamedValue `json:"state"`
 type DocFailure struct
     field Check string `json:"check"`
     field Kind string `json:"kind"`
