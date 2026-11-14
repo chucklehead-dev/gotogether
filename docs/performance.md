@@ -1227,6 +1227,68 @@ wallet-grist.calls and 322 for wallet-grist, under the 360-minute ceiling,
 where #145 gave both the ceiling, expecting them unfinished. Measured on a
 contended machine; a run alone may be faster.
 
+## The library's proofs (J7b, 2026-11-14)
+
+The library's two bindings (`library.binding.yaml`, the store's side, and
+`library.calls.binding.yaml`, the clients') each prove `copiesHeld` and
+`withinLimit` to depth 8. On the nightly (run 43523234654, the old model)
+they took 99 and 47 minutes of their jobs, and measured cold on
+`514e93ff` 6,013 s and 4,695 s. Measured here (Quint 0.33.1, Apalache
+0.62.4, 4 cores), each through `gotogether simulate -verify N`, wall time
+with Apalache's startup (about 14 s).
+
+**Where the time went.** The read models' folds, as in wallet-grist's
+proof: `copies`, `onLoan`, `loanCount`, `loanBooks` and `held` each
+selected the read model's events from the log (`booksEvents(log, b)`,
+`loansEvents(log, m)`: a `select` of symbolic length) and folded the
+selection. `copiesHeld` reads `copies` and `onLoan` for every book and
+every borrow in the log, so it paid most. Ablations on the clients' model
+(v0 the original; v1 each fold one pass over the log with the event's own
+book or member as its condition; v2 v1 with the borrowed books kept as a
+set, not recomputed), each invariant alone:
+
+| run | v0 | v1 | v2 |
+|---|---|---|---|
+| depth 4: copiesHeld / withinLimit | 29 / 17 s | 16 / 16 s | 16 / 14 s |
+| depth 5 | 96 / 22 s | 23 / 16 s | 24 / 17 s |
+| depth 6 | 408 / 45 s | 43 / 20 s | |
+| depth 7 | | 102 / 25 s | |
+| the store's side, depth 5 | 139 / 49 s | 46 / 33 s | |
+
+v2's set bought nothing; v1 is kept. At depth 6 v1 is about ten times
+faster on `copiesHeld`, and the gap widens with each depth.
+
+**The rewrite** (`model/library_rules.qnt`, by hand; nothing generated
+changed): each count is one fold over the log, adding an event of its
+type whose book (or member, or both, for `held`) is the one asked. The
+two are equal on every log the models hold: each event is made by a
+generated constructor (`memberJoined`, `bookAdded`, `bookBorrowed`,
+`bookReturned`, `grist.failed`, each batch stamped by `caused`), which
+tags it with the strings it stores, so the read model's selection of a
+book's events is exactly the events whose book field is that book.
+Evidence: `examples/library/testdata/loans.qnt` keeps the earlier
+definitions verbatim and a machine appending every such event, with every
+member, book, count (−1 to 3) and cause; its invariant `agree` says each
+count, `loanBooks`, `copiesHeldIn` and `withinLimitIn` equal the earlier
+ones at every member and book. `quint verify` proves `agree` for every log
+of up to 5 events; at 6 it checked four of the five transitions (all
+held) before the two-hour limit stopped it, `loanBooks`' list equality
+taking about an hour per check. `TestLoansAgree` samples it (1,000 traces
+of up to 10 steps), and the same equality in every state the store's and
+the clients' models reach; two planted mistakes (a loan count ignoring
+its member, copies counting every addition) are each reported violated.
+States, transitions, bounds, invariants and Apalache policy are unchanged.
+
+**Depth 8, cold, through the CLI**: the clients' side in 291 s (both
+invariants hold, `borrow.limit` witnessed by quint verify), the store's
+side in 884 s, run alone. A first store run, started beside the clients'
+on the same machine, ended after 3m40s in Apalache's status "failure"
+with no errors and no verdict (the tool error it is, never a pass); run
+alone it passed. Two runs on one machine need their own Apalache servers
+(wallet-grist's measurement ran each in its own network namespace). By
+`ci/verify-alone.txt`'s rule (cold time × 1.5 + 10 minutes): 18 minutes
+for library-calls (was 127) and 33 for library (was 160).
+
 ## Inventory's proof before and after the grist library's folds (2026-11-12)
 
 The J7b roster measurements put inventory's cold depth-8 proof at 414 s on
