@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
+	"github.com/chucklehead-dev/gotogether/itf"
 )
 
 // Config says how to generate traces and how to read them. The zero value
@@ -51,8 +52,10 @@ type Config struct {
 	// its count logged ("required x: reached in 3 of 100 traces"), and Run
 	// or Test fails when one held in no state of any trace. A rare state
 	// the implementation is wrong at needs its traces to reach it: a run
-	// that never did proved nothing of it. More samples or steps, or a
-	// step that favours it, reach it.
+	// that never did proved nothing of it. Run steers to each: the
+	// shortest path to it the evaluator finds (within MaxSteps) is
+	// replayed first, as subtest witness_<name>, so a state one sample in
+	// thousands reaches is tested every run.
 	Require []string
 
 	// Verbose: 0 quiet, 1 logs every step (action and picks), 2 also the
@@ -326,8 +329,26 @@ func replayAll(t *testing.T, c Config, files []string, newDriver func(testing.TB
 				t.Logf("connect: %d of %d traces ran: not judging Config.Require", judged, len(files))
 				return
 			}
-			t.Errorf("connect: %s never reached the required %s in %d traces (seed %s): the run proved nothing of the states they name. Raise MaxSamples or MaxSteps, or steer the model's step toward them; check they are reachable with gotogether simulate", what, strings.Join(missed, ", "), len(files), c.Seed)
+			t.Errorf("connect: %s never reached the required %s in %d traces (seed %s), and no witness trace reached it: the run proved nothing of the states they name. Raise MaxSamples or MaxSteps, or steer the model's step toward them; check they are reachable with gotogether simulate", what, strings.Join(missed, ", "), len(files), c.Seed)
 		}()
+		// the shortest path to each required state, replayed first: a
+		// state the samples reach rarely is tested every run. A quint test
+		// replays its named run alone, and NondetPath reads the action
+		// from the state, which a witness does not record.
+		if what == "run" && len(c.NondetPath) == 0 {
+			ws, notes := req.witnesses(c)
+			for _, n := range notes {
+				t.Logf("connect: %s", n)
+			}
+			for j, w := range ws {
+				if !t.Run("witness_"+w.name, func(t *testing.T) {
+					req.witnessed(w.name, len(w.trace.States)-1)
+					replayOne(t, c, w.trace, len(files)+j, newDriver, fmt.Sprintf("\nthe witness trace of required %s: the shortest path to it the Go evaluator found (%d steps)", w.name, len(w.trace.States)-1))
+				}) {
+					t.FailNow()
+				}
+			}
+		}
 	}
 	traces := &traceReader{c: c}
 	for i, f := range files {
@@ -346,30 +367,37 @@ func replayAll(t *testing.T, c Config, files []string, newDriver func(testing.TB
 				}
 				judged++
 			}
-			opt := ReplayOptions{Trace: i, StatePath: c.StatePath, NondetPath: c.NondetPath}
-			if c.Verbose > 0 {
-				opt.OnStep = func(s *Step) {
-					if c.Verbose > 1 {
-						t.Logf("[trace %d step %d]\n%s", s.Trace, s.Index, s)
-					} else {
-						t.Logf("[trace %d step %d] %s", s.Trace, s.Index, s.summary())
-					}
-				}
+			repro := ""
+			if c.Seed != "" && what == "run" {
+				repro = fmt.Sprintf("\nreproduce with QUINT_SEED=%s (trace file %s)", c.Seed, f)
 			}
-			if err := Replay(tr, newDriver(t), opt); err != nil {
-				msg := err.Error()
-				if se, ok := errors.AsType[*StepError](err); ok && se.Kind != "trace" {
-					msg += "\n\n" + indent(se.Step.String(), "    ")
-				}
-				repro := ""
-				if c.Seed != "" && what == "run" {
-					repro = fmt.Sprintf("\nreproduce with QUINT_SEED=%s (trace file %s)", c.Seed, f)
-				}
-				t.Fatalf("connect: %s\n%s", msg, repro)
-			}
+			replayOne(t, c, tr, i, newDriver, repro)
 		}) {
 			t.FailNow()
 		}
+	}
+}
+
+// replayOne replays trace number i on a fresh driver, failing t with the
+// step and repro at the first divergence.
+func replayOne(t *testing.T, c Config, tr *itf.Trace, i int, newDriver func(testing.TB) Driver, repro string) {
+	t.Helper()
+	opt := ReplayOptions{Trace: i, StatePath: c.StatePath, NondetPath: c.NondetPath}
+	if c.Verbose > 0 {
+		opt.OnStep = func(s *Step) {
+			if c.Verbose > 1 {
+				t.Logf("[trace %d step %d]\n%s", s.Trace, s.Index, s)
+			} else {
+				t.Logf("[trace %d step %d] %s", s.Trace, s.Index, s.summary())
+			}
+		}
+	}
+	if err := Replay(tr, newDriver(t), opt); err != nil {
+		msg := err.Error()
+		if se, ok := errors.AsType[*StepError](err); ok && se.Kind != "trace" {
+			msg += "\n\n" + indent(se.Step.String(), "    ")
+		}
+		t.Fatalf("connect: %s\n%s", msg, repro)
 	}
 }
 

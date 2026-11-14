@@ -64,7 +64,19 @@ func TestRequireCountsAndRefusals(t *testing.T) {
 func TestRequireFailsWhenNeverReached(t *testing.T) {
 	needQuint(t)
 	out := connectFailureOutput(t, "require-missed")
-	for _, want := range []string{"required nonNegative: reached in 10 of 10 traces (20 of 20 states)", "required bobSaves: reached in 0 of 10 traces", "never reached the required bobSaves in 10 traces (seed 0x1)", "Raise MaxSamples or MaxSteps"} {
+	for _, want := range []string{"required nonNegative: reached in 10 of 10 traces (20 of 20 states)", "required bobSaves: reached in 0 of 10 traces", "required bobSaves: no witness trace (unreachable in one step)", "never reached the required bobSaves in 10 traces (seed 0x1)", "Raise MaxSamples or MaxSteps"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+}
+
+// The witness trace reaches the state a capped deposit is wrong at, which
+// the one sampled trace never does: without steering the run passes.
+func TestRequireWitnessCatchesWhatSamplesMiss(t *testing.T) {
+	needQuint(t)
+	out := connectFailureOutput(t, "require-capped")
+	for _, want := range []string{"--- FAIL: TestConnectProcessHelper/witness_bobSaves", "states diverge", "the witness trace of required bobSaves: the shortest path to it the Go evaluator found (2 steps)"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)
 		}
