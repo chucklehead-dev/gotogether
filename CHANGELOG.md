@@ -15,6 +15,12 @@ and adds a line here.
   depth's bounded proof. Exact state equality is unchanged. This is not a
   heap/RSS cap: compilation and temporary evaluator allocations are excluded.
 
+- Required states for connect (ROADMAP N1): `connect.Config.Require` names
+  boolean vals of the model, evaluated by the Go evaluator in every state of
+  the run's traces; Run and Test log each one's count ("required x: reached
+  in k of N traces (s of S states)") and fail when one was never reached.
+  A name that is no val, or a val that is not a boolean, fails before any
+  replay.
 - Tests without quint (ROADMAP Q0): a binding's compiled model kept beside it
   (`gotogether compile -binding B`, now writing `<stem>.model.json` by default,
   `validate.CompiledFor`) judges its qtest and qhegel runs by the Go evaluator

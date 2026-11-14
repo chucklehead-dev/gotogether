@@ -46,6 +46,15 @@ type Config struct {
 	StatePath  []string
 	NondetPath []string
 
+	// Require names boolean vals of the model the run's traces must reach:
+	// each is evaluated in every state of every trace by the Go evaluator,
+	// its count logged ("required x: reached in 3 of 100 traces"), and Run
+	// or Test fails when one held in no state of any trace. A rare state
+	// the implementation is wrong at needs its traces to reach it: a run
+	// that never did proved nothing of it. More samples or steps, or a
+	// step that favours it, reach it.
+	Require []string
+
 	// Verbose: 0 quiet, 1 logs every step (action and picks), 2 also the
 	// model state. Values outside 0–2 are invalid. Default $QUINT_VERBOSE.
 	// Failures always show the step.
@@ -296,6 +305,30 @@ func Test(t *testing.T, c Config, test string, newDriver func(testing.TB) Driver
 func replayAll(t *testing.T, c Config, files []string, newDriver func(testing.TB) Driver, what string) {
 	t.Helper()
 	t.Logf("connect: %s %s: generated %d traces, seed %s", what, c.Spec, len(files), c.Seed)
+	req, err := compileRequired(t.Context(), c)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	judged := 0 // traces whose states req has seen: all, unless -run skips some
+	if req != nil {
+		defer func() {
+			if t.Failed() {
+				return
+			}
+			lines, missed := req.report(judged)
+			for _, l := range lines {
+				t.Logf("connect: %s", l)
+			}
+			if len(missed) == 0 {
+				return
+			}
+			if judged < len(files) {
+				t.Logf("connect: %d of %d traces ran: not judging Config.Require", judged, len(files))
+				return
+			}
+			t.Errorf("connect: %s never reached the required %s in %d traces (seed %s): the run proved nothing of the states they name. Raise MaxSamples or MaxSteps, or steer the model's step toward them; check they are reachable with gotogether simulate", what, strings.Join(missed, ", "), len(files), c.Seed)
+		}()
+	}
 	traces := &traceReader{c: c}
 	for i, f := range files {
 		if !t.Run(fmt.Sprintf("trace_%d", i), func(t *testing.T) {
@@ -306,6 +339,12 @@ func replayAll(t *testing.T, c Config, files []string, newDriver func(testing.TB
 			tr, err := traces.read(t.Context(), f)
 			if err != nil {
 				t.Fatalf("connect: %s: %v", f, err)
+			}
+			if req != nil {
+				if err := req.trace(tr); err != nil {
+					t.Fatalf("connect: %s: %v", f, err)
+				}
+				judged++
 			}
 			opt := ReplayOptions{Trace: i, StatePath: c.StatePath, NondetPath: c.NondetPath}
 			if c.Verbose > 0 {
