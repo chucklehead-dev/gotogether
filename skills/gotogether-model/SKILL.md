@@ -24,7 +24,7 @@ judges Hegel's runs (`qhegel`), and it replays recorded runs
 4. Properties as boolean `val`s; a restart a parameterless action; an
    outcome a value; observable choices as parameters. Finite internal choices
    have bounded ordinary-trace support (see conventions, item 9).
-5. `quint typecheck`, `quint run --invariant`, then `gotogether simulate
+5. `gotogether lint -model m.qnt` (no binding needed), `quint run --invariant`, then `gotogether simulate
    -binding` (`-graph`) with `holds`, `allows` and `possible`.
 6. `quint run --mbt` once: read `mbt::actionTaken` and `mbt::nondetPicks`.
 7. Select the model's actual safety/completion names (replace `safe`/`complete`):

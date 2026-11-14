@@ -58,6 +58,7 @@ type Binding struct
     method (*Binding) CheckSpec() error
     method (*Binding) ChecksActor(actor string) bool
     method (*Binding) EvalModule(m *Model, qntPath string) (*EvalModule, error)
+    method (*Binding) InitChoiceNote(m *Model) string
     method (*Binding) Lint(m *Model) []string
     method (*Binding) LintAnnotations(m *Model, anns []Annotation) (errs, warns []string)
     method (*Binding) LintChoiceFindings(m *Model) []LintFinding
@@ -482,6 +483,7 @@ type Options struct
     field Simulation string
     field Weave string
     field Conversions []string
+    field Models []string
     field Quint string
 type Report struct
     field Format string `json:"format"`
@@ -2620,6 +2622,7 @@ type DocGraph struct
     field Transitions int `json:"transitions"`
     field Depth int `json:"depth"`
     field Complete bool `json:"complete"`
+    field CompleteDepth int `json:"completeDepth"`
     field Cut string `json:"cut,omitempty"`
     field Stopped string `json:"stopped,omitempty"`
     field Bound DocGraphBound `json:"bound"`
@@ -3250,6 +3253,7 @@ type GraphResult struct
     field Complete bool
     field Cut string
     field Stopped string
+    field CompleteDepth int
     field Bound GraphBound
     field Invariants []InvariantVerdict
     field Deadlocks int

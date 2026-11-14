@@ -46,6 +46,11 @@ type search struct {
 	complete bool
 	cut      string
 	depth    int
+	// cutAt is the depth of the node being expanded when the state bound
+	// cut the search, -1 if it cut among the starts: breadth first, every
+	// node shallower was expanded already, so every state within cutAt
+	// steps was found
+	cutAt int
 
 	added    func(j int) (stop bool, err error)
 	edge     func(i int, t Transition, j int) (stop bool)
@@ -92,7 +97,7 @@ func (s *search) run(starts []State) (err error) {
 			continue
 		}
 		if s.b.States > 0 && len(s.nodes) >= s.b.States {
-			s.complete, s.cut = false, "states"
+			s.complete, s.cut, s.cutAt = false, "states", -1
 			return nil
 		}
 		s.seen[seenKey{k, 0}] = len(s.nodes)
@@ -142,7 +147,7 @@ func (s *search) run(starts []State) (err error) {
 				continue
 			}
 			if s.b.States > 0 && len(s.nodes) >= s.b.States {
-				s.complete, s.cut = false, "states"
+				s.complete, s.cut, s.cutAt = false, "states", nd.depth
 				if s.edge != nil {
 					s.edge(i, t, -1)
 				}
@@ -222,6 +227,13 @@ type Graph struct {
 	// "states", "depth", or "unsupported" (Explore's error says why).
 	Complete bool
 	Cut      string
+	// CompleteDepth is the depth every state within which is in States:
+	// the deepest state's for a complete graph, Bound.Depth for one the
+	// depth bound cut, and for one the state bound cut, the depth it was
+	// expanding (breadth first, every state shallower was expanded). -1
+	// when no depth is known complete (the bound cut among the starts, or
+	// the evaluator stopped).
+	CompleteDepth int
 	// Transitions are the transitions the evaluator computed: the edges
 	// before labels merged them (Edges counts the edges kept)
 	Transitions int
@@ -306,6 +318,15 @@ func (m *Model) Explore(consts map[string]Value, init, step string, b Bound, lab
 	g.Complete, g.Cut = s.complete && err == nil, s.cut
 	if err != nil {
 		g.Cut = cutOf(err)
+	}
+	g.CompleteDepth = -1
+	switch {
+	case g.Complete:
+		g.CompleteDepth = slices.Max(append([]int{0}, g.Depth...))
+	case g.Cut == "depth":
+		g.CompleteDepth = b.Depth
+	case g.Cut == "states":
+		g.CompleteDepth = s.cutAt
 	}
 	// the starts are the first nodes: those distinct, within the bound
 	g.Starts = 0

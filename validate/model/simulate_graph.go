@@ -107,6 +107,8 @@ func (s *sim) graph(ctx context.Context, bpath string, b *binding.Binding, check
 		switch {
 		case holds[inv] && v.Held() && r.Complete:
 			s.printf("  holds   %s: no reachable state violates it (the whole graph, %d states%s)\n", inv, r.States, depthNote(r))
+		case holds[inv] && v.Held() && r.Cut == "states" && bound.Kind == "depth":
+			s.printf("  bounded %s: no state within %s of init violates it (complete to depth %d: a bounded proof, every trace of up to %s; the state bound cut deeper: %s)\n", inv, nOf(bound.Depth, "step"), bound.Depth, nOf(bound.Depth, "step"), raise)
 		case holds[inv] && v.Held():
 			s.printf("  bounded %s: %s violates it, which proves nothing past them (the graph is truncated: %s)\n", inv, where, raise)
 		case allows[inv] && v.Violated:
@@ -283,6 +285,10 @@ func graphBound(r *GraphResult) Bound {
 		b.Kind = "complete"
 	case r.Cut == "depth":
 		b.Kind = "depth"
+	case r.Cut == "states" && r.CompleteDepth > 0:
+		// every state within CompleteDepth steps was found and checked, as
+		// a depth bound of that depth leaves them: the same bounded proof
+		b.Kind, b.Depth, b.States = "depth", r.CompleteDepth, r.statesWithin(r.CompleteDepth)
 	case r.Cut == "states":
 		b.Kind = "states"
 	default:
