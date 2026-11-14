@@ -36,6 +36,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -382,8 +383,18 @@ func checker(t testing.TB, bindingPath string, o validate.Options) *validate.Che
 	if err != nil {
 		t.Fatalf("gotogether: %v", err)
 	}
+	if note := c.Binding.InitChoiceNote(c.Model); note != "" {
+		if _, said := initChoiceSaid.LoadOrStore(c.Binding.Path, true); !said {
+			t.Logf("gotogether: %s: %s", filepath.Base(bindingPath), note)
+		}
+	}
 	return c
 }
+
+// initChoiceSaid holds the bindings whose init choice a test has already
+// been told of (InitChoiceNote), once per test binary: a Hegel test checks
+// its binding thousands of times. Process-wide.
+var initChoiceSaid sync.Map
 
 func config(t testing.TB, opts []Option) settings {
 	var c settings

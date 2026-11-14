@@ -554,6 +554,10 @@ func (b *Binding) LintChoices(m *Model) []string { return lintMessages(b.LintCho
 // LintChoiceFindings describes internal-choice sites and their supported validation scope.
 func (b *Binding) LintChoiceFindings(m *Model) []LintFinding {
 	var out []LintFinding
+	if note := b.InitChoiceNote(m); note != "" {
+		out = append(out, LintFinding{Code: "binding.init.internal_choice", Severity: "warning", Symbol: "init", Confidence: "model_metadata",
+			Fix: "Record a snapshot step at the head of each run (snapshot:), or make init deterministic where its choice is symmetric.", Message: note})
+	}
 	for _, name := range slices.Sorted(maps.Keys(b.Actions)) {
 		a := b.Actions[name]
 		if a.Expect == "" {
@@ -566,6 +570,22 @@ func (b *Binding) LintChoiceFindings(m *Model) []LintFinding {
 		}
 	}
 	return out
+}
+
+// InitChoiceNote says what a choice the model's init makes costs each run's
+// check, and how to avoid it, or is "" when init makes none or every run
+// starts from a recorded snapshot (which replaces init). Such a run's check
+// searches init's admitted states for one its steps can follow and confirms
+// that path with a quint process: the Go evaluator's pass alone never
+// decides it, so a Hegel test of many cases runs a quint process per case.
+func (b *Binding) InitChoiceNote(m *Model) string {
+	cs := m.Chooses("init")
+	if len(cs) == 0 || b.Snapshot != "" {
+		return ""
+	}
+	return fmt.Sprintf("%s's init makes a choice of its own (%s): every run's check searches its initial states for one the steps can follow and confirms that path with a quint process, never the Go evaluator's pass alone (a process per Hegel case); "+
+		"record a snapshot step at the head of each run (snapshot: an action that sets the whole state), or make init deterministic where the choice is symmetric (init = initWith(...))",
+		b.Module, strings.Join(cs, ", "))
 }
 
 // Lint checks the binding against the model: every bound action exists and

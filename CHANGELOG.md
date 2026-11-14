@@ -8,6 +8,17 @@ and adds a line here.
 
 ## Unreleased
 
+- A run that starts from a recorded snapshot (or a resume's witness) is no
+  longer sent to the pinned-choice search because the model's `init` makes a
+  choice: the run never evaluates init. Before, such a run had no verdict
+  ("finite pinned choices currently require ... without ... snapshot"), so a
+  snapshot could not be used to avoid init's choice (golem's first use, #144).
+- `Binding.InitChoiceNote` says what a choice in `init` costs (each run's
+  check searches the initial states and confirms with a quint process, never
+  the Go evaluator's pass alone) and how to avoid it (a snapshot step, or a
+  deterministic init). `gotogether lint` reports it
+  (`binding.init.internal_choice`), and qtest and qhegel log it once per
+  binding when a test first checks it. ROADMAP L5.
 - `qload.OfSimulation`'s Target sets each run's seed on a copy of the
   configuration. It set it on the configuration every call shares, and `Runs`
   (so `Count`, `Mostly`, `qhegel.FindTrigger`) calls it in parallel: runs took
