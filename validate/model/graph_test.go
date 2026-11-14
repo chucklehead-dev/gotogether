@@ -178,3 +178,20 @@ func TestCheckerGraphCompleteDepth(t *testing.T) {
 		t.Fatalf("a cut in the first level proves: complete to depth %d, bound %+v", first.CompleteDepth, graphBound(first))
 	}
 }
+
+// The graph's witness replay runs on QUINT_BACKEND's backend, as sampling
+// does: it once ran quint test on quint's default (rust) whatever the
+// variable said, fetching the Rust evaluator for a run asked to avoid it
+// (issue #220).
+func TestWitnessReplayHonoursTheBackend(t *testing.T) {
+	t.Setenv("QUINT_BACKEND", "typescript")
+	got := witnessReplayArgs("w_small", "m.qnt")
+	want := []string{"test", "--main", "simulate", "--match", "^w_small$", "--max-samples", "1", "m.qnt", "--backend", "typescript"}
+	if !slices.Equal(got, want) {
+		t.Errorf("witness replay argv %q, want %q", got, want)
+	}
+	t.Setenv("QUINT_BACKEND", "")
+	if got := witnessReplayArgs("w_small", "m.qnt"); slices.Contains(got, "--backend") {
+		t.Errorf("unset QUINT_BACKEND: %q passes a backend, want quint's default", got)
+	}
+}

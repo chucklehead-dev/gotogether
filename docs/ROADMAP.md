@@ -256,6 +256,28 @@ them inside.
   drawn by Hegel inside `qhegel.VaryTraces` and shrunk by it. Open: a
   looser model generated from the design's by dropping its guards.
 
+## Goo's browser journey (O, #220)
+
+Goo checked its acquisition and retained-return journey as a shadow
+consumer: requests as invocations, DOM observations as steps, Bombadil
+and Playwright through the request log, source and compiled replays
+compared. Done: graph witness replay honours `QUINT_BACKEND` (it ran
+quint's default, fetching the Rust evaluator); the external-drivers
+reference now has page text through `intern`, Bombadil's
+per-key show deduplication and the navigation-epoch recipe for a
+return, and the driver's own drained-then-settled bridge.
+
+- **O1: a settle record in the request log.** Goo's bridge is Go code
+  appending a settle after the log's steps; a `settle` event of
+  `gotogether.requests/1` (a format change: internal/formats) would let a
+  non-Go driver say it, with the caller still establishing quiet.
+- **O2: a compact external-driver example.** One journey showing what a
+  conforming prefix is not: a pending invocation, no eventual end, a
+  retained display violated, a hidden final display, a lost tail, each a
+  control with its intended diagnosis, and a code-0 completion; raw page
+  text interned. webjobs has most of it, spread over Bombadil and
+  Playwright.
+
 ## A Go Quint (Q)
 
 Quint's front end (parse, resolve, flatten, type and effect check) and its
