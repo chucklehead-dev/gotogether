@@ -8,6 +8,13 @@ and adds a line here.
 
 ## Unreleased
 
+- `gotogether lint -model m.qnt` checks a Quint model with no binding, as a
+  design-phase model is written (golem's first use, #144; ROADMAP L3): a
+  primed assignment whose right side holds a bare `or`/`and` (`x' = x or y`
+  reads as `(x' = x) or y`), a declaration or parameter quint refuses as a
+  built-in or keyword (`internal/quintnames`), then quint's typecheck, its
+  effect-unification dump for branches that assign different variables
+  turned into the variables each assigns (`lint.Options.Models`).
 - A run that starts from a recorded snapshot (or a resume's witness) is no
   longer sent to the pinned-choice search because the model's `init` makes a
   choice: the run never evaluates init. Before, such a run had no verdict

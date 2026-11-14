@@ -121,9 +121,11 @@ Already in place and to be documented: `qtest.Model` claims (`Proves`,
 - **L2: the design phase as a report.** The skills document the model-only
   path for design work; new: a story × instance matrix generated from
   scenarios and named instances (which mechanism each bug story needs).
-- **L3: `gotogether lint -model`, without a binding.** A primed assignment
-  followed by `or`/`and` (`x' = x or y`); an action's unassigned variables by
-  name; reserved names from `internal/quintnames`.
+- **L3: `gotogether lint -model`, without a binding.** Done: a primed
+  assignment followed by a bare `or`/`and`, reserved names (declarations and
+  parameters), and quint's typecheck, its effect-unification error for
+  branches assigning different variables made readable. None of the
+  repository's 165 models has a source finding.
 - **L4: Quint's environment.** doctor names `QUINT_BACKEND=typescript` when
   the evaluator is missing or cannot be fetched; a `quint test` gotogether
   runs that matches nothing is an error, not a pass (quint's own CLI: an
