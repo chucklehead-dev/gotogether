@@ -8,6 +8,11 @@ and adds a line here.
 
 ## Unreleased
 
+- `qload.OfSimulation`'s Target sets each run's seed on a copy of the
+  configuration. It set it on the configuration every call shares, and `Runs`
+  (so `Count`, `Mostly`, `qhegel.FindTrigger`) calls it in parallel: runs took
+  each other's seeds, a batch could run one seed twice, and one trigger was
+  judged two ways (Hegel's "nondeterministic failure", a search with no verdict).
 - A binding's `module` may name an instance module (`module design {
   import publication(N = 3, ...).* }`): the binding binds `publication` with
   the instance's constants and gives none of them itself, so one binding per
