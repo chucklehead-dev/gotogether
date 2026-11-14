@@ -8,6 +8,10 @@ and adds a line here.
 
 ## Unreleased
 
+- `simulate -graph` with a depth bound reports what it proves: "bounded x: no
+  state within N steps of init violates it (complete to depth N: a bounded
+  proof, every trace of up to N steps)", for an unclassified invariant too
+  (it said "proves nothing past them", golem's #144).
 - Required states for connect (ROADMAP N1): `connect.Config.Require` names
   boolean vals of the model, evaluated by the Go evaluator in every state of
   the run's traces; Run and Test log each one's count ("required x: reached

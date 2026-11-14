@@ -107,8 +107,8 @@ func (s *sim) graph(ctx context.Context, bpath string, b *binding.Binding, check
 		switch {
 		case holds[inv] && v.Held() && r.Complete:
 			s.printf("  holds   %s: no reachable state violates it (the whole graph, %d states%s)\n", inv, r.States, depthNote(r))
-		case holds[inv] && v.Held() && r.Cut == "states" && bound.Kind == "depth":
-			s.printf("  bounded %s: no state within %s of init violates it (complete to depth %d: a bounded proof, every trace of up to %s; the state bound cut deeper: %s)\n", inv, nOf(bound.Depth, "step"), bound.Depth, nOf(bound.Depth, "step"), raise)
+		case holds[inv] && v.Held() && bound.Kind == "depth":
+			s.printf("  bounded %s: no state within %s of init violates it (complete to depth %d: a bounded proof, every trace of up to %s%s)\n", inv, nOf(bound.Depth, "step"), bound.Depth, nOf(bound.Depth, "step"), deeper(r, raise))
 		case holds[inv] && v.Held():
 			s.printf("  bounded %s: %s violates it, which proves nothing past them (the graph is truncated: %s)\n", inv, where, raise)
 		case allows[inv] && v.Violated:
@@ -131,6 +131,10 @@ func (s *sim) graph(ctx context.Context, bpath string, b *binding.Binding, check
 				"The shortest counterexample:\n%s", inv, cexText(v.Counterexample))
 		case r.Complete:
 			s.printf("  holds   %s: no reachable state violates it (unclassified: add it to simulate.holds to keep it so)\n", inv)
+		case bound.Kind == "depth":
+			// a depth bound (or a state bound after whole levels) still
+			// proves every trace up to it, classified or not
+			s.printf("  bounded %s: no state within %s of init violates it (complete to depth %d: a bounded proof, every trace of up to %s; unclassified: add it to simulate.holds to keep it so)\n", inv, nOf(bound.Depth, "step"), bound.Depth, nOf(bound.Depth, "step"))
 		default:
 			s.printf("  bounded %s: %s violates it, which proves nothing past them (unclassified, the graph truncated)\n", inv, where)
 		}
@@ -275,6 +279,16 @@ func (s *sim) graph(ctx context.Context, bpath string, b *binding.Binding, check
 		s.rep.Code = code
 	}
 	return nil
+}
+
+// deeper is what a bounded proof's line says of the states past its
+// depth: nothing for the depth bound, which was asked for; the bound to
+// raise where the state bound cut deeper.
+func deeper(r *GraphResult, raise string) string {
+	if r.Cut == "states" {
+		return "; the state bound cut deeper: " + raise
+	}
+	return ""
 }
 
 // graphBound is what r's verdicts cover.
