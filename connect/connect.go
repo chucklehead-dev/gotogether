@@ -67,8 +67,9 @@ type Step struct {
 	// (Config.StatePath; the whole state when the path is empty).
 	State itf.Value
 
-	eval  *evaluator  // the run's model, for Eval; nil outside Run and Test
-	state qeval.State // After as the model's state, made by the first Eval
+	eval    *evaluator   // the run's model, for Eval; nil outside Run and Test
+	state   qeval.State  // After as the model's state, made by the first Eval
+	stateOf *qeval.Model // the model state was made for: Eval may compile another
 }
 
 // Has reports whether a pick was made in this step.

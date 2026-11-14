@@ -32,8 +32,10 @@ type Differential struct {
 	// Impls are the implementations, by name; each a Driver, and an
 	// Observer or a StateDriver to be compared beyond its errors.
 	Impls map[string]Driver
-	// IgnoreModel compares the implementations with each other only,
-	// not each StateDriver's state with the model's: for traces of a model
+	// IgnoreModel compares the implementations with each other only:
+	// neither each StateDriver's state with the model's nor each
+	// StepChecker's own check runs (a driver's CheckStep usually compares
+	// with the model, and fails on a varied input), for traces of a model
 	// whose states describe the inputs, not the design.
 	IgnoreModel bool
 	// Vary, if set, runs once per step before the implementations and may
@@ -84,9 +86,9 @@ func (d *Differential) Step(s *Step) error {
 		strings.Join(failed, " and "), strings.Join(succeeded, " and "))
 }
 
-// CheckStep compares each StateDriver's state with the model's (unless
-// IgnoreModel), runs each StepChecker's own check, and compares every
-// implementation's observation with the first's.
+// CheckStep compares each StateDriver's state with the model's and runs
+// each StepChecker's own check (neither under IgnoreModel), then compares
+// every implementation's observation with the first's.
 func (d *Differential) CheckStep(s *Step) error {
 	type seen struct {
 		name string
@@ -107,7 +109,7 @@ func (d *Differential) CheckStep(s *Step) error {
 				return fmt.Errorf("%s's state diverges from the model's:\n  %s", n, strings.Join(diff, "\n  "))
 			}
 		}
-		if sc, ok := impl.(StepChecker); ok {
+		if sc, ok := impl.(StepChecker); ok && !d.IgnoreModel {
 			if err := recovered(func() error { return sc.CheckStep(s) }); err != nil {
 				return fmt.Errorf("%s: %w", n, err)
 			}
