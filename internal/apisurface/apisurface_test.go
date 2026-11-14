@@ -12,7 +12,7 @@ const root = "../.."
 
 // Each published module's exported API is the recorded one. After a
 // deliberate change: GOTOGETHER_UPDATE_API=1 go test ./internal/apisurface/,
-// and review the diff of api/ with the change (and a CHANGELOG line).
+// and review the diff of api/ with the change (and its changes/ entry).
 func TestAPISurface(t *testing.T) {
 	for _, m := range Modules {
 		t.Run(m.Dir, func(t *testing.T) {
@@ -36,7 +36,7 @@ func TestAPISurface(t *testing.T) {
 				if d == "" { // the same lines, another order or owner (a field moved between types)
 					d = "  the same lines, in another order or under other types"
 				}
-				t.Errorf("%s's exported API changed:\n%s\nIf deliberate: GOTOGETHER_UPDATE_API=1 go test ./internal/apisurface/, and commit %s with the change (and a CHANGELOG line)", m.Path, d, m.File)
+				t.Errorf("%s's exported API changed:\n%s\nIf deliberate: GOTOGETHER_UPDATE_API=1 go test ./internal/apisurface/, and commit %s with the change (and its entry, a file of changes/: changes/README.md)", m.Path, d, m.File)
 			}
 		})
 	}

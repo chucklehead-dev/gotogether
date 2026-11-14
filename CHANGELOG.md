@@ -4,7 +4,9 @@ Every published module (the core, qhegel, qweave, qanalysis, qgosim, grist, qnav
 and the doubles' qenv/simgrpc, qenv/kubesim, qenv/simlog/kafkalog and
 qenv/simlog/kinesislog) is versioned together; the examples are not
 published. A change to the core's exported API updates `api/core.txt`
-and adds a line here.
+and adds its entry as a file of `changes/` (changes/README.md), never an
+edit here: `ci/changelog.sh -write` moves them under Unreleased at a
+release.
 
 ## Unreleased
 

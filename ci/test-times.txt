@@ -31,7 +31,7 @@ examples/twophase 55 # 47.0 CPU s on CI (run 442, 8178000 and 54c27fd; 60.8 in r
 examples/wallet 119
 examples/webjobs 125 # 67.5 and 124.5 CPU s on CI (runs 459 and 460, the same code: 460's a slow runner, its counters 439 against 253): its within bindings' passing runs decided by the Go evaluator (7543f3d), quint judging a fifth (f7cd68c); 179, 132 and 106 in runs 442-444, when quint judged them all; 13 checks under -short (the client per mutant, a cmd/webjobs overlay build each, TestShrink is full mode)
 binding 385 # 217 and 384 CPU s, 130 and 241 s wall on CI (runs 431 and 434; 332 CPU s and 439 s wall in run 427, before b7606ee ran TestEvalModuleCompiles in parallel, a typecheck per spec, and d6640dc)
-connect 18 # 17.9 descendant CPU seconds on Go 1.27.3/Quint 0.33.1: native trace-lifetime failure helpers plus terminal-retention and Rust constructor-name controls; same 2x regression factor.
+connect 26 # 26.4 CPU seconds on CI (Go 1.27.3/Quint 0.33.1, #212's run; 37.0 on #214's, a loaded runner): the trace-lifetime helpers and controls as before, plus N1's Config.Require tests (one generated run and compile for the counts, a never-reached and a witness helper process, each a quint run and a compile); same 2x regression factor.
 cmd/gotogether 412 # 411.1 CPU s in PR15 run 41165098703; 373.9 in green PR14 run 41162327623. CLI coverage grew from 28 tests at c405eb342 (the 200 baseline) to 97; the new checkpoint JSON test costs 2.3 CPU s. The existing 2x regression factor is unchanged.
 # Initial grist -short baselines: two standalone 4-CPU runs on 2026-11-03,
 # PostgreSQL 16 enabled, GOTOGETHER_CHECK/STRICT=1 and EVAL_SAMPLE=1/5.

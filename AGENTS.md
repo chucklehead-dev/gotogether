@@ -161,7 +161,8 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
   internal type, qenv.Rates, carries that type's fields and methods). A
   deliberate change to any of them regenerates it (`GOTOGETHER_UPDATE_API=1
   go test ./internal/apisurface/`, from the root) and adds a CHANGELOG
-  line.
+  entry as a file of `changes/` (changes/README.md), never an edit of
+  CHANGELOG.md: one file per change conflicts with no other pull request.
 - Shared receipt/report JSON fields also change the generated report schema.
   After changing their shape, run `GOTOGETHER_UPDATE_SCHEMA=1 go test ./schemas/`
   and check `go test ./schemas/ ./internal/apisurface/` together; API snapshots
