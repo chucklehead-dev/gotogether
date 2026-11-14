@@ -1,0 +1,26 @@
+== github.com/chucklehead-dev/gotogether/qenv/simvalkey
+func New(s *qenv.Sim, name string) *Server
+func WithTimeout(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc)
+type Client struct
+    field Timeout time.Duration
+    method (*Client) B() valkey.Builder
+    method (*Client) Close()
+    method (*Client) Dedicate() (valkey.DedicatedClient, func())
+    method (*Client) Dedicated(fn func(valkey.DedicatedClient) error) error
+    method (*Client) Do(ctx context.Context, cmd valkey.Completed) valkey.ValkeyResult
+    method (*Client) DoCache(context.Context, valkey.Cacheable, time.Duration) valkey.ValkeyResult
+    method (*Client) DoMulti(ctx context.Context, cmds ...valkey.Completed) []valkey.ValkeyResult
+    method (*Client) DoMultiCache(context.Context, ...valkey.CacheableTTL) []valkey.ValkeyResult
+    method (*Client) DoMultiStream(context.Context, ...valkey.Completed) valkey.MultiValkeyResultStream
+    method (*Client) DoStream(context.Context, valkey.Completed) valkey.ValkeyResultStream
+    method (*Client) Mode() valkey.ClientMode
+    method (*Client) Nodes() map[string]valkey.Client
+    method (*Client) Receive(context.Context, valkey.Completed, func(valkey.PubSubMessage)) error
+type Server struct
+    field Proc *qenv.Process
+    method (*Server) Client() *Client
+    method (*Server) Failover()
+    method (*Server) Replicate()
+var ErrUnavailable = errors.New("simvalkey: server unavailable")
+var ErrUnknownOutcome = errors.New("simvalkey: command outcome unknown")
+

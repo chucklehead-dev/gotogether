@@ -15,7 +15,7 @@ a run replays from its choices and Hegel's shrinking removes faults.
 - Writing the app, or a step lands in the wrong place: [references/seams.md](references/seams.md).
 - Deploying (restarts, settles, stuck runs, quorums, disks, clocks, partitions): [references/simulation.md](references/simulation.md).
 - Exploring, scripting a fault, reproducing, rates, shrinking: [references/explore.md](references/explore.md).
-- An HTTP, gRPC or Kafka/Kinesis service: [references/services.md](references/services.md); database/sql: [references/sql.md](references/sql.md).
+- An HTTP, gRPC, Valkey or Kafka/Kinesis service: [references/services.md](references/services.md); database/sql: [references/sql.md](references/sql.md).
 - Code you cannot change: [references/weaving.md](references/weaving.md); a whole program: [references/gosim.md](references/gosim.md).
 - Your functions as fault points: [references/fault-points.md](references/fault-points.md); sweeps, fuzzing, coverage and mutants: [references/sweeps.md](references/sweeps.md), [references/fuzzing.md](references/fuzzing.md), [references/coverage-and-mutants.md](references/coverage-and-mutants.md).
 - Production workloads, a real deployment's faults: [references/workloads.md](references/workloads.md), [references/real.md](references/real.md), [references/beyond.md](references/beyond.md).

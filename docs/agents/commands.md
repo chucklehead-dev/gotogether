@@ -47,10 +47,11 @@ AGENTS.md has the general requirements.
   rule files are generated from binding.Binding and convert.Rules:
   `GOTOGETHER_UPDATE_SCHEMA=1 go test ./schemas/` after adding a field
   (`TestSchemasAreGenerated` fails until then).
-- The doubles' modules (qenv/simgrpc, qenv/kubesim, qenv/simlog/kafkalog,
+- The doubles' modules (qenv/simgrpc, qenv/simvalkey, qenv/kubesim, qenv/simlog/kafkalog,
   qenv/simlog/kinesislog): `cd <dir> && GOWORK=off GOTOGETHER_CHECK=1 go test
   ./...`, as CI's doubles job runs them (and under `-race`), on their own
-  go.mod and pinned core; no quint needed. qenv/simlog is the core's
+  go.mod and pinned core. simvalkey's model contract also needs quint; the
+  other doubles' tests need no quint. qenv/simlog is the core's
   (`go test ./qenv/simlog/`, `GOTOGETHER_CHECK=1` for its contract check).
   kafkalog and kinesislog require the core at a commit with qenv/simlog:
   a change to simlog's seams that they need is pushed first, then

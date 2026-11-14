@@ -16,7 +16,7 @@ commit="${1:-$(git rev-parse HEAD)}"
 core=github.com/chucklehead-dev/gotogether
 # the published modules, as AGENTS.md lists them (TestCorePinsAgree checks
 # this list against the repository's go.mod files)
-modules=(qhegel qweave qanalysis qgosim grist qnav qenv/simgrpc qenv/kubesim qenv/simlog/kafkalog qenv/simlog/kinesislog)
+modules=(qhegel qweave qanalysis qgosim grist qnav qenv/simgrpc qenv/simvalkey qenv/kubesim qenv/simlog/kafkalog qenv/simlog/kinesislog)
 export GOWORK=off GOFLAGS=-mod=mod
 for m in "${modules[@]}"; do
   reqs=()

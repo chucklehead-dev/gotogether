@@ -1,4 +1,4 @@
-# Services: HTTP, gRPC, streams
+# Services: HTTP, gRPC, Valkey, streams
 
 ## HTTP servers (examples/kvstore)
 
@@ -61,6 +61,27 @@ sim.Spawn("sdk", func(ctx context.Context) { /* client.Post(srv.URL()+"/payments
   goroutines (`http.TimeoutHandler` among them) needs weaving or gosim.
 - Not simulated: TLS (https reaches the same server), HTTP/2, trailers,
   100-continue, Hijack, connection reuse.
+
+## Valkey: `qenv/simvalkey` (a module)
+
+Use the valkey-go client seam when an application's Redis/Valkey operations
+must interleave with other work. Keep its real command builders and Lua
+scripts; the double replaces the client rather than running a real socket
+server. Its README defines the command profile and unsupported features.
+
+- Separate commands reach scheduling seams. Commands inside one Lua script
+  run atomically, so a read followed by a write in client code can race while
+  the same sequence inside a script cannot.
+- Atomic means isolation, not rollback: a Lua runtime error can leave earlier
+  writes applied. Preserve that behavior in retry and compensation tests.
+- `TIME` and expiry use the server's simulated clock, not the calling
+  gateway's clock. Skew the caller to test that distinction.
+- Test a no-response hang separately from an immediate outage. A canceled
+  caller stops waiting, but cancellation after dispatch does not prove the
+  operation did not apply; retries need the application's idempotency policy.
+- A simulated hang waits at a qenv seam. `Sim.Hang` remains the wall-time
+  watchdog for code blocked outside simulation (for example a real mutex
+  held across the call), not the network fault's virtual delay.
 
 ## gRPC services: `qenv/simgrpc` (a module; examples/grpcledger)
 

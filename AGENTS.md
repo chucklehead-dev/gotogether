@@ -60,8 +60,8 @@ woven/        the woven builds' ABI: what qenv/weave's aspects, qweave -cover an
 qenv/fault/   the //quint:fault aspect: fault points (qenv.FaultPoint) with the function's own errors, declared for coverage
 qenv/qhttp/ qenv/qsql/ qenv/simlog/   doubles in the core: net/http, database/sql over a Store, a partitioned log (Kafka's
               contract: idempotent producer, group, fencing; the Writer/Reader seams its real tiers implement)
-qenv/simgrpc/ qenv/kubesim/   separate modules (published), doubles with heavy dependencies: any generated gRPC service in qenv
-              (ServiceRegistrar + ClientConnInterface); controller-runtime clients over simulated API servers
+qenv/simgrpc/ qenv/simvalkey/ qenv/kubesim/   separate modules (published), doubles with heavy dependencies: generated gRPC
+              services; valkey-go commands and Lua; controller-runtime clients over simulated API servers
 qenv/simlog/kafkalog/ qenv/simlog/kinesislog/   separate modules (published): simlog's seams over franz-go and the AWS SDK
               (kinesislog/kinesisfake: an in-process Kinesis endpoint)
 qgosim/       separate module: qenv and whole programs in gosim (on the fork, module github.com/chucklehead-dev/gosim)
@@ -132,7 +132,7 @@ ci/           install-quint.sh (quint + its Rust evaluator, avoiding GitHub API 
 ## Requirements and commands
 
 - The published modules (the core, qhegel, qweave, qanalysis, qgosim, grist, qnav,
-  and the doubles' qenv/simgrpc, qenv/kubesim, qenv/simlog/kafkalog,
+  and the doubles' qenv/simgrpc, qenv/simvalkey, qenv/kubesim, qenv/simlog/kafkalog,
   qenv/simlog/kinesislog) have no `replace`: `go install …@version` refuses one, and a
   dependency's is ignored. They require each other at pushed commits
   (pseudo-versions, until tags), all at one commit: `TestCorePinsAgree`

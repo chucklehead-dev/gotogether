@@ -1,0 +1,5 @@
+spec: slots.qnt
+module: slots
+actions:
+  admit: {}
+invariants: [atMostOne]

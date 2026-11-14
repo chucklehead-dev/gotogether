@@ -35,6 +35,7 @@ use (
 	./qanalysis
 	./qenv/kubesim
 	./qenv/simgrpc
+	./qenv/simvalkey
 	./qenv/simlog/kafkalog
 	./qenv/simlog/kinesislog
 	./qgosim
