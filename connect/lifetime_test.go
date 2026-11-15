@@ -141,6 +141,14 @@ func TestConnectProcessHelper(t *testing.T) {
 		Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 1, MaxSteps: 1, Seed: "0x1", Require: []string{"MAX"}}, func(testing.TB) Driver { return &bankDriver{} })
 	case "require-capped":
 		Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 1, MaxSteps: 2, Seed: "0x1", Require: []string{"bobSaves"}}, func(testing.TB) Driver { return &bankDriver{capped: true} })
+	case "bind-buggy":
+		Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 50, MaxSteps: 20, Seed: "0x1"}, bankBinding(true, (*bank).deposit).Driver)
+	case "bind-returns":
+		Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 10, MaxSteps: 15, Seed: "0x1"}, bankBinding(false, (*bank).depositBalance).Returns("deposit", "balanceOf", "account").Driver)
+	case "bind-returns-wrong":
+		Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 10, MaxSteps: 15, Seed: "0x1"}, bankBinding(false, (*bank).depositBalanceBefore).Returns("deposit", "balanceOf", "account").Driver)
+	case "bind-unchecked":
+		Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 1, MaxSteps: 2, Seed: "0x1"}, bankBinding(false, (*bank).depositBalance).Driver)
 	case "nondet":
 		Test(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 1}, "aliceSavesTest", func(testing.TB) Driver { return &bankDriver{} })
 	case "selected":
