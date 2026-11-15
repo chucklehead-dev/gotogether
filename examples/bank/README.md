@@ -7,7 +7,7 @@ which tests catch which bug.
 
 | Test | Direction | Catches |
 |---|---|---|
-| `mbt_test.go` `TestModelDrivesBank` | the model drives (`connect.Run`), balances compared per step | `LostDeposit` |
+| `mbt_test.go` `TestModelDrivesBank` | the model drives (`connect.Run`), balances compared per step, and each `Balance` with the model's `balanceOf` (`Step.Eval`); the run must reach `rich` (`Config.Require`), which no random trace of 30 does: its 6-step witness is replayed first | `LostDeposit` |
 | `mbt_test.go` `TestModelDrivenCatchesOnlyDivergence` | the same, against both mutants | only `LostDeposit`: the model never asks for a self-transfer |
 | `hegel_test.go` `TestHegelRunsConformToModel` | Hegel drives, the model judges after the test (`After`) | — (faithful bank) |
 | `hegel_test.go` `TestHegelCatchesSelfTransfer` | Hegel drives, the model judges each case, Hegel shrinks (`CheckCase`) | `SelfTransfer`, shrunk to a deposit and a self-transfer |
