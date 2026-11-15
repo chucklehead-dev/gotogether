@@ -838,6 +838,19 @@ func branchIndex(m *binding.Model, t qeval.Transition) int {
 	return -1
 }
 
+// releaseGraph drops what the report's graph holds beyond its verdicts
+// (the explored graph, its evaluator, its state keys and checkers), so a
+// caller running searches one after another (Matrix) holds one graph at a
+// time. The report's verdicts and document need it no more; what reads the
+// graph itself (Lacks, statesWithin, a comparison) then sees none.
+func (r *Report) releaseGraph() {
+	if r == nil || r.Graph == nil {
+		return
+	}
+	g := r.Graph
+	g.graph, g.e, g.keys, g.checker, g.sourceChecker = nil, nil, nil, nil, nil
+}
+
 // statesWithin is the number of r's states within d steps of a start.
 func (r *GraphResult) statesWithin(d int) int {
 	n := 0

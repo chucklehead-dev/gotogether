@@ -82,7 +82,8 @@ type MatrixCell struct {
 // only cost memory. A variant that
 // cannot run (a constant the model lacks, an unknown invariant) is an
 // error naming it: the matrix is the design's record, and a column left
-// out of it would read as a pass.
+// out of it would read as a pass. opt.Variant runs that variant alone,
+// an unknown name an error naming the variants.
 func Matrix(ctx context.Context, bindingPath string, opt SimulateOptions) (*MatrixReport, error) {
 	// a variant that must only break stops at its counterexamples: the
 	// rest of its graph would show nothing more the matrix reports
@@ -94,8 +95,15 @@ func Matrix(ctx context.Context, bindingPath string, opt SimulateOptions) (*Matr
 	if b.Simulate == nil || len(b.Simulate.Variants) == 0 {
 		return nil, fmt.Errorf("simulate -matrix: %s's simulate section has no variants: list the design's alternatives under simulate.variants, each a name, its constants, and what it holds and allows", bindingPath)
 	}
+	variants := b.Simulate.Variants
+	if opt.Variant != "" {
+		if _, err := b.Variant(opt.Variant); err != nil {
+			return nil, fmt.Errorf("simulate -variant: %w", err)
+		}
+		variants = slices.DeleteFunc(slices.Clone(variants), func(v binding.Variant) bool { return v.Name != opt.Variant })
+	}
 	m := &MatrixReport{Binding: bindingPath}
-	for _, v := range b.Simulate.Variants {
+	for _, v := range variants {
 		vb, err := b.Variant(v.Name)
 		if err != nil {
 			return nil, err
@@ -104,6 +112,12 @@ func Matrix(ctx context.Context, bindingPath string, opt SimulateOptions) (*Matr
 		if err != nil {
 			return nil, fmt.Errorf("simulate -matrix: variant %s: %w", v.Name, err)
 		}
+		// the graph released, its verdicts kept: the next variant's search
+		// must not run beside this one's graph. Held, each search ran with
+		// the ones before it (golem's leadership, #144: 3,309 MB of graph
+		// read 5,765 MB beside the previous 2,347), and from the twelfth
+		// of 30 variants every search was cut by memory.
+		rep.releaseGraph()
 		m.Variants = append(m.Variants, VariantReport{Name: v.Name, Constants: maps.Clone(vb.Simulate.Constants), Report: rep})
 		if rep.Code == 1 || m.Code == 0 {
 			m.Code = rep.Code // a failure wins over no verdict, either over a pass

@@ -233,6 +233,9 @@ type SimulateOptions struct {
 	// the section allows (must break), and has no eventual val, once each
 	// has broken (GraphSearch.UntilBroken). Matrix sets it.
 	UntilBroken bool
+	// Variant, for Matrix, runs that one of the binding's variants alone
+	// (a script runs each in its own process, in parallel); "" runs all.
+	Variant string
 	// Unfair and Stops are the actions the liveness search does not hold
 	// to weak fairness (nil: simulate.unfair and simulate.stops).
 	Unfair, Stops []string

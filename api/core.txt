@@ -3489,6 +3489,7 @@ type SimulateOptions struct
     field MemoryBytes int64
     field ProcessBytes int64
     field UntilBroken bool
+    field Variant string
     field Unfair []string
     field Stops []string
     field Out string
