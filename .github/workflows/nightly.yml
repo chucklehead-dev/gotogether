@@ -215,6 +215,14 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # One exact node for every shard: core-mutants-gate compares the
+      # shards' tools on PATH by content, and the runner image's own node
+      # (or setup-node's cached 22.x) differed between images within one
+      # run, refusing the aggregate on 11-14 and 11-15. An exact version
+      # installs the same binary on every shard.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
       - name: mutants of ${{ matrix.pkg }}
         env:
           JOBS: 4 # bounded concurrent source mutations (per shard)
