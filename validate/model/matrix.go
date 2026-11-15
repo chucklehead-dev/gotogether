@@ -48,13 +48,16 @@ type MatrixRow struct {
 // classification ("holds", "allows" for must break, "" for neither),
 // Verdict what the run found ("holds", "bounded", "breaks", "unchecked",
 // "" when the variant does not check it), Steps the counterexample's
-// length when it breaks (0 for none known), and OK whether that is what the
-// variant expects.
+// length when it breaks (0 for none known), Depth the depth a "holds" was
+// proved to (0 for the whole state graph: a search cut only by its depth
+// proves every trace that long, not every trace), and OK whether that is
+// what the variant expects.
 type MatrixCell struct {
 	Variant string
 	Expect  string
 	Verdict string
 	Steps   int
+	Depth   int
 	OK      bool
 }
 
@@ -155,6 +158,12 @@ func matrixCell(v VariantReport, name string) MatrixCell {
 		}
 	case vd.Held && vd.Bound.Proves():
 		c.Verdict = "holds"
+		switch vd.Bound.Kind {
+		case "depth":
+			c.Depth = vd.Bound.Depth
+		case "verified":
+			c.Depth = vd.Bound.Steps
+		}
 	case vd.Held:
 		c.Verdict = "bounded"
 	}
@@ -193,9 +202,9 @@ func (m *MatrixReport) Text() string {
 	return b.String()
 }
 
-// Text is the cell as the table shows it: "holds", "breaks in 3 steps",
-// "FAIL: never breaks" and the like, "–" where the variant does not check
-// the property.
+// Text is the cell as the table shows it: "holds" (the whole state graph),
+// "holds to depth 8" (a bounded proof), "breaks in 3 steps", "FAIL: never
+// breaks" and the like, "–" where the variant does not check the property.
 func (c MatrixCell) Text() string {
 	found := c.Verdict
 	switch c.Verdict {
@@ -204,6 +213,10 @@ func (c MatrixCell) Text() string {
 	case "breaks":
 		if c.Steps > 0 {
 			found = fmt.Sprintf("breaks in %d step%s", c.Steps, map[bool]string{true: "", false: "s"}[c.Steps == 1])
+		}
+	case "holds":
+		if c.Depth > 0 {
+			found = fmt.Sprintf("holds to depth %d", c.Depth)
 		}
 	case "bounded":
 		found = "holds within the bound"
@@ -238,7 +251,7 @@ func (m *MatrixReport) Doc() *validate.MatrixDocument {
 	for _, r := range m.Rows {
 		row := validate.MatrixRowDoc{Check: r.Check}
 		for _, c := range r.Cells {
-			row.Cells = append(row.Cells, validate.MatrixCellDoc{Variant: c.Variant, Expect: c.Expect, Verdict: c.Verdict, Steps: c.Steps, OK: c.OK})
+			row.Cells = append(row.Cells, validate.MatrixCellDoc{Variant: c.Variant, Expect: c.Expect, Verdict: c.Verdict, Steps: c.Steps, Depth: c.Depth, OK: c.OK})
 		}
 		d.Rows = append(d.Rows, row)
 	}

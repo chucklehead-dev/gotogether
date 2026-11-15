@@ -3,6 +3,8 @@ package qeval
 import (
 	"errors"
 	"math"
+	"runtime"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"testing"
@@ -186,6 +188,38 @@ func TestProcessCheckBacksOff(t *testing.T) {
 	}
 	if ok || !tight.processOver {
 		t.Fatalf("a 1-byte bound never cut: over %v", tight.processOver)
+	}
+}
+
+// freed is where TestProcessBoundIgnoresFreedMemory's allocation lives,
+// so the compiler keeps it on the heap. Process-wide; that test alone
+// writes it, and it does not run in parallel.
+var freed []byte
+
+// Memory an earlier search freed, which the runtime keeps mapped after a
+// collection until its scavenger returns it, does not cut the next search
+// (a matrix's variants run in one process: golem's second variant was cut
+// at 113 states, #144). Not parallel: it measures the process.
+func TestProcessBoundIgnoresFreedMemory(t *testing.T) {
+	debug.FreeOSMemory()
+	base := processMemory()
+	freed = make([]byte, 256<<20)
+	for i := 0; i < len(freed); i += 4096 {
+		freed[i] = 1 // touched, so the pages are the process's
+	}
+	freed = nil
+	runtime.GC() // frees the heap, keeps its pages mapped
+	if processMemory() < base+128<<20 {
+		t.Skip("the runtime returned the freed pages at once: nothing to confirm")
+	}
+	b := graphMemory{process: base + 64<<20}
+	for range processCheckEvery {
+		if !b.reserve(1) {
+			t.Fatalf("cut by freed memory: bound %d, seen %d", b.process, b.processSeen)
+		}
+	}
+	if b.processSeen > b.process {
+		t.Errorf("ProcessSeen %d past the bound %d it was within: an unconfirmed reading", b.processSeen, b.process)
 	}
 }
 

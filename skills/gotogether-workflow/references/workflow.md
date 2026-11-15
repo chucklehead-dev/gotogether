@@ -396,8 +396,13 @@ design.md` writes the table into the design document between its
 the document carries the decision with the model (a literate model's own
 document: CW1). `-json` prints `gotogether.matrix/1`: each variant's
 `report/2` document and its constants, and the rows, each cell with
-`expect`, `verdict`, `steps` and `ok`, for scripts. A `holds` within a
-bound shows as "holds within the bound": read its variant's `graph.completeDepth`.
+`expect`, `verdict`, `steps`, `depth` and `ok`, for scripts. A cell says
+how far its proof goes: "holds" is the whole state graph; "holds to depth
+8" a search cut only by its depth, a bounded proof of every trace that
+long (`depth` in the JSON, 0 for the whole graph); "holds within the
+bound" a search cut by its states or memory, no proof past what it saw
+(read its variant's `graph.completeDepth`). A variant that must hold
+passes with either proof.
 Each run's options (`-graph`, `-depth`, `-process-memory`) apply to every
 variant; a variant's own `search: { depth: N, states: N }` bounds its
 searches over the section's. A variant whose invariants it must all break

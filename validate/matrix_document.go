@@ -35,11 +35,13 @@ type MatrixRowDoc struct {
 // expects ("holds"; "allows", must break; "" for neither), what was found
 // ("holds", "bounded", "breaks", "unchecked"; "" when the variant does not
 // check it), the counterexample's length when it breaks (0: none known),
-// and whether that is as expected.
+// the depth a "holds" was proved to (0: the whole state graph), and
+// whether that is as expected.
 type MatrixCellDoc struct {
 	Variant string `json:"variant"`
 	Expect  string `json:"expect,omitempty"`
 	Verdict string `json:"verdict,omitempty"`
 	Steps   int    `json:"steps,omitempty"`
+	Depth   int    `json:"depth,omitempty"`
 	OK      bool   `json:"ok"`
 }
