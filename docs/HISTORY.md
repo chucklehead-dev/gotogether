@@ -9686,3 +9686,10 @@ generated changed. The clients' depth-8 proof now takes 47 minutes and the
 store's 3 h 28 min, on a machine shared with up to three other proofs. Each
 depth still multiplies the invariant queries by five or six: the rest is
 the proof's own arithmetic.
+
+## The red nightlies before J7c (STATUS, superseded 2026-11-15)
+
+STATUS's CI row until J7c was met (a manual full nightly on `7428afdc`,
+2026-11-14, 68 of 68 green), kept as it stood:
+
+Nightly remains red. The retained November 9 run on `b90c3d8b` passed 55 jobs, including benchmarks, browser admission, evaluator shadows, Grist and fresh-seed workloads. Its scheduler mutation campaign completed 1,749 mutations across seven passing baselines, with 99 survivors against the unchanged limit of 22; verification was canceled near its two-hour job limit. That producer predates execution-status metadata, so operational kills cannot be separated into assertion and resource failures. Later router controls and the native search-policy change are not qualified by that run. Trace mutations pass at their existing limit; the original 500-seed wallet campaign passes after exact-prefix recovery. Full verification and a green current-source nightly remain blockers.
