@@ -14,7 +14,11 @@
 // with no response stays pending, so a run that must finish does not.
 // What the page then shows is a step of its own (watch, step), which
 // completes nothing: a poll's answer or another request's may have made
-// it true.
+// it true. When the test knows the system is quiet (its journey done,
+// every call answered or one left pending on purpose), settled() waits
+// for the answers still being read and writes the log's settle, so the
+// binding's eventual properties are judged; a log without one ends
+// unsettled (the end of the file is not a settle).
 //
 // Every routed call carries a correlation id in a header (x-request-id
 // unless named; one the page set itself is kept), which the record's
@@ -81,7 +85,7 @@ function correlation(corr, id, req) {
 }
 
 // RequestLog writes the protocol's lines for a driver's events: request,
-// response, failed and step, called in the order they happened, each
+// response, failed, step and settled, called in the order they happened, each
 // with its time. It knows nothing of Playwright: requestLog feeds it a
 // page's events, and replay a recorded sequence of them.
 //
@@ -159,6 +163,14 @@ class RequestLog {
     for (const k of ['obs', 'ref', 'thread']) if (extra && extra[k]) rec[k] = extra[k];
     this.line(rec);
   }
+
+  // settled is the driver saying the system has settled: it carries its
+  // time and, if given, a ref (how the test knew: "every job ready").
+  settled(time, ref) {
+    const rec = { event: 'settled', time: iso(time) };
+    if (ref) rec.ref = ref;
+    this.line(rec);
+  }
 }
 
 // requestLog records page's calls into the request log at opts.path
@@ -177,10 +189,13 @@ class RequestLog {
 //            -<pid>-<n> after it, n counting this process's logs: two
 //            pages, or two workers, never number their records in one
 //            recorder (gotogether validate refuses two logs naming one)
-// It returns {step(action, args, extra), watch(selector, map), close()}:
-// step writes a step now; watch writes map(text)'s {action, args} each
-// time the selector's text changes in the page (null: no step); close
-// stops routing, waits for the answers being read and closes the files.
+// It returns {step(action, args, extra), watch(selector, map),
+// settled(ref), close()}: step writes a step now; watch writes
+// map(text)'s {action, args} each time the selector's text changes in the
+// page (null: no step); settled waits for the answers being read, then
+// writes the settle (the test, not the adapter, knows the system is
+// quiet: call it once nothing more is sent); close stops routing, waits
+// for the answers being read and closes the files.
 let logs = 0; // requestLog's calls in this process: a recorder's suffix
 async function requestLog(page, opts) {
   const fd = fs.openSync(opts.path, 'w');
@@ -263,6 +278,12 @@ async function requestLog(page, opts) {
   let watches = 0;
   return {
     step: (action, args, extra) => step(action, args, extra),
+    async settled(ref) {
+      // drained first: an answer being read is the driver's own work
+      await Promise.all([...reading]);
+      const time = now();
+      record({ type: 'settled', time, ref }, () => log.settled(time, ref));
+    },
     async watch(selector, map) {
       const name = `__gotogetherWatch${++watches}`;
       await page.exposeBinding(name, (_source, text) => {
@@ -326,6 +347,9 @@ function replay(eventsText, opts, write) {
         break;
       case 'step':
         log.step(e.time, e.action, e.args, e.extra);
+        break;
+      case 'settled':
+        log.settled(e.time, e.ref);
         break;
       default:
         throw new Error(`gotogether-requests: an event of type ${e.type}`);

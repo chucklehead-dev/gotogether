@@ -639,6 +639,7 @@ const CodeArg = "code"
 const Protocol = "gotogether.requests/1"
 const Request Event = "request"
 const Response Event = "response"
+const Settled Event = "settled"
 const Step Event = "step"
 func New(h Header, records []Record) (*Log, error)
 func Read(r io.Reader) (*Log, error)

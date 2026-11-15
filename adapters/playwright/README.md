@@ -26,6 +26,7 @@ test('a report', async ({ page }, testInfo) => {
   await page.goto('/');
   await page.locator('#submit').dblclick();
   await expect(page.locator('#result')).toContainText('ready');
+  await log.settled('the job is ready');        // the journey is quiet: eventual properties apply
   await log.close();
 });
 ```
@@ -61,6 +62,13 @@ gotogether validate -binding webjobs.binding.yaml server.jsonl test-results/*/re
   map)`: a step each time the element's text changes, through a
   `MutationObserver` in the page; `step(action, args)` writes one now). It
   completes nothing.
+- **The settle is the test's to say** (`settled(ref)`): once the
+  journey is quiet (every call answered, or one left pending on
+  purpose), it waits for the answers still being read and writes the
+  log's `settled` record, so the binding's `eventually` properties are
+  judged at the run's end. The adapter cannot know the system is quiet,
+  so it never writes one itself: a log without one ends unsettled, and
+  closing the page is not a settle. A step written after it voids it.
 - **A correlation id** goes in each call's request (`x-request-id:
   <prefix>-<n>`, unless the page set the header itself, which is kept)
   and in the record's `corr`, which every step of the call carries in its

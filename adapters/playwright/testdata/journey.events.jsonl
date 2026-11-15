@@ -15,3 +15,4 @@
 {"type":"response","id":5,"time":1793083261093.9126,"response":{"status":202,"headers":{"cache-control":"no-store","content-length":"39","date":"Tue, 27 Oct 2026 06:41:01 GMT","content-type":"application/json"},"body":{"id":"j08078c51","status":"accepted"}}}
 {"type":"step","time":1793083261095.706,"action":"show","args":{"id":"j08078c51","status":"accepted"},"extra":{"action":"show","args":{"id":"j08078c51","status":"accepted"}}}
 {"type":"step","time":1793083261452.7732,"action":"show","args":{"id":"j08078c51","status":"ready"},"extra":{"action":"show","args":{"id":"j08078c51","status":"ready"}}}
+{"type":"settled","time":1793083261953.0232,"ref":"every job ready"}
