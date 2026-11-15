@@ -15,6 +15,7 @@ and Hegel varies the details. Use both.
 - Either direction with code, the modes, expected failures, classifying: [references/guide.md](references/guide.md).
 - The modes' costs and options, generators and budgets: [references/modes.md](references/modes.md).
 - A machine for concurrent or distributed code (`hegelnet.Network`): [references/pitfalls.md](references/pitfalls.md) first.
+- Where the tests live (the package's own files behind `//go:build hegel`, not a module of their own): [references/layout.md](references/layout.md).
 - A simulated System's faults shrunk: `qhegel.Shrink` (the gotogether-faults skill).
 
 ## Steps
