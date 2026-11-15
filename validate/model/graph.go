@@ -48,7 +48,19 @@ type GraphSearch struct {
 	// maps it (qeval.Bound.ProcessBytes): the budget to set from a machine's
 	// memory, which MemoryBytes's estimate is not. A search it cuts is cut
 	// "memory", GraphResult.ProcessCut set.
-	ProcessBytes  int64
+	ProcessBytes int64
+	// UntilBroken stops the search once each invariant has broken, where
+	// every invariant is one the section allows (must break) and there is
+	// no eventual val: nothing then needs the rest of the graph, and
+	// searching on costs only memory (a broken design's matrix variant,
+	// golem's 7 GiB to find a two-step counterexample). Breadth first, each
+	// counterexample is still a shortest; the graph is cut "broken", its
+	// deadlocks and coverage bounded to the depth it completed.
+	UntilBroken bool
+	// Allows are the invariants the run allows to fail (must break), for
+	// UntilBroken: nil is the binding's section's. The run's own, where it is
+	// a matrix variant's, whose list the binding on disk does not have.
+	Allows        []string
 	Eventually    []string
 	Unfair, Stops []string
 }
@@ -375,6 +387,12 @@ func (r *GraphResult) Extent() string {
 		return fmt.Sprintf("truncated by the retained graph storage estimate budget (%d bytes, %d charged): %s%s; excludes compilation, temporary evaluation allocations and process heap/RSS", r.Bound.MemoryBytes, r.MemoryUsed, n, depth)
 	case "depth":
 		return fmt.Sprintf("truncated by the depth bound (%d): %s, states at the bound not expanded", r.Bound.Depth, n)
+	case "broken":
+		depth := ""
+		if r.CompleteDepth > 0 {
+			depth = fmt.Sprintf(", complete to depth %d", r.CompleteDepth)
+		}
+		return fmt.Sprintf("stopped once every invariant it must break broke: %s%s", n, depth)
 	}
 	return fmt.Sprintf("stopped after %s: %s", n, r.Stopped)
 }
@@ -459,7 +477,25 @@ func (c *modelChecker) Graph(ctx context.Context, cfg GraphSearch) (result *Grap
 		}
 		return evs
 	}
-	g, err := e.Model.Explore(consts, e.Module.Init, step, bound, label)
+	var until func(qeval.State) (bool, error)
+	allowed := cfg.Allows
+	if allowed == nil {
+		allowed = sim.Allows
+	}
+	if cfg.UntilBroken && len(evs) == 0 && len(invs) > 0 && !slices.ContainsFunc(invs, func(n string) bool { return !slices.Contains(allowed, n) }) {
+		left := slices.Clone(invs) // the invariants not yet broken in a state found
+		until = func(s qeval.State) (bool, error) {
+			left = slices.DeleteFunc(left, func(inv string) bool {
+				x, err := e.Model.Eval(consts, s, e.Module.Possible[inv])
+				b, ok := x.(qeval.Bool)
+				// an evaluation error is broken too: the check after the
+				// search reports it, with its path
+				return err == nil && ok && !bool(b) || err != nil && !errors.As(err, new(*qeval.Unsupported))
+			})
+			return len(left) == 0, nil
+		}
+	}
+	g, err := e.Model.ExploreUntil(consts, e.Module.Init, step, bound, label, until)
 	r := &GraphResult{States: len(g.States), Starts: g.Starts, Transitions: g.Edges(), Complete: g.Complete, Cut: g.Cut, CompleteDepth: g.CompleteDepth,
 		Bound:      GraphBound{States: bound.States, Depth: bound.Depth, MemoryBytes: bound.MemoryBytes, ProcessBytes: bound.ProcessBytes},
 		MemoryUsed: g.MemoryUsed, ProcessCut: g.ProcessCut, ProcessSeen: g.ProcessSeen, PeakResident: peakResident(), graph: g, e: original, checker: cc, sourceChecker: c}

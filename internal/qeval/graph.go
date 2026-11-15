@@ -284,6 +284,17 @@ type Edge struct {
 // not Complete, cut "unsupported" for an Unsupported one, and holds only
 // real states and edges (a path in it is a trace of the model).
 func (m *Model) Explore(consts map[string]Value, init, step string, b Bound, label func([]Event) []Event) (g *Graph, err error) {
+	return m.ExploreUntil(consts, init, step, b, label, nil)
+}
+
+// ExploreUntil is Explore, stopped once until holds of a state just found
+// (it sees every state, in the order found, breadth first): the graph is
+// then not Complete, its Cut "broken", and its CompleteDepth the depth
+// whose states were all found, as a state bound's cut leaves it. A matrix
+// variant that must only break its invariants stops so once each has
+// broken (validate/model), where searching on could only cost memory. An
+// error from until stops the search with it.
+func (m *Model) ExploreUntil(consts map[string]Value, init, step string, b Bound, label func([]Event) []Event, until func(State) (bool, error)) (g *Graph, err error) {
 	g = &Graph{ids: map[string]int{}, labels: map[string]int{}, m: m.detached(), memory: graphMemory{limit: b.MemoryBytes, process: b.ProcessBytes}}
 	defer func() {
 		g.MemoryUsed, g.ProcessCut, g.ProcessSeen = g.memory.used, g.memory.processOver, g.memory.processSeen
@@ -328,6 +339,18 @@ func (m *Model) Explore(consts map[string]Value, init, step string, b Bound, lab
 		g.Out = append(g.Out, nil)
 		g.Expanded = append(g.Expanded, false)
 		g.ids[nd.key] = j
+		if until != nil {
+			stop, err := until(nd.s)
+			if err != nil {
+				return true, err
+			}
+			if stop {
+				// the node's parent row is the one expanding: every
+				// shallower state was found, breadth first
+				s.complete, s.cut, s.cutAt = false, "broken", nd.depth-1
+				return true, nil
+			}
+		}
 		return false, nil
 	}
 	var kept map[Edge]bool // the expanded state's edges so far
@@ -371,7 +394,7 @@ func (m *Model) Explore(consts map[string]Value, init, step string, b Bound, lab
 		return false
 	}
 	err = s.run(starts)
-	if s.cut == "memory" && s.cutAt >= 0 {
+	if (s.cut == "memory" || s.cut == "broken") && s.cutAt >= 0 {
 		// A partial row cannot establish a deadlock or complete enabledness.
 		g.Expanded[s.expanding] = false
 	}
@@ -385,7 +408,7 @@ func (m *Model) Explore(consts map[string]Value, init, step string, b Bound, lab
 		g.CompleteDepth = slices.Max(append([]int{0}, g.Depth...))
 	case g.Cut == "depth":
 		g.CompleteDepth = b.Depth
-	case g.Cut == "states" || g.Cut == "memory":
+	case g.Cut == "states" || g.Cut == "memory" || g.Cut == "broken":
 		g.CompleteDepth = s.cutAt
 	}
 	// the starts are the first nodes: those distinct, within the bound

@@ -399,7 +399,12 @@ document: CW1). `-json` prints `gotogether.matrix/1`: each variant's
 `expect`, `verdict`, `steps` and `ok`, for scripts. A `holds` within a
 bound shows as "holds within the bound": read its variant's `graph.completeDepth`.
 Each run's options (`-graph`, `-depth`, `-process-memory`) apply to every
-variant.
+variant; a variant's own `search: { depth: N, states: N }` bounds its
+searches over the section's. A variant whose invariants it must all break
+(no `holds`, no eventual vals) stops its graph once each has broken: its
+counterexamples are the shortest still, its graph line says "stopped once
+every invariant it must break broke", and a broken design costs only the
+states before its counterexamples, never its whole graph.
 
 Without variants in the binding, the same matrix is a loop over `-const`,
 one report per cell; the exit code is 0 (no failure), 1 (a failure) or 2

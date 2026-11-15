@@ -1,6 +1,7 @@
 package qeval
 
 import (
+	"errors"
 	"math"
 	"slices"
 	"strings"
@@ -185,5 +186,32 @@ func TestProcessCheckBacksOff(t *testing.T) {
 	}
 	if ok || !tight.processOver {
 		t.Fatalf("a 1-byte bound never cut: over %v", tight.processOver)
+	}
+}
+
+// ExploreUntil stops once its predicate holds of a state found, breadth
+// first: cut "broken", every state shallower than the stopping one found
+// (CompleteDepth), and its predicate's error the search's.
+func TestExploreUntil(t *testing.T) {
+	m := compile(t, "../../../validate/testdata/wide.qnt", "wide", "init", "step")
+	far := func(s State) (bool, error) {
+		x, y := s["x"].(Int), s["y"].(Int)
+		return int64(x)+int64(y) >= 3, nil
+	}
+	g, err := m.ExploreUntil(nil, "init", "step", Bound{}, nil, far)
+	if err != nil || g.Complete || g.Cut != "broken" || len(g.States) >= 4096 || g.CompleteDepth != 2 {
+		t.Fatalf("until x+y >= 3: err %v, complete %v, cut %q, %d states, complete to %d", err, g.Complete, g.Cut, len(g.States), g.CompleteDepth)
+	}
+	last := g.States[len(g.States)-1]
+	if ok, _ := far(last); !ok {
+		t.Errorf("stopped at %v, where the predicate does not hold", last)
+	}
+	full, err := m.ExploreUntil(nil, "init", "step", Bound{}, nil, func(State) (bool, error) { return false, nil })
+	if err != nil || !full.Complete || len(full.States) != 4096 {
+		t.Fatalf("a predicate never true: err %v, complete %v, %d states", err, full.Complete, len(full.States))
+	}
+	boom := errors.New("boom")
+	if _, err := m.ExploreUntil(nil, "init", "step", Bound{}, nil, func(State) (bool, error) { return false, boom }); !errors.Is(err, boom) {
+		t.Fatalf("the predicate's error: %v", err)
 	}
 }

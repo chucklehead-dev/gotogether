@@ -60,11 +60,18 @@ type MatrixCell struct {
 
 // Matrix checks each of the binding's simulate.variants (Binding.Variant)
 // with opt, as Simulate would check the binding with that variant's
-// constants and classifications, and tabulates them. A variant that
+// constants and classifications, and tabulates them. A variant whose
+// invariants are all ones it must break, with no eventual val, stops its
+// graph once each has broken (GraphSearch.UntilBroken): its
+// counterexamples are the shortest still, and the rest of its graph could
+// only cost memory. A variant that
 // cannot run (a constant the model lacks, an unknown invariant) is an
 // error naming it: the matrix is the design's record, and a column left
 // out of it would read as a pass.
 func Matrix(ctx context.Context, bindingPath string, opt SimulateOptions) (*MatrixReport, error) {
+	// a variant that must only break stops at its counterexamples: the
+	// rest of its graph would show nothing more the matrix reports
+	opt.UntilBroken = true
 	b, err := binding.Load(bindingPath)
 	if err != nil {
 		return nil, err

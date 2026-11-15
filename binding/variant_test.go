@@ -43,6 +43,22 @@ func TestVariants(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// a variant's search bounds over the section's
+	bounded := filepath.Join(t.TempDir(), "b.yaml")
+	spec, _ := filepath.Abs("../validate/testdata/design.qnt")
+	withSearch := strings.Replace(strings.Replace(string(src), "spec: design.qnt", "spec: "+spec, 1),
+		"      allows: [noStaleWrite, oldNeverWrites]\n", "      allows: [noStaleWrite, oldNeverWrites]\n      search: { depth: 3 }\n", 1)
+	if err := os.WriteFile(bounded, []byte(withSearch), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if bb, err := Load(bounded); err != nil {
+		t.Fatal(err)
+	} else if lv, _ := bb.Variant("lease"); lv == nil || lv.Simulate.Search.Depth != 3 || bb.Simulate.Search.Depth != 0 {
+		t.Errorf("lease's search depth: %+v", lv)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
 	dir := t.TempDir()
 	for _, c := range []struct{ from, to, want string }{
 		{"    - name: fence\n", "    - name: lease\n", `simulate.variants names "lease" twice`},

@@ -6,3 +6,7 @@
   comparisons). `-write-matrix doc.md` writes the table into a document
   between its `<!-- gotogether:matrix -->` lines; `-json` prints
   `gotogether.matrix/1` (`validate.MatrixDocument`, `model.Matrix`).
+- In a matrix, a variant whose invariants it must all break (no eventual
+  val) stops its graph once each has broken (`qeval.Model.ExploreUntil`,
+  `model.GraphSearch.UntilBroken`, cut `broken`), and a variant's own
+  `search` bounds its searches.

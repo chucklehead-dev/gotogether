@@ -22,7 +22,10 @@ func TestSimulateMatrix(t *testing.T) {
 	b := "../../validate/testdata/design.yaml"
 	code, text := capture(t, func() (int, error) { return simulate(t.Context(), []string{"-matrix", "-graph", "-binding", b}) })
 	for _, want := range []string{"variant lease (DESIGN = \"lease\"):", "variant fence (DESIGN = \"fence\"):",
-		"| | lease | fence |", "| noStaleWrite | breaks in 2 steps | holds |", "| oldNeverWrites | breaks in 1 step | breaks in 1 step |"} {
+		"| | lease | fence |", "| noStaleWrite | breaks in 2 steps | holds |", "| oldNeverWrites | breaks in 1 step | breaks in 1 step |",
+		// lease must only break, and its stale writes grow without bound: it
+		// stops once both have broken, where it once ran to the state bound
+		"graph   stopped once every invariant it must break broke: 4 states", "graph   complete: 4 states"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("missing %q in:\n%s", want, text)
 		}

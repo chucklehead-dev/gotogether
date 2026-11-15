@@ -229,6 +229,10 @@ type SimulateOptions struct {
 	// ProcessBytes, with Graph, bounds the process's memory as the Go
 	// runtime maps it (GraphSearch.ProcessBytes; 0: none)
 	ProcessBytes int64
+	// UntilBroken, with Graph, stops a search whose invariants are all ones
+	// the section allows (must break), and has no eventual val, once each
+	// has broken (GraphSearch.UntilBroken). Matrix sets it.
+	UntilBroken bool
 	// Unfair and Stops are the actions the liveness search does not hold
 	// to weak fairness (nil: simulate.unfair and simulate.stops).
 	Unfair, Stops []string
