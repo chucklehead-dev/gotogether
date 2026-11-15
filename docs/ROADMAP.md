@@ -319,8 +319,13 @@ Items, each its own decision before it starts:
   JSON for every check), and `gotogether tangle -check` fails on a
   missing or stale checked-in `.qnt`; validate/testdata/literate is the
   fixture (a deliberately broken invariant, a recorded run replayed).
-  Left: the slice on Goo's own acquisition contract and golem's
-  documents, `lint -model doc.md`, positions inside counterexample
+  Goo's acquisition contract (their fixture at goo `a549e87d`, run
+  2026-11-15): its document tangles to exactly their `.qnt`, their real
+  request log replays through their drain bridge to the same verdict from
+  either (Finishes and their named scenario), a deliberately broken
+  `retainedOwnership` is reported at `contract.md:87`, quint's errors at the
+  document's lines, and a stale checked-in `.qnt` is refused. Left:
+  golem's documents, `lint -model doc.md`, positions inside counterexample
   replays. Quint fences in Markdown read
   natively: a binding's `spec:` may name the `.md`, gotogether extracts its
   `quint` blocks (by module, in order) into a generated `.qnt` beside a
@@ -425,8 +430,11 @@ Items, each its own decision before it starts:
   and a plain `go test ./...`, or a platform libhegel does not ship for,
   is unaffected; CI runs the tag. go.mod still lists hegel (`go mod tidy`
   reads every tag); test-only, it is not linked into production binaries.
-  Asked of golem first: what forced `test/props` (go.mod, platforms, CI),
-  in case the tag does not answer it. A pure-Go shrinker (over qenv's
+  golem's answer: nothing forced it; it copied gotogether's own layout
+  (qhegel a module of its own) by convention, and an application's
+  test-only requirement costs it nothing. Documented: the Hegel skill's
+  layout reference, with the cost to a library (its users see the
+  requirement in their module graph, not their builds). A pure-Go shrinker (over qenv's
   recorded choice bytes, beside qshrink) waits until a project needs
   Hegel-free shrinking; it would not cover the varied differential, which
   needs Hegel's input drawing.
