@@ -334,7 +334,13 @@ Items, each its own decision before it starts:
   and exposure documents (lmt today) are the second case. Go doc-comment
   blocks are for links to the model, not the model: one state machine cut
   across packages is unreadable whole (both projects).
-- **CW2: the design matrix (L2's story × instance matrix).** A model
+- **CW2: the design matrix (L2's story × instance matrix).** First slice
+  done: `simulate.variants` (each a name, constants, holds and allows) and
+  `simulate -matrix` run every variant and tabulate them, a cell FAIL where
+  the variant's classification is contradicted; `-write-matrix doc.md`
+  writes the table between markers, `-json` prints `gotogether.matrix/1`.
+  Left: possibles per variant, breaks stopping at the first violation, and
+  iterative deepening. A model
   declares its switches once (`DESIGN`, `GUARD`, `ROLLBACK`, constants of an
   instance) and a table of expectations: which variants must hold which
   properties, which must break which, with which named scenarios possible.

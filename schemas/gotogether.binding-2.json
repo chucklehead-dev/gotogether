@@ -305,6 +305,43 @@
           },
           "type": "array"
         },
+        "variants": {
+          "description": "Variants are the design's alternatives, each the same model under constants of its own (a DESIGN switch, a mechanism turned off), with what each must hold and must be able to break: `gotogether simulate -matrix` checks every one and prints the table, properties by variants (ROADMAP CW2). Its lists replace the section's, where given.",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "allows": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "constants": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "holds": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "type": "array"
+        },
         "verifySkip": {
           "description": "VerifySkip, if set, says why -verify skips the model: one Apalache cannot encode, or one too slow at any useful depth. Its sampling stands.",
           "type": "string"

@@ -83,6 +83,11 @@ var (
 	// removed one is a new major.
 	Report = Format{Thing: "report", Major: 2, What: "a command's machine-readable report (validate -json, simulate -json)",
 		Older: "run the command again with this version"}
+	// Matrix is a design matrix (simulate -matrix -json; validate.
+	// MatrixDocument): each variant's report/2 document, and the table of
+	// what each holds and breaks.
+	Matrix = Format{Thing: "matrix", Major: 1, What: "a design matrix (simulate -matrix -json)",
+		Older: "run gotogether simulate -matrix again with this version"}
 	// Lint is the structured core lint report, shared by text and JSON.
 	Lint = Format{Thing: "lint", Major: 1, What: "core lint findings and performed checks (lint -json)", Older: "run gotogether lint again"}
 	// ModelPreflight is grist's read-only catalog and model-source inspection.
@@ -99,7 +104,7 @@ var (
 
 // All is every format, for doctor and the docs.
 func All() []Format {
-	return []Format{Steps, Requests, Binding, Convert, Corpus, Choices, Manifest, Evidence, Model, Report, Lint, ModelPreflight, Nav}
+	return []Format{Steps, Requests, Binding, Convert, Corpus, Choices, Manifest, Evidence, Model, Report, Matrix, Lint, ModelPreflight, Nav}
 }
 
 // Name is the format's name at the major this build writes.
