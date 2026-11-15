@@ -526,6 +526,16 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 			defer c.Close()
 			checker = &modelChecker{c}
 		}
+		// the checker loads the binding from its file: a variant's section
+		// (Matrix) is not the file's, and its search bound, constants and
+		// classifications are what the graph and the possibles must use
+		if checker.Binding != nil && checker.Binding.Simulate != b.Simulate {
+			cb := *checker.Binding
+			cb.Simulate = b.Simulate
+			cv := *checker.Checker
+			cv.Binding = &cb
+			checker = &modelChecker{&cv}
+		}
 		if possibles, err = resolvePossibles(checker, possibleList); err != nil {
 			return nil, err
 		}

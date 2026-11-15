@@ -87,6 +87,53 @@ func TestSimulateMatrix(t *testing.T) {
 	}
 }
 
+// A variant's own search bound is the one its graph searches (golem's
+// leadership designs, each to its own depth, #144: the checker read the
+// file's section, so every variant searched the section's bound), and a
+// holds its search proved only to a depth says so in the table and the
+// JSON, where it once read "holds" as the whole graph does.
+func TestSimulateMatrixVariantSearch(t *testing.T) {
+	skip.Quint(t)
+	dir := t.TempDir()
+	src, err := os.ReadFile("../../validate/testdata/design.qnt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := filepath.Join(dir, "design.yaml")
+	if err := os.WriteFile(filepath.Join(dir, "design.qnt"), src, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(b, []byte(`spec: design.qnt
+module: design
+constants: { DESIGN: '"fence"' }
+actions: { takeover: {}, writeOld: {} }
+invariants: [noStaleWrite]
+simulate:
+  holds: [noStaleWrite]
+  terminal: 'true'
+  variants:
+    - name: whole
+    - name: shallow
+      search: { depth: 1 }
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, text := capture(t, func() (int, error) { return simulate(t.Context(), []string{"-matrix", "-graph", "-binding", b}) })
+	if code != 0 || !strings.Contains(text, "| noStaleWrite | holds | holds to depth 1 |") {
+		t.Fatalf("exit %d, want the shallow variant's bounded proof in its cell:\n%s", code, text)
+	}
+	_, out := capture(t, func() (int, error) {
+		return simulate(t.Context(), []string{"-json", "-matrix", "-graph", "-binding", b})
+	})
+	var d validate.MatrixDocument
+	if err := json.Unmarshal([]byte(out), &d); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if c := d.Rows[0].Cells; len(c) != 2 || c[0].Depth != 0 || c[1].Depth != 1 || c[1].Verdict != "holds" {
+		t.Errorf("cells %+v: want depth 0 for the whole graph, 1 for the shallow search", c)
+	}
+}
+
 func TestSimulateMatrixRefusals(t *testing.T) {
 	for _, tc := range []struct {
 		args []string

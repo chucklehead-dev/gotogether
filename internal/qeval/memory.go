@@ -2,7 +2,7 @@ package qeval
 
 import (
 	"math"
-	"runtime"
+	"runtime/debug"
 	"runtime/metrics"
 )
 
@@ -45,9 +45,14 @@ func (b *graphMemory) reserve(n int64) bool {
 
 // processWithin reads the process's memory every so many reservations and
 // says whether it is within its bound. A reading past it is confirmed after a
-// collection (garbage alone never cuts a search), and a confirmed reading
-// under it backs the checks off, so a search near its bound does not
-// collect at every check.
+// collection that returns freed pages to the operating system
+// (debug.FreeOSMemory): garbage alone never cuts a search, nor memory an
+// earlier search freed that the runtime still maps (runtime.GC frees the
+// heap but keeps its pages until the scavenger returns them, and cut a
+// matrix's second variant at 113 states: golem's, #144). A confirmed
+// reading under the bound backs the checks off, so a search near its
+// bound does not collect at every check. ProcessSeen keeps only readings
+// that count: within the bound, or confirmed.
 func (b *graphMemory) processWithin() bool {
 	if b.every == 0 {
 		b.every = processCheckEvery
@@ -57,13 +62,14 @@ func (b *graphMemory) processWithin() bool {
 	}
 	b.reserves = 0
 	m := processMemory()
-	b.processSeen = max(b.processSeen, m)
 	if m <= b.process {
+		b.processSeen = max(b.processSeen, m)
 		b.every = processCheckEvery
 		return true
 	}
-	runtime.GC()
+	debug.FreeOSMemory()
 	if m = processMemory(); m <= b.process {
+		b.processSeen = max(b.processSeen, m)
 		b.every = 16 * processCheckEvery
 		return true
 	}

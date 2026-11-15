@@ -2896,6 +2896,7 @@ type MatrixCellDoc struct
     field Expect string `json:"expect,omitempty"`
     field Verdict string `json:"verdict,omitempty"`
     field Steps int `json:"steps,omitempty"`
+    field Depth int `json:"depth,omitempty"`
     field OK bool `json:"ok"`
 type MatrixDocument struct
     field Format string `json:"format"`
@@ -3388,6 +3389,7 @@ type MatrixCell struct
     field Expect string
     field Verdict string
     field Steps int
+    field Depth int
     field OK bool
     method (MatrixCell) Text() string
 type MatrixReport struct
