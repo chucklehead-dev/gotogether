@@ -55,6 +55,15 @@ module bank {
   // Properties.
   val noOverdraft = ACCOUNTS.forall(a => balances.get(a) >= 0)
 
+  // An account's balance, as the bank reports it: a driver compares the
+  // bank's Balance with this (connect's Step.Eval), not with a copy in Go.
+  def balanceOf(account: str): int = balances.get(account)
+
+  // A state random traces seldom reach (an account holding 30 or more);
+  // the model-driven test requires it (connect's Config.Require), so a
+  // bug that shows only there is tested every run.
+  val rich = ACCOUNTS.exists(a => balances.get(a) >= 30)
+
   // A named scenario, for `quint test` and as a regression of the code.
   run payRentTest =
     init

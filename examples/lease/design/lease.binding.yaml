@@ -1,0 +1,31 @@
+# The design model's binding (lease.md): no code is checked against it.
+# simulate -matrix compares the designs; design_test.go checks that the
+# table in lease.md is the one the model gives.
+spec: lease.md
+module: leaseDesign
+constants:
+  FENCING: 'true'
+  CLOCKS: '"lying"'
+actions:
+  grant: {}
+  write: {}
+invariants: [noStaleWrite, noLateWrite]
+simulate:
+  terminal: 'true'
+  # the section is the design chosen (the constants above: fencing, clocks
+  # that lie), as plain simulate checks it; each variant sets both lists
+  holds: [noStaleWrite]
+  allows: [noLateWrite]
+  variants:
+    - name: fence
+      constants: { FENCING: 'true', CLOCKS: '"lying"' }
+      holds: [noStaleWrite]
+      allows: [noLateWrite]
+    - name: trusted clocks
+      constants: { FENCING: 'false', CLOCKS: '"true"' }
+      holds: [noStaleWrite, noLateWrite]
+      allows: []
+    - name: lease only
+      constants: { FENCING: 'false', CLOCKS: '"lying"' }
+      holds: []
+      allows: [noStaleWrite, noLateWrite]

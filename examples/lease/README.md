@@ -16,6 +16,9 @@ and the process's sleeps with them.
 | [lease.binding.yaml](lease.binding.yaml) | grants and writes; a write refused as stale is no step |
 | [lease.go](lease.go) | the lock (its own process and clocks: it times leases on its monotonic clock) and the store as services, the holders, `Run` |
 | [lease_test.go](lease_test.go) | each variant explored with and without clock faults, and every run with one jump |
+| [design/lease.md](design/lease.md) | the design, before the code: a literate model (`gotogether tangle`) of fencing, trusted clocks and a lease alone, and the matrix of what each holds |
+| [design/lease.binding.yaml](design/lease.binding.yaml) | the design's variants (`simulate.variants`), each with what it must hold and what it must be able to break |
+| [design_test.go](design_test.go) | the design document's matrix is the model's |
 
 ## What each test catches
 
@@ -28,6 +31,7 @@ and the process's sleeps with them.
 | `TestNoFencingImmuneToSkewAndJumps` | `NoFencing` | skews and jumps; then every run with one jump (`System.Exhaust`, 3209 runs; the first 100 under `-short`) | every run conforms: a monotonic clock sees neither |
 | `TestWallIntervalBrokenByAClockJump` | `WallInterval`: `NoFencing` timing its lease on the wall clock (`Now().Sub`, as code whose times lost their monotonic reading does); then faithful | jumps; then every run with one jump | `Some(Violates("noStaleWrite"))` (half the runs; 306 of the 3209 with one jump, 9 of the first 100 that `-short` searches): the holder's clock went back; the fenced store survives each |
 | `TestAbsoluteExpiryBrokenBySkew` | `AbsoluteExpiry`: the holder compares the lock's expiry time with its own wall clock | true, then skews only | conforms, then `Some(Violates("noStaleWrite"))` (36%); `WallInterval` conforms under the same skews: an interval on one clock is immune to skew |
+| `TestDesignMatrixIsCurrent` | the design's three variants, on the model alone (`model.Matrix`, the whole graph) | the model's: `CLOCKS` lying or trusted | fencing holds `noStaleWrite` and breaks `noLateWrite` (an old holder still writes until its successor does); trusted clocks hold both; a lease alone breaks both; the test fails when design/lease.md's table is not the one the model gives |
 | `TestNoFencingBrokenByDrift` | `NoFencing`, then faithful | drift only, at 2%, then 25% | conforms at 2% (the margin left after a pause covers about 5%), `Some(Violates("noStaleWrite"))` at 25% (30% of runs): a slow clock under-measures the lease; the fenced store conforms at 25% |
 
 Each mutant is broken by the one fault its code trusts: a comparison of
@@ -38,6 +42,21 @@ The lesson is Kleppmann's: a lease checked against a clock is a
 performance optimisation, and only a token the guarded resource checks
 makes it safe. A test that runs with true clocks cannot tell the two
 apart.
+
+## The design, before the code
+
+design/lease.md is the decision the code above carries out, written as
+a literate model: its quint blocks tangle into `design/lease.qnt`
+(generated, ignored by git), and its table is written by the checker
+from the binding's variants, not by hand:
+
+```sh
+gotogether tangle design/lease.md
+gotogether simulate -matrix -graph -write-matrix design/lease.md -binding design/lease.binding.yaml
+```
+
+A position in an error, or a broken invariant's source, names the
+document's line, not the generated file's.
 
 ## Run it
 
