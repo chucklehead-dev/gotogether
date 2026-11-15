@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/chucklehead-dev/gotogether/internal/literate"
 	"github.com/chucklehead-dev/gotogether/internal/memo"
 	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/internal/quintnames"
@@ -326,7 +327,9 @@ func LoadModel(ctx context.Context, quint, spec, module string) (*Model, error) 
 		// with --out, quint writes its errors there, not to its output: a
 		// refused model once said only "exit status 1"
 		out = append(out, typecheckErrors(tmp.Name())...)
-		return nil, fmt.Errorf("quint typecheck %s: %w\n%s%s", spec, err, out, reservedHint(string(out)))
+		// a literate model's positions are its document's (ROADMAP CW1)
+		text := literate.Rewrite(string(out), filepath.Dir(spec))
+		return nil, fmt.Errorf("quint typecheck %s: %w\n%s%s", literate.DocOf(spec), err, text, reservedHint(text))
 	}
 	b, err := os.ReadFile(tmp.Name())
 	if err != nil {

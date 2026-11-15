@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/literate"
 	"github.com/chucklehead-dev/gotogether/internal/memo"
 	"github.com/chucklehead-dev/gotogether/qtrace"
 	"github.com/chucklehead-dev/gotogether/validate/receipt"
@@ -236,6 +237,9 @@ type Report struct {
 	// run had it settle (qenv.Settle): a run that never reached quiescence
 	// is not OK, whatever its steps. Set by the caller that ran it (qtest).
 	Unsettled string
+	// sources are where each definition of a literate model is
+	// ("doc.md:23"): a failing invariant's line names its own.
+	sources map[string]string
 }
 
 // OK is true when every actor's trace conforms and satisfies the
@@ -280,7 +284,7 @@ func (r *Report) Summary() string { return r.summary(false) }
 // failing record's other indices, and the model's whole state.
 func (r *Report) VerboseSummary() string { return r.summary(true) }
 
-func (r *Report) summary(verbose bool) string {
+func (r *Report) summaryText(verbose bool) string {
 	s := ""
 	if r.Unsettled != "" {
 		s += r.Unsettled + "\n"
@@ -310,6 +314,50 @@ func (r *Report) summary(verbose bool) string {
 	}
 	s += r.Receipt().String()
 	return s
+}
+
+func (r *Report) summary(verbose bool) string {
+	return sourcedSummary(r.summaryText(verbose), r.sources)
+}
+
+// sourcedSummary is a report's text with each failing invariant's line
+// naming where its definition is (`invariant belowMax (counter.md:23):
+// FAIL`), and every position in a literate model's generated file its
+// document's.
+func sourcedSummary(text string, sources map[string]string) string {
+	if len(sources) == 0 {
+		return text
+	}
+	lines := strings.SplitAfter(text, "\n")
+	for i, line := range lines {
+		indent, rest, ok := strings.Cut(line, "invariant ")
+		if !ok || strings.TrimSpace(indent) != "" {
+			continue
+		}
+		name, verdict, ok := strings.Cut(rest, ": ")
+		if src, known := sources[name]; ok && known && strings.HasPrefix(verdict, "FAIL") {
+			lines[i] = indent + "invariant " + name + " (" + src + "): " + verdict
+		}
+	}
+	return literate.Rewrite(strings.Join(lines, ""), "")
+}
+
+// sourcesOf are b's model's definitions' places, its document's lines
+// for a literate model, named as the working directory sees them; nil
+// without a binding.
+func sourcesOf(b *binding.Binding) map[string]string {
+	// a literate model's alone: a .qnt model's report text stays as it
+	// was, which scripts and tests read
+	if b == nil || !literate.IsDoc(b.Spec) {
+		return nil
+	}
+	shown := b.DocPath()
+	if wd, err := os.Getwd(); err == nil {
+		if rel, err := filepath.Rel(wd, shown); err == nil && !strings.HasPrefix(rel, "..") {
+			shown = rel
+		}
+	}
+	return literate.Sources(b.SpecPath(), shown)
 }
 
 // reconstruct is the binding's Reconstruct: the traces of the actors b
@@ -350,7 +398,7 @@ func (c *Checker) check(ctx context.Context, steps []qtrace.Step) (*Report, erro
 		return reps[0], errs[0]
 	}
 	traces, issues := reconstruct(c.Binding, steps)
-	rep := &Report{Issues: issues}
+	rep := &Report{Issues: issues, sources: sourcesOf(c.Binding)}
 	re := c.runEvaluator()
 	var shadowErr error // the first actor the evaluator and quint disagree on
 	for _, t := range traces {

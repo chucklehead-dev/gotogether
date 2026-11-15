@@ -28,6 +28,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/chucklehead-dev/gotogether/internal/formats"
+	"github.com/chucklehead-dev/gotogether/internal/literate"
 	"github.com/chucklehead-dev/gotogether/internal/memo"
 	"github.com/chucklehead-dev/gotogether/itf"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -299,6 +300,16 @@ func Load(path string) (*Binding, error) {
 	if bd.Spec == "" || bd.Module == "" {
 		return nil, fmt.Errorf("%s: spec and module are required", path)
 	}
+	if literate.IsDoc(bd.Spec) {
+		// a literate model (ROADMAP CW1): its quint blocks written beside
+		// it, which every reader of SpecPath then runs. A document gone (a
+		// manifest's binding whose model is not here) is left to CheckSpec.
+		if _, err := os.Stat(bd.DocPath()); err == nil {
+			if _, _, err := literate.Write(bd.DocPath()); err != nil {
+				return nil, fmt.Errorf("%s: spec %s: %w", path, bd.Spec, err)
+			}
+		}
+	}
 	if err := bd.resolveInstance(); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
@@ -499,8 +510,19 @@ func actorGlob(pat string) (*regexp.Regexp, error) {
 	return regexp.Compile(b.String())
 }
 
-// SpecPath is the absolute path of the model.
+// SpecPath is the absolute path of the model: for a literate model (a
+// spec naming a Markdown document), the .qnt Load generated beside it.
 func (b *Binding) SpecPath() string {
+	if literate.IsDoc(b.Spec) {
+		return literate.GeneratedPath(b.DocPath())
+	}
+	return b.DocPath()
+}
+
+// DocPath is the absolute path of the spec as the binding names it: the
+// model, or a literate model's Markdown document, where positions in its
+// generated .qnt are reported.
+func (b *Binding) DocPath() string {
 	if filepath.IsAbs(b.Spec) {
 		return b.Spec
 	}
@@ -516,7 +538,7 @@ func (b *Binding) CheckSpec() error {
 	if err := b.checkEvidence(nil); err != nil {
 		return err
 	}
-	resolved := b.SpecPath()
+	resolved := b.DocPath()
 	if _, err := os.Stat(resolved); err == nil || !errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}

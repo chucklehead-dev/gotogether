@@ -57,6 +57,7 @@ type Binding struct
     field Path string `yaml:"-"`
     method (*Binding) CheckSpec() error
     method (*Binding) ChecksActor(actor string) bool
+    method (*Binding) DocPath() string
     method (*Binding) EvalModule(m *Model, qntPath string) (*EvalModule, error)
     method (*Binding) InitChoiceNote(m *Model) string
     method (*Binding) Lint(m *Model) []string
@@ -2562,6 +2563,7 @@ type DocCheck struct
     field Verdict string `json:"verdict"`
     field Detail string `json:"detail,omitempty"`
     field Counterexample *DocCounterexample `json:"counterexample,omitempty"`
+    field Source string `json:"source,omitempty"`
 type DocComparison struct
     field Scope string `json:"scope"`
     field Basis string `json:"basis"`
@@ -3392,6 +3394,7 @@ type Report struct
     field EvaluatorBug string
     field Code int
     field Text string
+    field Sources map[string]string
     method (*Report) Doc() *validate.Document
     method (*Report) StepActionReachability() StepActionReachability
 type SimulateOptions struct

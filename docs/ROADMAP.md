@@ -306,7 +306,17 @@ toolkit's:
 
 Items, each its own decision before it starts:
 
-- **CW1: literate models (L8, unparked).** Quint fences in Markdown read
+- **CW1: literate models (L8, unparked).** First slice done: a
+  binding's `spec:` names the document, Load writes its quint blocks
+  beside it with the document's digest and a line map (never over a
+  hand-written file), quint's errors, lint's findings and simulate's and
+  validate's failing lines name the document's lines (`source` in the
+  JSON for every check), and `gotogether tangle -check` fails on a
+  missing or stale checked-in `.qnt`; validate/testdata/literate is the
+  fixture (a deliberately broken invariant, a recorded run replayed).
+  Left: the slice on Goo's own acquisition contract and golem's
+  documents, `lint -model doc.md`, positions inside counterexample
+  replays. Quint fences in Markdown read
   natively: a binding's `spec:` may name the `.md`, gotogether extracts its
   `quint` blocks (by module, in order) into a generated `.qnt` beside a
   line map, and every position quint or gotogether reports (typecheck

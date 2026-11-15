@@ -175,7 +175,7 @@ func Inspect(ctx context.Context, o Options) *Report {
 		m, err := binding.LoadModel(ctx, o.Quint, b.SpecPath(), b.Module)
 		if err != nil {
 			operational := modelOperational(err)
-			r.fail(x.model, "binding.model", err, b.SpecPath(), "correct the model/module or make the selected Quint executable available", "model", operational)
+			r.fail(x.model, "binding.model", err, b.DocPath(), "correct the model/module or make the selected Quint executable available", "model", operational)
 			blockRest("model loading/typechecking did not pass", x.lint)
 			continue
 		}
@@ -184,7 +184,7 @@ func Inspect(ctx context.Context, o Options) *Report {
 		r.bindingFindings(x.choices, b.LintChoiceFindings(m), p)
 		for _, property := range slices.Sorted(maps.Keys(m.Diagnostics)) {
 			active := slices.Contains(b.Invariants, property) || slices.Contains(b.Eventually, property)
-			r.Evidence = append(r.Evidence, Evidence{Kind: "model.diagnostic", Target: p, Count: 1, Items: []EvidenceItem{{Path: b.SpecPath(), Symbol: m.Module + "." + property, Value: m.Diagnostics[property], Active: &active}}})
+			r.Evidence = append(r.Evidence, Evidence{Kind: "model.diagnostic", Target: p, Count: 1, Items: []EvidenceItem{{Path: b.DocPath(), Symbol: m.Module + "." + property, Value: m.Diagnostics[property], Active: &active}}})
 		}
 		bound = append(bound, binding.Bound{Binding: b, Model: m})
 		r.Evidence = append(r.Evidence, Evidence{Kind: "binding", Target: p, Count: len(b.Actions)})

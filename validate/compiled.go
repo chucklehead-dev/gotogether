@@ -425,7 +425,7 @@ func (c *Checker) checkCompiled(ctx context.Context, steps []qtrace.Step) (*Repo
 	for _, n := range cs.notes {
 		issues = append(issues, qtrace.Issue{Severity: "warning", Kind: "compiled", Msg: n})
 	}
-	rep := &Report{Issues: issues}
+	rep := &Report{Issues: issues, sources: sourcesOf(c.Binding)}
 	e := cs.ev.replaying()
 	for _, t := range traces {
 		if err := ctx.Err(); err != nil {

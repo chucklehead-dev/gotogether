@@ -140,7 +140,7 @@ func (c *Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProce
 	var keys []string
 	for i, steps := range runs {
 		traces, issues := reconstruct(c.Binding, steps)
-		reports[i] = &Report{Issues: issues}
+		reports[i] = &Report{Issues: issues, sources: sourcesOf(c.Binding)}
 		for _, t := range traces {
 			if c.resumes(t) && c.mode.history == nil {
 				// the evaluator's search from the resume's states, confirmed by
