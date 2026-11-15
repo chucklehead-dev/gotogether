@@ -269,6 +269,12 @@ type Report struct {
 	// Deadlocks is the graph's verdict on the states the step cannot
 	// leave (with Graph): Held when none is a deadlock.
 	Deadlocks *Verdict
+	// Dead is the graph's verdict on simulate.dead (with Graph, when the
+	// section lists it): Violated when a listed action is taken or an
+	// action no state enables is unlisted, Unchecked when the graph cannot
+	// tell (stopped at its counterexamples, or truncated by states or
+	// memory).
+	Dead *Verdict
 	// EvaluatorBug, if set, is quint reaching a state the evaluator's
 	// complete graph lacks: the graph's verdicts are void.
 	EvaluatorBug string
@@ -306,6 +312,9 @@ type Verdict struct {
 	Counterexample   *Counterexample
 	Lasso            *HotLasso
 	Error, Unchecked string
+	// Note says why a verdict that is not an invariant's failed (the
+	// actions simulate.dead got wrong).
+	Note string
 	// Trace is quint's output for a sampled or verified violation.
 	Trace string
 	// Replayed is, with Replay, whether quint test replayed the

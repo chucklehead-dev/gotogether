@@ -206,6 +206,7 @@ type Simulation struct
     field Terminal string `yaml:"terminal"`
     field Unfair []string `yaml:"unfair"`
     field Stops []string `yaml:"stops"`
+    field Dead []string `yaml:"dead"`
     field Variants []Variant `yaml:"variants"`
 type StepPattern struct
     field Action string
@@ -222,6 +223,7 @@ type Variant struct
     field Constants map[string]string `yaml:"constants"`
     field Holds []string `yaml:"holds"`
     field Allows []string `yaml:"allows"`
+    field Dead []string `yaml:"dead"`
     field Search SearchBound `yaml:"search"`
 type Within struct
     field After string `yaml:"after"`
@@ -2905,7 +2907,13 @@ type MatrixDocument struct
     field Exit int `json:"exit"`
     field Variants []MatrixVariant `json:"variants"`
     field Rows []MatrixRowDoc `json:"rows"`
+    field Others []MatrixOtherDoc `json:"others,omitempty"`
     field Table string `json:"table"`
+type MatrixOtherDoc struct
+    field Variant string `json:"variant"`
+    field Kind string `json:"kind"`
+    field Name string `json:"name"`
+    field Detail string `json:"detail,omitempty"`
 type MatrixRowDoc struct
     field Check string `json:"check"`
     field Cells []MatrixCellDoc `json:"cells"`
@@ -3392,10 +3400,16 @@ type MatrixCell struct
     field Depth int
     field OK bool
     method (MatrixCell) Text() string
+type MatrixOther struct
+    field Variant string
+    field Kind string
+    field Name string
+    field Detail string
 type MatrixReport struct
     field Binding string
     field Variants []VariantReport
     field Rows []MatrixRow
+    field Others []MatrixOther
     field Code int
     method (*MatrixReport) Doc() *validate.MatrixDocument
     method (*MatrixReport) Text() string
@@ -3451,6 +3465,7 @@ type Report struct
     field Eventually []Verdict
     field Possibles []PossibleVerdict
     field Deadlocks *Verdict
+    field Dead *Verdict
     field EvaluatorBug string
     field Code int
     field Text string
@@ -3500,6 +3515,7 @@ type Verdict struct
     field Lasso *HotLasso
     field Error string
     field Unchecked string
+    field Note string
     field Trace string
     field Replayed string
 

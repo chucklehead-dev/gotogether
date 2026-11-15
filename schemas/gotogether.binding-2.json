@@ -219,6 +219,13 @@
             "null"
           ]
         },
+        "dead": {
+          "description": "Dead, if set, are the step's actions the design means never to be enabled (one a switch turns off): `simulate -graph` fails when a listed action is taken, or when an action no state enables is not listed, since every property that action could break then goes untested (golem's graph_holds, #144). Unset, nothing is checked; an empty list says no action is dead.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "holds": {
           "description": "Holds are the invariants the model guarantees: no trace violates them. An eventual val here is one the model drives itself: `simulate -graph` fails on a fair cycle that keeps it false forever (P6).",
           "items": {
@@ -324,6 +331,13 @@
                   "object",
                   "null"
                 ]
+              },
+              "dead": {
+                "description": "Dead, if set, replaces the section's dead actions (Simulation.Dead), as Holds and Allows replace theirs: the dead actions follow the variant's switches.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
               "holds": {
                 "items": {

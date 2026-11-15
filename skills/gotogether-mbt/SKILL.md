@@ -29,7 +29,8 @@ compared with the model's. The Go counterpart of quint-connect.
 4. One action at a time, until a run of 50 samples passes; then raise
    `MaxSteps`.
 5. A state a bug hides at, rare in the samples: name its boolean val in
-   `Config.Require`; the run replays the shortest path to it first
+   `Config.Require`, the state after the step under test (a witness ends
+   there); the run replays the shortest path to it first
    (`witness_<name>`), logs how often the samples reached it, and fails
    when nothing did.
 6. A program that runs by itself: `sys.FollowTraces(t, cfg,

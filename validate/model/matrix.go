@@ -24,9 +24,21 @@ type MatrixReport struct {
 	// Rows are the table's: one per invariant or eventual val that some
 	// variant classifies, in the order the variants first name them.
 	Rows []MatrixRow
+	// Others are the failing checks no row shows: a variant's deadlock,
+	// its simulate.dead, a possible it could not reach. A matrix whose
+	// cells all pass can still exit 1 on one, and the table says so
+	// (golem's model without a terminal, every finished run a deadlock).
+	Others []MatrixOther
 	// Code is the worst of the variants' Codes (1 over 2): 0 when every
 	// variant is as the binding says.
 	Code int
+}
+
+// A MatrixOther is a failing check of one variant that is not a row of the
+// table: its Kind ("graph", "possible"), its Name ("deadlock", "dead", a
+// possible's text) and its report's Detail.
+type MatrixOther struct {
+	Variant, Kind, Name, Detail string
 }
 
 // A VariantReport is one variant's run: its name, the constants it sets
@@ -98,6 +110,13 @@ func Matrix(ctx context.Context, bindingPath string, opt SimulateOptions) (*Matr
 		}
 	}
 	m.Rows = matrixRows(b, m.Variants)
+	for _, v := range m.Variants {
+		for _, c := range v.Report.Doc().Checks {
+			if c.Verdict == "fail" && c.Kind != "invariant" && c.Kind != "eventually" {
+				m.Others = append(m.Others, MatrixOther{Variant: v.Name, Kind: c.Kind, Name: c.Name, Detail: c.Detail})
+			}
+		}
+	}
 	return m, nil
 }
 
@@ -199,6 +218,13 @@ func (m *MatrixReport) Text() string {
 		}
 		b.WriteString("\n")
 	}
+	if len(m.Others) > 0 {
+		var fails []string
+		for _, o := range m.Others {
+			fails = append(fails, fmt.Sprintf("%s: %s", o.Variant, o.Name))
+		}
+		fmt.Fprintf(&b, "\nFAIL outside the table: %s (each variant's report says why)\n", strings.Join(fails, "; "))
+	}
 	return b.String()
 }
 
@@ -254,6 +280,9 @@ func (m *MatrixReport) Doc() *validate.MatrixDocument {
 			row.Cells = append(row.Cells, validate.MatrixCellDoc{Variant: c.Variant, Expect: c.Expect, Verdict: c.Verdict, Steps: c.Steps, Depth: c.Depth, OK: c.OK})
 		}
 		d.Rows = append(d.Rows, row)
+	}
+	for _, o := range m.Others {
+		d.Others = append(d.Others, validate.MatrixOtherDoc{Variant: o.Variant, Kind: o.Kind, Name: o.Name, Detail: o.Detail})
 	}
 	return d
 }
