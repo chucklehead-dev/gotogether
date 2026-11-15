@@ -414,6 +414,13 @@ Items, each its own decision before it starts:
     x/tools and reads `//quint:action`, pinned by consumers with Go's
     `tool` directive; generated code carries a version stamp of the core
     API it targets, as woven code carries `woven.ABI1`.
+  Runtime half done: `connect.Bind` (actions to methods, picks to
+  parameters in order, a leading context the trace's, results compared
+  with a model def by `Returns` or refused unchecked, `State`, `Check`,
+  `Handle`, `Skip`); examples/bank's model-driven test is bound. Left:
+  the static half in qanalysis (Quint types and ITF codecs from Go
+  structs, the walkthrough's tables, the alignment lint), and golem's
+  `expDriver` as the first outside case.
   Not core: x/tools is large, releases with Go itself and would raise
   every consumer's version of it (minimal version selection), all for a
   development-time tool. Not a new module: it would repeat qanalysis's

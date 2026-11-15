@@ -243,6 +243,22 @@ From golem's use (#144):
   it with what the model's own action computed (`s.Get` after the step).
   The model's traces bring the inputs no hand-written case would: out of
   order, after a failover, at any point.
+- **Bind the methods instead of writing handlers.** `connect.Bind(newImpl)`
+  makes the implementation at `init` (once per trace, with the trace's
+  `testing.TB`); `.Action(name, (*T).Method, picks...)` binds an action,
+  its picks named in the method's parameter order (Go cannot read
+  parameter names), each decoded into its parameter's type. A leading
+  `context.Context` is given the trace's; a pointer parameter is
+  optional, nil when the model did not pick it; a final `error` fails the
+  step. A result besides the error must be checked against the model's
+  def (`.Returns(name, def, picks...)`, through `Step.Eval`), or the
+  driver refuses to start. `.Handle(name, func(T, *Step) error)` takes an
+  action no method fits, `.Skip(names...)` another component's,
+  `.State(project)` and `.Check(func(T, *Step) error)` the projection and
+  a check after each step; `b.Driver` is the factory `connect.Run` takes.
+  A malformed binding (a count of picks not the method's, a method of
+  another type, an action bound twice) panics where it is built, naming
+  the fix. examples/bank's `TestModelDrivesBank` is bound this way.
 - **Reach the state that matters.** Name a boolean val true where the
   bug could show (a publication with a gap in the ledger) in
   `Config.Require`: the run replays the shortest path to it first, counts
