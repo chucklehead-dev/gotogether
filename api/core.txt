@@ -78,6 +78,7 @@ type Binding struct
     method (*Binding) StartIssues(tr *qtrace.Trace) []qtrace.Issue
     method (*Binding) StepsToITF(steps []qtrace.Step) (map[string][]byte, []qtrace.Issue, error)
     method (*Binding) UsedFields(m *Model) map[string][]string
+    method (*Binding) Variant(name string) (*Binding, error)
     method (*Binding) WithRuntimeConstants(names ...string) *Binding
 type Bound struct
     field Binding *Binding
@@ -205,6 +206,7 @@ type Simulation struct
     field Terminal string `yaml:"terminal"`
     field Unfair []string `yaml:"unfair"`
     field Stops []string `yaml:"stops"`
+    field Variants []Variant `yaml:"variants"`
 type StepPattern struct
     field Action string
     field Params []string
@@ -215,6 +217,11 @@ type TraceReader struct
     field Spec string
     field Module string
     method (*TraceReader) Read(ctx context.Context, path string) (*itf.Trace, error)
+type Variant struct
+    field Name string `yaml:"name"`
+    field Constants map[string]string `yaml:"constants"`
+    field Holds []string `yaml:"holds"`
+    field Allows []string `yaml:"allows"`
 type Within struct
     field After string `yaml:"after"`
     field Holds string `yaml:"holds"`
@@ -2883,6 +2890,27 @@ type Manifest struct
     method (*Manifest) Bundle(dir string) error
     method (*Manifest) Verify() (warnings []string, err error)
     method (*Manifest) Write(path string) error
+type MatrixCellDoc struct
+    field Variant string `json:"variant"`
+    field Expect string `json:"expect,omitempty"`
+    field Verdict string `json:"verdict,omitempty"`
+    field Steps int `json:"steps,omitempty"`
+    field OK bool `json:"ok"`
+type MatrixDocument struct
+    field Format string `json:"format"`
+    field Binding string `json:"binding"`
+    field Verdict string `json:"verdict"`
+    field Exit int `json:"exit"`
+    field Variants []MatrixVariant `json:"variants"`
+    field Rows []MatrixRowDoc `json:"rows"`
+    field Table string `json:"table"`
+type MatrixRowDoc struct
+    field Check string `json:"check"`
+    field Cells []MatrixCellDoc `json:"cells"`
+type MatrixVariant struct
+    field Name string `json:"name"`
+    field Constants map[string]string `json:"constants,omitempty"`
+    field Report *Document `json:"report"`
 type NamedValue struct
     field Name string `json:"name"`
     field Value string `json:"value"`
@@ -3187,6 +3215,7 @@ func Compare(ctx context.Context, before, after *GraphResult, opt CompareOptions
 func ConfirmComparison(ctx context.Context, comparison *Comparison) error
 func ExportComparison(ctx context.Context, comparison *Comparison, dir string) error
 func For(c *validate.Checker) *Analyzer
+func Matrix(ctx context.Context, bindingPath string, opt SimulateOptions) (*MatrixReport, error)
 func New(ctx context.Context, bindingPath string, opt validate.Options) (*Analyzer, error)
 func Simulate(ctx context.Context, bindingPath string, opt SimulateOptions) (*Report, error)
 func SimulateMany(ctx context.Context, bindingPaths []string, opt SimulateOptions) iter.Seq2[*Report, error]
@@ -3351,6 +3380,23 @@ type InvariantVerdict struct
     field Checked int
     field Unchecked int
     method (InvariantVerdict) Held() bool
+type MatrixCell struct
+    field Variant string
+    field Expect string
+    field Verdict string
+    field Steps int
+    field OK bool
+    method (MatrixCell) Text() string
+type MatrixReport struct
+    field Binding string
+    field Variants []VariantReport
+    field Rows []MatrixRow
+    field Code int
+    method (*MatrixReport) Doc() *validate.MatrixDocument
+    method (*MatrixReport) Text() string
+type MatrixRow struct
+    field Check string
+    field Cells []MatrixCell
 type PossibleAction struct
     field Action string
     field Args []PossibleArgument
@@ -3433,6 +3479,10 @@ type StepActionReachability struct
     field Missing []string
     field Actions []ActionCoverage
     field Bound Bound
+type VariantReport struct
+    field Name string
+    field Constants map[string]string
+    field Report *Report
 type Verdict struct
     field NativeProof *validate.NativeProof
     field Name string

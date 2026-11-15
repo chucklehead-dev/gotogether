@@ -127,3 +127,36 @@ func TestWriteAndCheck(t *testing.T) {
 		t.Errorf("the hand-written file changed: %q", b)
 	}
 }
+
+// The matrix replaces what is between its markers, nothing outside them,
+// and a document without them, or with them twice, is refused.
+func TestWriteMarked(t *testing.T) {
+	dir := t.TempDir()
+	doc := filepath.Join(dir, "design.md")
+	write := func(s string) {
+		if err := os.WriteFile(doc, []byte(s), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("# Design\n\nbefore\n" + MatrixBegin + "\nold table\n" + MatrixEnd + "\nafter\n")
+	if changed, err := WriteMarked(doc, MatrixBegin, MatrixEnd, "| new |\n"); err != nil || !changed {
+		t.Fatalf("first write: %v, %v", changed, err)
+	}
+	got, _ := os.ReadFile(doc)
+	if want := "# Design\n\nbefore\n" + MatrixBegin + "\n| new |\n" + MatrixEnd + "\nafter\n"; string(got) != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+	if changed, err := WriteMarked(doc, MatrixBegin, MatrixEnd, "| new |\n"); err != nil || changed {
+		t.Fatalf("the same table again: %v, %v", changed, err)
+	}
+	for body, want := range map[string]string{
+		"no markers\n": "has no " + MatrixBegin,
+		MatrixBegin + "\na\n" + MatrixEnd + "\n" + MatrixBegin + "\nb\n" + MatrixEnd + "\n": "more than once",
+		MatrixEnd + "\n" + MatrixBegin + "\n":                                               "before",
+	} {
+		write(body)
+		if _, err := WriteMarked(doc, MatrixBegin, MatrixEnd, "x"); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v, want %q", body, err, want)
+		}
+	}
+}

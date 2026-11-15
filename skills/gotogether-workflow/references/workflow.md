@@ -360,26 +360,62 @@ val's hot lasso, `cycle`, `stutter` and `ends`. A check that holds has
 none. Go consumers use the canonical model report's `Doc()` projection.
 
 A design matrix (golem's lease placement: each proposal a variant, each
-property a column) is a loop over `-const` with one report per cell; the
-exit code is 0 (no failure), 1 (a failure) or 2 (no verdict: incomplete
-or a tool error), and the cell's verdicts are in the JSON, not the
-prose:
+property a row) is one command. List the design's alternatives in the
+binding, each with its constants and what it must hold and must be able to
+break (`holds` and `allows`, as the section's; a list a variant leaves out
+is the section's):
+
+```yaml
+simulate:
+  holds: [noStaleWrite]
+  allows: [oldNeverWrites]
+  variants:
+    - name: lease
+      constants: { DESIGN: '"lease"' }
+      holds: []
+      allows: [noStaleWrite, oldNeverWrites]
+    - name: fence
+      constants: { DESIGN: '"fence"' }
+```
+
+`gotogether simulate -matrix -graph -binding lease.binding.yaml` runs each
+variant as simulate runs the binding, prints each report under its name,
+then the table:
+
+```
+| | lease | fence |
+|---|---|---|
+| noStaleWrite | breaks in 2 steps | holds |
+| oldNeverWrites | breaks in 1 step | breaks in 1 step |
+```
+
+A cell the variant contradicts says so (`FAIL: breaks in 2 steps (must
+hold)`, `FAIL: holds (must break)`), and the exit is 1. `-write-matrix
+design.md` writes the table into the design document between its
+`<!-- gotogether:matrix -->` and `<!-- /gotogether:matrix -->` lines, so
+the document carries the decision with the model (a literate model's own
+document: CW1). `-json` prints `gotogether.matrix/1`: each variant's
+`report/2` document and its constants, and the rows, each cell with
+`expect`, `verdict`, `steps` and `ok`, for scripts. A `holds` within a
+bound shows as "holds within the bound": read its variant's `graph.completeDepth`.
+Each run's options (`-graph`, `-depth`, `-process-memory`) apply to every
+variant.
+
+Without variants in the binding, the same matrix is a loop over `-const`,
+one report per cell; the exit code is 0 (no failure), 1 (a failure) or 2
+(no verdict: incomplete or a tool error):
 
 ```sh
 for design in '"doc"' '"fence"' '"object"'; do
   gotogether simulate -json -graph -depth 9 -binding lease.binding.yaml \
     -const "DESIGN=$design" >"matrix-$design.json"
-  echo "exit $? for DESIGN=$design"
   jq -r --arg d "$design" '.graph as $g | .checks[] | [$d, .name, .verdict,
       (if .counterexample then (.counterexample.steps | length) - 1 else "" end),
       ($g.completeDepth // "")] | @tsv' "matrix-$design.json"
 done
 ```
 
-Each row is the variant, the check, its verdict (`holds`, `bounded`,
-`fail`, `allows`, `hot`, `live`, `unchecked`), the counterexample's length
-and the depth the graph was complete to: a `holds` with a `completeDepth`
-below `-depth` is bounded there (`bound.proves` says whether it is a
-proof), never a pass past it. CW2 (ROADMAP) makes the matrix one command. The Goo Read
+A `holds` with a `completeDepth` below `-depth` is bounded there
+(`bound.proves` says whether it is a proof), never a pass past it. The Goo Read
 reproduction exercises this contract while preserving its historical frozen SDK
 baseline and using the current CLI for typed graph checks.

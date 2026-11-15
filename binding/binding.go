@@ -239,6 +239,57 @@ type Simulation struct {
 	// or an input the driver stops sending before it settles).
 	Unfair []string `yaml:"unfair"`
 	Stops  []string `yaml:"stops"`
+	// Variants are the design's alternatives, each the same model under
+	// constants of its own (a DESIGN switch, a mechanism turned off), with
+	// what each must hold and must be able to break: `gotogether simulate
+	// -matrix` checks every one and prints the table, properties by
+	// variants (ROADMAP CW2). Its lists replace the section's, where given.
+	Variants []Variant `yaml:"variants"`
+}
+
+// A Variant is one alternative of a design (Simulation.Variants): its
+// name, the constants it sets over the section's, and the invariants it
+// must hold and those it must be able to break (Holds and Allows, as the
+// section's; nil keeps the section's list).
+type Variant struct {
+	Name      string            `yaml:"name"`
+	Constants map[string]string `yaml:"constants"`
+	Holds     []string          `yaml:"holds"`
+	Allows    []string          `yaml:"allows"`
+}
+
+// Variant is b as its simulate section's variant name has it: the
+// variant's constants over the section's, its holds and allows in place
+// of the section's where it gives them, and no variants of its own. An
+// unknown name is an error naming the variants there are.
+func (b *Binding) Variant(name string) (*Binding, error) {
+	if b.Simulate == nil || len(b.Simulate.Variants) == 0 {
+		return nil, fmt.Errorf("%s: simulate.variants is empty: list the design's variants, each a name and its constants", b.relPath())
+	}
+	var names []string
+	for _, v := range b.Simulate.Variants {
+		names = append(names, v.Name)
+		if v.Name != name {
+			continue
+		}
+		c := *b
+		sec := *b.Simulate
+		sec.Variants = nil
+		sec.Constants = maps.Clone(sec.Constants)
+		if sec.Constants == nil {
+			sec.Constants = map[string]string{}
+		}
+		maps.Copy(sec.Constants, v.Constants)
+		if v.Holds != nil {
+			sec.Holds = slices.Clone(v.Holds)
+		}
+		if v.Allows != nil {
+			sec.Allows = slices.Clone(v.Allows)
+		}
+		c.Simulate = &sec
+		return &c, nil
+	}
+	return nil, fmt.Errorf("%s: simulate.variants has no %q: its variants are %s", b.relPath(), name, strings.Join(names, ", "))
 }
 
 // A SearchBound bounds the Go evaluator's searches of a model on its
@@ -318,6 +369,18 @@ func Load(path string) (*Binding, error) {
 	}
 	if err := bd.checkActors(); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	if bd.Simulate != nil {
+		seen := map[string]bool{}
+		for i, v := range bd.Simulate.Variants {
+			switch {
+			case v.Name == "":
+				return nil, fmt.Errorf("%s: simulate.variants[%d] has no name: name each variant (it heads its column of the matrix)", path, i)
+			case seen[v.Name]:
+				return nil, fmt.Errorf("%s: simulate.variants names %q twice: give each variant a name of its own", path, v.Name)
+			}
+			seen[v.Name] = true
+		}
 	}
 	for i := range bd.Within {
 		w := &bd.Within[i]

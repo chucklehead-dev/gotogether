@@ -78,7 +78,8 @@ compare them: one model with `DESIGN` a string constant (`"doc"`,
 every value with `-const DESIGN=...`. golem's two proposals for its
 leadership lease were settled so: the search found a precondition one
 design stated and the other missed, and a case neither covered, which
-argument had not.
+argument had not. `simulate.variants` and `simulate -matrix` make it one command and one table
+(the workflow reference).
 
 ## 3. Record where effects happen: linearization points
 

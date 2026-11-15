@@ -280,6 +280,9 @@ type Report struct {
 	// .qnt model's text is as it was: scripts and tests read it).
 	Sources map[string]string
 	spec    string // the binding's spec, as it names it
+	// section is the simulate section the run classified its checks by
+	// (a variant's, for Matrix)
+	section *binding.Simulation
 }
 
 // A Verdict is one invariant's or eventual val's verdict in the
@@ -445,6 +448,7 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 	if sec == nil {
 		sec = &binding.Simulation{}
 	}
+	s.rep.section = sec
 	if sec.Skip != "" {
 		s.rep.Skipped = sec.Skip
 		s.printf("simulate %s: skipped: %s\n", bpath, sec.Skip)

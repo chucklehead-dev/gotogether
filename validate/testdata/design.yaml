@@ -1,0 +1,20 @@
+# The lease design's variants (matrix_test.go): simulate -matrix checks
+# each and tabulates what each holds and breaks.
+spec: design.qnt
+module: design
+constants: { DESIGN: '"fence"' }
+actions:
+  takeover: {}
+  writeOld: {}
+invariants: [noStaleWrite, oldNeverWrites]
+simulate:
+  holds: [noStaleWrite]
+  allows: [oldNeverWrites]
+  terminal: 'true'
+  variants:
+    - name: lease
+      constants: { DESIGN: '"lease"' }
+      holds: []
+      allows: [noStaleWrite, oldNeverWrites]
+    - name: fence
+      constants: { DESIGN: '"fence"' }

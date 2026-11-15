@@ -373,3 +373,47 @@ func Sources(spec, name string) map[string]string {
 	}
 	return out
 }
+
+// Matrix markers bound the place in a document where `gotogether simulate
+// -matrix -write-matrix` writes the design matrix: everything between
+// them is replaced, everything outside left as it is.
+const (
+	MatrixBegin = "<!-- gotogether:matrix -->"
+	MatrixEnd   = "<!-- /gotogether:matrix -->"
+)
+
+// WriteMarked replaces what lies between doc's begin and end markers (each
+// alone on its line, once) with content, and writes doc only when that
+// changes it. A document without the markers, or with them out of order or
+// repeated, is an error naming what to add.
+func WriteMarked(doc, begin, end, content string) (changed bool, err error) {
+	src, err := os.ReadFile(doc)
+	if err != nil {
+		return false, err
+	}
+	// markers as whole lines: the text with a newline before its first,
+	// so one on the document's first line is found as any other
+	text := "\n" + string(src)
+	bm, em := "\n"+begin+"\n", "\n"+end+"\n"
+	if !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	b, e := strings.Index(text, bm), strings.Index(text, em)
+	switch {
+	case b < 0 || e < 0:
+		return false, fmt.Errorf("%s has no %s ... %s: add the two lines where the matrix goes, each alone on its line", doc, begin, end)
+	case strings.Count(text, bm) > 1 || strings.Count(text, em) > 1:
+		return false, fmt.Errorf("%s has %s or %s more than once: keep one pair", doc, begin, end)
+	case e < b:
+		return false, fmt.Errorf("%s has %s before %s: put the begin marker first", doc, end, begin)
+	}
+	out := text[:b+len(bm)] + strings.TrimRight(content, "\n") + text[e:]
+	out = out[1:] // the newline added before the first line
+	if !strings.HasSuffix(string(src), "\n") {
+		out = strings.TrimSuffix(out, "\n")
+	}
+	if out == string(src) {
+		return false, nil
+	}
+	return true, os.WriteFile(doc, []byte(out), 0o644)
+}

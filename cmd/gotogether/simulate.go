@@ -2,16 +2,20 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/literate"
 	"github.com/chucklehead-dev/gotogether/validate/model"
 )
 
@@ -33,6 +37,9 @@ func simulate(ctx context.Context, args []string) (int, error) {
 	request, err := simulationRequest(args, &mr, log)
 	if err != nil {
 		return mr.write(log.document(), os.Stdout, 2, err)
+	}
+	if request.matrix {
+		return simulateMatrix(ctx, os.Stdout, request, mr.json)
 	}
 	// Every binding reports, in the order the roster finishes them: a
 	// failure, an error or an unfinished share does not stop the others.
@@ -90,6 +97,10 @@ func simulate(ctx context.Context, args []string) (int, error) {
 type simulationPlan struct {
 	bindings []string
 	options  model.SimulateOptions
+	// matrix runs the binding's simulate.variants side by side (CW2);
+	// writeMatrix is the document whose markers it writes the table between
+	matrix      bool
+	writeMatrix string
 }
 
 func simulationRequest(args []string, mr *machineReports, log *simLog) (*simulationPlan, error) {
@@ -113,6 +124,8 @@ func simulationRequest(args []string, mr *machineReports, log *simLog) (*simulat
 	unfair := fset.String("unfair", "", "with -graph: comma-separated actions the liveness search does not oblige (default: the binding's simulate.unfair)")
 	stops := fset.String("stops", "", "with -graph: comma-separated actions the liveness search takes in no cycle (default: the binding's simulate.stops)")
 	quint := fset.String("quint", "quint", "quint binary")
+	matrix := fset.Bool("matrix", false, "check each of the binding's simulate.variants (the design's alternatives, each its constants and what it holds and allows) and print the table, properties by variants; -json prints gotogether.matrix/1")
+	writeMatrix := fset.String("write-matrix", "", "with -matrix: write the table into this Markdown document, between its <!-- gotogether:matrix --> and <!-- /gotogether:matrix --> lines")
 	timeout := fset.Duration("timeout", 0, "end the whole run within this: the bindings share it fairly (each the same first share, those that run out retried with what the others leave); "+
 		"one that does not finish is reported unfinished, with no verdict (exit 2)")
 	fset.Parse(args)
@@ -126,6 +139,12 @@ func simulationRequest(args []string, mr *machineReports, log *simLog) (*simulat
 	}
 	if len(paths) == 0 {
 		return nil, fmt.Errorf("simulate needs -binding b.yaml")
+	}
+	if *writeMatrix != "" && !*matrix {
+		return nil, fmt.Errorf("simulate: -write-matrix requires -matrix")
+	}
+	if *matrix && (len(paths) != 1 || len(mr.files) != 0 || mr.dir != "") {
+		return nil, fmt.Errorf("simulate -matrix: one -binding, its variants in one table (-json prints it; -report and -report-dir are for single reports)")
 	}
 	if fset.NArg() != 0 {
 		return nil, fmt.Errorf("simulate: unexpected argument %q; repeat -binding for each model", fset.Arg(0))
@@ -205,7 +224,7 @@ func simulationRequest(args []string, mr *machineReports, log *simLog) (*simulat
 	if *stops != "" {
 		opt.Stops = splitList(*stops)
 	}
-	return &simulationPlan{bindings: append([]string(nil), paths...), options: opt}, nil
+	return &simulationPlan{bindings: append([]string(nil), paths...), options: opt, matrix: *matrix, writeMatrix: *writeMatrix}, nil
 }
 
 func prepareSimulationReports(dir string) error {
@@ -256,4 +275,57 @@ func splitTop(s string) []string {
 		out = append(out, rest)
 	}
 	return out
+}
+
+// simulateMatrix is simulate -matrix: each of the binding's variants run as
+// simulate would run the binding (model.Matrix), each report printed under
+// its name, then the table; with -json, the gotogether.matrix/1 document
+// alone; with -write-matrix, the table also written into the document.
+// The exit is the worst variant's: 1 when one is not as its
+// classifications say.
+func simulateMatrix(ctx context.Context, out io.Writer, plan *simulationPlan, asJSON bool) (int, error) {
+	m, err := model.Matrix(ctx, plan.bindings[0], plan.options)
+	if err != nil {
+		return 2, err
+	}
+	if plan.writeMatrix != "" {
+		changed, err := literate.WriteMarked(plan.writeMatrix, literate.MatrixBegin, literate.MatrixEnd, m.Text())
+		if err != nil {
+			return 2, fmt.Errorf("simulate -write-matrix: %w", err)
+		}
+		if !asJSON {
+			defer func() {
+				if changed {
+					fmt.Fprintf(out, "matrix written to %s\n", plan.writeMatrix)
+				} else {
+					fmt.Fprintf(out, "matrix in %s is current\n", plan.writeMatrix)
+				}
+			}()
+		}
+	}
+	if asJSON {
+		b, err := json.MarshalIndent(m.Doc(), "", "  ")
+		if err != nil {
+			return 2, err
+		}
+		fmt.Fprintf(out, "%s\n", b)
+		return m.Code, nil
+	}
+	for _, v := range m.Variants {
+		fmt.Fprintf(out, "variant %s (%s):\n%s\n", v.Name, constantsText(v.Constants), v.Report.Text)
+	}
+	fmt.Fprintf(out, "matrix of %s, properties by variants:\n%s", plan.bindings[0], m.Text())
+	return m.Code, nil
+}
+
+// constantsText is a variant's constants as NAME = value, sorted.
+func constantsText(c map[string]string) string {
+	if len(c) == 0 {
+		return "the binding's constants"
+	}
+	var parts []string
+	for _, k := range slices.Sorted(maps.Keys(c)) {
+		parts = append(parts, k+" = "+c[k])
+	}
+	return strings.Join(parts, ", ")
 }
