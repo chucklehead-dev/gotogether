@@ -174,7 +174,12 @@ carries the graph's extent (`complete`, `cut`, `depth`) and every verdict.
   Accounting is conservative and may charge shared values more than once.
   Compilation, temporary evaluator allocations and the process heap/RSS are
   outside this budget: a 1.5M-state search's earlier OOM motivates the work,
-  but a hard process-memory guarantee is still open. Measure bytes per state
+  but a hard process-memory guarantee is still open. Second increment done:
+  `-process-memory` bounds the process's Go-mapped memory (read every few
+  hundred admissions, a reading past it confirmed after a collection), and
+  each graph reports `peakResident` (golem's search peaked at 1.18 times its
+  estimate, killing a 7 GB runner). Left: bytes per state on the graph line,
+  memory outside the Go runtime (the binary, cgo). Measure bytes per state
   before tuning. Exact state equality remains; fingerprints would require
   exact collision checks, since a collision must not prove anything.
 - **M2: the deepest level the graph completed.** Done: a graph the state

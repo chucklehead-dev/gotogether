@@ -277,17 +277,26 @@ type DocGraph struct {
 	// deepest level explored in full
 	CompleteDepth int `json:"completeDepth"`
 	// MemoryUsed estimates retained graph storage, excluding compilation, temporary evaluation and heap/RSS.
-	MemoryUsed  int64                      `json:"memoryUsed"`
-	MemoryScope string                     `json:"memoryScope"`
-	Cut         string                     `json:"cut,omitempty"`
-	Stopped     string                     `json:"stopped,omitempty"`
-	Bound       DocGraphBound              `json:"bound"`
-	Deadlocks   int                        `json:"deadlocks"`
-	Terminals   int                        `json:"terminals"`
-	Quiescent   int                        `json:"quiescent"`
-	Unfair      []string                   `json:"unfair,omitempty"`
-	Stops       []string                   `json:"stops,omitempty"`
-	StepActions *DocStepActionReachability `json:"stepActions,omitempty"`
+	MemoryUsed  int64  `json:"memoryUsed"`
+	MemoryScope string `json:"memoryScope"`
+	// ProcessCut says the process memory bound cut the search (Cut is
+	// "memory"), ProcessSeen the largest reading of the process's memory
+	// (the Go runtime's mapped memory) the bound took.
+	ProcessCut  bool  `json:"processCut,omitempty"`
+	ProcessSeen int64 `json:"processSeen,omitempty"`
+	// PeakResident is the process's peak resident set in bytes when the
+	// search ended (0 where the platform reports none): set beside
+	// MemoryUsed, the headroom a machine needs over the estimate.
+	PeakResident int64                      `json:"peakResident,omitempty"`
+	Cut          string                     `json:"cut,omitempty"`
+	Stopped      string                     `json:"stopped,omitempty"`
+	Bound        DocGraphBound              `json:"bound"`
+	Deadlocks    int                        `json:"deadlocks"`
+	Terminals    int                        `json:"terminals"`
+	Quiescent    int                        `json:"quiescent"`
+	Unfair       []string                   `json:"unfair,omitempty"`
+	Stops        []string                   `json:"stops,omitempty"`
+	StepActions  *DocStepActionReachability `json:"stepActions,omitempty"`
 }
 
 // DocStepActionReachability describes calls to step's statically identified
@@ -316,6 +325,8 @@ type DocGraphBound struct {
 	Depth  int `json:"depth"`
 	// MemoryBytes bounds estimated retained graph storage, not process heap/RSS.
 	MemoryBytes int64 `json:"memoryBytes"`
+	// ProcessBytes bounds the process's memory as the Go runtime maps it (0: none).
+	ProcessBytes int64 `json:"processBytes,omitempty"`
 }
 
 // DocBound is a model check's scope. Proves describes coverage, not success:

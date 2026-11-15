@@ -1,0 +1,7 @@
+# wide.qnt's 4,096 states: the process memory bound reads the process
+# many times before the graph completes (graph_memory_test.go).
+spec: wide.qnt
+module: wide
+actions:
+  incX: {}
+  incY: {}

@@ -253,7 +253,12 @@ type Graph struct {
 	// shared values on each occurrence and excludes transient evaluation and
 	// model compilation; it is not a heap/RSS measurement.
 	MemoryUsed int64
-	memory     graphMemory
+	// ProcessCut says Bound.ProcessBytes cut the search (Cut is "memory"),
+	// ProcessSeen the largest reading of the process's memory it took
+	// (0 without the bound)
+	ProcessCut  bool
+	ProcessSeen int64
+	memory      graphMemory
 
 	ids    map[string]int
 	labels map[string]int
@@ -279,8 +284,10 @@ type Edge struct {
 // not Complete, cut "unsupported" for an Unsupported one, and holds only
 // real states and edges (a path in it is a trace of the model).
 func (m *Model) Explore(consts map[string]Value, init, step string, b Bound, label func([]Event) []Event) (g *Graph, err error) {
-	g = &Graph{ids: map[string]int{}, labels: map[string]int{}, m: m.detached(), memory: graphMemory{limit: b.MemoryBytes}}
-	defer func() { g.MemoryUsed = g.memory.used }()
+	g = &Graph{ids: map[string]int{}, labels: map[string]int{}, m: m.detached(), memory: graphMemory{limit: b.MemoryBytes, process: b.ProcessBytes}}
+	defer func() {
+		g.MemoryUsed, g.ProcessCut, g.ProcessSeen = g.memory.used, g.memory.processOver, g.memory.processSeen
+	}()
 	defer func() {
 		if canceled := m.contextErr(); canceled != nil {
 			g.Complete, g.Cut, err = false, "canceled", canceled

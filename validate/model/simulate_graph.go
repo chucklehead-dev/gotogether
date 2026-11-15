@@ -46,7 +46,7 @@ func (s *sim) graph(ctx context.Context, bpath string, b *binding.Binding, check
 	if evs == nil {
 		evs = []string{}
 	}
-	r, err := checker.Graph(ctx, GraphSearch{Constants: overrides, Invariants: invariants, Eventually: evs, States: opt.States, Depth: opt.Depth, MemoryBytes: opt.MemoryBytes, Unfair: opt.Unfair, Stops: opt.Stops})
+	r, err := checker.Graph(ctx, GraphSearch{Constants: overrides, Invariants: invariants, Eventually: evs, States: opt.States, Depth: opt.Depth, MemoryBytes: opt.MemoryBytes, ProcessBytes: opt.ProcessBytes, Unfair: opt.Unfair, Stops: opt.Stops})
 	if err != nil {
 		return fmt.Errorf("simulate -graph: %w", err)
 	}

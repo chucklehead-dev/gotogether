@@ -43,7 +43,12 @@ type GraphSearch struct {
 	States, Depth int
 	// MemoryBytes bounds estimated retained graph storage (0: DefaultGraphMemoryBytes).
 	// It does not cap compilation, temporary evaluator allocations, Go heap or RSS.
-	MemoryBytes   int64
+	MemoryBytes int64
+	// ProcessBytes, if set, bounds the process's memory as the Go runtime
+	// maps it (qeval.Bound.ProcessBytes): the budget to set from a machine's
+	// memory, which MemoryBytes's estimate is not. A search it cuts is cut
+	// "memory", GraphResult.ProcessCut set.
+	ProcessBytes  int64
 	Eventually    []string
 	Unfair, Stops []string
 }
@@ -81,6 +86,15 @@ type GraphResult struct {
 	// MemoryUsed is estimated retained graph storage charged by the search.
 	// Compilation, temporary evaluator allocations and process heap are excluded.
 	MemoryUsed int64
+	// ProcessCut says Bound.ProcessBytes cut the search; ProcessSeen is the
+	// largest reading of the process's memory it took (0 without that bound)
+	ProcessCut  bool
+	ProcessSeen int64
+	// PeakResident is the process's peak resident set when the search ended
+	// (getrusage's high-water mark, 0 where the platform has none): what a
+	// machine must hold, set beside MemoryUsed to size -memory or
+	// -process-memory
+	PeakResident int64
 	// Invariants are each invariant's verdict, in the order asked
 	Invariants []InvariantVerdict
 	// Deadlocks are the states the step cannot leave where Terminal does
@@ -180,6 +194,8 @@ type GraphBound struct {
 	States, Depth int
 	// MemoryBytes is the estimated retained graph storage budget, not a heap cap.
 	MemoryBytes int64
+	// ProcessBytes bounds the process's memory (0: none)
+	ProcessBytes int64
 }
 
 // An InvariantVerdict is one invariant over a state graph: violated in
@@ -353,6 +369,9 @@ func (r *GraphResult) Extent() string {
 		if r.CompleteDepth > 0 {
 			depth = fmt.Sprintf(", complete to depth %d", r.CompleteDepth)
 		}
+		if r.ProcessCut {
+			return fmt.Sprintf("truncated by the process memory bound (%d bytes, %d in use): %s%s", r.Bound.ProcessBytes, r.ProcessSeen, n, depth)
+		}
 		return fmt.Sprintf("truncated by the retained graph storage estimate budget (%d bytes, %d charged): %s%s; excludes compilation, temporary evaluation allocations and process heap/RSS", r.Bound.MemoryBytes, r.MemoryUsed, n, depth)
 	case "depth":
 		return fmt.Sprintf("truncated by the depth bound (%d): %s, states at the bound not expanded", r.Bound.Depth, n)
@@ -383,6 +402,9 @@ func (c *modelChecker) Graph(ctx context.Context, cfg GraphSearch) (result *Grap
 	if cfg.MemoryBytes == 0 {
 		cfg.MemoryBytes = DefaultGraphMemoryBytes
 	}
+	if cfg.ProcessBytes < 0 {
+		return nil, fmt.Errorf("graph: process memory bound must not be negative")
+	}
 	sim := c.Binding.Simulate
 	if sim == nil {
 		sim = &binding.Simulation{}
@@ -406,7 +428,7 @@ func (c *modelChecker) Graph(ctx context.Context, cfg GraphSearch) (result *Grap
 		stops = sim.Stops
 	}
 	bound := searchBound(sim, cfg.States, cfg.Depth)
-	bound.MemoryBytes = cfg.MemoryBytes
+	bound.MemoryBytes, bound.ProcessBytes = cfg.MemoryBytes, cfg.ProcessBytes
 	preds := slices.Clone(invs)
 	if terminal != "" {
 		preds = append(preds, terminal)
@@ -439,7 +461,8 @@ func (c *modelChecker) Graph(ctx context.Context, cfg GraphSearch) (result *Grap
 	}
 	g, err := e.Model.Explore(consts, e.Module.Init, step, bound, label)
 	r := &GraphResult{States: len(g.States), Starts: g.Starts, Transitions: g.Edges(), Complete: g.Complete, Cut: g.Cut, CompleteDepth: g.CompleteDepth,
-		Bound: GraphBound{States: bound.States, Depth: bound.Depth, MemoryBytes: bound.MemoryBytes}, MemoryUsed: g.MemoryUsed, graph: g, e: original, checker: cc, sourceChecker: c}
+		Bound:      GraphBound{States: bound.States, Depth: bound.Depth, MemoryBytes: bound.MemoryBytes, ProcessBytes: bound.ProcessBytes},
+		MemoryUsed: g.MemoryUsed, ProcessCut: g.ProcessCut, ProcessSeen: g.ProcessSeen, PeakResident: peakResident(), graph: g, e: original, checker: cc, sourceChecker: c}
 	if err != nil {
 		var u *qeval.Unsupported
 		var ee *qeval.EvalError

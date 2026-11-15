@@ -226,6 +226,9 @@ type SimulateOptions struct {
 	// MemoryBytes, with Graph, bounds estimated retained graph storage
 	// (0: DefaultGraphMemoryBytes), excluding compilation, transient evaluation and heap/RSS.
 	MemoryBytes int64
+	// ProcessBytes, with Graph, bounds the process's memory as the Go
+	// runtime maps it (GraphSearch.ProcessBytes; 0: none)
+	ProcessBytes int64
 	// Unfair and Stops are the actions the liveness search does not hold
 	// to weak fairness (nil: simulate.unfair and simulate.stops).
 	Unfair, Stops []string
@@ -432,7 +435,7 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 	if opt.Graph && opt.Verify > 0 {
 		return nil, fmt.Errorf("simulate: -graph and -verify are two ways to check every trace: pick one")
 	}
-	if !opt.Graph && (opt.MemoryBytes != 0 || opt.Out != "" || opt.Unfair != nil || opt.Stops != nil || opt.Replay) {
+	if !opt.Graph && (opt.MemoryBytes != 0 || opt.ProcessBytes != 0 || opt.Out != "" || opt.Unfair != nil || opt.Stops != nil || opt.Replay) {
 		return nil, fmt.Errorf("simulate: -memory, -out, -unfair and -stops are -graph's: add -graph")
 	}
 	if err := b.CheckSpec(); err != nil {

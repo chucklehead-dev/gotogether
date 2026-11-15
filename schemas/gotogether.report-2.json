@@ -1811,6 +1811,10 @@
                   "description": "MemoryBytes bounds estimated retained graph storage, not process heap/RSS.",
                   "type": "integer"
                 },
+                "processBytes": {
+                  "description": "ProcessBytes bounds the process's memory as the Go runtime maps it (0: none).",
+                  "type": "integer"
+                },
                 "states": {
                   "type": "integer"
                 }
@@ -1908,6 +1912,10 @@
                 },
                 "memoryBytes": {
                   "description": "MemoryBytes bounds estimated retained graph storage, not process heap/RSS.",
+                  "type": "integer"
+                },
+                "processBytes": {
+                  "description": "ProcessBytes bounds the process's memory as the Go runtime maps it (0: none).",
                   "type": "integer"
                 },
                 "states": {
@@ -2304,6 +2312,10 @@
               "description": "MemoryBytes bounds estimated retained graph storage, not process heap/RSS.",
               "type": "integer"
             },
+            "processBytes": {
+              "description": "ProcessBytes bounds the process's memory as the Go runtime maps it (0: none).",
+              "type": "integer"
+            },
             "states": {
               "type": "integer"
             }
@@ -2334,6 +2346,17 @@
         },
         "memoryUsed": {
           "description": "MemoryUsed estimates retained graph storage, excluding compilation, temporary evaluation and heap/RSS.",
+          "type": "integer"
+        },
+        "peakResident": {
+          "description": "PeakResident is the process's peak resident set in bytes when the search ended (0 where the platform reports none): set beside MemoryUsed, the headroom a machine needs over the estimate.",
+          "type": "integer"
+        },
+        "processCut": {
+          "description": "ProcessCut says the process memory bound cut the search (Cut is \"memory\"), ProcessSeen the largest reading of the process's memory (the Go runtime's mapped memory) the bound took.",
+          "type": "boolean"
+        },
+        "processSeen": {
           "type": "integer"
         },
         "quiescent": {
