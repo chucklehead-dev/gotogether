@@ -61,6 +61,25 @@ Either way works:
   when a checked-in `.qnt` is missing or was generated from another
   version of its document, and names the command that fixes it.
 
+  Run it first, before anything loads the binding: loading a binding
+  writes the `.qnt` (simulate, validate, lint, a test's checks), so a
+  check after one finds it fresh. In CI, in this order:
+
+  ```sh
+  gotogether tangle -check design/*.md   # 1: missing or stale
+  gotogether simulate -binding design/contract.binding.yaml
+  go test ./...                           # and every other load
+  ```
+
+  `tangle -check` exits 1 for anything it finds wrong with a document's
+  `.qnt` (missing, stale, hand-written, or a document it cannot tangle),
+  and 2 for a bad invocation (no document, or one that is not `.md`).
+  `tangle` without `-check` writes, and exits 2 when it would overwrite a
+  hand-written `.qnt` of the generated name: it refuses and keeps it.
+  An edit of the document's prose changes its digest and line map too,
+  so the model is stale after it: a CI control for a stale artifact
+  edits the document, not the generated file.
+
 ## Results
 
 | Report line | What it means | Do next |
