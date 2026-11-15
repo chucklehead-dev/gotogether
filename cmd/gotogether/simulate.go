@@ -125,6 +125,7 @@ func simulationRequest(args []string, mr *machineReports, log *simLog) (*simulat
 	stops := fset.String("stops", "", "with -graph: comma-separated actions the liveness search takes in no cycle (default: the binding's simulate.stops)")
 	quint := fset.String("quint", "quint", "quint binary")
 	matrix := fset.Bool("matrix", false, "check each of the binding's simulate.variants (the design's alternatives, each its constants and what it holds and allows) and print the table, properties by variants; -json prints gotogether.matrix/1")
+	variant := fset.String("variant", "", "with -matrix: run only this variant (one process per variant, run in parallel by a script)")
 	writeMatrix := fset.String("write-matrix", "", "with -matrix: write the table into this Markdown document, between its <!-- gotogether:matrix --> and <!-- /gotogether:matrix --> lines")
 	timeout := fset.Duration("timeout", 0, "end the whole run within this: the bindings share it fairly (each the same first share, those that run out retried with what the others leave); "+
 		"one that does not finish is reported unfinished, with no verdict (exit 2)")
@@ -142,6 +143,12 @@ func simulationRequest(args []string, mr *machineReports, log *simLog) (*simulat
 	}
 	if *writeMatrix != "" && !*matrix {
 		return nil, fmt.Errorf("simulate: -write-matrix requires -matrix")
+	}
+	if *variant != "" && !*matrix {
+		return nil, fmt.Errorf("simulate: -variant requires -matrix")
+	}
+	if *variant != "" && *writeMatrix != "" {
+		return nil, fmt.Errorf("simulate: -variant with -write-matrix would write one column over the document's table: write the whole matrix, or print one variant's")
 	}
 	if *matrix && (len(paths) != 1 || len(mr.files) != 0 || mr.dir != "") {
 		return nil, fmt.Errorf("simulate -matrix: one -binding, its variants in one table (-json prints it; -report and -report-dir are for single reports)")
@@ -224,6 +231,7 @@ func simulationRequest(args []string, mr *machineReports, log *simLog) (*simulat
 	if *stops != "" {
 		opt.Stops = splitList(*stops)
 	}
+	opt.Variant = *variant
 	return &simulationPlan{bindings: append([]string(nil), paths...), options: opt, matrix: *matrix, writeMatrix: *writeMatrix}, nil
 }
 

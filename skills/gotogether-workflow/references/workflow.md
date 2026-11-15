@@ -403,8 +403,11 @@ long (`depth` in the JSON, 0 for the whole graph); "holds within the
 bound" a search cut by its states or memory, no proof past what it saw
 (read its variant's `graph.completeDepth`). A variant that must hold
 passes with either proof.
-Each run's options (`-graph`, `-depth`, `-process-memory`) apply to every
-variant; a variant's own `search: { depth: N, states: N }` bounds its
+The variants run one after another in one process, each graph released
+before the next search, so `-process-memory` bounds each variant's search;
+`-variant NAME` runs one alone (a script runs each in its own process, in
+parallel, and builds no table). Each run's options (`-graph`, `-depth`,
+`-process-memory`) apply to every variant; a variant's own `search: { depth: N, states: N }` bounds its
 searches over the section's. A variant whose invariants it must all break
 (no `holds`, no eventual vals) stops its graph once each has broken: its
 counterexamples are the shortest still, its graph line says "stopped once

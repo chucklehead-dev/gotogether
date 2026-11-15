@@ -141,6 +141,8 @@ func TestSimulateMatrixRefusals(t *testing.T) {
 	}{
 		{[]string{"-binding", "a.yaml", "-write-matrix", "d.md"}, "-write-matrix requires -matrix"},
 		{[]string{"-matrix", "-binding", "a.yaml", "-binding", "b.yaml"}, "simulate -matrix: one -binding"},
+		{[]string{"-variant", "fence", "-binding", "a.yaml"}, "-variant requires -matrix"},
+		{[]string{"-matrix", "-variant", "fence", "-write-matrix", "d.md", "-binding", "a.yaml"}, "would write one column over the document's table"},
 	} {
 		if _, err := simulationRequest(tc.args, &machineReports{}, &simLog{}); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%v: %v, want %q", tc.args, err, tc.want)
@@ -260,5 +262,22 @@ func TestSimulateMatrixShowsOtherFailures(t *testing.T) {
 	code, text := capture(t, func() (int, error) { return simulate(t.Context(), []string{"-matrix", "-graph", "-binding", b}) })
 	if code != 1 || !strings.Contains(text, "| bounded | holds |") || !strings.Contains(text, "FAIL outside the table: on: deadlock") {
 		t.Errorf("a deadlock outside the table: exit %d\n%s", code, text)
+	}
+}
+
+// -variant runs one of the matrix's variants, one column, so a script can
+// run each in its own process and in parallel (golem's leadership, #144);
+// an unknown name is refused with the variants there are.
+func TestSimulateMatrixOneVariant(t *testing.T) {
+	skip.Quint(t)
+	b := "../../validate/testdata/design.yaml"
+	code, text := capture(t, func() (int, error) {
+		return simulate(t.Context(), []string{"-matrix", "-graph", "-variant", "fence", "-binding", b})
+	})
+	if code != 0 || !strings.Contains(text, "| | fence |\n") || strings.Contains(text, "variant lease") {
+		t.Errorf("one variant: exit %d\n%s", code, text)
+	}
+	if _, err := simulate(t.Context(), []string{"-matrix", "-graph", "-variant", "fense", "-binding", b}); err == nil || !strings.Contains(err.Error(), "fense") || !strings.Contains(err.Error(), "lease") {
+		t.Errorf("an unknown variant: %v", err)
 	}
 }
