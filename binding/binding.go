@@ -239,6 +239,13 @@ type Simulation struct {
 	// or an input the driver stops sending before it settles).
 	Unfair []string `yaml:"unfair"`
 	Stops  []string `yaml:"stops"`
+	// Dead, if set, are the step's actions the design means never to be
+	// enabled (one a switch turns off): `simulate -graph` fails when a
+	// listed action is taken, or when an action no state enables is not
+	// listed, since every property that action could break then goes
+	// untested (golem's graph_holds, #144). Unset, nothing is checked; an
+	// empty list says no action is dead.
+	Dead []string `yaml:"dead"`
 	// Variants are the design's alternatives, each the same model under
 	// constants of its own (a DESIGN switch, a mechanism turned off), with
 	// what each must hold and must be able to break: `gotogether simulate
@@ -256,6 +263,10 @@ type Variant struct {
 	Constants map[string]string `yaml:"constants"`
 	Holds     []string          `yaml:"holds"`
 	Allows    []string          `yaml:"allows"`
+	// Dead, if set, replaces the section's dead actions (Simulation.Dead),
+	// as Holds and Allows replace theirs: the dead actions follow the
+	// variant's switches.
+	Dead []string `yaml:"dead"`
 	// Search bounds this variant's searches, over the section's where set
 	// (a broken design searched a step or two past its counterexample, not
 	// its whole graph: golem's leadership variants).
@@ -263,7 +274,7 @@ type Variant struct {
 }
 
 // Variant is b as its simulate section's variant name has it: the
-// variant's constants over the section's, its holds and allows in place
+// variant's constants over the section's, its holds, allows and dead in place
 // of the section's where it gives them, and no variants of its own. An
 // unknown name is an error naming the variants there are.
 func (b *Binding) Variant(name string) (*Binding, error) {
@@ -289,6 +300,9 @@ func (b *Binding) Variant(name string) (*Binding, error) {
 		}
 		if v.Allows != nil {
 			sec.Allows = slices.Clone(v.Allows)
+		}
+		if v.Dead != nil {
+			sec.Dead = slices.Clone(v.Dead)
 		}
 		if v.Search.States != 0 {
 			sec.Search.States = v.Search.States

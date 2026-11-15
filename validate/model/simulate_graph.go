@@ -171,6 +171,11 @@ func (s *sim) graph(ctx context.Context, bpath string, b *binding.Binding, check
 			s.printf("  never   %s: no state explored enables it (within the bound)\n", strings.Join(never, ", "))
 		}
 	}
+	if sec.Dead != nil {
+		if dc := s.checkDead(r, sec.Dead, bound); dc > code {
+			code = dc
+		}
+	}
 	// the binding's actions the step never calls: no state of the graph
 	// comes from them, so an invariant about what they do (an audit's, a
 	// settle's) holds in it vacuously
@@ -581,6 +586,73 @@ func crossCheck(ctx context.Context, b *binding.Binding, overrides []string, qui
 		}
 	}
 	return len(files), "", nil
+}
+
+// checkDead judges simulate.dead against the graph: a listed action
+// the graph takes fails, and so does an action no state enables that the
+// list leaves out, since every property it could break goes untested.
+// The latter needs a graph that could have found the action: complete, or
+// complete to a depth (then the action is enabled within no trace that
+// long). A graph stopped at its counterexamples (UntilBroken), or one
+// truncated before any whole level, leaves it unchecked, never failed:
+// its missing actions mean nothing (golem, #144).
+func (s *sim) checkDead(r *GraphResult, dead []string, bound Bound) int {
+	v := &Verdict{Name: "dead", Bound: bound}
+	s.rep.Dead = v
+	inStep := map[string]bool{}
+	for _, a := range r.Actions {
+		inStep[a.Action] = true
+	}
+	never := nameSet(r.NeverEnabled())
+	listed := nameSet(dead)
+	var unknown, taken, unlisted []string
+	for _, a := range dead {
+		switch {
+		case !inStep[a]:
+			unknown = append(unknown, a)
+		case !never[a]:
+			taken = append(taken, a)
+		}
+	}
+	for _, a := range r.NeverEnabled() {
+		if !listed[a] {
+			unlisted = append(unlisted, a)
+		}
+	}
+	var wrong []string
+	if len(unknown) > 0 {
+		wrong = append(wrong, fmt.Sprintf("%s: no action the step calls (the step's: %s)", strings.Join(unknown, ", "), strings.Join(slices.Sorted(maps.Keys(inStep)), ", ")))
+	}
+	if len(taken) > 0 {
+		wrong = append(wrong, fmt.Sprintf("%s: listed dead, but the graph takes it (remove it from simulate.dead, or find what enables it)", strings.Join(taken, ", ")))
+	}
+	// complete, or complete to a depth (a state or memory cut after whole
+	// levels too); never one stopped at its counterexamples, whatever
+	// depth it completed
+	decides := (r.Complete || bound.Kind == "depth") && r.Cut != "broken"
+	if len(unlisted) > 0 && decides {
+		wrong = append(wrong, fmt.Sprintf("%s: no state enables it, and simulate.dead does not list it (every property it could break goes untested: list it if a switch turns it off, else find the guard)", strings.Join(unlisted, ", ")))
+	}
+	switch {
+	case len(wrong) > 0:
+		v.Violated, v.Note = true, strings.Join(wrong, "; ")
+		s.printf("  FAIL    dead: %s\n", v.Note)
+		return 1
+	case len(unlisted) > 0 && r.Cut == "broken":
+		v.Unchecked = "not reached: the graph stopped at its counterexamples, so an action it never took says nothing (" + strings.Join(unlisted, ", ") + ")"
+		s.printf("  unchecked dead: %s\n", v.Unchecked)
+	case len(unlisted) > 0:
+		v.Unchecked = "not reached within the bound, which proves nothing of it (" + strings.Join(unlisted, ", ") + ")"
+		s.printf("  unchecked dead: %s\n", v.Unchecked)
+	default:
+		v.Held = true
+		what := "no action is dead"
+		if len(dead) > 0 {
+			what = "exactly " + strings.Join(dead, ", ") + " never enabled"
+		}
+		s.printf("  dead    as listed: %s\n", what)
+	}
+	return 0
 }
 
 // reportEventually writes simulate -graph's verdicts on the eventual vals

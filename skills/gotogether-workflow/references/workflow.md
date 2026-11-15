@@ -411,6 +411,21 @@ counterexamples are the shortest still, its graph line says "stopped once
 every invariant it must break broke", and a broken design costs only the
 states before its counterexamples, never its whole graph.
 
+`dead: [action, ...]` lists the step's actions a design means never to be
+enabled (the ones its switches turn off); a variant's list replaces the
+section's, as `holds` and `allows` do, and an unset list checks nothing.
+The graph fails a listed action it takes, a name the step does not call,
+and an action no state enables that the list leaves out: a newly dead
+action in a design that should hold is a model bug, and every property it
+could break goes untested. A graph stopped at its counterexamples, or cut
+before a whole level, cannot tell and leaves it unchecked.
+
+A check no row shows (the deadlock check, `dead`, a possible) can fail a
+matrix whose every cell passes: the table then ends with `FAIL outside
+the table: <variant>: <check>; ...`, and `-json`'s `others` carries each
+with its detail. A model with no `simulate.terminal` makes every
+finished run a deadlock: say where it means to stop.
+
 Without variants in the binding, the same matrix is a loop over `-const`,
 one report per cell; the exit code is 0 (no failure), 1 (a failure) or 2
 (no verdict: incomplete or a tool error):

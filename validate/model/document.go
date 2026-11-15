@@ -71,6 +71,9 @@ func (r *Report) Doc() *validate.Document {
 		}
 		d.Checks = append(d.Checks, modelDocCheck(*r.Deadlocks, "graph"))
 	}
+	if r.Dead != nil {
+		d.Checks = append(d.Checks, modelDocCheck(*r.Dead, "graph"))
+	}
 	for _, p := range r.Possibles {
 		verdict := "fail"
 		if p.Found {
@@ -160,6 +163,9 @@ func modelDocCheck(v Verdict, kind string) validate.DocCheck {
 	}
 	if v.Unchecked != "" {
 		detail += "; " + v.Unchecked
+	}
+	if v.Note != "" {
+		detail += "; " + v.Note
 	}
 	if v.Counterexample != nil {
 		detail += "\n" + cexText(v.Counterexample)

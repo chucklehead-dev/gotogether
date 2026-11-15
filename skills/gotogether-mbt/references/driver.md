@@ -248,7 +248,20 @@ From golem's use (#144):
   `Config.Require`: the run replays the shortest path to it first, counts
   the sampled states where it held, and fails when nothing reached it.
   golem's mutant passed at 100 samples, where 26 of 4,609 publications had
-  a gap.
+  a gap. Require the state *after* the step under test, not the one
+  before it: a witness ends at the state it reaches, so the step whose
+  behaviour that state was meant to exercise is never replayed. golem
+  required "a probe in flight and a call waiting that has tried every
+  deployment" (the state just before the gateway chooses where the call
+  goes): the witness stopped there, and a mutant ignoring the probe
+  passed. "That call's last attempt sent past the probing deployment",
+  the state after the choice, caught it.
+- **Code that makes its own choices.** Where the code chooses (which
+  deployment an attempt takes, when a call gives up) and the model leaves
+  the choice open, give the model a switch (golem's `ORDERED`) that makes
+  the instance the test drives choose as the code does, while the
+  design's variants keep every choice open. The driver then compares the
+  code's choice with the model's step instead of making it.
 - **Arrange the clocks a guard needs.** Where the model enables an action
   the code guards by time (`takeLease` fires whenever; the code takes a
   lease only once it has lapsed by the taker's clock), give each replica

@@ -152,3 +152,113 @@ func TestSimulateMatrixRefusals(t *testing.T) {
 		t.Errorf("a binding with no variants: exit %d, %v", code, err)
 	}
 }
+
+// switchModel has an action a constant turns off: extra is dead unless ON.
+const switchModel = `module sw {
+  const ON: bool
+  var n: int
+  action init = n' = 0
+  action inc = all { n < 2, n' = n + 1 }
+  action extra = all { ON, n < 2, n' = n + 1 }
+  action step = any { inc, extra }
+  val bounded = n <= 2
+  val small = n < 2
+}
+`
+
+// writeSwitch writes switchModel and a binding of it with the given
+// invariants and simulate section, returning the binding's path.
+func writeSwitch(t *testing.T, invariants, section string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "sw.qnt"), []byte(switchModel), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	b := filepath.Join(dir, "sw.yaml")
+	body := "spec: sw.qnt\nmodule: sw\nconstants: { ON: 'true' }\nactions: { inc: {}, extra: {} }\ninvariants: " + invariants + "\nsimulate:\n" + section
+	if err := os.WriteFile(b, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// simulate.dead (golem's graph_holds, #144): the actions a variant's
+// switches turn off are listed, a variant's list replaces the section's,
+// and the graph fails a listed action it takes, an unlisted one no state
+// enables and a name the step does not call. A variant stopped at its
+// counterexamples cannot tell, and leaves it unchecked.
+func TestSimulateMatrixDead(t *testing.T) {
+	skip.Quint(t)
+	b := writeSwitch(t, "[bounded]", `  terminal: 'true'
+  holds: [bounded]
+  dead: []
+  variants:
+    - name: on
+    - name: off
+      constants: { ON: 'false' }
+      dead: [extra]
+    - name: off unlisted
+      constants: { ON: 'false' }
+    - name: on listed
+      dead: [extra]
+    - name: misnamed
+      constants: { ON: 'false' }
+      dead: [extar]
+`)
+	code, text := capture(t, func() (int, error) { return simulate(t.Context(), []string{"-matrix", "-graph", "-binding", b}) })
+	for _, want := range []string{
+		"| bounded | holds | holds | holds | holds | holds |",
+		"FAIL outside the table: off unlisted: dead; on listed: dead; misnamed: dead",
+		"extra: no state enables it, and simulate.dead does not list it",
+		"extra: listed dead, but the graph takes it",
+		"extar: no action the step calls",
+		"dead    as listed: no action is dead",
+		"dead    as listed: exactly extra never enabled",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in:\n%s", want, text)
+		}
+	}
+	if code != 1 {
+		t.Errorf("exit %d: every cell passes, but three variants' dead lists are wrong", code)
+	}
+	_, out := capture(t, func() (int, error) {
+		return simulate(t.Context(), []string{"-json", "-matrix", "-graph", "-binding", b})
+	})
+	var d validate.MatrixDocument
+	if err := json.Unmarshal([]byte(out), &d); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if len(d.Others) != 3 || d.Others[0] != (validate.MatrixOtherDoc{Variant: "off unlisted", Kind: "graph", Name: "dead", Detail: d.Others[0].Detail}) {
+		t.Errorf("others: %+v", d.Others)
+	}
+
+	// stopped at its counterexample, the graph never took extra, which
+	// says nothing: unchecked, the matrix still passing
+	broken := writeSwitch(t, "[small]", `  terminal: 'true'
+  variants:
+    - name: off
+      constants: { ON: 'false' }
+      allows: [small]
+      dead: []
+`)
+	code, text = capture(t, func() (int, error) { return simulate(t.Context(), []string{"-matrix", "-graph", "-binding", broken}) })
+	if code != 0 || !strings.Contains(text, "unchecked dead: not reached: the graph stopped at its counterexamples") || strings.Contains(text, "FAIL outside") {
+		t.Errorf("a variant stopped at its counterexample: exit %d\n%s", code, text)
+	}
+}
+
+// A check no row shows can fail a matrix whose every cell passes (golem's
+// model without a terminal, every finished run a deadlock): the table says
+// which, where it once showed only passing cells over an exit of 1.
+func TestSimulateMatrixShowsOtherFailures(t *testing.T) {
+	skip.Quint(t)
+	b := writeSwitch(t, "[bounded]", `  holds: [bounded]
+  variants:
+    - name: on
+`)
+	code, text := capture(t, func() (int, error) { return simulate(t.Context(), []string{"-matrix", "-graph", "-binding", b}) })
+	if code != 1 || !strings.Contains(text, "| bounded | holds |") || !strings.Contains(text, "FAIL outside the table: on: deadlock") {
+		t.Errorf("a deadlock outside the table: exit %d\n%s", code, text)
+	}
+}

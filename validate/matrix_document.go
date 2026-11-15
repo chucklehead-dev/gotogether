@@ -13,7 +13,11 @@ type MatrixDocument struct {
 	Exit     int             `json:"exit"`
 	Variants []MatrixVariant `json:"variants"`
 	Rows     []MatrixRowDoc  `json:"rows"`
-	Table    string          `json:"table"`
+	// Others are the failing checks no row shows (a deadlock,
+	// simulate.dead, a possible): a matrix whose cells all pass can fail
+	// on one.
+	Others []MatrixOtherDoc `json:"others,omitempty"`
+	Table  string           `json:"table"`
 }
 
 // A MatrixVariant is one variant: its name, the constants it ran under
@@ -29,6 +33,16 @@ type MatrixVariant struct {
 type MatrixRowDoc struct {
 	Check string          `json:"check"`
 	Cells []MatrixCellDoc `json:"cells"`
+}
+
+// A MatrixOtherDoc is a failing check of one variant that is not a row
+// of the table (a deadlock, simulate.dead, a possible): the variant, the
+// check's kind and name, and its report's detail.
+type MatrixOtherDoc struct {
+	Variant string `json:"variant"`
+	Kind    string `json:"kind"`
+	Name    string `json:"name"`
+	Detail  string `json:"detail,omitempty"`
 }
 
 // A MatrixCellDoc is one property in one variant: what the variant

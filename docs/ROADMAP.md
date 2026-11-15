@@ -220,7 +220,13 @@ them inside.
   samples: 26 of 4,609 publications had the gap it shows at). Done: each
   val evaluated by the Go evaluator in every state, its count logged, and
   steering: the shortest path to each (the evaluator's search, within
-  MaxSteps) replayed before the samples as a witness trace.
+  MaxSteps) replayed before the samples as a witness trace. Open: a
+  witness ends at the state it reaches, so the step after it is never
+  replayed (golem's mutant passed until the required state was the one
+  after the choice, #144). Documented ("require the state after the step
+  under test"); continuing a witness a few steps past its target needs its
+  own design, since random steps would make a run vary and deterministic
+  ones are a new kind of trace.
 - **N2: `connect.Compose(a, b)`.** One model run driving several drivers,
   each action to the driver that implements it, so a gateway and a control
   plane forbidden to import each other share one test.
@@ -347,7 +353,12 @@ Items, each its own decision before it starts:
   Second slice: a variant whose invariants it must all break (no eventual
   val) stops its graph once each has broken (`qeval.Model.ExploreUntil`,
   cut "broken", its counterexamples still shortest); a variant's own
-  `search` bounds. Left: possibles per variant, iterative deepening. A model
+  `search` bounds. Third (golem's adoption, #144): a variant's search
+  bound applied (the checker had read the file's section), "holds to depth
+  N" for a bounded proof, `dead` lists (a variant's replacing the
+  section's; a listed action taken, or an unlisted one never enabled,
+  fails), and the failing checks no row shows named under the table.
+  Left: possibles per variant, iterative deepening. A model
   declares its switches once (`DESIGN`, `GUARD`, `ROLLBACK`, constants of an
   instance) and a table of expectations: which variants must hold which
   properties, which must break which, with which named scenarios possible.
