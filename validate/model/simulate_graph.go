@@ -46,7 +46,7 @@ func (s *sim) graph(ctx context.Context, bpath string, b *binding.Binding, check
 	if evs == nil {
 		evs = []string{}
 	}
-	r, err := checker.Graph(ctx, GraphSearch{Constants: overrides, Invariants: invariants, Eventually: evs, States: opt.States, Depth: opt.Depth, MemoryBytes: opt.MemoryBytes, ProcessBytes: opt.ProcessBytes, Unfair: opt.Unfair, Stops: opt.Stops})
+	r, err := checker.Graph(ctx, GraphSearch{Constants: overrides, Invariants: invariants, Eventually: evs, States: opt.States, Depth: opt.Depth, MemoryBytes: opt.MemoryBytes, ProcessBytes: opt.ProcessBytes, UntilBroken: opt.UntilBroken, Allows: slices.Clone(sec.Allows), Unfair: opt.Unfair, Stops: opt.Stops})
 	if err != nil {
 		return fmt.Errorf("simulate -graph: %w", err)
 	}
@@ -308,6 +308,9 @@ func deeper(r *GraphResult, raise string) string {
 	if r.Cut == "states" || r.Cut == "memory" {
 		return "; the " + r.Cut + " bound cut deeper: " + raise
 	}
+	if r.Cut == "broken" {
+		return "; the search stopped once every invariant it must break broke"
+	}
 	return ""
 }
 
@@ -319,12 +322,14 @@ func graphBound(r *GraphResult) Bound {
 		b.Kind = "complete"
 	case r.Cut == "depth":
 		b.Kind = "depth"
-	case (r.Cut == "states" || r.Cut == "memory") && r.CompleteDepth > 0:
+	case (r.Cut == "states" || r.Cut == "memory" || r.Cut == "broken") && r.CompleteDepth > 0:
 		// every state within CompleteDepth steps was found and checked, as
 		// a depth bound of that depth leaves them: the same bounded proof
 		b.Kind, b.Depth, b.States = "depth", r.CompleteDepth, r.statesWithin(r.CompleteDepth)
 	case r.Cut == "states" || r.Cut == "memory":
 		b.Kind = r.Cut
+	case r.Cut == "broken":
+		b.Kind = "states" // the states found breadth first, before it stopped
 	default:
 		b.Kind, b.Stopped = "stopped", r.Stopped
 	}

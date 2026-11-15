@@ -256,6 +256,10 @@ type Variant struct {
 	Constants map[string]string `yaml:"constants"`
 	Holds     []string          `yaml:"holds"`
 	Allows    []string          `yaml:"allows"`
+	// Search bounds this variant's searches, over the section's where set
+	// (a broken design searched a step or two past its counterexample, not
+	// its whole graph: golem's leadership variants).
+	Search SearchBound `yaml:"search"`
 }
 
 // Variant is b as its simulate section's variant name has it: the
@@ -285,6 +289,12 @@ func (b *Binding) Variant(name string) (*Binding, error) {
 		}
 		if v.Allows != nil {
 			sec.Allows = slices.Clone(v.Allows)
+		}
+		if v.Search.States != 0 {
+			sec.Search.States = v.Search.States
+		}
+		if v.Search.Depth != 0 {
+			sec.Search.Depth = v.Search.Depth
 		}
 		c.Simulate = &sec
 		return &c, nil

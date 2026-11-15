@@ -222,6 +222,7 @@ type Variant struct
     field Constants map[string]string `yaml:"constants"`
     field Holds []string `yaml:"holds"`
     field Allows []string `yaml:"allows"`
+    field Search SearchBound `yaml:"search"`
 type Within struct
     field After string `yaml:"after"`
     field Holds string `yaml:"holds"`
@@ -3353,6 +3354,8 @@ type GraphSearch struct
     field Depth int
     field MemoryBytes int64
     field ProcessBytes int64
+    field UntilBroken bool
+    field Allows []string
     field Eventually []string
     field Unfair []string
     field Stops []string
@@ -3468,6 +3471,7 @@ type SimulateOptions struct
     field Depth int
     field MemoryBytes int64
     field ProcessBytes int64
+    field UntilBroken bool
     field Unfair []string
     field Stops []string
     field Out string

@@ -339,8 +339,10 @@ Items, each its own decision before it starts:
   `simulate -matrix` run every variant and tabulate them, a cell FAIL where
   the variant's classification is contradicted; `-write-matrix doc.md`
   writes the table between markers, `-json` prints `gotogether.matrix/1`.
-  Left: possibles per variant, breaks stopping at the first violation, and
-  iterative deepening. A model
+  Second slice: a variant whose invariants it must all break (no eventual
+  val) stops its graph once each has broken (`qeval.Model.ExploreUntil`,
+  cut "broken", its counterexamples still shortest); a variant's own
+  `search` bounds. Left: possibles per variant, iterative deepening. A model
   declares its switches once (`DESIGN`, `GUARD`, `ROLLBACK`, constants of an
   instance) and a table of expectations: which variants must hold which
   properties, which must break which, with which named scenarios possible.
