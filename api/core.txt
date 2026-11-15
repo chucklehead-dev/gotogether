@@ -2658,6 +2658,9 @@ type DocGraph struct
     field CompleteDepth int `json:"completeDepth"`
     field MemoryUsed int64 `json:"memoryUsed"`
     field MemoryScope string `json:"memoryScope"`
+    field ProcessCut bool `json:"processCut,omitempty"`
+    field ProcessSeen int64 `json:"processSeen,omitempty"`
+    field PeakResident int64 `json:"peakResident,omitempty"`
     field Cut string `json:"cut,omitempty"`
     field Stopped string `json:"stopped,omitempty"`
     field Bound DocGraphBound `json:"bound"`
@@ -2671,6 +2674,7 @@ type DocGraphBound struct
     field States int `json:"states"`
     field Depth int `json:"depth"`
     field MemoryBytes int64 `json:"memoryBytes"`
+    field ProcessBytes int64 `json:"processBytes,omitempty"`
 type DocInput struct
     field Path string `json:"path"`
     field Format string `json:"format"`
@@ -3284,6 +3288,7 @@ type GraphBound struct
     field States int
     field Depth int
     field MemoryBytes int64
+    field ProcessBytes int64
 type GraphResult struct
     field States int
     field Starts int
@@ -3295,6 +3300,9 @@ type GraphResult struct
     field CompleteDepth int
     field Bound GraphBound
     field MemoryUsed int64
+    field ProcessCut bool
+    field ProcessSeen int64
+    field PeakResident int64
     field Invariants []InvariantVerdict
     field Deadlocks int
     field Terminals int
@@ -3315,6 +3323,7 @@ type GraphSearch struct
     field States int
     field Depth int
     field MemoryBytes int64
+    field ProcessBytes int64
     field Eventually []string
     field Unfair []string
     field Stops []string
@@ -3412,6 +3421,7 @@ type SimulateOptions struct
     field States int
     field Depth int
     field MemoryBytes int64
+    field ProcessBytes int64
     field Unfair []string
     field Stops []string
     field Out string

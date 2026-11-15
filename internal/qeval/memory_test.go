@@ -140,3 +140,50 @@ func BenchmarkGraphStorageEstimate(b *testing.B) {
 		})
 	}
 }
+
+// The process bound reads the runtime's memory and cuts the search past it
+// (#144: a search within its estimate killed a runner sized by it), never
+// below it; Reach refuses it as it refuses the graph budget.
+func TestGraphProcessMemoryBound(t *testing.T) {
+	m := compile(t, "../../../validate/testdata/wide.qnt", "wide", "init", "step")
+	if _, err := m.Reach(nil, State{}, "step", nil, Bound{ProcessBytes: 1}); err == nil {
+		t.Fatal("Reach silently ignored a process memory bound")
+	}
+	g, err := m.Explore(nil, "init", "step", Bound{ProcessBytes: 1}, nil)
+	if err != nil || g.Complete || g.Cut != "memory" || !g.ProcessCut || g.ProcessSeen <= 1 {
+		t.Fatalf("a 1-byte process bound: err %v, complete %v, cut %q, process cut %v, seen %d", err, g.Complete, g.Cut, g.ProcessCut, g.ProcessSeen)
+	}
+	if len(g.States) >= 4096 {
+		t.Fatalf("cut after all %d states", len(g.States))
+	}
+	full, err := m.Explore(nil, "init", "step", Bound{ProcessBytes: 1 << 50}, nil)
+	if err != nil || !full.Complete || full.ProcessCut || len(full.States) != 4096 || full.ProcessSeen <= 0 {
+		t.Fatalf("a bound far above the process: err %v, complete %v, process cut %v, %d states, seen %d", err, full.Complete, full.ProcessCut, len(full.States), full.ProcessSeen)
+	}
+	if none, _ := m.Explore(nil, "init", "step", Bound{}, nil); none.ProcessSeen != 0 || none.ProcessCut {
+		t.Fatalf("no bound read the process: seen %d, cut %v", none.ProcessSeen, none.ProcessCut)
+	}
+}
+
+// A reading past the bound is confirmed after a collection, and a reading
+// under it backs the checks off, so a search near its bound does not
+// collect at every check.
+func TestProcessCheckBacksOff(t *testing.T) {
+	b := graphMemory{process: 1 << 50}
+	for range processCheckEvery {
+		if !b.reserve(1) {
+			t.Fatal("refused under the bound")
+		}
+	}
+	if b.processSeen <= 0 || b.every != processCheckEvery {
+		t.Fatalf("after %d reservations: seen %d, every %d", processCheckEvery, b.processSeen, b.every)
+	}
+	tight := graphMemory{process: 1}
+	ok := true
+	for i := 0; i < processCheckEvery && ok; i++ {
+		ok = tight.reserve(1)
+	}
+	if ok || !tight.processOver {
+		t.Fatalf("a 1-byte bound never cut: over %v", tight.processOver)
+	}
+}

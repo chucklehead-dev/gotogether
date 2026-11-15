@@ -184,5 +184,16 @@ structured graph report. A truncated graph proves nothing beyond its completed
 depth; its observed counterexamples remain real paths. The estimate can charge
 shared values more than once and excludes model compilation, temporary
 evaluator allocations and process heap/RSS. It is not a hard process memory cap.
+
+To size a search from the machine's memory, bound the process instead:
+`-process-memory 5000` (MiB) reads the process's memory as the Go runtime
+maps it while the search runs, collects once before believing a reading past
+the bound, and cuts the graph there (`cut: memory`, `processCut`,
+`processSeen`; the text says "truncated by the process memory bound"), with
+the same bounded proof to `completeDepth`. Leave headroom for what the Go
+runtime does not map (the binary, quint's own processes): golem's search peaked
+at 7,070 MiB resident under `-memory 6000`, about 1.18 times its estimate,
+enough to kill a 7 GB runner. Every graph's JSON reports `peakResident`, the
+process's resident high-water mark, to read that ratio for your own model.
 `model-diff -memory` applies the same per-graph budget; either incomplete input
 makes comparison inconclusive, never equivalent.
