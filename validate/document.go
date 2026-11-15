@@ -227,9 +227,40 @@ type DocCheck struct {
 	Kind    string    `json:"kind"` // "invariant", "eventually", "possible", "graph"
 	Verdict string    `json:"verdict"`
 	Detail  string    `json:"detail,omitempty"`
+	// Counterexample is the path the check's verdict rests on, as data: a
+	// violated invariant's or a deadlock's path, or an eventual val's hot
+	// lasso. Detail renders the same for people; scripts read this, never
+	// Detail. Absent when the verdict rests on no path, and when an
+	// evaluator disagreement voided the graph's verdicts.
+	Counterexample *DocCounterexample `json:"counterexample,omitempty"`
 	// Source is where the check's definition is in the model, "file:line"
 	// (a literate model's document line), when the report knows.
 	Source string `json:"source,omitempty"`
+}
+
+// DocCounterexample is a path in the model's state graph: Steps from the
+// start ("init") through each transition, with the state after each, so
+// its length is len(Steps)-1; for a hot lasso, Cycle then returns to the
+// last step's state forever (none for a Stutter, where no fair action is
+// enabled, Ends when no action is). Replay is the path as a Quint run;
+// Sampled are steps whose call has other successors that quint's replay
+// may draw instead.
+type DocCounterexample struct {
+	Steps   []DocCounterexampleStep `json:"steps"`
+	Cycle   []DocCounterexampleStep `json:"cycle,omitempty"`
+	Stutter bool                    `json:"stutter,omitempty"`
+	Ends    bool                    `json:"ends,omitempty"`
+	Replay  string                  `json:"replay,omitempty"`
+	Sampled []int                   `json:"sampled,omitempty"`
+}
+
+// DocCounterexampleStep is one step of a counterexample: the action's call
+// as the model names it ("init" for the start), the choices the action
+// made itself, and the whole state after it, each value a Quint literal.
+type DocCounterexampleStep struct {
+	Call  string       `json:"call"`
+	Picks []NamedValue `json:"picks,omitempty"`
+	State []NamedValue `json:"state"`
 }
 
 // DocGraph describes a model-state graph, not recorded executions. Complete

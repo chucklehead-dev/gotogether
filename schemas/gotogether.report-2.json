@@ -1209,6 +1209,133 @@
               "null"
             ]
           },
+          "counterexample": {
+            "additionalProperties": false,
+            "description": "Counterexample is the path the check's verdict rests on, as data: a violated invariant's or a deadlock's path, or an eventual val's hot lasso. Detail renders the same for people; scripts read this, never Detail. Absent when the verdict rests on no path, and when an evaluator disagreement voided the graph's verdicts.",
+            "properties": {
+              "cycle": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "call": {
+                      "type": "string"
+                    },
+                    "picks": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "type": "array"
+                    },
+                    "state": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "type": "array"
+              },
+              "ends": {
+                "type": "boolean"
+              },
+              "replay": {
+                "type": "string"
+              },
+              "sampled": {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              "steps": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "call": {
+                      "type": "string"
+                    },
+                    "picks": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "type": "array"
+                    },
+                    "state": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "type": "array"
+              },
+              "stutter": {
+                "type": "boolean"
+              }
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
           "detail": {
             "type": "string"
           },

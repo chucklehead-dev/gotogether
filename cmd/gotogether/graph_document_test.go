@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/internal/skip"
@@ -99,5 +100,43 @@ func TestSimulateUnsupportedScopeAndNativeNoVerdictStatus(t *testing.T) {
 	}
 	if !bytes.Contains(buf.Bytes(), []byte(`"verdict": "no verdict"`)) {
 		t.Fatalf("writer overwrote native scope: %s", buf.Bytes())
+	}
+}
+
+// A graph check's path is data in the report (CW4): a script reads the
+// violated invariant's path, the deadlock's and an eventual val's lasso
+// from counterexample, never from detail's text, and a check that holds
+// carries none.
+func TestSimulateCounterexamplesAsData(t *testing.T) {
+	skip.Quint(t)
+	read := func(binding string) map[string]validate.DocCheck {
+		t.Helper()
+		_, out := capture(t, func() (int, error) { return simulate(t.Context(), []string{"-json", "-graph", "-binding", binding}) })
+		var d validate.Document
+		if err := json.Unmarshal([]byte(out), &d); err != nil {
+			t.Fatalf("%s: %v\n%s", binding, err, out)
+		}
+		checks := map[string]validate.DocCheck{}
+		for _, c := range d.Checks {
+			checks[c.Name] = c
+		}
+		return checks
+	}
+	g := read("../../validate/testdata/graph.yaml")
+	for _, name := range []string{"small", "deadlock"} {
+		cx := g[name].Counterexample
+		if cx == nil || len(cx.Steps) != 4 || !strings.HasPrefix(cx.Steps[0].Call, "init") || cx.Steps[3].Call != "bump(by = 2)" || len(cx.Steps[3].State) != 2 || cx.Replay == "" || len(cx.Cycle) != 0 {
+			t.Errorf("%s: counterexample %+v, want init, inc, inc, bump(by = 2) with each state and a replay", name, cx)
+		}
+	}
+	if cx := g["small"].Counterexample; cx != nil && (cx.Steps[3].State[0] != validate.NamedValue{Name: "x", Value: "3"}) {
+		t.Errorf("small's last state %v, want x = 3 first", cx.Steps[3].State)
+	}
+	if cx := g["positive"].Counterexample; cx != nil {
+		t.Errorf("positive holds, yet carries a counterexample %+v", cx)
+	}
+	h := read("../../validate/testdata/hot.yaml")
+	if cx := h["drained"].Counterexample; cx == nil || len(cx.Steps) != 2 || len(cx.Cycle) != 4 || cx.Stutter || cx.Replay == "" {
+		t.Errorf("drained's hot lasso %+v, want a 2-step prefix and a 4-step cycle", cx)
 	}
 }

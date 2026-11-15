@@ -352,6 +352,34 @@ configured bounds. Check `bound.kind` and `bound.proves` for proof coverage;
 and retains actual search extent/path. Samples do not prove absence. Read
 `skipReason` and no-verdict status for unperformed checks, and reserve errors for
 actual failures. Never regex `notes` or `detail` to recover these machine facts.
-Go consumers use the canonical model report's `Doc()` projection. The Goo Read
+Each check's `counterexample` is the path its verdict rests on, as data:
+`steps` from `init` (each a `call`, the action's own `picks` and the whole
+`state` after it, values as Quint literals; the path's length is
+`len(steps)-1`), `replay` (the path as a Quint run) and, for an eventual
+val's hot lasso, `cycle`, `stutter` and `ends`. A check that holds has
+none. Go consumers use the canonical model report's `Doc()` projection.
+
+A design matrix (golem's lease placement: each proposal a variant, each
+property a column) is a loop over `-const` with one report per cell; the
+exit code is 0 (no failure), 1 (a failure) or 2 (no verdict: incomplete
+or a tool error), and the cell's verdicts are in the JSON, not the
+prose:
+
+```sh
+for design in '"doc"' '"fence"' '"object"'; do
+  gotogether simulate -json -graph -depth 9 -binding lease.binding.yaml \
+    -const "DESIGN=$design" >"matrix-$design.json"
+  echo "exit $? for DESIGN=$design"
+  jq -r --arg d "$design" '.graph as $g | .checks[] | [$d, .name, .verdict,
+      (if .counterexample then (.counterexample.steps | length) - 1 else "" end),
+      ($g.completeDepth // "")] | @tsv' "matrix-$design.json"
+done
+```
+
+Each row is the variant, the check, its verdict (`holds`, `bounded`,
+`fail`, `allows`, `hot`, `live`, `unchecked`), the counterexample's length
+and the depth the graph was complete to: a `holds` with a `completeDepth`
+below `-depth` is bounded there (`bound.proves` says whether it is a
+proof), never a pass past it. CW2 (ROADMAP) makes the matrix one command. The Goo Read
 reproduction exercises this contract while preserving its historical frozen SDK
 baseline and using the current CLI for typed graph checks.
