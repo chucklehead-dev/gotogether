@@ -21,12 +21,16 @@ import (
 // invariants is the invariants command: the table of a model's
 // properties, where the Go code enforces each and which tests check it,
 // from //quint:enforces and //quint:checks directives (ROADMAP CW5's
-// static half, internal/invtable). It prints the table, writes it into a
-// design document between its markers (-write), or compares the
-// document's with it (-check, writing nothing: exit 1 when stale, naming
-// the rows that changed). A directive naming no property of the model, or
+// static half, internal/invtable), and the table of its actions, the code
+// that records each (//quint:action, literal qobs.Record) and the
+// drivers that run it (connect.Bind entries, connect.Switch keys). It
+// prints both, writes each into a design document between its markers,
+// where the document has them (-write), or compares the document's with
+// them (-check, writing nothing: exit 1 when stale, naming the rows that
+// changed). An annotation naming no property or action of the model, or
 // annotating nothing, fails (exit 1) under every mode; a property nothing
-// enforces or no test checks is a warning, a failure under -require. Exit
+// enforces or no test checks, and an action nothing records or drives,
+// is a warning (of the tables in play), a failure under -require. Exit
 // 2 is a bad invocation, a Go file that does not parse, or a model quint
 // refuses.
 func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, error) {
@@ -35,9 +39,9 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 	spec := fset.String("spec", "", "the model: a .qnt, or a literate model's .md (written to its .qnt, as tangle does)")
 	main := fset.String("main", "", "the model's main module (default: the spec's file name, as quint's)")
 	bpath := fset.String("binding", "", "take -spec and -main from this binding, and only its invariants and eventually vals as the properties")
-	write := fset.String("write", "", "write the table into this Markdown document, between its "+invtable.Begin+" and "+invtable.End+" lines")
-	check := fset.String("check", "", "compare the table with this Markdown document's, writing nothing: exit 1 when they differ, naming the rows (for CI)")
-	require := fset.String("require", "", "fail (exit 1) when a property is not: enforced, checked, or both (enforced,checked), instead of warning")
+	write := fset.String("write", "", "write the tables into this Markdown document: the properties' between its "+invtable.Begin+" and "+invtable.End+" lines, the actions' between "+invtable.ActionsBegin+" and "+invtable.ActionsEnd+", each where the document has its markers")
+	check := fset.String("check", "", "compare the tables with this Markdown document's, writing nothing: exit 1 when they differ, naming the rows (for CI)")
+	require := fset.String("require", "", "fail (exit 1), instead of warning, when a property is not enforced (a //quint:enforces) or checked (a //quint:checks in a test), or an action not recorded (a //quint:action or a literal qobs.Record) or driven (a connect.Bind entry or connect.Switch key): a comma-separated list of enforced, checked, recorded, driven")
 	quint := fset.String("quint", "quint", "quint binary")
 	if err := fset.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -51,10 +55,10 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 	for r := range strings.SplitSeq(*require, ",") {
 		switch r = strings.TrimSpace(r); r {
 		case "":
-		case "enforced", "checked":
+		case "enforced", "checked", "recorded", "driven":
 			required = append(required, r)
 		default:
-			return 2, fmt.Errorf("invariants: -require %s: give enforced, checked, or enforced,checked", *require)
+			return 2, fmt.Errorf("invariants: -require %s: give a comma-separated list of enforced and checked (each property), recorded and driven (each action)", *require)
 		}
 	}
 	switch {
@@ -69,6 +73,25 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 	if doc != "" {
 		if _, err := os.Stat(doc); err != nil {
 			return 2, fmt.Errorf("invariants: the document %s: %v (name the Markdown document the table goes in)", doc, err)
+		}
+	}
+	// the tables: both printed, else those whose markers the document has
+	tables := []docTable{
+		{"properties", invtable.Begin, invtable.End, (*invtable.Table).Markdown, []string{"enforced", "checked"}},
+		{"actions", invtable.ActionsBegin, invtable.ActionsEnd, (*invtable.Table).MarkdownActions, []string{"recorded", "driven"}},
+	}
+	if doc != "" {
+		src, _ := os.ReadFile(doc)
+		tables = slices.DeleteFunc(tables, func(t docTable) bool {
+			return !strings.Contains(string(src), t.begin) && !strings.Contains(string(src), t.end)
+		})
+		if len(tables) == 0 {
+			msg := fmt.Sprintf("%s has neither %s ... %s nor %s ... %s: add the two lines where each table goes, each alone on its line", doc, invtable.Begin, invtable.End, invtable.ActionsBegin, invtable.ActionsEnd)
+			if *check != "" {
+				fmt.Fprintf(out, "FAIL %s: missing: %s; then run %s\n", doc, msg, invariantsFix(args))
+				return 1, nil
+			}
+			return 2, fmt.Errorf("invariants -write: %s", msg)
 		}
 	}
 	patterns := fset.Args()
@@ -121,15 +144,19 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 		for _, e := range errs {
 			fmt.Fprintln(errw, e)
 		}
-		what := "the table is not written"
+		what := "the tables are not written"
 		if *write == "" && *check == "" {
 			what = "no table printed"
 		}
-		fmt.Fprintf(out, "FAIL %s naming no property of model %s, or annotating nothing: %s (fix each as it says)\n", plural(len(errs), "directive"), m.Main, what)
+		fmt.Fprintf(out, "FAIL %s naming no property or action of model %s, or annotating nothing: %s (fix each as it says)\n", plural(len(errs), "annotation"), m.Main, what)
 		return 1, nil
 	}
+	var shown []string
+	for _, t := range tables {
+		shown = append(shown, t.kinds...)
+	}
 	code := 0
-	for _, w := range table.Warnings() {
+	for _, w := range table.Warnings(shown...) {
 		fmt.Fprintln(errw, "warning: "+w)
 	}
 	if len(required) > 0 {
@@ -140,29 +167,53 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 			code = 1
 		}
 	}
-	summary := fmt.Sprintf("%s of model %s: %d enforced, %d checked", properties(len(table.Rows)), m.Main, count(table, true), count(table, false))
+	var parts []string
+	for _, t := range tables {
+		if t.name == "properties" {
+			parts = append(parts, fmt.Sprintf("%s of model %s: %d enforced, %d checked", properties(len(table.Rows)), m.Main, count(table, "enforced"), count(table, "checked")))
+		} else {
+			of := ""
+			if len(parts) == 0 {
+				of = " of model " + m.Main
+			}
+			parts = append(parts, fmt.Sprintf("%s%s: %d recorded, %d driven", plural(len(table.Actions), "action"), of, count(table, "recorded"), count(table, "driven")))
+		}
+	}
+	summary := strings.Join(parts, "; ")
 	switch {
 	case *check != "":
-		have, err := literate.Marked(*check, invtable.Begin, invtable.End)
-		if err != nil {
-			fmt.Fprintf(out, "FAIL %s: missing: %v; then run %s\n", *check, err, invariantsFix(args))
-			return 1, nil
+		var why []string
+		for _, t := range tables {
+			have, err := literate.Marked(*check, t.begin, t.end)
+			if err != nil {
+				fmt.Fprintf(out, "FAIL %s: missing: %v; then run %s\n", *check, err, invariantsFix(args))
+				return 1, nil
+			}
+			changes := invtable.Changes(have, t.text(table, filepath.Dir(*check)))
+			if have != t.text(table, filepath.Dir(*check)) && len(changes) == 0 {
+				changes = []string{"the " + t.name + " table was edited by hand"}
+			}
+			for _, c := range changes {
+				if c == "the header" {
+					c = "the " + t.name + " table's header"
+				}
+				why = append(why, c)
+			}
 		}
-		want := table.Markdown(filepath.Dir(*check))
-		if have == want {
+		if len(why) == 0 {
 			fmt.Fprintf(out, "ok   %s: current (%s)\n", *check, summary)
 			return code, nil
 		}
-		why := strings.Join(invtable.Changes(have, want), ", ")
-		if why == "" {
-			why = "the table was edited by hand"
-		}
-		fmt.Fprintf(out, "FAIL %s: stale: %s: run %s\n", *check, why, invariantsFix(args))
+		fmt.Fprintf(out, "FAIL %s: stale: %s: run %s\n", *check, strings.Join(why, ", "), invariantsFix(args))
 		return 1, nil
 	case *write != "":
-		changed, err := literate.WriteMarked(*write, invtable.Begin, invtable.End, table.Markdown(filepath.Dir(*write)))
-		if err != nil {
-			return 2, fmt.Errorf("invariants -write: %w", err)
+		changed := false
+		for _, t := range tables {
+			c, err := literate.WriteMarked(*write, t.begin, t.end, t.text(table, filepath.Dir(*write)))
+			if err != nil {
+				return 2, fmt.Errorf("invariants -write: %w", err)
+			}
+			changed = changed || c
 		}
 		if changed {
 			fmt.Fprintf(out, "%s: written (%s)\n", *write, summary)
@@ -171,8 +222,17 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 		}
 		return code, nil
 	}
-	fmt.Fprint(out, table.Markdown(""))
+	fmt.Fprint(out, table.Markdown("")+"\n"+table.MarkdownActions(""))
 	return code, nil
+}
+
+// A docTable is one of the tables a document may hold: its markers, its
+// text (paths relative to a directory) and the kinds of warning it shows.
+type docTable struct {
+	name       string
+	begin, end string
+	text       func(t *invtable.Table, dir string) string
+	kinds      []string
 }
 
 // properties is "1 property" or "n properties".
@@ -183,12 +243,17 @@ func properties(n int) string {
 	return fmt.Sprintf("%d properties", n)
 }
 
-// count is how many of the table's properties are enforced (or, with
-// enforced false, checked).
-func count(t *invtable.Table, enforced bool) int {
+// count is how many of the table's rows are of kind: properties
+// enforced or checked, actions recorded or driven.
+func count(t *invtable.Table, kind string) int {
 	n := 0
 	for _, r := range t.Rows {
-		if (enforced && len(r.Enforced) > 0) || (!enforced && len(r.Checked) > 0) {
+		if (kind == "enforced" && len(r.Enforced) > 0) || (kind == "checked" && len(r.Checked) > 0) {
+			n++
+		}
+	}
+	for _, r := range t.Actions {
+		if (kind == "recorded" && len(r.Recorded) > 0) || (kind == "driven" && len(r.Driven) > 0) {
 			n++
 		}
 	}

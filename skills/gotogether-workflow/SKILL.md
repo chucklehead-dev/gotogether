@@ -16,7 +16,7 @@ invariant and judges code that never shows it faithful.
 - Every stage's commands and code, triage, CI: [references/workflow.md](references/workflow.md).
 - A verdict or claim: [references/verdicts.md](references/verdicts.md).
 - Planting a mutant: [references/overlays.md](references/overlays.md).
-- A design document's table of invariants, where each is enforced and which tests check it (`gotogether invariants`): [references/invariants.md](references/invariants.md).
+- A design document's tables: each invariant's enforcement and tests, each action's recording and driver (`gotogether invariants`): [references/invariants.md](references/invariants.md).
 - The model's conventions and patterns: gotogether-model, gotogether-patterns.
 
 ## Steps
@@ -47,7 +47,7 @@ Before merging:
 - [ ] The faithful system conforms, settles, and `Reaches(...).Faulted()` the faults it must survive.
 - [ ] Every mutant is caught as its test states; the README's table lists them.
 - [ ] `qtest.MutateSteps` has run on a recorded log.
-- [ ] A walkthrough's invariant table is generated: `gotogether invariants -check doc.md -require enforced,checked` in CI.
+- [ ] A walkthrough's tables are generated: `gotogether invariants -check doc.md -require enforced,checked,recorded` in CI.
 - [ ] CI: `simulate` per binding, `go test -short`, `GOTOGETHER_STRICT=1`.
 
 ## Results
@@ -66,6 +66,8 @@ Before merging:
 | exit 2, no verdict | the binding or model does not fit the steps | the message names the step and template |
 | `FAIL doc.md: stale: row p changed` (`invariants -check`) | an annotated line moved, or a directive was added | the `run gotogether invariants ... -write` it names |
 | `f.go:12: //quint:enforces names p: ...` | the directive names no property | the property it names, or the model's |
+| `f.go:38: .Action("x", ...) names x, which is no action of model M` | a driver, Record or `//quint:action` names no action | the nearest name it suggests |
+| `warning: action a: nothing records it` / `nothing drives it` | no step of it is recorded, or no connect driver runs it | record or bind it; `-require recorded,driven` in CI |
 | a mutant survives | the check is too weak | strengthen it, or document the gap |
 | conforms, the environment's checker fails | the model assumes more of the environment | gotogether-patterns §2 |
 

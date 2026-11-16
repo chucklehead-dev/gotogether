@@ -1,8 +1,14 @@
 // Package counter is the fixture of gotogether invariants: a counter
-// annotated with the properties of model/counter.qnt it enforces.
+// annotated with the properties of model/counter.qnt it enforces, and
+// the actions it records.
 package counter
 
-import "errors"
+import (
+	"context"
+	"errors"
+
+	obs "github.com/chucklehead-dev/gotogether/qobs"
+)
 
 // ErrFull is Inc's refusal at the cap.
 var ErrFull = errors.New("counter: at its cap")
@@ -15,6 +21,7 @@ type Counter struct {
 // Inc adds one, refusing at the cap.
 //
 //quint:enforces withinCap
+//quint:action action:inc
 func (c *Counter) Inc() error {
 	if c.N >= c.Cap {
 		return ErrFull
@@ -23,8 +30,10 @@ func (c *Counter) Inc() error {
 	return nil
 }
 
-// Reset starts again from zero.
-func (c *Counter) Reset() {
+// Reset starts again from zero, its step recorded through qobs imported
+// under another name.
+func (c *Counter) Reset(ctx context.Context) {
 	//quint:enforces counterBase.nonNegative
 	c.N = 0
+	obs.Record(ctx, "reset", nil)
 }

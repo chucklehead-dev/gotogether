@@ -100,7 +100,8 @@ Either way works:
   The table of invariants, where the code enforces each and which tests
   check it (`gotogether invariants -spec design/counter.md -write
   design/counter.md ./...`), is written the same way, between
-  `<!-- gotogether:invariants -->` lines, the `.qnt` written again when
+  `<!-- gotogether:invariants -->` lines (and the actions table between
+  `<!-- gotogether:actions -->` lines), the `.qnt` written again when
   it was current; `-check` compares it, naming the rows that changed
   (gotogether-workflow's invariants.md).
 
