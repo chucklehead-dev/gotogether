@@ -17,8 +17,10 @@ compared with the model's. The Go counterpart of quint-connect.
 
 ## Steps
 
-1. A driver: `Step` dispatching with `connect.Switch` (`"init"` first),
-   picks decoded with `connect.MustPick[T](s, "param")`.
+1. A driver: bind each action to its method (`connect.Bind(newImpl).
+   Action("deposit", (*Bank).Deposit, "account", "amount")`, picks named
+   in parameter order), or a `Step` dispatching with `connect.Switch`
+   (`"init"` first) and `connect.MustPick[T](s, "param")`.
 2. A projection: `State() (any, error)`, exported fields named after the
    model's. One the model defines (`def balanceOf(a)`): compare in
    `CheckStep` with `connect.MustEval[int](s, "balanceOf", "alice")`, not a
@@ -59,6 +61,8 @@ compared with the model's. The Go counterpart of quint-connect.
 | `required x: no witness trace (...)` | the evaluator found no path within its bounds | the samples still count; raise `MaxSteps` |
 | `required x: reached in k of N traces` | how often the run reached it | a small k: raise the samples before trusting a pass |
 | `Eval("x") at step N (a): ...` | the def is misspelt, takes other arguments, is undefined there, or is outside the Go evaluator | the fix the message names (driver.md, `Step.Eval`) |
+| `connect.Bind: action x: ... takes N parameters ... but M picks are named` | the binding names too few or too many picks | one pick per parameter, in order (a leading `context.Context` is not named) |
+| `connect.Bind: action x: ... returns T besides an error, and nothing checks it` | a result the run would drop | `.Returns("x", "def", picks...)` against the model's def, or bind a func that drops it |
 | `the implementations disagree` | a `connect.Differential`'s implementations differ, where the model may say nothing | decide which is right, fix the other |
 | `reproduce with QUINT_SEED=0x...` | the failing trace | rerun with it, `QUINT_VERBOSE=2` |
 

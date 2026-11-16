@@ -1289,6 +1289,103 @@ alone it passed. Two runs on one machine need their own Apalache servers
 `ci/verify-alone.txt`'s rule (cold time × 1.5 + 10 minutes): 18 minutes
 for library-calls (was 127) and 33 for library (was 160).
 
+## Counters' proofs (J7b, 2026-11-15)
+
+Counters' three store-side bindings in `verify-alone` (`counters`,
+`counters.real`, `counters.retiring`) prove the same two invariants,
+`uniqueNames` and `averageAsOfTrigger`, of the same model, as one native
+batch to depth 8: one query sequence, which the group's later bindings
+reuse. Measured on `2fdc21ea` and this change (Quint 0.33.1, Apalache
+0.62.4, 4 cores, nothing else heavy on the machine), the default binding
+through `gotogether simulate -binding examples/counters/counters.binding.yaml
+-verify 8`, cold and alone; per-depth times are Apalache's `detailed.log`.
+
+**Where the time goes.** All of it is Apalache's Z3 queries, as in the
+other grist proofs: the batch took 36m17s of the binding's 36m47s
+(prepare 6 s, the Go evaluator's possibles 24 s). Unlike inventory's,
+wallet-grist's and the library's, no single derived quantity dominates.
+The transitions' cost is spread over the 22 transitions Apalache keeps
+of the step's 27 (5 to 13 s each at depth 6, none over an eighth of the
+step's time), and each invariant's check grows with the symbolic state the
+steps build. Ablations at depth 6 (`quint verify` alone, wall time with
+Apalache's startup; the last four timing only, semantics changed):
+
+| model | depth 6 | transitions / uniqueNames / averageAsOfTrigger |
+|---|---|---|
+| v0: the original | 306 s | 114 / 47 / 40 s |
+| v1: `total`, `createdBy` and `averageEmits` one fold over the log (no `select`) | 280 s | 99 / 44 / 36 s |
+| v2: v1 with `isCounter` and the name check by the event's own field, not `existsTagged`'s tag match | 256 s | 109 / 18 / 35 s |
+| v2, `conditionHolds` always true | 243 s | 101 / 14 / 33 s |
+| v2, the step's log slices in the call transitions replaced by the log | 242 s | 106 / 17 / 36 s |
+| v2, `uniqueNames` alone / `averageAsOfTrigger` alone | 193 / 213 s | |
+| v2 without the eight transitions that draw a trigger from `1..log.length()+1` (payout's effect and outcome, the six calls) | 135 s | 48 / 8 / 30 s |
+
+The read models' selections and tag matches are the same kind of
+encoding the library's and wallet-grist's proofs paid for, and v2 removes
+them; here they cost little, a sixth at depth 6, almost all of it in
+`uniqueNames`' check (the name rule, `existsTagged` over the log's tag
+sets, constrains every create the invariant counts). What remains is the
+model itself: half of the transitions' time is the eight
+trigger-drawing transitions, each a symbolic position in the log, and the
+rest of the transitions and `averageAsOfTrigger`'s check (the k-th
+average against the k-th prefix sum, a list of symbolic length) follow the
+state the steps build. Neither is an encoding of one derived quantity
+with an equal cheaper form: the 2026-11-10 measurement already found
+rewrites of the two invariants equal or slower, and the trigger draws are
+the generated skeleton's, the calls and effects any trigger may have.
+
+**The rewrite** (`model/counters_rules.qnt`, by hand; nothing generated
+changed): v2. `total` is one fold over the log adding each increment
+whose counter is the one asked; `createdBy`, `isCounter` and the new
+`nameTaken` are folds whose condition is the created event's own
+counter, owner or name; `averageEmits` folds the prefix's sum and count
+together. The two are equal on every log the models hold: each event is
+made by a generated constructor (`counterCreated`, `counterIncremented`,
+`averageComputed`, `notified`, `counterRetired`, `paidOut`, `grist.failed`,
+`grist.unknown`, each batch stamped by `caused`), which tags an event with
+the strings it stores, so the selection of a counter's increments, and
+the match of a creation's counter or name tag, are exactly the events
+whose field is that string. Evidence: `examples/counters/testdata/rules.qnt`
+keeps the earlier definitions verbatim and a machine appending every such
+event, with every counter, name, owner, amount (−2 to 3, beyond the
+models' 1 to 2) and cause; its invariant `agree` says `total`, `isCounter`,
+`createdBy`, every command's outcome, the retirement's events and
+`averageEmits` equal the earlier ones at every counter, name and caller.
+`quint verify` proves `agree` for every log of up to 10 events (23, 36,
+64, 113 and 216 s at depths 4 to 8, 900 s at depth 10). `TestRulesAgree` samples
+it (1,000 traces of up to 10 steps), and the same equality in every state
+the store's and the clients' models reach; two planted mistakes (a total
+ignoring its counter, a creator check ignoring the caller) are each
+reported violated, by the test and by `quint verify` at depth 4.
+States, transitions, bounds, invariants and Apalache policy are
+unchanged.
+
+Per depth, before (`2fdc21ea`) and after, the default binding at depth 8:
+
+| depth | before: transitions | uniqueNames | averageAsOfTrigger | after: transitions | uniqueNames | averageAsOfTrigger |
+|---|---|---|---|---|---|---|
+| 4 | 14.2 s | 2.0 s | 0.8 s | 13.7 s | 0.9 s | 0.7 s |
+| 5 | 50.4 s | 12.7 s | 7.5 s | 46.5 s | 4.1 s | 6.0 s |
+| 6 | 144.6 s | 49.6 s | 59.2 s | 106.0 s | 14.6 s | 39.5 s |
+| 7 | 182.6 s | 113.6 s | 140.6 s | 238.4 s | 45.0 s | 139.0 s |
+| 8 | about 1,380 s in all | | | 396.1 s | 105.9 s | about 490 s |
+| binding | 36 min 47 s | | | 28 min 20 s | | |
+
+Depth 8's figures before are its share of the batch (the log of that run
+was not kept past depth 7); "about" is the batch's time less the others
+logged. The proof is 1.3 times faster, not the tenfold of the other
+three: `uniqueNames`' check falls by 2.5 to 3.4 times at each depth from 5,
+`averageAsOfTrigger`'s and the transitions' do not move beyond one
+query's variance (depth 7's transitions were slower after, depth 6's
+faster). Counters' proof stays in `verify-alone`: three bindings that
+cannot reuse it would take 85 minutes, so by `ci/verify-alone.txt`'s rule
+(cold time × 1.5 + 10 minutes) the group's limit is 138 minutes (was 183;
+with reuse it needs about 29). Making the proof fit a shared roster's
+share would need a change of the model (fewer trigger draws in the
+skeleton, or a cheaper statement of `averageAsOfTrigger`), not an equal
+encoding of what it has: that is the maintainer's call, and J7b's open
+part.
+
 ## Inventory's proof before and after the grist library's folds (2026-11-12)
 
 The J7b roster measurements put inventory's cold depth-8 proof at 414 s on

@@ -233,6 +233,7 @@ type Within struct
     method (Within) Name() string
 
 == github.com/chucklehead-dev/gotogether/connect
+func Bind[T any](newT func(tb testing.TB) T) *Binding[T]
 func Eval[T any](s *Step, name string, args ...any) (T, error)
 func GenerateRun(ctx context.Context, c Config) ([]string, Config, error)
 func MustEval[T any](s *Step, name string, args ...any) T
@@ -244,6 +245,14 @@ func Replay(tr *itf.Trace, d Driver, opt ReplayOptions) error
 func Run(t *testing.T, c Config, newDriver func(testing.TB) Driver)
 func Skip(*Step) error
 func Test(t *testing.T, c Config, test string, newDriver func(testing.TB) Driver)
+type Binding[T any] struct
+    method (*Binding[T]) Action(name string, method any, params ...string) *Binding[T]
+    method (*Binding[T]) Check(check func(impl T, s *Step) error) *Binding[T]
+    method (*Binding[T]) Driver(tb testing.TB) Driver
+    method (*Binding[T]) Handle(name string, h func(impl T, s *Step) error) *Binding[T]
+    method (*Binding[T]) Returns(name, def string, args ...string) *Binding[T]
+    method (*Binding[T]) Skip(names ...string) *Binding[T]
+    method (*Binding[T]) State(project func(impl T) any) *Binding[T]
 type Config struct
     field Spec string
     field Main string

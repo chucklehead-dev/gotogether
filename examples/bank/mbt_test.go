@@ -44,25 +44,31 @@ type modelState struct {
 
 func (d *driver) State() (any, error) { return modelState{Balances: d.bank.Balances()}, nil }
 
-// readingDriver is the driver that also checks the bank's other read.
-// Its CheckStep needs the model connect.Run compiles for Step.Eval, so
-// the drivers Replay and Hegel run (which compile none) are plain ones.
-type readingDriver struct{ *driver }
-
-// CheckStep reads each account through Balance, the bank's own read, and
-// compares it with the model's definition balanceOf, evaluated in the
-// step's state (Step.Eval): State covers Balances, this the other read.
-func (d readingDriver) CheckStep(s *connect.Step) error {
-	for _, a := range accounts {
-		if model, bank := connect.MustEval[int](s, "balanceOf", a), d.bank.Balance(a); model != bank {
-			return fmt.Errorf("Balance(%q) = %d, the model's balanceOf = %d", a, bank, model)
-		}
-	}
-	return nil
+// bound is the bank bound to the model's actions (connect.Bind): each
+// action a method, its picks its parameters by name (the context is the
+// trace's), the balances projected, and the bank's other read, Balance,
+// compared with the model's balanceOf after every step (Step.Eval). It is
+// driver's Switch without the hand-written decoding: a renamed method or
+// a changed parameter is a build or binding error, not a stale handler.
+func bound() *connect.Binding[*Bank] {
+	return connect.Bind(func(testing.TB) *Bank { return New(accounts) }).
+		Action("deposit", (*Bank).Deposit, "account", "amount").
+		Action("withdraw", (*Bank).Withdraw, "account", "amount").
+		Action("transfer", (*Bank).Transfer, "src", "dst", "amount").
+		State(func(b *Bank) any { return modelState{Balances: b.Balances()} }).
+		Check(func(b *Bank, s *connect.Step) error {
+			for _, a := range accounts {
+				if model, bank := connect.MustEval[int](s, "balanceOf", a), b.Balance(a); model != bank {
+					return fmt.Errorf("Balance(%q) = %d, the model's balanceOf = %d", a, bank, model)
+				}
+			}
+			return nil
+		})
 }
 
-// The model drives the bank: random traces of the deployed design, each
-// replayed on a fresh bank with the balances compared after every step.
+// The model drives the bank, bound to it (bound): random traces of the
+// deployed design, each replayed on a fresh bank with the balances
+// compared after every step.
 // The run must reach the model's rich state (Require): the shortest path
 // to it is replayed first (subtest witness_rich), and the log says how
 // many of the random traces reached it. Reproduce a failure with the
@@ -70,7 +76,7 @@ func (d readingDriver) CheckStep(s *connect.Step) error {
 func TestModelDrivesBank(t *testing.T) {
 	qtest.RequireQuint(t)
 	connect.Run(t, connect.Config{Spec: "model/bank.qnt", Main: "bankDesign", MaxSamples: 30, MaxSteps: 25, Require: []string{"rich"}},
-		func(testing.TB) connect.Driver { return readingDriver{&driver{}} })
+		bound().Driver)
 }
 
 // What model-driven testing can and cannot catch. LostDeposit diverges
