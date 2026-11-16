@@ -38,6 +38,9 @@ func TestPlaywrightGolden(t *testing.T) {
 			if len(tr.Steps) != 11 {
 				t.Errorf("%d steps, want 11: five calls completed, six shows", len(tr.Steps))
 			}
+			if !tr.Settled || steps[len(steps)-1].Ref != "every job ready" {
+				t.Errorf("the journey's settle: settled %v, last %+v; want the test's settled() to settle the run", tr.Settled, steps[len(steps)-1])
+			}
 		}, 0},
 		{"failures", func(t *testing.T, steps []qtrace.Step, tr *qtrace.Trace) {
 			if s := steps[1]; s.Call != 1 || s.Args["code"] != int64(0) || s.Error != "net::ERR_CONNECTION_REFUSED" || s.Outcome != "ok" || s.Args["id"] != "" {
@@ -51,6 +54,9 @@ func TestPlaywrightGolden(t *testing.T) {
 			}
 			if tr.Pending[0].Action != "cancel" {
 				t.Errorf("pending %+v, want the cancel", tr.Pending)
+			}
+			if tr.Settled {
+				t.Error("a log with no settled record is settled")
 			}
 		}, 1},
 	} {
@@ -66,7 +72,8 @@ func TestPlaywrightGolden(t *testing.T) {
 				t.Fatalf("reconstructed: %v %+v", issues, traces)
 			}
 			for _, s := range steps {
-				if s.Recorder != "ui" || s.Actor != "webjobs" || s.Thread != "page" {
+				// a settle is the whole system's, of no thread (as qobs.Settled's)
+				if s.Recorder != "ui" || s.Actor != "webjobs" || (s.Thread != "page") != s.Settled {
 					t.Fatalf("%+v: want the header's names", s)
 				}
 			}

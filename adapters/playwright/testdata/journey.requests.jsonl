@@ -15,3 +15,4 @@
 {"event":"response","req":"5","time":"2026-10-27T06:41:01.093912Z","code":202,"args":{"id":"j08078c51","status":"accepted"}}
 {"event":"step","action":"show","time":"2026-10-27T06:41:01.095706Z","args":{"id":"j08078c51","status":"accepted"}}
 {"event":"step","action":"show","time":"2026-10-27T06:41:01.452773Z","args":{"id":"j08078c51","status":"ready"}}
+{"event":"settled","time":"2026-10-27T06:41:01.953023Z","ref":"every job ready"}

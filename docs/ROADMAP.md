@@ -39,7 +39,7 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Proposed queue | M1–M6: golem's graph search and Valkey ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6835911012)) | M1 (a bounded result: `-memory`, `-process-memory`, `peakResident`) and M2 done; next M3 (symmetry). |
 | Proposed queue | N1–N7: golem's driver asks ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6843138891)) | N1 (`Config.Require`, its witnesses), N3 (`Step.Eval`), N5 (actionmap `-roundtrips`) and N7 (`connect.Differential`) done. Next N2 (`connect.Compose`). Open in N1: a witness continued past its target (documented for now: require the state after the step under test). |
 | Proposed queue | CW1–CW11: a contract from design to operation ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6885259328), [#220](https://github.com/chucklehead-dev/gotogether/issues/220#issuecomment-6884857732)) | CW1 (literate models; Goo adopted it), CW2 (the design matrix with per-variant search, `dead`, `-variant` and memory released per variant; golem adopted it for four models) and CW4 done. CW5's runtime half done (`connect.Bind` with `Returns` and `Observes`); next its static half in qanalysis, golem's `expDriver` the first outside case, a world that is not one `T` an open question. Then CW3; CW11 (asynchronous drivers) its own design. Left in CW1: `lint -model doc.md`, stable IDs; in CW2: possibles per variant, iterative deepening. |
-| Proposed queue | O1–O2: external drivers ([#220](https://github.com/chucklehead-dev/gotogether/issues/220)) | O1 (a settle record in `gotogether.requests/1`) retires Goo's drain bridge; O2 the compact external-driver example. |
+| Proposed queue | O1–O2: external drivers ([#220](https://github.com/chucklehead-dev/gotogether/issues/220)) | O1 done (a `settled` record in `gotogether.requests/1`, written by the Playwright adapter's `settled()`): it retires Goo's drain bridge. Next O2, the compact external-driver example. |
 | Proposed queue | Q0–Q11: a Go Quint | A design item, each its own decision. Q0 first (no quint for consumers, small); Q2's front end only once Q3's corpus and ill-typed generator exist. Upstream first. |
 | Dropped | J12 and J23 | Go 1.26 compatibility and pin batching are withdrawn. Go 1.27.3 and immediate required sibling pin alignment remain deliberate policies. |
 
@@ -281,10 +281,12 @@ reference now has page text through `intern`, Bombadil's
 per-key show deduplication and the navigation-epoch recipe for a
 return, and the driver's own drained-then-settled bridge.
 
-- **O1: a settle record in the request log.** Goo's bridge is Go code
-  appending a settle after the log's steps; a `settle` event of
-  `gotogether.requests/1` (a format change: internal/formats) would let a
-  non-Go driver say it, with the caller still establishing quiet.
+- **O1: a settle record in the request log.** Done: `{"event":
+  "settled"}` in `gotogether.requests/1` (an added optional record kind,
+  so the major stays), read as the step `qobs.Settled` writes; the
+  Playwright adapter's `settled(ref)` drains its answers then writes it.
+  Goo's bridge is Go code appending a settle after the log's steps; any
+  driver now says it in the log, the caller still establishing quiet.
 - **O2: a compact external-driver example.** One journey showing what a
   conforming prefix is not: a pending invocation, no eventual end, a
   retained display violated, a hidden final display, a lost tail, each a

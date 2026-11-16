@@ -97,6 +97,53 @@ func TestSteps(t *testing.T) {
 	}
 }
 
+// A settled record is the driver's settle (O1): the same record as
+// qobs.Settled writes, so a run whose log ends with one is settled
+// (qtrace.Trace.Settled) and its eventual properties are judged; one with
+// a step after it, or none, is not (EOF is not a settle). It carries
+// only its time and ref.
+func TestSettled(t *testing.T) {
+	answered := []string{
+		`{"event":"request","req":"1","action":"submit","time":"` + at(0) + `","args":{"key":"k1"}}`,
+		`{"event":"response","req":"1","time":"` + at(10) + `","code":202,"args":{"id":"j1"}}`,
+	}
+	settled := func(lines ...string) bool {
+		t.Helper()
+		l, err := read(t, lines...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		traces, issues := qtrace.Reconstruct(l.Steps())
+		if len(issues) > 0 || len(traces) != 1 {
+			t.Fatalf("reconstructed: %v %+v", issues, traces)
+		}
+		return traces[0].Settled
+	}
+	settle := `{"event":"settled","time":"` + at(20) + `","ref":"drained after 2 polls"}`
+	if !settled(append(answered, settle)...) {
+		t.Error("a log ending with a settled record is not settled")
+	}
+	if settled(answered...) {
+		t.Error("a log with no settled record is settled: EOF is not a settle")
+	}
+	if settled(append(answered, settle, `{"event":"step","action":"show","time":"`+at(30)+`","args":{"id":"j1"}}`)...) {
+		t.Error("a log with a step after its settle is settled")
+	}
+	l, err := read(t, append(answered, settle)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := l.Steps()[2]
+	if s.Action != "settled" || !s.Settled || s.Thread != "" || s.Seq != 3 || s.Ref != "drained after 2 polls" || s.Args != nil || s.Invocation {
+		t.Errorf("the settle's step: %+v", s)
+	}
+	for _, extra := range []string{`"action":"drained"`, `"req":"1"`, `"thread":"page"`, `"args":{"n":1}`, `"obs":{"n":1}`} {
+		if _, err := read(t, `{"event":"settled","time":"`+at(0)+`",`+extra+`}`); err == nil || !strings.Contains(err.Error(), "a settled record carries more than its time and ref") {
+			t.Errorf("a settled record with %s: %v", extra, err)
+		}
+	}
+}
+
 // The header's defaults are a recorder's: actor "default", process and
 // thread the recorder.
 func TestHeaderDefaults(t *testing.T) {
@@ -135,7 +182,7 @@ func TestRefused(t *testing.T) {
 		{"a step answering a request", "", []string{req("1", 0), `{"event":"step","action":"show","req":"1","time":"` + at(1) + `"}`}, "line 3: step show names a request"},
 		{"time going back", "", []string{req("1", 5), req("2", 1)}, "line 3: time"},
 		{"no time", "", []string{`{"event":"step","action":"show"}`}, "line 2: a step with no time"},
-		{"an unknown event", "", []string{`{"event":"click","action":"a","time":"` + at(0) + `"}`}, `line 2: event "click" is none of the protocol's (request, response, step)`},
+		{"an unknown event", "", []string{`{"event":"click","action":"a","time":"` + at(0) + `"}`}, `line 2: event "click" is none of the protocol's (request, response, step, settled)`},
 		{"the code as an argument", "", []string{req("1", 0), `{"event":"response","req":"1","time":"` + at(1) + `","code":200,"args":{"code":1}}`}, `line 3: the response to request 1 has an argument "code"`},
 		{"a request's argument named code", "", []string{`{"event":"request","req":"1","action":"a","time":"` + at(0) + `","args":{"code":"SAVE10"}}`}, `line 2: request 1 has an argument "code", the name of the completion's code (CodeArg), which would replace it`},
 		{"an answer's field under the answer's name", "", []string{req("1", 0), `{"event":"response","req":"1","time":"` + at(1) + `","code":200,"args":{"key":"x","answer_key":"y"}}`}, "line 3: the response to request 1 answers both key, which the request sent, and answer_key"},
