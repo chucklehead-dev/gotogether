@@ -17,7 +17,7 @@ type command struct{ purpose, example, short string }
 
 // helpOrder is the order gotogether help lists the commands in: a
 // newcomer's first ones first. Read-only.
-var helpOrder = []string{"init", "scaffold", "lint", "simulate", "model-diff", "validate", "bundle", "nav", "evidence", "steps", "shrink", "itf", "convert", "cover", "compile", "tangle", "skills", "doctor"}
+var helpOrder = []string{"init", "scaffold", "lint", "simulate", "model-diff", "validate", "bundle", "nav", "evidence", "steps", "shrink", "itf", "convert", "cover", "compile", "tangle", "types", "skills", "doctor"}
 
 var commands = map[string]command{
 	"init": {"write a new project, green as written: a synchronous library with observed-call tests, or an HTTP service (its handler recording each step, a client that retries a refused connection), its model and binding, a test in a simulation on qenv/qhttp (the server's process before the client), one over a real socket through qobshttp, and a mutant the tests catch",
@@ -66,6 +66,9 @@ var commands = map[string]command{
 	"tangle": {"write each literate model (a Markdown design document whose ```quint blocks, in order, are the model) to its .qnt beside it, as a binding naming the document does when it loads; positions in the .qnt are reported at the document's lines; -check (in CI, where the .qnt is checked in) fails if one is missing or stale",
 		"gotogether tangle design/acquisition.md\n  gotogether tangle -check design/*.md",
 		"a model kept in its design document? the document's quint blocks as its model, positions at its lines"},
+	"types": {"generate the Go types of a model's types, for itf.Decode of its states and values and connect's projections: a struct per record, a string type with constants per enum, a struct with Tag and a field per variant for any other sum, a pointer per Option, State with a field per state variable; what Go cannot say here is itf.Value with a comment saying why; -check (in CI, where the file is checked in) fails if it is missing or stale, naming the types that changed",
+		"gotogether types -spec model/stock.qnt -main stock -package stock -o model_types.go\n  gotogether types -binding stock.binding.yaml -o model_types.go -check",
+		"Go mirrors of a model's records and sums? generated from the model, and checked for staleness"},
 	"skills": {"list the agent skills (skills list, the default), or install them into a project (skills install; its -h)",
 		"gotogether skills install -target all",
 		"the agent skills: list them, or install them into a project"},
@@ -131,7 +134,7 @@ func isZeroValue(f *flag.Flag) bool {
 
 // commandNames are main's commands, for the unknown command's
 // did-you-mean.
-var commandNames = []string{"init", "scaffold", "simulate", "model-diff", "evidence", "lint", "steps", "validate", "bundle", "shrink", "nav", "itf", "convert", "cover", "compile", "tangle", "skills", "doctor", "help", "version"}
+var commandNames = []string{"init", "scaffold", "simulate", "model-diff", "evidence", "lint", "steps", "validate", "bundle", "shrink", "nav", "itf", "convert", "cover", "compile", "tangle", "types", "skills", "doctor", "help", "version"}
 
 // unknownCommand says that name is no command, with the nearest one if
 // it is a likely misspelling, and where the list is: the whole usage

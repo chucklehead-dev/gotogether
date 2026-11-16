@@ -25,7 +25,7 @@ pins from the checked-in go.mod files, not from historical handoff paragraphs.
 
 | Area | What you can do today | Start at |
 |---|---|---|
-| MBT | Quint traces drive the code (`connect.Run`, `connect.Test`, quint-connect parity); required states with their witness traces replayed first (`Config.Require`), the model's own defs in a driver (`Step.Eval`), two implementations compared on one run (`connect.Differential`) | README §1, [examples/bank](../examples/bank), skill `gotogether-mbt` |
+| MBT | Quint traces drive the code (`connect.Run`, `connect.Test`, quint-connect parity); required states with their witness traces replayed first (`Config.Require`), the model's own defs in a driver (`Step.Eval`), two implementations compared on one run (`connect.Differential`); the model's types as generated Go types (`gotogether types [-check]`) | README §1, [examples/bank](../examples/bank), skill `gotogether-mbt` |
 | Hegel | Hegel drives and the model judges and shrinks, or the model drives and Hegel varies (qhegel, its own module) | README §2, skill `gotogether-hegel` |
 | Trace validation | steps recorded (`qobs`, `//quint:action`, OTel spans converted) and judged by a binding; `validate -json`, JUnit, SARIF; on-call reports with one record index, wall time, pod, trace id and a state diff | README §3, [instrumentation.md](instrumentation.md), DESIGN §68 |
 | Simulation | qenv: virtual time, crashable processes, Store, Queue, Service, Disk, qhttp, qsql, simlog doubles, fault kinds by name; `System.Explore`, FaultOrders, Exhaust, PCT, sweeps, mutants (overlays and qmut), coverage by model step | README §4, [examples/hello](../examples/hello), skill `gotogether-faults` |

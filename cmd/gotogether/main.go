@@ -64,7 +64,7 @@ func main() {
 		usage()
 	}
 	ctx := context.Background()
-	if slices.Contains([]string{"scaffold", "steps", "lint", "validate", "model-diff", "simulate"}, os.Args[1]) {
+	if slices.Contains([]string{"scaffold", "steps", "lint", "validate", "model-diff", "simulate", "types"}, os.Args[1]) {
 		var stop context.CancelFunc
 		ctx, stop = signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 		defer stop()
@@ -106,6 +106,8 @@ func main() {
 		err = compileTo(os.Stdout, os.Args[2:])
 	case "tangle":
 		code, err = tangle(os.Stdout, os.Args[2:])
+	case "types":
+		code, err = types(ctx, os.Stdout, os.Args[2:])
 	case "doctor":
 		code, err = doctor(os.Stdout, os.Args[2:])
 	case "help", "-h", "-help", "--help":

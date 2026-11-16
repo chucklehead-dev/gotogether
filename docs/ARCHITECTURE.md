@@ -69,7 +69,7 @@ package-level variable says whether it is read-only or process-wide
 | exploration | `qtest` (System, Explore, Exhaust, Sweep, Mutants, Expect), `qshrink`, `qsweep`, `qcover`, `qmut` | many runs, each judged, claimed over (`Rejects`, `Some(...)`, `Exercised`), shrunk, mutated, swept |
 | simulation | `qenv` and its doubles (`qenv/qhttp`, `qenv/qsql`, `qenv/simlog`), `qenv/weave`, `qenv/fault`, `qhistory`, `qnemesis` | the system on virtual time with every nondeterministic choice made by a Chooser: processes, crashes, a transactional Store, queues, lossy RPC; real deployments' nemeses |
 | load | `qmeta` (imports nothing of the module), `qload` | a CTMC predicting recovery from a load spike; a load simulation on qenv confirming it |
-| model-based tests | `connect` | Quint traces drive the code (quint-connect's API) |
+| model-based tests | `connect`, internal/typegen | Quint traces drive the code (quint-connect's API); the model's types as Go types `itf.Decode` fills (`gotogether types`) |
 | the CLI | `cmd/gotogether` | every check from the shell: init (a new HTTP service's project), lint (a binding's schema first: `schemas`), scaffold, simulate, validate, compile, nav, evidence, doctor |
 
 Simulation sits below exploration in the import graph's sense (qtest

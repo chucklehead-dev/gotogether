@@ -139,8 +139,10 @@ func TestUsageOneLinePerCommand(t *testing.T) {
 	if !strings.Contains(usage, "-graph") || !strings.Contains(usage, "gotogether simulate -binding stock.binding.yaml -graph") {
 		t.Errorf("help does not show simulate -graph:\n%s", usage)
 	}
-	if strings.Contains(usage, "-linearize-budget") || strings.Count(usage, "\n") > 40 {
-		t.Errorf("help lists flags (or runs past 40 lines):\n%s", usage)
+	// two lines a command (its question, its example), two of heading,
+	// version's and the footer: nothing else
+	if lines := 2*len(helpOrder) + 4; strings.Contains(usage, "-linearize-budget") || strings.Count(usage, "\n") > lines {
+		t.Errorf("help lists flags (or runs past %d lines):\n%s", lines, usage)
 	}
 }
 
