@@ -489,7 +489,10 @@ func checkBound(t *testing.T, c Config, ev *evaluator, mc modelChecked) {
 		t.Logf("connect.Bind: the binding is not checked against %s before the traces (%v): the traces still check it", c.Spec, err)
 		return
 	}
-	bad, unbound := mc.checkModel(m, c)
+	bad, unbound, notes := mc.checkModel(m, c)
+	for _, n := range notes {
+		t.Log(n)
+	}
 	if len(unbound) > 0 {
 		one := len(unbound) == 1
 		t.Logf("connect.Bind: the model's action%s %s %s bound to nothing: a step of %s fails as unimplemented (bind, Handle or Skip %s)", plural(len(unbound)), strings.Join(unbound, ", "),
