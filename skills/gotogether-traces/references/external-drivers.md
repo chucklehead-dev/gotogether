@@ -291,15 +291,19 @@ an end of file is not it. Its steps are then:
 2. check that every request it sent has its response line (or knowingly
    leave one pending: a call never answered is the run's to judge,
    `qtest.Finishes()` fails it);
-3. then record the settle, after every other step of the journey. The
-   request log (`gotogether.requests/1`) has no settle record: the one
-   who knows the journey is quiet records it. In Go, append to the
-   log's steps a settle record of the log's recorder, after its last
-   (`qtrace.Step{Recorder: ..., Seq: last+1, Time: ..., Settled: true}`,
-   what `qobs.Settled` records); or, where the server knows (webjobs:
-   the driver exited, the server stopped taking requests, every job
-   ended), call `qobs.Settled` there. A model step before it (`drained`)
-   is the model's own, if the model has an end action.
+3. then record the settle, after every other step of the journey: the
+   log's own `{"event": "settled", "time": ..., "ref": ...}` record
+   (`qdriver.Settled`), written by the driver that knows the journey is
+   quiet. Playwright's adapter writes it with `await log.settled("every
+   job ready")`, which first waits for the answers still being read; any
+   other driver writes the line itself. It carries only its time and a
+   ref (how the driver knew), and reads as the same settle `qobs.Settled`
+   records. A record after it voids it, as a step after a settle does;
+   a log without one ends unsettled. Where the server knows instead
+   (webjobs: the driver exited, the server stopped taking requests,
+   every job ended), call `qobs.Settled` there. A model step before it
+   (`drained`) is the model's own, if the model has an end action, and
+   no longer stands in for the settle.
 
 The binding's `eventually` vals are then judged in that last state, and
 `complete: true` (or `Finishes()`) fails a run that has none. The settle

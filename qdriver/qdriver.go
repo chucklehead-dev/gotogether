@@ -17,13 +17,14 @@
 // thread (default the recorder: one tab's actions are in program order)
 // name the steps as a recorder's options would; driver is free text.
 //
-// Every other line is a record, an "event" of one of three kinds, each
+// Every other line is a record, an "event" of one of four kinds, each
 // with its "time" (RFC 3339, the driver's own clock; in the log's order,
 // never going back):
 //
 //	{"event": "request", "req": "1", "action": "submit", "time": "2026-10-27T09:00:00.120000Z", "args": {"key": "k1"}, "corr": "t1-1", "ref": "trace.zip screenshot=s1.png"}
 //	{"event": "response", "req": "1", "time": "2026-10-27T09:00:00.164000Z", "code": 202, "args": {"id": "j1", "status": "accepted"}}
 //	{"event": "step", "action": "show", "time": "2026-10-27T09:00:00.170000Z", "args": {"id": "j1", "status": "accepted"}}
+//	{"event": "settled", "time": "2026-10-27T09:00:01.000000Z"}
 //
 // The kinds:
 //   - request: the driver sent a request. req is its identity in the log
@@ -48,6 +49,17 @@
 //   - step: something the driver saw that answers no request (the page's
 //     display changed, a poll's answer): a step of its own, which
 //     completes nothing. It names no req.
+//   - settled: the driver says the system has settled: it has drained
+//     what it owns (every request answered, or one left pending on
+//     purpose) and sends nothing more, so the binding's eventual
+//     properties apply to the run, as a qobs.Settled record makes them
+//     (qtrace.Trace.Settled). It carries only its time and ref. The
+//     driver establishes the quiescence; the record only says it was
+//     established, and is no telemetry watermark nor proof that no
+//     producer's records were lost. A record after it is a step after
+//     the settle: the run is no longer settled until another says so.
+//     Without one the log ends unsettled, and an eventual property is
+//     not judged (EOF is not a settle).
 //
 // Any record may carry obs (observations of the state after it, on a
 // response or a step), thread (another tab's program order, on a request
@@ -113,6 +125,7 @@ const (
 	Request  Event = "request"  // the driver sent a request: an invocation
 	Response Event = "response" // its own answer: the call's completion
 	Step     Event = "step"     // something seen that answers no request: a step of its own
+	Settled  Event = "settled"  // the driver says the system has settled (qobs.Settled)
 )
 
 // Header is a log's first line: the protocol's version and the names its
@@ -362,8 +375,12 @@ func (l *Log) check(at func(int) string) error {
 			case r.Req != "" || r.Code != nil || r.Corr != "":
 				return bad("step %s names a request (req, code or corr): a step answers none; a request's answer is a response", r.Action)
 			}
+		case Settled:
+			if r.Action != "" || r.Req != "" || r.Code != nil || r.Error != "" || r.Outcome != "" || r.Args != nil || r.Obs != nil || r.Corr != "" || r.Thread != "" || r.Order != nil {
+				return bad("a settled record carries more than its time and ref: a settle is the whole system's, of no action, request or thread; record what the driver saw before it as a step")
+			}
 		default:
-			return bad("event %q is none of the protocol's (%s, %s, %s)", r.Event, Request, Response, Step)
+			return bad("event %q is none of the protocol's (%s, %s, %s, %s)", r.Event, Request, Response, Step, Settled)
 		}
 	}
 	return nil
@@ -379,8 +396,9 @@ func orRecord(event Event) string {
 // Steps turns the log into steps and records, numbered from 1 in the
 // log's order: each request an invocation record (qtrace.Step.Invocation),
 // its response the completion (Call its invocation's Seq), each step a
-// step. A torn log ends with a loss record after its last seq
-// (qtrace.MarkLost).
+// step, each settled record a settle (qtrace.Record.Settled, as
+// qobs.Settled writes it). A torn log ends with a loss record after its
+// last seq (qtrace.MarkLost).
 func (l *Log) Steps() []qtrace.Step {
 	h := l.Header
 	actor, process, thread := h.Actor, h.Process, h.Thread
@@ -440,6 +458,9 @@ func (l *Log) Steps() []qtrace.Step {
 		case Step:
 			s.Outcome = "ok"
 			s.Args = values(r.Args)
+		case Settled:
+			// as qobs.Settled writes it: of the whole system, no thread
+			s.Action, s.Thread, s.Settled = "settled", "", true
 		}
 		out = append(out, s)
 	}

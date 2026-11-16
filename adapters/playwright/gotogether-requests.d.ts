@@ -64,6 +64,8 @@ export interface RequestLogHandle {
   step(action: string, args?: Record<string, unknown>, extra?: Omit<Step, 'action' | 'args'>): Promise<void>;
   /** writes map(text)'s step each time the selector's text changes */
   watch(selector: string, map: (text: string | null) => Step | null | undefined): Promise<void>;
+  /** waits for the answers being read, then writes the log's settle (call it once the test sends nothing more) */
+  settled(ref?: string): Promise<void>;
   /** stops routing, waits for the answers being read, closes the files */
   close(): Promise<void>;
 }
