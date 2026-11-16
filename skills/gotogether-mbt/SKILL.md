@@ -63,6 +63,9 @@ compared with the model's. The Go counterpart of quint-connect.
 | `Eval("x") at step N (a): ...` | the def is misspelt, takes other arguments, is undefined there, or is outside the Go evaluator | the fix the message names (driver.md, `Step.Eval`) |
 | `connect.Bind: action x: ... takes N parameters ... but M picks are named` | the binding names too few or too many picks | one pick per parameter, in order (a leading `context.Context` is not named) |
 | `connect.Bind: action x: ... returns T besides an error, and nothing checks it` | a result the run would drop | `.Returns("x", "def", picks...)` against the model's def, `.Observes("x", picks...)` when it is a choice the model picks, or bind a func that drops it |
+| `the binding does not fit spec (N mismatches, found before any trace ran)` | the bound driver was checked against the model's actions, picks and types; every mismatch is a line below it | fix each line as it says |
+| `connect.Bind: action x: the model has no action x` or `(pick p): the model has no nondet or parameter p` | a name the model lacks: a typo, or a rename in the model | the model's name (the line lists them) |
+| `Go type T does not fit the model's Q`, or `Returns' def d is no val or def` | a parameter, an observed result or a Returns' result `itf.Decode` cannot fill from the model's type, or a def the model lacks | a Go type that decodes from Q (driver.md, Bind) |
 | `the implementations disagree` | a `connect.Differential`'s implementations differ, where the model may say nothing | decide which is right, fix the other |
 | `reproduce with QUINT_SEED=0x...` | the failing trace | rerun with it, `QUINT_VERBOSE=2` |
 
