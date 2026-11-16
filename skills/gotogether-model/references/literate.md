@@ -97,6 +97,13 @@ Either way works:
   not the checker's (and with the matrix's own exit otherwise), and
   writes nothing.
 
+  The table of invariants, where the code enforces each and which tests
+  check it (`gotogether invariants -spec design/counter.md -write
+  design/counter.md ./...`), is written the same way, between
+  `<!-- gotogether:invariants -->` lines, the `.qnt` written again when
+  it was current; `-check` compares it, naming the rows that changed
+  (gotogether-workflow's invariants.md).
+
 ## Results
 
 | Report line | What it means | Do next |

@@ -17,7 +17,7 @@ type command struct{ purpose, example, short string }
 
 // helpOrder is the order gotogether help lists the commands in: a
 // newcomer's first ones first. Read-only.
-var helpOrder = []string{"init", "scaffold", "lint", "simulate", "model-diff", "validate", "bundle", "nav", "evidence", "steps", "shrink", "itf", "convert", "cover", "compile", "tangle", "types", "skills", "doctor"}
+var helpOrder = []string{"init", "scaffold", "lint", "simulate", "model-diff", "validate", "bundle", "nav", "evidence", "steps", "shrink", "itf", "convert", "cover", "compile", "tangle", "types", "invariants", "skills", "doctor"}
 
 var commands = map[string]command{
 	"init": {"write a new project, green as written: a synchronous library with observed-call tests, or an HTTP service (its handler recording each step, a client that retries a refused connection), its model and binding, a test in a simulation on qenv/qhttp (the server's process before the client), one over a real socket through qobshttp, and a mutant the tests catch",
@@ -69,6 +69,9 @@ var commands = map[string]command{
 	"types": {"generate the Go types of a model's types, for itf.Decode of its states and values and connect's projections: a struct per record, a string type with constants per enum, a struct with Tag and a field per variant for any other sum, a pointer per Option, State with a field per state variable; what Go cannot say here is itf.Value with a comment saying why; -check (in CI, where the file is checked in) fails if it is missing or stale, naming the types that changed",
 		"gotogether types -spec model/stock.qnt -main stock -package stock -o model_types.go\n  gotogether types -binding stock.binding.yaml -o model_types.go -check",
 		"Go mirrors of a model's records and sums? generated from the model, and checked for staleness"},
+	"invariants": {"generate a design document's table of the model's properties (its boolean vals, or a binding's invariants and eventually vals): where the Go code enforces each (//quint:enforces p on a declaration or the statement below it) and which tests check it (//quint:checks p in a Test or Fuzz function), as file:line links relative to the document; a directive naming no property fails, a property nothing enforces or no test checks is a warning (-require enforced,checked fails it); -write puts the table between the document's <!-- gotogether:invariants --> lines, -check (in CI) fails if it is stale, naming the rows",
+		"gotogether invariants -spec model/stock.qnt -main stock -write docs/walkthrough.md ./...\n  gotogether invariants -binding stock.binding.yaml -check docs/walkthrough.md -require enforced,checked ./...",
+		"where is each invariant enforced, and which tests check it? a table from annotations, checked for staleness"},
 	"skills": {"list the agent skills (skills list, the default), or install them into a project (skills install; its -h)",
 		"gotogether skills install -target all",
 		"the agent skills: list them, or install them into a project"},
@@ -134,7 +137,7 @@ func isZeroValue(f *flag.Flag) bool {
 
 // commandNames are main's commands, for the unknown command's
 // did-you-mean.
-var commandNames = []string{"init", "scaffold", "simulate", "model-diff", "evidence", "lint", "steps", "validate", "bundle", "shrink", "nav", "itf", "convert", "cover", "compile", "tangle", "types", "skills", "doctor", "help", "version"}
+var commandNames = []string{"init", "scaffold", "simulate", "model-diff", "evidence", "lint", "steps", "validate", "bundle", "shrink", "nav", "itf", "convert", "cover", "compile", "tangle", "types", "invariants", "skills", "doctor", "help", "version"}
 
 // unknownCommand says that name is no command, with the nearest one if
 // it is a likely misspelling, and where the list is: the whole usage

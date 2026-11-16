@@ -149,6 +149,15 @@ func TestWriteMarked(t *testing.T) {
 	if changed, err := WriteMarked(doc, MatrixBegin, MatrixEnd, "| new |\n"); err != nil || changed {
 		t.Fatalf("the same table again: %v, %v", changed, err)
 	}
+	// Marked reads back what was written, and nothing between adjacent
+	// markers
+	if got, err := Marked(doc, MatrixBegin, MatrixEnd); err != nil || got != "| new |\n" {
+		t.Errorf("Marked: %q, %v", got, err)
+	}
+	write(MatrixBegin + "\n" + MatrixEnd)
+	if got, err := Marked(doc, MatrixBegin, MatrixEnd); err != nil || got != "" {
+		t.Errorf("Marked, empty: %q, %v", got, err)
+	}
 	for body, want := range map[string]string{
 		"no markers\n": "has no " + MatrixBegin,
 		MatrixBegin + "\na\n" + MatrixEnd + "\n" + MatrixBegin + "\nb\n" + MatrixEnd + "\n": "more than once",
