@@ -262,7 +262,25 @@ From golem's use (#144):
   a check after each step; `b.Driver` is the factory `connect.Run` takes.
   A malformed binding (a count of picks not the method's, a method of
   another type, an action bound twice) panics where it is built, naming
-  the fix. examples/bank's `TestModelDrivesBank` is bound this way.
+  the fix. Before the first trace replays, `connect.Run` and `connect.Test`
+  check the binding against the model quint compiled (the one `Step.Eval`
+  and `Config.Require` use: no other quint process when either compiled):
+  each bound action (`Action`, `Handle`, `Skip`) is an action of the
+  model, each pick (a parameter's, `Observes'`, `Returns'` arguments) a
+  nondet of `step` or a parameter of the model's action, each Go type one
+  `itf.Decode` fills from the model's type for it (int into any integer
+  kind or `*big.Int`, a record into a struct by field name, a sum into
+  `itf:",tag"`/`itf:",value"` fields, an Option into a pointer, ...), and
+  `Returns'` def a val or def of the model, of the arity given, whose
+  type decodes into the result. Every mismatch fails the test at once,
+  one line each, before any trace: a typo in an action no trace sampled
+  is no longer a silent pass. A type variable, a Go interface and a type
+  that decodes itself (`itf.Unmarshaler`) are accepted, and a model's
+  action bound to nothing is logged, not refused (a step of it fails as
+  unimplemented, as before).
+  With `Config.NondetPath` only `Returns` is checked: the actions and
+  picks are read from a variable. examples/bank's `TestModelDrivesBank`
+  is bound this way.
 - **Reach the state that matters.** Name a boolean val true where the
   bug could show (a publication with a gap in the ledger) in
   `Config.Require`: the run replays the shortest path to it first, counts

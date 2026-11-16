@@ -26,6 +26,9 @@ type evaluator struct {
 	err     error    // the last compile's failure, when m is nil
 	keep    []string // the names m was compiled to keep
 	missing map[string]bool
+	// bound: a bound driver's binding was checked against the model
+	// (checkBound), once per run
+	bound bool
 }
 
 // model is the run's model with a definition name, compiled again for
@@ -57,6 +60,46 @@ func (e *evaluator) model(name string) (*qeval.Model, error) {
 	}
 	e.m, e.keep = m, keep
 	return m, nil
+}
+
+// modelWith is the run's model with every one of names it has, in one
+// compile when none is at hand yet (a bound driver's check, before the
+// first step, asks for its Returns' defs so that their Evals compile
+// nothing more). A name quint refuses is left out, and the compile tried
+// again without it.
+func (e *evaluator) modelWith(names []string) (*qeval.Model, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for {
+		var want []string
+		for _, n := range names {
+			if e.missing[n] || slices.Contains(e.keep, n) {
+				continue
+			}
+			if e.m != nil {
+				if _, ok := e.m.Decl(n); ok {
+					continue
+				}
+			}
+			want = append(want, n)
+		}
+		if e.m != nil && len(want) == 0 {
+			return e.m, nil
+		}
+		keep := append(slices.Clone(e.keep), want...)
+		m, err := compileModel(e.ctx, e.c, keep)
+		if nf, ok := errors.AsType[*notFound](err); ok && slices.Contains(want, nf.name) {
+			if e.missing == nil {
+				e.missing = map[string]bool{}
+			}
+			e.missing[nf.name] = true
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		e.m, e.keep, e.err = m, keep, nil
+	}
 }
 
 // Eval is the value of the model's definition name in the step's

@@ -399,12 +399,41 @@ func replayOne(t *testing.T, c Config, ev *evaluator, tr *itf.Trace, i int, newD
 			}
 		}
 	}
-	if err := Replay(tr, newDriver(t), opt); err != nil {
+	d := newDriver(t)
+	if mc, ok := d.(modelChecked); ok && !ev.bound {
+		ev.bound = true
+		checkBound(t, c, ev, mc)
+	}
+	if err := Replay(tr, d, opt); err != nil {
 		msg := err.Error()
 		if se, ok := errors.AsType[*StepError](err); ok && se.Kind != "trace" {
 			msg += "\n\n" + indent(se.Step.String(), "    ")
 		}
 		t.Fatalf("connect: %s\n%s", msg, repro)
+	}
+}
+
+// checkBound fails t, before the first trace replays, when the driver's
+// binding does not fit the run's model (bindcheck.go), with every
+// mismatch at once. It reuses the model Step.Eval and Config.Require
+// compile, compiling once for Returns' defs when none is at hand. A model
+// the check cannot have is logged, not refused: the traces still judge
+// the binding.
+func checkBound(t *testing.T, c Config, ev *evaluator, mc modelChecked) {
+	t.Helper()
+	m, err := ev.modelWith(mc.defs())
+	if err != nil {
+		t.Logf("connect.Bind: the binding is not checked against %s before the traces (%v): the traces still check it", c.Spec, err)
+		return
+	}
+	bad, unbound := mc.checkModel(m, c)
+	if len(unbound) > 0 {
+		one := len(unbound) == 1
+		t.Logf("connect.Bind: the model's action%s %s %s bound to nothing: a step of %s fails as unimplemented (bind, Handle or Skip %s)", plural(len(unbound)), strings.Join(unbound, ", "),
+			map[bool]string{true: "is", false: "are"}[one], map[bool]string{true: "it", false: "one"}[one], map[bool]string{true: "it", false: "them"}[one])
+	}
+	if len(bad) > 0 {
+		t.Fatalf("connect: the binding does not fit %s (%d mismatch%s, found before any trace ran):\n%s", c.Spec, len(bad), map[bool]string{true: "", false: "es"}[len(bad) == 1], indent(strings.Join(bad, "\n"), "    "))
 	}
 }
 

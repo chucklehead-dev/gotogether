@@ -111,6 +111,8 @@ type Model struct {
 	confirm *confirmMemo
 	// fp, if set, records what evaluations read and write (Tracking)
 	fp *Footprint
+	// types is the IR's type table, read when first asked (TypeOf)
+	types *typeTable
 }
 
 // AsReplayed is m judging steps as a quint replay of them takes each:
@@ -141,6 +143,7 @@ func Load(data []byte) (*Model, error) {
 			Declarations []json.RawMessage `json:"declarations"`
 		} `json:"modules"`
 		Table  map[string]json.RawMessage `json:"table"`
+		Types  json.RawMessage            `json:"types"`
 		Main   string                     `json:"main"`
 		Errors []json.RawMessage          `json:"errors"`
 	}
@@ -159,7 +162,7 @@ func Load(data []byte) (*Model, error) {
 			mod = m
 		}
 	}
-	m := &Model{byName: map[string]*Decl{}, byID: map[int64]*Decl{}, refs: map[int64]ref{}, ren: &renames{}, confirm: &confirmMemo{}}
+	m := &Model{byName: map[string]*Decl{}, byID: map[int64]*Decl{}, refs: map[int64]ref{}, ren: &renames{}, confirm: &confirmMemo{}, types: &typeTable{raw: ir.Types}}
 	for _, raw := range mod.Declarations {
 		var d Decl
 		if err := json.Unmarshal(raw, &d); err != nil {
