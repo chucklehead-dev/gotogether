@@ -241,9 +241,12 @@ testing, where Quint traces drive the implementation). It adds:
   -spec model.qnt -write docs/walkthrough.md ./...`): `//quint:enforces p`
   where the code enforces a property, `//quint:checks p` in the tests that
   check it, and the design document's table of every property with
-  file:line links, kept current by `-check` in CI; a directive naming no
-  property fails, and `-require enforced,checked` fails a property
-  nothing enforces or checks
+  file:line links, and of every action with the code that records it
+  (`//quint:action`, a literal `qobs.Record`) and the driver that runs it
+  (a `connect.Bind` entry, a `connect.Switch` key), kept current by
+  `-check` in CI; a name that is no property or action fails, and
+  `-require enforced,checked,recorded,driven` fails a property or action
+  nothing covers
   ([reference](skills/gotogether-workflow/references/invariants.md));
 - **model behavior comparison** (`gotogether model-diff`): compare two finite
   instances on explicit observed variables, with added/removed sequence witnesses,

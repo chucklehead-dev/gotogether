@@ -18,7 +18,9 @@ module counterBase {
   action init = n' = 0
   action inc = all { n < CAP, n' = n + 1 }
   action reset = n' = 0
-  action step = any { inc, reset }
+  // nothing implements idle: the actions table shows it
+  action idle = n' = n
+  action step = any { inc, reset, idle }
 }
 
 module counter {

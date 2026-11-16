@@ -1,6 +1,11 @@
 package counter
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	"github.com/chucklehead-dev/gotogether/connect"
+)
 
 // TestInc counts to the cap and is refused there.
 //
@@ -20,9 +25,15 @@ func TestInc(t *testing.T) {
 func TestReset(t *testing.T) {
 	t.Run("from the cap", func(t *testing.T) {
 		c := &Counter{N: 2, Cap: 2}
-		c.Reset()
+		c.Reset(context.Background())
 		if c.N < 0 { //quint:checks nonNegative, counter::withinCap
 			t.Fatalf("negative: %d", c.N)
 		}
 	})
+}
+
+// bound is the counter bound to the model's inc (connect.Bind).
+func bound() *connect.Binding[*Counter] {
+	return connect.Bind(func(testing.TB) *Counter { return &Counter{Cap: 3} }).
+		Action("inc", (*Counter).Inc)
 }

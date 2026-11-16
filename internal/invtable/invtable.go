@@ -20,6 +20,10 @@
 // test: on a Test or Fuzz function of a _test.go file, or inside one, and
 // the test it names is that function.
 //
+// A second table has a row per action: the code that records its steps
+// and the connect drivers that run it, found from what that code already
+// names (actions.go), with no annotation of its own.
+//
 // Go source is read with go/parser alone: the table needs positions and
 // comments, not types, so it stays in the core with no x/tools (as
 // `gotogether types` does).
@@ -73,6 +77,10 @@ type Model struct {
 	// Properties are in the model's order (quint numbers declarations as
 	// it parses them)
 	Properties []*Property
+	// Actions are the model's actions the main module sees unqualified,
+	// init and step left out (connect's: a trace names neither), in the
+	// model's order
+	Actions []*Property
 	// visible is, per module, each name it sees unqualified and the
 	// declaration's key (module::name)
 	visible map[string]map[string]string
@@ -170,6 +178,11 @@ func Read(tc []byte, main string, comments map[string]string) (*Model, error) {
 	}
 	for name, key := range m.visible[main] {
 		d, ok := byKey[key]
+		if ok && d.Qualifier == "action" && name != "init" && name != "step" {
+			doc, _, _ := strings.Cut(strings.TrimSpace(d.Doc), "\n")
+			m.Actions = append(m.Actions, &Property{Name: name, Module: d.ProtoName, Doc: strings.TrimSpace(doc), id: d.ID})
+			continue
+		}
 		if !ok || (d.Qualifier != "val" && d.Qualifier != "temporal") {
 			continue
 		}
@@ -184,7 +197,9 @@ func Read(tc []byte, main string, comments map[string]string) (*Model, error) {
 		m.Properties = append(m.Properties, p)
 		m.byKey[key] = p
 	}
-	slices.SortFunc(m.Properties, func(a, b *Property) int { return cmp.Or(cmp.Compare(a.id, b.id), cmp.Compare(a.Name, b.Name)) })
+	byID := func(a, b *Property) int { return cmp.Or(cmp.Compare(a.id, b.id), cmp.Compare(a.Name, b.Name)) }
+	slices.SortFunc(m.Properties, byID)
+	slices.SortFunc(m.Actions, byID)
 	return m, nil
 }
 
@@ -312,13 +327,20 @@ func Comments(src []byte) map[string]string {
 	return out
 }
 
-// Kind is a directive's: enforces or checks.
+// Kind is what an annotation says of the names it gives: that the code
+// enforces or a test checks a property, or that the code records or
+// drives an action.
 type Kind string
 
-// The two directives.
+// The kinds: the two property directives, and the code that implements
+// an action (actions.go): a //quint:action directive or a literal
+// qobs.Record (recorded), a connect.Bind entry or connect.Switch key
+// (driven).
 const (
 	Enforces Kind = "enforces"
 	Checks   Kind = "checks"
+	Records  Kind = "records"
+	Drives   Kind = "drives"
 )
 
 // A Site is a place a directive annotates.
@@ -332,13 +354,18 @@ type Site struct {
 	Func string
 }
 
-// An Annotation is one //quint:enforces or //quint:checks directive.
+// An Annotation is one //quint:enforces or //quint:checks directive, or
+// one piece of code naming actions it implements.
 type Annotation struct {
 	Kind Kind
-	// Line is the directive's own line (Site.Line is what it annotates)
+	// Line is the directive's own line (Site.Line is what it annotates);
+	// for code, the line of the literal naming the action
 	Line  int
 	Site  Site
 	Names []string
+	// Source is how messages show an action's annotation
+	// (`.Action("deposit", ...)`); "" for a property directive
+	Source string
 }
 
 // Scan reads the directives of the Go files that patterns name: a
@@ -395,6 +422,8 @@ func Scan(patterns []string) (anns []Annotation, problems []string, err error) {
 			return nil, nil, fmt.Errorf("%w (fix the file, or leave its directory out of the patterns)", err)
 		}
 		a, p := annotationsOf(fset, f, strings.HasSuffix(path, "_test.go"))
+		anns, problems = append(anns, a...), append(problems, p...)
+		a, p = actionsOf(fset, f)
 		anns, problems = append(anns, a...), append(problems, p...)
 	}
 	return anns, problems, nil
@@ -559,10 +588,12 @@ type Row struct {
 	Checked  []Site
 }
 
-// A Table is a row per property, in the model's order.
+// A Table is a row per property, and one per action, in the model's
+// order.
 type Table struct {
-	Model *Model
-	Rows  []Row
+	Model   *Model
+	Rows    []Row
+	Actions []ActionRow
 }
 
 // Table puts each annotation in its property's row. errs are the
@@ -577,8 +608,19 @@ func (m *Model) Table(anns []Annotation) (*Table, []string) {
 	for i := range t.Rows {
 		rows[t.Rows[i].Property] = &t.Rows[i]
 	}
+	actions := map[string]*ActionRow{}
+	for _, p := range m.Actions {
+		t.Actions = append(t.Actions, ActionRow{Action: p})
+	}
+	for i := range t.Actions {
+		actions[t.Actions[i].Action.Name] = &t.Actions[i]
+	}
 	var errs []string
 	for _, a := range anns {
+		if a.Kind == Records || a.Kind == Drives {
+			errs = append(errs, m.placeAction(a, actions)...)
+			continue
+		}
 		for _, n := range a.Names {
 			p, why := m.resolve(n)
 			if p == nil {
@@ -602,12 +644,16 @@ func (m *Model) Table(anns []Annotation) (*Table, []string) {
 			}
 		}
 	}
+	bySite := func(a, b Site) int {
+		return cmp.Or(cmp.Compare(a.Path, b.Path), cmp.Compare(a.Line, b.Line), cmp.Compare(a.Func, b.Func))
+	}
 	for i := range t.Rows {
-		for _, s := range []*[]Site{&t.Rows[i].Enforced, &t.Rows[i].Checked} {
-			slices.SortFunc(*s, func(a, b Site) int {
-				return cmp.Or(cmp.Compare(a.Path, b.Path), cmp.Compare(a.Line, b.Line), cmp.Compare(a.Func, b.Func))
-			})
-		}
+		slices.SortFunc(t.Rows[i].Enforced, bySite)
+		slices.SortFunc(t.Rows[i].Checked, bySite)
+	}
+	for i := range t.Actions {
+		slices.SortFunc(t.Actions[i].Recorded, bySite)
+		slices.SortFunc(t.Actions[i].Driven, bySite)
 	}
 	return t, errs
 }
@@ -620,8 +666,9 @@ func appendSite(s []Site, x Site) []Site {
 }
 
 // Warnings are the properties nothing enforces and those no test
-// checks, each with the directive to add: of kind enforced, checked or
-// both (nil: both).
+// checks, each with the directive to add, then the actions nothing
+// records and those nothing drives: of the kinds named (enforced,
+// checked, recorded, driven; none: all four).
 func (t *Table) Warnings(kinds ...string) []string {
 	var out []string
 	want := func(k string) bool { return len(kinds) == 0 || slices.Contains(kinds, k) }
@@ -633,7 +680,7 @@ func (t *Table) Warnings(kinds ...string) []string {
 			out = append(out, fmt.Sprintf("property %s: no test checks it: put //quint:checks %s on the test that does", r.Property.Name, r.Property.Name))
 		}
 	}
-	return out
+	return append(out, t.actionWarnings(want)...)
 }
 
 // Markdown is the table, its paths relative to dir (the document's
@@ -642,18 +689,6 @@ func (t *Table) Warnings(kinds ...string) []string {
 // are as scanned. The meaning column is there when a property has a doc
 // comment.
 func (t *Table) Markdown(dir string) string {
-	absDir, _ := filepath.Abs(dir)
-	rel := func(p string) string {
-		if dir == "" {
-			return filepath.ToSlash(filepath.Clean(p))
-		}
-		if abs, err := filepath.Abs(p); err == nil {
-			if r, err := filepath.Rel(absDir, abs); err == nil {
-				p = r
-			}
-		}
-		return filepath.ToSlash(p)
-	}
 	meaning := slices.ContainsFunc(t.Rows, func(r Row) bool { return r.Property.Doc != "" })
 	var b strings.Builder
 	if meaning {
@@ -661,17 +696,7 @@ func (t *Table) Markdown(dir string) string {
 	} else {
 		b.WriteString("| property | enforced by | checked by |\n|---|---|---|\n")
 	}
-	cell := func(sites []Site) string {
-		if len(sites) == 0 {
-			return "—"
-		}
-		var parts []string
-		for _, s := range sites {
-			p := rel(s.Path)
-			parts = append(parts, fmt.Sprintf("`%s` [%s:%d](%s#L%d)", s.Func, p, s.Line, p, s.Line))
-		}
-		return strings.Join(parts, "<br>")
-	}
+	cell := func(sites []Site) string { return siteCell(sites, dir) }
 	for _, r := range t.Rows {
 		fmt.Fprintf(&b, "| `%s` |", r.Property.Name)
 		if meaning && r.Property.Doc != "" {
@@ -682,6 +707,28 @@ func (t *Table) Markdown(dir string) string {
 		fmt.Fprintf(&b, " %s | %s |\n", cell(r.Enforced), cell(r.Checked))
 	}
 	return b.String()
+}
+
+// siteCell is a table's cell of sites: each its function and a link to
+// its file:line, relative to dir ("" as scanned), or "—" when none.
+func siteCell(sites []Site, dir string) string {
+	if len(sites) == 0 {
+		return "—"
+	}
+	absDir, _ := filepath.Abs(dir)
+	var parts []string
+	for _, s := range sites {
+		p := filepath.ToSlash(filepath.Clean(s.Path))
+		if dir != "" {
+			if abs, err := filepath.Abs(s.Path); err == nil {
+				if r, err := filepath.Rel(absDir, abs); err == nil {
+					p = filepath.ToSlash(r)
+				}
+			}
+		}
+		parts = append(parts, fmt.Sprintf("`%s` [%s:%d](%s#L%d)", s.Func, p, s.Line, p, s.Line))
+	}
+	return strings.Join(parts, "<br>")
 }
 
 // Changes are what differs between a table as a document has it (have)
