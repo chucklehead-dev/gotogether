@@ -13,10 +13,11 @@ import (
 // Types for the fit table: what itf.Decode fills from Quint's values.
 type (
 	fitAcct struct {
-		Name     string
-		Limit    int `itf:"limit"`
-		Ignored  bool
-		internal int //nolint:unused // unexported: Decode skips it
+		Name    string
+		Limit   int `itf:"limit"`
+		Ignored bool
+		//lint:ignore U1000 unexported on purpose: the fit table checks Decode skips it
+		internal int
 	}
 	fitWrongAcct struct{ Limit string }
 	fitCmd       struct {
