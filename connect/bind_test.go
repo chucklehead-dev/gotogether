@@ -109,10 +109,17 @@ func TestBindRefusesMalformed(t *testing.T) {
 			Bind(func(testing.TB) *bank { return nil }).Action("deposit", (*bank).deposit, "account", "amount").Action("deposit", (*bank).deposit, "account", "amount")
 		}, "bound twice"},
 		{"init", func() { Bind(func(testing.TB) *bank { return nil }).Skip("init") }, "init is Bind's constructor"},
-		{"returns unbound", func() { Bind(func(testing.TB) *bank { return nil }).Returns("deposit", "balanceOf") }, "no such action"},
+		{"returns unbound", func() { Bind(func(testing.TB) *bank { return nil }).Returns("deposit", "balanceOf") }, "no action bound to a method"},
 		{"returns no result", func() {
 			Bind(func(testing.TB) *bank { return nil }).Action("withdraw", (*bank).withdraw, "account", "amount").Returns("withdraw", "balanceOf")
 		}, "returns 0 results besides an error"},
+		{"observes unbound", func() { Bind(func(testing.TB) *bank { return nil }).Observes("deposit", "account") }, "no action bound to a method"},
+		{"observes count", func() {
+			Bind(func(testing.TB) *bank { return nil }).Action("deposit", (*bank).depositBalance, "account", "amount").Observes("deposit", "account", "amount")
+		}, "returns 1 result besides an error, but 2 picks named"},
+		{"observes and returns", func() {
+			Bind(func(testing.TB) *bank { return nil }).Action("deposit", (*bank).depositBalance, "account", "amount").Returns("deposit", "balanceOf", "account").Observes("deposit", "amount")
+		}, "already checked"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			defer func() {
@@ -147,5 +154,55 @@ func TestBindPicks(t *testing.T) {
 	}
 	if err := d.Step(&Step{Action: "unbound"}); err == nil || !strings.Contains(err.Error(), "unbound") {
 		t.Errorf("an unbound action: %v", err)
+	}
+}
+
+// An action's result that is a choice the implementation makes, which
+// the model picks, is compared with the pick (Observes): the faithful
+// choice passes, another is named with the model's, and a pick the step
+// lacks is named with the picks there are.
+func TestBindObserves(t *testing.T) {
+	// claim chooses the account to deposit into: the implementation's
+	// choice, which the model picks as account
+	claim := func(choose func(string) string) *Binding[*bank] {
+		return Bind(func(testing.TB) *bank { return &bank{balances: map[string]int{"alice": 0, "bob": 0}} }).
+			Action("claim", func(b *bank, preferred string, n int) string {
+				a := choose(preferred)
+				b.deposit(a, n)
+				return a
+			}, "preferred", "amount").
+			Observes("claim", "account")
+	}
+	step := func(picks map[string]itf.Value) *Step { return &Step{Action: "claim", Picks: picks} }
+	picks := map[string]itf.Value{"preferred": itf.StrOf("bob"), "amount": itf.IntOf(2), "account": itf.StrOf("bob")}
+	for _, c := range []struct {
+		name   string
+		choose func(string) string
+		picks  map[string]itf.Value
+		want   string // "" for a pass
+	}{
+		{"faithful", func(p string) string { return p }, picks, ""},
+		{"another choice", func(string) string { return "alice" }, picks, "the implementation chose account = alice; the model's choice is bob"},
+		{"no pick", func(p string) string { return p }, map[string]itf.Value{"preferred": itf.StrOf("bob"), "amount": itf.IntOf(2)}, "Observes' pick account is not in the step (have amount, preferred)"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			d := claim(c.choose).Driver(t)
+			if err := d.Step(&Step{Action: "init"}); err != nil {
+				t.Fatal(err)
+			}
+			err := d.Step(step(c.picks))
+			switch {
+			case c.want == "" && err != nil:
+				t.Errorf("the faithful choice: %v", err)
+			case c.want != "" && (err == nil || !strings.Contains(err.Error(), c.want)):
+				t.Errorf("got %v, want %q", err, c.want)
+			}
+		})
+	}
+	// an observed result is checked: the driver is made without refusal
+	ft := &fatalTB{TB: t}
+	claim(func(p string) string { return p }).Driver(ft)
+	if ft.fatal != "" {
+		t.Errorf("an observed result refused as unchecked: %s", ft.fatal)
 	}
 }

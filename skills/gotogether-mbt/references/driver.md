@@ -251,8 +251,12 @@ From golem's use (#144):
   `context.Context` is given the trace's; a pointer parameter is
   optional, nil when the model did not pick it; a final `error` fails the
   step. A result besides the error must be checked against the model's
-  def (`.Returns(name, def, picks...)`, through `Step.Eval`), or the
-  driver refuses to start. `.Handle(name, func(T, *Step) error)` takes an
+  def (`.Returns(name, def, picks...)`, through `Step.Eval`) or, when it
+  is a choice the implementation makes that the model picks (which
+  account, which ticket), against the step's picks
+  (`.Observes(name, picks...)`, one per result: "the implementation chose
+  account = alice; the model's choice is bob"), or the driver refuses to
+  start. `.Handle(name, func(T, *Step) error)` takes an
   action no method fits, `.Skip(names...)` another component's,
   `.State(project)` and `.Check(func(T, *Step) error)` the projection and
   a check after each step; `b.Driver` is the factory `connect.Run` takes.
