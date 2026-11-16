@@ -64,7 +64,7 @@ Before merging:
 | `Mismatch` | the code computed another state | the `expect` or the `obs.*` value |
 | `Violates` | the design allows the bad run | fix the design, or the property |
 | exit 2, no verdict | the binding or model does not fit the steps | the message names the step and template |
-| `FAIL doc.md: stale: row p changed` (`invariants -check`) | an annotated line moved, or a directive was added | the `run gotogether invariants ... -write` it names |
+| `FAIL doc.md: stale: row p changed` (`invariants -check`) | an annotated line moved, or a directive was added | the `run gotogether invariants ... -write` it names; `-links name` stops moved lines failing CI |
 | `f.go:12: //quint:enforces names p: ...` | the directive names no property | the property it names, or the model's |
 | `f.go:38: .Action("x", ...) names x, which is no action of model M` | a driver, Record or `//quint:action` names no action | the nearest name it suggests |
 | `warning: action a: nothing records it` / `nothing drives it` | no step of it is recorded, or no connect driver runs it | record or bind it; `-require recorded,driven` in CI |

@@ -66,7 +66,7 @@ func actionsOf(fset *token.FileSet, f *ast.File) (out []Annotation, problems []s
 			continue
 		}
 		out = append(out, Annotation{Kind: Records, Line: a.Line, Names: []string{a.Action},
-			Site:   Site{Path: a.Path, Line: line(a.Decl.Pos()), Func: funcName(a.Decl)},
+			Site:   Site{Path: a.Path, Line: line(a.Decl.Pos()), Func: funcName(a.Decl), Pkg: f.Name.Name},
 			Source: "//quint:action action:" + a.Action})
 	}
 	for _, r := range binding.RecordsOf(fset, f) {
@@ -78,7 +78,7 @@ func actionsOf(fset *token.FileSet, f *ast.File) (out []Annotation, problems []s
 			}
 		}
 		out = append(out, Annotation{Kind: Records, Line: r.Line, Names: []string{r.Action},
-			Site:   Site{Path: r.Path, Line: r.Line, Func: enclosing(r.At)},
+			Site:   Site{Path: r.Path, Line: r.Line, Func: enclosing(r.At), Pkg: f.Name.Name},
 			Source: fmt.Sprintf("%s(ctx, %q, ...)", call, r.Action)})
 	}
 	pkg := importedAs(f, connectPath)
@@ -96,7 +96,7 @@ func actionsOf(fset *token.FileSet, f *ast.File) (out []Annotation, problems []s
 		pos := fset.Position(lit.Pos())
 		at = append(at, lit.Pos())
 		drives = append(drives, Annotation{Kind: Drives, Line: pos.Line, Names: []string{name},
-			Site:   Site{Path: pos.Filename, Line: pos.Line, Func: enclosing(lit.Pos())},
+			Site:   Site{Path: pos.Filename, Line: pos.Line, Func: enclosing(lit.Pos()), Pkg: f.Name.Name},
 			Source: fmt.Sprintf(source, name)})
 	}
 	ast.Inspect(f, func(n ast.Node) bool {
@@ -328,7 +328,7 @@ func (t *Table) MarkdownActions(dir string) string {
 	var b strings.Builder
 	b.WriteString("| action | recorded by | driven by |\n|---|---|---|\n")
 	for _, r := range t.Actions {
-		fmt.Fprintf(&b, "| `%s` | %s | %s |\n", r.Action.Name, siteCell(r.Recorded, dir), siteCell(r.Driven, dir))
+		fmt.Fprintf(&b, "| `%s` | %s | %s |\n", r.Action.Name, t.siteCell(r.Recorded, dir), t.siteCell(r.Driven, dir))
 	}
 	return b.String()
 }

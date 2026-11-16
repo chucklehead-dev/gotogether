@@ -9,8 +9,8 @@ docs/walkthrough.md ./counter`, from the fixture's directory; the test
 <!-- gotogether:invariants -->
 | property | meaning | enforced by | checked by |
 |---|---|---|---|
-| `withinCap` | n never exceeds the cap. | `Counter.Inc` [../counter/counter.go:25](../counter/counter.go#L25) | `TestInc` [../counter/counter_test.go:13](../counter/counter_test.go#L13)<br>`TestReset` [../counter/counter_test.go:29](../counter/counter_test.go#L29) |
-| `nonNegative` | n is never negative. | `Counter.Reset` [../counter/counter.go:37](../counter/counter.go#L37) | `TestReset` [../counter/counter_test.go:29](../counter/counter_test.go#L29) |
+| `withinCap` | n never exceeds the cap. | `Counter.Inc` [../counter/counter.go:25](../counter/counter.go#L25) | `TestInc` [../counter/counter_test.go:13](../counter/counter_test.go#L13)<br>`TestReset/from_the_cap` [../counter/counter_test.go:29](../counter/counter_test.go#L29) |
+| `nonNegative` | n is never negative. | `Counter.Reset` [../counter/counter.go:37](../counter/counter.go#L37) | `TestReset/from_the_cap` [../counter/counter_test.go:29](../counter/counter_test.go#L29) |
 | `atCap` | | — | — |
 <!-- /gotogether:invariants -->
 
