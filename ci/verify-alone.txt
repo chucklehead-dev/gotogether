@@ -6,16 +6,16 @@
 # group's measured cold time (docs/performance.md) with the margin given;
 # at most GitHub's 360.
 
-# Measured on main 514e93ff (Quint 0.33.1, Apalache 0.62.4), each binding
-# alone and cold through the CLI with -verify 8, four such proofs at once
-# on four cores (one Apalache server each). The margin is 1.5 times the
-# measurement, for a slower runner, plus 10 minutes for setup and the
-# reports' upload.
+# The margin is 1.5 times the measurement, for a slower runner, plus 10
+# minutes for setup and the reports' upload.
 #
-# counters 2,177 s, counters.real 2,313 s, counters.retiring 2,394 s: 6,884 s
-# (115 min) if real and retiring cannot reuse counters' exact proof (with
-# the managed tool they do, and the group takes about 40 min). 115 x 1.5 + 10.
-counters 183 examples/counters/counters.binding.yaml examples/counters/counters.real.binding.yaml examples/counters/counters.retiring.binding.yaml
+# counters, counters.real and counters.retiring: one model, one batch of
+# the same two invariants. Measured with J7b's rules (one fold per read,
+# docs/performance.md, counters' proofs), counters alone and cold with
+# -verify 8: 1,700 s (28 min; on 2fdc21ea, before them, 2,207 s). 85 min
+# if real and retiring cannot reuse its exact proof (with the managed
+# tool they do, and the group takes about 29). 85 x 1.5 + 10.
+counters 138 examples/counters/counters.binding.yaml examples/counters/counters.real.binding.yaml examples/counters/counters.retiring.binding.yaml
 # library and library.calls: measured with J7b's model (each read model's
 # count one fold over the log), each binding alone and cold with -verify 8
 # (docs/performance.md, the library's proofs); on 514e93ff, before it,

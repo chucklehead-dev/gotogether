@@ -13,9 +13,17 @@ module countersRules {
   pure val STRS: Set[str] = Set("a", "b")
   pure val INTS: Set[int] = 1.to(2)
 
+  // Each read below is one fold over the log, the event's own counter,
+  // name or owner its condition, not the read model's selection
+  // (totalsEvents) folded again nor a match of its tags: equal on every
+  // log the models hold, since each generated constructor tags an event
+  // with the strings it stores, and cheaper for quint verify
+  // (docs/performance.md, counters' proofs; testdata/rules.qnt keeps the
+  // earlier definitions and checks the two agree).
+
   // totals, keyed by counter: the sum of its increments
   pure def total(log: List[Event], counter: str): int =
-    totalsEvents(log, counter).foldl(0, (s, e) => s + counterIncrementedBy(e))
+    log.foldl(0, (s, e) => if (e.typ == "counter-incremented" and counterIncrementedCounter(e) == counter) s + counterIncrementedBy(e) else s)
   // counter-names: each name's counter (a later create of a name wins)
   pure def counterNames(log: List[Event]): str -> str =
     counterNamesEvents(log).foldl(Map(), (m, e) => m.put(counterCreatedName(e), counterCreatedCounter(e)))
@@ -25,13 +33,17 @@ module countersRules {
     names.keys().filter(n => names.get(n) == counter).size()
   // caller created counter under some name: the one caller who may retire it
   pure def createdBy(log: List[Event], counter: str, caller: str): bool =
-    log.select(e => e.typ == "counter-created" and counterCreatedCounter(e) == counter and counterCreatedOwner(e) == caller).length() > 0
-  pure def isCounter(log: List[Event], counter: str): bool = existsTagged(log, "counter-created", "counter", counter)
+    log.foldl(false, (found, e) => found or (e.typ == "counter-created" and counterCreatedCounter(e) == counter and counterCreatedOwner(e) == caller))
+  pure def isCounter(log: List[Event], counter: str): bool =
+    log.foldl(false, (found, e) => found or (e.typ == "counter-created" and counterCreatedCounter(e) == counter))
+  // a counter has the name
+  pure def nameTaken(log: List[Event], name: str): bool =
+    log.foldl(false, (found, e) => found or (e.typ == "counter-created" and counterCreatedName(e) == name))
 
   // create-counter: refused when a counter has the name, which its read
   // set must cover; the creator is the caller that sent it
   pure def createCounterOutcome(log: List[Event], c: CreateCounterArgs): str =
-    if (existsTagged(log, "counter-created", "name", c.name)) "name-taken" else "ok"
+    if (nameTaken(log, c.name)) "name-taken" else "ok"
   pure def createCounterEvents(log: List[Event], c: CreateCounterArgs): List[Event] = [counterCreated(c.counter, c.name, c.caller)]
   pure def createCounterNeeds(c: CreateCounterArgs, result: str): Set[Read] = Set(counterCreatedByName(c.name))
 
@@ -51,10 +63,11 @@ module countersRules {
   pure def showCounterAnswer(log: List[Event], q: ShowCounterArgs): ShowCounterResult =
     { total: total(log, q.counter), names: namesOf(log, q.counter) }
 
-  // average: the tenant's sum and count of increments as of the trigger
+  // average: the tenant's sum and count of increments as of the trigger,
+  // both in one fold
   pure def averageEmits(prefix: List[Event], trigger: int): List[Event] =
-    val incs = prefix.select(e => e.typ == "counter-incremented")
-    List(averageComputed(incs.foldl(0, (s, e) => s + counterIncrementedBy(e)), incs.length()))
+    val p = prefix.foldl((0, 0), (acc, e) => if (e.typ == "counter-incremented") (acc._1 + counterIncrementedBy(e), acc._2 + 1) else acc)
+    List(averageComputed(p._1, p._2))
   pure def welcomeSuccess(prefix: List[Event], trigger: int): List[Event] = [notified(counterCreatedCounter(prefix[trigger - 1]))]
   // a creation's welcome mails the counter and its name (the mailer sends
   // every mail: Send is not Keyed, and the generated mailerSendAdmits
