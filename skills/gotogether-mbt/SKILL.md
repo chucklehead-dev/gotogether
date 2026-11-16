@@ -21,13 +21,17 @@ compared with the model's. The Go counterpart of quint-connect.
    Action("deposit", (*Bank).Deposit, "account", "amount")`, picks named
    in parameter order), or a `Step` dispatching with `connect.Switch`
    (`"init"` first) and `connect.MustPick[T](s, "param")`.
-2. A projection: `State() (any, error)`, exported fields named after the
-   model's. One the model defines (`def balanceOf(a)`): compare in
+2. A projection: `State() (any, error)`, or a bound `.State(func(T) S)`:
+   return a concrete type S from State to have it checked before any
+   trace. Exported fields named after the model's. One the model defines (`def balanceOf(a)`): compare in
    `CheckStep` with `connect.MustEval[int](s, "balanceOf", "alice")`, not a
    copy of the def in Go.
 3. `connect.Run(t, connect.Config{Spec: ..., Main: ..., MaxSamples: 50,
-   MaxSteps: 30}, newDriver)`. The factory takes the trace's `testing.TB`;
-   use its `Context` and `Cleanup` for resources, not the outer test's.
+   MaxSteps: 30}, newDriver)`, or `b.Run(t, cfg)` / `b.Test(t, cfg, test)`
+   for a binding: checked before any trace is generated, where
+   `connect.Run(t, cfg, b.Driver)` checks only at the first trace. The
+   factory takes the trace's `testing.TB`; use its `Context` and `Cleanup`
+   for resources, not the outer test's.
 4. One action at a time, until a run of 50 samples passes; then raise
    `MaxSteps`.
 5. A state a bug hides at, rare in the samples: name its boolean val in
@@ -65,6 +69,8 @@ compared with the model's. The Go counterpart of quint-connect.
 | `connect.Bind: action x: ... returns T besides an error, and nothing checks it` | a result the run would drop | `.Returns("x", "def", picks...)` against the model's def, `.Observes("x", picks...)` when it is a choice the model picks, or bind a func that drops it |
 | `the binding does not fit spec (N mismatches, found before any trace ran)` | the bound driver was checked against the model's actions, picks and types; every mismatch is a line below it | fix each line as it says |
 | `connect.Bind: action x: the model has no action x` or `(pick p): the model has no nondet or parameter p` | a name the model lacks: a typo, or a rename in the model | the model's name (the line lists them) |
+| `connect.Bind: action x, parameter i (pick p): p is a pick of y, not x (x's picks: ...)` | p is another action's choice: quint records every nondet at every step, so it would decode y's | a nondet that feeds x's call in `step` (the line lists x's own) |
+| `connect.Bind: State: the projection, Go type S, does not fit the model's state (...)` | a field the model's state lacks, an unexported one, or one of a type that does not decode | name each field after a state variable (or tag it `itf:"-"`), of a type that decodes from it |
 | `Go type T does not fit the model's Q`, or `Returns' def d is no val or def` | a parameter, an observed result or a Returns' result `itf.Decode` cannot fill from the model's type, or a def the model lacks | a Go type that decodes from Q (driver.md, Bind) |
 | `FAIL f.go: stale: type X changed` or `missing` (`gotogether types -check`) | the model's types changed since the file was generated, or it was never written | the `run gotogether types ...` it names, then commit the file |
 | `the implementations disagree` | a `connect.Differential`'s implementations differ, where the model may say nothing | decide which is right, fix the other |

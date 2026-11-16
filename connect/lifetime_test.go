@@ -14,6 +14,13 @@ import (
 	"time"
 )
 
+// replayAll replays files as Run does once it generated them, compiling
+// what it needs itself: the lifetime tests' traces are written by hand.
+func replayAll(t *testing.T, c Config, files []string, newDriver func(testing.TB) Driver, what string) {
+	t.Helper()
+	replayPrepared(t, c, files, newDriver, what, nil)
+}
+
 func lifecycleTraces(t *testing.T, count int) []string {
 	t.Helper()
 	dir := t.TempDir()
@@ -145,14 +152,28 @@ func TestConnectProcessHelper(t *testing.T) {
 		Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: bindBuggySamples, MaxSteps: 20, Seed: "0x1"}, bankBinding(true, (*bank).deposit).Driver)
 	case "bind-returns-wrong":
 		Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 2, MaxSteps: 6, Seed: "0x1"}, bankBinding(false, (*bank).depositBalanceBefore).Returns("deposit", "balanceOf", "account").Driver)
-	case "bind-mismatched":
-		// two mismatches with bank.qnt, both in actions a run of one
-		// step may never sample: the check names them before any trace
+	case "bind-mismatched", "bind-mismatched-driver":
+		// three mismatches with bank.qnt, two in actions a run of one
+		// step may never sample and one in the projection: b.Run names
+		// them before any trace is generated, connect.Run with b.Driver
+		// at the first trace's driver
 		b := Bind(func(tb testing.TB) *bank { tb.Log("implementation made"); return &bank{balances: map[string]int{}} }).
 			Action("deposit", func(*bank, string, string) {}, "account", "amount").
 			Action("withdraw", (*bank).withdraw, "account", "amount").
-			Action("transfre", (*bank).transfer, "src", "dst", "amount")
-		Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 1, MaxSteps: 1, Seed: "0x1"}, b.Driver)
+			Action("transfre", (*bank).transfer, "src", "dst", "amount").
+			State(func(b *bank) fitBankFees { return fitBankFees{Balances: b.balances} })
+		c := Config{Spec: "testdata/bank.qnt", MaxSamples: 1, MaxSteps: 1, Seed: "0x1"}
+		if os.Getenv("GOTOGETHER_CONNECT_HELPER") == "bind-mismatched-driver" {
+			Run(t, c, b.Driver)
+			return
+		}
+		b.Run(t, c)
+	case "bind-test-mismatched":
+		// b.Test checks before quint test generates the named run's traces
+		b := Bind(func(tb testing.TB) *bank { tb.Log("implementation made"); return &bank{balances: map[string]int{}} }).
+			Skip("deposit", "withdraw", "transfer").
+			State(func(b *bank) fitBankFees { return fitBankFees{Balances: b.balances} })
+		b.Test(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 1}, "aliceSavesTest")
 	case "nondet":
 		Test(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 1}, "aliceSavesTest", func(testing.TB) Driver { return &bankDriver{} })
 	case "selected":

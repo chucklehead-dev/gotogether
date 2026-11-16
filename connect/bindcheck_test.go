@@ -3,6 +3,7 @@ package connect
 import (
 	"math/big"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -41,6 +42,16 @@ type (
 		Kids []fitSelf
 	}
 	fitDecodes struct{}
+	// projections of bank.qnt's state: a field it lacks, one unexported
+	fitBankFees struct {
+		Balances map[string]int
+		Fees     int
+	}
+	fitBankHidden struct {
+		Balances map[string]int
+		//lint:ignore U1000 unexported on purpose: the check refuses it, as DecodeProjection does
+		ops int
+	}
 )
 
 func (*fitDecodes) UnmarshalITF(itf.Value) error { return nil }
@@ -177,6 +188,18 @@ func TestBindCheckedAgainstModel(t *testing.T) {
 	if bad := check(Bind(newBank).Action("deposit", func(b *bank, a *string, n any) {}, "account", "amount")); len(bad) > 0 {
 		t.Errorf("a pointer and an interface: %v", bad)
 	}
+	// amount is every action's: each takes it
+	if bad := check(Bind(newBank).Action("deposit", func(*bank, int) {}, "amount").Action("withdraw", func(*bank, int) {}, "amount").Action("transfer", func(*bank, int) {}, "amount")); len(bad) > 0 {
+		t.Errorf("a nondet the actions share: %v", bad)
+	}
+	// a projection with a field the model's record leaves out, and one
+	// returned as any (decoded at the first init, as before): accepted
+	if bad := check(Bind(newBank).State(func(b *bank) struct{ Ops int } { return struct{ Ops int }{b.ops} })); len(bad) > 0 {
+		t.Errorf("a projection of part of the state: %v", bad)
+	}
+	if bad := check(Bind(newBank).State(func(b *bank) any { return fitBankFees{} })); len(bad) > 0 {
+		t.Errorf("a projection returned as any is not checked before the traces: %v", bad)
+	}
 	for _, c := range []struct {
 		name string
 		b    *Binding[*bank]
@@ -187,7 +210,15 @@ func TestBindCheckedAgainstModel(t *testing.T) {
 		{"a skipped action the model lacks", Bind(newBank).Skip("aliceSavesTest"),
 			[]string{"connect.Bind: action aliceSavesTest: the model has no action aliceSavesTest (its actions: deposit, transfer, withdraw)"}},
 		{"a typo'd pick", Bind(newBank).Action("deposit", (*bank).deposit, "acount", "amount"),
-			[]string{"connect.Bind: action deposit, parameter 1 (pick acount): the model has no nondet or parameter acount (its picks: account, amount, dst, src): name the nondet that feeds the parameter"}},
+			[]string{"connect.Bind: action deposit, parameter 1 (pick acount): the model has no nondet or parameter acount (its picks: account, amount): name the nondet that feeds the parameter"}},
+		// transfer's src, recorded in a deposit's step too: refused, with
+		// the action whose pick it is and deposit's own
+		{"another action's pick", Bind(newBank).Action("deposit", (*bank).deposit, "src", "amount"),
+			[]string{"connect.Bind: action deposit, parameter 1 (pick src): src is a pick of transfer, not deposit (deposit's picks: account, amount): name a nondet that feeds deposit"}},
+		{"another action's pick observed", Bind(newBank).Action("deposit", func(b *bank, a string, n int) string { b.deposit(a, n); return a }, "account", "amount").Observes("deposit", "dst"),
+			[]string{"connect.Bind: action deposit: Observes' pick dst: dst is a pick of transfer, not deposit (deposit's picks: account, amount): name the nondet the model picks deposit's choice with"}},
+		{"another action's pick as Returns' argument", bankBinding(false, (*bank).depositBalance).Returns("deposit", "balanceOf", "src"),
+			[]string{"connect.Bind: action deposit: Returns' argument src: src is a pick of transfer, not deposit (deposit's picks: account, amount): pass picks of deposit"}},
 		{"a wrong Go type", Bind(newBank).Action("deposit", func(*bank, string, string) {}, "account", "amount"),
 			[]string{"connect.Bind: action deposit, parameter 2 (pick amount): Go type string does not fit the model's int (int does not decode into string): make the parameter a type itf.Decode fills from int"}},
 		{"a Returns def the model lacks", bankBinding(false, (*bank).depositBalance).Returns("deposit", "balanceOff", "account"),
@@ -198,6 +229,14 @@ func TestBindCheckedAgainstModel(t *testing.T) {
 			[]string{"connect.Bind: action deposit: its result, Go type string, does not fit Returns' def balanceOf, of the model's int (int does not decode into string): return a type itf.Decode fills from int"}},
 		{"an Observes type mismatch", Bind(newBank).Action("deposit", func(b *bank, a string, n int) int { b.deposit(a, n); return 0 }, "account", "amount").Observes("deposit", "account"),
 			[]string{"connect.Bind: action deposit: Observes' pick account: result 1, Go type int, does not fit the model's str (str does not decode into int): return a type itf.Decode fills from str"}},
+		// the projection's type, checked against the model's variables
+		// (balances: str -> int, ops: int) as Replay decodes them
+		{"a projection of a wrong type", Bind(newBank).State(func(b *bank) struct{ Balances map[string]string } { return struct{ Balances map[string]string }{} }),
+			[]string{"connect.Bind: State: the projection, Go type struct { Balances map[string]string }, does not fit the model's state (at .balances[k], int does not decode into string): project the model's state variables, each into a type itf.Decode fills from it"}},
+		{"a projection of a field the model lacks", Bind(newBank).State(func(b *bank) fitBankFees { return fitBankFees{} }),
+			[]string{"connect.Bind: State: the projection, Go type connect.fitBankFees, does not fit the model's state (field Fees of connect.fitBankFees is not the model's (it has balances, ops): name it after one, or tag it `itf:\"-\"`)"}},
+		{"a projection of an unexported field", Bind(newBank).State(func(b *bank) fitBankHidden { return fitBankHidden{} }),
+			[]string{"connect.Bind: State: the projection, Go type connect.fitBankHidden, does not fit the model's state (field ops of connect.fitBankHidden is unexported, so it is never compared"}},
 		{"several", Bind(newBank).
 			Action("deposit", func(*bank, string, string) {}, "account", "amount").
 			Action("withdraw", (*bank).withdraw, "acount", "amount").
@@ -222,22 +261,120 @@ func TestBindCheckedAgainstModel(t *testing.T) {
 	}
 }
 
-// connect.Run checks a bound driver's binding before replaying a trace,
-// and fails with every mismatch at once: the implementation is never
-// made.
+// The bank's three mismatches, its projection's included, each line.
+var bindMismatches = []string{
+	"connect: the binding does not fit testdata/bank.qnt (3 mismatches, found before any trace ran):",
+	"    connect.Bind: action deposit, parameter 2 (pick amount): Go type string does not fit the model's int",
+	"    connect.Bind: action transfre: the model has no action transfre",
+	"    connect.Bind: State: the projection, Go type connect.fitBankFees, does not fit the model's state (field Fees of connect.fitBankFees is not the model's",
+}
+
+// b.Run checks the binding before generating a trace, and fails with
+// every mismatch at once, its projection's included: no trace is
+// generated (Run logs none, and no trace subtest runs) and the
+// implementation is never made.
 func TestBindCheckFailsRun(t *testing.T) {
 	needQuint(t)
 	out := connectFailureOutput(t, "bind-mismatched")
-	for _, want := range []string{
-		"connect: the binding does not fit testdata/bank.qnt (2 mismatches, found before any trace ran):",
-		"    connect.Bind: action deposit, parameter 2 (pick amount): Go type string does not fit the model's int",
-		"    connect.Bind: action transfre: the model has no action transfre",
-	} {
+	for _, want := range bindMismatches {
+		if !strings.Contains(out, want) {
+			t.Errorf("want %q in:\n%s", want, out)
+		}
+	}
+	for _, after := range []string{"implementation made", "generated 1 traces", "trace_0"} {
+		if strings.Contains(out, after) {
+			t.Errorf("%q: the check ran after the traces were generated:\n%s", after, out)
+		}
+	}
+}
+
+// b.Test checks as b.Run does, before quint test runs.
+func TestBindCheckFailsTest(t *testing.T) {
+	needQuint(t)
+	out := connectFailureOutput(t, "bind-test-mismatched")
+	for _, want := range []string{"connect: the binding does not fit testdata/bank.qnt (1 mismatch, found before any trace ran):", bindMismatches[3]} {
+		if !strings.Contains(out, want) {
+			t.Errorf("want %q in:\n%s", want, out)
+		}
+	}
+	for _, after := range []string{"implementation made", "generated 1 traces", "trace_0"} {
+		if strings.Contains(out, after) {
+			t.Errorf("%q: the check ran after the traces were generated:\n%s", after, out)
+		}
+	}
+}
+
+// connect.Run with b.Driver checks the same binding when the first
+// trace's driver is made: after generation, before the implementation.
+func TestBindCheckFailsDriverAtFirstTrace(t *testing.T) {
+	needQuint(t)
+	out := connectFailureOutput(t, "bind-mismatched-driver")
+	for _, want := range append(bindMismatches, "generated 1 traces") {
 		if !strings.Contains(out, want) {
 			t.Errorf("want %q in:\n%s", want, out)
 		}
 	}
 	if strings.Contains(out, "implementation made") {
-		t.Errorf("the implementation was made, a trace replayed:\n%s", out)
+		t.Errorf("the implementation was made before the check:\n%s", out)
+	}
+}
+
+// attempts is an implementation of bindpicks.qnt.
+type attempts struct {
+	tries int
+	log   []string
+}
+
+func (a *attempts) attempt(d int) int               { a.tries += d; return a.tries }
+func (a *attempts) failed(outcome string)           { a.log = append(a.log, outcome) }
+func (a *attempts) retry(d int, backoff int)        { a.tries += d + backoff }
+func (a *attempts) attemptWith(d int, _ string) int { a.tries += d; return a.tries }
+
+// Each action's picks are its own (bindpicks.qnt): quint records failed's
+// outcome in attempt's steps too, where it decodes another action's
+// choice, so a binding that names it is refused before any trace, naming
+// whose it is. A nondet two actions' calls share is each one's, and one
+// bound in the action's own body is its.
+func TestBindChecksPicksPerAction(t *testing.T) {
+	needQuint(t)
+	c, err := Config{Spec: "testdata/bindpicks.qnt", Dir: t.TempDir()}.resolve(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := compileModel(t.Context(), c, []string{"triesAfter"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	newAttempts := func(testing.TB) *attempts { return &attempts{} }
+	check := func(b *Binding[*attempts]) []string {
+		t.Helper()
+		bad, _ := b.Driver(t).(modelChecked).checkModel(m, c)
+		return bad
+	}
+	// d is attempt's and retry's both; backoff is bound in retry's body
+	faithful := Bind(newAttempts).
+		Action("attempt", (*attempts).attempt, "d").Returns("attempt", "triesAfter", "d").
+		Action("failed", (*attempts).failed, "outcome").
+		Action("retry", (*attempts).retry, "d", "backoff")
+	if bad := check(faithful); len(bad) > 0 {
+		t.Errorf("the faithful binding: %v", bad)
+	}
+	for _, c := range []struct {
+		name string
+		b    *Binding[*attempts]
+		want []string
+	}{
+		{"failed's outcome bound to attempt", Bind(newAttempts).Action("attempt", (*attempts).attemptWith, "d", "outcome").Returns("attempt", "triesAfter", "d"),
+			[]string{"connect.Bind: action attempt, parameter 2 (pick outcome): outcome is a pick of failed, not attempt (attempt's picks: d): name a nondet that feeds attempt"}},
+		{"retry's own nondet bound to attempt", Bind(newAttempts).Action("attempt", func(*attempts, int) {}, "backoff"),
+			[]string{"connect.Bind: action attempt, parameter 1 (pick backoff): backoff is a pick of retry, not attempt (attempt's picks: d): name a nondet that feeds attempt"}},
+		{"a pick no action has", Bind(newAttempts).Action("failed", (*attempts).failed, "outcom"),
+			[]string{"connect.Bind: action failed, parameter 1 (pick outcom): the model has no nondet or parameter outcom (its picks: outcome): name the nondet that feeds the parameter"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if bad := check(c.b); !slices.Equal(bad, c.want) {
+				t.Errorf("mismatches:\n  got  %q\n  want %q", bad, c.want)
+			}
+		})
 	}
 }

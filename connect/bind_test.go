@@ -33,7 +33,7 @@ func bankBinding[F any](buggy bool, deposit F) *Binding[*bank] {
 		Action("deposit", deposit, "account", "amount").
 		Action("withdraw", (*bank).withdraw, "account", "amount").
 		Action("transfer", (*bank).transfer, "src", "dst", "amount").
-		State(func(b *bank) any { return bankState{Balances: b.balances, Ops: b.ops} })
+		State(func(b *bank) bankState { return bankState{Balances: b.balances, Ops: b.ops} })
 }
 
 // A Binding drives the bank as bankDriver's Switch does: each action a
@@ -51,7 +51,7 @@ func TestBindDrivesBank(t *testing.T) {
 		}
 		return nil
 	})
-	Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 5, MaxSteps: 12, Seed: "0x1"}, b.Driver)
+	b.Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 5, MaxSteps: 12, Seed: "0x1"})
 }
 
 // The bound bank diverges where bankDriver's does: a transfer of 3 credits
@@ -120,6 +120,13 @@ func TestBindRefusesMalformed(t *testing.T) {
 		{"observes and returns", func() {
 			Bind(func(testing.TB) *bank { return nil }).Action("deposit", (*bank).depositBalance, "account", "amount").Returns("deposit", "balanceOf", "account").Observes("deposit", "amount")
 		}, "already checked"},
+		{"state not a func", func() { Bind(func(testing.TB) *bank { return nil }).State(bankState{}) }, "connect.Bind: State: connect.bankState is no func(*connect.bank) S"},
+		{"state of another type", func() {
+			Bind(func(testing.TB) *bank { return nil }).State(func(*bankDriver) bankState { return bankState{} })
+		}, "is no func(*connect.bank) S"},
+		{"state twice", func() {
+			bankBinding(false, (*bank).deposit).State(func(*bank) bankState { return bankState{} })
+		}, "connect.Bind: State given twice: give one projection"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			defer func() {

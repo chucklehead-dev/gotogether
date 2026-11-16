@@ -61,7 +61,7 @@ func TestTypes(t *testing.T) {
 		t.Errorf("act's params: %s, want %s", got, want)
 	}
 	nd := m.Nondets("step")
-	if got, want := slices.Sorted(maps.Keys(nd)), []string{"n", "v", "w", "x", "y", "z"}; !slices.Equal(got, want) {
+	if got, want := slices.Sorted(maps.Keys(nd)), []string{"cmd", "d", "gate", "k", "n", "outcome", "v", "w", "x", "y", "z"}; !slices.Equal(got, want) {
 		t.Errorf("step's nondets %v, want %v (grow's n among them)", got, want)
 	}
 	if got := nd["n"]; len(got) != 1 || got[0].String() != "int" {
@@ -69,5 +69,33 @@ func TestTypes(t *testing.T) {
 	}
 	if got := m.Actions(); !slices.Contains(got, "act") || !slices.Contains(got, "grow") || slices.Contains(got, "idOf") {
 		t.Errorf("actions %v", got)
+	}
+
+	// each action's own picks: its call's arguments (attempt's through
+	// a let and a sum: d and k), the guards it is under (failed's gate
+	// and k, k shared with attempt), the nondets of its body (grow's n),
+	// and the whole model's where a match hides the call (opened,
+	// closed, and keepWith, which they apply too)
+	own, unsure := m.ActionPicks("step")
+	for action, want := range map[string]string{
+		"act":     "v w x y z",
+		"grow":    "n",
+		"attempt": "d k",
+		"failed":  "gate k outcome",
+	} {
+		if got := strings.Join(slices.Sorted(maps.Keys(own[action])), " "); got != want || unsure[action] {
+			t.Errorf("%s's picks: %s (unsure %v), want %s", action, got, unsure[action], want)
+		}
+	}
+	if got := own["attempt"]["d"]; len(got) != 1 || got[0].String() != "int" {
+		t.Errorf("attempt's d: %v", got)
+	}
+	for _, action := range []string{"opened", "closed", "keepWith", "init", "step"} {
+		if !unsure[action] || len(own[action]) != len(nd) {
+			t.Errorf("%s: unsure %v with %d picks, want the whole model's %d", action, unsure[action], len(own[action]), len(nd))
+		}
+	}
+	if own, _ := m.ActionPicks("nothing"); own != nil {
+		t.Errorf("a step the model lacks: %v", own)
 	}
 }

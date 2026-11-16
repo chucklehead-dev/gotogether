@@ -304,26 +304,44 @@ From golem's use (#144):
   account = alice; the model's choice is bob"), or the driver refuses to
   start. `.Handle(name, func(T, *Step) error)` takes an
   action no method fits, `.Skip(names...)` another component's,
-  `.State(project)` and `.Check(func(T, *Step) error)` the projection and
-  a check after each step; `b.Driver` is the factory `connect.Run` takes.
-  A malformed binding (a count of picks not the method's, a method of
-  another type, an action bound twice) panics where it is built, naming
-  the fix. Before the first trace replays, `connect.Run` and `connect.Test`
+  `.State(func(T) S)` and `.Check(func(T, *Step) error)` the projection
+  and a check after each step. Run it with `b.Run(t, cfg)` or
+  `b.Test(t, cfg, test)`: `connect.Run` and `connect.Test` with the
+  binding checked before any trace is generated. `connect.Run(t, cfg,
+  b.Driver)` also works, and checks only at the first trace, after
+  quint generated them all. A malformed binding (a count of picks not the
+  method's, a method of another type, an action bound twice, a State that
+  is no `func(T) S` or given twice) panics where it is built, naming the
+  fix. `b.Run` and `b.Test` (`connect.Run` at its first trace)
   check the binding against the model quint compiled (the one `Step.Eval`
   and `Config.Require` use: no other quint process when either compiled):
   each bound action (`Action`, `Handle`, `Skip`) is an action of the
-  model, each pick (a parameter's, `Observes'`, `Returns'` arguments) a
-  nondet of `step` or a parameter of the model's action, each Go type one
+  model, each pick (a parameter's, `Observes'`, `Returns'` arguments) one
+  of that action's own, each Go type one
   `itf.Decode` fills from the model's type for it (int into any integer
   kind or `*big.Int`, a record into a struct by field name, a sum into
-  `itf:",tag"`/`itf:",value"` fields, an Option into a pointer, ...), and
+  `itf:",tag"`/`itf:",value"` fields, an Option into a pointer, ...),
   `Returns'` def a val or def of the model, of the arity given, whose
-  type decodes into the result. Every mismatch fails the test at once,
-  one line each, before any trace: a typo in an action no trace sampled
-  is no longer a silent pass. A type variable, a Go interface and a type
-  that decodes itself (`itf.Unmarshaler`) are accepted, and a model's
-  action bound to nothing is logged, not refused (a step of it fails as
-  unimplemented, as before).
+  type decodes into the result, and State's S the model's state (at
+  `Config.StatePath`) as `itf.DecodeProjection` reads it: every field a
+  state variable's, exported, of a type that decodes from it. Return a
+  concrete type S from State to have it checked before any trace: a
+  `func(T) any` is decoded only at the first trace's init.
+  An action's own picks are its parameters, the nondets whose values flow
+  into its call in `step` (`nondet d = ...; attempt(d)`, through lets and
+  expressions) or into a guard over it (`all { gate, failed(o) }`), and
+  those its body binds; a nondet several calls use is each one's.
+  `quint run --mbt` records every nondet at every step, so another
+  action's would decode that action's choice: it is refused, naming
+  whose it is ("outcome is a pick of failed, not attempt (attempt's
+  picks: d)"). Where `step`'s shape hides the calls (a `match`, a
+  let-bound action) the action's picks are the whole model's. Every
+  mismatch fails the test at once, one line each, before any trace: a
+  typo in an action no trace sampled is no longer a silent pass. A type
+  variable, a Go interface and a type that decodes itself
+  (`itf.Unmarshaler`) are accepted, and a model's action bound to
+  nothing is logged, not refused (a step of it fails as unimplemented,
+  as before).
   With `Config.NondetPath` only `Returns` is checked: the actions and
   picks are read from a variable. examples/bank's `TestModelDrivesBank`
   is bound this way.

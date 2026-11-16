@@ -3,6 +3,7 @@ package qeval
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -315,4 +316,286 @@ func (m *Model) Actions() []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// ActionPicks are each action's own choices, as a step of it records
+// them: quint run --mbt records every nondet step evaluates, at every
+// step, so Nondets(step) holds every action's picks, and a pick of
+// another action's decodes that action's choice. An action's own are
+// the nondets whose values flow into its call in step (nondet d = ...;
+// attempt(d), through lets and the expressions they bind), those of a
+// guard or condition the call is under (all { d > 0, attempt(d) }, if
+// (d > 0) attempt(d) else ...), and those bound in its body and in what
+// it applies. A nondet several calls use is each one's.
+//
+// unsure names the actions whose picks the step's shape does not let
+// the attribution follow: an action applied under an operator other
+// than any, all, and, or, if and an action's application (a match, a
+// then), one a let binds, a recursive one, and one step does not reach.
+// Their picks are Nondets(step), the whole model's: a refusal of a pick
+// the action does make is worse than a borrowed pick let through. Every
+// action of the model is in own. Nil when step is no definition of m.
+func (m *Model) ActionPicks(step string) (own map[string]map[string][]*Type, unsure map[string]bool) {
+	d, ok := m.Decl(step)
+	if !ok || d.Expr == nil {
+		return nil, nil
+	}
+	a := &attribution{m: m, env: map[int64]nondetSet{}, nondet: map[int64]*Decl{}, own: map[string]nondetSet{}, unsure: map[string]bool{}, stack: map[int64]bool{d.ID: true}}
+	body := d.Expr
+	if body.Kind == "lambda" {
+		body = body.Expr
+	}
+	a.attribute(body, nondetSet{})
+	whole := m.Nondets(step)
+	own, unsure = map[string]map[string][]*Type{}, map[string]bool{}
+	for _, n := range m.Actions() {
+		set, ok := a.own[n]
+		if !ok || a.unsure[n] {
+			own[n], unsure[n] = whole, true
+			continue
+		}
+		picks := map[string][]*Type{}
+		for id := range set {
+			nd := a.nondet[id]
+			name := m.Display(nd.Name)
+			t, _ := m.TypeOf(nd)
+			if !slices.ContainsFunc(picks[name], func(u *Type) bool { return u.String() == t.String() }) {
+				picks[name] = append(picks[name], t)
+			}
+		}
+		own[n] = picks
+	}
+	return own, unsure
+}
+
+// nondetSet is a set of nondets, by their let's id.
+type nondetSet map[int64]bool
+
+func (s nondetSet) union(o nondetSet) nondetSet {
+	out := make(nondetSet, len(s)+len(o))
+	maps.Copy(out, s)
+	maps.Copy(out, o)
+	return out
+}
+
+// attribution is ActionPicks' walk of step: env says which nondets the
+// value of a let or a parameter comes from (a nondet itself, and those
+// its set is drawn from), own the nondets each action is found to take.
+type attribution struct {
+	m      *Model
+	env    map[int64]nondetSet
+	nondet map[int64]*Decl // the nondets bound, by id
+	own    map[string]nondetSet
+	unsure map[string]bool
+	stack  map[int64]bool // the actions being followed, against recursion
+}
+
+// action is the model's action e names or applies, if it does.
+func (a *attribution) action(e *Expr) (*Decl, bool) {
+	if e == nil || e.Kind != "app" && e.Kind != "name" {
+		return nil, false
+	}
+	r, ok := a.m.refs[e.ID]
+	if !ok || r.kind != "def" {
+		return nil, false
+	}
+	d := a.m.byID[r.decl]
+	return d, d != nil && d.Kind == "def" && d.Qualifier == "action"
+}
+
+// bind records a let's definition in env.
+func (a *attribution) bind(d *Decl) {
+	from := a.refs(d.Expr)
+	if d.Qualifier == "nondet" {
+		a.nondet[d.ID] = d
+		from = from.union(nondetSet{d.ID: true})
+	}
+	a.env[d.ID] = from
+}
+
+// refs are the nondets e's value comes from: those it names, directly
+// or through a let or a parameter env knows.
+func (a *attribution) refs(e *Expr) nondetSet {
+	out := nondetSet{}
+	var walk func(e *Expr)
+	walk = func(e *Expr) {
+		if e == nil {
+			return
+		}
+		if e.Kind == "let" && e.Opdef != nil {
+			a.bind(e.Opdef)
+			walk(e.Expr)
+			return
+		}
+		if e.Kind == "app" || e.Kind == "name" {
+			if r, ok := a.m.refs[e.ID]; ok && (r.kind == "def" || r.kind == "param") {
+				maps.Copy(out, a.env[r.decl])
+			}
+		}
+		for _, x := range e.Args {
+			walk(x)
+		}
+		walk(e.Expr)
+	}
+	walk(e)
+	return out
+}
+
+// callsAction reports whether e applies an action (the model's, or one
+// a let binds).
+func (a *attribution) callsAction(e *Expr) bool {
+	found := false
+	var walk func(e *Expr)
+	walk = func(e *Expr) {
+		if e == nil || found {
+			return
+		}
+		if _, ok := a.action(e); ok || e.Kind == "let" && e.Opdef != nil && e.Opdef.Qualifier == "action" {
+			found = true
+			return
+		}
+		for _, x := range e.Args {
+			walk(x)
+		}
+		walk(e.Expr)
+		if e.Opdef != nil {
+			walk(e.Opdef.Expr)
+		}
+	}
+	walk(e)
+	return found
+}
+
+// unsureIn marks every action e applies, and those they apply, unsure.
+func (a *attribution) unsureIn(e *Expr) {
+	seen := map[int64]bool{}
+	var walk func(e *Expr)
+	walk = func(e *Expr) {
+		if e == nil {
+			return
+		}
+		if d, ok := a.action(e); ok && !seen[d.ID] {
+			seen[d.ID] = true
+			a.unsure[a.m.Display(d.Name)] = true
+			walk(d.Expr)
+		}
+		for _, x := range e.Args {
+			walk(x)
+		}
+		walk(e.Expr)
+		if e.Opdef != nil {
+			walk(e.Opdef.Expr)
+		}
+	}
+	walk(e)
+}
+
+// attribute walks an action-valued expression of step, s the nondets
+// of the guards and conditions it is under.
+func (a *attribution) attribute(e *Expr, s nondetSet) {
+	switch {
+	case e == nil:
+		return
+	case e.Kind == "let" && e.Opdef != nil:
+		a.bind(e.Opdef)
+		if e.Opdef.Qualifier == "action" || a.callsAction(e.Opdef.Expr) {
+			a.unsureIn(e.Opdef.Expr) // an action a let binds: where it is applied is not followed
+		}
+		a.attribute(e.Expr, s)
+		return
+	}
+	if d, ok := a.action(e); ok {
+		a.call(d, e.Args, s)
+		return
+	}
+	if !a.callsAction(e) {
+		return
+	}
+	if e.Kind != "app" {
+		a.unsureIn(e) // a lambda's body, or a let-bound action applied
+		return
+	}
+	switch e.Opcode {
+	case "actionAny", "or":
+		for _, x := range e.Args {
+			a.attribute(x, s)
+		}
+	case "actionAll", "and", "ite":
+		// the conjuncts (an if's condition) that apply no action guard
+		// every call among the others
+		inner := s
+		for _, x := range e.Args {
+			if !a.callsAction(x) {
+				inner = inner.union(a.refs(x))
+			}
+		}
+		for _, x := range e.Args {
+			if a.callsAction(x) {
+				a.attribute(x, inner)
+			}
+		}
+	default:
+		a.unsureIn(e)
+	}
+}
+
+// call attributes an application of action d to args, under s: what
+// flows into its arguments, and the nondets bound in its body and in
+// what it applies, actions included (a step of d may record any of
+// them). The actions d applies take what flows into d, with the
+// nondets of d's own guards and lets.
+func (a *attribution) call(d *Decl, args []*Expr, s nondetSet) {
+	name := a.m.Display(d.Name)
+	if a.stack[d.ID] {
+		a.unsure[name] = true // recursion: not followed
+		return
+	}
+	a.stack[d.ID] = true
+	defer delete(a.stack, d.ID)
+	all := s
+	argRefs := make([]nondetSet, len(args))
+	for i, x := range args {
+		argRefs[i] = a.refs(x)
+		all = all.union(argRefs[i])
+	}
+	body := d.Expr
+	if body != nil && body.Kind == "lambda" {
+		for i, p := range body.Params {
+			if i < len(argRefs) {
+				a.env[p.ID] = argRefs[i]
+			}
+		}
+		body = body.Expr
+	}
+	var bound func(e *Expr)
+	seen := map[int64]bool{d.ID: true}
+	bound = func(e *Expr) {
+		if e == nil {
+			return
+		}
+		if e.Kind == "let" && e.Opdef != nil {
+			if e.Opdef.Qualifier == "nondet" {
+				all = all.union(nondetSet{e.Opdef.ID: true})
+				a.nondet[e.Opdef.ID] = e.Opdef
+			}
+			bound(e.Opdef.Expr)
+		}
+		if e.Kind == "app" || e.Kind == "name" {
+			if r, ok := a.m.refs[e.ID]; ok && r.kind == "def" && !seen[r.decl] {
+				seen[r.decl] = true
+				if c := a.m.byID[r.decl]; c != nil {
+					bound(c.Expr)
+				}
+			}
+		}
+		for _, x := range e.Args {
+			bound(x)
+		}
+		bound(e.Expr)
+	}
+	bound(body)
+	a.own[name] = a.own[name].union(all)
+	if a.callsAction(body) {
+		a.attribute(body, a.own[name])
+	}
 }

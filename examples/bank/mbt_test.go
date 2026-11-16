@@ -55,7 +55,7 @@ func bound() *connect.Binding[*Bank] {
 		Action("deposit", (*Bank).Deposit, "account", "amount").
 		Action("withdraw", (*Bank).Withdraw, "account", "amount").
 		Action("transfer", (*Bank).Transfer, "src", "dst", "amount").
-		State(func(b *Bank) any { return modelState{Balances: b.Balances()} }).
+		State(func(b *Bank) modelState { return modelState{Balances: b.Balances()} }).
 		Check(func(b *Bank, s *connect.Step) error {
 			for _, a := range accounts {
 				if model, bank := connect.MustEval[int](s, "balanceOf", a), b.Balance(a); model != bank {
@@ -66,7 +66,8 @@ func bound() *connect.Binding[*Bank] {
 		})
 }
 
-// The model drives the bank, bound to it (bound): random traces of the
+// The model drives the bank, bound to it (bound; bound().Run checks the
+// binding against the model before generating a trace): random traces of the
 // deployed design, each replayed on a fresh bank with the balances
 // compared after every step.
 // The run must reach the model's rich state (Require): the shortest path
@@ -75,8 +76,7 @@ func bound() *connect.Binding[*Bank] {
 // QUINT_SEED it prints.
 func TestModelDrivesBank(t *testing.T) {
 	qtest.RequireQuint(t)
-	connect.Run(t, connect.Config{Spec: "model/bank.qnt", Main: "bankDesign", MaxSamples: 30, MaxSteps: 25, Require: []string{"rich"}},
-		bound().Driver)
+	bound().Run(t, connect.Config{Spec: "model/bank.qnt", Main: "bankDesign", MaxSamples: 30, MaxSteps: 25, Require: []string{"rich"}})
 }
 
 // What model-driven testing can and cannot catch. LostDeposit diverges

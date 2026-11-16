@@ -252,8 +252,10 @@ type Binding[T any] struct
     method (*Binding[T]) Handle(name string, h func(impl T, s *Step) error) *Binding[T]
     method (*Binding[T]) Observes(name string, picks ...string) *Binding[T]
     method (*Binding[T]) Returns(name, def string, args ...string) *Binding[T]
+    method (*Binding[T]) Run(t *testing.T, c Config)
     method (*Binding[T]) Skip(names ...string) *Binding[T]
-    method (*Binding[T]) State(project func(impl T) any) *Binding[T]
+    method (*Binding[T]) State(project any) *Binding[T]
+    method (*Binding[T]) Test(t *testing.T, c Config, test string)
 type Config struct
     field Spec string
     field Main string

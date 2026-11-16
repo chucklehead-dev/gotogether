@@ -276,49 +276,112 @@ func must[T any](t T, _ error) T { return t }
 // directory lifetime through testing.TB. Its cleanups finish before the next
 // trace starts. Ordinary Go test filtering and skips apply to the subtests.
 // Run fails t at the first divergence, with the seed that reproduces it.
-// It is quint-connect's #[quint_run].
+// A driver Bind made (b.Driver) is checked against the model when the
+// first trace's is made, after generation; Binding.Run checks it before
+// generating any trace. It is quint-connect's #[quint_run].
 func Run(t *testing.T, c Config, newDriver func(testing.TB) Driver) {
+	t.Helper()
+	runTraces(t, c, newDriver, nil)
+}
+
+// runTraces is Run, with bound, if set, checked before generation.
+func runTraces(t *testing.T, c Config, newDriver func(testing.TB) Driver, bound modelChecked) {
 	t.Helper()
 	if c.Dir == "" {
 		c.Dir = t.TempDir()
 	}
+	pre := checkFirst(t, &c, bound)
 	files, c, err := GenerateRun(t.Context(), c)
 	if err != nil {
 		t.Fatalf("connect: generating traces: %v", err)
 	}
-	replayAll(t, c, files, newDriver, "run")
+	replayPrepared(t, c, files, newDriver, "run", pre)
 }
 
 // Test replays the traces of the spec's `run` named test (quint test --match)
 // on a fresh driver each, with the per-trace subtest lifetimes described in
 // Run. It is quint-connect's #[quint_test]. Unless the spec records the
 // action itself (Config.NondetPath), use package validate to check such tests
-// against Go instead.
+// against Go instead. A driver Bind made is checked as Run says;
+// Binding.Test checks it before generating the traces.
 func Test(t *testing.T, c Config, test string, newDriver func(testing.TB) Driver) {
+	t.Helper()
+	testTraces(t, c, test, newDriver, nil)
+}
+
+// testTraces is Test, with bound, if set, checked before generation.
+func testTraces(t *testing.T, c Config, test string, newDriver func(testing.TB) Driver, bound modelChecked) {
 	t.Helper()
 	if c.Dir == "" {
 		c.Dir = t.TempDir()
 	}
+	pre := checkFirst(t, &c, bound)
 	files, c, err := generateTest(t.Context(), c, test)
 	if err != nil {
 		t.Fatalf("connect: generating traces of %s: %v", test, err)
 	}
-	replayAll(t, c, files, newDriver, "test "+test)
+	replayPrepared(t, c, files, newDriver, "test "+test, pre)
 }
 
-func replayAll(t *testing.T, c Config, files []string, newDriver func(testing.TB) Driver, what string) {
+// prepared is what a run compiles before its first trace: Config.Require's
+// vals, and the model Step.Eval and a bound driver's check use.
+type prepared struct {
+	req *required
+	ev  *evaluator
+}
+
+// prepare compiles c's model for Config.Require, failing t when a name
+// is no val of it. Without Require, Step.Eval's model is compiled at the
+// first Eval (or a bound driver's check), so a run that never asks pays
+// nothing.
+func prepare(t *testing.T, c Config) *prepared {
 	t.Helper()
-	t.Logf("connect: %s %s: generated %d traces, seed %s", what, c.Spec, len(files), c.Seed)
 	req, err := compileRequired(t.Context(), c)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	// Step.Eval's model: Require's compile when there is one, else
-	// compiled at the first Eval, so a run that never asks pays nothing
 	ev := &evaluator{ctx: t.Context(), c: c}
 	if req != nil {
 		ev.m, ev.keep = req.m, c.Require
 	}
+	return &prepared{req: req, ev: ev}
+}
+
+// checkFirst checks bound, Binding.Run's or Binding.Test's binding,
+// against the model before a trace is generated (checkBound), and
+// returns the compile for the replay; nil when bound is. c is resolved
+// here (seed, directory, quint), so the compile is the one the run's
+// traces are judged with, and generation's resolve of it changes
+// nothing.
+func checkFirst(t *testing.T, c *Config, bound modelChecked) *prepared {
+	t.Helper()
+	if bound == nil {
+		return nil
+	}
+	rc, err := c.resolve(t.Context())
+	if err != nil {
+		return nil // generating the traces reports it
+	}
+	*c = rc
+	p := prepare(t, rc)
+	p.ev.bound = true
+	checkBound(t, rc, p.ev, bound)
+	return p
+}
+
+// replayPrepared replays files, each on a fresh driver from newDriver,
+// on what checkFirst compiled before the traces were generated, or,
+// given nil, on what it compiles here from c.
+func replayPrepared(t *testing.T, c Config, files []string, newDriver func(testing.TB) Driver, what string, pre *prepared) {
+	t.Helper()
+	t.Logf("connect: %s %s: generated %d traces, seed %s", what, c.Spec, len(files), c.Seed)
+	if pre == nil {
+		pre = prepare(t, c)
+	}
+	// pre's evaluator was made with the config c is (checkFirst resolved
+	// it, and generation's resolve of a resolved config returns it as it
+	// is): nothing of it to update
+	req, ev := pre.req, pre.ev
 	judged := 0 // traces whose states req has seen: all, unless -run skips some
 	if req != nil {
 		defer func() {
@@ -430,10 +493,10 @@ func checkBound(t *testing.T, c Config, ev *evaluator, mc modelChecked) {
 	if len(unbound) > 0 {
 		one := len(unbound) == 1
 		t.Logf("connect.Bind: the model's action%s %s %s bound to nothing: a step of %s fails as unimplemented (bind, Handle or Skip %s)", plural(len(unbound)), strings.Join(unbound, ", "),
-			map[bool]string{true: "is", false: "are"}[one], map[bool]string{true: "it", false: "one"}[one], map[bool]string{true: "it", false: "them"}[one])
+			choose(one, "is", "are"), choose(one, "it", "one"), choose(one, "it", "them"))
 	}
 	if len(bad) > 0 {
-		t.Fatalf("connect: the binding does not fit %s (%d mismatch%s, found before any trace ran):\n%s", c.Spec, len(bad), map[bool]string{true: "", false: "es"}[len(bad) == 1], indent(strings.Join(bad, "\n"), "    "))
+		t.Fatalf("connect: the binding does not fit %s (%d mismatch%s, found before any trace ran):\n%s", c.Spec, len(bad), choose(len(bad) == 1, "", "es"), indent(strings.Join(bad, "\n"), "    "))
 	}
 }
 

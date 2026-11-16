@@ -21,17 +21,25 @@ import (
 //	b := connect.Bind(func(testing.TB) *Bank { return NewBank(accounts) }).
 //		Action("deposit", (*Bank).Deposit, "account", "amount").
 //		Action("withdraw", (*Bank).Withdraw, "account", "amount").
-//		State(func(b *Bank) any { return bankState{Balances: b.Balances()} })
-//	connect.Run(t, cfg, b.Driver)
+//		State(func(b *Bank) bankState { return bankState{Balances: b.Balances()} })
+//	b.Run(t, cfg)
 //
-// A Binding is built once, before Run, and is not changed after: Driver
-// makes each trace's driver from it.
+// State takes a func(T) S: with S a concrete type (bankState, not any)
+// the projection is checked against the model's state with the actions.
+// b.Run and b.Test check the binding before generating any trace;
+// connect.Run(t, cfg, b.Driver) runs the same replay but checks at the
+// first trace, after generation. A Binding is built once, before the
+// run, and is not changed after: Driver makes each trace's driver from
+// it.
 type Binding[T any] struct {
 	init    func(testing.TB) T
 	actions map[string]*boundAction
 	order   []string // the actions' names, in the order bound
 	project func(T) any
-	checks  []func(T, *Step) error
+	// stateType is project's result type, checked against the model's
+	// state before any trace unless it is an interface (bindcheck.go)
+	stateType reflect.Type
+	checks    []func(T, *Step) error
 }
 
 // boundAction is one action's method and the picks that are its
@@ -106,7 +114,7 @@ func (b *Binding[T]) Action(name string, method any, params ...string) *Binding[
 	}
 	if n := ft.NumIn() - first; n != len(params) {
 		panic(fmt.Sprintf("%s: %s takes %d parameter%s besides the receiver%s, but %s named (%s): name one pick per parameter, in order",
-			where, ft, n, plural(n), map[bool]string{true: " and a context", false: ""}[a.ctx], map[bool]string{true: "1 pick is", false: fmt.Sprintf("%d picks are", len(params))}[len(params) == 1], strings.Join(params, ", ")))
+			where, ft, n, plural(n), choose(a.ctx, " and a context", ""), choose(len(params) == 1, "1 pick is", fmt.Sprintf("%d picks are", len(params))), strings.Join(params, ", ")))
 	}
 	for i := first; i < ft.NumIn(); i++ {
 		a.types = append(a.types, ft.In(i))
@@ -190,10 +198,33 @@ func (b *Binding[T]) Skip(names ...string) *Binding[T] {
 }
 
 // State is the implementation's state as the model's is compared with it
-// after every step (StateDriver: the model's state decoded into project's
-// result type, fields the type lacks not compared).
-func (b *Binding[T]) State(project func(impl T) any) *Binding[T] {
-	b.project = project
+// after every step (StateDriver: the model's state decoded into the
+// projection's type, fields the type lacks not compared). project is a
+// func(T) S: give S, the projection's type, as its result,
+//
+//	State(func(b *Bank) bankState { return bankState{Balances: b.Balances()} })
+//
+// and the type is checked against the model's state variables before
+// any trace, with the binding's actions; a func(T) any is compared alike
+// but checked only at the first trace's init, where the model's state is
+// decoded into what it returned. A project of another shape panics here,
+// naming the fix, as Action does, and so does a second State.
+func (b *Binding[T]) State(project any) *Binding[T] {
+	if b.project != nil {
+		panic("connect.Bind: State given twice: give one projection")
+	}
+	fn := reflect.ValueOf(project)
+	var t T
+	impl := reflect.TypeOf(&t).Elem()
+	if !fn.IsValid() || fn.Kind() != reflect.Func || fn.IsNil() || fn.Type().NumIn() != 1 || fn.Type().NumOut() != 1 || !impl.AssignableTo(fn.Type().In(0)) {
+		panic(fmt.Sprintf("connect.Bind: State: %T is no func(%s) S: give a func from the implementation to its projection, like func(b %s) state { ... }", project, impl, impl))
+	}
+	if f, ok := project.(func(T) any); ok {
+		b.project = f
+	} else {
+		b.project = func(impl T) any { return fn.Call([]reflect.Value{reflect.ValueOf(&impl).Elem()})[0].Interface() }
+	}
+	b.stateType = fn.Type().Out(0)
 	return b
 }
 
@@ -210,12 +241,7 @@ func (b *Binding[T]) Check(check func(impl T, s *Step) error) *Binding[T] {
 // nothing.
 func (b *Binding[T]) Driver(tb testing.TB) Driver {
 	tb.Helper()
-	for _, n := range b.order {
-		if a := b.actions[n]; a.handler == nil && len(a.results) > 0 && a.returns == "" && a.observes == nil {
-			tb.Fatalf("connect.Bind: action %s: %s returns %s besides an error, and nothing checks it: compare it with a model def (Returns(%q, def, picks...)) or the model's picks (Observes(%q, picks...)), or bind a func that drops it",
-				n, a.fn.Type(), typesText(a.results), n, n)
-		}
-	}
+	b.refuseUnchecked(tb)
 	d := &boundDriver[T]{b: b, tb: tb}
 	switch {
 	case b.project != nil && len(b.checks) > 0:
@@ -226,6 +252,38 @@ func (b *Binding[T]) Driver(tb testing.TB) Driver {
 		return boundChecker[T]{d}
 	}
 	return d
+}
+
+// refuseUnchecked fails tb when an action's results are checked by
+// nothing: they would read as a pass.
+func (b *Binding[T]) refuseUnchecked(tb testing.TB) {
+	tb.Helper()
+	for _, n := range b.order {
+		if a := b.actions[n]; a.handler == nil && len(a.results) > 0 && a.returns == "" && a.observes == nil {
+			tb.Fatalf("connect.Bind: action %s: %s returns %s besides an error, and nothing checks it: compare it with a model def (Returns(%q, def, picks...)) or the model's picks (Observes(%q, picks...)), or bind a func that drops it",
+				n, a.fn.Type(), typesText(a.results), n, n)
+		}
+	}
+}
+
+// Run is connect.Run(t, c, b.Driver), with the binding checked against
+// the model before any trace is generated: every mismatch at once (each
+// action, each of its picks, each type, State's projection), on the
+// compile Step.Eval and Config.Require use, and no implementation made.
+// connect.Run(t, c, b.Driver) checks the same at its first trace, after
+// quint has generated them all.
+func (b *Binding[T]) Run(t *testing.T, c Config) {
+	t.Helper()
+	b.refuseUnchecked(t)
+	runTraces(t, c, b.Driver, b)
+}
+
+// Test is connect.Test(t, c, test, b.Driver), with the binding checked
+// before the test's traces are generated, as Run checks it.
+func (b *Binding[T]) Test(t *testing.T, c Config, test string) {
+	t.Helper()
+	b.refuseUnchecked(t)
+	testTraces(t, c, test, b.Driver, b)
 }
 
 // boundDriver is one trace's driver: the implementation, made at init.

@@ -61,7 +61,7 @@ var quintNotFound = regexp.MustCompile(`QNT404\] Name '([^']+)' not found`)
 
 // compileModel is c's model (c.Spec, its c.Main, c.Init and c.StepName)
 // compiled by quint and loaded by the Go evaluator, for Config.Require
-// and Step.Eval alike: replayAll compiles it once for both. quint's
+// and Step.Eval alike: replayPrepared compiles it once for both. quint's
 // flattening drops every definition init and step do not use, which in
 // an instance module (module design { import m(N = 3).* }) is every val
 // of m, so the names a run needs are passed as --invariant (any
