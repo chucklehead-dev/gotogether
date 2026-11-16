@@ -21,7 +21,7 @@ import (
 //	b := connect.Bind(func(testing.TB) *Bank { return NewBank(accounts) }).
 //		Action("deposit", (*Bank).Deposit, "account", "amount").
 //		Action("withdraw", (*Bank).Withdraw, "account", "amount").
-//		State(func(b *Bank) any { return bankState{Balances: b.Balances()} })
+//		State(func(b *Bank) bankState { return bankState{Balances: b.Balances()} })
 //	connect.Run(t, cfg, b.Driver)
 //
 // A Binding is built once, before Run, and is not changed after: Driver
@@ -31,7 +31,10 @@ type Binding[T any] struct {
 	actions map[string]*boundAction
 	order   []string // the actions' names, in the order bound
 	project func(T) any
-	checks  []func(T, *Step) error
+	// stateType is project's result type, checked against the model's
+	// state before any trace unless it is an interface (bindcheck.go)
+	stateType reflect.Type
+	checks    []func(T, *Step) error
 }
 
 // boundAction is one action's method and the picks that are its
@@ -190,10 +193,30 @@ func (b *Binding[T]) Skip(names ...string) *Binding[T] {
 }
 
 // State is the implementation's state as the model's is compared with it
-// after every step (StateDriver: the model's state decoded into project's
-// result type, fields the type lacks not compared).
-func (b *Binding[T]) State(project func(impl T) any) *Binding[T] {
-	b.project = project
+// after every step (StateDriver: the model's state decoded into the
+// projection's type, fields the type lacks not compared). project is a
+// func(T) S: give S, the projection's type, as its result,
+//
+//	State(func(b *Bank) bankState { return bankState{Balances: b.Balances()} })
+//
+// and the type is checked against the model's state variables before
+// any trace, with the binding's actions; a func(T) any is compared alike
+// but checked only at the first trace's init, where the model's state is
+// decoded into what it returned. A project of another shape panics here,
+// naming the fix, as Action does.
+func (b *Binding[T]) State(project any) *Binding[T] {
+	fn := reflect.ValueOf(project)
+	var t T
+	impl := reflect.TypeOf(&t).Elem()
+	if !fn.IsValid() || fn.Kind() != reflect.Func || fn.IsNil() || fn.Type().NumIn() != 1 || fn.Type().NumOut() != 1 || !impl.AssignableTo(fn.Type().In(0)) {
+		panic(fmt.Sprintf("connect.Bind: State: %T is no func(%s) S: give a func from the implementation to its projection, like func(b %s) state { ... }", project, impl, impl))
+	}
+	if f, ok := project.(func(T) any); ok {
+		b.project = f
+	} else {
+		b.project = func(impl T) any { return fn.Call([]reflect.Value{reflect.ValueOf(&impl).Elem()})[0].Interface() }
+	}
+	b.stateType = fn.Type().Out(0)
 	return b
 }
 

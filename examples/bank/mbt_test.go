@@ -55,7 +55,7 @@ func bound() *connect.Binding[*Bank] {
 		Action("deposit", (*Bank).Deposit, "account", "amount").
 		Action("withdraw", (*Bank).Withdraw, "account", "amount").
 		Action("transfer", (*Bank).Transfer, "src", "dst", "amount").
-		State(func(b *Bank) any { return modelState{Balances: b.Balances()} }).
+		State(func(b *Bank) modelState { return modelState{Balances: b.Balances()} }).
 		Check(func(b *Bank, s *connect.Step) error {
 			for _, a := range accounts {
 				if model, bank := connect.MustEval[int](s, "balanceOf", a), b.Balance(a); model != bank {

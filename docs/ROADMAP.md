@@ -424,11 +424,15 @@ Items, each its own decision before it starts:
   or refused unchecked, `State`, `Check`, `Handle`, `Skip`);
   examples/bank's model-driven test is bound. Static half, first slice
   done ("check first", maintainer's choice: no generated files): a
-  binding is checked against the model's declared actions, picks and
-  types before any trace runs (`connect.Run`/`Test`, on the compile
-  `Step.Eval` and `Require` share; the IR's type table read by
-  internal/qeval's `TypeOf`, `Params`, `Nondets`), every mismatch
-  listed at once with its fix, the fit rules `itf.Decode`'s. Second
+  binding is checked against the model's declared actions, each
+  action's own picks (`ActionPicks`: its call's nondets in `step`, its
+  guards', its body's; the whole model's where the shape hides them),
+  types and `State`'s projection (`func(T) S`, `DecodeProjection`'s
+  rules) before any trace is generated (`connect.Run`/`Test` with
+  `b.Driver`, on the compile `Step.Eval` and `Require` share; the IR's
+  type table read by internal/qeval's `TypeOf`, `Params`, `Nondets`),
+  every mismatch listed at once with its fix, the fit rules
+  `itf.Decode`'s (golem's planted drift, #144). Second
   slice done: Go types generated from the model's (`gotogether types
   -spec m.qnt -main M -o f.go`, or `-binding`; internal/typegen, on
   `quint typecheck`'s IR, aliases kept by name and an application's

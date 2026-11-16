@@ -253,7 +253,7 @@ type Binding[T any] struct
     method (*Binding[T]) Observes(name string, picks ...string) *Binding[T]
     method (*Binding[T]) Returns(name, def string, args ...string) *Binding[T]
     method (*Binding[T]) Skip(names ...string) *Binding[T]
-    method (*Binding[T]) State(project func(impl T) any) *Binding[T]
+    method (*Binding[T]) State(project any) *Binding[T]
 type Config struct
     field Spec string
     field Main string

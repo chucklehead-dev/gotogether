@@ -146,12 +146,14 @@ func TestConnectProcessHelper(t *testing.T) {
 	case "bind-returns-wrong":
 		Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 2, MaxSteps: 6, Seed: "0x1"}, bankBinding(false, (*bank).depositBalanceBefore).Returns("deposit", "balanceOf", "account").Driver)
 	case "bind-mismatched":
-		// two mismatches with bank.qnt, both in actions a run of one
-		// step may never sample: the check names them before any trace
+		// three mismatches with bank.qnt, two in actions a run of one
+		// step may never sample and one in the projection: the check
+		// names them before any trace is generated
 		b := Bind(func(tb testing.TB) *bank { tb.Log("implementation made"); return &bank{balances: map[string]int{}} }).
 			Action("deposit", func(*bank, string, string) {}, "account", "amount").
 			Action("withdraw", (*bank).withdraw, "account", "amount").
-			Action("transfre", (*bank).transfer, "src", "dst", "amount")
+			Action("transfre", (*bank).transfer, "src", "dst", "amount").
+			State(func(b *bank) fitBankFees { return fitBankFees{Balances: b.balances} })
 		Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 1, MaxSteps: 1, Seed: "0x1"}, b.Driver)
 	case "nondet":
 		Test(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 1}, "aliceSavesTest", func(testing.TB) Driver { return &bankDriver{} })

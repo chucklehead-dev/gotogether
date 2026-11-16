@@ -46,7 +46,8 @@ func (d *boundDriver[T]) defs() []string {
 }
 
 func (d *boundDriver[T]) checkModel(m *qeval.Model, c Config) (mismatches, unbound []string) {
-	return checkBinding(d.b.order, d.b.actions, m, c)
+	mismatches, unbound = checkBinding(d.b.order, d.b.actions, m, c)
+	return append(mismatches, checkState(d.b.stateType, m, c)...), unbound
 }
 
 func checkBinding(order []string, actions map[string]*boundAction, m *qeval.Model, c Config) (out, unbound []string) {
@@ -69,8 +70,16 @@ func checkBinding(order []string, actions map[string]*boundAction, m *qeval.Mode
 	// from the model's actions and nondets: only Returns is checked
 	picksKnown := len(c.NondetPath) == 0
 	var nondets map[string][]*qeval.Type
+	var own map[string]map[string][]*qeval.Type
+	var unsure map[string]bool
 	if picksKnown {
 		nondets = m.Nondets(step)
+		// each action's own picks (qeval's ActionPicks): quint run --mbt
+		// records every nondet at every step, so a pick of another
+		// action's decodes that action's choice. Where the step's shape
+		// hides which nondets an action takes, its picks are the whole
+		// model's (unsure), as before: accepted, not refused
+		own, unsure = m.ActionPicks(step)
 		picksKnown = nondets != nil
 	}
 	for _, name := range order {
@@ -87,10 +96,15 @@ func checkBinding(order []string, actions map[string]*boundAction, m *qeval.Mode
 		if a.handler != nil {
 			continue
 		}
-		// the Quint types a pick of the step takes: its nondet's, else
-		// the model's parameter of that name (nil when neither is known)
+		mine, ok := own[name]
+		if !ok {
+			mine = nondets
+		}
+		// the Quint types a pick of the step takes: the action's own
+		// nondet's, else its parameter of that name (nil when neither
+		// is known)
 		pickTypes := func(pick string) ([]*qeval.Type, bool) {
-			if ts, ok := nondets[pick]; ok {
+			if ts, ok := mine[pick]; ok {
 				return ts, true
 			}
 			for _, p := range params {
@@ -102,7 +116,7 @@ func checkBinding(order []string, actions map[string]*boundAction, m *qeval.Mode
 		}
 		pickNames := func() string {
 			var ns []string
-			for n := range nondets {
+			for n := range mine {
 				ns = append(ns, n)
 			}
 			for _, p := range params {
@@ -113,9 +127,33 @@ func checkBinding(order []string, actions map[string]*boundAction, m *qeval.Mode
 			slices.Sort(ns)
 			return strings.Join(ns, ", ")
 		}
+		// borrowed says, of a pick the model chooses but not for this
+		// action, whose it is: the step's nondet another action takes
+		borrowed := func(pick string) (string, bool) {
+			if _, ok := nondets[pick]; !ok {
+				return "", false
+			}
+			var owners []string
+			for _, n := range modelActions {
+				if n != name && !unsure[n] {
+					if _, ok := own[n][pick]; ok {
+						owners = append(owners, n)
+					}
+				}
+			}
+			whose := fmt.Sprintf("%s is a pick of %s, not %s", pick, andList(owners), name)
+			if len(owners) == 0 {
+				whose = fmt.Sprintf("%s is chosen by %s, but no action's call uses it", pick, step)
+			}
+			return fmt.Sprintf("%s (%s's picks: %s)", whose, name, pickNames()), true
+		}
 		if picksKnown {
 			for i, p := range a.params {
 				ts, ok := pickTypes(p)
+				if why, other := borrowed(p); !ok && other {
+					bad("connect.Bind: action %s, parameter %d (pick %s): %s: name a nondet that feeds %s", name, i+1, p, why, name)
+					continue
+				}
 				if !ok {
 					bad("connect.Bind: action %s, parameter %d (pick %s): the model has no nondet or parameter %s (its picks: %s): name the nondet that feeds the parameter", name, i+1, p, p, pickNames())
 					continue
@@ -132,6 +170,10 @@ func checkBinding(order []string, actions map[string]*boundAction, m *qeval.Mode
 			}
 			for i, p := range a.observes {
 				ts, ok := pickTypes(p)
+				if why, other := borrowed(p); !ok && other {
+					bad("connect.Bind: action %s: Observes' pick %s: %s: name the nondet the model picks %s's choice with", name, p, why, name)
+					continue
+				}
 				if !ok {
 					bad("connect.Bind: action %s: Observes' pick %s: the model has no nondet or parameter %s (its picks: %s): name the nondet the model picks the choice with", name, p, p, pickNames())
 					continue
@@ -141,7 +183,12 @@ func checkBinding(order []string, actions map[string]*boundAction, m *qeval.Mode
 				}
 			}
 			for _, p := range a.returnsArgs {
-				if _, ok := pickTypes(p); !ok {
+				_, ok := pickTypes(p)
+				if why, other := borrowed(p); !ok && other {
+					bad("connect.Bind: action %s: Returns' argument %s: %s: pass picks of %s", name, p, why, name)
+					continue
+				}
+				if !ok {
 					bad("connect.Bind: action %s: Returns' argument %s: the model has no nondet or parameter %s (its picks: %s): pass the picks the def takes", name, p, p, pickNames())
 				}
 			}
@@ -156,6 +203,67 @@ func checkBinding(order []string, actions map[string]*boundAction, m *qeval.Mode
 		}
 	}
 	return out, unbound
+}
+
+// andList is names as prose: a, a and b, a, b and c.
+func andList(names []string) string {
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+}
+
+// checkState checks State's projection type against the model's state,
+// as Replay decodes the state into it (itf.DecodeProjection, at
+// Config.StatePath): every field the projection has must be a state
+// variable's (or a record field's, below the top), of a type Decode
+// fills from it, and exported. A projection whose type is an interface
+// (a func(T) any) is decoded into the type it returns at the first
+// trace's init, and not checked here.
+func checkState(t reflect.Type, m *qeval.Model, c Config) []string {
+	if t == nil || t.Kind() == reflect.Interface {
+		return nil
+	}
+	// the state as a trace has it: a record of the variables, and of the
+	// mbt:: ones a --mbt trace adds (any type)
+	q := &qeval.Type{Kind: "rec"}
+	for _, v := range m.Vars {
+		d, _ := m.Decl(v)
+		vt, ok := m.TypeOf(d)
+		if !ok {
+			return nil // an IR without types: the first init decodes it
+		}
+		q.Fields = append(q.Fields, qeval.Field{Name: m.Display(v), Type: vt})
+	}
+	q.Fields = append(q.Fields, qeval.Field{Name: "mbt::actionTaken"}, qeval.Field{Name: "mbt::nondetPicks"})
+	for i, p := range c.StatePath {
+		var next *qeval.Type
+		if q != nil && q.Kind == "rec" {
+			for _, f := range q.Fields {
+				if f.Name == p || i == 0 && strings.Contains(p, "::") && f.Name == p[strings.LastIndex(p, "::")+2:] {
+					next = f.Type
+				}
+			}
+		}
+		if next == nil {
+			return nil // a path the model's types do not show: Replay names it
+		}
+		q = next
+	}
+	f := fitter{seen: map[fitKey]bool{}, strict: true}
+	path, why, ok := f.fits(q, t, "")
+	if ok {
+		return nil
+	}
+	where := " (" + why + ")"
+	if path != "" {
+		where = fmt.Sprintf(" (at %s, %s)", path, why)
+	}
+	state := "state"
+	if len(c.StatePath) > 0 {
+		state = fmt.Sprintf("state at %s", strings.Join(c.StatePath, "."))
+	}
+	return []string{fmt.Sprintf("connect.Bind: State: the projection, Go type %s, does not fit the model's %s%s: project the model's state variables, each into a type itf.Decode fills from it", t, state, where)}
 }
 
 // checkReturns checks that Returns' def is one of the model's, taking
@@ -236,7 +344,12 @@ type fitKey struct {
 // fitter mirrors itf.Decode's rules (itf/decode.go): fits reports
 // whether every value of Quint type q decodes into Go type t, and if
 // not, where and why. seen breaks the cycles of a recursive Go type.
-type fitter struct{ seen map[fitKey]bool }
+// strict is itf.DecodeProjection's rules, a state projection's: a
+// struct's fields must be exported, and a record's fields.
+type fitter struct {
+	seen   map[fitKey]bool
+	strict bool
+}
 
 func (f fitter) fits(q *qeval.Type, t reflect.Type, path string) (string, string, bool) {
 	if q == nil {
@@ -375,6 +488,13 @@ func (f fitter) fits(q *qeval.Type, t reflect.Type, path string) (string, string
 // a record the fields named like its own, a variant its tag and value
 // fields or the field named like the variant.
 func (f fitter) fitsStruct(q *qeval.Type, t reflect.Type, path string, mismatch func() (string, string, bool)) (string, string, bool) {
+	if f.strict { // never decoded, never compared
+		for i := range t.NumField() {
+			if sf := t.Field(i); !sf.IsExported() {
+				return path, fmt.Sprintf("field %s of %s is unexported, so it is never compared: export it, or leave it out of the type", sf.Name, t), false
+			}
+		}
+	}
 	fields := goFields(t)
 	tupleTagged := slices.ContainsFunc(fields, func(g goField) bool { return g.tuple })
 	var live []goField
@@ -410,15 +530,29 @@ func (f fitter) fitsStruct(q *qeval.Type, t reflect.Type, path string, mismatch 
 			if g.skip || g.tag || g.value {
 				continue
 			}
+			found := false
 			for _, fl := range q.Fields {
 				if fl.Name == g.name || normName(fl.Name) == normName(g.name) {
 					if p, w, ok := f.fits(fl.Type, t.Field(g.index).Type, path+"."+fl.Name); !ok {
 						return p, w, ok
 					}
+					found = true
 					break
 				}
 			}
-			// a field the record lacks keeps its zero value, as Decode leaves it
+			// a field the record lacks keeps its zero value, as Decode
+			// leaves it; DecodeProjection refuses it, since it would
+			// compare nothing
+			if !found && f.strict && !q.Open {
+				var names []string
+				for _, fl := range q.Fields {
+					if !strings.HasPrefix(fl.Name, "mbt::") {
+						names = append(names, fl.Name)
+					}
+				}
+				slices.Sort(names)
+				return path, fmt.Sprintf("field %s of %s is not the model's (it has %s): name it after one, or tag it `itf:\"-\"`", g.name, t, strings.Join(names, ", ")), false
+			}
 		}
 	case "sum":
 		var tagF, valF *goField
