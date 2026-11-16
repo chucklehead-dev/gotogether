@@ -20,6 +20,16 @@ import (
 // closes not even that: Go never reuses goroutine ids, so a leftover entry
 // is a leak that also attributes a stray goroutine's steps to a closed run.
 func TestNativeTaskGoroutineIsLiveAndOwnedWhileItRuns(t *testing.T) {
+	// live counts every simulation's goroutines in the process: an
+	// earlier test's native task may still be unwinding (its Close
+	// returned, its goroutine not yet gone), and its exit mid-test would
+	// shift the counts this test reads. The test is not parallel, so
+	// nothing else is live once those exit: wait for that before the
+	// baseline (a shuffled order once read 3, 1, 0 for 3, 2, 1)
+	settled := time.Now().Add(5 * time.Second)
+	for live.Load() != 0 && time.Now().Before(settled) {
+		time.Sleep(time.Millisecond) //qenv:ok waiting, outside any simulation, for another test's goroutines to exit
+	}
 	base := live.Load()
 	s := NewNative(Nominal{}, nil)
 	var during int64
