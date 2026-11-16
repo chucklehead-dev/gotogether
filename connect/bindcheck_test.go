@@ -170,7 +170,7 @@ func TestBindCheckedAgainstModel(t *testing.T) {
 		if !ok || ft.fatal != "" {
 			t.Fatalf("a bound driver is checked against the model: %T %s", d, ft.fatal)
 		}
-		bad, _ := d.checkModel(r.m, r.c)
+		bad, _, _ := d.checkModel(r.m, r.c)
 		return bad
 	}
 	newBank := func(testing.TB) *bank { return &bank{balances: map[string]int{}} }
@@ -334,10 +334,14 @@ func (a *attempts) attemptWith(d int, _ string) int { a.tries += d; return a.tri
 // outcome in attempt's steps too, where it decodes another action's
 // choice, so a binding that names it is refused before any trace, naming
 // whose it is. A nondet two actions' calls share is each one's, and one
-// bound in the action's own body is its.
+// bound in the action's own body is its. The Main is an instance module
+// (bindpicksDesign), as a connect run's usually is: quint's alias of its
+// step once gave every action all of step's nondets, silently (golem's
+// report, #144). An action the check cannot attribute (probe, under a
+// match) is checked against the whole model's picks, and says so.
 func TestBindChecksPicksPerAction(t *testing.T) {
 	needQuint(t)
-	c, err := Config{Spec: "testdata/bindpicks.qnt", Dir: t.TempDir()}.resolve(t.Context())
+	c, err := Config{Spec: "testdata/bindpicks.qnt", Main: "bindpicksDesign", Dir: t.TempDir()}.resolve(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,7 +352,7 @@ func TestBindChecksPicksPerAction(t *testing.T) {
 	newAttempts := func(testing.TB) *attempts { return &attempts{} }
 	check := func(b *Binding[*attempts]) []string {
 		t.Helper()
-		bad, _ := b.Driver(t).(modelChecked).checkModel(m, c)
+		bad, _, _ := b.Driver(t).(modelChecked).checkModel(m, c)
 		return bad
 	}
 	// d is attempt's and retry's both; backoff is bound in retry's body
@@ -358,6 +362,15 @@ func TestBindChecksPicksPerAction(t *testing.T) {
 		Action("retry", (*attempts).retry, "d", "backoff")
 	if bad := check(faithful); len(bad) > 0 {
 		t.Errorf("the faithful binding: %v", bad)
+	}
+	// probe's picks are not attributed: outcome passes, with the note
+	// a run logs
+	bad, _, notes := Bind(newAttempts).Action("probe", (*attempts).failed, "outcome").Driver(t).(modelChecked).checkModel(m, c)
+	if want := []string{"connect.Bind: picks of probe not attributed (applied under matchVariant, which the attribution does not follow): checked against the whole model's"}; len(bad) > 0 || !slices.Equal(notes, want) {
+		t.Errorf("an action under a match: mismatches %q, notes %q, want none and %q", bad, notes, want)
+	}
+	if _, _, notes := faithful.Driver(t).(modelChecked).checkModel(m, c); len(notes) > 0 {
+		t.Errorf("the attributed actions noted as not: %q", notes)
 	}
 	for _, c := range []struct {
 		name string

@@ -34,7 +34,7 @@ type modelChecked interface {
 	defs() []string
 	// checkModel is every mismatch between the binding and m, one line
 	// each; unbound, the model's actions no binding takes
-	checkModel(m *qeval.Model, c Config) (mismatches, unbound []string)
+	checkModel(m *qeval.Model, c Config) (mismatches, unbound, notes []string)
 }
 
 func (b *Binding[T]) defs() []string {
@@ -47,18 +47,21 @@ func (b *Binding[T]) defs() []string {
 	return out
 }
 
-func (b *Binding[T]) checkModel(m *qeval.Model, c Config) (mismatches, unbound []string) {
-	mismatches, unbound = checkBinding(b.order, b.actions, m, c)
-	return append(mismatches, checkState(b.stateType, m, c)...), unbound
+func (b *Binding[T]) checkModel(m *qeval.Model, c Config) (mismatches, unbound, notes []string) {
+	mismatches, unbound, notes = checkBinding(b.order, b.actions, m, c)
+	return append(mismatches, checkState(b.stateType, m, c)...), unbound, notes
 }
 
 func (d *boundDriver[T]) defs() []string { return d.b.defs() }
 
-func (d *boundDriver[T]) checkModel(m *qeval.Model, c Config) (mismatches, unbound []string) {
+func (d *boundDriver[T]) checkModel(m *qeval.Model, c Config) (mismatches, unbound, notes []string) {
 	return d.b.checkModel(m, c)
 }
 
-func checkBinding(order []string, actions map[string]*boundAction, m *qeval.Model, c Config) (out, unbound []string) {
+// checkBinding is checkModel's actions; notes, one per bound action
+// whose picks are checked against the whole model's, says why, so that
+// a pass of a pick it borrows is not read as an attribution's.
+func checkBinding(order []string, actions map[string]*boundAction, m *qeval.Model, c Config) (out, unbound, notes []string) {
 	bad := func(format string, args ...any) { out = append(out, fmt.Sprintf(format, args...)) }
 	init, step := c.Init, c.StepName
 	if init == "" {
@@ -79,14 +82,15 @@ func checkBinding(order []string, actions map[string]*boundAction, m *qeval.Mode
 	picksKnown := len(c.NondetPath) == 0
 	var nondets map[string][]*qeval.Type
 	var own map[string]map[string][]*qeval.Type
-	var unsure map[string]bool
+	var unsure map[string]string
 	if picksKnown {
 		nondets = m.Nondets(step)
 		// each action's own picks (qeval's ActionPicks): quint run --mbt
 		// records every nondet at every step, so a pick of another
 		// action's decodes that action's choice. Where the step's shape
 		// hides which nondets an action takes, its picks are the whole
-		// model's (unsure), as before: accepted, not refused
+		// model's (unsure, with why: logged), as before: accepted, not
+		// refused
 		own, unsure = m.ActionPicks(step)
 		picksKnown = nondets != nil
 	}
@@ -143,7 +147,7 @@ func checkBinding(order []string, actions map[string]*boundAction, m *qeval.Mode
 			}
 			var owners []string
 			for _, n := range modelActions {
-				if n != name && !unsure[n] {
+				if _, hidden := unsure[n]; n != name && !hidden {
 					if _, ok := own[n][pick]; ok {
 						owners = append(owners, n)
 					}
@@ -154,6 +158,9 @@ func checkBinding(order []string, actions map[string]*boundAction, m *qeval.Mode
 				whose = fmt.Sprintf("%s is chosen by %s, but no action's call uses it", pick, step)
 			}
 			return fmt.Sprintf("%s (%s's picks: %s)", whose, name, pickNames()), true
+		}
+		if why, hidden := unsure[name]; picksKnown && hidden && len(a.params)+len(a.observes)+len(a.returnsArgs) > 0 {
+			notes = append(notes, fmt.Sprintf("connect.Bind: picks of %s not attributed (%s): checked against the whole model's", name, why))
 		}
 		if picksKnown {
 			for i, p := range a.params {
@@ -210,7 +217,7 @@ func checkBinding(order []string, actions map[string]*boundAction, m *qeval.Mode
 			unbound = append(unbound, n)
 		}
 	}
-	return out, unbound
+	return out, unbound, notes
 }
 
 // andList is names as prose: a, a and b, a, b and c.

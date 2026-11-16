@@ -83,19 +83,67 @@ func TestTypes(t *testing.T) {
 		"attempt": "d k",
 		"failed":  "gate k outcome",
 	} {
-		if got := strings.Join(slices.Sorted(maps.Keys(own[action])), " "); got != want || unsure[action] {
-			t.Errorf("%s's picks: %s (unsure %v), want %s", action, got, unsure[action], want)
+		if got := strings.Join(slices.Sorted(maps.Keys(own[action])), " "); got != want || unsure[action] != "" {
+			t.Errorf("%s's picks: %s (unsure: %q), want %s", action, got, unsure[action], want)
 		}
 	}
 	if got := own["attempt"]["d"]; len(got) != 1 || got[0].String() != "int" {
 		t.Errorf("attempt's d: %v", got)
 	}
-	for _, action := range []string{"opened", "closed", "keepWith", "init", "step"} {
-		if !unsure[action] || len(own[action]) != len(nd) {
-			t.Errorf("%s: unsure %v with %d picks, want the whole model's %d", action, unsure[action], len(own[action]), len(nd))
+	for action, why := range map[string]string{
+		"opened":   "applied under matchVariant, which the attribution does not follow",
+		"closed":   "applied under matchVariant, which the attribution does not follow",
+		"keepWith": "applied under matchVariant, which the attribution does not follow",
+		"init":     "step does not apply it",
+	} {
+		if unsure[action] != why || len(own[action]) != len(nd) {
+			t.Errorf("%s: unsure %q with %d picks, want %q and the whole model's %d", action, unsure[action], len(own[action]), why, len(nd))
 		}
 	}
 	if own, _ := m.ActionPicks("nothing"); own != nil {
 		t.Errorf("a step the model lacks: %v", own)
+	}
+}
+
+// An instance module's Main (module gateway { import attempts(CALLS =
+// ...).* }, the shape the skills recommend for connect) attributes as the
+// module itself does: quint aliases step (q::step = its step), which the
+// walk applies as an action, and every call once took all of its
+// nondets, silently (golem, #144).
+func TestActionPicksUnderAnInstance(t *testing.T) {
+	m := compile(t, "picks_instance.qnt", "gateway", "init", "step")
+	own, unsure := m.ActionPicks("step")
+	for action, want := range map[string]string{
+		"start":   "c",
+		"attempt": "c d",
+		"failed":  "c outcome",
+	} {
+		if got := strings.Join(slices.Sorted(maps.Keys(own[action])), " "); got != want || unsure[action] != "" {
+			t.Errorf("%s's picks: %s (unsure: %q), want %s", action, got, unsure[action], want)
+		}
+	}
+}
+
+// An attribution that gives every call all of the nondets is reported
+// (suspicious), not passed off: step's own entry (an instance's alias
+// applies it) aside, and not when the calls' sets differ or one nondet
+// is all there is.
+func TestActionPicksSuspicious(t *testing.T) {
+	all := nondetSet{1: true, 2: true, 3: true}
+	for _, c := range []struct {
+		name   string
+		own    map[string]nondetSet
+		unsure map[string]string
+		want   bool
+	}{
+		{"every call all", map[string]nondetSet{"a": all, "b": all, "step": all}, nil, true},
+		{"the calls differ", map[string]nondetSet{"a": {1: true}, "b": all, "step": all}, nil, false},
+		{"one call", map[string]nondetSet{"a": all, "step": all}, nil, false},
+		{"one nondet", map[string]nondetSet{"a": {1: true}, "b": {1: true}}, nil, false},
+		{"an unsure call aside", map[string]nondetSet{"a": {1: true}, "b": all, "c": all}, map[string]string{"a": "x"}, true},
+	} {
+		if got := suspicious(c.own, c.unsure, "step"); got != c.want {
+			t.Errorf("%s: suspicious %v, want %v", c.name, got, c.want)
+		}
 	}
 }

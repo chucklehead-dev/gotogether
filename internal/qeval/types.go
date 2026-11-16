@@ -329,29 +329,46 @@ func (m *Model) Actions() []string {
 // it applies. A nondet several calls use is each one's.
 //
 // unsure names the actions whose picks the step's shape does not let
-// the attribution follow: an action applied under an operator other
-// than any, all, and, or, if and an action's application (a match, a
-// then), one a let binds, a recursive one, and one step does not reach.
-// Their picks are Nondets(step), the whole model's: a refusal of a pick
-// the action does make is worse than a borrowed pick let through. Every
-// action of the model is in own. Nil when step is no definition of m.
-func (m *Model) ActionPicks(step string) (own map[string]map[string][]*Type, unsure map[string]bool) {
+// the attribution follow, each with why: an action applied under an
+// operator other than any, all, and, or, if and an action's application
+// (a match, a then), one a let binds, a recursive one, and one step does
+// not reach. Their picks are Nondets(step), the whole model's: a refusal
+// of a pick the action does make is worse than a borrowed pick let
+// through. So are every action's when the walk attributed each of them
+// the whole model's although step chooses several nondets for several
+// calls (suspicious): that is what a walk gone wrong looks like (an
+// instance's step, followed as an action, once gave every call all of
+// step's nondets), and it is said, not passed off as an attribution.
+// Every action of the model is in own. Nil when step is no definition
+// of m.
+func (m *Model) ActionPicks(step string) (own map[string]map[string][]*Type, unsure map[string]string) {
 	d, ok := m.Decl(step)
 	if !ok || d.Expr == nil {
 		return nil, nil
 	}
-	a := &attribution{m: m, env: map[int64]nondetSet{}, nondet: map[int64]*Decl{}, own: map[string]nondetSet{}, unsure: map[string]bool{}, stack: map[int64]bool{d.ID: true}}
+	a := &attribution{m: m, env: map[int64]nondetSet{}, nondet: map[int64]*Decl{}, own: map[string]nondetSet{}, unsure: map[string]string{}, stack: map[int64]bool{d.ID: true}}
 	body := d.Expr
 	if body.Kind == "lambda" {
 		body = body.Expr
 	}
 	a.attribute(body, nondetSet{})
 	whole := m.Nondets(step)
-	own, unsure = map[string]map[string][]*Type{}, map[string]bool{}
+	if suspicious(a.own, a.unsure, m.Display(d.Name)) {
+		for n := range a.own {
+			if _, ok := a.unsure[n]; !ok && n != m.Display(d.Name) {
+				a.unsure[n] = "every call came out with all of step's nondets, as an attribution that lost their flow does"
+			}
+		}
+	}
+	own, unsure = map[string]map[string][]*Type{}, map[string]string{}
 	for _, n := range m.Actions() {
 		set, ok := a.own[n]
-		if !ok || a.unsure[n] {
-			own[n], unsure[n] = whole, true
+		why, hidden := a.unsure[n]
+		if !ok && !hidden {
+			why, hidden = step+" does not apply it", true
+		}
+		if hidden {
+			own[n], unsure[n] = whole, why
 			continue
 		}
 		picks := map[string][]*Type{}
@@ -366,6 +383,28 @@ func (m *Model) ActionPicks(step string) (own map[string]map[string][]*Type, uns
 		own[n] = picks
 	}
 	return own, unsure
+}
+
+// suspicious reports an attribution that took every action step applies
+// (at least two, step itself aside: an instance's alias applies it) to
+// choose every nondet any of them takes (at least two): a model can do
+// so (a guard over every call that reads every nondet), but a walk that
+// lost the calls' flow does so always, and saying so costs only a log
+// line, the picks then being accepted as the whole model's.
+func suspicious(own map[string]nondetSet, unsure map[string]string, step string) bool {
+	all, calls := nondetSet{}, 0
+	for n, s := range own {
+		if _, ok := unsure[n]; !ok && n != step {
+			maps.Copy(all, s)
+			calls++
+		}
+	}
+	for n, s := range own {
+		if _, ok := unsure[n]; !ok && n != step && len(s) != len(all) {
+			return false
+		}
+	}
+	return calls >= 2 && len(all) >= 2
 }
 
 // nondetSet is a set of nondets, by their let's id.
@@ -386,8 +425,8 @@ type attribution struct {
 	env    map[int64]nondetSet
 	nondet map[int64]*Decl // the nondets bound, by id
 	own    map[string]nondetSet
-	unsure map[string]bool
-	stack  map[int64]bool // the actions being followed, against recursion
+	unsure map[string]string // why
+	stack  map[int64]bool    // the actions being followed, against recursion
 }
 
 // action is the model's action e names or applies, if it does.
@@ -466,8 +505,9 @@ func (a *attribution) callsAction(e *Expr) bool {
 	return found
 }
 
-// unsureIn marks every action e applies, and those they apply, unsure.
-func (a *attribution) unsureIn(e *Expr) {
+// unsureIn marks every action e applies, and those they apply, unsure,
+// for why.
+func (a *attribution) unsureIn(e *Expr, why string) {
 	seen := map[int64]bool{}
 	var walk func(e *Expr)
 	walk = func(e *Expr) {
@@ -476,7 +516,9 @@ func (a *attribution) unsureIn(e *Expr) {
 		}
 		if d, ok := a.action(e); ok && !seen[d.ID] {
 			seen[d.ID] = true
-			a.unsure[a.m.Display(d.Name)] = true
+			if n := a.m.Display(d.Name); a.unsure[n] == "" {
+				a.unsure[n] = why
+			}
 			walk(d.Expr)
 		}
 		for _, x := range e.Args {
@@ -499,7 +541,7 @@ func (a *attribution) attribute(e *Expr, s nondetSet) {
 	case e.Kind == "let" && e.Opdef != nil:
 		a.bind(e.Opdef)
 		if e.Opdef.Qualifier == "action" || a.callsAction(e.Opdef.Expr) {
-			a.unsureIn(e.Opdef.Expr) // an action a let binds: where it is applied is not followed
+			a.unsureIn(e.Opdef.Expr, "a let of "+a.m.Display(e.Opdef.Name)+" binds it, and where that is applied is not followed")
 		}
 		a.attribute(e.Expr, s)
 		return
@@ -512,7 +554,7 @@ func (a *attribution) attribute(e *Expr, s nondetSet) {
 		return
 	}
 	if e.Kind != "app" {
-		a.unsureIn(e) // a lambda's body, or a let-bound action applied
+		a.unsureIn(e, "applied in a lambda, or as a let-bound action, which the attribution does not follow")
 		return
 	}
 	switch e.Opcode {
@@ -535,19 +577,25 @@ func (a *attribution) attribute(e *Expr, s nondetSet) {
 			}
 		}
 	default:
-		a.unsureIn(e)
+		a.unsureIn(e, "applied under "+e.Opcode+", which the attribution does not follow")
 	}
 }
 
 // call attributes an application of action d to args, under s: what
 // flows into its arguments, and the nondets bound in its body and in
 // what it applies, actions included (a step of d may record any of
-// them). The actions d applies take what flows into d, with the
-// nondets of d's own guards and lets.
+// them). The actions d applies take what flows into d (s and the
+// arguments), and through d's body what flows into their own calls
+// there (its lets and guards), never every nondet d binds: d may be
+// step itself (an instance module's step is an alias,
+// q::step = m::step, applied as an action), whose nondets are each
+// call's own.
 func (a *attribution) call(d *Decl, args []*Expr, s nondetSet) {
 	name := a.m.Display(d.Name)
 	if a.stack[d.ID] {
-		a.unsure[name] = true // recursion: not followed
+		if a.unsure[name] == "" {
+			a.unsure[name] = "it applies itself, which the attribution does not follow"
+		}
 		return
 	}
 	a.stack[d.ID] = true
@@ -558,6 +606,7 @@ func (a *attribution) call(d *Decl, args []*Expr, s nondetSet) {
 		argRefs[i] = a.refs(x)
 		all = all.union(argRefs[i])
 	}
+	flow := all // what flows into d, for the actions it applies
 	body := d.Expr
 	if body != nil && body.Kind == "lambda" {
 		for i, p := range body.Params {
@@ -596,6 +645,6 @@ func (a *attribution) call(d *Decl, args []*Expr, s nondetSet) {
 	bound(body)
 	a.own[name] = a.own[name].union(all)
 	if a.callsAction(body) {
-		a.attribute(body, a.own[name])
+		a.attribute(body, flow)
 	}
 }

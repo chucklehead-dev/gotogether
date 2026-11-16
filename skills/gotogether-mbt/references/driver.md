@@ -334,8 +334,14 @@ From golem's use (#144):
   `quint run --mbt` records every nondet at every step, so another
   action's would decode that action's choice: it is refused, naming
   whose it is ("outcome is a pick of failed, not attempt (attempt's
-  picks: d)"). Where `step`'s shape hides the calls (a `match`, a
-  let-bound action) the action's picks are the whole model's. Every
+  picks: d)"), under an instance module's Main as under the model's
+  own. Where `step`'s shape hides the calls (a `match`, a let-bound
+  action, an action `step` never applies) the action's picks are the
+  whole model's, and the run logs it once: "connect.Bind: picks of
+  attempt not attributed (applied under matchVariant, ...): checked
+  against the whole model's" (a pass there is not the attribution's).
+  So does every action when each came out with all of step's nondets
+  (the attribution's own failure, reported rather than trusted). Every
   mismatch fails the test at once, one line each, before any trace: a
   typo in an action no trace sampled is no longer a silent pass. A type
   variable, a Go interface and a type that decodes itself
