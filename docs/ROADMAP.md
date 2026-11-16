@@ -38,7 +38,7 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Proposed queue | L1–L8: golem's first use ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6833092588)) | L1 (#191), L3 (#195), L5 (#194) and L6's docs landed after J7c; the rest as projects ask. |
 | Proposed queue | M1–M6: golem's graph search and Valkey ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6835911012)) | M1 (a bounded result: `-memory`, `-process-memory`, `peakResident`) and M2 done; next M3 (symmetry). |
 | Proposed queue | N1–N7: golem's driver asks ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6843138891)) | N1 (`Config.Require`, its witnesses), N3 (`Step.Eval`), N5 (actionmap `-roundtrips`) and N7 (`connect.Differential`) done. Next N2 (`connect.Compose`). Open in N1: a witness continued past its target (documented for now: require the state after the step under test). |
-| Proposed queue | CW1–CW10: a contract from design to operation ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6885259328), [#220](https://github.com/chucklehead-dev/gotogether/issues/220#issuecomment-6884857732)) | CW1 (literate models; Goo adopted it), CW2 (the design matrix with per-variant search, `dead`, `-variant` and memory released per variant; golem adopted it for four models) and CW4 done. Next CW5: the driver's mapping as a runtime binding in core (`connect.Bind`, decided 2026-11-14), golem's `expDriver` its first case. Then CW3. Left in CW1: `lint -model doc.md`, stable IDs; in CW2: possibles per variant, iterative deepening. |
+| Proposed queue | CW1–CW11: a contract from design to operation ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6885259328), [#220](https://github.com/chucklehead-dev/gotogether/issues/220#issuecomment-6884857732)) | CW1 (literate models; Goo adopted it), CW2 (the design matrix with per-variant search, `dead`, `-variant` and memory released per variant; golem adopted it for four models) and CW4 done. CW5's runtime half done (`connect.Bind` with `Returns` and `Observes`); next its static half in qanalysis, golem's `expDriver` the first outside case, a world that is not one `T` an open question. Then CW3; CW11 (asynchronous drivers) its own design. Left in CW1: `lint -model doc.md`, stable IDs; in CW2: possibles per variant, iterative deepening. |
 | Proposed queue | O1–O2: external drivers ([#220](https://github.com/chucklehead-dev/gotogether/issues/220)) | O1 (a settle record in `gotogether.requests/1`) retires Goo's drain bridge; O2 the compact external-driver example. |
 | Proposed queue | Q0–Q11: a Go Quint | A design item, each its own decision. Q0 first (no quint for consumers, small); Q2's front end only once Q3's corpus and ill-typed generator exist. Upstream first. |
 | Dropped | J12 and J23 | Go 1.26 compatibility and pin batching are withdrawn. Go 1.27.3 and immediate required sibling pin alignment remain deliberate policies. |
@@ -417,11 +417,20 @@ Items, each its own decision before it starts:
     API it targets, as woven code carries `woven.ABI1`.
   Runtime half done: `connect.Bind` (actions to methods, picks to
   parameters in order, a leading context the trace's, results compared
-  with a model def by `Returns` or refused unchecked, `State`, `Check`,
-  `Handle`, `Skip`); examples/bank's model-driven test is bound. Left:
-  the static half in qanalysis (Quint types and ITF codecs from Go
-  structs, the walkthrough's tables, the alignment lint), and golem's
-  `expDriver` as the first outside case.
+  with a model def by `Returns` or with the model's own picks by
+  `Observes` (a choice the implementation makes, golem's attempt driver),
+  or refused unchecked, `State`, `Check`, `Handle`, `Skip`);
+  examples/bank's model-driven test is bound. Next: the static half in
+  qanalysis (Quint types and ITF codecs from Go structs, the
+  walkthrough's tables, the alignment lint), and golem's `expDriver` as
+  the first outside case.
+  Open question (golem, [#144](https://github.com/chucklehead-dev/gotogether/issues/144)):
+  a world that is not one `T`. A driver whose picks name several objects
+  (a gateway and a request become a limiter and a ticket) needs either a
+  resolver from picks to objects before the bound method is called, or a
+  world type with one method per action, Bind giving it the arity checks
+  and decoding. golem's four direct fits suggest the second may be
+  enough; no design until a second case says which.
   Not core: x/tools is large, releases with Go itself and would raise
   every consumer's version of it (minimal version selection), all for a
   development-time tool. Not a new module: it would repeat qanalysis's
@@ -480,6 +489,12 @@ Items, each its own decision before it starts:
   assumption a production check. A reviewed finding becomes a sanitized
   regression case. Browser drain, producer settlement and collection
   completeness stay three contracts (O1).
+- **CW11: asynchronous drivers.** A driver whose implementation runs on
+  its own goroutines (golem's `ServeHTTP` handlers, each paused before a
+  pick and released by the model's step) needs a primitive that waits
+  for the implementation's next point, as golem's `settle` does by hand
+  today: connect's steps are synchronous calls. Its own design, golem's
+  driver its first case; it is not `Bind`'s ([#144](https://github.com/chucklehead-dev/gotogether/issues/144)).
 
 Kept on purpose, both projects say: the model as an independent text,
 Apalache for proofs, necessity runs, native source and arithmetic oracles

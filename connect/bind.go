@@ -49,6 +49,10 @@ type boundAction struct {
 	// evaluated with these picks as its arguments (Step.Eval)
 	returns     string
 	returnsArgs []string
+	// observes, if set, names the picks its results must equal, one per
+	// result in order: the implementation's choice compared with the
+	// model's (Observes)
+	observes []string
 }
 
 var (
@@ -126,13 +130,41 @@ func (b *Binding[T]) Action(name string, method any, params ...string) *Binding[
 // is refused when its driver is made.
 func (b *Binding[T]) Returns(name, def string, args ...string) *Binding[T] {
 	a, ok := b.actions[name]
-	if !ok {
-		panic(fmt.Sprintf("connect.Bind: Returns(%q): no such action: bind it with Action first", name))
+	if !ok || a.handler != nil {
+		panic(fmt.Sprintf("connect.Bind: Returns(%q): no action bound to a method: bind it with Action first", name))
+	}
+	if a.returns != "" || a.observes != nil {
+		panic(fmt.Sprintf("connect.Bind: Returns(%q): its results are already checked (Returns or Observes): give each action one", name))
 	}
 	if len(a.results) != 1 {
 		panic(fmt.Sprintf("connect.Bind: Returns(%q): its method returns %d result%s besides an error: Returns checks one", name, len(a.results), plural(len(a.results))))
 	}
 	a.returns, a.returnsArgs = def, args
+	return b
+}
+
+// Observes says that action name's results are choices the
+// implementation makes and the model picks: each result, in order, must
+// equal the step's pick of the name given (one pick per result besides
+// an error), compared after decoding the pick into the result's type. A
+// mismatch reads "the implementation chose X; the model's choice is Y".
+// Returns compares a result with a def the model computes; Observes with
+// a choice it made. An action takes one of the two.
+//
+//	Action("admit", (*Limiter).Admit, "request").Observes("admit", "ticket")
+func (b *Binding[T]) Observes(name string, picks ...string) *Binding[T] {
+	a, ok := b.actions[name]
+	if !ok || a.handler != nil {
+		panic(fmt.Sprintf("connect.Bind: Observes(%q): no action bound to a method: bind it with Action first", name))
+	}
+	if a.returns != "" || a.observes != nil {
+		panic(fmt.Sprintf("connect.Bind: Observes(%q): its results are already checked (Returns or Observes): give each action one", name))
+	}
+	if len(picks) != len(a.results) || len(picks) == 0 {
+		panic(fmt.Sprintf("connect.Bind: Observes(%q): its method returns %d result%s besides an error, but %d pick%s named: name one pick per result, in order",
+			name, len(a.results), plural(len(a.results)), len(picks), plural(len(picks))))
+	}
+	a.observes = picks
 	return b
 }
 
@@ -179,9 +211,9 @@ func (b *Binding[T]) Check(check func(impl T, s *Step) error) *Binding[T] {
 func (b *Binding[T]) Driver(tb testing.TB) Driver {
 	tb.Helper()
 	for _, n := range b.order {
-		if a := b.actions[n]; a.handler == nil && len(a.results) > 0 && a.returns == "" {
-			tb.Fatalf("connect.Bind: action %s: %s returns %s besides an error, and nothing checks it: compare it with a model def (Returns(%q, def, picks...)), or bind a func that drops it",
-				n, a.fn.Type(), typesText(a.results), n)
+		if a := b.actions[n]; a.handler == nil && len(a.results) > 0 && a.returns == "" && a.observes == nil {
+			tb.Fatalf("connect.Bind: action %s: %s returns %s besides an error, and nothing checks it: compare it with a model def (Returns(%q, def, picks...)) or the model's picks (Observes(%q, picks...)), or bind a func that drops it",
+				n, a.fn.Type(), typesText(a.results), n, n)
 		}
 	}
 	d := &boundDriver[T]{b: b, tb: tb}
@@ -238,6 +270,28 @@ func (d *boundDriver[T]) Step(s *Step) error {
 	}
 	if a.returns != "" {
 		return checkReturn(s, a, out[0])
+	}
+	for i, p := range a.observes {
+		if err := checkObserved(s, a, p, out[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkObserved compares an action's result, a choice the implementation
+// made, with the model's pick of that choice.
+func checkObserved(s *Step, a *boundAction, pick string, got reflect.Value) error {
+	mv, ok := s.Picks[pick]
+	if !ok {
+		return fmt.Errorf("connect.Bind: action %s: Observes' pick %s is not in the step (have %s): name the nondet the model picks the choice with", a.name, pick, s.pickNames())
+	}
+	want := reflect.New(got.Type())
+	if err := itf.Decode(mv, want.Interface()); err != nil {
+		return fmt.Errorf("connect.Bind: action %s: the model's %s is %s, which does not decode into %s: %w", a.name, pick, mv, got.Type(), err)
+	}
+	if !reflect.DeepEqual(got.Interface(), want.Elem().Interface()) {
+		return fmt.Errorf("connect.Bind: action %s: the implementation chose %s = %v; the model's choice is %v", a.name, pick, got.Interface(), want.Elem().Interface())
 	}
 	return nil
 }
