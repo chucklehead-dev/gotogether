@@ -1,0 +1,8 @@
+# The fixture's binding: it checks two of the model's three properties
+# (invariants_test.go).
+spec: model/counter.qnt
+module: counter
+actions:
+  inc: {}
+  reset: {}
+invariants: [withinCap, nonNegative]

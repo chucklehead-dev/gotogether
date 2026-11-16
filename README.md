@@ -237,6 +237,14 @@ testing, where Quint traces drive the implementation). It adds:
   one writes the mirrors by hand; `-check` fails in CI when the file is
   stale, naming the types that changed
   ([reference](skills/gotogether-mbt/references/driver.md));
+- **invariant tables generated from annotations** (`gotogether invariants
+  -spec model.qnt -write docs/walkthrough.md ./...`): `//quint:enforces p`
+  where the code enforces a property, `//quint:checks p` in the tests that
+  check it, and the design document's table of every property with
+  file:line links, kept current by `-check` in CI; a directive naming no
+  property fails, and `-require enforced,checked` fails a property
+  nothing enforces or checks
+  ([reference](skills/gotogether-workflow/references/invariants.md));
 - **model behavior comparison** (`gotogether model-diff`): compare two finite
   instances on explicit observed variables, with added/removed sequence witnesses,
   native source replay, portable confirmed-witness exports and explicit inconclusive

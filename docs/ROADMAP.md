@@ -38,7 +38,7 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Proposed queue | L1–L8: golem's first use ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6833092588)) | L1 (#191), L3 (#195), L5 (#194) and L6's docs landed after J7c; the rest as projects ask. |
 | Proposed queue | M1–M6: golem's graph search and Valkey ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6835911012)) | M1 (a bounded result: `-memory`, `-process-memory`, `peakResident`) and M2 done; next M3 (symmetry). |
 | Proposed queue | N1–N7: golem's driver asks ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6843138891)) | N1 (`Config.Require`, its witnesses), N3 (`Step.Eval`), N5 (actionmap `-roundtrips`) and N7 (`connect.Differential`) done. Next N2 (`connect.Compose`). Open in N1: a witness continued past its target (documented for now: require the state after the step under test). |
-| Proposed queue | CW1–CW11: a contract from design to operation ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6885259328), [#220](https://github.com/chucklehead-dev/gotogether/issues/220#issuecomment-6884857732)) | CW1 (literate models; Goo adopted it), CW2 (the design matrix with per-variant search, `dead`, `-variant` and memory released per variant; golem adopted it for four models) and CW4 done. CW5's runtime half done (`connect.Bind` with `Returns` and `Observes`), and its static half's first two slices (a binding checked against the model's actions, picks and types before any trace; Go types generated from the model's, `gotogether types [-check]`); next the walkthrough's tables and the alignment lint in qanalysis, golem's `expDriver` the first outside case, a world that is not one `T` an open question. Then CW3; CW11 (asynchronous drivers) its own design. Left in CW1: `lint -model doc.md`, stable IDs; in CW2: possibles per variant, iterative deepening. |
+| Proposed queue | CW1–CW11: a contract from design to operation ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6885259328), [#220](https://github.com/chucklehead-dev/gotogether/issues/220#issuecomment-6884857732)) | CW1 (literate models; Goo adopted it), CW2 (the design matrix with per-variant search, `dead`, `-variant` and memory released per variant; golem adopted it for four models) and CW4 done. CW5's runtime half done (`connect.Bind` with `Returns` and `Observes`), and its static half's first three slices (a binding checked against the model's actions, picks and types before any trace; Go types generated from the model's, `gotogether types [-check]`; the walkthrough's invariant tables from `//quint:enforces` and `//quint:checks`, `gotogether invariants [-write|-check] [-require]`); next the alignment lint's remaining part (an action without an implementation) in qanalysis, golem's `expDriver` the first outside case, a world that is not one `T` an open question. Then CW3; CW11 (asynchronous drivers) its own design. Left in CW1: `lint -model doc.md`, stable IDs; in CW2: possibles per variant, iterative deepening. |
 | Proposed queue | O1–O2: external drivers ([#220](https://github.com/chucklehead-dev/gotogether/issues/220)) | O1 done (a `settled` record in `gotogether.requests/1`, written by the Playwright adapter's `settled()`): it retires Goo's drain bridge. Next O2, the compact external-driver example. |
 | Proposed queue | Q0–Q11: a Go Quint | A design item, each its own decision. Q0 first (no quint for consumers, small); Q2's front end only once Q3's corpus and ill-typed generator exist. Upstream first. |
 | Dropped | J12 and J23 | Go 1.26 compatibility and pin batching are withdrawn. Go 1.27.3 and immediate required sibling pin alignment remain deliberate policies. |
@@ -444,9 +444,25 @@ Items, each its own decision before it starts:
   names what changed. No x/tools needed (text and go/format), so it is
   the core CLI's, not qanalysis's; Quint to Go only, the model the
   source (golem's `expState` and `event` decoders are what it replaces).
-  Left of the static half: the walkthrough's invariant tables, the
-  alignment lint (qanalysis), Go to Quint (if ever), and golem's
-  `expDriver` as the first outside case.
+  Third slice done: the walkthrough's invariant tables (`gotogether
+  invariants -spec m.qnt -write doc.md ./...`, or `-binding`;
+  internal/invtable, go/parser and `quint typecheck`'s IR, so the core's,
+  as `types` is): `//quint:enforces p` on a declaration's doc comment or
+  above a statement, `//quint:checks p` on or in a Test or Fuzz function;
+  a property is a boolean val (or temporal) the main module sees
+  unqualified, a binding's invariants and eventually vals with
+  `-binding`, named bare or qualified by any module of the spec that sees
+  it (the instance, the declaring module); a row per property in the
+  model's order, its meaning its doc comment, file:line links relative
+  to the document, between `<!-- gotogether:invariants -->` markers;
+  `-check` (exit 1) names the rows that changed. Its lint covers two of
+  the alignment lint's three parts: a directive naming no property is an
+  error at its file:line (every mode), and a property nothing enforces
+  or no test checks a warning, failing under `-require
+  enforced,checked`. Left of the static half: the alignment lint's third
+  part, an action without an implementation (qanalysis: it needs the
+  bound methods' types, or `//quint:action`), Go to Quint (if ever), and
+  golem's `expDriver` as the first outside case.
   Open question (golem, [#144](https://github.com/chucklehead-dev/gotogether/issues/144)):
   a world that is not one `T`. A driver whose picks name several objects
   (a gateway and a request become a limiter and a ticket) needs either a

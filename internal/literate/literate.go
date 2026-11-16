@@ -426,25 +426,53 @@ func CheckMarked(doc, begin, end, content string) (current bool, err error) {
 	return err == nil && out == string(src), err
 }
 
-// replaceMarked is src with what lies between its markers replaced by
-// content.
-func replaceMarked(doc, src, begin, end, content string) (string, error) {
+// Marked is the text of doc between its begin and end markers (without
+// them): what WriteMarked last wrote there, for a check that says which
+// part of it changed. A document without the markers is WriteMarked's
+// error.
+func Marked(doc, begin, end string) (string, error) {
+	src, err := os.ReadFile(doc)
+	if err != nil {
+		return "", err
+	}
+	text, b, e, err := markedSpan(doc, string(src), begin, end)
+	if err != nil {
+		return "", err
+	}
+	return text[b+len(begin)+2 : e+1], nil
+}
+
+// markedSpan is src with a newline before it (and after, if it has none)
+// and where its markers' lines start in that text, at the newline before
+// each.
+func markedSpan(doc, src, begin, end string) (text string, b, e int, err error) {
 	// markers as whole lines: the text with a newline before its first,
 	// so one on the document's first line is found as any other
-	text := "\n" + src
+	text = "\n" + src
 	bm, em := "\n"+begin+"\n", "\n"+end+"\n"
 	if !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}
-	b, e := strings.Index(text, bm), strings.Index(text, em)
+	b, e = strings.Index(text, bm), strings.Index(text, em)
 	switch {
 	case b < 0 || e < 0:
-		return "", fmt.Errorf("%s has no %s ... %s: add the two lines where the matrix goes, each alone on its line", doc, begin, end)
+		return "", 0, 0, fmt.Errorf("%s has no %s ... %s: add the two lines where the table goes, each alone on its line", doc, begin, end)
 	case strings.Count(text, bm) > 1 || strings.Count(text, em) > 1:
-		return "", fmt.Errorf("%s has %s or %s more than once: keep one pair", doc, begin, end)
+		return "", 0, 0, fmt.Errorf("%s has %s or %s more than once: keep one pair", doc, begin, end)
 	case e < b:
-		return "", fmt.Errorf("%s has %s before %s: put the begin marker first", doc, end, begin)
+		return "", 0, 0, fmt.Errorf("%s has %s before %s: put the begin marker first", doc, end, begin)
 	}
+	return text, b, e, nil
+}
+
+// replaceMarked is src with what lies between its markers replaced by
+// content.
+func replaceMarked(doc, src, begin, end, content string) (string, error) {
+	text, b, e, err := markedSpan(doc, src, begin, end)
+	if err != nil {
+		return "", err
+	}
+	bm := "\n" + begin + "\n"
 	out := text[:b+len(bm)] + strings.TrimRight(content, "\n") + text[e:]
 	out = out[1:] // the newline added before the first line
 	if !strings.HasSuffix(src, "\n") {
