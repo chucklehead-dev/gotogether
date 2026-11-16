@@ -261,19 +261,22 @@ func TestBindCheckedAgainstModel(t *testing.T) {
 	}
 }
 
-// connect.Run checks a bound driver's binding before generating a trace,
-// and fails with every mismatch at once, its projection's included: no
-// trace is generated (Run logs none, and no trace subtest runs) and the
+// The bank's three mismatches, its projection's included, each line.
+var bindMismatches = []string{
+	"connect: the binding does not fit testdata/bank.qnt (3 mismatches, found before any trace ran):",
+	"    connect.Bind: action deposit, parameter 2 (pick amount): Go type string does not fit the model's int",
+	"    connect.Bind: action transfre: the model has no action transfre",
+	"    connect.Bind: State: the projection, Go type connect.fitBankFees, does not fit the model's state (field Fees of connect.fitBankFees is not the model's",
+}
+
+// b.Run checks the binding before generating a trace, and fails with
+// every mismatch at once, its projection's included: no trace is
+// generated (Run logs none, and no trace subtest runs) and the
 // implementation is never made.
 func TestBindCheckFailsRun(t *testing.T) {
 	needQuint(t)
 	out := connectFailureOutput(t, "bind-mismatched")
-	for _, want := range []string{
-		"connect: the binding does not fit testdata/bank.qnt (3 mismatches, found before any trace ran):",
-		"    connect.Bind: action deposit, parameter 2 (pick amount): Go type string does not fit the model's int",
-		"    connect.Bind: action transfre: the model has no action transfre",
-		"    connect.Bind: State: the projection, Go type connect.fitBankFees, does not fit the model's state (field Fees of connect.fitBankFees is not the model's",
-	} {
+	for _, want := range bindMismatches {
 		if !strings.Contains(out, want) {
 			t.Errorf("want %q in:\n%s", want, out)
 		}
@@ -282,6 +285,37 @@ func TestBindCheckFailsRun(t *testing.T) {
 		if strings.Contains(out, after) {
 			t.Errorf("%q: the check ran after the traces were generated:\n%s", after, out)
 		}
+	}
+}
+
+// b.Test checks as b.Run does, before quint test runs.
+func TestBindCheckFailsTest(t *testing.T) {
+	needQuint(t)
+	out := connectFailureOutput(t, "bind-test-mismatched")
+	for _, want := range []string{"connect: the binding does not fit testdata/bank.qnt (1 mismatch, found before any trace ran):", bindMismatches[3]} {
+		if !strings.Contains(out, want) {
+			t.Errorf("want %q in:\n%s", want, out)
+		}
+	}
+	for _, after := range []string{"implementation made", "generated 1 traces", "trace_0"} {
+		if strings.Contains(out, after) {
+			t.Errorf("%q: the check ran after the traces were generated:\n%s", after, out)
+		}
+	}
+}
+
+// connect.Run with b.Driver checks the same binding when the first
+// trace's driver is made: after generation, before the implementation.
+func TestBindCheckFailsDriverAtFirstTrace(t *testing.T) {
+	needQuint(t)
+	out := connectFailureOutput(t, "bind-mismatched-driver")
+	for _, want := range append(bindMismatches, "generated 1 traces") {
+		if !strings.Contains(out, want) {
+			t.Errorf("want %q in:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "implementation made") {
+		t.Errorf("the implementation was made before the check:\n%s", out)
 	}
 }
 
@@ -342,18 +376,5 @@ func TestBindChecksPicksPerAction(t *testing.T) {
 				t.Errorf("mismatches:\n  got  %q\n  want %q", bad, c.want)
 			}
 		})
-	}
-}
-
-// Run and Test check the binding before generating a trace when the
-// factory is b.Driver itself, which makes no implementation; any other
-// factory, a closure around b.Driver too, is called once per trace only.
-func TestBindingDriverIsRecognized(t *testing.T) {
-	b := bankBinding(false, (*bank).deposit)
-	if !isBindingDriver(b.Driver) || !isBindingDriver(Bind(func(testing.TB) *attempts { return nil }).Driver) {
-		t.Error("a Binding's Driver is not recognized")
-	}
-	if isBindingDriver(func(tb testing.TB) Driver { return b.Driver(tb) }) || isBindingDriver(func(testing.TB) Driver { return &bankDriver{} }) || isBindingDriver(nil) {
-		t.Error("another factory is taken for a Binding's Driver")
 	}
 }

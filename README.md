@@ -457,7 +457,7 @@ func TestModelDrivesBank(t *testing.T) {
 Or bind the actions to the methods themselves, and let the binding decode
 the picks (`connect.Bind`): the compiler checks a renamed method, and a
 parameter's type is decoded from its pick. Before generating a trace,
-`connect.Run` checks the binding against the model: each action, each
+`b.Run` checks the binding against the model: each action, each
 pick (one of that action's own), each type, and the projection's.
 
 ```go
@@ -468,7 +468,7 @@ func TestModelDrivesBank(t *testing.T) {
 		Action("deposit", (*bank.Bank).Deposit, "account", "amount"). // ctx: the trace's
 		Action("withdraw", (*bank.Bank).Withdraw, "account", "amount").
 		State(func(b *bank.Bank) state { return state{b.Balances()} })
-	connect.Run(t, connect.Config{Spec: "model/bank.qnt", Main: "bankDesign", MaxSamples: 30, MaxSteps: 25}, b.Driver)
+	b.Run(t, connect.Config{Spec: "model/bank.qnt", Main: "bankDesign", MaxSamples: 30, MaxSteps: 25})
 }
 ```
 

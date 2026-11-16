@@ -21,14 +21,17 @@ compared with the model's. The Go counterpart of quint-connect.
    Action("deposit", (*Bank).Deposit, "account", "amount")`, picks named
    in parameter order), or a `Step` dispatching with `connect.Switch`
    (`"init"` first) and `connect.MustPick[T](s, "param")`.
-2. A projection: `State() (any, error)`, or a bound `.State(func(T) S)`
-   (S its type, checked before any trace), exported fields named after the
-   model's. One the model defines (`def balanceOf(a)`): compare in
+2. A projection: `State() (any, error)`, or a bound `.State(func(T) S)`:
+   return a concrete type S from State to have it checked before any
+   trace. Exported fields named after the model's. One the model defines (`def balanceOf(a)`): compare in
    `CheckStep` with `connect.MustEval[int](s, "balanceOf", "alice")`, not a
    copy of the def in Go.
 3. `connect.Run(t, connect.Config{Spec: ..., Main: ..., MaxSamples: 50,
-   MaxSteps: 30}, newDriver)`. The factory takes the trace's `testing.TB`;
-   use its `Context` and `Cleanup` for resources, not the outer test's.
+   MaxSteps: 30}, newDriver)`, or `b.Run(t, cfg)` / `b.Test(t, cfg, test)`
+   for a binding: checked before any trace is generated, where
+   `connect.Run(t, cfg, b.Driver)` checks only at the first trace. The
+   factory takes the trace's `testing.TB`; use its `Context` and `Cleanup`
+   for resources, not the outer test's.
 4. One action at a time, until a run of 50 samples passes; then raise
    `MaxSteps`.
 5. A state a bug hides at, rare in the samples: name its boolean val in

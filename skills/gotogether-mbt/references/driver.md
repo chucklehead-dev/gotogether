@@ -305,12 +305,14 @@ From golem's use (#144):
   start. `.Handle(name, func(T, *Step) error)` takes an
   action no method fits, `.Skip(names...)` another component's,
   `.State(func(T) S)` and `.Check(func(T, *Step) error)` the projection
-  and a check after each step; `b.Driver` is the factory `connect.Run`
-  takes. A malformed binding (a count of picks not the method's, a method
-  of another type, an action bound twice, a State that is no `func(T) S`)
-  panics where it is built, naming the fix. Before generating any trace
-  (when the factory is `b.Driver` itself: a closure around it is checked
-  at its first trace, after generation), `connect.Run` and `connect.Test`
+  and a check after each step. Run it with `b.Run(t, cfg)` or
+  `b.Test(t, cfg, test)`: `connect.Run` and `connect.Test` with the
+  binding checked before any trace is generated. `connect.Run(t, cfg,
+  b.Driver)` also works, and checks only at the first trace, after
+  quint generated them all. A malformed binding (a count of picks not the
+  method's, a method of another type, an action bound twice, a State that
+  is no `func(T) S` or given twice) panics where it is built, naming the
+  fix. `b.Run` and `b.Test` (`connect.Run` at its first trace)
   check the binding against the model quint compiled (the one `Step.Eval`
   and `Config.Require` use: no other quint process when either compiled):
   each bound action (`Action`, `Handle`, `Skip`) is an action of the
@@ -322,8 +324,9 @@ From golem's use (#144):
   `Returns'` def a val or def of the model, of the arity given, whose
   type decodes into the result, and State's S the model's state (at
   `Config.StatePath`) as `itf.DecodeProjection` reads it: every field a
-  state variable's, exported, of a type that decodes from it (a
-  `func(T) any` is decoded only at the first trace's init: return S).
+  state variable's, exported, of a type that decodes from it. Return a
+  concrete type S from State to have it checked before any trace: a
+  `func(T) any` is decoded only at the first trace's init.
   An action's own picks are its parameters, the nondets whose values flow
   into its call in `step` (`nondet d = ...; attempt(d)`, through lets and
   expressions) or into a guard over it (`all { gate, failed(o) }`), and

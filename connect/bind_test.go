@@ -51,7 +51,7 @@ func TestBindDrivesBank(t *testing.T) {
 		}
 		return nil
 	})
-	Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 5, MaxSteps: 12, Seed: "0x1"}, b.Driver)
+	b.Run(t, Config{Spec: "testdata/bank.qnt", MaxSamples: 5, MaxSteps: 12, Seed: "0x1"})
 }
 
 // The bound bank diverges where bankDriver's does: a transfer of 3 credits
@@ -124,6 +124,9 @@ func TestBindRefusesMalformed(t *testing.T) {
 		{"state of another type", func() {
 			Bind(func(testing.TB) *bank { return nil }).State(func(*bankDriver) bankState { return bankState{} })
 		}, "is no func(*connect.bank) S"},
+		{"state twice", func() {
+			bankBinding(false, (*bank).deposit).State(func(*bank) bankState { return bankState{} })
+		}, "connect.Bind: State given twice: give one projection"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			defer func() {

@@ -216,6 +216,14 @@ func article(word string) string {
 	return "a"
 }
 
+// choose is a if cond, else b: a message's word that depends on a count.
+func choose(cond bool, a, b string) string {
+	if cond {
+		return a
+	}
+	return b
+}
+
 func plural(n int) string {
 	if n == 1 {
 		return ""

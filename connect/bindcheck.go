@@ -24,8 +24,10 @@ import (
 // refusal of a binding that works is worse than a mismatch found by a
 // trace.
 
-// modelChecked is a driver Bind made: connect.Run and connect.Test check
-// its binding against the run's model before replaying the first trace.
+// modelChecked is a Binding, or a driver Bind made: Binding.Run and
+// Binding.Test check the binding against the run's model before
+// generating a trace, connect.Run and connect.Test a driver's before
+// replaying the first.
 type modelChecked interface {
 	// defs are the model definitions the binding names (Returns'),
 	// compiled for before the check
@@ -35,19 +37,25 @@ type modelChecked interface {
 	checkModel(m *qeval.Model, c Config) (mismatches, unbound []string)
 }
 
-func (d *boundDriver[T]) defs() []string {
+func (b *Binding[T]) defs() []string {
 	var out []string
-	for _, n := range d.b.order {
-		if a := d.b.actions[n]; a.returns != "" && !slices.Contains(out, a.returns) {
+	for _, n := range b.order {
+		if a := b.actions[n]; a.returns != "" && !slices.Contains(out, a.returns) {
 			out = append(out, a.returns)
 		}
 	}
 	return out
 }
 
+func (b *Binding[T]) checkModel(m *qeval.Model, c Config) (mismatches, unbound []string) {
+	mismatches, unbound = checkBinding(b.order, b.actions, m, c)
+	return append(mismatches, checkState(b.stateType, m, c)...), unbound
+}
+
+func (d *boundDriver[T]) defs() []string { return d.b.defs() }
+
 func (d *boundDriver[T]) checkModel(m *qeval.Model, c Config) (mismatches, unbound []string) {
-	mismatches, unbound = checkBinding(d.b.order, d.b.actions, m, c)
-	return append(mismatches, checkState(d.b.stateType, m, c)...), unbound
+	return d.b.checkModel(m, c)
 }
 
 func checkBinding(order []string, actions map[string]*boundAction, m *qeval.Model, c Config) (out, unbound []string) {
@@ -236,6 +244,10 @@ func checkState(t reflect.Type, m *qeval.Model, c Config) []string {
 		q.Fields = append(q.Fields, qeval.Field{Name: m.Display(v), Type: vt})
 	}
 	q.Fields = append(q.Fields, qeval.Field{Name: "mbt::actionTaken"}, qeval.Field{Name: "mbt::nondetPicks"})
+	// as Replay's walk reads the path: only its first segment names a
+	// variable, which a flattened import qualifies (m::balances, the
+	// trace's balances); the segments after it name record fields, which
+	// carry no qualifier
 	for i, p := range c.StatePath {
 		var next *qeval.Type
 		if q != nil && q.Kind == "rec" {
@@ -287,7 +299,7 @@ func checkReturns(a *boundAction, m *qeval.Model, c Config, bad func(string, ...
 		for _, p := range params {
 			ps = append(ps, p.Name)
 		}
-		bad("connect.Bind: action %s: Returns' def %s takes %d argument%s (%s), but %d pick%s given: name one pick per parameter, in order", a.name, a.returns, len(params), plural(len(params)), strings.Join(ps, ", "), len(a.returnsArgs), map[bool]string{true: " is", false: "s are"}[len(a.returnsArgs) == 1])
+		bad("connect.Bind: action %s: Returns' def %s takes %d argument%s (%s), but %d pick%s given: name one pick per parameter, in order", a.name, a.returns, len(params), plural(len(params)), strings.Join(ps, ", "), len(a.returnsArgs), choose(len(a.returnsArgs) == 1, " is", "s are"))
 		return
 	}
 	t, ok := m.TypeOf(d)
