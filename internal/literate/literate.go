@@ -386,14 +386,52 @@ const (
 // alone on its line, once) with content, and writes doc only when that
 // changes it. A document without the markers, or with them out of order or
 // repeated, is an error naming what to add.
+//
+// A literate document's generated model records the document's digest
+// and line map, which any edit changes, prose and tables included: when
+// that model was current before the write it is written again after it,
+// so writing a matrix into a binding's own document never leaves its
+// model stale for `tangle -check` (Goo found that order a trap). A model
+// already stale, missing or hand-written is left as it was, for -check to
+// report.
 func WriteMarked(doc, begin, end, content string) (changed bool, err error) {
+	if IsDoc(doc) && Check(doc) == nil {
+		defer func() {
+			if changed && err == nil {
+				_, _, err = Write(doc)
+			}
+		}()
+	}
 	src, err := os.ReadFile(doc)
 	if err != nil {
 		return false, err
 	}
+	out, err := replaceMarked(doc, string(src), begin, end, content)
+	if err != nil || out == string(src) {
+		return false, err
+	}
+	return true, os.WriteFile(doc, []byte(out), 0o644)
+}
+
+// CheckMarked says whether doc's text between its begin and end markers
+// is content already, writing nothing: the check of a document's matrix
+// in CI (simulate -check-matrix). A document without the markers is the
+// same error as WriteMarked's.
+func CheckMarked(doc, begin, end, content string) (current bool, err error) {
+	src, err := os.ReadFile(doc)
+	if err != nil {
+		return false, err
+	}
+	out, err := replaceMarked(doc, string(src), begin, end, content)
+	return err == nil && out == string(src), err
+}
+
+// replaceMarked is src with what lies between its markers replaced by
+// content.
+func replaceMarked(doc, src, begin, end, content string) (string, error) {
 	// markers as whole lines: the text with a newline before its first,
 	// so one on the document's first line is found as any other
-	text := "\n" + string(src)
+	text := "\n" + src
 	bm, em := "\n"+begin+"\n", "\n"+end+"\n"
 	if !strings.HasSuffix(text, "\n") {
 		text += "\n"
@@ -401,19 +439,16 @@ func WriteMarked(doc, begin, end, content string) (changed bool, err error) {
 	b, e := strings.Index(text, bm), strings.Index(text, em)
 	switch {
 	case b < 0 || e < 0:
-		return false, fmt.Errorf("%s has no %s ... %s: add the two lines where the matrix goes, each alone on its line", doc, begin, end)
+		return "", fmt.Errorf("%s has no %s ... %s: add the two lines where the matrix goes, each alone on its line", doc, begin, end)
 	case strings.Count(text, bm) > 1 || strings.Count(text, em) > 1:
-		return false, fmt.Errorf("%s has %s or %s more than once: keep one pair", doc, begin, end)
+		return "", fmt.Errorf("%s has %s or %s more than once: keep one pair", doc, begin, end)
 	case e < b:
-		return false, fmt.Errorf("%s has %s before %s: put the begin marker first", doc, end, begin)
+		return "", fmt.Errorf("%s has %s before %s: put the begin marker first", doc, end, begin)
 	}
 	out := text[:b+len(bm)] + strings.TrimRight(content, "\n") + text[e:]
 	out = out[1:] // the newline added before the first line
-	if !strings.HasSuffix(string(src), "\n") {
+	if !strings.HasSuffix(src, "\n") {
 		out = strings.TrimSuffix(out, "\n")
 	}
-	if out == string(src) {
-		return false, nil
-	}
-	return true, os.WriteFile(doc, []byte(out), 0o644)
+	return out, nil
 }

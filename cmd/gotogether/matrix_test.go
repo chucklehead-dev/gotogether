@@ -66,6 +66,27 @@ func TestSimulateMatrix(t *testing.T) {
 		t.Errorf("the document:\n%s", got)
 	}
 
+	// -check-matrix compares, writing nothing: current now, stale after an
+	// edit of the table, which it leaves as it is
+	check := func() (int, string) {
+		return capture(t, func() (int, error) {
+			return simulate(t.Context(), []string{"-matrix", "-graph", "-check-matrix", doc, "-binding", b})
+		})
+	}
+	if code, text := check(); code != 0 || !strings.Contains(text, "is current") {
+		t.Fatalf("check of the written table: %d\n%s", code, text)
+	}
+	edited := bytes.Replace(got, []byte("| | lease | fence |"), []byte("| | lease | fenced |"), 1)
+	if err := os.WriteFile(doc, edited, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, text := check(); code != 1 || !strings.Contains(text, "is stale: its table is not the checker's") {
+		t.Fatalf("check of an edited table: %d\n%s", code, text)
+	}
+	if after, _ := os.ReadFile(doc); !bytes.Equal(after, edited) {
+		t.Errorf("-check-matrix wrote the document:\n%s", after)
+	}
+
 	// fence said to break noStaleWrite: the model holds it, and the matrix fails
 	src, err := os.ReadFile(b)
 	if err != nil {
@@ -140,6 +161,8 @@ func TestSimulateMatrixRefusals(t *testing.T) {
 		want string
 	}{
 		{[]string{"-binding", "a.yaml", "-write-matrix", "d.md"}, "-write-matrix requires -matrix"},
+		{[]string{"-binding", "a.yaml", "-check-matrix", "d.md"}, "-check-matrix requires -matrix"},
+		{[]string{"-matrix", "-check-matrix", "d.md", "-write-matrix", "d.md", "-binding", "a.yaml"}, "-check-matrix compares the whole table and writes nothing"},
 		{[]string{"-matrix", "-binding", "a.yaml", "-binding", "b.yaml"}, "simulate -matrix: one -binding"},
 		{[]string{"-variant", "fence", "-binding", "a.yaml"}, "-variant requires -matrix"},
 		{[]string{"-matrix", "-variant", "fence", "-write-matrix", "d.md", "-binding", "a.yaml"}, "would write one column over the document's table"},

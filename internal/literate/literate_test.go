@@ -160,3 +160,47 @@ func TestWriteMarked(t *testing.T) {
 		}
 	}
 }
+
+// A matrix written into a document whose model is current leaves that
+// model current: the write changes the document's digest and line map,
+// so the model is written again (simulate -write-matrix, then tangle
+// -check). A model already stale, or none, is left as it was.
+func TestWriteMarkedKeepsTheModelCurrent(t *testing.T) {
+	dir := t.TempDir()
+	doc := filepath.Join(dir, "design.md")
+	body := "# Design\n\n```quint\nmodule design {\n  var x: int\n}\n```\n\n" + MatrixBegin + "\nold table\n" + MatrixEnd + "\n"
+	if err := os.WriteFile(doc, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Write(doc); err != nil {
+		t.Fatal(err)
+	}
+	if changed, err := WriteMarked(doc, MatrixBegin, MatrixEnd, "| new |\n"); err != nil || !changed {
+		t.Fatalf("write: %v, %v", changed, err)
+	}
+	if err := Check(doc); err != nil {
+		t.Errorf("the model was current before the matrix was written, not after: %v", err)
+	}
+
+	// stale before (the prose edited after tangling): left stale
+	if err := os.WriteFile(doc, []byte("edited\n\n"+body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteMarked(doc, MatrixBegin, MatrixEnd, "| newer |\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Check(doc); err == nil || !strings.Contains(err.Error(), "stale") {
+		t.Errorf("a stale model rewritten by a matrix write: %v", err)
+	}
+
+	// none before: none made
+	if err := os.Remove(GeneratedPath(doc)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteMarked(doc, MatrixBegin, MatrixEnd, "| newest |\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(GeneratedPath(doc)); !os.IsNotExist(err) {
+		t.Errorf("a model made where none was: %v", err)
+	}
+}
