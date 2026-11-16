@@ -231,6 +231,12 @@ testing, where Quint traces drive the implementation). It adds:
   errors and the reports name the document's lines; `gotogether tangle
   -check` keeps a checked-in `.qnt` current
   ([reference](skills/gotogether-model/references/literate.md));
+- **Go types generated from the model's** (`gotogether types -spec
+  model.qnt -main M -o model_types.go`): its records, enums and sums,
+  and a `State` of its variables, as Go types `itf.Decode` fills, so no
+  one writes the mirrors by hand; `-check` fails in CI when the file is
+  stale, naming the types that changed
+  ([reference](skills/gotogether-mbt/references/driver.md));
 - **model behavior comparison** (`gotogether model-diff`): compare two finite
   instances on explicit observed variables, with added/removed sequence witnesses,
   native source replay, portable confirmed-witness exports and explicit inconclusive

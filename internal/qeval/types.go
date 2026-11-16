@@ -25,6 +25,10 @@ type Type struct {
 	// Open: a row variable stands for fields not listed (a record type
 	// inferred from the fields used)
 	Open bool
+	// ID is the IR's id of the type's node, 0 when it has none: where
+	// quint writes an alias out (a polymorphic alias's application
+	// substitutes its arguments), the alias's body keeps its node's id
+	ID int64
 }
 
 // A Field is a record's field, a tuple's element or a sum's variant.
@@ -135,6 +139,7 @@ func (t *Type) write(b *strings.Builder) {
 // irType is a type as the IR writes it; a row is {kind: row, fields,
 // other} (other the rest: another row, empty, or a row variable).
 type irType struct {
+	ID     int64     `json:"id"`
 	Kind   string    `json:"kind"`
 	Name   string    `json:"name"`
 	Elem   *irType   `json:"elem"`
@@ -157,7 +162,7 @@ func (t *irType) typ() *Type {
 	if t == nil {
 		return nil
 	}
-	out := &Type{Kind: t.Kind, Name: t.Name, Elem: t.Elem.typ(), Arg: t.Arg.typ(), Res: t.Res.typ()}
+	out := &Type{Kind: t.Kind, Name: t.Name, Elem: t.Elem.typ(), Arg: t.Arg.typ(), Res: t.Res.typ(), ID: t.ID}
 	for _, a := range t.Args {
 		out.Args = append(out.Args, a.typ())
 	}
@@ -173,6 +178,19 @@ func (t *irType) typ() *Type {
 		}
 	}
 	return out
+}
+
+// ParseType reads one type as quint's IR writes it: a typedef's type or
+// a var's typeAnnotation in `quint typecheck --out`'s modules, where an
+// alias is kept by its name (kind const, Name the alias as the module
+// refers to it: Item, lib::Item) and a polymorphic alias's application is
+// written out. Nil for JSON null.
+func ParseType(raw json.RawMessage) (*Type, error) {
+	var t *irType
+	if err := json.Unmarshal(raw, &t); err != nil {
+		return nil, fmt.Errorf("qeval: a type: %w", err)
+	}
+	return t.typ(), nil
 }
 
 // typeTable is the IR's types, read the first time one is asked for:

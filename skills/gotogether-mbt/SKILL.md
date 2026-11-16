@@ -11,7 +11,7 @@ compared with the model's. The Go counterpart of quint-connect.
 
 ## Choose your path
 
-- The skeleton, decoding model values, the TDD loop, `CheckStep`, `Step.Eval`, concurrency gates, fault scripts and the limits: [references/driver.md](references/driver.md).
+- The skeleton, decoding model values (Go types generated from the model's: `gotogether types`), the TDD loop, `CheckStep`, `Step.Eval`, concurrency gates, fault scripts and the limits: [references/driver.md](references/driver.md).
 - Inputs the model forbids: let Hegel drive (the gotogether-hegel skill).
 - The model itself fails to typecheck or names nothing: the gotogether-model skill.
 
@@ -66,6 +66,7 @@ compared with the model's. The Go counterpart of quint-connect.
 | `the binding does not fit spec (N mismatches, found before any trace ran)` | the bound driver was checked against the model's actions, picks and types; every mismatch is a line below it | fix each line as it says |
 | `connect.Bind: action x: the model has no action x` or `(pick p): the model has no nondet or parameter p` | a name the model lacks: a typo, or a rename in the model | the model's name (the line lists them) |
 | `Go type T does not fit the model's Q`, or `Returns' def d is no val or def` | a parameter, an observed result or a Returns' result `itf.Decode` cannot fill from the model's type, or a def the model lacks | a Go type that decodes from Q (driver.md, Bind) |
+| `FAIL f.go: stale: type X changed` or `missing` (`gotogether types -check`) | the model's types changed since the file was generated, or it was never written | the `run gotogether types ...` it names, then commit the file |
 | `the implementations disagree` | a `connect.Differential`'s implementations differ, where the model may say nothing | decide which is right, fix the other |
 | `reproduce with QUINT_SEED=0x...` | the failing trace | rerun with it, `QUINT_VERBOSE=2` |
 

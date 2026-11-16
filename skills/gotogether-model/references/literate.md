@@ -80,6 +80,14 @@ Either way works:
   so the model is stale after it: a CI control for a stale artifact
   edits the document, not the generated file.
 
+  The model's Go types are generated from the document the same way as
+  from a `.qnt` (`gotogether types -spec design/counter.md -main counter
+  -o counter_types.go`, or `-binding`; it tangles the document first),
+  and checked the same way: `gotogether types ... -check` after `tangle
+  -check`, exit 1 when the Go file is missing or the document's types
+  changed. Prose edits leave it current: only the types' digests count
+  (gotogether-mbt's driver.md, Generated Go types).
+
   A design matrix in the document (`simulate -matrix -write-matrix
   design.md`) changes the document too: when its `.qnt` was current, the
   writer writes it again, so the two stay in step and `tangle -check`

@@ -85,6 +85,52 @@ are not replay coverage; skipped/filtered traces supply no conformance evidence.
   (a field the API does not return) lives in the package, as an internal
   test file (`package snapshot`, not `snapshot_test`).
 
+## Generated Go types (`gotogether types`)
+
+Do not write Go mirrors of the model's records and sums by hand: generate
+them, and check them in CI. The model is the source; nothing goes from Go
+back to Quint.
+
+```sh
+gotogether types -spec model/bank.qnt -main bank -package bank -o model_types.go
+gotogether types -binding bank.binding.yaml -o model_types.go -check   # CI: exit 1 when stale
+```
+
+Or `//go:generate gotogether types -spec ../model/bank.qnt -main bank -o model_types.go`
+in the package. `-spec` takes a literate model's `.md` too; `-binding`
+takes the spec and module from a binding (an instance module's imported
+module). `-package` defaults to that of the Go files beside `-o`.
+
+The file (gofmt'd, sorted, the same from any directory) has:
+
+- `State`, a field per state variable tagged with its name: decode a
+  trace's state with `itf.Decode(itf.Value{Kind: itf.Record, Fields:
+  st.Vars}, &s)`, or use it as a `StateDriver`'s whole-state projection
+  (a projection of part of the state stays a struct of your own);
+- per `type` declaration: a record a struct (fields exported, tagged
+  `itf:"<field>"`), a tuple a struct `F0, F1, ...`, an enum a `string`
+  type with a constant per variant (`PhaseIdle`) and an `Enum` method (so
+  `itf.Encode` writes a variant), any other sum a struct with `Tag` (its
+  own string type, constants `EventAdded`) and a field per variant that
+  carries a value, `Option[T]` a `*T`, a set or list a slice, a map a Go
+  map when its key is comparable (a pointer is not counted so), else a
+  slice of `struct{ Key K; Value V }`; a scalar or collection declaration
+  is a Go alias (`type Amount = int`), as Quint's is;
+- `itf.Value`, with a comment saying why, where Go cannot say the type:
+  an uninterpreted type (`type Ref`), a type variable, a sum two of whose
+  variants differ in case or underscores alone (Decode cannot tell them
+  apart). A polymorphic declaration (`Tagged[a]`) is no Go type: each use
+  is written out where it occurs;
+- a header naming the model, and a digest per type and variable:
+  `-check` names what changed (`stale: type Note added, type Phase
+  changed`), and the command that writes the file again.
+
+Names are the Quint ones exported (`byName` is `ByName`, qualifiers
+stripped); a taken name takes a trailing underscore (`State_` when the
+model declares its own `State`, `Tag_` for a variant named Tag), the main
+module's types claiming theirs before an import's, State and the
+constants last.
+
 ## The TDD loop (one action at a time)
 
 1. Run the test. `unimplemented action "X" (picks: a, b)` names the next
