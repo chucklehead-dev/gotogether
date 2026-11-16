@@ -80,6 +80,15 @@ Either way works:
   so the model is stale after it: a CI control for a stale artifact
   edits the document, not the generated file.
 
+  A design matrix in the document (`simulate -matrix -write-matrix
+  design.md`) changes the document too: when its `.qnt` was current, the
+  writer writes it again, so the two stay in step and `tangle -check`
+  still passes; a `.qnt` already stale or missing is left for it to
+  report. In CI, check the table without writing it: `simulate -matrix
+  -graph -check-matrix design.md` exits 1 when the document's table is
+  not the checker's (and with the matrix's own exit otherwise), and
+  writes nothing.
+
 ## Results
 
 | Report line | What it means | Do next |

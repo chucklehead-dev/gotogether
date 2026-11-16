@@ -101,6 +101,8 @@ type simulationPlan struct {
 	// writeMatrix is the document whose markers it writes the table between
 	matrix      bool
 	writeMatrix string
+	// checkMatrix is the document whose table is compared, nothing written
+	checkMatrix string
 }
 
 func simulationRequest(args []string, mr *machineReports, log *simLog) (*simulationPlan, error) {
@@ -127,6 +129,7 @@ func simulationRequest(args []string, mr *machineReports, log *simLog) (*simulat
 	matrix := fset.Bool("matrix", false, "check each of the binding's simulate.variants (the design's alternatives, each its constants and what it holds and allows) and print the table, properties by variants; -json prints gotogether.matrix/1")
 	variant := fset.String("variant", "", "with -matrix: run only this variant (one process per variant, run in parallel by a script)")
 	writeMatrix := fset.String("write-matrix", "", "with -matrix: write the table into this Markdown document, between its <!-- gotogether:matrix --> and <!-- /gotogether:matrix --> lines")
+	checkMatrix := fset.String("check-matrix", "", "with -matrix: compare the table with this Markdown document's, writing nothing: exit 1 when they differ (for CI)")
 	timeout := fset.Duration("timeout", 0, "end the whole run within this: the bindings share it fairly (each the same first share, those that run out retried with what the others leave); "+
 		"one that does not finish is reported unfinished, with no verdict (exit 2)")
 	fset.Parse(args)
@@ -146,6 +149,12 @@ func simulationRequest(args []string, mr *machineReports, log *simLog) (*simulat
 	}
 	if *variant != "" && !*matrix {
 		return nil, fmt.Errorf("simulate: -variant requires -matrix")
+	}
+	if *checkMatrix != "" && !*matrix {
+		return nil, fmt.Errorf("simulate: -check-matrix requires -matrix")
+	}
+	if *checkMatrix != "" && (*writeMatrix != "" || *variant != "") {
+		return nil, fmt.Errorf("simulate: -check-matrix compares the whole table and writes nothing: give it without -write-matrix and -variant")
 	}
 	if *variant != "" && *writeMatrix != "" {
 		return nil, fmt.Errorf("simulate: -variant with -write-matrix would write one column over the document's table: write the whole matrix, or print one variant's")
@@ -232,7 +241,7 @@ func simulationRequest(args []string, mr *machineReports, log *simLog) (*simulat
 		opt.Stops = splitList(*stops)
 	}
 	opt.Variant = *variant
-	return &simulationPlan{bindings: append([]string(nil), paths...), options: opt, matrix: *matrix, writeMatrix: *writeMatrix}, nil
+	return &simulationPlan{bindings: append([]string(nil), paths...), options: opt, matrix: *matrix, writeMatrix: *writeMatrix, checkMatrix: *checkMatrix}, nil
 }
 
 func prepareSimulationReports(dir string) error {
@@ -288,9 +297,11 @@ func splitTop(s string) []string {
 // simulateMatrix is simulate -matrix: each of the binding's variants run as
 // simulate would run the binding (model.Matrix), each report printed under
 // its name, then the table; with -json, the gotogether.matrix/1 document
-// alone; with -write-matrix, the table also written into the document.
+// alone; with -write-matrix, the table also written into the document;
+// with -check-matrix, compared with the document's, nothing written.
 // The exit is the worst variant's: 1 when one is not as its
-// classifications say.
+// classifications say, or when -check-matrix's document has another
+// table.
 func simulateMatrix(ctx context.Context, out io.Writer, plan *simulationPlan, asJSON bool) (int, error) {
 	m, err := model.Matrix(ctx, plan.bindings[0], plan.options)
 	if err != nil {
@@ -311,19 +322,38 @@ func simulateMatrix(ctx context.Context, out io.Writer, plan *simulationPlan, as
 			}()
 		}
 	}
+	code := m.Code
+	if plan.checkMatrix != "" {
+		current, err := literate.CheckMarked(plan.checkMatrix, literate.MatrixBegin, literate.MatrixEnd, m.Text())
+		if err != nil {
+			return 2, fmt.Errorf("simulate -check-matrix: %w", err)
+		}
+		if !current {
+			code = max(code, 1)
+		}
+		if !asJSON {
+			defer func() {
+				if current {
+					fmt.Fprintf(out, "matrix in %s is current\n", plan.checkMatrix)
+				} else {
+					fmt.Fprintf(out, "matrix in %s is stale: its table is not the checker's; write it with -write-matrix %s\n", plan.checkMatrix, plan.checkMatrix)
+				}
+			}()
+		}
+	}
 	if asJSON {
 		b, err := json.MarshalIndent(m.Doc(), "", "  ")
 		if err != nil {
 			return 2, err
 		}
 		fmt.Fprintf(out, "%s\n", b)
-		return m.Code, nil
+		return code, nil
 	}
 	for _, v := range m.Variants {
 		fmt.Fprintf(out, "variant %s (%s):\n%s\n", v.Name, constantsText(v.Constants), v.Report.Text)
 	}
 	fmt.Fprintf(out, "matrix of %s, properties by variants:\n%s", plan.bindings[0], m.Text())
-	return m.Code, nil
+	return code, nil
 }
 
 // constantsText is a variant's constants as NAME = value, sorted.

@@ -394,7 +394,10 @@ hold)`, `FAIL: holds (must break)`), and the exit is 1. `-write-matrix
 design.md` writes the table into the design document between its
 `<!-- gotogether:matrix -->` and `<!-- /gotogether:matrix -->` lines, so
 the document carries the decision with the model (a literate model's own
-document: CW1). `-json` prints `gotogether.matrix/1`: each variant's
+document: CW1, whose generated `.qnt` is written again when it was
+current). `-check-matrix design.md` compares the table with the
+document's instead, writing nothing, and exits 1 when they differ: the
+CI check. `-json` prints `gotogether.matrix/1`: each variant's
 `report/2` document and its constants, and the rows, each cell with
 `expect`, `verdict`, `steps`, `depth` and `ok`, for scripts. A cell says
 how far its proof goes: "holds" is the whole state graph; "holds to depth
