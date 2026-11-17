@@ -97,13 +97,34 @@ selector name, as `lint -binding -src` does). An action is
 qobs and connect are recognised under any name the file imports them as
 (`cn "github.com/chucklehead-dev/gotogether/connect"`). Only string
 literals count: an action named through a constant or a variable is not
-seen, nor a key set on a Switch after it is made (`sw["a"] = h`). The
-rows are the model's actions as the main module sees them, `init` and
-`step` left out as connect leaves them (a driver's `init` is no error).
-A name that is no action of the model is an error at its line. Actions
-cannot be qualified (a step names its action bare, as a trace does), so
-a tree that records or drives two models' actions is scanned per model,
-by its directories.
+seen, nor a key set on a Switch after it is made (`sw["a"] = h`). A
+`.Skip` counts as driven (the driver accounts for the action), shown
+`skipped in TestX`.
+
+The rows are the actions `step` applies itself (through `any`, `all`,
+`if`, `nondet`): not `init` and `step`, not frame actions applied only
+inside other actions (`keepN`), and not what `init` applies (`initWith`:
+a trace names that step `init`). A directive or driver naming any of
+these is no error, and no row. `-exclude` takes actions out of the rows
+too (one flag: Quint names are unique in a module). A name that is no
+action of the model is an error at its line.
+
+The actions table is read only when it is in play: printed (no
+document), or the document has an actions pair of this model's name
+(or an unnamed one). Otherwise no code implementing actions is read, no
+action is an error or a note, and `-require recorded` or `driven` is a
+bad invocation (exit 2). Actions cannot be qualified (a step names its
+action bare, as a trace does), so with a table in play:
+
+- a connect driver in a file whose `connect.Config{Spec: "..."}` names
+  another spec (resolved from its package's directory, or by base name)
+  is left out, noted once: `note: 3 connect driver entries in files
+  whose connect.Config names another spec, left out of the actions of
+  model publication: ../model/attempts.qnt (3)`;
+- an unknown action recorded (directive or Record) in a file whose
+  property annotations all name another model's module is that model's,
+  counted in the other-model note;
+- any other unknown action stays an error.
 
 ## The command
 
@@ -135,7 +156,10 @@ the actions':
 ```
 
 and nothing outside them; `-check` compares the tables the document
-has, and only their kinds of warning are shown (printed, both are). A
+has. A row with nothing of a kind `-require` names is a `FAIL` line of
+its own; the bare rows of a kind not required are one note a kind,
+`note: 5 actions nothing records (recorded is not required): a, b, ...`
+(of the tables in play). A
 literate model's `.qnt` is written again when it was current, as with
 `simulate -write-matrix` (the literate reference); `-literate=false`
 treats the document as plain Markdown and refuses a `.md` spec (name the
@@ -154,10 +178,10 @@ directory. A site is its function (`Type.Method`), qualified by its
 package (`state.Restore`, `telemetry.Call.AttemptID`) when the tables
 span packages, and a `checks` directive in a `t.Run` closure with a
 literal name names the subtest (`TestReset/from_the_cap`). With
-`-links name` each site is its package and function, linked to its file
-without a line: the table then changes only when a site is added,
-removed or renamed, not when code above it moves (the default, `line`,
-links each `file:line`):
+`-links name` each site is its function (qualified as above), linked to
+its file by the file's base name, without a line: the table then
+changes only when a site is added, removed or renamed, not when code
+above it moves (the default, `line`, links each `file:line`):
 
 ```markdown
 | property | meaning | enforced by | checked by |
@@ -187,9 +211,10 @@ links each `file:line`):
 | `doc.md has no table of model M: add <!-- gotogether:invariants M --> ...; its tables are named a, b` | no pair of this model's name, nor unnamed | add the pair, or `-name` |
 | `f.go:38: .Action("ince", ...) names ince, which is no action of model counter: did you mean inc? ...` (exit 1, every mode) | a driver entry, Switch key, directive or Record names no action | fix the name, or leave another model's code out of the patterns |
 | `f.go:17: //quint:action on F names no action: give it action:NAME ...` | a directive without its action | add `action:NAME` |
-| `warning: property p: nothing enforces it` / `no test checks it` (a `—` cell) | an unannotated property | annotate it, or say why in the document |
-| `warning: action a: nothing records it` / `nothing drives it` (a `—` cell) | no code records the action's steps, or no connect driver runs it | record it where it takes effect, bind it, or say why |
-| `FAIL property p: ...`, `FAIL action a: ...` (exit 1) | the same under `-require` | the same |
+| `note: 1 property nothing enforces (enforced is not required): p` (also `no test checks`, `nothing records`, `nothing drives`; a `—` cell) | rows without that kind, which `-require` does not name | annotate them, or say why in the document |
+| `FAIL property p: nothing enforces it: put //quint:enforces p ...`, `FAIL action a: nothing records it: ...` (exit 1) | a bare row of a kind `-require` names | the directive or driver it names |
+| `note: 3 connect driver entries in files whose connect.Config names another spec ...` | another model's drivers in the tree | nothing: their own run tables them |
+| `invariants: -require driven is of the actions table, and doc.md has none of model M ...` (exit 2) | an action kind required with no actions table in play | add the pair, or require enforced and checked alone |
 | `FAIL doc.md: stale: row p changed, row q added: run gotogether invariants ...` (exit 1) | the code moved, or the annotations changed | run the command it names, commit the document |
 | `FAIL doc.md: missing: doc.md has no table of model M: add <!-- gotogether:invariants M --> ...` | the document has no markers of this model, nor unnamed ones | add the pair where the table goes |
 | exit 2 | a bad invocation, a Go file that does not parse, a model quint refuses | the message says which |

@@ -80,10 +80,9 @@ func TestInvariantsGolden(t *testing.T) {
 	if err != nil || !strings.Contains(out.String(), "ok   "+doc+": current (3 properties of model counter: 2 enforced, 2 checked; 3 actions: 2 recorded, 2 driven)") {
 		t.Fatalf("the checked-in table: %d, %v\n%s%s(write it again: cd %s && gotogether invariants -spec model/counter.qnt -write docs/walkthrough.md ./counter)", code, err, out.String(), errw.String(), fixture)
 	}
-	want := "warning: property atCap: nothing enforces it: put //quint:enforces atCap on the code that does\n" +
-		"warning: property atCap: no test checks it: put //quint:checks atCap on the test that does\n" +
-		"warning: action idle: nothing records it: put //quint:action action:idle on the function that does it, or record it with qobs.Record(ctx, \"idle\", ...)\n" +
-		"warning: action idle: nothing drives it: bind it in a connect driver (connect.Bind(...).Action(\"idle\", ...), Handle or Skip, or a connect.Switch key)\n" +
+	// a required kind's bare rows each a FAIL; another's one note
+	want := "note: 1 property no test checks (checked is not required): atCap\n" +
+		"note: 1 action nothing drives (driven is not required): idle\n" +
 		"FAIL property atCap: nothing enforces it: put //quint:enforces atCap on the code that does\n" +
 		"FAIL action idle: nothing records it: put //quint:action action:idle on the function that does it, or record it with qobs.Record(ctx, \"idle\", ...)\n"
 	if code != 1 || errw.String() != want {
@@ -187,6 +186,7 @@ func TestInvariantsFlags(t *testing.T) {
 		{[]string{"-spec", "m.qnt", "-require", "enforced,tested"}, "-require enforced,tested: give a comma-separated list of enforced and checked (each property), recorded and driven (each action)"},
 		{[]string{"-spec", "m.qnt", "-write", fixture + "/counter.binding.yaml"}, "invariants -write: " + fixture + "/counter.binding.yaml has no table of model m: add <!-- gotogether:invariants m --> ... <!-- /gotogether:invariants m -->, or <!-- gotogether:actions m --> ... <!-- /gotogether:actions m -->, each alone on its line where the table goes (unnamed markers serve a document of one model)"},
 		{[]string{"-spec", "m.qnt", "-name", "other", "-write", golem + "/docs/design.md"}, "has no table of model other: add <!-- gotogether:invariants other --> ... <!-- /gotogether:invariants other -->, or <!-- gotogether:actions other --> ... <!-- /gotogether:actions other -->, each alone on its line where the table goes (unnamed markers serve a document of one model); its tables are named attempts, publication (-name picks one)"},
+		{[]string{"-spec", "m.qnt", "-write", golem + "/docs/design.md", "-name", "publication", "-require", "enforced,driven"}, "invariants: -require driven is of the actions table, and " + golem + "/docs/design.md has none of model publication (<!-- gotogether:actions publication --> ... <!-- /gotogether:actions publication -->, or unnamed): add the pair, or require only enforced and checked"},
 		{[]string{"-spec", "m.qnt", "-props", "a", "-invariant", "b"}, "-props names the properties and -invariant derives them: give one"},
 		{[]string{"-spec", "m.qnt", "-links", "short"}, "-links short: give line (file:line links) or name (package and function, linked to the file)"},
 		{[]string{"-spec", "design.md", "-literate=false"}, "-spec design.md is Markdown and -literate=false reads no model from it: name the .qnt your tangler writes from it (design.qnt)"},
@@ -239,8 +239,9 @@ func TestInvariantsTwoModels(t *testing.T) {
 		return n, out.String(), errw.String()
 	}
 	n, out, errw := run(append(attempts, "-write", doc, tree)...)
-	if n != 0 || out != doc+": written (2 properties of model attempts: 2 enforced, 2 checked)\n" ||
-		errw != "note: 2 annotation names qualified by modules this spec does not have (other models'), left out of the table of model attempts: publication (2)\n" {
+	if n != 0 || out != doc+": written (2 properties of model attempts: 2 enforced, 2 checked; 2 actions: 1 recorded, 2 driven)\n" ||
+		errw != "note: 2 annotation names of other models (qualified by modules this spec does not have, or actions recorded in files annotated only for them), left out of the tables of model attempts: publication (2)\n"+
+			"note: 1 action nothing records (recorded is not required): idle\n" {
 		t.Fatalf("attempts: %d\n%s%s", n, out, errw)
 	}
 	if now, _ := os.ReadFile(doc); !strings.Contains(string(now), "<!-- gotogether:invariants publication -->\n<!-- /gotogether:invariants publication -->") {
@@ -272,10 +273,43 @@ func TestInvariantsProps(t *testing.T) {
 	if n, err := invariants(t.Context(), &out, &errw, []string{"-spec", spec, "-props", "reachedFive,boundedAttempts,noLostAttempt", "-exclude", "reachedFive", golem + "/..."}); n != 0 || err != nil {
 		t.Fatalf("%d, %v\n%s%s", n, err, out.String(), errw.String())
 	}
-	if rows := regexp.MustCompile("(?m)^\\| `(\\w+)`").FindAllStringSubmatch(out.String(), -1); len(rows) != 3 || rows[0][1] != "boundedAttempts" || rows[1][1] != "noLostAttempt" || rows[2][1] != "attempt" {
+	if rows := regexp.MustCompile("(?m)^\\| `(\\w+)`").FindAllStringSubmatch(out.String(), -1); len(rows) != 4 || rows[0][1] != "boundedAttempts" || rows[1][1] != "noLostAttempt" || rows[2][1] != "attempt" {
 		t.Errorf("rows %v in:\n%s", rows, out.String())
 	}
 	if n, err := invariants(t.Context(), &out, &errw, []string{"-spec", spec, "-props", "boundedAttempt", golem + "/..."}); n != 2 || err == nil || err.Error() != "invariants: -props names boundedAttempt, which is no boolean val of model attempts: did you mean boundedAttempts? name one of its boolean vals (boundedAttempts, noLostAttempt, reachedFive, safe)" {
 		t.Errorf("a misspelled -props: %d, %v", n, err)
+	}
+}
+
+// golem's case (#144): publication's run over a package that holds
+// attempts' connect test and directive and publication's own annotations.
+// With no actions table of publication in play, no code implementing
+// actions is read: -require enforced,checked passes. With one, attempts'
+// driver (its Config names attempts' spec) is skipped and noted, and the
+// action recorded in a file annotated only for attempts is attempts'.
+func TestInvariantsOtherModelsActions(t *testing.T) {
+	skip.Quint(t)
+	dir := copyTree(t, golem)
+	doc := filepath.Join(dir, "docs", "design.md")
+	args := []string{"-spec", filepath.Join(dir, "model", "publication.qnt"), "-exclude", "witness", "-links", "name", "-require", "enforced,checked"}
+	var out, errw bytes.Buffer
+	if n, err := invariants(t.Context(), &out, &errw, append(args, "-check", doc, dir+"/...")); n != 0 || err != nil || strings.Contains(errw.String(), "no action of model") || strings.Contains(errw.String(), "connect") || strings.Contains(errw.String(), "note: 1 action") {
+		t.Fatalf("no actions table: %d, %v\n%s%s", n, err, out.String(), errw.String())
+	}
+	f, err := os.OpenFile(doc, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString("\n<!-- gotogether:actions publication -->\n<!-- /gotogether:actions publication -->\n")
+	f.Close()
+	out.Reset()
+	errw.Reset()
+	if n, err := invariants(t.Context(), &out, &errw, append(args, "-write", doc, dir+"/...")); n != 0 || err != nil ||
+		!strings.Contains(errw.String(), "note: 5 annotation names of other models (qualified by modules this spec does not have, or actions recorded in files annotated only for them), left out of the tables of model publication: attempts (5)\n") ||
+		!strings.Contains(errw.String(), "note: 3 connect driver entries in files whose connect.Config names another spec, left out of the actions of model publication: ../model/attempts.qnt (3)\n") {
+		t.Fatalf("with publication's actions table: %d, %v\n%s%s", n, err, out.String(), errw.String())
+	}
+	if src, _ := os.ReadFile(doc); !strings.Contains(string(src), "| `serve` | — | — |\n<!-- /gotogether:actions publication -->") {
+		t.Errorf("publication's actions:\n%s", src)
 	}
 }
