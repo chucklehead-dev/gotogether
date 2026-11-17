@@ -43,9 +43,9 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 	bpath := fset.String("binding", "", "take -spec and -main from this binding, and only its invariants and eventually vals as the properties (unless -props or -invariant)")
 	props := fset.String("props", "", "the properties, exactly these boolean vals in this order (comma-separated), instead of every boolean val or the binding's")
 	invariant := fset.String("invariant", "", "the properties: the conjuncts of these vals (comma-separated; val safe = and { a, b } gives a and b), expanded through conjuncts that are themselves conjunctions of vals; a val that is no conjunction is itself")
-	exclude := fset.String("exclude", "", "leave these boolean vals out of the properties (comma-separated): scenario targets, mutant witnesses")
+	exclude := fset.String("exclude", "", "leave these out of the tables (comma-separated): boolean vals out of the properties (scenario targets, mutant witnesses), actions out of the actions rows")
 	name := fset.String("name", "", "the name of this model's tables in the document, <!-- gotogether:invariants NAME --> (default: the main module, or the binding's module); a document without named markers takes its unnamed ones")
-	links := fset.String("links", "line", "line: each site a file:line link; name: a site by package and function, linked to its file without a line, so moved code leaves the table current")
+	links := fset.String("links", "line", "line: each site a file:line link; name: a site by its function (by package and function when the tables span packages), linked to its file by its base name without a line, so moved code leaves the table current")
 	lit := fset.Bool("literate", true, "treat a .md spec as a literate model, and a document that is one as its model's source (its .qnt written again); false: a .md spec is refused (name the .qnt your own tangler writes) and the document is plain Markdown")
 	write := fset.String("write", "", "write the tables into this Markdown document: the properties' between its "+invtable.Begin+" and "+invtable.End+" lines, the actions' between "+invtable.ActionsBegin+" and "+invtable.ActionsEnd+", each where the document has its markers; named ones (<!-- gotogether:invariants NAME -->) hold one model's of several, and only -name's are written")
 	check := fset.String("check", "", "compare the tables with this Markdown document's, writing nothing: exit 1 when they differ, naming the rows (for CI)")
@@ -155,14 +155,27 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 			return 2, fmt.Errorf("invariants -write: %s", msg)
 		}
 	}
+	// the actions table is in play when printed, or when the document
+	// has its markers: otherwise no code implementing actions is read,
+	// and none can fail the run (another model's drivers, unqualifiable)
+	actionsInPlay := slices.ContainsFunc(tables, func(t docTable) bool { return t.name == "actions" })
+	if !actionsInPlay {
+		for _, r := range required {
+			if r == "recorded" || r == "driven" {
+				ab, ae := literate.Markers("actions", *name)
+				return 2, fmt.Errorf("invariants: -require %s is of the actions table, and %s has none of model %s (%s ... %s, or unnamed): add the pair, or require only enforced and checked", r, doc, *name, ab, ae)
+			}
+		}
+	}
 	patterns := fset.Args()
 	if len(patterns) == 0 {
 		patterns = []string{"./..."}
 	}
-	anns, problems, err := invtable.Scan(patterns)
+	anns, problems, err := invtable.ScanFor(patterns, actionsInPlay)
 	if err != nil {
 		return 2, fmt.Errorf("invariants: %w", err)
 	}
+	anns, skippedDrivers := invtable.OtherSpecs(anns, path)
 	tc, err := typegen.Typecheck(ctx, *quint, path)
 	if err != nil {
 		return 2, err
@@ -209,15 +222,29 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 			mods = append(mods, fmt.Sprintf("%s (%d)", mod, table.Others[mod]))
 			n += table.Others[mod]
 		}
-		fmt.Fprintf(errw, "note: %s qualified by modules this spec does not have (other models'), left out of the table of model %s: %s\n", plural(n, "annotation name"), m.Main, strings.Join(mods, ", "))
+		fmt.Fprintf(errw, "note: %s of other models (qualified by modules this spec does not have, or actions recorded in files annotated only for them), left out of the tables of model %s: %s\n", plural(n, "annotation name"), m.Main, strings.Join(mods, ", "))
 	}
-	var shown []string
-	for _, t := range tables {
-		shown = append(shown, t.kinds...)
+	if len(skippedDrivers) > 0 {
+		var specs []string
+		n := 0
+		for _, sp := range slices.Sorted(maps.Keys(skippedDrivers)) {
+			specs = append(specs, fmt.Sprintf("%s (%d)", sp, skippedDrivers[sp]))
+			n += skippedDrivers[sp]
+		}
+		fmt.Fprintf(errw, "note: %s in files whose connect.Config names another spec, left out of the actions of model %s: %s\n", map[bool]string{true: "1 connect driver entry", false: fmt.Sprintf("%d connect driver entries", n)}[n == 1], m.Main, strings.Join(specs, ", "))
 	}
+	// each row a kind leaves bare: a FAIL of its own when required, else
+	// one note a kind
 	code := 0
-	for _, w := range table.Warnings(shown...) {
-		fmt.Fprintln(errw, "warning: "+w)
+	for _, t := range tables {
+		for _, k := range t.kinds {
+			if slices.Contains(required, k) {
+				continue
+			}
+			if missing := table.Missing(k); len(missing) > 0 {
+				fmt.Fprintln(errw, "note: "+missingNote(k, missing))
+			}
+		}
 	}
 	if len(required) > 0 {
 		if failed := table.Warnings(required...); len(failed) > 0 {
@@ -298,6 +325,22 @@ type docTable struct {
 	begin, end string
 	text       func(t *invtable.Table, dir string) string
 	kinds      []string
+}
+
+// missingNote is the one line that names the rows of a kind not
+// required that have nothing of it: "5 actions nothing records
+// (recorded is not required): a, b, ...".
+func missingNote(kind string, names []string) string {
+	what := map[string]string{"enforced": "nothing enforces", "checked": "no test checks", "recorded": "nothing records", "driven": "nothing drives"}[kind]
+	rows := properties(len(names))
+	if kind == "recorded" || kind == "driven" {
+		rows = plural(len(names), "action")
+	}
+	shown := names
+	if len(shown) > 10 {
+		shown = append(slices.Clone(shown[:10]), "...")
+	}
+	return fmt.Sprintf("%s %s (%s is not required): %s", rows, what, kind, strings.Join(shown, ", "))
 }
 
 // list is a comma-separated flag's values.

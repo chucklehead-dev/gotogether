@@ -21,7 +21,11 @@ func (m *Model) lookup(flag, name string) (*Property, error) {
 		names = append(names, p.Name)
 	}
 	slices.Sort(names)
-	msg := fmt.Sprintf("%s names %s, which is no boolean val of model %s: ", flag, name, m.Main)
+	what := "boolean val"
+	if flag == "-exclude" {
+		what = "boolean val or action"
+	}
+	msg := fmt.Sprintf("%s names %s, which is no %s of model %s: ", flag, name, what, m.Main)
 	if s := nearest.Name(name, names); s != "" {
 		msg += fmt.Sprintf("did you mean %s? ", s)
 	}
@@ -45,13 +49,18 @@ func (m *Model) Only(flag string, names []string) error {
 	return nil
 }
 
-// Exclude leaves names out of the table's properties: -exclude. A name
-// that is no boolean val is an error; one the selection had left out
-// already is none.
+// Exclude leaves names out of the tables: -exclude. A boolean val leaves
+// the properties, an action the actions' rows (it stays an action, which
+// code may name). A name that is neither is an error; one the selection
+// had left out already is none.
 func (m *Model) Exclude(names []string) error {
 	var ps []*Property
 	drop := map[*Property]bool{}
 	for _, n := range names {
+		if m.actionsAll[n] {
+			m.Actions = slices.DeleteFunc(m.Actions, func(a *Property) bool { return a.Name == n })
+			continue
+		}
 		p, err := m.lookup("-exclude", n)
 		if err != nil {
 			return err

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/token"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -88,7 +89,8 @@ func actionsOf(fset *token.FileSet, f *ast.File) (out []Annotation, problems []s
 	isB := bindings(f, pkg)
 	var drives []Annotation
 	var at []token.Pos // each drive's literal, to sort them by
-	add := func(lit *ast.BasicLit, source string) {
+	var specs []string // the specs the file's connect.Configs name
+	add := func(lit *ast.BasicLit, source string, skip bool) {
 		name, err := strconv.Unquote(lit.Value)
 		if err != nil {
 			return
@@ -96,9 +98,29 @@ func actionsOf(fset *token.FileSet, f *ast.File) (out []Annotation, problems []s
 		pos := fset.Position(lit.Pos())
 		at = append(at, lit.Pos())
 		drives = append(drives, Annotation{Kind: Drives, Line: pos.Line, Names: []string{name},
-			Site:   Site{Path: pos.Filename, Line: pos.Line, Func: enclosing(lit.Pos()), Pkg: f.Name.Name},
+			Site:   Site{Path: pos.Filename, Line: pos.Line, Func: enclosing(lit.Pos()), Pkg: f.Name.Name, Skipped: skip},
 			Source: fmt.Sprintf(source, name)})
 	}
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.CompositeLit:
+			if !isSelector(n.Type, pkg, "Config") {
+				break
+			}
+			for _, e := range n.Elts {
+				if kv, ok := e.(*ast.KeyValueExpr); ok {
+					if k, ok := kv.Key.(*ast.Ident); ok && k.Name == "Spec" {
+						if lit, ok := kv.Value.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+							if v, err := strconv.Unquote(lit.Value); err == nil && !slices.Contains(specs, v) {
+								specs = append(specs, v)
+							}
+						}
+					}
+				}
+			}
+		}
+		return true
+	})
 	ast.Inspect(f, func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *ast.CallExpr:
@@ -111,7 +133,7 @@ func actionsOf(fset *token.FileSet, f *ast.File) (out []Annotation, problems []s
 					break
 				}
 				if lit, ok := arg.(*ast.BasicLit); ok && lit.Kind == token.STRING {
-					add(lit, "."+sel.Sel.Name+"(%q, ...)")
+					add(lit, "."+sel.Sel.Name+"(%q, ...)", sel.Sel.Name == "Skip")
 				}
 			}
 		case *ast.CompositeLit:
@@ -121,7 +143,7 @@ func actionsOf(fset *token.FileSet, f *ast.File) (out []Annotation, problems []s
 			for _, e := range n.Elts {
 				if kv, ok := e.(*ast.KeyValueExpr); ok {
 					if lit, ok := kv.Key.(*ast.BasicLit); ok && lit.Kind == token.STRING && lit.Value != `"_"` {
-						add(lit, pkg+".Switch{%q: ...}")
+						add(lit, pkg+".Switch{%q: ...}", false)
 					}
 				}
 			}
@@ -135,9 +157,40 @@ func actionsOf(fset *token.FileSet, f *ast.File) (out []Annotation, problems []s
 	}
 	slices.SortFunc(order, func(i, j int) int { return int(at[i]) - int(at[j]) })
 	for _, i := range order {
+		drives[i].Specs = specs
 		out = append(out, drives[i])
 	}
 	return out, problems
+}
+
+// OtherSpecs leaves out of anns the connect drivers of files whose
+// connect.Config names a spec, none of them spec (another model's
+// driver: actions cannot be qualified, but a driver says its model),
+// and counts them by the specs they name. A Config's spec is relative to
+// its package's directory, where go test runs; one matches spec when it
+// resolves to it, or has its base name (a .md literate model and its
+// .qnt alike).
+func OtherSpecs(anns []Annotation, spec string) (kept []Annotation, skipped map[string]int) {
+	abs, _ := filepath.Abs(spec)
+	base := strings.TrimSuffix(filepath.Base(spec), filepath.Ext(spec))
+	ours := func(a Annotation, s string) bool {
+		if !filepath.IsAbs(s) {
+			s = filepath.Join(filepath.Dir(a.Site.Path), s)
+		}
+		if r, err := filepath.Abs(s); err == nil && r == abs {
+			return true
+		}
+		return strings.TrimSuffix(filepath.Base(s), filepath.Ext(s)) == base
+	}
+	skipped = map[string]int{}
+	for _, a := range anns {
+		if a.Kind == Drives && len(a.Specs) > 0 && !slices.ContainsFunc(a.Specs, func(s string) bool { return ours(a, s) }) {
+			skipped[strings.Join(a.Specs, ", ")]++
+			continue
+		}
+		kept = append(kept, a)
+	}
+	return kept, skipped
 }
 
 // importedAs is the name file f imports path under, "" when it does not
@@ -275,15 +328,20 @@ func (m *Model) actionNames() []string {
 }
 
 // placeAction puts a Records or Drives annotation in its action's row;
-// errs name each name that is no action of the model. init and step are
-// actions a driver implements but no table row (connect's), so they are
-// neither.
-func (m *Model) placeAction(a Annotation, rows map[string]*ActionRow) (errs []string) {
+// errs name each name that is no action of the model. An action with no
+// row (init and step, a frame action, one -exclude left out) is neither.
+// In a file whose property annotations all name another model's module,
+// otherMod, an unknown action is that model's: counted in others.
+func (m *Model) placeAction(a Annotation, rows map[string]*ActionRow, otherMod string, others map[string]int) (errs []string) {
 	for _, n := range a.Names {
-		if n == "init" || n == "step" {
+		r, ok := rows[n]
+		if !ok && m.actionsAll[n] {
+			continue // an action, but no row: init, step, a frame action, one -exclude left out
+		}
+		if !ok && otherMod != "" {
+			others[otherMod]++
 			continue
 		}
-		r, ok := rows[n]
 		if !ok {
 			msg := fmt.Sprintf("%s:%d: %s names %s, which is no action of model %s: ", a.Site.Path, a.Line, a.Source, n, m.Main)
 			if s := nearest.Name(n, m.actionNames()); s != "" {

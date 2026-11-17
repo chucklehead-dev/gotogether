@@ -16,7 +16,11 @@ module attempts {
   // a scenario's target: nothing enforces it, by design
   val reachedFive = n == 5
 
+  // a frame action: applied inside idle, no step of its own (no row)
+  action keepN = n' = n
+
   action init = n' = 0
   action attempt = all { n < 5, n' = n + 1 }
-  action step = attempt
+  action idle = keepN
+  action step = any { attempt, idle }
 }

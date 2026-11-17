@@ -38,6 +38,7 @@ import (
 	"go/token"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -84,6 +85,9 @@ type Model struct {
 	// init and step left out (connect's: a trace names neither), in the
 	// model's order
 	Actions []*Property
+	// actionsAll are every action main sees, rows or not (frame actions,
+	// init, step), by name: what a directive or driver may name
+	actionsAll map[string]bool
 	// visible is, per module, each name it sees unqualified and the
 	// declaration's key (module::name)
 	visible map[string]map[string]string
@@ -208,7 +212,55 @@ func Read(tc []byte, main string, comments map[string]string) (*Model, error) {
 	byID := func(a, b *Property) int { return cmp.Or(cmp.Compare(a.id, b.id), cmp.Compare(a.Name, b.Name)) }
 	slices.SortFunc(m.Properties, byID)
 	slices.SortFunc(m.Actions, byID)
+	// the rows: the actions step applies itself, not the frame actions
+	// (keep*, a helper) applied inside them; every action stays an
+	// action a directive or driver may name
+	m.actionsAll = map[string]bool{"init": true, "step": true}
+	for _, a := range m.Actions {
+		m.actionsAll[a.Name] = true
+	}
+	if step, ok := byKey[m.visible[main]["step"]]; ok && step.Qualifier == "action" {
+		applied := map[string]bool{}
+		appliedActions(step.Expr, m.visible[step.ProtoName], byKey, applied)
+		m.Actions = slices.DeleteFunc(m.Actions, func(a *Property) bool { return !applied[a.key()] })
+	}
 	return m, nil
+}
+
+// appliedActions adds to applied the keys of the actions expression e
+// applies itself (a name, or an application, that scope resolves to an
+// action), not descending into them: the actions a step's alternatives
+// name, through any, all, if, match, let and nondet alike.
+func appliedActions(e json.RawMessage, scope map[string]string, decls map[string]tcDecl, applied map[string]bool) {
+	var node map[string]json.RawMessage
+	if json.Unmarshal(e, &node) != nil {
+		var list []json.RawMessage
+		if json.Unmarshal(e, &list) == nil {
+			for _, x := range list {
+				appliedActions(x, scope, decls, applied)
+			}
+		}
+		return
+	}
+	var kind, name string
+	_ = json.Unmarshal(node["kind"], &kind)
+	switch kind {
+	case "name":
+		_ = json.Unmarshal(node["name"], &name)
+	case "app":
+		_ = json.Unmarshal(node["opcode"], &name)
+	}
+	if key, ok := scope[name]; ok && name != "" {
+		if d, ok := decls[key]; ok && d.Qualifier == "action" {
+			applied[key] = true
+			return
+		}
+	}
+	for k, v := range node {
+		if k != "kind" && k != "id" {
+			appliedActions(v, scope, decls, applied)
+		}
+	}
 }
 
 // addFrom adds to v what an import, instance or export declaration d
@@ -379,6 +431,9 @@ type Site struct {
 	// Pkg is the file's package name, which qualifies Func when a table
 	// spans packages
 	Pkg string
+	// Skipped is a connect driver's Skip: it accounts for the action
+	// (driven) without running it, and its cell says so
+	Skipped bool
 }
 
 // An Annotation is one //quint:enforces or //quint:checks directive, or
@@ -393,6 +448,9 @@ type Annotation struct {
 	// Source is how messages show an action's annotation
 	// (`.Action("deposit", ...)`); "" for a property directive
 	Source string
+	// Specs are, for a connect driver, the specs its file's
+	// connect.Config literals name (OtherSpecs)
+	Specs []string
 }
 
 // Scan reads the directives of the Go files that patterns name: a
@@ -402,6 +460,13 @@ type Annotation struct {
 // annotate nothing a table can name, each with its fix; err is a file
 // that does not parse, or a pattern that names no directory.
 func Scan(patterns []string) (anns []Annotation, problems []string, err error) {
+	return ScanFor(patterns, true)
+}
+
+// ScanFor is Scan, reading the code that implements actions only when
+// actions is set: a run with no actions table in play looks at none,
+// so another model's drivers and records cannot fail it.
+func ScanFor(patterns []string, actions bool) (anns []Annotation, problems []string, err error) {
 	fset := token.NewFileSet()
 	var files []string
 	for _, pat := range patterns {
@@ -450,8 +515,10 @@ func Scan(patterns []string) (anns []Annotation, problems []string, err error) {
 		}
 		a, p := annotationsOf(fset, f, strings.HasSuffix(path, "_test.go"))
 		anns, problems = append(anns, a...), append(problems, p...)
-		a, p = actionsOf(fset, f)
-		anns, problems = append(anns, a...), append(problems, p...)
+		if actions {
+			a, p = actionsOf(fset, f)
+			anns, problems = append(anns, a...), append(problems, p...)
+		}
 	}
 	return anns, problems, nil
 }
@@ -679,10 +746,32 @@ func (m *Model) Table(anns []Annotation) (*Table, []string) {
 	for i := range t.Actions {
 		actions[t.Actions[i].Action.Name] = &t.Actions[i]
 	}
+	// the files whose property annotations all name other models'
+	// modules: an unknown action recorded there is another model's too
+	other, ours := map[string]string{}, map[string]bool{}
+	for _, a := range anns {
+		if a.Kind != Enforces && a.Kind != Checks {
+			continue
+		}
+		for _, n := range a.Names {
+			if _, why := m.resolve(n); why == otherModel {
+				if _, ok := other[a.Site.Path]; !ok {
+					mod, _, _ := strings.Cut(strings.Replace(n, "::", ".", 1), ".")
+					other[a.Site.Path] = mod
+				}
+			} else {
+				ours[a.Site.Path] = true
+			}
+		}
+	}
 	var errs []string
 	for _, a := range anns {
 		if a.Kind == Records || a.Kind == Drives {
-			errs = append(errs, m.placeAction(a, actions)...)
+			mod := ""
+			if a.Kind == Records && !ours[a.Site.Path] {
+				mod = other[a.Site.Path]
+			}
+			errs = append(errs, m.placeAction(a, actions, mod, t.Others)...)
 			continue
 		}
 		for _, n := range a.Names {
@@ -736,10 +825,28 @@ func appendSite(s []Site, x Site) []Site {
 	return append(s, x)
 }
 
+// Missing are the rows that have nothing of kind (enforced, checked,
+// recorded, driven), by name, in the table's order.
+func (t *Table) Missing(kind string) []string {
+	var out []string
+	for _, r := range t.Rows {
+		if (kind == "enforced" && len(r.Enforced) == 0) || (kind == "checked" && len(r.Checked) == 0) {
+			out = append(out, r.Property.Name)
+		}
+	}
+	for _, r := range t.Actions {
+		if (kind == "recorded" && len(r.Recorded) == 0) || (kind == "driven" && len(r.Driven) == 0) {
+			out = append(out, r.Action.Name)
+		}
+	}
+	return out
+}
+
 // Warnings are the properties nothing enforces and those no test
 // checks, each with the directive to add, then the actions nothing
 // records and those nothing drives: of the kinds named (enforced,
-// checked, recorded, driven; none: all four).
+// checked, recorded, driven; none: all four). The command prints them
+// for the kinds -require names, as failures.
 func (t *Table) Warnings(kinds ...string) []string {
 	var out []string
 	want := func(k string) bool { return len(kinds) == 0 || slices.Contains(kinds, k) }
@@ -802,14 +909,15 @@ func (t *Table) qualified() bool {
 }
 
 // siteCell is a table's cell of sites: each its function (with its
-// package when the table spans packages, or ByName) and a link to its
-// file:line, relative to dir ("" as scanned), or "—" when none. ByName
-// links the file alone, each function of a file once.
+// package when the tables span packages) and a link to its file:line,
+// relative to dir ("" as scanned), or "—" when none. ByName links the
+// file alone, by its base name, each function of a file once. A
+// driver's Skip reads "skipped in".
 func (t *Table) siteCell(sites []Site, dir string) string {
 	if len(sites) == 0 {
 		return "—"
 	}
-	qualify := t.ByName || t.qualified()
+	qualify := t.qualified()
 	absDir, _ := filepath.Abs(dir)
 	var parts []string
 	for _, s := range sites {
@@ -827,7 +935,10 @@ func (t *Table) siteCell(sites []Site, dir string) string {
 		}
 		part := fmt.Sprintf("`%s` [%s:%d](%s#L%d)", fn, p, s.Line, p, s.Line)
 		if t.ByName {
-			part = fmt.Sprintf("`%s` [%s](%s)", fn, p, p)
+			part = fmt.Sprintf("`%s` [%s](%s)", fn, path.Base(p), p)
+		}
+		if s.Skipped {
+			part = "skipped in " + part
 		}
 		if !slices.Contains(parts, part) {
 			parts = append(parts, part)

@@ -67,7 +67,7 @@ Before merging:
 | `FAIL doc.md: stale: row p changed` (`invariants -check`) | an annotated line moved, or a directive was added | the `run gotogether invariants ... -write` it names; `-links name` stops moved lines failing CI |
 | `f.go:12: //quint:enforces names p: ...` | the directive names no property | the property it names, or the model's |
 | `f.go:38: .Action("x", ...) names x, which is no action of model M` | a driver, Record or `//quint:action` names no action | the nearest name it suggests |
-| `warning: action a: nothing records it` / `nothing drives it` | no step of it is recorded, or no connect driver runs it | record or bind it; `-require recorded,driven` in CI |
+| `note: N actions nothing records (recorded is not required): ...` | rows no code records or drives; `-require recorded,driven` makes each a FAIL | record or bind them, or leave the kind unrequired |
 | a mutant survives | the check is too weak | strengthen it, or document the gap |
 | conforms, the environment's checker fails | the model assumes more of the environment | gotogether-patterns §2 |
 
