@@ -23,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -382,6 +383,41 @@ const (
 	MatrixEnd   = "<!-- /gotogether:matrix -->"
 )
 
+// Markers are the begin and end lines of a generated table of kind
+// (`<!-- gotogether:invariants -->`), or with a name, one of several
+// tables of that kind in one document, each a model's
+// (`<!-- gotogether:invariants attempts -->`): pairs of different names
+// are different markers, so each is written and checked alone, and
+// those of other names are left as they are.
+func Markers(kind, name string) (begin, end string) {
+	if name != "" {
+		kind += " " + name
+	}
+	return "<!-- gotogether:" + kind + " -->", "<!-- /gotogether:" + kind + " -->"
+}
+
+// MarkerNames are the names of the named tables of kind in src, each
+// once, in the document's order ("" for an unnamed one): what a message
+// about a document lists when it has none of the name asked for.
+func MarkerNames(src, kind string) []string {
+	var out []string
+	prefix := "<!-- gotogether:" + kind
+	for line := range strings.SplitSeq(src, "\n") {
+		rest, ok := strings.CutPrefix(strings.TrimSpace(line), prefix)
+		if !ok {
+			continue
+		}
+		name, ok := strings.CutSuffix(rest, " -->")
+		if !ok || (name != "" && name[0] != ' ') {
+			continue
+		}
+		if name = strings.TrimSpace(name); !slices.Contains(out, name) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
 // WriteMarked replaces what lies between doc's begin and end markers (each
 // alone on its line, once) with content, and writes doc only when that
 // changes it. A document without the markers, or with them out of order or
@@ -402,6 +438,13 @@ func WriteMarked(doc, begin, end, content string) (changed bool, err error) {
 			}
 		}()
 	}
+	return WriteMarkedText(doc, begin, end, content)
+}
+
+// WriteMarkedText is WriteMarked for a document that is plain Markdown,
+// whatever its name: no model is tangled from it or written again (a
+// document another tool tangles, such as lmt's).
+func WriteMarkedText(doc, begin, end, content string) (changed bool, err error) {
 	src, err := os.ReadFile(doc)
 	if err != nil {
 		return false, err

@@ -41,6 +41,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/internal/nearest"
@@ -61,10 +62,12 @@ type Property struct {
 	Name string
 	// Module is the module that declares it
 	Module string
-	// Doc is the first line of its doc comment (quint's `///`, else the
-	// `//` comment above it in the spec), "" when it has none
-	Doc string
-	id  int64
+	// Doc is the first sentence of its doc comment's first paragraph
+	// (quint's `///`, else the `//` comment above it in the spec), its
+	// wrapped lines joined; "" when it has none
+	Doc  string
+	id   int64
+	expr json.RawMessage // its body, for Conjuncts
 }
 
 func (p *Property) key() string { return p.Module + "::" + p.Name }
@@ -85,20 +88,25 @@ type Model struct {
 	// declaration's key (module::name)
 	visible map[string]map[string]string
 	byKey   map[string]*Property
+	// all are every boolean val and temporal main sees, by key, whatever
+	// a selection kept
+	all     map[string]*Property
 	modules []string
-	// left are the properties Restrict left out, by key
+	// left are the properties a selection (Restrict, Only, Exclude) left
+	// out, by key
 	left map[string]bool
 }
 
 type tcDecl struct {
-	Kind          string `json:"kind"`
-	Name          string `json:"name"`
-	ID            int64  `json:"id"`
-	Qualifier     string `json:"qualifier"`
-	Doc           string `json:"doc"`
-	ProtoName     string `json:"protoName"`
-	DefName       string `json:"defName"`
-	QualifiedName string `json:"qualifiedName"`
+	Kind          string          `json:"kind"`
+	Name          string          `json:"name"`
+	ID            int64           `json:"id"`
+	Qualifier     string          `json:"qualifier"`
+	Doc           string          `json:"doc"`
+	ProtoName     string          `json:"protoName"`
+	DefName       string          `json:"defName"`
+	QualifiedName string          `json:"qualifiedName"`
+	Expr          json.RawMessage `json:"expr"`
 }
 
 // Read is the properties of module main in quint typecheck's output tc.
@@ -120,7 +128,7 @@ func Read(tc []byte, main string, comments map[string]string) (*Model, error) {
 		return nil, fmt.Errorf("reading quint typecheck's output: %w", err)
 	}
 	decls := map[string][]tcDecl{}
-	m := &Model{Main: main, visible: map[string]map[string]string{}, byKey: map[string]*Property{}}
+	m := &Model{Main: main, visible: map[string]map[string]string{}, byKey: map[string]*Property{}, all: map[string]*Property{}}
 	for _, mod := range out.Modules {
 		decls[mod.Name] = mod.Declarations
 		m.modules = append(m.modules, mod.Name)
@@ -179,8 +187,7 @@ func Read(tc []byte, main string, comments map[string]string) (*Model, error) {
 	for name, key := range m.visible[main] {
 		d, ok := byKey[key]
 		if ok && d.Qualifier == "action" && name != "init" && name != "step" {
-			doc, _, _ := strings.Cut(strings.TrimSpace(d.Doc), "\n")
-			m.Actions = append(m.Actions, &Property{Name: name, Module: d.ProtoName, Doc: strings.TrimSpace(doc), id: d.ID})
+			m.Actions = append(m.Actions, &Property{Name: name, Module: d.ProtoName, Doc: FirstSentence(d.Doc), id: d.ID})
 			continue
 		}
 		if !ok || (d.Qualifier != "val" && d.Qualifier != "temporal") {
@@ -189,13 +196,14 @@ func Read(tc []byte, main string, comments map[string]string) (*Model, error) {
 		if t, ok := out.Types[fmt.Sprint(d.ID)]; !ok || t.Type.Kind != "bool" {
 			continue
 		}
-		doc, _, _ := strings.Cut(strings.TrimSpace(d.Doc), "\n")
+		doc := FirstSentence(d.Doc)
 		if doc == "" {
-			doc = comments[key]
+			doc = FirstSentence(comments[key])
 		}
-		p := &Property{Name: name, Module: d.ProtoName, Doc: strings.TrimSpace(doc), id: d.ID}
+		p := &Property{Name: name, Module: d.ProtoName, Doc: doc, id: d.ID, expr: d.Expr}
 		m.Properties = append(m.Properties, p)
 		m.byKey[key] = p
+		m.all[key] = p
 	}
 	byID := func(a, b *Property) int { return cmp.Or(cmp.Compare(a.id, b.id), cmp.Compare(a.Name, b.Name)) }
 	slices.SortFunc(m.Properties, byID)
@@ -239,18 +247,28 @@ func (m *Model) Restrict(names []string) error {
 	if len(bad) > 0 {
 		return fmt.Errorf("the binding checks %s, which %s no boolean val of module %s: fix the binding (its properties: %s)", strings.Join(bad, ", "), map[bool]string{true: "is", false: "are"}[len(bad) == 1], m.Main, strings.Join(m.names(), ", "))
 	}
-	m.left = map[string]bool{}
 	var kept []*Property
 	for _, p := range m.Properties {
 		if keep[p] {
 			kept = append(kept, p)
-		} else {
-			m.left[p.key()] = true
-			delete(m.byKey, p.key())
 		}
 	}
-	m.Properties = kept
+	m.keep(kept)
 	return nil
+}
+
+// keep makes ps, in their order, the table's properties, and the rest
+// of the model's boolean vals left out.
+func (m *Model) keep(ps []*Property) {
+	m.Properties, m.byKey, m.left = ps, map[string]*Property{}, map[string]bool{}
+	for _, p := range ps {
+		m.byKey[p.key()] = p
+	}
+	for k := range m.all {
+		if _, ok := m.byKey[k]; !ok {
+			m.left[k] = true
+		}
+	}
 }
 
 func (m *Model) names() []string {
@@ -260,6 +278,10 @@ func (m *Model) names() []string {
 	}
 	return out
 }
+
+// otherModel is resolve's why for a name qualified by a module the spec
+// does not have: another model's, ignored and counted.
+const otherModel = "another model's"
 
 // resolve is the property name means, or why it is none and what to do.
 func (m *Model) resolve(name string) (*Property, string) {
@@ -272,7 +294,7 @@ func (m *Model) resolve(name string) (*Property, string) {
 	}
 	vis, ok := m.visible[mod]
 	if !ok {
-		return nil, fmt.Sprintf("%s is no module of the spec (its modules: %s)", mod, strings.Join(m.modules, ", "))
+		return nil, otherModel
 	}
 	key, ok := vis[short]
 	if !ok {
@@ -286,7 +308,7 @@ func (m *Model) resolve(name string) (*Property, string) {
 	}
 	switch {
 	case m.left[key]:
-		return nil, fmt.Sprintf("%s is a val of model %s that the binding does not check: add it to the binding's invariants (or eventually), or name one it checks", name, m.Main)
+		return nil, fmt.Sprintf("%s is a val of model %s that this table leaves out (the binding does not check it, or -props, -invariant or -exclude left it out): add it to the selection, or name one the table has", name, m.Main)
 	case qualified && mod != m.Main:
 		if _, seen := m.visible[m.Main][short]; !seen {
 			return nil, fmt.Sprintf("model %s does not see %s's %s (it imports it qualified, or not at all)", m.Main, mod, short)
@@ -301,9 +323,9 @@ var ident = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 var definitionLine = regexp.MustCompile(`^\s*(?:val|temporal)\s+([A-Za-z_][A-Za-z0-9_]*)`)
 var moduleLine = regexp.MustCompile(`^\s*module\s+([A-Za-z_][A-Za-z0-9_]*)`)
 
-// Comments are the first lines of the `//` comments directly above each
-// val and temporal of a .qnt's source, by module::name: the meaning of a
-// property whose doc comment is not quint's `///`.
+// Comments are the `//` comments directly above each val and temporal
+// of a .qnt's source, by module::name, a line each: the meaning of a
+// property whose doc comment is not quint's `///` (FirstSentence).
 func Comments(src []byte) map[string]string {
 	out := map[string]string{}
 	mod := ""
@@ -317,9 +339,9 @@ func Comments(src []byte) map[string]string {
 			block = append(block, strings.TrimSpace(strings.TrimPrefix(c, "/")))
 			continue
 		}
-		if dm := definitionLine.FindStringSubmatch(line); dm != nil && len(block) > 0 && block[0] != "" {
+		if dm := definitionLine.FindStringSubmatch(line); dm != nil && len(block) > 0 {
 			if _, ok := out[mod+"::"+dm[1]]; !ok {
-				out[mod+"::"+dm[1]] = block[0]
+				out[mod+"::"+dm[1]] = strings.Join(block, "\n")
 			}
 		}
 		block = nil
@@ -350,8 +372,13 @@ type Site struct {
 	// Line is the declaration's or the statement's
 	Line int
 	// Func is the declaration (Type.Method for a method), or for a
-	// statement the function it is in; for a checks directive, the test
+	// statement the function it is in; for a checks directive, the test,
+	// and its subtest (TestX/from_the_cap) when the directive is in a
+	// t.Run closure with a literal name
 	Func string
+	// Pkg is the file's package name, which qualifies Func when a table
+	// spans packages
+	Pkg string
 }
 
 // An Annotation is one //quint:enforces or //quint:checks directive, or
@@ -468,7 +495,10 @@ func annotationsOf(fset *token.FileSet, f *ast.File, test bool) (out []Annotatio
 				problems = append(problems, fmt.Sprintf("%s: //quint:checks is %s: put it on the Test or Fuzz function of a _test.go file that checks the property, or on a statement inside one", at, where))
 				continue
 			}
-			site.Path = pos.Filename
+			site.Path, site.Pkg = pos.Filename, f.Name.Name
+			if kind == Checks && fn.Body != nil && cg.Pos() > fn.Body.Lbrace {
+				site.Func += subtest(fn.Body, cg.Pos())
+			}
 			out = append(out, Annotation{Kind: kind, Line: pos.Line, Site: site, Names: names})
 		}
 	}
@@ -546,6 +576,33 @@ func specName(specs []ast.Spec) string {
 	return ""
 }
 
+// subtest is the subtest path ("/a/b") of the t.Run closures in body
+// that hold pos, each named by a string literal, spaces as the testing
+// package writes them (underscores); "" outside any such closure.
+func subtest(body *ast.BlockStmt, pos token.Pos) string {
+	var path string
+	ast.Inspect(body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok || call.Pos() > pos || pos >= call.End() {
+			return n == nil || n.Pos() <= pos && pos < n.End()
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || sel.Sel.Name != "Run" || len(call.Args) != 2 {
+			return true
+		}
+		lit, ok := call.Args[0].(*ast.BasicLit)
+		fn, isFunc := call.Args[1].(*ast.FuncLit)
+		if !ok || lit.Kind != token.STRING || !isFunc || pos < fn.Body.Lbrace || pos > fn.Body.Rbrace {
+			return true
+		}
+		if name, err := strconv.Unquote(lit.Value); err == nil {
+			path += "/" + strings.ReplaceAll(name, " ", "_")
+		}
+		return true
+	})
+	return path
+}
+
 // funcName is a function's name, Type.Method for a method.
 func funcName(d *ast.FuncDecl) string {
 	if d.Recv == nil || len(d.Recv.List) == 0 {
@@ -594,6 +651,13 @@ type Table struct {
 	Model   *Model
 	Rows    []Row
 	Actions []ActionRow
+	// Others count the names qualified by a module the spec does not
+	// have, by that module: another model's annotations, left out
+	Others map[string]int
+	// ByName shows sites by their qualified function and links each to
+	// its file without a line (-links name): the table changes only when
+	// a site is added, removed or renamed, not when code above it moves
+	ByName bool
 }
 
 // Table puts each annotation in its property's row. errs are the
@@ -601,7 +665,7 @@ type Table struct {
 // properties and the fix.
 func (m *Model) Table(anns []Annotation) (*Table, []string) {
 	rows := map[*Property]*Row{}
-	t := &Table{Model: m}
+	t := &Table{Model: m, Others: map[string]int{}}
 	for _, p := range m.Properties {
 		t.Rows = append(t.Rows, Row{Property: p})
 	}
@@ -623,12 +687,19 @@ func (m *Model) Table(anns []Annotation) (*Table, []string) {
 		}
 		for _, n := range a.Names {
 			p, why := m.resolve(n)
+			if why == otherModel {
+				mod, _, _ := strings.Cut(strings.Replace(n, "::", ".", 1), ".")
+				t.Others[mod]++
+				continue
+			}
 			if p == nil {
 				msg := fmt.Sprintf("%s:%d: //quint:%s names %s: %s: ", a.Site.Path, a.Line, a.Kind, n, why)
 				if s := nearest.Name(n, m.names()); s != "" {
 					msg += fmt.Sprintf("did you mean %s? ", s)
 				}
-				if len(m.Properties) == 0 {
+				if strings.HasSuffix(why, "add it to the selection, or name one the table has") {
+					msg = strings.TrimSuffix(msg, ": ") + fmt.Sprintf(" (%s)", strings.Join(m.names(), ", "))
+				} else if len(m.Properties) == 0 {
 					msg += fmt.Sprintf("model %s has no properties (boolean vals): add one to the model, or name another module with -main", m.Main)
 				} else {
 					msg += fmt.Sprintf("name one of model %s's properties: %s", m.Main, strings.Join(m.names(), ", "))
@@ -696,7 +767,7 @@ func (t *Table) Markdown(dir string) string {
 	} else {
 		b.WriteString("| property | enforced by | checked by |\n|---|---|---|\n")
 	}
-	cell := func(sites []Site) string { return siteCell(sites, dir) }
+	cell := func(sites []Site) string { return t.siteCell(sites, dir) }
 	for _, r := range t.Rows {
 		fmt.Fprintf(&b, "| `%s` |", r.Property.Name)
 		if meaning && r.Property.Doc != "" {
@@ -709,15 +780,43 @@ func (t *Table) Markdown(dir string) string {
 	return b.String()
 }
 
-// siteCell is a table's cell of sites: each its function and a link to
-// its file:line, relative to dir ("" as scanned), or "—" when none.
-func siteCell(sites []Site, dir string) string {
+// qualified reports whether the table's sites, of both tables, span
+// more than one package (by directory and package name): their
+// functions are then shown with their package's name.
+func (t *Table) qualified() bool {
+	pkgs := map[[2]string]bool{}
+	add := func(sites []Site) {
+		for _, s := range sites {
+			pkgs[[2]string{filepath.Dir(filepath.Clean(s.Path)), s.Pkg}] = true
+		}
+	}
+	for _, r := range t.Rows {
+		add(r.Enforced)
+		add(r.Checked)
+	}
+	for _, r := range t.Actions {
+		add(r.Recorded)
+		add(r.Driven)
+	}
+	return len(pkgs) > 1
+}
+
+// siteCell is a table's cell of sites: each its function (with its
+// package when the table spans packages, or ByName) and a link to its
+// file:line, relative to dir ("" as scanned), or "—" when none. ByName
+// links the file alone, each function of a file once.
+func (t *Table) siteCell(sites []Site, dir string) string {
 	if len(sites) == 0 {
 		return "—"
 	}
+	qualify := t.ByName || t.qualified()
 	absDir, _ := filepath.Abs(dir)
 	var parts []string
 	for _, s := range sites {
+		fn := s.Func
+		if qualify && s.Pkg != "" {
+			fn = s.Pkg + "." + fn
+		}
 		p := filepath.ToSlash(filepath.Clean(s.Path))
 		if dir != "" {
 			if abs, err := filepath.Abs(s.Path); err == nil {
@@ -726,7 +825,13 @@ func siteCell(sites []Site, dir string) string {
 				}
 			}
 		}
-		parts = append(parts, fmt.Sprintf("`%s` [%s:%d](%s#L%d)", s.Func, p, s.Line, p, s.Line))
+		part := fmt.Sprintf("`%s` [%s:%d](%s#L%d)", fn, p, s.Line, p, s.Line)
+		if t.ByName {
+			part = fmt.Sprintf("`%s` [%s](%s)", fn, p, p)
+		}
+		if !slices.Contains(parts, part) {
+			parts = append(parts, part)
+		}
 	}
 	return strings.Join(parts, "<br>")
 }

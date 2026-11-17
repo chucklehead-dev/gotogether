@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -15,15 +16,24 @@ import (
 // a design document whose table is checked in (the golden).
 const fixture = "testdata/invariants"
 
+// golem is the fixture of golem's shapes (#144): two models, attempts and
+// publication, whose qualified annotations share a tree of two packages,
+// and one document holding each model's table under its own name (the
+// golden, written as docs/design.md says).
+const golem = "testdata/invariants-golem"
+
 // copyFixture copies the fixture into a new directory.
-func copyFixture(t *testing.T) string {
+func copyFixture(t *testing.T) string { return copyTree(t, fixture) }
+
+// copyTree copies the directory from into a new directory.
+func copyTree(t *testing.T, from string) string {
 	t.Helper()
 	dir := t.TempDir()
-	err := filepath.WalkDir(fixture, func(path string, d os.DirEntry, err error) error {
+	err := filepath.WalkDir(from, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
-		rel, _ := filepath.Rel(fixture, path)
+		rel, _ := filepath.Rel(from, path)
 		src, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -159,7 +169,7 @@ func TestInvariantsBinding(t *testing.T) {
 	}
 	edit(t, filepath.Join(dir, "counter", "counter_test.go"), "//quint:checks withinCap\n", "//quint:checks withinCap atCap\n")
 	out.Reset()
-	if n, err := invariants(t.Context(), &out, &errw, []string{"-binding", b, filepath.Join(dir, "counter")}); n != 1 || err != nil || !strings.Contains(errw.String(), "counter_test.go:12: //quint:checks names atCap: atCap is a val of model counterBase that the binding does not check: add it to the binding's invariants (or eventually), or name one it checks") {
+	if n, err := invariants(t.Context(), &out, &errw, []string{"-binding", b, filepath.Join(dir, "counter")}); n != 1 || err != nil || !strings.Contains(errw.String(), "counter_test.go:12: //quint:checks names atCap: atCap is a val of model counterBase that this table leaves out (the binding does not check it, or -props, -invariant or -exclude left it out): add it to the selection, or name one the table has (withinCap, nonNegative)\n") {
 		t.Errorf("a val the binding does not check: %d, %v\n%s%s", n, err, out.String(), errw.String())
 	}
 }
@@ -175,7 +185,11 @@ func TestInvariantsFlags(t *testing.T) {
 		{[]string{"-binding", "b.yaml", "-main", "m"}, "-binding names the spec and its module"},
 		{[]string{"-spec", "m.qnt", "-write", doc, "-check", doc}, "-write writes the table and -check compares it, writing nothing: give one"},
 		{[]string{"-spec", "m.qnt", "-require", "enforced,tested"}, "-require enforced,tested: give a comma-separated list of enforced and checked (each property), recorded and driven (each action)"},
-		{[]string{"-spec", "m.qnt", "-write", fixture + "/counter.binding.yaml"}, "invariants -write: " + fixture + "/counter.binding.yaml has neither <!-- gotogether:invariants --> ... <!-- /gotogether:invariants --> nor <!-- gotogether:actions --> ... <!-- /gotogether:actions -->: add the two lines where each table goes"},
+		{[]string{"-spec", "m.qnt", "-write", fixture + "/counter.binding.yaml"}, "invariants -write: " + fixture + "/counter.binding.yaml has no table of model m: add <!-- gotogether:invariants m --> ... <!-- /gotogether:invariants m -->, or <!-- gotogether:actions m --> ... <!-- /gotogether:actions m -->, each alone on its line where the table goes (unnamed markers serve a document of one model)"},
+		{[]string{"-spec", "m.qnt", "-name", "other", "-write", golem + "/docs/design.md"}, "has no table of model other: add <!-- gotogether:invariants other --> ... <!-- /gotogether:invariants other -->, or <!-- gotogether:actions other --> ... <!-- /gotogether:actions other -->, each alone on its line where the table goes (unnamed markers serve a document of one model); its tables are named attempts, publication (-name picks one)"},
+		{[]string{"-spec", "m.qnt", "-props", "a", "-invariant", "b"}, "-props names the properties and -invariant derives them: give one"},
+		{[]string{"-spec", "m.qnt", "-links", "short"}, "-links short: give line (file:line links) or name (package and function, linked to the file)"},
+		{[]string{"-spec", "design.md", "-literate=false"}, "-spec design.md is Markdown and -literate=false reads no model from it: name the .qnt your tangler writes from it (design.qnt)"},
 		{[]string{"-spec", "m.qnt", "-check", "none.md"}, "the document none.md:"},
 		{[]string{"-spec", "m.qnt", "nowhere/..."}, "nowhere/... names no directory"},
 		{[]string{"-nope"}, "invariants: flag provided but not defined: -nope (gotogether invariants -h lists its flags)"},
@@ -190,5 +204,78 @@ func TestInvariantsFlags(t *testing.T) {
 	var out bytes.Buffer
 	if code, err := invariants(t.Context(), &out, &out, []string{"-h"}); code != 0 || err != nil || !strings.Contains(out.String(), commands["invariants"].purpose) || !strings.Contains(out.String(), "-require") {
 		t.Errorf("-h: %d, %v\n%s", code, err, out.String())
+	}
+}
+
+// golem's shapes: one document, two models' named tables, each written
+// and checked by its own run over the whole tree, the other model's
+// qualified annotations noted and left out, its table untouched. The
+// attempts run derives its properties from its invariant (-invariant
+// safe: the scenario target reachedFive is no row) and spans two
+// packages (state.Restore, telemetry.Call.AttemptID); publication's
+// leaves its mutant witness out (-exclude) and links sites by name, so
+// a line moved above them leaves its table current while attempts', by
+// line, goes stale.
+func TestInvariantsTwoModels(t *testing.T) {
+	skip.Quint(t)
+	dir := copyTree(t, golem)
+	doc := filepath.Join(dir, "docs", "design.md")
+	golden, _ := os.ReadFile(doc)
+	// the document as it was before either table was written
+	blank := regexp.MustCompile(`(?s)(<!-- gotogether:invariants (\w+) -->\n).*?(<!-- /gotogether:invariants)`).ReplaceAll(golden, []byte("${1}${3}"))
+	if err := os.WriteFile(doc, blank, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tree := dir + "/..."
+	attempts := []string{"-spec", filepath.Join(dir, "model", "attempts.qnt"), "-invariant", "safe"}
+	publication := []string{"-spec", filepath.Join(dir, "model", "publication.qnt"), "-exclude", "witness", "-links", "name"}
+	run := func(args ...string) (int, string, string) {
+		t.Helper()
+		var out, errw bytes.Buffer
+		n, err := invariants(t.Context(), &out, &errw, args)
+		if err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		return n, out.String(), errw.String()
+	}
+	n, out, errw := run(append(attempts, "-write", doc, tree)...)
+	if n != 0 || out != doc+": written (2 properties of model attempts: 2 enforced, 2 checked)\n" ||
+		errw != "note: 2 annotation names qualified by modules this spec does not have (other models'), left out of the table of model attempts: publication (2)\n" {
+		t.Fatalf("attempts: %d\n%s%s", n, out, errw)
+	}
+	if now, _ := os.ReadFile(doc); !strings.Contains(string(now), "<!-- gotogether:invariants publication -->\n<!-- /gotogether:invariants publication -->") {
+		t.Errorf("the attempts run wrote publication's table:\n%s", now)
+	}
+	if n, out, _ := run(append(publication, "-write", doc, tree)...); n != 0 || !strings.Contains(out, "written (1 property of model publication") {
+		t.Fatalf("publication: %d\n%s", n, out)
+	}
+	if now, _ := os.ReadFile(doc); !bytes.Equal(now, golden) {
+		t.Errorf("the document differs from the golden %s:\n%s", golem+"/docs/design.md", now)
+	}
+	// a line above every site: attempts' lines are stale, publication's
+	// names are not
+	edit(t, filepath.Join(dir, "state", "state.go"), "package state\n", "package state\n\n// (a line added above every site)\n")
+	if n, out, _ := run(append(attempts, "-check", doc, tree)...); n != 1 || !strings.Contains(out, "stale: row noLostAttempt changed: run gotogether invariants") {
+		t.Errorf("attempts, by line: %d\n%s", n, out)
+	}
+	if n, out, _ := run(append(publication, "-check", doc, tree)...); n != 0 || !strings.Contains(out, "ok   "+doc+": current (1 property of model publication: 1 enforced, 1 checked)") {
+		t.Errorf("publication, by name: %d\n%s", n, out)
+	}
+}
+
+// -props takes exactly its vals in its order, and -exclude removes from
+// them; a name that is no boolean val is refused with the nearest.
+func TestInvariantsProps(t *testing.T) {
+	skip.Quint(t)
+	var out, errw bytes.Buffer
+	spec := golem + "/model/attempts.qnt"
+	if n, err := invariants(t.Context(), &out, &errw, []string{"-spec", spec, "-props", "reachedFive,boundedAttempts,noLostAttempt", "-exclude", "reachedFive", golem + "/..."}); n != 0 || err != nil {
+		t.Fatalf("%d, %v\n%s%s", n, err, out.String(), errw.String())
+	}
+	if rows := regexp.MustCompile("(?m)^\\| `(\\w+)`").FindAllStringSubmatch(out.String(), -1); len(rows) != 3 || rows[0][1] != "boundedAttempts" || rows[1][1] != "noLostAttempt" || rows[2][1] != "attempt" {
+		t.Errorf("rows %v in:\n%s", rows, out.String())
+	}
+	if n, err := invariants(t.Context(), &out, &errw, []string{"-spec", spec, "-props", "boundedAttempt", golem + "/..."}); n != 2 || err == nil || err.Error() != "invariants: -props names boundedAttempt, which is no boolean val of model attempts: did you mean boundedAttempts? name one of its boolean vals (boundedAttempts, noLostAttempt, reachedFive, safe)" {
+		t.Errorf("a misspelled -props: %d, %v", n, err)
 	}
 }

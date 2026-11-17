@@ -95,7 +95,6 @@ func TestResolve(t *testing.T) {
 		"bounde":       "model m has no property bounde",
 		"count":        "count is no boolean val of model m",
 		"k":            "k is no boolean val of model m",
-		"other.x":      "other is no module of the spec (its modules: base, m, q, lib, user)",
 		"base.nothing": "module base has no definition nothing",
 		"lib.count":    "count is no boolean val", // imported, not exported: lib sees it, m's count is not a property
 		"a.b.c":        "a property is a val's name, or module.name",
@@ -104,6 +103,10 @@ func TestResolve(t *testing.T) {
 		if p, why := m.resolve(name); p != nil || !strings.Contains(why, want) {
 			t.Errorf("%s: %v %q, want %q", name, p, why, want)
 		}
+	}
+	// a module the spec does not have: another model's, no error
+	if p, why := m.resolve("other.x"); p != nil || why != otherModel {
+		t.Errorf("other.x: %v %q", p, why)
 	}
 	// a module m does not see flattened: q's b is qualified
 	u := read(t, "user")
@@ -117,7 +120,7 @@ func TestResolve(t *testing.T) {
 	if !slices.Equal(m.names(), []string{"bounded", "positive"}) {
 		t.Errorf("restricted: %v", m.names())
 	}
-	if _, why := m.resolve("own"); !strings.Contains(why, "own is a val of model m that the binding does not check: add it to the binding's invariants (or eventually)") {
+	if _, why := m.resolve("own"); !strings.Contains(why, "own is a val of model m that this table leaves out (the binding does not check it, or -props, -invariant or -exclude left it out)") {
 		t.Errorf("own after Restrict: %q", why)
 	}
 	if err := read(t, "m").Restrict([]string{"bounded", "count", "gone"}); err == nil || err.Error() != "the binding checks count, gone, which are no boolean val of module m: fix the binding (its properties: bounded, positive, settles, own)" {
@@ -125,12 +128,12 @@ func TestResolve(t *testing.T) {
 	}
 }
 
-// Comments are the first line of the // block directly above a val,
-// by module.
+// Comments are the // block directly above a val, by module, its
+// lines kept for FirstSentence.
 func TestComments(t *testing.T) {
 	src := "module a {\n  // first\n  // second\n  val p = true\n\n  // detached\n\n  val q = true\n}\nmodule b {\n  // b's\n  temporal p = true\n}\n"
 	got := Comments([]byte(src))
-	if len(got) != 2 || got["a::p"] != "first" || got["b::p"] != "b's" {
+	if len(got) != 2 || got["a::p"] != "first\nsecond" || got["b::p"] != "b's" {
 		t.Errorf("comments %q", got)
 	}
 }
@@ -229,7 +232,7 @@ func FuzzA(f *testing.F) {}
 		"enforces settles @a/a.go:12 L.Admit",
 		"enforces own @a/a.go:13 L.Admit",
 		"checks bounded+positive @a/a_test.go:6 TestA",
-		"checks settles @a/a_test.go:9 TestA",
+		"checks settles @a/a_test.go:9 TestA/sub",
 		"checks own @a/a_test.go:17 FuzzA",
 		"enforces bounded @a/sub/s.go:3 F",
 	}

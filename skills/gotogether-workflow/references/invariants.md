@@ -42,15 +42,41 @@ main module sees unqualified: its own, and those of a module it imports
 or instantiates flattened (`module exposure { import limits(N = 3).* }`).
 A qualified import's (`import choreo(...) as choreo`) are not. With
 `-binding` they are the binding's `invariants` and `eventually` vals
-alone, and a directive naming another val of the model says the binding
-does not check it.
+alone. Three flags choose them instead, a model's scenario targets and
+mutant witnesses being boolean vals nothing enforces by design:
+
+- `-props a,b,c`: exactly these, in this order;
+- `-invariant safe`: the conjuncts of `val safe = and { a, b }` (or
+  `a and b`, `all { a, b }`), expanded through conjuncts that are
+  themselves conjunctions of vals, depth first; a val that is no
+  conjunction is itself, and one with a conjunct that is no val's name
+  (`x != 5`) stays a row too, before its named conjuncts, since no other
+  row stands for that conjunct;
+- `-exclude a,b`: these left out, after the others.
+
+`-props` and `-invariant` replace the binding's set (give one of the
+two); `-exclude` removes from whichever set is chosen. A name that is
+no boolean val is refused (exit 2) with the nearest. A directive naming
+a val the table leaves out says so.
 
 A directive names a property as the main module does (`limitsHonoured`),
 or qualified by any module of the spec that sees it, with `.` or `::`:
 the instance (`exposure.limitsHonoured`), the module that declares it
 (`limits.limitsHonoured`), or the main module. The table names each as
-the main module does, in the model's order, with its meaning: the first
-line of its `///` doc comment, else of the `//` comment above it.
+the main module does, in the model's order (or `-props`'), with its
+meaning: the first sentence of its `///` doc comment's first paragraph,
+else of the `//` comment above it, its wrapped lines joined (up to a
+period followed by a space or the end).
+
+**Qualify annotations when a tree holds several models.** A name
+qualified by a module the spec does not have (`publication.noExpiredServe`
+in the attempts model's run) is another model's: it is left out and
+counted once, `note: 2 annotation names qualified by modules this spec
+does not have (other models'), left out of the table of model attempts:
+publication (2)`. An unqualified name that is no property stays an
+error, and so does one qualified by a module of the spec that lacks the
+val. So one package can carry two models' annotations, each run scanning
+`./...`.
 
 ## Actions and the code that implements them
 
@@ -74,8 +100,10 @@ literals count: an action named through a constant or a variable is not
 seen, nor a key set on a Switch after it is made (`sw["a"] = h`). The
 rows are the model's actions as the main module sees them, `init` and
 `step` left out as connect leaves them (a driver's `init` is no error).
-A name that is no action of the model is an error at its line, so scan
-only the code of the model the table is for.
+A name that is no action of the model is an error at its line. Actions
+cannot be qualified (a step names its action bare, as a trace does), so
+a tree that records or drives two models' actions is scanned per model,
+by its directories.
 
 ## The command
 
@@ -107,10 +135,29 @@ the actions':
 ```
 
 and nothing outside them; `-check` compares the tables the document
-has, and only their kinds of warning are shown (printed, both are) (a literate model's `.qnt` is written again when
-it was current, as with `simulate -write-matrix`: the literate
-reference). Links are relative to the document, so the table is the same
-from any directory:
+has, and only their kinds of warning are shown (printed, both are). A
+literate model's `.qnt` is written again when it was current, as with
+`simulate -write-matrix` (the literate reference); `-literate=false`
+treats the document as plain Markdown and refuses a `.md` spec (name the
+`.qnt` your own tangler, lmt for one, writes).
+
+One document can hold several models' tables, each pair named for its
+model: `<!-- gotogether:invariants attempts -->` ...
+`<!-- /gotogether:invariants attempts -->`, and the same for
+`actions`. A run writes and checks only the pair of its name (`-name`,
+default the main module, or the module the binding names), else the
+unnamed pair; the others are left as they are. A document of one model
+keeps unnamed markers.
+
+Links are relative to the document, so the table is the same from any
+directory. A site is its function (`Type.Method`), qualified by its
+package (`state.Restore`, `telemetry.Call.AttemptID`) when the tables
+span packages, and a `checks` directive in a `t.Run` closure with a
+literal name names the subtest (`TestReset/from_the_cap`). With
+`-links name` each site is its package and function, linked to its file
+without a line: the table then changes only when a site is added,
+removed or renamed, not when code above it moves (the default, `line`,
+links each `file:line`):
 
 ```markdown
 | property | meaning | enforced by | checked by |
@@ -134,13 +181,17 @@ from any directory:
 | `f.go:17: //quint:enforces names withinCapp: model counter has no property withinCapp: did you mean withinCap? name one of ...` (exit 1, every mode) | the directive names no property | fix the name, or the model |
 | `f.go:9: //quint:checks is in helper, which is no test: ...` | a checks directive outside a test | move it to the test that calls the helper |
 | `f.go:15: //quint:enforces in F annotates no statement: ...` | nothing on the next line | put it above the statement, or on F's doc |
+| `note: N annotation names qualified by modules this spec does not have (other models') ...` | other models' qualified annotations in the tree | nothing: their own run tables them |
+| `f.go:12: //quint:checks names p: p is a val of model M that this table leaves out ...` | the binding, `-props`, `-invariant` or `-exclude` left p out | add it to the selection, or name one the table has |
+| `invariants: -props names x, which is no boolean val of model M: did you mean ...` (exit 2) | a selection flag names no boolean val | the name it suggests |
+| `doc.md has no table of model M: add <!-- gotogether:invariants M --> ...; its tables are named a, b` | no pair of this model's name, nor unnamed | add the pair, or `-name` |
 | `f.go:38: .Action("ince", ...) names ince, which is no action of model counter: did you mean inc? ...` (exit 1, every mode) | a driver entry, Switch key, directive or Record names no action | fix the name, or leave another model's code out of the patterns |
 | `f.go:17: //quint:action on F names no action: give it action:NAME ...` | a directive without its action | add `action:NAME` |
 | `warning: property p: nothing enforces it` / `no test checks it` (a `—` cell) | an unannotated property | annotate it, or say why in the document |
 | `warning: action a: nothing records it` / `nothing drives it` (a `—` cell) | no code records the action's steps, or no connect driver runs it | record it where it takes effect, bind it, or say why |
 | `FAIL property p: ...`, `FAIL action a: ...` (exit 1) | the same under `-require` | the same |
 | `FAIL doc.md: stale: row p changed, row q added: run gotogether invariants ...` (exit 1) | the code moved, or the annotations changed | run the command it names, commit the document |
-| `FAIL doc.md: missing: doc.md has neither <!-- gotogether:invariants --> ... nor <!-- gotogether:actions --> ...` | the document has no markers | add the two lines where each table goes |
+| `FAIL doc.md: missing: doc.md has no table of model M: add <!-- gotogether:invariants M --> ...` | the document has no markers of this model, nor unnamed ones | add the pair where the table goes |
 | exit 2 | a bad invocation, a Go file that does not parse, a model quint refuses | the message says which |
 
 Read Go source alone (go/parser): no types, no build, so it runs where
