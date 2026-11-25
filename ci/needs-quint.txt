@@ -68,6 +68,7 @@ examples/migrate-payments TestProductionDayAtVolume | Q2 | it writes payments.da
 examples/raftkv TestCatchUp | size | cluster.binding.yaml's model
 examples/raftkv TestClusterFaithful | size | cluster.binding.yaml's model
 examples/raftkv TestElectionAfterHeal | size | cluster.binding.yaml's model
+examples/raftkv TestHostStallIsNoVerdict | size | cluster.real.binding.yaml's model
 examples/raftkv TestUnpersistedVote | size | cluster.binding.yaml's model
 examples/raftkv TestRealCluster | real | RAFTKV_REAL's three node processes, judged by cluster.binding.yaml (size) too
 examples/raftkv TestRealFaultsInSimulation | real | RAFTKV_REAL's toxiproxy faults re-made in qenv, judged by cluster.real.binding.yaml (size)

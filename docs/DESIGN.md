@@ -7255,7 +7255,11 @@ deadlock, never at an unlucky draw, and a step one value in 1000 enables
 is taken. The distribution is not quint's (it is each choice's uniform
 draw, conditioned on the step being enabled), and a call's successors are
 drawn each time (no memo), so the sampler costs one path a step, not the
-step's successors. `Model.Simulate` is one trace: init sampled from no
+step's successors. It stays so by decision
+(2026-11-25): a sample backtracks past a disabling draw rather than end
+the trace there, as quint's may, and parity is by meaning (below), never
+by distribution; a check that needs quint's distribution (short traces
+where quint's end early) runs quint. `Model.Simulate` is one trace: init sampled from no
 state, step up to Steps times, each state judged by the invariants, the
 first false one ending it.
 
@@ -7412,6 +7416,11 @@ generated programs. Its first "front end" is quint again.
   sort, which compares ids as strings: shifting the ids reorders
   independent declarations. The form keeps the layer (`$layer`, ported
   from quint's call graph) and orders a layer by declaration key. A
+  module whose name repeats (QNT102: quint writes both) is keyed by its
+  content with its declarations as a multiset, never in quint's order,
+  and twins alike in name, kind and content (`var x: int` twice) are
+  numbered by their places in the source map (the parse's, for the
+  outputs that carry none). A
   front end numbering its nodes otherwise cannot match quint's order
   within a layer, so the bar is the layering. Consumers read no quint
   order within a layer: binding sorts its Vars by name.
@@ -7448,6 +7457,20 @@ generated programs. Its first "front end" is quint again.
   the order, the doubled errors and an end-column quirk (a node starting
   on the first line keeps the shift in its end column wherever it ends)
   before any Go code.
+- **Quint's id-dependence, by class.** Where quint's own output follows
+  its ids beyond what the form can order, there is nothing to match
+  (q2-front-end.md §4.5's rule): the oracle's comparison, `CompareKnown`,
+  accepts the classes internal/qoracle/testdata/shift-known.txt lists by
+  name, against any front end, logs each by class and compares the
+  outputs after it. `cycle-order`: only the errors differ, the same set
+  once a QNT098 is its cycle's modules as a set, the first errors equal
+  or both a QNT099. `types-after-error`: a typecheck (or a failed
+  compile's document) with the same errors, equal but in which nodes have
+  types, none typed otherwise.
+  `layer-order` is the form's own; `verdict-flip` names a corpus entry
+  (an upstream bug). A missing, extra or moved error, a first error of
+  another code, or a node typed otherwise is a disagreement; `Compare`
+  is the form's comparison alone.
 - **The corpus is pinned, quint's part fetched.** testdata/corpus.json
   lists every entry (the repository's .qnt files, its bindings'
   evaluation and --invariant modules, quint's examples, fixtures and

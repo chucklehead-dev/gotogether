@@ -1,8 +1,13 @@
-# Entries whose verdict quint 0.33.1 itself changes when every id is
-# shifted (a module written first): quint against quint shifted differs
-# there by quint's own id-dependence, which a Go front end numbering its
-# nodes otherwise will meet too. Each line: an entry's id, " # ", what
-# quint does. TestCorpus logs these instead of failing, and fails on one
-# that agrees again.
-quint:examples/language-features/importFrom.qnt # shifted, imports.qnt's `import E` and `export basics as ExportedBasics` fail: QNT405 Module 'basics' not found, QNT404 MyF::ExportedBasics::double (export resolution depends on the modules' order within a toposort layer, which is the ids')
-quint-test:quint/test/names/collector.test.ts#16 # `assume _ = val foo = 1 { foo }`: shifted, QNT000 Couldn't unify int and bool (the assumption named _ resolves by the ids' order)
+# Where quint 0.33.1's own output changes when every id is shifted (a
+# module written first), there is no quint behaviour to match: gotogether's
+# front end makes an id-free choice (source order, then name), and the
+# oracle accepts the class here (docs/q2-front-end.md §4.5's rule). Each
+# line: a class, a scope (* every program, else a corpus entry's id), " # ",
+# what quint does. The classes are internal/qoracle's (harness.go's Class);
+# a verdict-flip is an upstream bug (docs/upstream/quint-id-verdict-flip.md),
+# logged instead of failed, and fails once it agrees again.
+layer-order * # toposort.ts's `toposort` sorts a layer with `newLayer.sort()`, comparing ids as strings; the form compares declarations and modules by layer
+cycle-order * # toposort.ts's `cycles: Set(edges.keys())`: an immutable Map over 8 entries iterates in the order of its keys' hashes (a bigint's decimal string), so QNT099's errors come out in the ids' hash order and QNT098 lists, and points at, a cycle's modules in it
+types-after-error * # constraintGenerator.ts's exits return once a type error is recorded, and inferrer.ts walks a layer in the ids' order: which declarations after the first error have types follows the ids
+verdict-flip quint:examples/language-features/importFrom.qnt # shifted, imports.qnt's `import E` and `export basics as ExportedBasics` fail: QNT405 Module 'basics' not found, QNT404 MyF::ExportedBasics::double (export resolution depends on the modules' order within a toposort layer, which is the ids')
+verdict-flip quint-test:quint/test/names/collector.test.ts#16 # `assume _ = val foo = 1 { foo }`: shifted, QNT000 Couldn't unify int and bool (the assumption named _ resolves by the ids' order)

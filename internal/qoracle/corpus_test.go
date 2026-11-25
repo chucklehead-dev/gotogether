@@ -297,7 +297,10 @@ func TestCorpus(t *testing.T) {
 				mu.Unlock()
 				t.Errorf("%s: quint's verdict is %v, pinned %v: quint is not %s, or the entry changed", e.ID, v, e.Quint, m.Quint)
 			}
-			d, err := CompareOutputs(oa, ob)
+			d, kn, err := CompareOutputsKnown(oa, ob)
+			for _, k := range kn {
+				t.Logf("%s: quint and %s differ by an accepted class (testdata/shift-known.txt): %v", e.ID, fe.Name(), k)
+			}
 			mu.Lock()
 			ran++
 			if d == nil && err == nil {
@@ -339,26 +342,20 @@ func TestCorpus(t *testing.T) {
 }
 
 // shiftKnown are the entries on which quint's own verdict depends on its
-// ids (testdata/shift-known.txt: an id, then # and the reason): quint
-// shifted differs from quint there, and a Go front end, numbering its
-// nodes otherwise, will meet the same. Each is a finding about quint, not
-// the form's; an entry there that agrees fails, so the list stays true.
+// ids (testdata/shift-known.txt's verdict-flip lines): quint shifted
+// differs from quint there by an upstream bug, whose unshifted verdict a
+// Go front end implements. Each is a finding about quint, not the form's;
+// an entry there that agrees fails, so the list stays true.
 func shiftKnown(t *testing.T) map[string]string {
-	b, err := os.ReadFile("testdata/shift-known.txt")
+	ls, err := ShiftKnownLines()
 	if err != nil {
 		t.Fatal(err)
 	}
 	out := map[string]string{}
-	for _, l := range strings.Split(string(b), "\n") {
-		l = strings.TrimSpace(l)
-		if l == "" || strings.HasPrefix(l, "#") {
-			continue
+	for _, l := range ls {
+		if l.Class == ClassVerdictFlip {
+			out[l.Scope] = l.Reason
 		}
-		id, reason, ok := strings.Cut(l, " # ")
-		if !ok {
-			t.Fatalf("testdata/shift-known.txt: %q: want an id, \" # \" and the reason", l)
-		}
-		out[strings.TrimSpace(id)] = reason
 	}
 	return out
 }
