@@ -715,6 +715,21 @@ item is its own decision before it starts; the red-nightly rule applies.
   position; disagreements shrunk by `qshrink`. `evaluator-shadow` judges every
   verdict both ways. `ci/mutate-core.sh` on the port: a survivor is a program
   the corpus lacks. Bumping `QUINT_VERSION` re-runs it.
+  **Built (2026-11-25, q2-front-end.md §4.5):** internal/qoracle: the
+  canonical form (canon: ids as paths, declarations by toposort layer,
+  names by binder; brute-force and quint-output tests), the pinned corpus
+  manifest (repository, generated eval and --invariant modules, quint's
+  examples, fixtures and inline unit-test programs fetched at the tag by
+  `ci/fetch-quint-src.sh`), the harness (quint against quint with every id
+  shifted), ddmin over declarations and a tree shrink, the module and
+  ill-typed generators (every front-end QNT code reached, quint judging),
+  and the `qfront-differential` nightly. Left: a week of green nightlies
+  (exit criterion 5), Quint.g4's labelled alternatives counted against
+  the corpus, validate/model's simulate modules in the corpus, and, for
+  P5, `CompiledModel.Differs` by canon and `GOTOGETHER_FRONTEND=shadow` in
+  `evaluator-shadow` (both need P5's seam). One question for the
+  maintainer: quint orders a toposort layer by its ids as strings, and
+  binding's `Vars` follow that order.
 - **Stays external:** Apalache (`verify`, `simulate -prove`); the bounded
   graph covers small models in Go. Upstream: not contacted for now (the
   maintainer, 2026-11-25). gotogether proceeds on its own, and Q3 and Q2

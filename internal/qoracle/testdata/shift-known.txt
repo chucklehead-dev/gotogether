@@ -1,0 +1,8 @@
+# Entries whose verdict quint 0.33.1 itself changes when every id is
+# shifted (a module written first): quint against quint shifted differs
+# there by quint's own id-dependence, which a Go front end numbering its
+# nodes otherwise will meet too. Each line: an entry's id, " # ", what
+# quint does. TestCorpus logs these instead of failing, and fails on one
+# that agrees again.
+quint:examples/language-features/importFrom.qnt # shifted, imports.qnt's `import E` and `export basics as ExportedBasics` fail: QNT405 Module 'basics' not found, QNT404 MyF::ExportedBasics::double (export resolution depends on the modules' order within a toposort layer, which is the ids')
+quint-test:quint/test/names/collector.test.ts#16 # `assume _ = val foo = 1 { foo }`: shifted, QNT000 Couldn't unify int and bool (the assumption named _ resolves by the ids' order)

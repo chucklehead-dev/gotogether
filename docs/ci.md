@@ -203,6 +203,16 @@ running nothing green. To run a branch's fix before it merges, dispatch
 on the branch (`gh workflow run nightly.yml --ref <branch> ...`, or the
 API's `ref`).
 
+`qfront-differential` is Q3's oracle (docs/q2-front-end.md §4.5): it
+fetches quint's sources at `QUINT_VERSION`'s tag (`ci/fetch-quint-src.sh`,
+its commit checked against `ci/quint-src.commit`), runs every entry of
+internal/qoracle's pinned corpus and a generated sample seeded by date
+through the front-end harness (quint against its stub, until Q2's front
+end exists quint with every id shifted), checks that quint's verdict on
+each entry is still the pinned one, and keeps each disagreement shrunk.
+`GOTOGETHER_QFRONT_ENTRY=<id>` and `GOTOGETHER_QFRONT_SEED=n` rerun one
+(docs/agents/commands.md).
+
 A filtered run is named `nightly (partial: core-mutants, mutants qenv)`;
 only an unfiltered one is `nightly`. A partial run, or any dispatch,
 does not count for J7c, which asks for a green *scheduled* full nightly.

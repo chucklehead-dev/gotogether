@@ -43,6 +43,7 @@ qhegel/       separate module: Hegel integration; testdata/bank.yaml
 internal/hegelprops/  unpublished module (replace => ../..): the core's Hegel-checked properties, on the current core
 itf/          ITF decode/encode, Go <-> Quint values (Decode/Encode), Quint literal parser
 internal/qeval/  the Go evaluator: a model compiled once (quint compile), passing runs judged in Go, graphs (simulate -graph)
+internal/qoracle/  Q3, the oracle of Q2's front end: quint's JSON in canonical form (canon), the pinned corpus, the harness, generators
 qobs/ qtrace/ otelio/ convert/ input/  recording, schema/reconstruction, OTLP, span conversion, reading any trace input;
               qobs/qobshttp: an HTTP handler's steps into a given run
 qdriver/      an external driver's request log (gotogether.requests/1): requests as invocations, each completed by its own

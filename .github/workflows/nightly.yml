@@ -394,6 +394,56 @@ jobs:
           name: qeval-differential
           path: ${{ runner.temp }}/qeval
 
+  qfront-differential:
+    needs: select
+    if: github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'qfront-differential')
+    # Q3, the oracle Q2's Go front end is built against
+    # (docs/q2-front-end.md §4): every entry of the pinned corpus
+    # (internal/qoracle/testdata/corpus.json: the repository's .qnt files,
+    # the evaluation and --invariant modules its bindings generate, and
+    # quint's examples, test fixtures and unit tests' inline programs at
+    # QUINT_VERSION's tag, fetched, never vendored) and a generated sample
+    # (whole programs over four files, and each of the ill-typed
+    # generator's mutations) through the harness: quint against its stub,
+    # their parse, typecheck and compile outputs by canonical form, errors
+    # by the first and the set. Until P1 the stub is quint with every id
+    # shifted (GOTOGETHER_QFRONT_STUB=shifted), so the plumbing and the
+    # canonical form are proven before a Go front end exists; quint's
+    # verdict on each entry must also stay the pinned one. The generated
+    # sample is seeded by date (GOTOGETHER_QFRONT_SEED=n reruns a program,
+    # GOTOGETHER_QFRONT_ENTRY=<id> an entry). A disagreement is shrunk and
+    # kept (the artifact).
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
+      - name: Install quint
+        run: ci/install-quint.sh
+      - name: Fetch quint's sources at the tag
+        run: ci/fetch-quint-src.sh "$RUNNER_TEMP/quint-src" | tee -a "$GITHUB_ENV"
+      - name: the corpus and a generated sample, quint against its stub
+        env:
+          GOTOGETHER_QFRONT_CORPUS: "1"
+          GOTOGETHER_QFRONT_SAMPLE: "20"
+          GOTOGETHER_KEEP: ${{ runner.temp }}/qfront
+        run: |
+          export GOTOGETHER_SEED_OFFSET=$(( $(date -u +%s) / 86400 * 1000 ))
+          mkdir -p "$GOTOGETHER_KEEP"
+          set -o pipefail
+          go test -count=1 -timeout 110m -run '^Test(Corpus|Manifest|ModuleWellTyped|IllReachesEveryCode|GeneratedHarness)' -v ./internal/qoracle | tee "$GOTOGETHER_KEEP/qfront.log"
+      - name: keep the shrunk disagreements and the log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qfront-differential
+          path: ${{ runner.temp }}/qfront
+
   # Every model on its own, every trace of up to 8 steps (quint verify,
   # Apalache): a bounded proof of what the binding says each invariant
   # holds, a counterexample for what it allows. A binding's

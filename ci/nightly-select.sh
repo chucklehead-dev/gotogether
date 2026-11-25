@@ -27,7 +27,7 @@ set -f
 cd "$(dirname "$0")/.."
 
 # every job but select itself, in the workflow's order
-ids=(grist-full fresh-seeds core-properties volume core-mutants core-mutants-gate fuzz qeval-differential verify verify-alone-plan verify-alone evaluator-shadow webjobs-live raftkv-real benchmarks)
+ids=(grist-full fresh-seeds core-properties volume core-mutants core-mutants-gate fuzz qeval-differential qfront-differential verify verify-alone-plan verify-alone evaluator-shadow webjobs-live raftkv-real benchmarks)
 # a job selected takes the jobs it needs with it
 implied() {
   case "$1" in
