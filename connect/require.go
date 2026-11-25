@@ -68,6 +68,16 @@ var quintNotFound = regexp.MustCompile(`QNT404\] Name '([^']+)' not found`)
 // definition, not only a boolean, is kept so), keep. A name of keep
 // that quint cannot resolve is a *notFound.
 func compileModel(ctx context.Context, c Config, keep []string) (*qeval.Model, error) {
+	if c.compiled != nil {
+		// every definition was kept when it was compiled: a name it lacks
+		// is none of the model's
+		for _, n := range keep {
+			if _, ok := c.compiled.m.Decl(n); !ok {
+				return nil, &notFound{n}
+			}
+		}
+		return c.compiled.m, nil
+	}
 	spec, err := filepath.Abs(c.Spec)
 	if err != nil {
 		return nil, err
@@ -299,19 +309,22 @@ func (r *required) traceOf(step string, start qeval.State, path []qeval.Transiti
 	if err := add(start, "init", nil); err != nil {
 		return nil, err
 	}
+	prev := start
 	for _, t := range path {
-		// quint names the action step applied, not the actions that one
-		// calls: outer, for a step that applies outer, which applies inner
-		acts := t.Actions()
-		if len(acts) > 0 && acts[0].Action == r.m.Display(step) {
-			acts = acts[1:]
-		}
-		if len(acts) == 0 {
-			return nil, errors.New("a transition the evaluator found applied no named action: name every action step can take")
-		}
-		if err := add(t.State, acts[0].Action, t.Picks()); err != nil {
+		// quint names the branch the last any {} took (qeval's
+		// ActionTaken): outer, for a step that applies outer, which
+		// applies inner
+		action, err := r.m.ActionTaken(nil, prev, step, t)
+		if err != nil {
 			return nil, err
 		}
+		if action == "" {
+			return nil, errors.New("a transition the evaluator found applied no named action: name every action step can take")
+		}
+		if err := add(t.State, action, t.Picks()); err != nil {
+			return nil, err
+		}
+		prev = t.State
 	}
 	return tr, nil
 }

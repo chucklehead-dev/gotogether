@@ -63,6 +63,10 @@ type Config struct {
 	// model state. Values outside 0–2 are invalid. Default $QUINT_VERBOSE.
 	// Failures always show the step.
 	Verbose int
+
+	// compiled is the spec's compiled model the run uses instead of quint
+	// (compiled.go), set by resolve per GOTOGETHER_COMPILED
+	compiled *compiled
 }
 
 // FromEnv fills unset fields from the environment, quint-connect's
@@ -141,8 +145,15 @@ func (c Config) resolve(ctx context.Context) (Config, error) {
 	if err != nil {
 		return c, err
 	}
-	if err := quintcmd.Require(ctx, c.Quint, filepath.Dir(spec)); err != nil {
-		return c, err
+	if c.compiled == nil {
+		if c.compiled, err = compiledMode(c, spec); err != nil {
+			return c, err
+		}
+	}
+	if c.compiled == nil {
+		if err := quintcmd.Require(ctx, c.Quint, filepath.Dir(spec)); err != nil {
+			return c, err
+		}
 	}
 	if c.MaxSamples == 0 {
 		c.MaxSamples = 100
@@ -184,10 +195,17 @@ func (e *QuintError) Unwrap() error { return e.Err }
 // GenerateRun runs `quint run --mbt` and returns the trace files, in order,
 // and the resolved config (with the seed used). An incomplete batch returns
 // its partial files and an error instead of claiming MaxSamples were generated.
+// With the spec's compiled model (GOTOGETHER_COMPILED, CompiledFor), the
+// Go evaluator's simulation writes them instead, as quint would, with no
+// quint process.
 func GenerateRun(ctx context.Context, c Config) ([]string, Config, error) {
 	c, err := c.resolve(ctx)
 	if err != nil {
 		return nil, c, err
+	}
+	if c.compiled != nil {
+		files, err := generateGo(ctx, c)
+		return files, c, err
 	}
 	spec, _ := filepath.Abs(c.Spec)
 	n := strconv.Itoa(c.MaxSamples)
@@ -216,6 +234,10 @@ func generateTest(ctx context.Context, c Config, test string) ([]string, Config,
 	c, err := c.resolve(ctx)
 	if err != nil {
 		return nil, c, err
+	}
+	if c.compiled != nil {
+		return nil, c, fmt.Errorf("connect: %s's run %s is a quint test's, which the Go evaluator does not run (compiled model %s, %s): run it with quint (install quint, or GOTOGETHER_COMPILED=0), or replay the model's random traces with connect.Run",
+			c.Spec, test, c.compiled.path, compiledEnv)
 	}
 	spec, _ := filepath.Abs(c.Spec)
 	args := []string{"test", spec, "--seed", c.Seed, "--match", "^" + regexp.QuoteMeta(test) + "$",
@@ -374,7 +396,14 @@ func checkFirst(t *testing.T, c *Config, bound modelChecked) *prepared {
 // given nil, on what it compiles here from c.
 func replayPrepared(t *testing.T, c Config, files []string, newDriver func(testing.TB) Driver, what string, pre *prepared) {
 	t.Helper()
-	t.Logf("connect: %s %s: generated %d traces, seed %s", what, c.Spec, len(files), c.Seed)
+	if c.compiled != nil {
+		t.Logf("connect: %s %s: generated %d traces, seed %s, by the Go evaluator from the compiled model %s (no quint here, or %s=1)", what, c.Spec, len(files), c.Seed, c.compiled.path, compiledEnv)
+		for _, n := range c.compiled.notes {
+			t.Logf("connect: %s", n)
+		}
+	} else {
+		t.Logf("connect: %s %s: generated %d traces, seed %s", what, c.Spec, len(files), c.Seed)
+	}
 	if pre == nil {
 		pre = prepare(t, c)
 	}

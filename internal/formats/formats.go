@@ -77,6 +77,12 @@ var (
 	// quint.
 	Model = Format{Thing: "model", Major: 1, What: "compiled model (gotogether compile; validate -compiled)",
 		Older: "compile it again (gotogether compile -binding B -o model.json)"}
+	// MBT is a model compiled for connect's traces (gotogether compile
+	// -spec; connect.CompiledFor): the Go evaluator's IR of a spec's main
+	// module, every definition kept, compiled by quint, so that connect
+	// generates and replays traces where quint is not installed.
+	MBT = Format{Thing: "mbt", Major: 1, What: "a model compiled for connect's traces (gotogether compile -spec; connect without quint)",
+		Older: "compile it again (gotogether compile -spec S [-main M])"}
 	// Report is a command's machine-readable report (validate -json,
 	// simulate -json; validate.Document), read by alert routing, CI and
 	// the Action's job summary. An added field is optional; a changed or
@@ -104,7 +110,7 @@ var (
 
 // All is every format, for doctor and the docs.
 func All() []Format {
-	return []Format{Steps, Requests, Binding, Convert, Corpus, Choices, Manifest, Evidence, Model, Report, Matrix, Lint, ModelPreflight, Nav}
+	return []Format{Steps, Requests, Binding, Convert, Corpus, Choices, Manifest, Evidence, Model, MBT, Report, Matrix, Lint, ModelPreflight, Nav}
 }
 
 // Name is the format's name at the major this build writes.
