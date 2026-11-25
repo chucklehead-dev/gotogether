@@ -28,6 +28,10 @@ type Output struct {
 	// Compile is `quint compile --target json`'s IR, or, where it failed,
 	// its --out document (the modules before flattening, with errors).
 	Compile []byte
+	// CompileFailed is a compile that wrote no document, neither IR nor
+	// errors: its stderr's first line (quint's "Internal error while
+	// flattening" on one of its own examples). A verdict, compared as one.
+	CompileFailed string
 }
 
 // A FrontEnd parses, typechecks and compiles a program, writing quint's
@@ -130,10 +134,14 @@ func (q Quint) run(ctx context.Context, p Program, root, file string) (*Output, 
 	if stderr, err = run(at("compile.json"), args...); err != nil {
 		return nil, err
 	}
-	if b, _ := os.ReadFile(at("compile.json")); len(bytes.TrimSpace(b)) > 0 {
+	// a failed compile may write text to stdout (a parse error's
+	// "[DEBUG] generating undefined expr"): only JSON is the IR
+	if b, _ := os.ReadFile(at("compile.json")); len(bytes.TrimSpace(b)) > 0 && json.Valid(b) {
 		out.Compile = b
-	} else if out.Compile, err = read(at("compile-errors.json"), "compile", stderr); err != nil {
-		return nil, err
+	} else if b, _ := os.ReadFile(at("compile-errors.json")); len(bytes.TrimSpace(b)) > 0 && json.Valid(b) {
+		out.Compile = b
+	} else {
+		out.CompileFailed = or(firstLine(strings.TrimSpace(stderr)), "no output")
 	}
 	return out, nil
 }

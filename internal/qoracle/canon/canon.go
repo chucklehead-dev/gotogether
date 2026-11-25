@@ -536,6 +536,7 @@ func pick(n map[string]any, fields []string, f func(k string, v any) any) map[st
 	return out
 }
 
+// The fields each tier keeps (read-only).
 var (
 	compileDeclFields = []string{"id", "kind", "name", "qualifier", "expr"}
 	compileExprFields = []string{"id", "kind", "name", "opcode", "args", "value", "params", "qualifier", "expr", "opdef"}

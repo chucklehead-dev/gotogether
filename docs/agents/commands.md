@@ -114,6 +114,20 @@ AGENTS.md has the general requirements.
   reports. They are bounded cases rather than automatic shrinking outputs.
   Complete finite sets come from separately rendered pure relation oracles;
   native action execution contributes sampled membership checks only.
+  The front end's oracle (internal/qoracle, Q3; docs/q2-front-end.md §4.5):
+  `QUINT_VERSION=0.33.1 ci/fetch-quint-src.sh DIR` fetches quint's sources
+  at the tag (`QUINT_SRC=DIR` for the tests); `GOTOGETHER_QFRONT_CORPUS=1`
+  runs the pinned corpus through the harness (quint against its stub,
+  `GOTOGETHER_QFRONT_STUB=shifted` unset, or `quint`),
+  `GOTOGETHER_QFRONT_ENTRY=<id substring>` some entries alone,
+  `GOTOGETHER_QFRONT_SAMPLE=n` generated programs from
+  `GOTOGETHER_SEED_OFFSET+1` and `GOTOGETHER_QFRONT_SEED=n` one (with every
+  ill-typed mutation), `GOTOGETHER_QFRONT_ILL=1` the reach of every front-end
+  QNT code; `GOTOGETHER_KEEP=/dir` keeps shrunk disagreements. The manifest
+  (internal/qoracle/testdata/corpus.json) is rewritten, with quint's
+  verdicts, by `GOTOGETHER_UPDATE_CORPUS=1 QUINT_SRC=DIR go test -run
+  TestUpdateManifest ./internal/qoracle/` (about 15 minutes); per push,
+  TestManifestCurrent fails on a .qnt file it does not pin.
   validate keeps quint's typechecks and the evaluation modules' compiles
   across processes, by content (quint's version, the spec's and its
   imports' paths and contents, every .qnt beside them, the arguments),

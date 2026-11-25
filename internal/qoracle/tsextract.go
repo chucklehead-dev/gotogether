@@ -96,7 +96,7 @@ func tsString(s string) (string, int, bool) {
 	return b.String(), i, false
 }
 
-// declKeywords start a Quint declaration.
+// declKeywords start a Quint declaration (read-only).
 var declKeywords = []string{"const ", "var ", "val ", "def ", "pure ", "action ", "run ", "temporal ", "nondet ", "type ", "import ", "export ", "assume "}
 
 func startsDecl(s string) bool {

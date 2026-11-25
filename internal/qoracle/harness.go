@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/internal/qoracle/canon"
@@ -25,6 +24,9 @@ const (
 	// only the rest of the errors.
 	TierErrors Tier = "errors"
 )
+
+// ToolFailure is the verdict of a compile that wrote nothing (CompileFailed).
+const ToolFailure = "tool-failure"
 
 // A Disagreement is where two front ends' outputs differ, in their
 // canonical forms (canon, tier Read).
@@ -73,15 +75,45 @@ func (d *Disagreement) String() string {
 // then compile) its disagreement; nil when they agree. tmp holds the
 // runs' copies.
 func Compare(ctx context.Context, p Program, a, b FrontEnd, tmp string) (*Disagreement, error) {
-	oa, err := runIn(ctx, a, p, tmp)
+	oa, ob, err := RunBoth(ctx, p, a, b, tmp)
 	if err != nil {
 		return nil, err
+	}
+	return CompareOutputs(oa, ob)
+}
+
+// RunBoth is a's and b's outputs for p.
+func RunBoth(ctx context.Context, p Program, a, b FrontEnd, tmp string) (*Output, *Output, error) {
+	oa, err := runIn(ctx, a, p, tmp)
+	if err != nil {
+		return nil, nil, err
 	}
 	ob, err := runIn(ctx, b, p, tmp)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return compareOutputs(oa, ob)
+	return oa, ob, nil
+}
+
+// VerdictOf is the verdict an output says: its typecheck's and compile's
+// error codes.
+func VerdictOf(o *Output) (Verdict, error) {
+	errs, err := Errors(o.Typecheck, canon.Typecheck, o.Root)
+	if err != nil {
+		return Verdict{}, err
+	}
+	v := Verdict{Typecheck: orNone(Codes(errs))}
+	if o.CompileFailed != "" {
+		v.Compile = []string{ToolFailure}
+	}
+	if o.Compile != nil {
+		cerrs, err := Errors(o.Compile, canon.Compile, o.Root)
+		if err != nil {
+			return Verdict{}, err
+		}
+		v.Compile = orNone(Codes(cerrs))
+	}
+	return v, nil
 }
 
 func runIn(ctx context.Context, fe FrontEnd, p Program, tmp string) (*Output, error) {
@@ -96,7 +128,8 @@ func runIn(ctx context.Context, fe FrontEnd, p Program, tmp string) (*Output, er
 	return out, nil
 }
 
-func compareOutputs(oa, ob *Output) (*Disagreement, error) {
+// CompareOutputs compares two outputs by canonical form (Compare's).
+func CompareOutputs(oa, ob *Output) (*Disagreement, error) {
 	type doc struct {
 		kind       canon.Kind
 		tier       Tier
@@ -108,6 +141,9 @@ func compareOutputs(oa, ob *Output) (*Disagreement, error) {
 		{canon.Parse, TierParse, oa.Parse, ob.Parse, oa.SourceMap, ob.SourceMap, oa.Parse != nil, ob.Parse != nil},
 		{canon.Typecheck, TierTypecheck, oa.Typecheck, ob.Typecheck, nil, nil, oa.Typecheck != nil, ob.Typecheck != nil},
 		{canon.Compile, TierCompile, oa.Compile, ob.Compile, nil, nil, oa.Compile != nil, ob.Compile != nil},
+	}
+	if (oa.CompileFailed != "") != (ob.CompileFailed != "") {
+		return &Disagreement{Tier: TierCompile, Kind: canon.Compile, Diffs: []canon.Difference{{Path: "(compile failed)", A: oa.CompileFailed, B: ob.CompileFailed}}}, nil
 	}
 	for _, d := range docs {
 		if d.hasA != d.hasB {
@@ -129,15 +165,11 @@ func compareOutputs(oa, ob *Output) (*Disagreement, error) {
 			continue
 		}
 		dis := &Disagreement{Tier: d.tier, Kind: d.kind, Diffs: diffs}
-		var errs, rest []canon.Difference
+		onlyErrors := true
 		for _, x := range diffs {
-			if strings.HasPrefix(x.Path, "errors") {
-				errs = append(errs, x)
-			} else {
-				rest = append(rest, x)
-			}
+			onlyErrors = onlyErrors && strings.HasPrefix(x.Path, "errors")
 		}
-		if len(rest) == 0 {
+		if onlyErrors {
 			// errors alone: the first, or a later one
 			dis.Tier = TierErrors
 			dis.First = firstDiffers(fa, fb)
@@ -210,12 +242,4 @@ func Codes(errs []Error) []string {
 		}
 	}
 	return out
-}
-
-// absFile is path made absolute.
-func absFile(path string) string {
-	if p, err := filepath.Abs(path); err == nil {
-		return p
-	}
-	return path
 }

@@ -1,6 +1,6 @@
 # Q2: a Go front end for Quint
 
-Status: design and plan, 2026-11-25. Nothing here is built. It refines
+Status: design and plan, 2026-11-25. Q3 (the oracle, §4) is built (§4.5); the front end is not. It refines
 ROADMAP's Q2 ("the front end (L)") and Q3 ("the oracle"), and ROADMAP says
 that each is its own decision before it starts. It does not cover Q0's
 remainder (the examples' compiled models) or Q1 (qeval's refusals and
@@ -633,6 +633,78 @@ and kept as a regression fixture.
    plumbing is proven before any Go front end exists.
 
 Q3's tiers 2 to 5 then wait for P2 to P4.
+
+### 4.5 Q3 as built (2026-11-25)
+
+internal/qoracle; its mechanism is DESIGN §110. Against §4.4:
+
+1. **The manifest** (internal/qoracle/testdata/corpus.json, one entry a
+   line): CORPUS_SUMMARY. Each entry has its text's sha256, its
+   constructs (a lexical scan: instances, exports, aliases, sum types,
+   `match`, spread, `temporal`, `assume`, destructuring, `apalache::`,
+   hex, ...), compile's main, init, step and invariants, and quint's
+   verdict (its error codes for typecheck and compile). `apalache::`
+   entries expect "needs-quint". quint's files are fetched by
+   `ci/fetch-quint-src.sh` at the tag, its commit checked against
+   `ci/quint-src.commit`. Per push, TestManifestCurrent fails on a
+   repository .qnt file the manifest does not pin; the nightly checks
+   quint's files and verdicts too. Not yet in the corpus: validate/model's
+   simulate modules (their text is built inside `Simulate`), the
+   Rust evaluator's fixtures, and a count of Quint.g4's labelled
+   alternatives against the corpus (§4.1's completeness for the
+   grammar; for the codes, see 4).
+2. **canon** passes its tests: idempotent on quint's outputs, a shifted
+   model's form equal to the model's, a renamed or changed definition
+   differing there alone, and equality checked against brute force over
+   every bijection on small IRs. Each was ablated (the id rewriting, the
+   suffix rule, the variable renaming, the layer order): a test fails.
+   Two departures from §4.2: ids become paths, not counters (local
+   diffs), and declarations are compared by toposort layer, since
+   quint orders a layer by its ids as strings.
+3. **The harness against itself**: SELF_RESULT.
+4. **The ill-typed generator** reaches every front-end code, quint
+   judging (TestIllReachesEveryCode): QNT000 (syntax, type, effect),
+   QNT006 to QNT009, QNT012 to QNT016, QNT098, QNT099, QNT101, QNT102,
+   QNT200 to QNT206 and QNT404 to QNT408, from 37 mutations of the
+   module generator's programs (four files: aliases, a sum type,
+   polymorphic and record operators, an export, instances with constants,
+   a state machine). quint accepts every generated well-typed program
+   sampled.
+5. **The nightly** `qfront-differential` runs the corpus and a dated
+   sample; a week of green nights is still to come.
+
+Disagreements shrink by ddmin over declarations (positions kept: a
+removed declaration becomes blanks) and, for generated programs, by
+their tree; both are checked (against brute force over every subset,
+and for 1-minimality over the reductions).
+
+**What it found in quint 0.33.1**, each a constraint on P1 to P5:
+- The toposort sorts a layer with JavaScript's default sort, comparing
+  ids as strings: shifting ids reorders independent declarations, and
+  modules. Bar (2)'s "declaration order is part of it" holds only up to
+  the layer. *For the maintainer:* binding's `Vars` follow the
+  typecheck's order; either binding orders them itself, or P1 must
+  number nodes exactly as quint does.
+- A type error is reported once per module analysed before it: errors
+  compare as the first, then the set (§3.4's set).
+- A node starting on a file's first line keeps that line's column shift
+  in its end column, wherever it ends (a module's closing brace): the
+  source map's end columns are quint's arithmetic, not positions.
+- `compile --out` writes the modules before flattening; the IR is
+  stdout's (a file, not a pipe: node exits before a pipe drains), which
+  a failed compile may fill with text (`[DEBUG] generating undefined
+  expr`). The compile IR keeps the non-main modules unshadowed while its
+  table's names for them are unshadowed.
+- A type node's id inside `types` comes from the modules' id space or
+  from a builtin signature's own parse: no form can tell them apart, and
+  qeval decodes `Type.ID` without reading it. P5 can drop the field.
+- `val n2 = n; val r = { val n2 = n2 + 1; n2 }` typechecks and fails
+  compile with QNT099.
+
+**For P5, not built here:** `CompiledModel.Differs` comparing forms
+(canon.Of and canon.Equal are ready), and `GOTOGETHER_FRONTEND=shadow`
+in `evaluator-shadow`: both need P5's seam at the eight call sites.
+Mutation testing of internal/qfront waits for it to exist.
 
 ## 5. The plan
 
