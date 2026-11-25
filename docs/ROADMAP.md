@@ -604,6 +604,13 @@ Items, each its own decision before it starts:
   for the implementation's next point, as golem's `settle` does by hand
   today: connect's steps are synchronous calls. Its own design, golem's
   driver its first case; it is not `Bind`'s ([#144](https://github.com/chucklehead-dev/gotogether/issues/144)).
+- **CW12: I/O specifications (proposed, after Gobra).** A step's outbound
+  effects (calls, publishes, writes) stated per action in the model and
+  compared with what the doubles recorded during the step: a wrong
+  payload, a missing, duplicated, extra, reordered or late send caught at
+  its step, not at a settle. Design, phases and the maintainer's answers
+  (2026-11-25): [io-specs.md](io-specs.md). Nothing built; P0 and P1 next,
+  after CW3's first slice.
 
 Kept on purpose, both projects say: the model as an independent text,
 Apalache for proofs, necessity runs, native source and arithmetic oracles
