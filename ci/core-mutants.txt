@@ -11,28 +11,31 @@
 # internal/depgraph: sorting the nodes Tarjan visits, whose components
 # are sorted after.
 
-# qtrace: 24 of 405, each read (ids as of the watermarks' and the
-# observation mutants' tests). Equivalent: realTime's loop bounds
-# (47, 49, 52: earliest[0] is never read, earliest[k] >= k); a seq
-# equal to a Call or to another step's of its recorder (61, 67, 279:
-# that record is never among the steps, seqs are deduplicated, and a
-# completion numbered as its invocation is that record's duplicate);
-# a rejected order's state (93: never read); a budget's last turn
-# (101, 129, 130: it checks nothing); a complete search that tried
-# nothing (126: needs a budget under 1, which Linearize never
-# passes); a move to the front of what is first (77, 110: nothing to
-# move); the comparator's < on values never equal (295, 296); the
-# time key left in a line's attributes (37: nothing reads it); the
-# assumed mark inverted for every step alike (44: the same groups of
-# equal keys); a recorder's first seq against an equal one (235: seqs
-# are deduplicated first); a merged loss's After set to the equal
-# value it has (249, 250); UncorruptedFields' two passes in the other
-# order (198: the same fields); a retime's tie with its own copy (208:
-# what the retime of either would break, wellFormed leaves out) and a
-# step moved past itself (215: the others are other actors'). 119
-# ties the guided search's best move otherwise: another path, the
-# same verdicts.
-qtrace 24
+# qtrace: 25 of 548, each read (ids as of the effect records' tests).
+# Equivalent: realTime's loop bounds (126, 128, 131: earliest[0] is
+# never read, earliest[k] >= k); a seq equal to a Call or to another
+# step's of its recorder (152, 158, 391: that record is never among the
+# steps, seqs are deduplicated, and a completion numbered as its
+# invocation is that record's duplicate); a rejected order's state
+# (184: never read); a budget's last turn (192, 220, 221: it checks
+# nothing); a complete search that tried nothing (217: needs a budget
+# under 1, which Linearize never passes); a move to the front of what
+# is first (168, 201: nothing to move); the comparator's < on values
+# never equal (417, 418: Recorder compared only when they differ, and
+# one recorder's seqs are deduplicated); the time key left in a line's
+# attributes (115: nothing reads it); the assumed mark inverted for
+# every step alike (123: the same groups of equal keys); a recorder's
+# first seq against an equal one (346: seqs are deduplicated first); a
+# merged loss's After set to the equal value it has (360, 361);
+# UncorruptedFields' two passes in the other order (291: the same
+# fields); a retime's tie with its own copy (320: what the retime of
+# either would break, wellFormed leaves out) and a step moved past
+# itself (327: the others are other actors'); an effect made under a
+# call Late at its completion's own seq (401: an effect record and the
+# completion never share a seq, the second of the two dropped as a
+# conflicting duplicate). 210 ties the guided search's best move
+# otherwise: another path, the same verdicts.
+qtrace 25
 # qenv's ceiling remains 22 while J7a is requalified. Historical
 # binary-local IDs and assumptions are not current source approvals:
 # the former profile-key separator claim was disproved by a real
