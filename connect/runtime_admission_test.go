@@ -23,6 +23,7 @@ func oldRuntime(t *testing.T) string {
 }
 
 func TestUnsupportedRuntimeBeforeTraceEffects(t *testing.T) {
+	t.Setenv(compiledEnv, "0") // a test of quint's process, not of the compiled model
 	for _, backend := range []string{"typescript", "rust"} {
 		for _, existing := range []bool{false, true} {
 			t.Run(backend+map[bool]string{false: "/new", true: "/existing"}[existing], func(t *testing.T) {
@@ -71,6 +72,7 @@ func TestUnsupportedRuntimeChild(t *testing.T) {
 }
 
 func TestUnsupportedRuntimeNeverReachesDriver(t *testing.T) {
+	t.Setenv(compiledEnv, "0") // a test of quint's process, not of the compiled model
 	for _, backend := range []string{"typescript", "rust"} {
 		t.Run(backend, func(t *testing.T) {
 			bin := oldRuntime(t)
@@ -89,6 +91,7 @@ func TestUnsupportedRuntimeNeverReachesDriver(t *testing.T) {
 }
 
 func TestTraceCountOverridesRefusedBeforeEffects(t *testing.T) {
+	t.Setenv(compiledEnv, "0") // a test of quint's process, not of the compiled model
 	for _, flag := range []string{"--max-samples", "--n-traces", "--maxSamples", "--nTraces"} {
 		for _, equals := range []bool{false, true} {
 			t.Run(flag+map[bool]string{false: "/separate", true: "/equals"}[equals], func(t *testing.T) {
@@ -116,6 +119,7 @@ func TestTraceCountOverridesRefusedBeforeEffects(t *testing.T) {
 }
 
 func TestIncompleteRunReturnsPartialFilesAndError(t *testing.T) {
+	t.Setenv(compiledEnv, "0") // a test of quint's process, not of the compiled model
 	bin := oldRuntime(t)
 	script := `#!/bin/sh
 if [ "$1" = --version ]; then echo 0.33.1; exit 0; fi

@@ -233,15 +233,19 @@ type Within struct
     method (Within) Name() string
 
 == github.com/chucklehead-dev/gotogether/connect
+const MBTFormat = mbtmodel.Format
 func Bind[T any](newT func(tb testing.TB) T) *Binding[T]
+func CompiledFor(spec, main string) string
 func Eval[T any](s *Step, name string, args ...any) (T, error)
 func GenerateRun(ctx context.Context, c Config) ([]string, Config, error)
+func LoadMBT(path string) (cm *MBTModel, notes []string, err error)
 func MustEval[T any](s *Step, name string, args ...any) T
 func MustPick[T any](s *Step, name string) T
 func OptPick[T any](s *Step, name string) (*T, error)
 func Pick[T any](s *Step, name string) (T, error)
 func ReadTraces(ctx context.Context, c Config, files []string) ([]*itf.Trace, error)
 func Replay(tr *itf.Trace, d Driver, opt ReplayOptions) error
+func RequireTraces(t testing.TB, c Config)
 func Run(t *testing.T, c Config, newDriver func(testing.TB) Driver)
 func Skip(*Step) error
 func Test(t *testing.T, c Config, test string, newDriver func(testing.TB) Driver)
@@ -284,6 +288,19 @@ type Driver interface
 type DriverFunc func(s *Step) error
     method (DriverFunc) Step(s *Step) error
 type Handler func(s *Step) error
+type MBTModel = mbtmodel.Model
+    field Format string `json:"format"`
+    field Quint string `json:"quint"`
+    field Gotogether string `json:"gotogether,omitempty"`
+    field Spec string `json:"spec"`
+    field Main string `json:"main,omitempty"`
+    field Sources []Source `json:"sources"`
+    field IR json.RawMessage `json:"ir"`
+    method (*Model) Differs(other *Model) []string
+    method (*Model) Write(path string) error
+type MBTSource = mbtmodel.Source
+    field Path string `json:"path"`
+    field SHA256 string `json:"sha256"`
 type Observer interface
     embed Driver
     Observe() (any, error)
@@ -2465,6 +2482,7 @@ func CacheDir() string
 func Cached(ctx context.Context, bindingPath string, o Options) (*Checker, error)
 func CaptureModelSources(spec string) (*SourceGuard, error)
 func Compile(bindingPath string, opt Options) (*CompiledModel, error)
+func CompileMBT(ctx context.Context, c MBTOptions, out string) (*MBTModel, error)
 func CompiledFor(bindingPath string) string
 func CurrentTools(o Options) Tools
 func EventuallyName(val string) string
@@ -2897,6 +2915,22 @@ type Loss struct
     field Kind string `json:"kind"`
     field After uint64 `json:"after"`
     field Before time.Time `json:"before,omitzero"`
+type MBTModel = mbtmodel.Model
+    field Format string `json:"format"`
+    field Quint string `json:"quint"`
+    field Gotogether string `json:"gotogether,omitempty"`
+    field Spec string `json:"spec"`
+    field Main string `json:"main,omitempty"`
+    field Sources []Source `json:"sources"`
+    field IR json.RawMessage `json:"ir"`
+    method (*Model) Differs(other *Model) []string
+    method (*Model) Write(path string) error
+type MBTOptions struct
+    field Spec string
+    field Main string
+    field Init string
+    field Step string
+    field Quint string
 type Manifest struct
     field Format string `json:"format"`
     field Receipt *receipt.Summary `json:"receipt,omitempty"`

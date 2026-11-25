@@ -372,7 +372,11 @@ the binding's tests run where quint is not installed (`GOTOGETHER_COMPILED`,
 `qtest.RequireModel`), with `gotogether compile -binding b.yaml -check` in a
 CI job that has quint keeping it current; `gotogether doctor` lists the
 bindings that have none. Sixteen of the examples keep theirs
-(`ci/compiled-examples.sh`; `ci/needs-quint.txt` says why the rest do not).
+(`ci/compiled-examples.sh`; `ci/needs-quint.txt` says why the rest do not). A spec's compiled model for
+connect (`gotogether compile -spec model/m.qnt -main M` writes
+`model/m.M.mbt.json`) lets `connect.Run` and a bound driver's `Run` generate
+their traces with the Go evaluator's random simulation where quint is not
+installed (the same `GOTOGETHER_COMPILED`; `connect.RequireTraces`).
 
 Every file format is named and versioned (`gotogether.steps/1`,
 `gotogether.binding/2`, ...); pre-release, only the current major is

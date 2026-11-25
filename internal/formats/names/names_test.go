@@ -6,6 +6,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/validate/navproto"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/connect"
 	"github.com/chucklehead-dev/gotogether/convert"
 	"github.com/chucklehead-dev/gotogether/internal/evidence"
 	"github.com/chucklehead-dev/gotogether/internal/formats"
@@ -30,6 +31,7 @@ func TestNamesAreTheTables(t *testing.T) {
 		{evidence.Format, formats.Evidence},
 		{navproto.Protocol, formats.Nav},
 		{validate.CompiledFormat, formats.Model},
+		{connect.MBTFormat, formats.MBT},
 		{validate.ReportFormat, formats.Report},
 		{formats.Choices.At(qenv.BytesVersion), formats.Choices},
 	} {

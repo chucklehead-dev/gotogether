@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -95,6 +96,20 @@ var differentialFindings = []struct{ typ, expr, want string }{
 	// evaluator kept the greatest pair's
 	{"str -> List[str]", `Set(("k", ["a", "a", ""]), ("k", ["ab", "a", "ab"])).setToMap()`, "refused"},
 	{"int -> int", "Set((1, 2), (3, 2), (1, 2)).setToMap()", "value Map(1 -> 2, 3 -> 2)"},
+	// Q1's builtins, closed: refused once as no builtin of the evaluator's
+	{"Set[int -> bool]", "setOfMaps(Set(1, 2), Set(true, false))", "value Set(Map(1 -> false, 2 -> false), "},
+	{"Set[int -> bool]", "setOfMaps(Set(), Set(true))", "value Set(Map())"},
+	{"Set[int -> bool]", "setOfMaps(Set(1), Set())", "value Set()"},
+	{"int", "setOfMaps(Set(1, 2, 3), 1.to(3)).size()", "value 27"},
+	{"Set[List[int]]", "Set(1, 2).allListsUpTo(2)", "value Set([], [1], [1, 1], [1, 2], [2], [2, 1], [2, 2])"},
+	{"Set[List[int]]", "Set(1, 2).allListsUpTo(0)", "value Set([])"},
+	{"Set[List[int]]", "Set().allListsUpTo(3)", "value Set([])"},
+	{"int", "Set(7).getOnlyElement()", "value 7"},
+	{"int", "Set(7, 8).getOnlyElement()", "error"},
+	{"int", "Set().getOnlyElement()", "error"},
+	{"int", `q::debug("x", 3) + 1`, "value 4"},
+	// quint refuses it too (QNT501), and so does the evaluator, with its fix
+	{"bool", "Set(1).allLists().contains([1])", "refused (allLists: an infinite set of lists, which quint's simulator refuses too: use allListsUpTo)"},
 }
 
 func TestDifferentialFindings(t *testing.T) {
@@ -229,6 +244,9 @@ type goutcome struct {
 	refused string  // the evaluator's Unsupported
 	partial bool    // the evaluator: some of a choice's values disable the action
 	missing bool    // quint wrote nothing for it
+	// sampled: the evaluator's sample (Sample) is no successor of its
+	// own, or is disabled where a successor is, or enabled where none is
+	sampled string
 }
 
 func (o goutcome) String() string {
@@ -275,6 +293,7 @@ func evaluate(m *Model, e gentry, i int) (o goutcome) {
 	if o.vals == nil {
 		o.vals = []Value{}
 	}
+	o.sampled = samplesAgree(m, name, v, st, vals, uint64(i))
 	if _, err := assigned(m.AsReplayed(), name, v, st); err != nil {
 		var u *Unsupported
 		if errors.As(err, &u) && u.Choice != "" {
@@ -298,6 +317,57 @@ func fromErr(o goutcome, v Value, err error) goutcome {
 		o.val = v
 	}
 	return o
+}
+
+// samplesAgree checks Sample against the enumeration (vals, the values
+// action name may assign v from st): each of 16 samples is one of them,
+// and the action is enabled exactly when there is one. "" when they
+// agree, else what differs.
+func samplesAgree(m *Model, name, v string, st State, vals []Value, seed uint64) string {
+	r := rand.New(rand.NewPCG(seed, 0x51))
+	for range 16 {
+		x, ok, err := sampleAssigned(m, name, v, st, r)
+		switch {
+		case err != nil:
+			return "the sample fails (" + err.Error() + ") where the enumeration does not"
+		case ok != (len(vals) > 0):
+			return fmt.Sprintf("the sample is enabled=%v where the enumeration has %d successors", ok, len(vals))
+		case !ok:
+			return ""
+		case !(&Set{vals}).has(x):
+			return fmt.Sprintf("the sample assigns %s, none of the enumeration's %s", String(x), String(&Set{vals}))
+		}
+	}
+	return ""
+}
+
+// sampleAssigned is the value a sample of action name assigns v from st
+// (Sample's evaluation, on an entry that assigns v alone), and whether the
+// action is enabled.
+func sampleAssigned(m *Model, name, v string, st State, r *rand.Rand) (x Value, ok bool, err error) {
+	defer recoverInto(&err)
+	d, found := m.Decl(name)
+	if !found {
+		return nil, false, fmt.Errorf("no %s", name)
+	}
+	ev := m.evaluation(nil, st)
+	ev.labels, ev.rng = true, r
+	body, en, err := ev.bindArgs(d, nil, nil, name)
+	if err != nil {
+		return nil, false, err
+	}
+	succs, err := ev.action(body, en)
+	if err != nil || len(succs) == 0 {
+		return nil, false, err
+	}
+	if len(succs) != 1 {
+		return nil, false, fmt.Errorf("a sample of %d successors", len(succs))
+	}
+	x, ok = succs[0].a[v]
+	if !ok || len(succs[0].a) != 1 {
+		return nil, false, fmt.Errorf("the action assigns %v, not %s alone", succs[0].a, v)
+	}
+	return x, true, nil
 }
 
 // assigned is the values action name may assign v from state st, sorted.
@@ -723,6 +793,9 @@ func differ(t *testing.T, entries []gentry, seed uint64, rerun string) tally {
 			continue
 		}
 		tl.entries++
+		if q[i].sampled != "" {
+			t.Errorf("the evaluator's sampler and its enumeration disagree (%s): %s\n  %s", rerun, q[i].sampled, entries[i].root())
+		}
 		answered := false
 		for _, be := range backends {
 			d, ok := judge(b, q, qs, i, be)

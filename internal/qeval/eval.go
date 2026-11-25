@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"slices"
 	"strings"
 	"unsafe"
@@ -87,7 +88,10 @@ type evaluation struct {
 	depth  int
 	// labels: each successor carries what led to it (Transitions)
 	labels bool
-	ticks  uint8 // amortized request-cancellation checkpoints
+	// rng, if set, makes the evaluation a sample's (Sample): each choice
+	// drawn, at most one successor an action
+	rng   *rand.Rand
+	ticks uint8 // amortized request-cancellation checkpoints
 	// acts are the successors of each action call made so far (its
 	// declaration and arguments), in this state: an action's successors
 	// depend on nothing else (its body binds only its parameters), and a
@@ -311,6 +315,11 @@ type callMemo struct {
 type succ struct {
 	a   assignment
 	lab *events
+	// taken, in a labelled evaluation, is the action quint's --mbt names
+	// for the successor (mbt::actionTaken): the branch the last any {} on
+	// its path took, its action's name, or "" for an anonymous branch;
+	// nil where no any {} chose (quint names the step itself)
+	taken *string
 }
 
 // events are a successor's labels as a list, first event first: a
@@ -382,10 +391,14 @@ func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 							return nil, err
 						}
 						var lab *events
+						taken := x.taken
 						if ev.labels {
 							lab = x.lab.then(y.lab)
+							if y.taken != nil { // quint's last any {} evaluated
+								taken = y.taken
+							}
 						}
-						prod = append(prod, succ{z, lab})
+						prod = append(prod, succ{z, lab, taken})
 					}
 				}
 				out = prod
@@ -395,6 +408,12 @@ func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 			}
 			return out, nil
 		case opActionAny:
+			if ev.rng != nil {
+				return ev.sampled(len(e.Args), func(i int) ([]succ, error) {
+					next, err := ev.action(e.Args[i], en)
+					return ev.took(next, e.Args[i]), err
+				})
+			}
 			var out []succ
 			for _, a := range e.Args {
 				ev.checkpoint()
@@ -402,7 +421,7 @@ func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 				if err != nil {
 					return nil, err
 				}
-				out = append(out, next...)
+				out = append(out, ev.took(next, a)...)
 			}
 			return out, nil
 		case opIte:
@@ -425,6 +444,17 @@ func (ev *evaluation) action(e *Expr, en *env) ([]succ, error) {
 			s, err := ev.choiceSet(d, en)
 			if err != nil {
 				return nil, err
+			}
+			if ev.rng != nil {
+				var pick string
+				if ev.labels {
+					pick = ev.m.Display(d.Name)
+				}
+				return ev.sampled(len(s.Elems), func(i int) ([]succ, error) {
+					x := s.Elems[i]
+					next, err := ev.action(e.Expr, en.bind(d.Name, x))
+					return ev.label(next, Event{Pick: pick, Value: x}), err
+				})
 			}
 			var out []succ
 			disabled := 0   // values with no successor
@@ -496,7 +526,8 @@ func (ev *evaluation) calledAction(e *Expr, en *env) (*Decl, []Value, bool) {
 // (acts). The result is the caller's to change: label rewrites its
 // elements.
 func (ev *evaluation) callAction(d *Decl, args []Value, applied bool) ([]succ, error) {
-	memo := true
+	// a sample's calls are drawn each time: a memo would repeat a draw
+	memo := ev.rng == nil
 	for _, a := range args {
 		ev.checkpoint()
 		if _, ok := a.(*Lambda); ok {
@@ -544,6 +575,43 @@ func (ev *evaluation) callAction(d *Decl, args []Value, applied bool) ([]succ, e
 	}
 	ev.acts.succs[k] = slices.Clone(out)
 	return out, nil
+}
+
+// took marks out, the successors of an any {}'s branch, as that branch's
+// (succ.taken) where no any {} inside it chose, in a labelled evaluation.
+func (ev *evaluation) took(out []succ, branch *Expr) []succ {
+	if !ev.labels {
+		return out
+	}
+	var name *string
+	for i := range out {
+		if out[i].taken != nil {
+			continue
+		}
+		if name == nil {
+			name = ev.branchName(branch)
+		}
+		out[i].taken = name
+	}
+	return out
+}
+
+// branchName is the action an any {}'s branch applies, as quint's --mbt
+// names it: through its lets and nondets, the action applied or named,
+// else "" (an anonymous branch).
+func (ev *evaluation) branchName(e *Expr) *string {
+	for e != nil && e.kind == kindLet {
+		e = e.Expr
+	}
+	name := ""
+	if e != nil && (e.kind == kindApp || e.kind == kindName) {
+		if r, ok := ev.m.refs[e.ID]; ok && r.kind == "def" {
+			if d := ev.m.byID[r.decl]; d != nil && d.Qualifier == "action" {
+				name = ev.m.Display(d.Name)
+			}
+		}
+	}
+	return &name
 }
 
 // label puts what led to out (a call, a pick) before each successor's
@@ -1194,6 +1262,78 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		return NewSet(out)
 	case opChooseSome, opOneOf:
 		throw(unsupported(op, "a choice outside a nondet"))
+	case opGetOnlyElement:
+		s := ev.setOf(arg(0), op)
+		if len(s.Elems) != 1 {
+			throw(evalErr("getOnlyElement of a set of %d elements", len(s.Elems)))
+		}
+		return s.Elems[0]
+	case opSetOfMaps:
+		// every map from the domain to the range: |range|^|domain| of them
+		dom, rng := ev.setOf(arg(0), op), ev.setOf(arg(1), op)
+		n := 1
+		for range dom.Elems {
+			ev.checkpoint()
+			n *= len(rng.Elems)
+			if n > maxSet {
+				throw(unsupported(op, "more than %d maps", maxSet))
+			}
+		}
+		out := []Value{&Map{}}
+		if len(rng.Elems) == 0 && len(dom.Elems) > 0 {
+			out = nil
+		}
+		for i := range dom.Elems {
+			ev.checkpoint()
+			var next []Value
+			for _, m := range out {
+				ev.checkpoint()
+				for _, y := range rng.Elems {
+					ev.checkpoint()
+					mm := m.(*Map)
+					// the domain is sorted: each key appends in order
+					next = append(next, &Map{Keys: append(slices.Clone(mm.Keys), dom.Elems[i]), Vals: append(slices.Clone(mm.Vals), y)})
+				}
+			}
+			out = next
+		}
+		return NewSet(out)
+	case opAllListsUpTo:
+		s, k := ev.setOf(arg(0), op), ev.intOf(arg(1), op)
+		total, layer := 1, 1
+		for i := int64(0); i < k; i++ {
+			ev.checkpoint()
+			layer *= len(s.Elems)
+			total += layer
+			if total > maxSet || layer == 0 {
+				if layer == 0 {
+					break
+				}
+				throw(unsupported(op, "more than %d lists", maxSet))
+			}
+		}
+		out := []Value{List{}}
+		prev := []List{{}}
+		for i := int64(0); i < k && len(s.Elems) > 0; i++ {
+			ev.checkpoint()
+			var next []List
+			for _, l := range prev {
+				ev.checkpoint()
+				for _, x := range s.Elems {
+					ev.checkpoint()
+					nl := append(slices.Clone(l), x)
+					next = append(next, nl)
+					out = append(out, nl)
+				}
+			}
+			prev = next
+		}
+		return NewSet(out)
+	case opDebug:
+		// quint prints the message and the value, and is the value: the
+		// evaluator, which judges, prints nothing
+		_ = arg(0)
+		return arg(1)
 
 	// maps
 	case opMapCons:
@@ -1415,8 +1555,24 @@ func (ev *evaluation) builtin(e *Expr, en *env) Value {
 		}
 		return acc
 	}
-	throw(unsupported(op, "no builtin of this name"))
+	throw(unsupported(op, "%s", outsideWhy(op)))
 	return nil
+}
+
+// outsideWhy says why the evaluator refuses a builtin it has no case for:
+// the operators quint's own simulator and tests refuse too (QNT501) are
+// refused with quint's fix, a run's operators where an action or a value
+// is evaluated, and any other as no builtin the evaluator knows.
+func outsideWhy(op string) string {
+	switch op {
+	case "allLists":
+		return "an infinite set of lists, which quint's simulator refuses too: use allListsUpTo"
+	case "always", "eventually", "next", "leadsTo", "orKeep", "mustChange", "enabled", "weakFair", "strongFair":
+		return "a temporal operator, which quint run and quint test refuse too: Apalache's (quint verify)"
+	case "then", "reps", "expect", "fail":
+		return "a run's operator (a quint test's), which the evaluator does not run: runs are quint test's"
+	}
+	return "no builtin of this name"
 }
 
 func (ev *evaluation) truth(v Value) bool {

@@ -62,6 +62,7 @@ func TestConfigFromEnvNumericPreflight(t *testing.T) {
 // Configuration failure must precede both trace cleanup and subprocess work.
 // A successful control proves the fake command's marker can actually be reached.
 func TestNumericPreflightBeforeTraceEffects(t *testing.T) {
+	t.Setenv(compiledEnv, "0") // a test of quint's process, not of the compiled model
 	if runtime.GOOS == "windows" {
 		t.Skip("the fake Quint command is a POSIX shell script")
 	}

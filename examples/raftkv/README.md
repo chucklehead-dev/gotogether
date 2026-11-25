@@ -56,6 +56,7 @@ its own, recorded at each node after its hard state is persisted.
 | `TestLostSnapshots` | none | twelve operations a client, one message fault in ten, compaction every 16 entries | every run converges: a lost snapshot is reported to raft and retried (the first version never reported one, and 2 of these 40 runs left a follower behind for good) |
 | `TestRealNemesis`, `TestRealNoRequestID`, `TestRealSlowElection` (`RAFTKV_REAL=1`, toxiproxy) | none; `NoRequestID`; `SlowElection` | the real cluster under qnemesis (crashes, pauses, isolates, lost client responses, every node cut off), seeded schedules | every faithful run conforms and settles, both histories; some `NoRequestID` run fails as in the simulation; some `SlowElection` run elects past 500ms after a heal ([below](#under-a-nemesis)) |
 | `TestRealCluster` (`RAFTKV_REAL=1`) | none | three `raftkv-node` processes on localhost; the leader killed (`kill -9`) and restarted on its log while clients write | the cluster catches the node up (every `/status` agrees); the clients' history conforms linearized, settles and completes; the nodes' logs with the harness's settle conform to the cluster's model and settle (`eventually hasLeader` judged); without the settle they do not settle. `TestRealNodeExitsWithParent`: a node whose parent is killed exits |
+| `TestReplayCISeed5` | none | CI's seed 5 journal (`testdata/ci-seed5.journal.jsonl`: a 301ms pause of n1, a crash of n2, n1 cut off for 301ms) re-made in the simulation, without the real tier | every fault made, the cluster's history conforms, and nothing is said to be made otherwise than it happened (the replay hint once said the pause was off, comparing it with no simulation) |
 | `TestLinearizeScale` | none | four clients, fifty operations each, every history linearized whole | all 5 runs conform within a budget of 50000 orders, 20 to 60 s a history (most of it in planning each candidate: ROADMAP S2) |
 
 ## What the runs taught
@@ -158,7 +159,14 @@ the nodes' and nemesis's steps by
 heal, not 300ms. The faithful cluster's first leader after a heal came
 10 to 170ms after it in 24 runs measured, and once in about 60 with
 `-race` 320ms: real timing's tail, not the model's. SlowElection's came
-317ms to 1.1s after.
+317ms to 1.1s after. Once (CI, 2026-11-25, seed 5 of
+`TestRealFaultsInSimulation`) the faithful cluster's came 1.15s after the
+first cut's heal: two nodes campaigned for one term 3ms apart, 1.14s
+after it, and one led 5ms later. A campaign is recorded after its hard
+state is fsynced, and a 1s stall of every node's log commit reproduces
+that shape exactly; the simulation of the same faults and cuts elects
+within 300ms in all 30 seeds tried. A stall the nodes shared, not the
+code's.
 
 | test | mutant | claim | measured (this shape, `-race`) |
 |---|---|---|---|
@@ -203,7 +211,7 @@ the real one did (`Config.Stalls`) and a cut until its scripted heal
 (`Config.CutLength`, ten times `LongestCut`: at `LongestCut` alone qenv
 healed one link of two isolates by itself first, and the scripted heal
 never happened). What the script cannot make as it happened is logged
-(`Journal.Unreproducible`); a fault the simulation could not make fails
+(`Journal.Unreproducible`, against the simulation the replay deploys); a fault the simulation could not make fails
 the test with its root cause and what waited on it (`qnemesis.Unmade`).
 The clients' lost responses and the cuts after the schedule are no
 journal's: they are left out.
