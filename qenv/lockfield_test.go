@@ -174,14 +174,15 @@ func TestFieldInvariantSeamsAndOrder(t *testing.T) {
 			woven.MutexUnlockGuarded(woven.GuardedMutex{Mutex: &mu, Invariants: []woven.Invariant{{Name: "T.inv", Site: fieldSite, Holds: func() bool { c.call(); return true }}}})
 		})
 		var got any
+		var runErr error
 		func() {
 			defer func() { got = recover() }()
-			_ = s.Run(time.Minute)
+			runErr = s.Run(time.Minute)
 		}()
 		s.Close()
 		msg, _ := got.(string)
 		if !strings.HasPrefix(msg, "qenv: "+c.seam+" inside lock invariant T.inv's holds (guarded at "+fieldSite+", task holder): ") {
-			t.Errorf("%s: %v", c.seam, got)
+			t.Errorf("%s: %v (Run returned %v)", c.seam, got, runErr)
 		}
 	}
 
@@ -197,13 +198,14 @@ func TestFieldInvariantSeamsAndOrder(t *testing.T) {
 		}})
 	})
 	var e *qenv.LockInvariantError
+	var runErr error
 	func() {
 		defer func() { e, _ = recover().(*qenv.LockInvariantError) }()
-		_ = s.Run(time.Minute)
+		runErr = s.Run(time.Minute)
 	}()
 	s.Close()
 	if e == nil || e.Name != "T.b" || e.Guarded != fieldSite || strings.Join(order, " ") != "registered a b" {
-		t.Fatalf("RWMutex field: %v, checked %v", e, order)
+		t.Fatalf("RWMutex field: %v (Run returned %v), checked %v", e, runErr, order)
 	}
 
 	var mu sync.Mutex
