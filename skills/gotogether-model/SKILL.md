@@ -26,7 +26,8 @@ judges Hegel's runs (`qhegel`), and it replays recorded runs
    outcome a value; observable choices as parameters. Finite internal choices
    have bounded ordinary-trace support (see conventions, item 9).
 5. `gotogether lint -model m.qnt` (no binding needed), `quint run --invariant`, then `gotogether simulate
-   -binding` (`-graph`) with `holds`, `allows` and `possible`.
+   -binding` (`-graph`) with `holds`, `allows` and `possible`; without quint,
+   from `gotogether compile -binding`'s model (GOTOGETHER_COMPILED).
 6. `quint run --mbt` once: read `mbt::actionTaken` and `mbt::nondetPicks`.
 7. Select the model's actual safety/completion names (replace `safe`/`complete`):
    `gotogether scaffold -spec model.qnt -module M -invariants safe -eventually complete -out m.binding.yaml`.

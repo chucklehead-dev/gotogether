@@ -48,7 +48,7 @@ type evaluator struct {
 func init() {
 	evalshare.EvaluatorOf = func(ctx context.Context, checker any, make func(path string) (*binding.EvalModule, error)) *evalshare.Eval {
 		e := evaluatorOf(ctx, checker.(*Checker), make)
-		return &evalshare.Eval{Module: e.em, Model: e.m, Err: e.err, Literal: e.literal}
+		return &evalshare.Eval{Module: e.em, Model: e.m, Err: e.err, Literal: e.literal, Consts: e.consts}
 	}
 }
 
@@ -117,7 +117,7 @@ func evaluatorOf(ctx context.Context, c *Checker, make func(path string) (*bindi
 		}
 	}()
 	if c.compiled != nil {
-		return &evaluator{err: ErrNeedsQuint} // another module than the artifact's: quint would compile it
+		return c.compiled.analysis(c, make) // the artifact's module: no quint to compile another
 	}
 	dir := filepath.Join(os.TempDir(), "gotogether-eval")
 	em, err := make(filepath.Join(dir, "x", "eval.qnt"))

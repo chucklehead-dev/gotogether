@@ -30,10 +30,12 @@ var lossy = qenv.Rates{Default: 0.2}
 // reconciled false (a requeue is a stutter, which fairness counts as no
 // step: requeueing forever is no cycle), so the model drives it itself.
 func TestModelLive(t *testing.T) {
+	qtest.RequireModel(t, "requeue.binding.yaml")
 	qtest.Model(t, "requeue.binding.yaml").Expect(t, qtest.Live("reconciled"))
 }
 
 func TestStormModelHasLasso(t *testing.T) {
+	qtest.RequireModel(t, "requeue.storm.binding.yaml")
 	qtest.Model(t, "requeue.storm.binding.yaml").Expect(t, qtest.Refutes("reconciled"))
 }
 

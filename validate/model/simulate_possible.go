@@ -39,6 +39,9 @@ type possibleCheck struct {
 	quintWitness  []string
 	quintWitnessN int
 	quintSkip     string
+	// sampled, if set, is what the Go evaluator's sampler says of it
+	// (goPossibles, a compiled model's), in place of quint's verdict
+	sampled string
 }
 
 // possibleVals are the simulation module's vals of the predicates' negations.
@@ -392,6 +395,8 @@ func (s *sim) reportPossibles(bpath string, cs []*possibleCheck, rs []PossibleRe
 		switch {
 		case c.quintSkip != "":
 			quintSays = c.quintSkip
+		case c.sampled != "":
+			quintSays = c.sampled
 		case c.quintFound && len(c.quintWitness) > 0:
 			quintSays = "quint's sampled trace: " + strings.Join(c.quintWitness, ", ")
 		case c.quintFound && verify > 0:

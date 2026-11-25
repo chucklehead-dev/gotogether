@@ -8,6 +8,7 @@ import (
 	"testing"
 	"unicode"
 
+	"github.com/chucklehead-dev/gotogether/validate"
 	"github.com/chucklehead-dev/gotogether/validate/model"
 
 	"github.com/chucklehead-dev/gotogether/binding"
@@ -36,17 +37,27 @@ import (
 // in a complete graph.
 
 // Model is the model of binding (a binding file) on its own, for claims
-// about it (ModelCheck.Expect). It skips the test without quint.
+// about it (ModelCheck.Expect). Where quint is not installed it is the
+// binding's compiled model's (gotogether compile, GOTOGETHER_COMPILED as
+// for runs: RequireModel): the graph, the searches and the sampling are
+// the Go evaluator's alone, and what needs quint (the graph's cross-check
+// against quint's samples, a witness's replay by quint test) is not done,
+// each claim saying so. It skips the test with neither.
 func Model(t testing.TB, binding string) *ModelCheck {
 	t.Helper()
-	RequireQuint(t)
-	return &ModelCheck{binding: binding}
+	path, ok := compiledFor(t, binding, validate.Options{})
+	if !ok {
+		RequireQuint(t)
+	}
+	return &ModelCheck{binding: binding, compiled: path}
 }
 
 // A ModelCheck is a model alone, its claims stated by Expect.
 type ModelCheck struct {
 	binding string
 	options ModelOptions
+	// compiled is the compiled model it is analysed by ("": quint)
+	compiled string
 }
 
 // ModelOptions select a test-local model instance and search bounds without
@@ -159,13 +170,19 @@ func (m *ModelCheck) Expect(t testing.TB, claims ...ModelClaim) {
 	rep, err := model.Simulate(t.Context(), m.binding, model.SimulateOptions{
 		Invariants: n.invariants, Eventually: n.eventually, Possibles: n.possibles,
 		Graph: n.graph, Replay: n.graph, Constants: m.options.constants(),
-		States: m.options.States, Depth: m.options.Depth,
+		States: m.options.States, Depth: m.options.Depth, Compiled: m.compiled,
 	})
 	if err != nil {
 		t.Fatalf("qtest.Model(%s): %v", m.binding, err)
 	}
 	if rep.Skipped != "" {
 		t.Fatalf("qtest.Model(%s): no claim has a verdict: the model is not simulated (%s)", m.binding, rep.Skipped)
+	}
+	if rep.Compiled != "" {
+		t.Logf("gotogether: the model of %s analysed by its compiled model %s, the Go evaluator alone (no quint here, or %s=1)", m.binding, rep.Compiled, compiledEnv)
+		for _, n := range rep.NotDone {
+			t.Logf("gotogether: not done: %s", n)
+		}
 	}
 	for _, c := range claims {
 		switch v, why := c.judgeModel(rep); v {
@@ -217,13 +234,15 @@ func calls(cx *model.Counterexample) string {
 }
 
 // witnessed is a verdict's witness's value: yes if quint replayed it or
-// cannot replay it as drawn, unknown if quint's replay fails it (the
+// cannot replay it as drawn, or if there is no quint to replay it (a
+// compiled model's: the witness is the evaluator's alone, and the claim
+// says the replay was not done); unknown if quint's replay fails it (the
 // evaluator's error).
 func witnessed(v *model.Verdict, what string) (tri, string) {
 	switch {
 	case v.Replayed == "replayed":
 		return yes, what + " (replayed by quint test)"
-	case strings.HasPrefix(v.Replayed, "not replayed: steps"):
+	case strings.HasPrefix(v.Replayed, "not replayed: steps"), strings.HasPrefix(v.Replayed, "not done: "):
 		return yes, what + " (" + v.Replayed + ")"
 	case v.Replayed != "":
 		return unknown, what + ", " + v.Replayed

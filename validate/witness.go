@@ -74,6 +74,43 @@ func compiledBinding(b *binding.Binding, m *binding.Model) *binding.Binding {
 	return cb.WithRuntimeConstants(runtime...)
 }
 
+// compiledModule is the evaluation module a compiled model carries for
+// b (Compile writes it, NewCompiledChecker writes it again to compare):
+// compiledBinding's, with a val for each predicate the model's own
+// analyses read that is not already one of its vals (analysisPredicates),
+// so that simulate and qtest.Model run from the artifact with no quint to
+// compile a module of their own (DESIGN §110).
+func compiledModule(b *binding.Binding, m *binding.Model, path string) (*binding.EvalModule, error) {
+	return compiledBinding(b, m).PossibleModule(m, path, analysisPredicates(b, m))
+}
+
+// analysisPredicates are the predicates over the state that the binding's
+// simulate section names: its terminal and its possibles' when (the
+// possibles that are steps need none; the variants share the section's).
+// Each is evaluated by name (binding.EvalModule.Possible) where a model
+// analysis asks for it; the invariants and eventual vals are the module's
+// already. A possible that does not resolve is left out: simulate reports
+// it, by its own error, before any evaluation.
+func analysisPredicates(b *binding.Binding, m *binding.Model) []string {
+	sec := b.Simulate
+	if sec == nil {
+		return nil
+	}
+	var preds []string
+	add := func(p string) {
+		if p != "" && !slices.Contains(preds, p) {
+			preds = append(preds, p)
+		}
+	}
+	add(sec.Terminal)
+	for _, p := range sec.Possible {
+		if when, _, err := p.Resolve(m); err == nil {
+			add(when)
+		}
+	}
+	return preds
+}
+
 // isLiteral reports whether s is a Quint literal the Go evaluator reads
 // (itf.ParseQuint), not a template the binding computes from the steps.
 func isLiteral(s string) bool {
