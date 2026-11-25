@@ -41,7 +41,7 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Proposed queue | CW1–CW11: a contract from design to operation ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6885259328), [#220](https://github.com/chucklehead-dev/gotogether/issues/220#issuecomment-6884857732)) | CW1 (literate models; Goo adopted it), CW2 (the design matrix with per-variant search, `dead`, `-variant` and memory released per variant; golem adopted it for four models) and CW4 done. CW5's runtime half done (`connect.Bind` with `Returns` and `Observes`), and its static half (a binding checked against the model's actions, picks and types before any trace; Go types generated from the model's, `gotogether types [-check]`; the walkthrough's tables and the alignment lint, `gotogether invariants [-write|-check] [-require enforced,checked,recorded,driven]`: properties from `//quint:enforces` and `//quint:checks`, actions from the code that records and drives them); left in CW5: Go to Quint (if ever), golem's `expDriver` the first outside case, a world that is not one `T` an open question. CW3's first slice done (listed assumptions: `// @assume` lines in the model, `//quint:exercises` and `//quint:monitors`, the assumptions table, `-require targeted`); left in CW3: the doc lint, a predicate checked on traces. CW11 (asynchronous drivers) its own design. Left in CW1: `lint -model doc.md`, stable IDs; in CW2: possibles per variant, iterative deepening. |
 | Proposed queue | O1–O2: external drivers ([#220](https://github.com/chucklehead-dev/gotogether/issues/220)) | O1 done (a `settled` record in `gotogether.requests/1`, written by the Playwright adapter's `settled()`): it retires Goo's drain bridge. Next O2, the compact external-driver example. |
 | Proposed queue | LI1–LI4: [lock invariants, after Gobra](#lock-invariants-li-after-gobra) | LI1 (`qenv.Guard`, checked at every simulated Unlock) and LI2 (`//quint:guards`, woven by qweave at the field's Unlocks) done. LI3 (gosim) and LI4 (the doubles' row locks) as projects ask. |
-| Proposed queue | Q0–Q11: a Go Quint | A design item, each its own decision. Q0 first (no quint for consumers, small); Q2's front end only once Q3's corpus and ill-typed generator exist. Upstream first. |
+| Proposed queue | Q0–Q11: a Go Quint | A design item, each its own decision. Q0 first (no quint for consumers, small); Q2's front end only once Q3's corpus and ill-typed generator exist. No upstream contact for now (maintainer, 2026-11-25): gotogether proceeds on its own. |
 | Dropped | J12 and J23 | Go 1.26 compatibility and pin batching are withdrawn. Go 1.27.3 and immediate required sibling pin alignment remain deliberate policies. |
 
 **Red-nightly rule (maintainer decision):** while the nightly is red, feature
@@ -666,6 +666,14 @@ item is its own decision before it starts; the red-nightly rule applies.
   (types, L), P4 (effects and modes, M), P5 (wiring, M) and P6 (quint off
   consumer paths, S) come after Q3's exit criteria. `CompiledModel.Differs`
   compares IR bytes today and must compare canonical forms first.
+  Decided (2026-11-25):
+  - the bar above;
+  - quint's fixtures and examples fetched at `QUINT_VERSION`, not
+    vendored;
+  - `temporal`, `assume`, destructuring and `apalache::` refused at first;
+  - no `effects` written: the Rust evaluator reads none;
+  - internal for now;
+  - `go` the default only after a nightly shadow period.
 - **Q3: the oracle (M, with Q1 and Q2).** A differential job like
   `qeval-differential`: a corpus (quint's examples and fixtures, every
   example's model, qeval's generator grown to ill-typed programs) compiled
@@ -674,8 +682,9 @@ item is its own decision before it starts; the red-nightly rule applies.
   verdict both ways. `ci/mutate-core.sh` on the port: a survivor is a program
   the corpus lacks. Bumping `QUINT_VERSION` re-runs it.
 - **Stays external:** Apalache (`verify`, `simulate -prove`); the bounded
-  graph covers small models in Go. Upstream first: Informal Systems may want
-  the library, or prefer the Rust evaluator to grow a front end.
+  graph covers small models in Go. Upstream: not contacted for now (the
+  maintainer, 2026-11-25). gotogether proceeds on its own, and Q3 and Q2
+  are not gated on Informal Systems; the maintainer may reconsider.
 
 **What it removes.** Today the core reaches quint through processes: replay
 modules rendered as Quint text (internal/replay, `RenderModule`, the relative

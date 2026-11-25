@@ -11,14 +11,20 @@ quint only to write or change a model: to typecheck it and compile it to
 the IR the Go evaluator reads. Q2 removes that last need, and quint stays
 as the oracle that the Go front end is checked against.
 
-Sources. The code in this repository at `origin/main` (paths below).
-Quint 0.33.1 as installed by npm (`/opt/node22/lib/node_modules/@informalsystems/quint`:
-`dist/src/**` is the compiled TypeScript, and `test/*.ts` holds unit tests
-with Quint inline, no `.qnt` fixtures). `Quint.g4` at tag v0.33.1, fetched
-from raw.githubusercontent.com. The GitHub API and tarballs could not be
-reached from this session, so I have not checked the quint repository's
-`testFixtures/` and `examples/` directories, their counts, or their
-expected-output files. Where this document relies on them it says so.
+Sources:
+- the code in this repository at `origin/main` (paths below);
+- quint 0.33.1 as installed by npm (`dist/src/**`, the compiled
+  TypeScript);
+- quint's repository at tag v0.33.1, a shallow clone. Paths given as
+  `quint/...` are relative to it: `quint/src` (with
+  `quint/src/generated/Quint.g4`), `quint/testFixture`, `quint/test`,
+  `quint/integration-tests`, `examples` and the Rust `evaluator`.
+
+Counts and timings were taken on this machine. Claims that remain
+unverified are marked.
+
+The maintainer's decisions of 2026-11-25 are in §6 under "Decided", and
+the sections below follow them.
 
 ## 1. Scope: what gotogether asks of quint today
 
@@ -52,13 +58,25 @@ evaluator) and `binding.EvalModule`'s text (expects, wrappers, `__gtg_`
 names), which is what `compile` compiles. So the Go front end must
 compile gotogether's generated Quint as well as the user's model.
 
-An option without Node: the Rust evaluator has no front
-end of its own: quint 0.33.1 sends it the compiled IR on stdin
-(`dist/src/rust/commandWrapper.js`: `simulate-from-stdin`,
-`test-from-stdin`). A Go front end could therefore drive the Rust
-evaluator with no Node at all. That protocol is internal to quint and
-undocumented, so treat this as an option to ask upstream about (§3.6),
-not a dependency.
+**An option without Node.** The Rust evaluator has no front end. Its
+own docs say it relies "on the Quint typescript tool for parsing, name
+resolution and type/effect checking" (`evaluator/src/helpers.rs`).
+quint 0.33.1 sends it JSON on stdin (`dist/src/rust/commandWrapper.js`;
+`evaluator/src/main.rs`):
+- `SimulateInput` carries `parsed`, which holds init, step, invariants,
+  witnesses and the lookup table, plus the run's settings;
+- `TestInput` carries a test's definition and the table.
+
+What it reads is therefore expressions and the **table of whole
+definitions** (`LookupDefinition`, `evaluator/src/ir.rs`). It reads no
+`types` and no `effects`. Its development path compiles with
+`--flatten false` (`helpers.rs`), so the Rust evaluator does not need
+flattened modules either.
+
+A Go front end could therefore drive the Rust evaluator with no Node at
+all. The protocol is internal to quint (its main.rs documents it as "the
+integration with the `quint` typescript tool") and is not a published
+contract. It is an option, not a dependency.
 
 ### 1.2 The two outputs, and what is read of them
 
@@ -106,10 +124,14 @@ references it (`flattener`). `qeval.Load` (internal/qeval/ir.go) reads:
 
 `effects` is not read. It is 59 KB of hello's 120 KB IR
 (examples/hello/hello.model.json), and no Go package reads an `effects`
-key. The table's definition copies, `depth`, `hidden`, the types'
-variable lists and `warnings` are not read either. Q2 aims first at this
-**consumed subset**. `effects` and the table's copies can be written
-later, or never.
+key. The table's definition copies, `depth`, `hidden`, the types' variable
+lists and `warnings` are not read by qeval either. Q2 aims first at this
+**consumed subset**.
+
+The Rust evaluator does not read `effects` either (§1.1), so under the
+maintainer's decision 5 the Go front end never writes them. It does read
+the table's definition copies, so those are written only if the Rust
+stdin path is taken up.
 
 Two consequences:
 - **Ids leak into names.** The compile IR's names carry ids (`p_<id>`,
@@ -208,9 +230,18 @@ instances (15 files), `export` (28 files), polymorphic type aliases (7),
 sum types, `match`, record spread, `run`s with `.then`, and
 `always`/`eventually` in vals. None of them uses `temporal`
 declarations, `assume`, destructuring, `apalache::` or hex literals
-(checked with grep). That is a natural first subset. A construct outside
-it can be refused at first, as `qeval.Unsupported` is ("needs quint"),
-rather than guessed.
+(checked with grep). That is the first subset.
+
+By the maintainer's decision 4, `temporal`, `assume`, destructuring and
+`apalache::` are refused at first, as `qeval.Unsupported` is ("needs
+quint"), rather than guessed. quint's own corpus uses them far more than
+this repository does (counted by grep):
+- 29 of quint's 77 examples use at least one of them. By file: temporal
+  13, assume 8, destructuring 11, apalache:: 1. Hex literals appear in 3.
+- 6 of its 73 fixtures use at least one of them.
+
+Until those constructs are implemented, those files enter Q3 as expected
+refusals, not as accepted programs.
 
 ### 2.2 Types and effects
 
@@ -301,9 +332,8 @@ internal/qfront            Typecheck(spec) and Compile(spec, main, init, step), 
 
 These sit in the "values" layer, below binding (ARCHITECTURE §2), and
 import nothing of the module but internal/quintnames and
-internal/formats. They are internal until the upstream question is
-settled: published API is a promise (api/core.txt), and the names
-should follow whatever Informal Systems answers.
+internal/formats. They stay internal for now (decision 6): published
+API is a promise (api/core.txt).
 
 Quint offers three observable points, and porting phase for phase gives
 one checkpoint at each:
@@ -328,8 +358,9 @@ it out of the first pass.
 quint version whose language the front end implements and was certified
 against by Q3 (0.33.1), so older readers' admission check
 (`QuintSupported`) still holds. It adds an optional `compiler: "go"` (or
-`"quint"`) field. Under the formats rules (DESIGN §63) an optional field
-is not a new major version.
+`"quint"`) field, which needs no new major version under the formats
+rules (DESIGN §63). A `gotogether.model/2` is acceptable instead if it
+is cleaner (decision 8).
 
 ### 3.3 How close the IR must be
 
@@ -394,28 +425,35 @@ Targets:
 
 A benchmark over the corpus sits beside qeval's `bench_test.go`.
 
-### 3.6 Upstream
+### 3.6 Upstream: not contacted
 
-ROADMAP says "Upstream first". quint is Apache 2.0 (its package.json),
-so a port is permitted, and its NOTICE and attribution go with any
-vendored fixture. The Rust evaluator reads the IR from stdin and has no
-parser, so "the Rust evaluator grows a front end" would be a new Rust
-component. It would not serve `go install` users unless it shipped as a
-binary we fetch, which is what Q11 removes. A Go library is useful to
-gotogether whatever upstream does.
+By the maintainer's decision 1, gotogether proceeds on its own. Neither
+Q3 nor Q2 waits for Informal Systems, and no issue is drafted.
 
-The questions for Informal Systems, to ask before Q3's corpus is built,
-because the answers change the corpus and the IR bar:
-1. Do you plan a front end outside Node, in Rust or otherwise? If so,
-   when, and would its IR be the same JSON?
+The license allows this: quint is Apache 2.0 (`LICENSE`, package.json).
+Fixtures are fetched at the pinned tag, not vendored (decision 3), so
+nothing of quint's is redistributed.
+
+The Rust evaluator has no parser, so "the Rust evaluator grows a front
+end" would be a new Rust component. It would not serve `go install`
+users unless it shipped as a binary we fetch, which is what Q11
+removes. A Go library serves gotogether whatever upstream does.
+
+The questions below stay **open and are not being asked**. Each is
+answered for now by its default: quint's behaviour at the pinned tag is
+the contract, measured by Q3. They are kept here for the maintainer to
+reconsider.
+1. Is a front end outside Node planned, in Rust or otherwise? If so,
+   when, and would its IR be the same JSON? The evaluator's README lists
+   "Requirements before deprecating the Typescript Evaluator" but says
+   nothing of the front end.
 2. Is the JSON IR of `parse --out`, `typecheck --out` and `compile
    --target json` a contract? Is there a schema or a version field?
    Which fields are incidental, such as `depth`, `hidden` and the
    table's copies?
-3. Could `testFixtures/` (the `update-fixtures` script in package.json
-   suggests expected outputs) be published as a versioned conformance
+3. Could `quint/testFixture` be published as a versioned conformance
    suite of inputs, expected IR, and expected errors with positions?
-   May we vendor a snapshot under Apache 2.0?
+   Today it holds parse outputs only (§4.1).
 4. Is the node a type or effect error blames (the `reference`) stable
    across releases, or an artifact of the solver's order? Would distinct
    codes for type errors, instead of QNT000, be welcome?
@@ -424,12 +462,8 @@ because the answers change the corpus and the IR bar:
    (on main since v0.33.1)?
 6. Is the Rust evaluator's stdin protocol (`simulate-from-stdin`,
    `test-from-stdin`) supported for a third-party front end?
-7. Would a Go front end be of use to you, for example as a second
-   implementation that checks yours, or one you would host?
-
-A draft of these belongs in docs/upstream/ (`quint-go-front-end.md`),
-as the repository's other drafted issues do. No issue is sent without
-the maintainer.
+7. Would a Go front end be of use upstream, for example as a second
+   implementation that checks quint's own?
 
 ## 4. Q3 first: the oracle
 
@@ -446,12 +480,48 @@ its source and sha256:
   `*_gen.qnt`, `*_steps.qnt` and `*_rules.qnt` files of the grist
   examples and the generator's goldens). These are what the front end
   will compile most often.
-- **quint's examples and test fixtures** at the tag `QUINT_VERSION`
-  pins (0.33.1, ci.yml and nightly.yml), fetched as ci/install-quint.sh
-  fetches quint, or vendored if Informal Systems agrees (§3.6, Q3).
-  Their count and layout are not verified here (see Sources, above).
-- **quint's unit tests' inline programs** (`test/**/*.test.ts` in the
-  npm package), extracted where they are whole modules or declarations.
+- **quint's repository at the tag `QUINT_VERSION` pins** (0.33.1, in
+  ci.yml and nightly.yml), fetched by a script beside
+  ci/install-quint.sh and never vendored (decision 3). The tag's sources
+  are:
+  - **`examples/`**: 77 `.qnt` files, 13,827 lines. All 77 parse and
+    typecheck at this tag: `examples/README.md`'s table says so, and a
+    rerun of `quint typecheck` on each passed 77 of 77. They are the
+    accepted corpus, less the 29 that use constructs refused at first
+    (§2.1). 28 use instances and 4 use `export`.
+  - **`quint/testFixture/`**: 73 `.qnt` files, 1,629 lines. 52 are at
+    the top level, 11 under `apalache/`, 7 under `simulator/` and 3
+    under `typechecking/`. Their **expected outputs are `quint parse`'s
+    only**: 32 `--out` JSON files and 24 `--source-map` files, written
+    by `quint/scripts/update-fixtures.sh` with paths rewritten to
+    `mocked_path/testFixture`. They hold no typecheck or compile
+    expectations.
+    - 16 of the parse outputs expect errors: QNT099, QNT405, QNT404 (a
+      name, a type alias), QNT101, QNT406, QNT013, QNT098 (three
+      cycles), QNT008, QNT015, and ANTLR syntax errors as QNT000
+      ("mismatched input '}' expecting ...", "extraneous input").
+    - So the fixtures check tier 1 (parse) and the parse-phase errors
+      directly, and tiers 2 to 4 only by running quint on them.
+  - **`quint/integration-tests/lang/io.md`**: 17 txm tests, among them
+    the typecheck errors with their positions:
+    - `TrivialTypeError.qnt`: QNT000 at 2:7;
+    - `typechecking/OverrideErrors.qnt`: QNT000 at 8:16 and QNT201 at
+      9:16.
+
+    These positions are 1-based as quint prints them; `locs` in JSON
+    are 0-based. They are the only expected type-error positions
+    upstream checks in.
+  - **The inline programs of the unit tests**: 51 `*.test.ts` files with
+    about 680 `it(` cases. A program there is a list of declaration
+    strings, which `quint/test/builders` wraps as `module wrapper { ...
+    }` (`buildModuleWithDecls`, 55 call sites; `buildDef`, 17;
+    `parseMockedModule`, 10). They can be extracted by rendering the
+    same wrapper. Their expected types and effects are TypeScript
+    assertions, which Q3 does not need to port, since quint itself
+    judges each program in the harness.
+  - **`evaluator/fixtures/`**: a few `quint compile --flatten false`
+    outputs (ewd426, ewd840, jmt, simple, tictactoe), for a later Rust
+    stdin path.
 - **Generated well-typed programs.** qeval's generator
   (internal/qeval/gen_test.go) makes well-typed vals and actions over
   the builtins it supports, and quint already judges it (an entry quint
@@ -555,8 +625,9 @@ Q3's tiers 2 to 5 then wait for P2 to P4.
 Sizes use the roadmap's S, M and L. The roadmap's "L" for Q2 is
 optimistic, since P2 and P3 are each about an L. The honest total for Q2
 after Q3 is two L's, three M's and an S. Each phase ships behind
-`GOTOGETHER_FRONTEND=quint|go|shadow`. The default is `quint` until P5,
-and is `go` afterwards with quint as the nightly shadow.
+`GOTOGETHER_FRONTEND=quint|go|shadow`. The default stays `quint` through
+P5. It becomes `go` only after a period in shadow on the nightly
+(decision 7), and quint then remains the nightly shadow.
 
 | phase | size | delivers | exit criteria | risk |
 |---|---|---|---|---|
@@ -564,7 +635,7 @@ and is `go` afterwards with quint as the nightly shadow.
 | **P1** parser and source map | M | internal/qfront/syntax: lexer (from quintnames' tables), parser, AST, source map, parse-phase QNT codes (QNT006 to QNT016) | the whole corpus parses; tier 1 equal (canonical modules, the source map's spans); syntax-error corpus: code and start position equal | the ANTLR ambiguities of §3.1; the grammar drifting upstream |
 | **P2** names, imports, instances, flattening | L | source resolution, collector, resolver, toposort, unshadower, flattener, instance flattener (constants substituted, fresh ids), export, alias inliner | `quint parse --out`'s table equal canonically; typecheck's modules equal without types; compile's modules and table equal without types; QNT013, QNT098, QNT099, QNT101, QNT102 and QNT404 to QNT408 at quint's positions | instance flattening's interaction with analysis copies (§1.3, step 6); declaration order |
 | **P3** type checker | L | type-application resolution, constraint generation and solving with rows, polymorphism, builtin signatures ported (or parsed from quint's strings at build time), QNT000 type errors with reference spans | tier 2 types equal canonically; ill-typed corpus: first type error's position equal; N consecutive green nightlies with no disagreement | **the blamed node depends on the solver's order** (§6, risk 1); silent acceptance |
-| **P4** effects and modes | M | effect inference, the mode, nondet and multiple-updates checkers, `effects` written only if asked (§6, maintainer question 5) | QNT200 to QNT206 and effect QNT000 at quint's positions; lint's unification regex replaced by structured errors | effects are large and unread, so the temptation is to skip the check; it must not be skipped, since an ill-moded model accepted is risk 2 |
+| **P4** effects and modes | M | effect inference, the mode, nondet and multiple-updates checkers, the inferred effects are used for checking and not written (decision 5) | QNT200 to QNT206 and effect QNT000 at quint's positions; lint's unification regex replaced by structured errors | effects are large and unread, so the temptation is to skip the check; it must not be skipped, since an ill-moded model accepted is risk 2 |
 | **P5** wiring | M | the eight call sites of §1.1 behind one seam; `Differs` by `canon`; compiled artifact provenance (§3.2); doctor's line; `compile -check` without quint; RequireQuint skips that guarded only typecheck or compile removed | every example's suite green with `GOTOGETHER_FRONTEND=go` and with `shadow`; `gotogether compile` and `binding.LoadModel` with no quint on PATH | a behaviour change hidden in a reader that assumed quint's order or fields |
 | **P6** quint off consumer paths | S | with Q1's simulation and the in-process replays: no consumer path starts quint; quint is the oracle only (Q3 jobs, `shadow`, the confirmation of a failure where installed); Q11's one binary | a consumer's `go test` and `gotogether validate` with no Node on the machine, on every example | depends on Q1 and the replay work, not on Q2 alone |
 
@@ -607,14 +678,14 @@ What can ship early, and on what:
    `constraintGenerator` and `constraintSolver`, and may break whenever
    quint changes them. Mitigation: Q3 measures how often a looser bar
    (an enclosing node's span) would be needed before P3 commits, and
-   upstream question 4.
+   open question 4 (not being asked, §3.6).
 2. **Silent acceptance.** Go accepts, or types differently, a model
    quint refuses. A wrong inferred type changes what the binding
    converts, and every later verdict rests on it. Mitigations:
    - the ill-typed generator;
    - shadow mode in every example nightly;
    - refusing unimplemented constructs as "needs quint" (§2.1);
-   - never `go` as the default before P4.
+   - `go` the default only after a nightly shadow period (decision 7).
 3. **Upstream drift.** The grammar changed between v0.33.1 and main, and
    the IR is not a documented contract. One Go front end therefore
    implements exactly one quint language version, recorded as `Quint` in
@@ -629,31 +700,37 @@ What can ship early, and on what:
    persists.
 5. **Scope creep toward full parity**: effects written, `documentation`,
    the TLA+ target, `assume`, `temporal`. Keep to the consumed subset
-   and refuse the rest.
+   and refuse the rest (decisions 4 and 5).
 
-**For the maintainer**, the decisions this plan needs, most important
-first:
-1. **Upstream timing.** Should the §3.6 questions go to Informal Systems
-   before Q3 starts, as this plan recommends, or in parallel?
-2. **The bar.** Is canonical equality over the consumed subset, with
-   meaning as the backstop (§3.3), right? Is first-error position
-   parity, with set parity only if reachable (§3.4), right?
-3. **Fixtures.** Vendor a snapshot of quint's fixtures (Apache 2.0,
-   with NOTICE) or fetch them at the pinned tag in CI?
-4. **Unimplemented constructs.** Refuse `temporal`, `assume`,
-   destructuring and `apalache::` as "needs quint" at first, or
-   implement all of the grammar in P1 to P4?
-5. **Effects output.** Never write `effects` (nothing reads it), or
-   write it for the Rust evaluator's stdin path (§1.1)?
-6. **Placement.** Keep internal/qfront internal, or make it a published
-   module, which adds api/ and CHANGELOG duties, if upstream wants a
-   library?
-7. **The default switch.** Does `GOTOGETHER_FRONTEND=go` become the
-   default at P5's exit, or after a release with `shadow` in adopters'
-   CI?
-8. **Artifact provenance.** Is the `compiler` field in
-   `gotogether.model/1` acceptable as an optional field, rather than a
-   new major version (§3.2)?
+**Decided** (the maintainer, 2026-11-25):
+1. **No contact with Informal Systems for now.** gotogether proceeds on
+   its own, and the maintainer may reconsider. Q3 is not gated on
+   upstream. The §3.6 questions are open and not being asked, and no
+   docs/upstream note is written.
+2. **The bar is yes.** That is canonical equality over the read subset,
+   with qeval's agreement as the backstop (§3.3), plus first-error
+   position parity (§3.4).
+3. **quint's fixtures and examples are fetched at the pinned tag**
+   (`QUINT_VERSION`), not vendored.
+4. **`temporal`, `assume`, destructuring and `apalache::` are refused as
+   "needs quint" at first.**
+5. **`effects` is written only if the Rust evaluator's stdin path needs
+   it.** At v0.33.1 it does not (§1.1), so the Go front end writes no
+   `effects`.
+6. **The front end stays internal for now** (internal/qfront).
+7. **`go` becomes the default only after a period in shadow on the
+   nightly, not at P5's exit.** How long that period is remains open
+   (below).
+8. **An optional `compiler` field in `gotogether.model/1` is fine.** A
+   new major version is equally acceptable if cleaner: backward
+   compatibility does not drive the design. P5 picks whichever is
+   cleaner when it builds it.
+
+**Still open:**
+- How long the shadow period of decision 7 lasts, and what ends it: a
+  count of green nightlies, or a QUINT_VERSION bump survived.
+- Whether the Rust stdin path is taken up at all (P6 or later). It would
+  need the table's definition copies written (§1.2).
 
 **Keeping quint as the oracle.** After P6, quint and Node appear only:
 - in Q3's jobs, the push tier and the nightly;
