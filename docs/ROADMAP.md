@@ -40,6 +40,7 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Proposed queue | N1–N7: golem's driver asks ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6843138891)) | N1 (`Config.Require`, its witnesses), N3 (`Step.Eval`), N5 (actionmap `-roundtrips`) and N7 (`connect.Differential`) done. Next N2 (`connect.Compose`). Open in N1: a witness continued past its target (documented for now: require the state after the step under test). |
 | Proposed queue | CW1–CW11: a contract from design to operation ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6885259328), [#220](https://github.com/chucklehead-dev/gotogether/issues/220#issuecomment-6884857732)) | CW1 (literate models; Goo adopted it), CW2 (the design matrix with per-variant search, `dead`, `-variant` and memory released per variant; golem adopted it for four models) and CW4 done. CW5's runtime half done (`connect.Bind` with `Returns` and `Observes`), and its static half (a binding checked against the model's actions, picks and types before any trace; Go types generated from the model's, `gotogether types [-check]`; the walkthrough's tables and the alignment lint, `gotogether invariants [-write|-check] [-require enforced,checked,recorded,driven]`: properties from `//quint:enforces` and `//quint:checks`, actions from the code that records and drives them); left in CW5: Go to Quint (if ever), golem's `expDriver` the first outside case, a world that is not one `T` an open question. Then CW3; CW11 (asynchronous drivers) its own design. Left in CW1: `lint -model doc.md`, stable IDs; in CW2: possibles per variant, iterative deepening. |
 | Proposed queue | O1–O2: external drivers ([#220](https://github.com/chucklehead-dev/gotogether/issues/220)) | O1 done (a `settled` record in `gotogether.requests/1`, written by the Playwright adapter's `settled()`): it retires Goo's drain bridge. Next O2, the compact external-driver example. |
+| Proposed queue | LI1–LI4: [lock invariants, after Gobra](#lock-invariants-li-after-gobra) | LI1 (`qenv.Guard`, checked at every simulated Unlock) done. LI2 (a `//quint:guards` directive), LI3 (gosim) and LI4 (the doubles' row locks) as projects ask. |
 | Proposed queue | Q0–Q11: a Go Quint | A design item, each its own decision. Q0 first (no quint for consumers, small); Q2's front end only once Q3's corpus and ill-typed generator exist. Upstream first. |
 | Dropped | J12 and J23 | Go 1.26 compatibility and pin batching are withdrawn. Go 1.27.3 and immediate required sibling pin alignment remain deliberate policies. |
 
@@ -293,6 +294,33 @@ return, and the driver's own drained-then-settled bridge.
   control with its intended diagnosis, and a code-0 completion; raw page
   text interned. webjobs has most of it, spread over Bombadil and
   Playwright.
+
+## Lock invariants (LI, after Gobra)
+
+Gobra attaches an invariant to a mutex and proves it at every release.
+qenv checks one instead, in explorations: a broken critical section fails
+at the Unlock that published it, not at whatever read notices later.
+
+- **LI1: `qenv.Guard`.** Done: `Guard(ctx, mu, name, holds)` registers
+  `holds` for a `*sync.Mutex` or `*sync.RWMutex` in the simulation's own
+  guards (a `qrun.Key` in its context, dropped at Close), evaluated at
+  every exclusive release by a task (woven code's Unlock under
+  Orchestrion or qweave, on `New`'s scheduler and the native runtime
+  without a Platform), the lock still held; false panics the task with a
+  `*LockInvariantError` naming the invariant, the Unlock's site, the task
+  and the step. A seam or a recorded step inside `holds` panics with the
+  fix, so guarded passing runs make the unguarded runs' choices. Under
+  gosim (a Platform) it refuses: gosim's sync reaches no qenv Unlock.
+- **LI2: a declarative form.** `//quint:guards name` on a mutex field
+  naming a method of the struct, woven into the Guard at the struct's
+  construction (qweave), so a guarded type needs no test-side
+  registration. Open: where construction is (composite literals, `new`,
+  zero values) and how a guard finds its simulation then.
+- **LI3: gosim.** Checking at gosim's own `sync.Mutex.Unlock` needs a
+  hook in the fork's sync translation; until then Guard refuses there.
+- **LI4: qenv's own doubles.** `Store` row locks (`GetForUpdate`) are no
+  `sync.Locker`; an invariant over a row at its transaction's commit is
+  the model's job today (a recorded commit), not a lock invariant's.
 
 ## A contract from design to operation (CW)
 

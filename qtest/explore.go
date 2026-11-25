@@ -616,9 +616,12 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 				if r.diverged != nil {
 					replays = fmt.Sprintf("but its replay diverged first (%v): the entry may be stale, and the panic the changed code's", r.diverged)
 				}
+				what := "a qenv self-check (GOTOGETHER_CHECK: the store's history, a queue's contract, the scheduler's invariants) or a bug in the system"
+				if _, ok := p.Value.(*qenv.LockInvariantError); ok {
+					what = "a lock invariant (qenv.Guard) false at the Unlock it names"
+				}
 				t.Errorf("gotogether: %s panicked: %v\n"+
-					"  a qenv self-check (GOTOGETHER_CHECK: the store's history, a queue's contract, the scheduler's invariants) or a bug in the system: "+
-					"fix the code it names below; %s\n%s  %s:\n%s", x.nameOf(r), p.Value, replays, x.keep(r, true), where, p.Stack)
+					"  %s: fix the code it names below; %s\n%s  %s:\n%s", x.nameOf(r), p.Value, what, replays, x.keep(r, true), where, p.Stack)
 				continue
 			}
 			if r.origin.kind == "corpus" && r.diverged != nil {

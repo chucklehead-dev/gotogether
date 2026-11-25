@@ -37,6 +37,7 @@ func keyedOf[T any](ctx context.Context, key any, what string) (*T, *task) {
 		panic(fmt.Sprintf("qenv: %s outside a simulation task", what))
 	}
 	s := t.sim
+	s.refuse(what, "")
 	if s.keyed == nil {
 		s.keyed = map[any]any{}
 	}
@@ -72,10 +73,11 @@ func tryLockKey(ctx context.Context, key any) bool {
 
 // unlockKey releases an exclusive hold.
 func unlockKey(ctx context.Context, key any) {
-	l, _ := keyedOf[rwState](ctx, key, "Unlock")
+	l, t := keyedOf[rwState](ctx, key, "Unlock")
 	if !l.writer {
 		panic("qenv: unlock of unlocked mutex")
 	}
+	t.sim.checkGuards(t, key) // the lock invariants (Guard), the lock still held
 	l.writer = false
 }
 

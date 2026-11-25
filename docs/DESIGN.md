@@ -933,6 +933,9 @@ Code under test reaches the environment only through seams: `qenv.DB` and
 `Txn`, its own interfaces for brokers and services, `qenv.Go`, `qenv.Now`
 and `qenv.Sleep`. Outside a simulation these fall through to real
 goroutines and time. Production puts real clients behind the interfaces.
+Woven `sync` locks are seams too (§13), and a lock invariant
+(`qenv.Guard`, §13) is checked at each of their releases without being
+one: it draws nothing and refuses every seam.
 
 Workers distinguish empty-feed waits from work in hand. `Signal.WaitIdle(ctx, d)`
 uses the same notification/deadline semantics as `Wait`, but exempts only that
@@ -1333,6 +1336,41 @@ used to run on to its next scheduling point.
     qenv now finds the task through the goroutine;
   - a killed task's deferred `//quint:action` recorded a write that never
     completed; such steps are now discarded.
+
+**Lock invariants (`qenv.Guard`).** Gobra attaches an invariant to a
+mutex that must hold whenever the lock is released, and proves it. A
+simulated lock gives the same check at run time: `Guard(ctx, mu, name,
+holds)` registers `holds` for a `*sync.Mutex` or `*sync.RWMutex`, and
+`unlockKey`, the simulation's side of every exclusive release, calls it
+just before the release, the lock still held. Every path reaches it:
+Orchestrion's aspects and qweave (method values and promoted calls
+included) call `woven.MutexUnlock` or `RWUnlock`, which call `unlockKey`
+through `wovenrt`, on New's scheduler and on the native runtime without
+a Platform; `RUnlock` is not checked (a reader publishes nothing).
+- **Where it fails.** False makes the releasing task panic with a
+  `*LockInvariantError` (the invariant, where it was guarded, the
+  Unlock's site, the task, the step): Run re-raises it, qtest's
+  `runOne` makes it the run's `RunPanic`, and the run replays from its
+  seed. Inside the section the invariant may be false; only the release
+  publishes the state. A task unwinding after a crash or at Close is not
+  checked: its section was cut short.
+- **Per run.** The guards are the simulation's, in its base context
+  under a `qrun.Key` (so Guard finds them from a task, from
+  `Sim.Context`, or from the goroutine that created the simulation),
+  and Close drops them. Outside a simulation Guard does nothing: a real
+  Unlock is not intercepted, and a registry there would be one every
+  parallel run shares.
+- **Determinism.** While `holds` runs the simulation's `guarding` is
+  set, and every seam refuses with the fix: Yield, Wait, Sleep,
+  Signal.Wait, Go and Spawn, every choice (`draw`), the keyed locks, a
+  Notify that would wake a task, and a recorded step (qenv's site hook).
+  So an invariant reads, draws nothing and schedules nothing, and a
+  passing guarded run makes exactly the unguarded run's choices.
+- **gosim.** gosim simulates `sync` itself and is never woven with
+  qenv/weave, so no Unlock reaches qenv there: Guard on a native
+  simulation with a Platform panics rather than check nothing.
+- **Not done.** A declarative `//quint:guards` directive; Store's row
+  locks, which are not `sync.Locker`s (ROADMAP LI2–LI4).
 
 **Not done.**
 - `sync.Cond`, `sync.Once` (harmless: it never blocks across simulated

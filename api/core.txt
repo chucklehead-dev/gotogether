@@ -744,6 +744,7 @@ func FaultPoint(ctx context.Context, kind string, crash bool, errs ...error) err
 func From(ctx context.Context) *Sim
 func FromBytes(data []byte, rates Rates) *Bytes
 func Go(ctx context.Context, name string, fn func(ctx context.Context))
+func Guard(ctx context.Context, mu sync.Locker, name string, holds func() bool)
 func IsFault(kind string) bool
 func Mono(ctx context.Context) time.Duration
 func New(c Chooser) *Sim
@@ -869,6 +870,14 @@ type KeyRange struct
     field From string
     field To string
     method (KeyRange) Contains(key string) bool
+type LockInvariantError struct
+    field Name string
+    field Guarded string
+    field Unlock string
+    field Task string
+    field Step int
+    field Native bool
+    method (*LockInvariantError) Error() string
 type Machine interface
     Crash()
     Restart()
