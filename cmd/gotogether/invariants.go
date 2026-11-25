@@ -25,13 +25,17 @@ import (
 // from //quint:enforces and //quint:checks directives (ROADMAP CW5's
 // static half, internal/invtable), and the table of its actions, the code
 // that records each (//quint:action, literal qobs.Record) and the
-// drivers that run it (connect.Bind entries, connect.Switch keys). It
-// prints both, writes each into a design document between its markers,
-// where the document has them (-write), or compares the document's with
-// them (-check, writing nothing: exit 1 when stale, naming the rows that
-// changed). An annotation naming no property or action of the model, or
-// annotating nothing, fails (exit 1) under every mode; a property nothing
-// enforces or no test checks, and an action nothing records or drives,
+// drivers that run it (connect.Bind entries, connect.Switch keys), and
+// the table of what the model says it leaves out (its `// @assume` lines,
+// ROADMAP CW3), the code that exercises each (//quint:exercises) and the
+// checks that monitor it (//quint:monitors). It prints them, writes each
+// into a design document between its markers, where the document has
+// them (-write), or compares the document's with them (-check, writing
+// nothing: exit 1 when stale, naming the rows that changed). An
+// annotation naming no property, action or assumption of the model, or
+// annotating nothing, and an @assume line that declares none, fail (exit
+// 1) under every mode; a property nothing enforces or no test checks, an
+// action nothing records or drives, and an assumption nothing targets,
 // is a warning (of the tables in play), a failure under -require. Exit
 // 2 is a bad invocation, a Go file that does not parse, or a model quint
 // refuses.
@@ -47,9 +51,9 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 	name := fset.String("name", "", "the name of this model's tables in the document, <!-- gotogether:invariants NAME --> (default: the main module, or the binding's module); a document without named markers takes its unnamed ones")
 	links := fset.String("links", "line", "line: each site a file:line link; name: a site by its function (by package and function when the tables span packages), linked to its file by its base name without a line, so moved code leaves the table current")
 	lit := fset.Bool("literate", true, "treat a .md spec as a literate model, and a document that is one as its model's source (its .qnt written again); false: a .md spec is refused (name the .qnt your own tangler writes) and the document is plain Markdown")
-	write := fset.String("write", "", "write the tables into this Markdown document: the properties' between its "+invtable.Begin+" and "+invtable.End+" lines, the actions' between "+invtable.ActionsBegin+" and "+invtable.ActionsEnd+", each where the document has its markers; named ones (<!-- gotogether:invariants NAME -->) hold one model's of several, and only -name's are written")
+	write := fset.String("write", "", "write the tables into this Markdown document: the properties' between its "+invtable.Begin+" and "+invtable.End+" lines, the actions' between "+invtable.ActionsBegin+" and "+invtable.ActionsEnd+", the assumptions' between "+invtable.AssumptionsBegin+" and "+invtable.AssumptionsEnd+", each where the document has its markers; named ones (<!-- gotogether:invariants NAME -->) hold one model's of several, and only -name's are written")
 	check := fset.String("check", "", "compare the tables with this Markdown document's, writing nothing: exit 1 when they differ, naming the rows (for CI)")
-	require := fset.String("require", "", "fail (exit 1), instead of warning, when a property is not enforced (a //quint:enforces) or checked (a //quint:checks in a test), or an action not recorded (a //quint:action or a literal qobs.Record) or driven (a connect.Bind entry or connect.Switch key): a comma-separated list of enforced, checked, recorded, driven")
+	require := fset.String("require", "", "fail (exit 1), instead of warning, when a property is not enforced (a //quint:enforces) or checked (a //quint:checks in a test), an action not recorded (a //quint:action or a literal qobs.Record) or driven (a connect.Bind entry or connect.Switch key), or a listed assumption (// @assume in the model) not exercised (a //quint:exercises), monitored (a //quint:monitors) or targeted (either): a comma-separated list of enforced, checked, recorded, driven, exercised, monitored, targeted")
 	quint := fset.String("quint", "quint", "quint binary")
 	if err := fset.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -63,10 +67,10 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 	for r := range strings.SplitSeq(*require, ",") {
 		switch r = strings.TrimSpace(r); r {
 		case "":
-		case "enforced", "checked", "recorded", "driven":
+		case "enforced", "checked", "recorded", "driven", "exercised", "monitored", "targeted":
 			required = append(required, r)
 		default:
-			return 2, fmt.Errorf("invariants: -require %s: give a comma-separated list of enforced and checked (each property), recorded and driven (each action)", *require)
+			return 2, fmt.Errorf("invariants: -require %s: give a comma-separated list of enforced and checked (each property), recorded and driven (each action), exercised, monitored and targeted (each assumption)", *require)
 		}
 	}
 	if *links != "line" && *links != "name" {
@@ -127,6 +131,7 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 	tables := []docTable{
 		{name: "properties", kind: "invariants", text: (*invtable.Table).Markdown, kinds: []string{"enforced", "checked"}},
 		{name: "actions", kind: "actions", text: (*invtable.Table).MarkdownActions, kinds: []string{"recorded", "driven"}},
+		{name: "assumptions", kind: "assumptions", text: (*invtable.Table).MarkdownAssumptions, kinds: []string{"targeted"}},
 	}
 	if doc != "" {
 		src, _ := os.ReadFile(doc)
@@ -143,8 +148,9 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 		if len(tables) == 0 {
 			ib, ie := literate.Markers("invariants", *name)
 			ab, ae := literate.Markers("actions", *name)
-			msg := fmt.Sprintf("%s has no table of model %s: add %s ... %s, or %s ... %s, each alone on its line where the table goes (unnamed markers serve a document of one model)", doc, *name, ib, ie, ab, ae)
-			if others := slices.Concat(literate.MarkerNames(string(src), "invariants"), literate.MarkerNames(string(src), "actions")); len(others) > 0 {
+			sb, se := literate.Markers("assumptions", *name)
+			msg := fmt.Sprintf("%s has no table of model %s: add %s ... %s, %s ... %s, or %s ... %s, each alone on its line where the table goes (unnamed markers serve a document of one model)", doc, *name, ib, ie, ab, ae, sb, se)
+			if others := slices.Concat(literate.MarkerNames(string(src), "invariants"), literate.MarkerNames(string(src), "actions"), literate.MarkerNames(string(src), "assumptions")); len(others) > 0 {
 				slices.Sort(others)
 				msg += fmt.Sprintf("; its tables are named %s (-name picks one)", strings.Join(slices.Compact(others), ", "))
 			}
@@ -167,6 +173,16 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 			}
 		}
 	}
+	// the assumptions table likewise: a document's markers put it in
+	// play; printed, it is there when the model lists any (below)
+	if doc != "" && !slices.ContainsFunc(tables, func(t docTable) bool { return t.name == "assumptions" }) {
+		for _, r := range required {
+			if r == "exercised" || r == "monitored" || r == "targeted" {
+				sb, se := literate.Markers("assumptions", *name)
+				return 2, fmt.Errorf("invariants: -require %s is of the assumptions table, and %s has none of model %s (%s ... %s, or unnamed): add the pair, or require it of no assumption", r, doc, *name, sb, se)
+			}
+		}
+	}
 	patterns := fset.Args()
 	if len(patterns) == 0 {
 		patterns = []string{"./..."}
@@ -184,6 +200,18 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 	m, err := invtable.Read(tc, *main, invtable.Comments(src))
 	if err != nil {
 		return 2, err
+	}
+	// the model's listed assumptions, before a selection: a val that
+	// states one leaves the default properties, which -props may name
+	if bad := m.Assume(src, path); len(bad) > 0 {
+		for _, e := range bad {
+			fmt.Fprintln(errw, literate.Rewrite(e, "."))
+		}
+		fmt.Fprintf(out, "FAIL %s of model %s declaring no assumption the table can show: no table %s (fix each as it says)\n", plural(len(bad), "@assume line"), m.Main, map[bool]string{true: "printed", false: "written"}[doc == ""])
+		return 1, nil
+	}
+	if doc == "" && len(m.Assumptions) == 0 {
+		tables = slices.DeleteFunc(tables, func(t docTable) bool { return t.name == "assumptions" })
 	}
 	switch {
 	case *props != "":
@@ -212,7 +240,7 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 		if *write == "" && *check == "" {
 			what = "no table printed"
 		}
-		fmt.Fprintf(out, "FAIL %s naming no property or action of model %s, or annotating nothing: %s (fix each as it says)\n", plural(len(errs), "annotation"), m.Main, what)
+		fmt.Fprintf(out, "FAIL %s naming no property, action or assumption of model %s, or annotating nothing: %s (fix each as it says)\n", plural(len(errs), "annotation"), m.Main, what)
 		return 1, nil
 	}
 	if len(table.Others) > 0 {
@@ -238,7 +266,7 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 	code := 0
 	for _, t := range tables {
 		for _, k := range t.kinds {
-			if slices.Contains(required, k) {
+			if slices.Contains(required, k) || (k == "targeted" && (slices.Contains(required, "exercised") || slices.Contains(required, "monitored"))) {
 				continue
 			}
 			if missing := table.Missing(k); len(missing) > 0 {
@@ -256,14 +284,17 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 	}
 	var parts []string
 	for _, t := range tables {
-		if t.name == "properties" {
-			parts = append(parts, fmt.Sprintf("%s of model %s: %d enforced, %d checked", properties(len(table.Rows)), m.Main, count(table, "enforced"), count(table, "checked")))
-		} else {
-			of := ""
-			if len(parts) == 0 {
-				of = " of model " + m.Main
-			}
+		of := ""
+		if len(parts) == 0 {
+			of = " of model " + m.Main
+		}
+		switch t.name {
+		case "properties":
+			parts = append(parts, fmt.Sprintf("%s%s: %d enforced, %d checked", properties(len(table.Rows)), of, count(table, "enforced"), count(table, "checked")))
+		case "actions":
 			parts = append(parts, fmt.Sprintf("%s%s: %d recorded, %d driven", plural(len(table.Actions), "action"), of, count(table, "recorded"), count(table, "driven")))
+		case "assumptions":
+			parts = append(parts, fmt.Sprintf("%s%s: %d exercised, %d monitored", plural(len(table.Assumptions), "assumption"), of, count(table, "exercised"), count(table, "monitored")))
 		}
 	}
 	summary := strings.Join(parts, "; ")
@@ -314,6 +345,9 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 		return code, nil
 	}
 	fmt.Fprint(out, table.Markdown("")+"\n"+table.MarkdownActions(""))
+	if len(table.Assumptions) > 0 {
+		fmt.Fprint(out, "\n"+table.MarkdownAssumptions(""))
+	}
 	return code, nil
 }
 
@@ -331,10 +365,13 @@ type docTable struct {
 // required that have nothing of it: "5 actions nothing records
 // (recorded is not required): a, b, ...".
 func missingNote(kind string, names []string) string {
-	what := map[string]string{"enforced": "nothing enforces", "checked": "no test checks", "recorded": "nothing records", "driven": "nothing drives"}[kind]
+	what := map[string]string{"enforced": "nothing enforces", "checked": "no test checks", "recorded": "nothing records", "driven": "nothing drives", "targeted": "nothing targets"}[kind]
 	rows := properties(len(names))
-	if kind == "recorded" || kind == "driven" {
+	switch kind {
+	case "recorded", "driven":
 		rows = plural(len(names), "action")
+	case "targeted":
+		rows = plural(len(names), "assumption")
 	}
 	shown := names
 	if len(shown) > 10 {
@@ -401,6 +438,11 @@ func count(t *invtable.Table, kind string) int {
 	}
 	for _, r := range t.Actions {
 		if (kind == "recorded" && len(r.Recorded) > 0) || (kind == "driven" && len(r.Driven) > 0) {
+			n++
+		}
+	}
+	for _, r := range t.Assumptions {
+		if (kind == "exercised" && len(r.Exercised) > 0) || (kind == "monitored" && len(r.Monitored) > 0) {
 			n++
 		}
 	}
