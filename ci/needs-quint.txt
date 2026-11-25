@@ -79,6 +79,7 @@ examples/raftkv TestElectionAfterHeal | size | cluster.binding.yaml's model
 examples/raftkv TestUnpersistedVote | size | cluster.binding.yaml's model
 examples/raftkv TestRealCluster | real | RAFTKV_REAL's three node processes, judged by cluster.binding.yaml (size) too
 examples/raftkv TestRealFaultsInSimulation | real | RAFTKV_REAL's toxiproxy faults re-made in qenv, judged by cluster.real.binding.yaml (size)
+examples/raftkv TestReplayCISeed5 | size | CI's seed-5 journal re-made in qenv, judged by cluster.real.binding.yaml (size) too
 examples/requeue TestModelLive | Q1 Model | qtest.Model's Live
 examples/requeue TestStormModelHasLasso | Q1 Model | qtest.Model's Refutes
 examples/wallet TestLinearizeDelayedReadWithinBudget | checker | it builds validate.NewChecker (Eval go) to judge one fixture with a search budget

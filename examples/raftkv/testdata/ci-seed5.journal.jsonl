@@ -1,0 +1,6 @@
+{"index":0,"kind":"nemesis.pause.n1","event":"start","time":"2026-11-25T06:37:59.672511199Z","steps":8}
+{"index":0,"kind":"nemesis.resume.n1","event":"end","time":"2026-11-25T06:37:59.973397546Z","steps":16}
+{"index":1,"kind":"nemesis.crash.n2","event":"start","time":"2026-11-25T06:38:00.470672946Z","steps":24,"incarnation":1,"recorded":true}
+{"index":1,"kind":"nemesis.restart.n2","event":"end","time":"2026-11-25T06:38:00.771940473Z","steps":30,"incarnation":2}
+{"index":2,"kind":"nemesis.isolate.n1","event":"start","time":"2026-11-25T06:38:01.26871156Z","steps":36,"links":[["n1","n2"],["n1","n3"]],"recorded":true}
+{"index":2,"kind":"nemesis.heal.n1","event":"end","time":"2026-11-25T06:38:01.570011485Z","steps":41,"links":[["n1","n2"],["n1","n3"]],"recorded":true}
