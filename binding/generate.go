@@ -50,7 +50,8 @@ type Plan struct {
 	ObservedSteps int
 	Constants     map[string]string // constant -> Quint expression
 	Calls         []Call
-	// StateVars are the model variables visible to snapshot checkpoint replays.
+	// StateVars are the model variables visible to snapshot checkpoint
+	// replays, in Model.Vars' order (by name): a checkpoint's fields follow it.
 	StateVars []string
 	// Start is the call the replay starts from instead of init: the
 	// trace's first step, when it is the binding's snapshot action's
@@ -237,6 +238,8 @@ func (p *Planner) Plan(t *qtrace.Trace) (*Plan, error) {
 	}
 	plan := &Plan{Actor: t.Actor, Processes: t.Processes, ObservedSteps: len(t.Steps), Constants: maps.Clone(p.consts)}
 	if m != nil {
+		// sorted by name (Model.Vars), so the checkpoint text is the same
+		// whatever ids quint gave the declarations
 		plan.StateVars = slices.Clone(m.Vars)
 	}
 	p.mu.Lock() // the renderer's templates, added as they are first used

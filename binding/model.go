@@ -39,7 +39,9 @@ type Model struct {
 	// Antecedents are the boolean vals of the form `A implies B`, with A
 	// as Quint text: where A never holds, the val holds vacuously.
 	Antecedents map[string]string
-	Vars        []string
+	// Vars are the visible state variables, sorted by name: quint's order
+	// within a toposort layer follows its ids (DESIGN §111)
+	Vars []string
 	// checkpointScope lists imported state not provably captured by Vars.
 	checkpointScope []string
 	Consts          map[string]string // name -> type
@@ -600,6 +602,10 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 				}
 			}
 		}
+		// by name, not quint's order: a layer of its toposort is sorted by
+		// id as a string, so an id shift elsewhere reorders the variables
+		// (and the checkpoints and lint lists that follow them)
+		slices.Sort(m.Vars)
 		// a helper: called by an action, and not by step (whose calls are
 		// the steps); a model with no step has none
 		if step, ok := calledBy["step"]; ok {
