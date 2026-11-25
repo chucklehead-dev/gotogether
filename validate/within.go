@@ -206,6 +206,10 @@ type obligation struct {
 	how  string
 	note string
 	end  time.Time // how far the trace certainly went
+	// met is when a late response took effect at the earliest (its
+	// state's interval's start): how late it was, past due, is what a
+	// host stall must account for (ExcuseStalls)
+	met time.Time
 }
 
 // judgeRule is one obligation's verdict over the states' values of its
@@ -259,7 +263,7 @@ func judgeRule(w binding.Within, after, holds []bool, lo, hi []time.Time, steps 
 				res.Verdict = Fail
 				res.Failure = &Failure{Kind: "within", Index: k - 1, Step: steps[k], Note: fmt.Sprintf("%s became true after %s, and %s held only after %s, %s later (bound %s)",
 					w.After, at(k), w.Holds, at(met), shortest, w.BoundText), window: hi[k].Add(w.Bound)}
-				obs = append(obs, obligation{name: w.Name(), trigger: steps[k], at: hi[k], due: hi[k].Add(w.Bound), how: "late", note: res.Failure.Note, end: end})
+				obs = append(obs, obligation{name: w.Name(), trigger: steps[k], at: hi[k], due: hi[k].Add(w.Bound), how: "late", note: res.Failure.Note, end: end, met: lo[met]})
 				return res, obs, false
 			case unsure == nil:
 				unsure = &Failure{Kind: "within", Index: k - 1, Step: steps[k], Note: fmt.Sprintf("%s became true after %s and %s held after %s, between %s and %s later as the calls' intervals place their effects (bound %s)",

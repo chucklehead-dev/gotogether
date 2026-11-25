@@ -981,6 +981,17 @@ func sortedKV[V any](m map[string]V) []string {
 // anyWithinJudged reports whether some run's report judged a
 // bounded-response obligation (an obligation open at a trace's end is not
 // judged, nor one whose vals were not computed).
+// allStalled reports whether every run has no verdict for a host stall
+// alone (Run.Stalled).
+func allStalled(runs []*Run) bool {
+	for _, r := range runs {
+		if r == nil || !r.Stalled() {
+			return false
+		}
+	}
+	return len(runs) > 0
+}
+
 func anyWithinJudged(runs []*Run) bool {
 	for _, r := range runs {
 		if r == nil || r.Report == nil {
@@ -1126,6 +1137,18 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 		t.Fatalf("gotogether: %s: conformance claimed, and the binding's eventual vals (%s) were judged in none of %d runs: no run's trace ends with a settle. "+
 			"Call Sim.Settle at the end of Run and return its error (or qobs.Settled after a probe), or claim what the runs show: None(Settles()) alongside, for runs that are not to settle",
 			x.ref(), strings.Join(x.checker.Binding.Eventually, ", "), len(x.Runs))
+	}
+	if allStalled(x.Runs) {
+		// a host that stalled in every run judged nothing: no verdict,
+		// which no claim over the runs can rest on (a bound's checks were
+		// judged, then excused, so the message below would mislead)
+		var said []string
+		for _, s := range x.Runs[0].HostStalls {
+			said = append(said, s.String())
+		}
+		t.Fatalf("gotogether: %s: every one of %d runs has no verdict (host stall): a bounded response came late while the host stalled long enough to make it so "+
+			"(the first run's stalls: %s), so the runs judged nothing; run them again on a quiet host, or find what stalls it (the stalls' details)",
+			x.ref(), len(x.Runs), strings.Join(said, "; "))
 	}
 	if x.checker != nil && len(x.checker.Binding.Within) > 0 && !anyWithinJudged(x.Runs) && claimsConformance(claims) {
 		// a system that stalls in silence would pass: its obligation open,

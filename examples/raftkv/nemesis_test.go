@@ -110,6 +110,37 @@ type realVerdicts struct {
 	KV, Cluster *qtest.Run
 	Dir         string
 	Journal     *qnemesis.Journal
+	// Host is what the harness measured of the host while the run ran
+	// (watchHost): its stalls excuse a bound they could have broken
+	Host qnemesis.HostReport
+}
+
+// stallThreshold is the shortest host stall the real runs record: a
+// fifth of cluster.real.binding.yaml's tighter bound (a leader within
+// 500ms of a heal), and over half the headroom the faithful cluster's
+// slowest measured election (320ms with -race) leaves under it. A
+// shorter stall cannot make a faithful run late by itself, and the
+// probes' own delays stay under it (on a loaded four-core machine with
+// -race, ticks up to 78ms late and fsyncs up to 93ms in runs without a
+// stall: docs/HISTORY.md, 2026-11-25). A
+// stall excuses a late response only if it covers its lateness
+// (validate.Report.ExcuseStalls), so SlowElection's, 300ms to 600ms late,
+// is not excused by a stall of this length.
+const stallThreshold = 100 * time.Millisecond
+
+// watchHost starts measuring the host's stalls from the harness, not the
+// nodes: a 10ms ticker and an fsync in dir, on the disk the nodes' logs
+// are on, every 20ms. CI's one faithful failure (seed 5, 2026-11-25) was
+// a leader 1.15s after a heal: a stall of every node's fsync, which only
+// a probe of the disk sees.
+func watchHost(t *testing.T, dir string) *qnemesis.HostMonitor {
+	t.Helper()
+	m, err := qnemesis.WatchHost(qnemesis.HostWatch{Every: 10 * time.Millisecond, Threshold: stallThreshold, Dir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { m.Stop() })
+	return m
 }
 
 // runUnderNemesis runs the cluster under cfg's schedule in dir and judges
@@ -121,6 +152,7 @@ func runUnderNemesis(t *testing.T, bin, proxyURL, dir string, cfg nemesisRun) re
 	if err := os.MkdirAll(steps, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	host := watchHost(t, dir)
 	addrs := freeAddrs(t, len(Nodes))
 	// the peer links, one proxy per direction: node i dials peers[i][j]
 	// to reach j
@@ -333,17 +365,17 @@ func runUnderNemesis(t *testing.T, bin, proxyURL, dir string, cfg nemesisRun) re
 		_ = p.Close()
 	}
 
-	v := realVerdicts{Dir: dir}
+	v := realVerdicts{Dir: dir, Host: host.Stop()}
 	if f, err := os.Open(filepath.Join(dir, "journal.jsonl")); err == nil {
 		v.Journal, _ = qnemesis.ReadJournal(f)
 		f.Close()
 	}
 	v.KV = qtest.Validate(t, "raftkv.binding.yaml", readSteps(t, filepath.Join(steps, "clients.jsonl")),
-		qtest.Linearize(), qtest.ResolvePending(), qtest.LinearizeBudget(50000))
+		qtest.Linearize(), qtest.ResolvePending(), qtest.LinearizeBudget(50000), qtest.HostStalls(v.Host.Stalls...))
 	cluster := readSteps(t, filepath.Join(steps, "node-*.jsonl"))
 	cluster = append(cluster, readSteps(t, filepath.Join(steps, "nemesis.jsonl"))...)
 	cluster = append(cluster, readSteps(t, filepath.Join(steps, "harness.jsonl"))...)
-	v.Cluster = qtest.Validate(t, "cluster.real.binding.yaml", cluster)
+	v.Cluster = qtest.Validate(t, "cluster.real.binding.yaml", cluster, qtest.HostStalls(v.Host.Stalls...))
 	return v
 }
 
@@ -429,6 +461,10 @@ func realRuns(t *testing.T, seeds []int64, cfgOf func(seed int64) nemesisRun) []
 		v := runUnderNemesis(t, bin, url, filepath.Join(dir, fmt.Sprintf("seed%d", seed)), cfg)
 		t.Logf("seed %d (%v): the clients' history ok %v (NoRequestID's failure %v), the cluster's ok %v, settled %v", seed,
 			time.Since(start).Round(100*time.Millisecond), v.KV.OK(), noRequestIDCaught.Holds(v.KV), v.Cluster.OK(), qtest.Settles().Holds(v.Cluster))
+		t.Logf("  the host: %s", v.Host)
+		if v.Cluster.Stalled() {
+			t.Logf("  the cluster's: no verdict (host stall): a bound broken while the host stalled long enough to break it")
+		}
 		if !v.Cluster.OK() {
 			t.Logf("  the cluster's: %s", strings.TrimSpace(v.Cluster.Report.Summary()))
 		}
@@ -481,6 +517,40 @@ func seedsOf(t *testing.T, runs string, def []int64) []int64 {
 		return out
 	}
 	return def
+}
+
+// judged are vs's runs with a verdict: a run whose cluster history has
+// none for a host stall alone (qtest.Run.Stalled: a bound broken while
+// the harness measured a stall that could have broken it) is
+// inconclusive, neither a pass nor a FAIL, and is left out of the claims
+// and said: logged, and a line in inconclusive.txt beside the runs, which
+// CI turns into a warning. A run with any other failure stays in. If
+// every run is inconclusive, all are returned, and the claims fail (qtest:
+// "every one of N runs has no verdict (host stall)"): a job that judged
+// nothing is red, as a claim over no runs is.
+func judged(t *testing.T, vs []realVerdicts) []realVerdicts {
+	t.Helper()
+	var out []realVerdicts
+	var lines []string
+	for _, v := range vs {
+		if v.Cluster.Stalled() {
+			line := fmt.Sprintf("%s: no verdict (host stall): %s", v.Dir, v.Host)
+			t.Logf("inconclusive, left out of the claims: %s", line)
+			lines = append(lines, line)
+			continue
+		}
+		out = append(out, v)
+	}
+	if len(lines) > 0 {
+		f := filepath.Join(filepath.Dir(vs[0].Dir), "inconclusive.txt")
+		if err := os.WriteFile(f, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+			t.Error(err)
+		}
+	}
+	if len(out) == 0 {
+		return vs
+	}
+	return out
 }
 
 func kvOf(vs []realVerdicts) (out []*qtest.Run) {
@@ -545,11 +615,12 @@ var prSeeds = []int64{5, 9, 10}
 // 22s each. A second leader of a term added to one run's logs after its
 // crashes is a violation of electionSafety: the nodes declare no lost
 // tails (nemesisRun.Recorders), so a crash leaves the steps after it
-// judged.
+// judged. A run whose bound broke while the host stalled long enough to
+// break it has no verdict, and is said and left out (judged).
 func TestRealNemesis(t *testing.T) {
 	vs := realRuns(t, seedsOf(t, "RAFTKV_REAL_RUNS", prSeeds), func(seed int64) nemesisRun { return realConfig(seed, Faithful) })
 	qtest.Runs(kvOf(vs)...).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
-	qtest.Runs(clusterOf(vs)...).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
+	qtest.Runs(clusterOf(judged(t, vs))...).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
 	secondLeader(t, vs[0]).Expect(t, qtest.Violates("electionSafety"))
 }
 

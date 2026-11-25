@@ -57,6 +57,7 @@ its own, recorded at each node after its hard state is persisted.
 | `TestRealNemesis`, `TestRealNoRequestID`, `TestRealSlowElection` (`RAFTKV_REAL=1`, toxiproxy) | none; `NoRequestID`; `SlowElection` | the real cluster under qnemesis (crashes, pauses, isolates, lost client responses, every node cut off), seeded schedules | every faithful run conforms and settles, both histories; some `NoRequestID` run fails as in the simulation; some `SlowElection` run elects past 500ms after a heal ([below](#under-a-nemesis)) |
 | `TestRealCluster` (`RAFTKV_REAL=1`) | none | three `raftkv-node` processes on localhost; the leader killed (`kill -9`) and restarted on its log while clients write | the cluster catches the node up (every `/status` agrees); the clients' history conforms linearized, settles and completes; the nodes' logs with the harness's settle conform to the cluster's model and settle (`eventually hasLeader` judged); without the settle they do not settle. `TestRealNodeExitsWithParent`: a node whose parent is killed exits |
 | `TestReplayCISeed5` | none | CI's seed 5 journal (`testdata/ci-seed5.journal.jsonl`: a 301ms pause of n1, a crash of n2, n1 cut off for 301ms) re-made in the simulation, without the real tier | every fault made, the cluster's history conforms, and nothing is said to be made otherwise than it happened (the replay hint once said the pause was off, comparing it with no simulation) |
+| `TestHostStallIsNoVerdict` | none | the cluster's history after every node is cut off and healed, every node then frozen 1.2s (a host stall, as CI's seed 5 had), judged by `cluster.real.binding.yaml` | with the stall the harness measured over the window, no verdict (host stall), `electionSafety` holding; without it (stall detection off), with the stall before the heal, or one too short to make the leader late, the run violates `within 500ms after healed: leaderOrSplit`; the real tier's claims leave the inconclusive run out and keep the failing one |
 | `TestLinearizeScale` | none | four clients, fifty operations each, every history linearized whole | all 5 runs conform within a budget of 50000 orders, 20 to 60 s a history (most of it in planning each candidate: ROADMAP S2) |
 
 ## What the runs taught
@@ -167,6 +168,31 @@ state is fsynced, and a 1s stall of every node's log commit reproduces
 that shape exactly; the simulation of the same faults and cuts elects
 within 300ms in all 30 seeds tried. A stall the nodes shared, not the
 code's.
+
+So the harness measures the host while each real run runs
+(`qnemesis.WatchHost`, in the test process, not the nodes): a 10ms
+ticker on a thread of its own, reading on Linux that thread's wait for a
+CPU and the cgroup's throttling, and an 8-byte write and fsync every
+20ms in the run's directory, on the disk the nodes' logs are on (a
+stall of the nodes' fsyncs, which no ticker sees). A delay over 100ms is
+a stall (`stallThreshold`: a fifth of the 500ms bound, over half the
+headroom the slowest faithful election measured, 320ms, leaves under
+it, and above the probes' own delays: locally, under load and `-race`,
+ticks up to 78ms late and fsyncs up to 93ms in runs that recorded no
+stall, and stalls of 102 to 268ms in 8 of 30 runs, none of which broke a
+bound). Given the stalls (`qtest.HostStalls`), a bound broken while the
+host stalled for at least as long as the response was late, between its
+trigger and the response, is no verdict, "no verdict (host stall)":
+neither a pass nor a FAIL. A stall outside that window, or shorter than
+the lateness (SlowElection's leaders come 300ms or more late), excuses
+nothing, nor does a stall excuse any other check. `TestHostStallIsNoVerdict`
+shows each, on the simulation's history with every node frozen 1.2s
+after the heal. The claims over the real runs leave an inconclusive run
+out and say so (`judged`: logged, and `inconclusive.txt` beside the runs,
+which CI prints as a warning and keeps as an artifact); if every run is
+inconclusive the claims fail, since the tier then judged nothing. Each
+run's log says what the probes measured (`the host: 0 stalls over
+100ms (... ticks, the latest ...ms late; ... fsyncs, the longest ...)`).
 
 | test | mutant | claim | measured (this shape, `-race`) |
 |---|---|---|---|

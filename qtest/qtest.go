@@ -83,6 +83,8 @@ type settings struct {
 	mutant string
 	// stepMutations are StepMutations', for MutateSteps
 	stepMutations []qtrace.MutationOption
+	// hostStalls are HostStalls'
+	hostStalls []qtrace.Stall
 	// driver and artifacts are a run's manifest's (Driver, Artifacts)
 	driver    *validate.Driver
 	artifacts []validate.Artifact
@@ -114,6 +116,7 @@ var (
 	optDriver          = optionID{"Driver"}
 	optArtifacts       = optionID{"Artifacts"}
 	optStepMutations   = optionID{"StepMutations"}
+	optHostStalls      = optionID{"HostStalls"}
 )
 
 // option is an option that records its identity, so a workflow that
@@ -148,11 +151,12 @@ var (
 		"or record through the run's context); Global is Record's, qhegel.Test's and FindViolation's, for goroutines no run can follow"
 	whyManifest    = "a manifest is of a run gotogether did not drive, Validate's or Record's; an exploration's runs are its own, each reproduced by GOTOGETHER_RUN"
 	whyStepMutants = "it narrows MutateSteps' observation mutants; pass the steps to qtest.MutateSteps"
-	exploreIgnores = map[optionID]string{optGlobal: whyGlobal, optDriver: whyManifest, optArtifacts: whyManifest, optStepMutations: whyStepMutants}
+	whyHostStalls  = "a simulation runs on virtual time, which no host stall delays; HostStalls is for a real run's steps (Validate, Record)"
+	exploreIgnores = map[optionID]string{optGlobal: whyGlobal, optDriver: whyManifest, optArtifacts: whyManifest, optStepMutations: whyStepMutants, optHostStalls: whyHostStalls}
 	whyCaseOrder   = "a case's steps are checked as it records them, in that order; Linearize and ResolvePending are Record's, Validate's and explorations'"
 	casesIgnore    = map[optionID]string{optLinearize: whyCaseOrder, optLinearizeBudget: whyCaseOrder, optLinearizeByKey: whyCaseOrder, optClockSkew: whyCaseOrder, optResolvePending: whyCaseOrder,
 		optSkipIfEmpty: "it is qtest.Record's and explorations' (and a System's cases'), for an unwoven build that records nothing",
-		optDriver:      whyManifest, optArtifacts: whyManifest, optStepMutations: whyStepMutants}
+		optDriver:      whyManifest, optArtifacts: whyManifest, optStepMutations: whyStepMutants, optHostStalls: "a case is checked as it records, in-process, where no host stall is measured; HostStalls is Validate's and Record's"}
 	whyUnchecked    = "no case is checked against the model"
 	uncheckedIgnore = map[optionID]string{optConstants: whyUnchecked, optInvariants: whyUnchecked, optQuint: whyUnchecked}
 	validateIgnores = map[optionID]string{
@@ -194,6 +198,17 @@ func SkipIfEmpty() Option { return option(optSkipIfEmpty, func(c *settings) { c.
 // other runs, behind qobshttp.Handler(h, rec). It is Record's and
 // qhegel's: an exploration and Validate refuse it.
 func Global() Option { return option(optGlobal, func(c *settings) { c.Global = true }) }
+
+// HostStalls are the stalls measured of the host while the run's
+// system ran (qnemesis.WatchHost), outside the system: a bounded
+// response (a binding's within) that one of them could by itself have
+// made late is no verdict, "no verdict (host stall)"
+// (validate.Report.ExcuseStalls), neither a pass nor a FAIL, and the run
+// keeps them (Run.HostStalls). Any other failure stands. It is for a real
+// run's steps, Validate's and Record's: a simulation's time is virtual.
+func HostStalls(stalls ...qtrace.Stall) Option {
+	return option(optHostStalls, func(c *settings) { c.hostStalls = append(c.hostStalls, stalls...) })
+}
 
 // Constants checks against another instance of the binding's model: these
 // constants override the binding's, e.g. Constants(map[string]string{"STOCK": "1000"}).
@@ -329,6 +344,10 @@ type Run struct {
 	// Err is the scenario's error: the run did not run to its end
 	// (System.Run's error).
 	Err error
+	// HostStalls are the stalls of the host measured while the run ran
+	// (the HostStalls option): a bounded response one of them could have
+	// made late by itself has no verdict (Stalled).
+	HostStalls []qtrace.Stall
 	// Unsettled is why the system did not settle, when the run had it
 	// settle (a qenv.Unsettled from Sim.Settle): no error of the run, an
 	// outcome the claims judge. It makes the run's report not OK, so
@@ -351,6 +370,24 @@ func (r *Run) Faults() []qenv.Choice { return (&qenv.ChoiceLog{Choices: r.Choice
 // OK reports whether every actor conformed and satisfied the invariants.
 func (r *Run) OK() bool { return r.Report != nil && r.Report.OK() }
 
+// Stalled reports whether the run has no verdict for a host stall alone:
+// no check FAILs, and every actor that does not pass has no verdict
+// because a stall of its host could have made a bounded response late
+// (HostStalls; "no verdict (host stall)"). Such a run is inconclusive:
+// it neither conforms nor fails, and a claim over runs counts it as
+// unjudged.
+func (r *Run) Stalled() bool {
+	if r.Report == nil {
+		return false
+	}
+	if c := r.Report.Composition; c != nil {
+		if status, _ := c.Problem(); status != receipt.Pass {
+			return false
+		}
+	}
+	return r.Report.Stalled()
+}
+
 // adjust fits the run's report to how the run ended, on a copy (verdicts
 // are shared by every run of the same steps, which may have ended
 // otherwise): its Unsettled, and for a run that did not settle the cycle
@@ -372,6 +409,9 @@ func (r *Run) adjust(cc *validate.Checker) {
 			rep.Actors[i] = &c
 		}
 		cc.MarkHot(&rep, r.Steps)
+	}
+	if len(r.HostStalls) > 0 {
+		rep = *rep.ExcuseStalls(r.HostStalls)
 	}
 	r.Report = &rep
 	r.adjusted = r.Report
@@ -539,6 +579,7 @@ func check(t testing.TB, bindingPath string, run *Run, c settings) *Run {
 	run.Report = j.Report
 	run.checks, run.checker = checkedNames(ch), ch
 	run.search, run.driver, run.artifacts, run.name = c.searchOptions(), c.driver, c.artifacts, t.Name()
+	run.HostStalls = c.hostStalls
 	if c.tempDir {
 		run.keep = &keeper{dir: c.Dir, name: t.Name()}
 	}
