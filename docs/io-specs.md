@@ -2,7 +2,8 @@
 
 Status: design draft, 2026-11-25. Nothing here is built. Proposed as
 ROADMAP CW12; once a slice lands, its decisions become a DESIGN section
-(§109 at the time of writing) and this note is superseded there.
+and this note is superseded there. The maintainer's answers to §8's
+questions are in §8.1.
 
 <!-- not built: qobs.Effect -->
 
@@ -553,6 +554,29 @@ whether adopters write effect defs, before P2–P4 are committed.
    model step of payd's model. Is a server-side scope an action the model
    must gain, or does the binding relate it to the client's `request` by
    the idempotency key (rule 3)?
+
+### 8.1 Decided (maintainer, 2026-11-25)
+
+1. **Post-state** is enough for P1. A pre-state form is added only when a
+   real case needs it.
+2. **Boundary effects by default**; an internal effect (an outbox row) may
+   be named when a binding opts in, knowing it then specifies the design.
+3. **Reuse `Mismatch`**, its message saying the effect, so existing
+   `.Expect` claims work unchanged.
+4. **Rule 2 on by default** (the task's next step), as coverage does, the
+   report saying how each effect was attributed.
+5. **A pending call's recorded effect rules out "not taken"**: an effect
+   that landed means the call took effect.
+6. **Doubles always record effects**: cheap, and evidence and coverage use
+   them.
+7. **The format: whatever shape is cleanest.** Backward compatibility is
+   not a goal here: an optional record kind in `gotogether.steps/1` if that
+   is natural, a new major if a cleaner shape needs one. No compatibility
+   shims or dual readers for old logs.
+8. **grist**: decided after P3, not now.
+9. **Unmodified services**: effects are recorded at their adapters (qhttp,
+   qsql), as payd's steps already are, and related to the client's request
+   by its idempotency key (rule 3); the model gains no server-side action.
 
 ## 9. Relation to the roadmap
 
