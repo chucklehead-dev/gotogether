@@ -394,9 +394,8 @@ catches a wrong resolution even when it evaluates the same on the
 corpus. (3) already exists: the `qeval-differential` and
 `evaluator-shadow` nightlies and `TestAgreesWithQuint`. Pointed at
 Go-compiled IR, it catches what (2) would accept and the evaluator would
-see. Declaration order is part of (2): binding's `Vars` follow the order
-of the typecheck output, so a different toposort would show up in
-scaffold output.
+see. Declaration order is not part of it: binding sorts its `Vars` by
+name (§4.5), so a different toposort does not show in scaffold output.
 
 ### 3.4 Error parity
 
