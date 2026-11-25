@@ -365,18 +365,25 @@ func swapLog(rec string) []Step {
 
 // effect-swap exchanges the contents of two effects adjacent in their
 // recorder's seqs and of one cause, whatever order the log lists them
-// in, and its mutants are in the log's order: several recorders'
-// (whose pairs are found per recorder), one of them listed out of
-// order.
+// in, and its mutants are in the log's order: five recorders' (whose
+// pairs are found per recorder) interleaved, every recorder's first half
+// before any's second, so that one recorder's mutants after another's
+// are out of order whichever recorder comes first; one recorder listed
+// out of order.
 func TestEffectSwaps(t *testing.T) {
 	t.Parallel()
+	recs := []string{"r1", "r2", "r3", "r4", "r5"}
+	half := len(swapLog("")) / 2 // 5: the call's pair in the first, the Made's in the second
 	var log []Step
-	for _, rec := range []string{"r1", "r2", "r3", "r4", "r5"} {
-		log = append(log, swapLog(rec)...)
+	for _, rec := range recs {
+		log = append(log, swapLog(rec)[:half]...)
 	}
-	// r3's listed with its seqs 3 and 5 exchanged in place, so neither of
-	// its swapped pairs is adjacent in the log
-	r3 := 2 * len(swapLog(""))
+	for _, rec := range recs {
+		log = append(log, swapLog(rec)[half:]...)
+	}
+	// r3's listed with its seqs 3 and 5 exchanged in place, so its pair
+	// under the call is not adjacent in the log
+	r3 := 2 * half
 	log[r3+2], log[r3+4] = log[r3+4], log[r3+2]
 	type swap struct {
 		index  int
@@ -397,9 +404,11 @@ func TestEffectSwaps(t *testing.T) {
 		got = append(got, swap{m.Index, m.Action, [2]uint64{ch[0], ch[1]}})
 	}
 	var want []swap
-	for k := range 5 {
-		b := k * len(swapLog("")) // r3's pair under the call: seq 2 at b+1, seq 3 at b+4
-		want = append(want, swap{b + 1, "pay", [2]uint64{2, 3}}, swap{b + 7, "mark", [2]uint64{8, 9}})
+	for k := range recs { // the calls' pairs: seq 2 at k*half+1 (r3's seq 3 at +4)
+		want = append(want, swap{k*half + 1, "pay", [2]uint64{2, 3}})
+	}
+	for k := range recs { // the Made's pairs: seq 8 at the second half's +2
+		want = append(want, swap{len(recs)*half + k*half + 2, "mark", [2]uint64{8, 9}})
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("effect-swaps %v, want %v", got, want)
