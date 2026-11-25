@@ -1730,6 +1730,7 @@ const PerStep Durability = iota
 const Synced Durability = iota (spec 1 of its group)
 func CompleteThrough(ctx context.Context, t time.Time)
 func Effect(ctx context.Context, kind string, kv ...any)
+func EffectFunc(ctx context.Context, build func() (kind string, kv []any))
 func FileSink(path string, d Durability) (*JSONLSink, error)
 func From(ctx context.Context) *Recorder
 func Global() *Recorder
