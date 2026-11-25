@@ -8,7 +8,8 @@ import (
 )
 
 func init() {
-	wovenrt.Current, wovenrt.Lock, wovenrt.TryLock, wovenrt.Unlock = current, lockKey, tryLockKey, unlockKey
+	wovenrt.Current, wovenrt.Lock, wovenrt.TryLock, wovenrt.Unlock = current, lockKey, tryLockKey, func(ctx context.Context, key any) { unlockKey(ctx, key, nil) }
+	wovenrt.UnlockGuarded = unlockKey
 	wovenrt.RLock, wovenrt.TryRLock, wovenrt.RUnlock, wovenrt.Add, wovenrt.Wait = rLockKey, tryRLockKey, rUnlockKey, addKey, waitKey
 	wovenrt.Go = func(ctx context.Context, fn func()) { Go(ctx, "go", func(context.Context) { fn() }) }
 }
@@ -71,13 +72,15 @@ func tryLockKey(ctx context.Context, key any) bool {
 	return true
 }
 
-// unlockKey releases an exclusive hold.
-func unlockKey(ctx context.Context, key any) {
+// unlockKey releases an exclusive hold. fields are the invariants of the
+// lock's field (//quint:guards, woven at the Unlock's call site), checked
+// after those Guard registered.
+func unlockKey(ctx context.Context, key any, fields []wovenrt.Invariant) {
 	l, t := keyedOf[rwState](ctx, key, "Unlock")
 	if !l.writer {
 		panic("qenv: unlock of unlocked mutex")
 	}
-	t.sim.checkGuards(t, key) // the lock invariants (Guard), the lock still held
+	t.sim.checkGuards(t, key, fields) // the lock invariants, the lock still held
 	l.writer = false
 }
 

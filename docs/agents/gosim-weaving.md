@@ -53,6 +53,15 @@ Gotchas for agents (and humans) before changing qgosim, qweave, qenv/weave, the 
   invariant cannot call it (a passing guarded run makes the unguarded
   run's choices: `TestLockInvariantKeepsChoices`). gosim's own sync never
   reaches qenv, so Guard refuses under a Platform.
+- A `//quint:guards` field's invariants are woven at its Unlocks' call
+  sites (qweave/guards.go), replacing qenv/weave's Unlock aspects by ID
+  (`guardedUnlocks`): renaming one of those aspects, or adding an Unlock
+  aspect, needs that table changed too, or guarded Unlocks silently go
+  plain. qweave refuses every other use of the field (an Unlock through
+  its address would go unchecked); keep that check with any new way the
+  weaver reaches a lock (a new join point on a field's address). The
+  directive is qweave's alone: Orchestrion's YAML cannot express it, and
+  gosim's tool file weaves no Unlock (each field is reported skipped).
 - gosim (`qgosim`, `examples/gosim`) translates everything the simulated
   package imports: keep Hegel and other native code out of it. Hegel
   adapters live in qhegel (`Chooser`, `FindTrigger`), and the Glomers one in `maelstrom/hegelnet`, never

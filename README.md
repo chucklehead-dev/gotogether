@@ -916,7 +916,9 @@ A woven lock can carry an invariant, as a Gobra mutex does:
 checks it at every simulated `Unlock`, the lock still held, so a
 critical section that leaves its state broken fails its run at that
 release, naming the Unlock and the task (not under gosim, where Guard
-refuses).
+refuses). With qweave the invariant can be declared on the field instead,
+`mu sync.Mutex //quint:guards conserved` naming a method of the struct:
+every Unlock of the field is woven to check it, with no registration.
 
 A whole program, standard library and network included, can run in
 [gosim](https://github.com/jellevandenhooff/gosim) with its choices made by

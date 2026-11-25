@@ -43,10 +43,18 @@ weaves:
   that binds the receiver when the value is made, as a method value does,
   and makes the advised call;
 - **promoted calls.** `c.Lock()` on `struct{ sync.Mutex }` matches the
-  embedded field's type, and the advice is applied to `(c).Mutex`.
+  embedded field's type, and the advice is applied to `(c).Mutex`;
+- **lock invariants on a field.** `mu sync.Mutex //quint:guards conserved`
+  names methods of the struct (`func() bool`): each Unlock of the field
+  (a call, a defer, a method value) becomes `woven.MutexUnlockGuarded` (or
+  `RWUnlockGuarded`), which checks them, bound to the struct, as
+  `qenv.Guard` would. Any other use of the field (`&x.mu`, a copy) is
+  refused, since an Unlock through it would go unchecked; so are embedded
+  and pointer locks. Without qenv/weave in the tool file (gosim's) each
+  such field is listed skipped.
 
-`gotogether lint -weave` reports both, but they are a problem only under
-Orchestrion.
+`gotogether lint -weave` reports all three, but they are a problem only
+under Orchestrion.
 
 **Instrumenting the main module.** Two flags weave the main module's own
 non-test files (or the packages `-coverpkg` names), never the toolkit's:

@@ -29,6 +29,9 @@ type pkgInfo struct {
 	cover  bool
 	mutate bool // Config.Mutate
 	modDir string
+	// guards are the main module's //quint:guards fields, by guardKey,
+	// when qenv/weave's Unlocks are woven (guards.go)
+	guards map[string]*guard
 }
 
 // An edit replaces src[start:end] (an insertion when they are equal). Its
@@ -49,6 +52,7 @@ type fileWeaver struct {
 	need    map[string]string // alias -> path, imports to add
 	edits   []*edit
 	skipped []string
+	errs    []error // refusals found while advising
 	// directives: line -> directive names on that line
 	directives map[int][]string
 }
@@ -79,6 +83,9 @@ func weaveFile(p pkgInfo, file *ast.File, src []byte, name string, aspects []*As
 	}
 	if err := w.walk(aspects); err != nil {
 		return nil, nil, err
+	}
+	if len(w.errs) > 0 {
+		return nil, nil, w.errs[0]
 	}
 	// the module's own files: not tests, not generated ones in the build
 	// cache (a test binary's main)
@@ -142,6 +149,11 @@ func (w *fileWeaver) walk(aspects []*Aspect) error {
 			stmt = stmts[len(stmts)-1]
 		}
 		c := node{n: n, stmt: stmt, fn: fn}
+		if w.p.root {
+			if err = w.guardEscapes(n, parent); err != nil {
+				return false
+			}
+		}
 		for _, a := range aspects {
 			if !w.matches(a.Join, c, parent) {
 				continue
@@ -388,6 +400,21 @@ func (w *fileWeaver) wrap(a *Aspect, adv Advice, expr ast.Expr, parent ast.Node)
 	if isMethod && sel != nil && call == nil {
 		return w.methodValue(a, adv, mj, sel, e)
 	}
+	if _, unlock := guardedUnlocks[a.ID]; unlock && isMethod && sel != nil && call != nil {
+		if rp, _ := w.methodMatch(mj, sel); len(rp.fields) == 0 {
+			if g, fx, implicit, pointer := w.guardedField(sel.X); g != nil {
+				if err := w.guardAccess(g, fx); err != nil {
+					w.errs = append(w.errs, err)
+					return nil
+				}
+				e.render = func(inner func(ast.Node) string) (string, error) {
+					u := w.guardedUnlock(a, g, fx, implicit, pointer, inner)
+					return fmt.Sprintf("%s(func() %s { %s; return %s }())", u.fn, u.typ, u.bind, u.arg), nil
+				}
+				return e
+			}
+		}
+	}
 	e.render = func(inner func(ast.Node) string) (string, error) {
 		d := exprData{text: srcText(inner(expr))}
 		if call, ok := expr.(*ast.CallExpr); ok {
@@ -414,6 +441,19 @@ func (w *fileWeaver) wrap(a *Aspect, adv Advice, expr ast.Expr, parent ast.Node)
 // receiver now (as a method value does) and making the advised call.
 func (w *fileWeaver) methodValue(a *Aspect, adv Advice, mj MethodCall, sel *ast.SelectorExpr, e *edit) *edit {
 	rp, _ := w.methodMatch(mj, sel)
+	if _, unlock := guardedUnlocks[a.ID]; unlock && len(rp.fields) == 0 {
+		if g, fx, implicit, pointer := w.guardedField(sel.X); g != nil {
+			if err := w.guardAccess(g, fx); err != nil {
+				w.errs = append(w.errs, err)
+				return nil
+			}
+			e.render = func(inner func(ast.Node) string) (string, error) {
+				u := w.guardedUnlock(a, g, fx, implicit, pointer, inner)
+				return fmt.Sprintf("func() func() { %s; return func() { %s(%s) } }()", u.bind, u.fn, u.arg), nil
+			}
+			return e
+		}
+	}
 	sig := w.p.info.Selections[sel].Type().(*types.Signature)
 	var params, args []string
 	for i := 0; i < sig.Params().Len(); i++ {

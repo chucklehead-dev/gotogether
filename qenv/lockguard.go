@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/chucklehead-dev/gotogether/internal/wovenrt"
 	"github.com/chucklehead-dev/gotogether/qrun"
 )
 
@@ -27,6 +28,24 @@ import (
 // New's scheduler and on the native runtime without a Platform. Under
 // gosim (a native simulation with a Platform) sync is gosim's own and no
 // unlock reaches qenv: Guard refuses there instead of checking nothing.
+//
+// The declarative form is a directive on the lock's field, woven by qweave
+// at every Unlock of that field (DESIGN §13, "Lock invariants"):
+//
+//	type Account struct {
+//		mu   sync.Mutex //quint:guards conserved
+//		a, b int
+//	}
+//
+//	func (x *Account) conserved() bool { return x.a+x.b == 100 }
+//
+// x.mu.Unlock() (a call, a defer, a method value) becomes
+// woven.MutexUnlockGuarded, which hands unlockKey the field's invariants
+// bound to x: checked as a Guard's are (after the Guards of the same
+// mutex), named Account.conserved, "guarded at" the field's line. It needs
+// no registration and no construction site, so zero values and every
+// constructor are covered; what it cannot see is an Unlock not through the
+// field (its address taken), which qweave refuses to weave.
 
 // guardsKey carries a simulation's lock invariants in its context (New
 // puts them in the base every task's context derives from), so Guard finds
@@ -122,17 +141,26 @@ func (gs *lockGuards) close() {
 }
 
 // checkGuards evaluates key's invariants as t releases its exclusive hold,
-// the lock still held.
-func (s *Sim) checkGuards(t *task, key any) {
+// the lock still held: those Guard registered, then fields, the ones its
+// field declares (//quint:guards, which woven code passes to this
+// Unlock).
+func (s *Sim) checkGuards(t *task, key any, fields []wovenrt.Invariant) {
 	gs := s.guards
-	if len(gs.by) == 0 || t.killed {
+	if len(gs.by) == 0 && len(fields) == 0 || t.killed {
 		return
 	}
 	for _, g := range gs.by[key] {
-		if !s.evalGuard(g, t) {
-			e := &LockInvariantError{Name: g.name, Guarded: g.site, Unlock: unlockSite(), Task: t.name, Step: s.steps, Native: s.nat != nil}
-			panic(e)
-		}
+		s.checkGuard(g, t)
+	}
+	for _, f := range fields {
+		s.checkGuard(&lockGuard{name: f.Name, site: f.Site, holds: f.Holds}, t)
+	}
+}
+
+// checkGuard panics with a *LockInvariantError if g is false.
+func (s *Sim) checkGuard(g *lockGuard, t *task) {
+	if !s.evalGuard(g, t) {
+		panic(&LockInvariantError{Name: g.name, Guarded: g.site, Unlock: unlockSite(), Task: t.name, Step: s.steps, Native: s.nat != nil})
 	}
 }
 
@@ -194,8 +222,8 @@ func internalFrame(fn string) bool {
 // it, and qtest's explorations report the run as failed (the value of its
 // *qtest.RunPanic).
 type LockInvariantError struct {
-	Name    string // the invariant's, as Guard named it
-	Guarded string // where Guard registered it (file:line)
+	Name    string // the invariant's, as Guard named it (Type.method for a //quint:guards field's)
+	Guarded string // where Guard registered it, or where the //quint:guards field is declared (file:line)
 	Unlock  string // the code that released the lock with the invariant false (file:line)
 	Task    string // the task that released it
 	Step    int    // the scheduling step it happened in (New's scheduler)

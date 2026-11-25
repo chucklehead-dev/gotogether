@@ -357,7 +357,10 @@ var syncMethods = map[string]bool{"Lock": true, "Unlock": true, "TryLock": true,
 //   - a sync.Mutex, RWMutex or WaitGroup embedded in a struct: Orchestrion
 //     matches a call by its receiver expression's type, so a promoted call
 //     (t.Lock() on a struct embedding sync.Mutex) is not woven, and takes
-//     the real lock. Name the field (mu sync.Mutex) and call t.mu.Lock().
+//     the real lock. Name the field (mu sync.Mutex) and call t.mu.Lock();
+//   - a lock field marked //quint:guards: qweave weaves its invariants
+//     into the field's Unlocks, Orchestrion has no join point for it and
+//     checks nothing.
 //
 // Method values are found by name (no type information), so a method of
 // another type with one of those names is reported too: mark a deliberate
@@ -384,6 +387,21 @@ func Woven(dir string) ([]Finding, error) {
 	})
 	sortFindings(out)
 	return out, err
+}
+
+// guardsComment is a field's //quint:guards directive, if it has one.
+func guardsComment(f *ast.Field) *ast.Comment {
+	for _, cg := range []*ast.CommentGroup{f.Doc, f.Comment} {
+		if cg == nil {
+			continue
+		}
+		for _, c := range cg.List {
+			if c.Text == "//quint:guards" || strings.HasPrefix(c.Text, "//quint:guards ") || strings.HasPrefix(c.Text, "//quint:guards\t") {
+				return c
+			}
+		}
+	}
+	return nil
 }
 
 // WovenFile is Woven's check of one parsed file (with comments).
@@ -444,6 +462,10 @@ func WovenFile(fset *token.FileSet, f *ast.File) []Finding {
 			if t, ok := embedsSync(n.Type); ok && len(n.Names) == 0 && marked[fset.Position(n.Pos()).Line] != "//qenv:ok" {
 				add(n, "weave.embedded_sync", "embedded sync."+t+": calls promoted through the struct are not woven (weaving matches the receiver's type)",
 					"name the field (mu sync."+t+") and call it through the name")
+			}
+			if c := guardsComment(n); c != nil {
+				add(c, "weave.guards_qweave", "//quint:guards is woven by qweave alone: an Orchestrion build weaves the field's plain Unlock and checks no invariant",
+					"build with qweave (qweave go test ./...), or register the invariant in the test with qenv.Guard(ctx, &x.mu, name, x.method)")
 			}
 		case *ast.GoStmt:
 			line := fset.Position(n.Pos()).Line

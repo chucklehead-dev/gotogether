@@ -7,5 +7,6 @@
   {"in": "action:x set:[]int{1, 2} m:map[string]int{\"a\": 1}", "out": [["action", "x"], ["set", "[]int{1, 2}"], ["m", "map[string]int{\"a\": 1}"]]},
   {"in": "action:x\tfrom:src", "out": [["action", "x"], ["from", "src"]]},
   {"in": "action:x flag", "out": [["action", "x"], ["flag", ""]]},
-  {"in": "action:x url:http://h:1/p", "out": [["action", "x"], ["url", "http://h:1/p"]]}
+  {"in": "action:x url:http://h:1/p", "out": [["action", "x"], ["url", "http://h:1/p"]]},
+  {"in": "ledgered  counted", "out": [["ledgered", ""], ["counted", ""]]}
 ]

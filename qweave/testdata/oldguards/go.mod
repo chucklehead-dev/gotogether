@@ -1,0 +1,7 @@
+module example.com/oldguards
+
+go 1.27.3
+
+require github.com/chucklehead-dev/gotogether v0.0.0
+
+replace github.com/chucklehead-dev/gotogether => ./core
