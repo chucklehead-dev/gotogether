@@ -188,6 +188,7 @@ func TestKnownTypesAfterError(t *testing.T) {
 		{"others typed", typecheckForm([]string{"QNT000"}, map[string]string{"m/a": "int", "m/c": "str"}), canon.Typecheck, true},
 		{"typed otherwise", typecheckForm([]string{"QNT000"}, map[string]string{"m/a": "str"}), canon.Typecheck, false},
 		{"other errors", typecheckForm([]string{"QNT404"}, map[string]string{"m/a": "int"}), canon.Typecheck, false},
+		{"failed compile", typecheckForm([]string{"QNT000"}, map[string]string{"m/a": "int"}), canon.Compile, true},
 		{"parse output", typecheckForm([]string{"QNT000"}, map[string]string{"m/a": "int"}), canon.Parse, false},
 	}
 	for _, c := range cases {
@@ -231,13 +232,18 @@ func TestKnownIDDependence(t *testing.T) {
 	progs := map[string]string{
 		"cycle":     "module main {\n" + vals.String() + "  pure def cf(n: int): int = cg(n)\n  pure def cg(n: int): int = cf(n)\n}\n",
 		"duplicate": "module main {\n  val a = 1\n  val b = 2\n  val c = 3\n  val d = 4\n  val e = 5\n}\n\nmodule main {\n  val again = 1\n}\n",
-		"twins":     "module main {\n  var x: int\n  var x: int\n}\n",
-		"typeerror": "module main {\n  val a = 1\n  val b = 2\n  val c = 3\n  val bad = 1 + true\n  val e = 5\n}\n",
+		"twins":     "module main {\n  var x: int\n  var x: int\n  action init = x' = 0\n  action step = x' = x\n}\n",
+		"typeerror": "module main {\n  var x: int\n  val a = 1\n  val b = 2\n  val c = 3\n  val bad = 1 + true\n  val e = 5\n  action init = x' = 0\n  action step = x' = x\n}\n",
 	}
 	for name, text := range progs {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			p := Program{ID: name, File: filepath.Join(t.TempDir(), "main.qnt"), Text: text}
+			if name == "typeerror" || name == "twins" {
+				// the failed compile writes the typecheck's modules, table
+				// and types too, and no source map
+				p.Main = "main"
+			}
 			oa, ob, err := RunBoth(context.Background(), p, Quint{}, Shifted{}, t.TempDir())
 			if err != nil {
 				t.Fatal(err)
@@ -270,8 +276,8 @@ func TestKnownIDDependence(t *testing.T) {
 				if exact == nil || exact.Tier != TierTypecheck {
 					t.Fatalf("the exact comparison: %v, want the typecheck's types to differ (does quint still stop typing at an error?)", exact)
 				}
-				if len(known) != 1 || known[0].Class != ClassTypesAfterError {
-					t.Fatalf("known %v, want %s", known, ClassTypesAfterError)
+				if len(known) != 2 || known[0].Class != ClassTypesAfterError || known[1].Class != ClassTypesAfterError || known[1].Kind != canon.Compile {
+					t.Fatalf("known %v, want %s in the typecheck's and the failed compile's outputs", known, ClassTypesAfterError)
 				}
 				// a node both type, typed otherwise by quint shifted
 				ob.Typecheck = retype(t, oa.Typecheck, ob.Typecheck)

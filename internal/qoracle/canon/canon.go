@@ -100,6 +100,11 @@ type Options struct {
 	// relative to (the first that contains a path), slash-separated, so
 	// that two runs in different directories agree.
 	Roots []string
+	// Places is a source map of the same parse (quint numbers one input's
+	// parse, typecheck and compile alike), read only to tell declarations
+	// alike in everything but their places apart (keysOf) in an output
+	// that has none of its own; never compared.
+	Places []byte
 }
 
 // A Form is a canonical document: a tree of maps, slices, strings,
@@ -199,10 +204,16 @@ func idText(v any) (string, bool) {
 }
 
 func (c *canonicalizer) run(top, sm map[string]any) any {
-	if sm == nil {
-		sm, _ = top["sourceMap"].(map[string]any)
+	at := sm
+	if at == nil {
+		at, _ = top["sourceMap"].(map[string]any)
 	}
-	c.at = c.places(sm)
+	if at == nil && len(c.o.Places) > 0 {
+		if d, err := decode(c.o.Places); err == nil {
+			at, _ = d.(map[string]any)
+		}
+	}
+	c.at = c.places(at)
 	mods, _ := top["modules"].([]any)
 	modKeys := keysOf(mods, func(_ int, m map[string]any) string {
 		s, _ := m["name"].(string)

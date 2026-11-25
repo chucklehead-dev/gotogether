@@ -7415,7 +7415,8 @@ generated programs. Its first "front end" is quint again.
   module whose name repeats (QNT102: quint writes both) is keyed by its
   content with its declarations as a multiset, never in quint's order,
   and twins alike in name, kind and content (`var x: int` twice) are
-  numbered by their places in the source map. A
+  numbered by their places in the source map (the parse's, for the
+  outputs that carry none). A
   front end numbering its nodes otherwise cannot match quint's order
   within a layer, so the bar is the layering.
 - **Names follow their binders.** The compile IR's unshadowed names
@@ -7458,8 +7459,9 @@ generated programs. Its first "front end" is quint again.
   name, against any front end, logs each by class and compares the
   outputs after it. `cycle-order`: only the errors differ, the same set
   once a QNT098 is its cycle's modules as a set, the first errors equal
-  or both a QNT099. `types-after-error`: a typecheck with the same
-  errors, equal but in which nodes have types, none typed otherwise.
+  or both a QNT099. `types-after-error`: a typecheck (or a failed
+  compile's document) with the same errors, equal but in which nodes have
+  types, none typed otherwise.
   `layer-order` is the form's own; `verdict-flip` names a corpus entry
   (an upstream bug). A missing, extra or moved error, a first error of
   another code, or a node typed otherwise is a disagreement; `Compare`

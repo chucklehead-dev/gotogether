@@ -105,8 +105,9 @@ const (
 	// ClassTypesAfterError: after a module's first type error quint types
 	// nothing more (constraintGenerator.ts: each exit returns once its
 	// errors are not empty), and it walks a layer's declarations in the
-	// ids' order. Accepted: the same errors, the same type for every node
-	// both type, other nodes typed.
+	// ids' order. Accepted, in the typecheck's output and a failed
+	// compile's: the same errors, the same type for every node both type,
+	// other nodes typed.
 	ClassTypesAfterError Class = "types-after-error"
 	// ClassLayerOrder: a toposort layer sorted by its ids as strings. The
 	// form compares declarations and modules by layer, so it never shows
@@ -284,11 +285,11 @@ func compareOutputs(oa, ob *Output, accept map[Class]bool) (*Disagreement, []Kno
 		if !d.hasA {
 			continue
 		}
-		fa, err := canon.Of(d.a, d.smA, canon.Options{Kind: d.kind, Tier: canon.Read, Roots: []string{oa.Root}})
+		fa, err := canon.Of(d.a, d.smA, canon.Options{Kind: d.kind, Tier: canon.Read, Roots: []string{oa.Root}, Places: oa.SourceMap})
 		if err != nil {
 			return nil, nil, err
 		}
-		fb, err := canon.Of(d.b, d.smB, canon.Options{Kind: d.kind, Tier: canon.Read, Roots: []string{ob.Root}})
+		fb, err := canon.Of(d.b, d.smB, canon.Options{Kind: d.kind, Tier: canon.Read, Roots: []string{ob.Root}, Places: ob.SourceMap})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -328,10 +329,11 @@ func onlyErrors(diffs []canon.Difference) bool {
 // cycle's declarations is reported first or where a QNT098 points. A
 // missing or extra error, one at another place, another module in a
 // cycle, or a first error of another code is a disagreement. Types after
-// an error: a typecheck's forms equal but in their types, both with
-// errors, and no node typed by both typed otherwise.
+// an error: a typecheck's forms (or a failed compile's, which writes the
+// typecheck's modules and types with its errors) equal but in their
+// types, both with errors, and no node typed by both typed otherwise.
 func classOf(kind canon.Kind, fa, fb *canon.Form, diffs []canon.Difference, oa, ob *Output) (Class, bool) {
-	if kind == canon.Typecheck && typesAfterError(fa, fb) {
+	if kind != canon.Parse && typesAfterError(fa, fb) {
 		return ClassTypesAfterError, true
 	}
 	if !onlyErrors(diffs) {

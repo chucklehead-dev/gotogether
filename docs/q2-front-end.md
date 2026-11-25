@@ -739,16 +739,19 @@ and for 1-minimality over the reductions).
   the first error gets no type, and which ones those are is a layer's
   id order. `val bad = 1 + true` among `val a`, `b`, `c`: unshifted, `b`
   and `c` are untyped; shifted, typed (the nightly's seeds 20782003 and
-  20782015, every QNT000 type-error mutation). Class
-  `types-after-error`: the same errors, no node both type typed
-  otherwise. P1 walks a layer in source order, then name.
+  20782015, every QNT000 type-error mutation; a failed compile's `--out`
+  document carries the same types). Class `types-after-error`, in the
+  typecheck's and a failed compile's outputs: the same errors, no node
+  both type typed otherwise. P1 walks a layer in source order, then name.
 - **Twin declarations** (`var x: int` twice, QNT101) are both written,
   each layer's in id order. The form told twins alike in name, kind and
   content apart by quint's order (`x~var~<digest>~2`), so their source
   spans crossed once the ids shifted (seed 20782014's
   duplicate-definition): it now numbers them by their places in the
-  source map (canon's `keysOf`), where a front end has to put them
-  anyway: quint's output is the same under the shift, so rule 1.
+  source map (canon's `keysOf`; the typecheck and a failed compile, which
+  carry none, read the parse's, `Options.Places`), where a front end has
+  to put them anyway: quint's output is the same under the shift, so
+  rule 1.
 
 **The rule for quint's id-dependent behaviour** (the maintainer's
 decision, 2026-11-25, a formal-methods architect's proposal):
