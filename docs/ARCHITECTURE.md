@@ -209,6 +209,7 @@ this build reads.
 | `gotogether.run/3` | a validated run's manifest (`validate -manifest`; hashed compiled artifact selects evaluator-only replay) | the current only: written anew by every run |
 | `gotogether.evidence/3` | an exploration's evidence (`GOTOGETHER_EVIDENCE`) | the current only |
 | `gotogether.model/1` | a compiled model (`gotogether compile`) | the current only |
+| `gotogether.mbt/1` | a spec compiled for connect's traces (`gotogether compile -spec`) | the current only |
 | `gotogether.nav/2` | the run navigation protocol between a test binary and gotogether-nav | the current only |
 
 Beside them, two ABIs: `woven.ABI1`, which qweave's generated code

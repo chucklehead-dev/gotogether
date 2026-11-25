@@ -163,6 +163,29 @@ constants last.
   reading a store), implement `CheckStep(s *connect.Step) error`
   (`connect.StepChecker`).
 
+## Without quint (a compiled model)
+
+Where quint and Node are not installed (a consumer's CI), compile the
+spec once where they are, check the file in, and connect runs from it:
+
+```sh
+gotogether compile -spec model/bank.qnt -main bankDesign   # writes model/bank.bankDesign.mbt.json
+gotogether compile -spec model/bank.qnt -main bankDesign -check   # CI, where quint is: fails when stale
+GOTOGETHER_COMPILED=1 go test ./...                         # CI, without quint
+```
+
+- `GOTOGETHER_COMPILED` unset uses the compiled model only where quint is
+  not on PATH; `1` always (failing where the spec has none); `0` never.
+  `connect.RequireTraces(t, cfg)` skips a test where neither can run.
+- The traces are the Go evaluator's random simulation of the model, with
+  `quint run --mbt`'s semantics (`mbt::actionTaken` is the branch the last
+  `any {}` took; every pick of `step` in the record). Seeds are not quint's:
+  the same `QUINT_SEED` reproduces the same Go traces, not quint's.
+- `Config.Require`, `Step.Eval` and a bound driver's check read the
+  artifact's IR. `connect.Test` (a `quint test` run), a `Config.Args` other
+  than `--invariant`, and a construct outside the evaluator each fail with
+  the fix; nothing falls back to quint unasked.
+
 ## Comparing with the model's own definitions (`Step.Eval`)
 
 A projection the model defines (`def balanceOf(a: str): int`, `val

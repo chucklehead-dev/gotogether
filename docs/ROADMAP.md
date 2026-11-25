@@ -617,11 +617,25 @@ item is its own decision before it starts; the red-nightly rule applies.
   examples' models and their tests on `RequireModel`, doctor
   listing bindings without one, and Q1's fragment (`qtest.Model`, simulate and
   connect still need quint).
-- **Q1: the evaluator's whole fragment (M).** qeval's refusals
-  (`qeval.Unsupported`) closed, and `quint run`'s random simulation in Go.
-  Seeds cannot match quint's generator, so parity is by meaning: every trace
-  Go makes replays in quint, every trace quint makes replays in Go, and
-  small models' reachable sets agree.
+- **Q1: the evaluator's whole fragment (M). First slices built** (DESIGN
+  §109): the refusals inventoried (none of the repository's 67 agreeing
+  models hits one but rr's order-dependent fold, on purpose), the builtins
+  quint's simulator runs closed (`setOfMaps`, `allListsUpTo`,
+  `getOnlyElement`, `q::debug`), `quint run`'s random simulation in Go
+  (`qeval.Model.Sample`, `Simulate`, `ActionTaken`: sound and complete
+  draws, quint's `mbt::actionTaken`), parity by meaning on both backends
+  (Go's traces replay in quint pinned, quint's are paths of the
+  evaluator's, a small model's reachable sets agree), and connect's traces,
+  Require, Eval and bound checks from a compiled spec (`gotogether compile
+  -spec`, `gotogether.mbt/1`, `GOTOGETHER_COMPILED`) with no quint. Left:
+  `qtest.Model` and `simulate` from a compiled binding model (the
+  artifact to carry the claims' PossibleModule; the cross-check and the
+  witness replays reported as not done; sampled invariants by Simulate),
+  connect.Test's runs (`then`, `reps`, `expect`, `fail`), integers past 64
+  bits, and a nightly comparing Go's traces with quint's on every
+  example's model. Seeds cannot match quint's generator, so parity is by
+  meaning: every trace Go makes replays in quint, every trace quint makes
+  replays in Go, and small models' reachable sets agree.
 - **Q2: the front end (L).** Parser (from Quint's ANTLR grammar or by hand,
   for quint's error positions), name resolution, imports, instances and
   `export` flattened to the IR `quint compile` writes, then the type and
