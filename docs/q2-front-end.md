@@ -639,7 +639,7 @@ Q3's tiers 2 to 5 then wait for P2 to P4.
 internal/qoracle; its mechanism is DESIGN §111. Against §4.4:
 
 1. **The manifest** (internal/qoracle/testdata/corpus.json, one entry a
-   line): 864 entries, 40,039 lines: the repository's 184 .qnt files, 148 evaluation modules and 101 --invariant compiles from its bindings (6 bindings skipped: k8s YAMLs with a `spec:` key, and grist's generator goldens' shop.qnt, which quint refuses), quint's 77 examples and 73 test fixtures, and 281 inline programs extracted from its 51 unit-test files; 476 are compiled too. quint accepts 648, refuses 215 (their codes recorded), and one uses `apalache::` ("needs-quint"). One of quint's own examples crashes its compile (below). Each entry has its text's sha256, its
+   line): 862 entries: the repository's 182 tracked .qnt files (listed by git, so modules tests write into the tree, like validate's literate counter.qnt, are not pinned), 148 evaluation modules and 101 --invariant compiles from its bindings (6 bindings skipped: k8s YAMLs with a `spec:` key, and grist's generator goldens' shop.qnt, which quint refuses), quint's 77 examples and 73 test fixtures, and 281 inline programs extracted from its 51 unit-test files; 476 are compiled too. quint accepts 648, refuses 215 (their codes recorded), and one uses `apalache::` ("needs-quint"). One of quint's own examples crashes its compile (below). Each entry has its text's sha256, its
    constructs (a lexical scan: instances, exports, aliases, sum types,
    `match`, spread, `temporal`, `assume`, destructuring, `apalache::`,
    hex, ...), compile's main, init, step and invariants, and quint's

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -229,6 +230,33 @@ func qntFiles(dir string) ([]string, error) {
 	return out, err
 }
 
+// repoQntFiles are the repository's .qnt files, relative, sorted: those
+// git tracks or would track (.gitignore honoured), never the modules tests
+// write into the tree (validate's literate counter.qnt, binding's
+// __gtg_eval_ modules), which a walk found once a test had run and pinned
+// files a clean checkout lacks. A tracked file deleted in the work tree is
+// left out, as the walk would.
+func repoQntFiles(dir string) ([]string, error) {
+	cmd := exec.Command("git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "*.qnt")
+	cmd.Dir = dir
+	raw, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("listing the repository's .qnt files with git ls-files in %s: %w", dir, err)
+	}
+	var out []string
+	for _, rel := range strings.Split(string(raw), "\x00") {
+		if rel == "" || slices.ContainsFunc(strings.Split(rel, "/"), skipDir) {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(dir, rel)); err != nil {
+			continue
+		}
+		out = append(out, rel)
+	}
+	slices.Sort(out)
+	return slices.Compact(out), nil
+}
+
 // quintDirs are quint's checkout's corpus directories (read-only).
 var quintDirs = []string{"examples", "quint/testFixture"}
 
@@ -249,7 +277,7 @@ func Files(roots Roots) ([]Entry, map[string]string, error) {
 			Lines: strings.Count(string(b), "\n") + 1, Constructs: Constructs(string(b))})
 		return nil
 	}
-	files, err := qntFiles(roots.Repo)
+	files, err := repoQntFiles(roots.Repo)
 	if err != nil {
 		return nil, nil, err
 	}
