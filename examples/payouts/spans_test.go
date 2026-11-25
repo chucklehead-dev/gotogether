@@ -358,7 +358,7 @@ func saveSpanRun(t *testing.T, name string, r spanRun) {
 	}
 }
 func TestDeclaredCallSpans(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	for _, mode := range []string{"success", "refused", "lost", "pending"} {
 		t.Run(mode, func(t *testing.T) {
 			r := realSpanRun(t, mode)
@@ -416,7 +416,7 @@ func TestDeclaredCallSpans(t *testing.T) {
 // These are schema-valid corruptions of actual exported records, not invented
 // model answers. Their native counterpart is faithful in TestDeclaredCallSpans.
 func TestSpanIdentityCorruption(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	r := realSpanRun(t, "success")
 	for _, field := range []string{"tenant", "key", "trigger", "command", "outcome"} {
 		t.Run(field, func(t *testing.T) {
@@ -460,7 +460,15 @@ func TestSpanIdentityCorruption(t *testing.T) {
 	}
 	// Validate's malformed-input behavior is asserted separately from semantic
 	// failures below; no mutation-score credit is taken for missing parameters.
-	checker, err := validate.NewChecker(t.Context(), commits, validate.Options{Dir: t.TempDir()})
+	// the checker qtest's checks would choose (GOTOGETHER_COMPILED): the
+	// compiled model where quint is not installed
+	var checker *validate.Checker
+	cp, err := validate.CompiledChoice(commits, "")
+	if err == nil && cp != "" {
+		checker, err = validate.NewCompiledChecker(commits, cp, validate.Options{Dir: t.TempDir()})
+	} else if err == nil {
+		checker, err = validate.NewChecker(t.Context(), commits, validate.Options{Dir: t.TempDir()})
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

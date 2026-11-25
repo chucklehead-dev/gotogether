@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# The examples' compiled models (ROADMAP Q0): every <stem>.model.json under
-# examples/, beside its binding (validate.CompiledFor), and every example
+# The examples' compiled models (ROADMAP Q0): every <stem>.model.json.gz
+# under examples/ (gotogether.model/1 gzipped, DESIGN §113), beside its
+# binding (validate.CompiledFor), and every example
 # test that calls qtest.RequireModel. Nothing is listed here: the models
 # and the tests are found, so a new one is checked as soon as it is
 # checked in. The bindings that keep no model, and the tests that still
@@ -24,14 +25,14 @@ cd "$root"
 
 # models are the compiled models under examples/, sorted.
 models() {
-  find examples -name '*.model.json' -not -path '*/node_modules/*' -not -path '*/.gosim/*' | LC_ALL=C sort
+  find examples -name '*.model.json.gz' -not -path '*/node_modules/*' -not -path '*/.gosim/*' | LC_ALL=C sort
 }
 
 # binding_of is the binding a model at path was compiled from: the
 # artifact records it, relative to its own directory.
 binding_of() {
   local rel
-  rel=$(jq -r '.binding.path' "$1")
+  rel=$(gzip -dc "$1" | jq -r '.binding.path')
   if [ -z "$rel" ] || [ "$rel" = null ]; then
     echo "::error::$1 names no binding (.binding.path): is it gotogether compile's?" >&2
     exit 2
@@ -66,7 +67,7 @@ module_of() {
 case "${1:-}" in
 list)
   echo "models:"
-  for m in $(models); do echo "  $m ($(wc -c < "$m") bytes) of $(binding_of "$m")"; done
+  for m in $(models); do echo "  $m ($(wc -c < "$m") bytes, $(gzip -dc "$m" | wc -c) uncompressed) of $(binding_of "$m")"; done
   echo "tests:"
   tests | sed 's/^/  /'
   ;;

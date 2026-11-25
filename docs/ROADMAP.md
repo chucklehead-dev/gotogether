@@ -41,7 +41,7 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Proposed queue | CW1–CW12: a contract from design to operation ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6885259328), [#220](https://github.com/chucklehead-dev/gotogether/issues/220#issuecomment-6884857732)) | CW1 (literate models; Goo adopted it), CW2 (the design matrix with per-variant search, `dead`, `-variant` and memory released per variant; golem adopted it for four models) and CW4 done. CW5's runtime half done (`connect.Bind` with `Returns` and `Observes`), and its static half (a binding checked against the model's actions, picks and types before any trace; Go types generated from the model's, `gotogether types [-check]`; the walkthrough's tables and the alignment lint, `gotogether invariants [-write|-check] [-require enforced,checked,recorded,driven]`: properties from `//quint:enforces` and `//quint:checks`, actions from the code that records and drives them); left in CW5: Go to Quint (if ever), golem's `expDriver` the first outside case, a world that is not one `T` an open question. CW3's first slice done (listed assumptions: `// @assume` lines in the model, `//quint:exercises` and `//quint:monitors`, the assumptions table, `-require targeted`); left in CW3: the doc lint, a predicate checked on traces. CW11 (asynchronous drivers) its own design. CW12 (I/O specifications) P0 and P1 done (DESIGN §112); next its pending-call rule, then P2. Left in CW1: `lint -model doc.md`, stable IDs; in CW2: possibles per variant, iterative deepening. |
 | Proposed queue | O1–O2: external drivers ([#220](https://github.com/chucklehead-dev/gotogether/issues/220)) | O1 done (a `settled` record in `gotogether.requests/1`, written by the Playwright adapter's `settled()`): it retires Goo's drain bridge. Next O2, the compact external-driver example. |
 | Proposed queue | LI1–LI4: [lock invariants, after Gobra](#lock-invariants-li-after-gobra) | LI1 (`qenv.Guard`, checked at every simulated Unlock) and LI2 (`//quint:guards`, woven by qweave at the field's Unlocks) done. LI3 (gosim) and LI4 (the doubles' row locks) as projects ask. |
-| Proposed queue | Q0–Q11: a Go Quint | A design item, each its own decision. Q0 first (no quint for consumers, small); Q2's front end only once Q3's corpus and ill-typed generator exist. No upstream contact for now (maintainer, 2026-11-25): gotogether proceeds on its own. |
+| Proposed queue | Q0–Q11: a Go Quint | A design item, each its own decision. Q0 first (no quint for consumers, small); Q2's front end only once Q3's corpus and ill-typed generator exist: Q2's P1 (the parser) done, started before Q3's green week (the maintainer); next P2. No upstream contact for now (maintainer, 2026-11-25): gotogether proceeds on its own. |
 | Dropped | J12 and J23 | Go 1.26 compatibility and pin batching are withdrawn. Go 1.27.3 and immediate required sibling pin alignment remain deliberate policies. |
 
 **Red-nightly rule (maintainer decision):** while the nightly is red, feature
@@ -665,12 +665,16 @@ item is its own decision before it starts; the red-nightly rule applies.
   each with what releases it (`TestCompiledModels` keeps it current).
   `gotogether doctor` lists the module's bindings by their compiled models:
   none (with the compile), current or stale by their hashes (without quint;
-  `compile -check` compares meaning). Left: 30 bindings over 1 MB (counters
-  8 MB, edgepublish 22 MB, the grist apps 2-7 MB; IR, about twenty-fold
-  compressible): a compact artifact or a larger budget is the maintainer's
-  call; and connect's tests not yet moved to a spec's compiled model (Q1's
-  first slices), the checker's own callers and Q2's run-time models, each
-  listed (`qtest.Model` and simulate run from the binding's model since
+  `compile -check` compares meaning). Fifth (2026-11-25, DESIGN §113): the
+  artifact is kept gzipped (`<stem>.model.json.gz`, the same
+  `gotogether.model/1` document, deterministic bytes), the 1 MB budget on
+  the compressed size, and the 31 bindings that were over it keep theirs
+  too (edgepublish's 0.78 MB the largest; 54 models, 7.3 MB), 108 more
+  tests on `RequireModel` (242 in all, with the TestMutants that run
+  them). Left: connect's tests not yet moved to a spec's compiled model (Q1's first slices), the checker's own
+  callers (the CLI's validate, gristtest.StoredLogs), `quint run` of the
+  grist apps' rules modules, payd's real runs outside the evaluator's
+  fragment and Q2's run-time models, each listed (`qtest.Model` and simulate run from the binding's model since
   Q1's next slice: lease's design binding keeps one, 23 models).
 - **Q1: the evaluator's whole fragment (M). First slices built** (DESIGN
   §110): the refusals inventoried (none of the repository's 67 agreeing
@@ -718,6 +722,14 @@ item is its own decision before it starts; the red-nightly rule applies.
   - no `effects` written: the Rust evaluator reads none;
   - internal for now;
   - `go` the default only after a nightly shadow period.
+  **P1 built (2026-11-25, q2-front-end.md §5.1),** started before Q3's
+  green week (the maintainer): internal/qfront's lexer and hand-written
+  parser, quint's parse IR and source map with quint's own ids; 861 of the
+  863 corpus entries agree in P1's tier (the two others drop cyclic
+  definitions in quint's toposort, P2's). Left of P1: recovery after a
+  syntax error, a nightly step with the `go` stub, Quint.g4's alternatives
+  counted against the corpus, and the after-P1 uses (lint's token scanner,
+  validate's import scan). Next: P2.
 - **Q3: the oracle (M, with Q1 and Q2).** A differential job like
   `qeval-differential`: a corpus (quint's examples and fixtures, every
   example's model, qeval's generator grown to ill-typed programs) compiled

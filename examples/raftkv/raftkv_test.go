@@ -61,7 +61,7 @@ func TestLostSnapshots(t *testing.T) {
 // Through the same faults, no two nodes lead one term, and the settled
 // cluster has a leader.
 func TestClusterFaithful(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "cluster.binding.yaml")
 	system(Config{Record: Cluster}).Explore(t, qtest.ExploreConfig{Seeds: 10}).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
 }
 
@@ -119,7 +119,7 @@ func partitioned(ctx context.Context, d *Deployment) {
 // when it settles, but too late for the bound: only the bounded
 // obligation tells them apart.
 func TestElectionAfterHeal(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "cluster.binding.yaml")
 	// the run outlasts the scenario: a settle heals the network unrecorded
 	cfg := Config{Record: Cluster, Scenario: partitioned, Duration: 6 * time.Second}
 	x := qtest.ExploreConfig{Seeds: 10, Corpus: "testdata/corpus"}
@@ -224,7 +224,7 @@ func elections(ctx context.Context, d *Deployment) {
 // an election past the bound after a heal, which this test does not
 // claim: it is about a healthy network.)
 func TestUnpersistedVote(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "cluster.binding.yaml")
 	cfg := Config{Record: Cluster, Scenario: elections, Duration: 3 * time.Second}
 	rates := qenv.NoFaults.Set("nemesis.crash", 0.3).Set("rpc", 0.2)
 	x := qtest.ExploreConfig{Seeds: 30}
@@ -292,7 +292,7 @@ func downWhileWriting(ctx context.Context, d *Deployment) {
 // node stays behind; the cluster still settles with a leader, so only
 // the bound tells them apart.
 func TestCatchUp(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "cluster.binding.yaml")
 	if testing.Short() {
 		t.Skip("explores 40 runs with compaction")
 	}

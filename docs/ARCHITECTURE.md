@@ -58,7 +58,7 @@ package-level variable says whether it is read-only or process-wide
 
 | layer | packages | what it does |
 |---|---|---|
-| values | `itf`, internal/quintnames, internal/formats | Quint values in Go and back, ITF, Quint's reserved names, the formats' table |
+| values | `itf`, internal/quintnames, internal/formats, internal/qfront | Quint values in Go and back, ITF, Quint's reserved names, the formats' table; Q2's Go front end (P1: Quint parsed into quint's parse IR, nothing reads it yet) |
 | recording | `qtrace` (the `Step` type), `qrun`, `qobs`, `qobs/qobshttp`, `woven`, `qrole` | a step written where it happens: a recorder per run (found through the context or the goroutine), sinks (JSONL files, OTel span events), threads and clocks, invocations and settles |
 | input | `otelio`, `convert`, `input`, `qdriver` | other shapes of the same steps: OTLP files, plain spans turned into steps by rules, an external driver's request log |
 | reconstruction | `qtrace.Reconstruct` | steps into one trace per actor, ordered (seq, threads, Lamport or domain clocks), invocations matched with completions (pending calls kept), settles, losses |

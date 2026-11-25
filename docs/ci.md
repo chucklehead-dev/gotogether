@@ -231,8 +231,8 @@ artifact with the binding, and validate there with the Go evaluator
 alone:
 
 ```sh
-gotogether compile -binding stock.binding.yaml -o stock.model.json      # needs quint
-gotogether validate -binding stock.binding.yaml -compiled stock.model.json runs/*.jsonl   # needs neither
+gotogether compile -binding stock.binding.yaml -o stock.model.json.gz      # needs quint
+gotogether validate -binding stock.binding.yaml -compiled stock.model.json.gz runs/*.jsonl   # needs neither
 ```
 
 With the Action: `compiled: 'true'`. What it claims (DESIGN §64): a pass
@@ -246,7 +246,7 @@ unsupported candidate returns an error rather than pruning it or falling back.
 resolution and ITF inputs remain refused. A stale artifact (another binding, a changed
 source, an evaluation module this gotogether writes otherwise, a later
 format, quint before 0.33.1) is refused with the fix, `gotogether
-compile`. `gotogether doctor -compiled stock.model.json` checks it ahead;
+compile`. `gotogether doctor -compiled stock.model.json.gz` checks it ahead;
 plain `gotogether doctor` lists every binding of the module with its
 compiled model (none, current or stale by hashes; `compile -check` compares
 meaning, where quint is).

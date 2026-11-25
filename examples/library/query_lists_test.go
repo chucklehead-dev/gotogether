@@ -15,7 +15,7 @@ import (
 // Exercise the actual HTTP answer, both recorders and both generated bindings.
 // A count alone cannot distinguish wrong identities, order or multiplicity.
 func TestQueryListsPreserveLoanIdentity(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	tier := gristtest.NewTier(t, App, gristtest.TierConfig{
 		Local:     map[*grist.Dependency]grist.Handlers{Mailer: nil},
 		LoseEvery: -1, DependencyLoseEvery: -1,

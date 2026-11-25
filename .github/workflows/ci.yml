@@ -671,8 +671,22 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: real runs (seeds 5, 9, 10 faithful, NoRequestID and SlowElection; their journals re-made in the simulation; a kill -9 and restart)
         run: RAFTKV_REAL=1 RAFTKV_REAL_DIR="$RUNNER_TEMP/real" go test -race -count=1 -timeout 12m -run 'TestReal' -v .
+      - name: inconclusive runs (a bound broken while the host stalled, no verdict, left out of the claims)
+        id: stalls
+        if: always()
+        run: |
+          found=false
+          for f in "$RUNNER_TEMP"/real/*/inconclusive.txt; do
+            [ -f "$f" ] || continue
+            found=true
+            while IFS= read -r line; do
+              echo "::warning title=raftkv-real inconclusive::$line"
+              echo "- $line" >> "$GITHUB_STEP_SUMMARY"
+            done < "$f"
+          done
+          echo "found=$found" >> "$GITHUB_OUTPUT"
       - name: keep the runs' logs and journals
-        if: failure()
+        if: failure() || steps.stalls.outputs.found == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: raftkv-real
@@ -950,7 +964,7 @@ jobs:
         with:
           name: hello-compiled
           path: |
-            examples/hello/hello.model.json
+            examples/hello/hello.model.json.gz
             examples/hello/runs/
             examples/hello/mruns/
 
@@ -973,7 +987,7 @@ jobs:
           compiled: "true"
           run: |
             if command -v quint; then echo "quint is installed: -compiled must need none"; exit 1; fi
-            gotogether validate -binding hello.binding.yaml -compiled hello.model.json runs/*.jsonl
+            gotogether validate -binding hello.binding.yaml -compiled hello.model.json.gz runs/*.jsonl
       - name: the compiled model passes the runs quint passed
         run: test "${{ steps.compiled.outputs.result }}" = PASS
       - id: mutant
@@ -983,14 +997,14 @@ jobs:
           working-directory: examples/hello
           compiled: "true"
           doctor: "false"
-          run: gotogether validate -binding hello.binding.yaml -compiled hello.model.json mruns/*.jsonl
+          run: gotogether validate -binding hello.binding.yaml -compiled hello.model.json.gz mruns/*.jsonl
       - name: and fails the mutant's
         run: test "${{ steps.mutant.outcome }}" = failure && test "${{ steps.mutant.outputs.result }}" = FAIL
       # hello's tests with no quint are examples-compiled's, with every
       # other example's
 
   examples-compiled:
-    # every example's compiled model (examples/**/*.model.json) current by
+    # every example's compiled model (examples/**/*.model.json.gz) current by
     # meaning where quint is, then every example test on qtest.RequireModel
     # run with quint off PATH, each check by its compiled model alone
     # (ROADMAP Q0). Both are found, not listed (ci/compiled-examples.sh);

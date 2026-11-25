@@ -18,7 +18,7 @@ and the process's sleeps with them.
 | [lease_test.go](lease_test.go) | each variant explored with and without clock faults, and every run with one jump |
 | [design/lease.md](design/lease.md) | the design, before the code: a literate model (`gotogether tangle`) of fencing, trusted clocks and a lease alone, and the matrix of what each holds |
 | [design/lease.binding.yaml](design/lease.binding.yaml) | the design's variants (`simulate.variants`), each with what it must hold and what it must be able to break |
-| [design/lease.model.json](design/lease.model.json) | the design compiled for the Go evaluator (`gotogether compile -binding design/lease.binding.yaml`): where quint is not installed, the matrix is the evaluator's from it (`qtest.RequireModel`), each variant's constants its parameters |
+| [design/lease.model.json.gz](design/lease.model.json.gz) | the design compiled for the Go evaluator (`gotogether compile -binding design/lease.binding.yaml`): where quint is not installed, the matrix is the evaluator's from it (`qtest.RequireModel`), each variant's constants its parameters |
 | [design_test.go](design_test.go) | the design document's matrix is the model's |
 
 ## What each test catches

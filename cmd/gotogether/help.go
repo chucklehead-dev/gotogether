@@ -42,7 +42,7 @@ var commands = map[string]command{
 		"gotogether steps -actors node1 -out node1.jsonl runs/*.jsonl",
 		"which steps were recorded? list them, or select and sanitize them into a step log"},
 	"validate": {"check recorded runs (step logs, OTLP/JSON, ITF) against the model",
-		"gotogether validate -binding stock.binding.yaml runs/*.jsonl\n  gotogether validate -binding stock.binding.yaml -compiled stock.model.json runs/*.jsonl   (no quint: gotogether compile's)",
+		"gotogether validate -binding stock.binding.yaml runs/*.jsonl\n  gotogether validate -binding stock.binding.yaml -compiled stock.model.json.gz runs/*.jsonl   (no quint: gotogether compile's)",
 		"do recorded runs (step logs, OTLP/JSON, ITF) conform to the model? -replay judges a manifest's run again"},
 	"bundle": {"export a run manifest and its verified files into a fresh portable directory, without rerunning or changing its recorded verdict; unsupported absolute model references and stale or missing files are refused",
 		"gotogether bundle -out incident run.json\n  gotogether validate -replay incident/run.json -json",
@@ -60,8 +60,8 @@ var commands = map[string]command{
 	"cover": {"compare a real environment's code coverage with a simulation's: what ran only for real, only simulated",
 		"gotogether cover -covdir covdata -sim ev/app/TestX/x1.json",
 		"what code ran only for real, only simulated?"},
-	"compile": {"compile a binding's model for the Go evaluator (quint's typecheck and IR, the binding's and the sources' hashes), by default beside the binding (stock.model.json): validate -compiled, and qtest where quint is not installed, then judge its runs with no quint or Node, a run the evaluator cannot decide no verdict; -check (in CI, where quint is) fails if the checked-in file is stale",
-		"gotogether compile -binding stock.binding.yaml\n  gotogether compile -binding stock.binding.yaml -check\n  gotogether validate -binding stock.binding.yaml -compiled stock.model.json runs/*.jsonl",
+	"compile": {"compile a binding's model for the Go evaluator (quint's typecheck and IR, the binding's and the sources' hashes), by default beside the binding (stock.model.json.gz): validate -compiled, and qtest where quint is not installed, then judge its runs with no quint or Node, a run the evaluator cannot decide no verdict; -check (in CI, where quint is) fails if the checked-in file is stale",
+		"gotogether compile -binding stock.binding.yaml\n  gotogether compile -binding stock.binding.yaml -check\n  gotogether validate -binding stock.binding.yaml -compiled stock.model.json.gz runs/*.jsonl",
 		"validate without quint or Node? the model compiled once, for the Go evaluator alone"},
 	"tangle": {"write each literate model (a Markdown design document whose ```quint blocks, in order, are the model) to its .qnt beside it, as a binding naming the document does when it loads; positions in the .qnt are reported at the document's lines; -check (in CI, where the .qnt is checked in) fails if one is missing or stale",
 		"gotogether tangle design/acquisition.md\n  gotogether tangle -check design/*.md",
@@ -78,7 +78,7 @@ var commands = map[string]command{
 	"skills install": {"install the agent skills into a project (.agents/skills and .claude/skills by default)", "gotogether skills install",
 		"install the agent skills into a project"},
 	"doctor": {"report the installed pieces' versions (the CLI and its core, the module's core and published modules, qweave's woven ABI, gotogether-nav, binaries named, quint, its evaluator, Node), the quint cache, bindings' formats, the module's bindings by their compiled models (none, with the compile that writes one; current; stale by their hashes, a skew) and the formats this version reads, naming each skew with its fix",
-		"gotogether doctor\n  gotogether doctor -C ./service -strict -binding stock.binding.yaml -compiled stock.model.json ./bin/service",
+		"gotogether doctor\n  gotogether doctor -C ./service -strict -binding stock.binding.yaml -compiled stock.model.json.gz ./bin/service",
 		"do the installed pieces fit together? every version, and each skew with its fix"},
 }
 

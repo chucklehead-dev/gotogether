@@ -20,7 +20,7 @@ func TestValidationCost(t *testing.T) {
 	if n == 0 {
 		t.Skip("a measurement: COUNTERS_COST=<operations> runs it")
 	}
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	start := time.Now() //qenv:ok the measurement's own wall time, outside the simulation
 	x := system(commits, gristsim.Config{Tenants: []string{"t1"}, Clients: 4, Ops: n / 4,
 		Send: []string{"create-counter", "increment-counter", "increment-counter", "show-counter"}}).

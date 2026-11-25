@@ -52,7 +52,7 @@ func slowWorker(svc *queue.Service, c *clock) {
 // lease, and rejected the second perform. The run is a behaviour of the
 // design (at least once), and now of the model.
 func TestTwoLeasesOfOneJob(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "jobqueue.binding.yaml")
 	qtest.Record(t, "jobqueue.binding.yaml", func(*qobs.Recorder) {
 		svc, c := newService(queue.Faithful)
 		ctx := context.Background()
@@ -72,7 +72,7 @@ func TestTwoLeasesOfOneJob(t *testing.T) {
 // the second perform. That is a design-level verdict, not a bug in the
 // code: the run conforms.
 func TestSlowWorkerConformsButRunsTwice(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "jobqueue.binding.yaml")
 	run := qtest.Record(t, "jobqueue.binding.yaml", func(*qobs.Recorder) { slowWorker(newService(queue.Faithful)) })
 	run.Expect(t, qtest.Conforms())
 
@@ -97,7 +97,7 @@ func restartScenario(svc *queue.Service) {
 }
 
 func TestRestartConforms(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "jobqueue.binding.yaml")
 	run := qtest.Record(t, "jobqueue.binding.yaml", func(*qobs.Recorder) {
 		svc, _ := newService(queue.Faithful)
 		restartScenario(svc)
@@ -110,7 +110,7 @@ func TestRestartConforms(t *testing.T) {
 
 // Both mutants: the same scenarios, rejected at the step the bug makes.
 func TestMutantsRejected(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "jobqueue.binding.yaml")
 	cases := []struct {
 		m      queue.Mutation
 		run    func(*queue.Service, *clock)
@@ -177,7 +177,7 @@ func runMachine(tc hegel.TestCase, mut queue.Mutation) {
 // Every run Hegel generates is a behaviour of the model (checked after
 // the test, in parallel).
 func TestHegelRunsConform(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "jobqueue.binding.yaml")
 	qhegel.Test(t, qhegel.Config{Binding: "jobqueue.binding.yaml", Mode: qhegel.After, Opts: []qtest.Option{qtest.Global()}, AllowEmpty: true},
 		func(ht hegel.TestCase, _ *qhegel.Case) { runMachine(ht, queue.Faithful) },
 		hegel.WithTestCases(40), hegel.WithDatabase(""))
@@ -187,7 +187,7 @@ func TestHegelRunsConform(t *testing.T) {
 // run in which a worker's ack is accepted after its lease was lost: taken
 // over after it expired, or lost in a restart.
 func TestHegelShrinksAckAnyLease(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "jobqueue.binding.yaml")
 	if testing.Short() {
 		t.Skip("shrinking against the model runs quint dozens of times")
 	}

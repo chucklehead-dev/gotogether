@@ -118,7 +118,8 @@ AGENTS.md has the general requirements.
   `QUINT_VERSION=0.33.1 ci/fetch-quint-src.sh DIR` fetches quint's sources
   at the tag (`QUINT_SRC=DIR` for the tests); `GOTOGETHER_QFRONT_CORPUS=1`
   runs the pinned corpus through the harness (quint against its stub,
-  `GOTOGETHER_QFRONT_STUB=shifted` unset, or `quint`),
+  `GOTOGETHER_QFRONT_STUB=shifted` unset, or `quint`, or `go`: Q2's
+  Go parse, internal/qfront, against `quint parse`, both cut to P1's tier),
   `GOTOGETHER_QFRONT_ENTRY=<id substring>` some entries alone,
   `GOTOGETHER_QFRONT_SAMPLE=n` generated programs from
   `GOTOGETHER_SEED_OFFSET+1` and `GOTOGETHER_QFRONT_SEED=n` one (with every
@@ -126,7 +127,7 @@ AGENTS.md has the general requirements.
   QNT code; `GOTOGETHER_KEEP=/dir` keeps shrunk disagreements. The manifest
   (internal/qoracle/testdata/corpus.json) is rewritten, with quint's
   verdicts, by `GOTOGETHER_UPDATE_CORPUS=1 QUINT_SRC=DIR go test -run
-  TestUpdateManifest ./internal/qoracle/` (about 25 minutes; `=entries` with `GOTOGETHER_QFRONT_ENTRY` re-surveys some); testdata/shift-known.txt lists the entries whose verdict quint changes with its ids; per push,
+  TestUpdateManifest ./internal/qoracle/` (about 25 minutes; `=entries` with `GOTOGETHER_QFRONT_ENTRY` re-surveys some); testdata/shift-known.txt lists, by class, what quint changes with its ids (cycle-order, types-after-error: accepted; verdict-flip: per entry); per push,
   TestManifestCurrent fails on a .qnt file it does not pin.
   validate keeps quint's typechecks and the evaluation modules' compiles
   across processes, by content (quint's version, the spec's and its
@@ -176,7 +177,7 @@ AGENTS.md has the general requirements.
   binding may exit 0 without checking anything; partial solver output is not a
   completed verdict. Library callers opt in with `model.SimulateOptions.Progress`.
   `GOTOGETHER_COMPILED`: a binding's compiled model beside it
-  (`gotogether compile -binding B` writes `<stem>.model.json`) judges its
+  (`gotogether compile -binding B` writes `<stem>.model.json.gz`) judges its
   qtest and qhegel runs with no quint, the Go evaluator alone. Unset: where
   quint is not on PATH and the file exists; `1`: always, and a binding
   without one fails the test (a job without quint); `0`: never. Keep it
@@ -195,7 +196,7 @@ AGENTS.md has the general requirements.
   current by validate's TestCompiledMBTModelsAreCurrent): the Go
   evaluator's simulation, no quint; `connect.RequireTraces(t, cfg)`.
   The examples' compiled models: `ci/compiled-examples.sh check` (with
-  quint: every `examples/**/*.model.json` current, `compile -check`; `check
+  quint: every `examples/**/*.model.json.gz` current, `compile -check`; `check
   MODEL...` for some), `ci/compiled-examples.sh test` (quint taken off PATH,
   `GOTOGETHER_COMPILED=1`: every example test calling `RequireModel`, by
   name, `-short`; about 110 CPU s), `list`. A model is recompiled with

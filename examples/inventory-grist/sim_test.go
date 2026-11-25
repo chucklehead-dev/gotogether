@@ -67,9 +67,25 @@ func localChecks(t *testing.T, steps []qtrace.Step, inventoryOK bool) {
 		}
 	}
 }
+
+// newChecker is binding's checker as qtest's checks choose it
+// (validate.CompiledChoice, GOTOGETHER_COMPILED): its compiled model
+// where quint is not installed, else quint's.
+func newChecker(t *testing.T, binding string, opt validate.Options) (*validate.Checker, error) {
+	t.Helper()
+	path, err := validate.CompiledChoice(binding, opt.Quint)
+	if err != nil {
+		return nil, err
+	}
+	if path != "" {
+		return validate.NewCompiledChecker(binding, path, opt)
+	}
+	return validate.NewChecker(t.Context(), binding, opt)
+}
+
 func protocolCheck(t *testing.T, steps []qtrace.Step, limit int) gristtest.ProtocolSearch {
 	t.Helper()
-	checker, err := validate.NewChecker(t.Context(), protocol, validate.Options{NoITF: true})
+	checker, err := newChecker(t, protocol, validate.Options{NoITF: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +113,7 @@ func compositionChecks(t *testing.T) gristtest.Composition {
 	t.Helper()
 	checker := func(binding string) *validate.Checker {
 		t.Helper()
-		c, err := validate.NewChecker(t.Context(), binding, validate.Options{Dir: t.TempDir()})
+		c, err := newChecker(t, binding, validate.Options{Dir: t.TempDir()})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -117,7 +133,7 @@ func compositionChecks(t *testing.T) gristtest.Composition {
 // TestFaithful uses public gristsim configuration, generated local bindings,
 // peer links, and an independently written business protocol.
 func TestFaithful(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	cfg := config()
 	// Readiness is observed through inventory's public query, without healing
 	// faults or pacing generated arguments with an assumed completion delay.
@@ -238,7 +254,7 @@ func count(steps []qtrace.Step, actor, action, outcome string) int {
 	return n
 }
 func TestDecisionRaces(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	for _, cancelFirst := range []bool{true, false} {
 		name := "authorization-first"
 		if cancelFirst {
@@ -268,7 +284,7 @@ func TestDecisionRaces(t *testing.T) {
 }
 
 func TestReservationCrash(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	cfg := config()
 	cfg.Phases = nil
 	cfg.Send = []string{"place"}
@@ -291,7 +307,7 @@ func TestReservationCrash(t *testing.T) {
 }
 
 func TestCapacity(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	cfg := config()
 	cfg.Clients = 1
 	cfg.Ops = 1
@@ -311,7 +327,7 @@ func TestCapacity(t *testing.T) {
 	}
 }
 func TestCancellationOvertakesReserve(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	cfg := decisionConfig(true)
 	// This contrast intentionally cancels before observing a reservation. Keep
 	// the scripted delayed request active: an observation must not heal it.
@@ -349,7 +365,7 @@ func TestAnswered(t *testing.T) {
 // A valid order name is insufficient: the payload must match the exact
 // originating placement, even when both orders already exist.
 func TestProtocolCorrelation(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	cfg := config()
 	cfg.Clients = 1
 	cfg.Ops = 1
@@ -357,7 +373,7 @@ func TestProtocolCorrelation(t *testing.T) {
 	cfg.Alphabet = []string{"a"}
 	e := gristsim.System(commits, App, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 1, Chooser: quiet})
 	e.Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
-	checker, err := validate.NewChecker(t.Context(), protocol, validate.Options{NoITF: true})
+	checker, err := newChecker(t, protocol, validate.Options{NoITF: true})
 	if err != nil {
 		t.Fatal(err)
 	}

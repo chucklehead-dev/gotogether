@@ -29,7 +29,7 @@ func TestRealFaultsInSimulation(t *testing.T) {
 	} else {
 		vs := realRuns(t, prSeeds, func(seed int64) nemesisRun { return realConfig(seed, Faithful) })
 		qtest.Runs(kvOf(vs)...).Expect(t, qtest.Conforms())
-		qtest.Runs(clusterOf(vs)...).Expect(t, qtest.Conforms())
+		qtest.Runs(clusterOf(judged(t, vs))...).Expect(t, qtest.Conforms())
 		for _, v := range vs {
 			journals = append(journals, filepath.Join(v.Dir, "journal.jsonl"))
 		}
@@ -115,7 +115,7 @@ func replayNotes(j *qnemesis.Journal) []string {
 // said to be made otherwise than it happened (the hint once said the
 // pause was not made).
 func TestReplayCISeed5(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "cluster.real.binding.yaml")
 	const path = "testdata/ci-seed5.journal.jsonl"
 	f, err := os.Open(path)
 	if err != nil {

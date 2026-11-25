@@ -139,6 +139,32 @@ qtest.Runs(runs...).Expect(t, qtest.Some(qtest.Rejects("put")), qtest.None(qtest
 or the binding lack, eventual vals no run judged, no runs, and runs of
 two instances fail with the fix.
 
+### Host stalls: no verdict for a bound
+
+A real run's `within` bounds are wall-clock time, and a host that
+stalls (a shared CI runner's disk, a throttled cgroup) can break one
+with no defect in the code. Measure the host from the harness, outside
+the system, for as long as it runs, and give the stalls to the check:
+
+```go
+host, err := qnemesis.WatchHost(qnemesis.HostWatch{Threshold: 100 * time.Millisecond, Dir: dataDir}) // a 10ms ticker, an fsync on the system's disk
+/* ... the run ... */
+rep := host.Stop() // rep.Stalls, and the probes' longest delays (rep.MaxTick, rep.MaxSync)
+r := qtest.Validate(t, "cluster.binding.yaml", steps, qtest.HostStalls(rep.Stalls...))
+```
+
+A late response is "no verdict (host stall)" (`r.Stalled()`) only when
+the stalls between its trigger and the response cover its lateness; a
+stall elsewhere, a shorter one, a response that never came and every
+other failure stand. Choose the threshold against the tightest bound (a
+stall that could use a meaningful share of it alone) and above the
+probes' jitter. A claim over runs counts a stalled run as unjudged, and
+fails if every run is: leave stalled runs out of the claims only by
+saying so (raftkv's `judged`: logged, and a CI warning), never as
+passes. A system that saturates the host's CPU or disk itself stalls the
+probes too: read the stalls' details (the thread's wait for a CPU, the
+cgroup's throttling, the fsync's time).
+
 A failed run's journal re-makes its faults in a simulation:
 `j, _ := qnemesis.ReadJournal(f); sc := j.Script()` is a `qenv.Script`
 (crashes, pauses, partitions and heals by qenv's names, in the order

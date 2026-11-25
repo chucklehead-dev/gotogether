@@ -18,7 +18,7 @@ import (
 // schedule is Go's, not a chooser's, so a run is not reproducible from its
 // seed; the faults still are the chooser's, and the model judges the run.
 func TestNativeInSynctest(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	mem := &qobs.MemorySink{}
 	var took time.Duration
 	synctest.Test(t, func(t *testing.T) {

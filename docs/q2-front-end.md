@@ -1,6 +1,6 @@
 # Q2: a Go front end for Quint
 
-Status: design and plan, 2026-11-25. Q3 (the oracle, §4) is built (§4.5); the front end is not. It refines
+Status: design and plan, 2026-11-25. Q3 (the oracle, §4) is built (§4.5); of the front end, P1's parser is built (§5.1), started before Q3's week of green nightlies by the maintainer's decision. It refines
 ROADMAP's Q2 ("the front end (L)") and Q3 ("the oracle"), and ROADMAP says
 that each is its own decision before it starts. It does not cover Q0's
 remainder (the examples' compiled models) or Q1 (qeval's refusals and
@@ -123,7 +123,7 @@ references it (`flattener`). `qeval.Load` (internal/qeval/ir.go) reads:
 - `main` and `errors`. A non-empty `errors` refuses the IR.
 
 `effects` is not read. It is 59 KB of hello's 120 KB IR
-(examples/hello/hello.model.json), and no Go package reads an `effects`
+(examples/hello/hello.model.json.gz), and no Go package reads an `effects`
 key. The table's definition copies, `depth`, `hidden`, the types' variable
 lists and `warnings` are not read by qeval either. Q2 aims first at this
 **consumed subset**.
@@ -684,14 +684,96 @@ and for 1-minimality over the reductions).
   modules. Bar (2)'s "declaration order is part of it" holds only up to
   the layer. *For the maintainer:* binding's `Vars` follow the
   typecheck's order; either binding orders them itself, or P1 must
-  number nodes exactly as quint does.
+  number nodes exactly as quint does. (Decided below: binding orders
+  them by name, and P1 makes an id-free choice wherever quint's output
+  follows its ids.)
 - **quint's verdict itself depends on its ids** on two corpus entries:
   examples/language-features/importFrom.qnt is refused (QNT405 'basics',
   QNT404 through an export) once a module is written before it, and
   `assume _ = val foo = 1 { foo }` (a unit test's) gains a QNT000. A Go
   front end that numbers nodes otherwise will meet both; they are listed
-  in internal/qoracle/testdata/shift-known.txt, which the nightly logs
-  rather than fails on, and fails on once one agrees.
+  in internal/qoracle/testdata/shift-known.txt as `verdict-flip`, which
+  the nightly logs rather than fails on, and fails on once one agrees.
+  An upstream issue is drafted (docs/upstream/quint-id-verdict-flip.md).
+- **QNT099's order is the ids' hash order.** `toposort`
+  (quint/src/static/toposort.ts) returns its cycles as
+  `Set(edges.keys())`, the call graph's immutable Map after Kahn's
+  layers are taken out (`partition` and `map` keep its order), and
+  `parsePhase4toposort` (quint/src/parsing/quintParserFrontend.ts) writes
+  one QNT099 per id in that order. immutable 4.3.9 keeps a Map of up to
+  8 entries in insertion order and a larger one as a hashed trie whose
+  order is the hash of the key, a bigint hashed as its decimal string
+  (immutable.js's `hash`): with a module's call graph over 8 entries, the
+  cycle `cf`/`cg` reports `cf` first at ids 22 and 29 and `cg` first at
+  29 and 36 (the nightly of 2026-11-25, seeds 20782002 and 20782014).
+  QNT098's listing of an import cycle's modules, and its reference (the
+  first), come from the same `cycles`. Class `cycle-order`: the set of
+  cyclic declarations, as (code, place), and each import cycle's modules
+  as a set must match; which QNT099 comes first, and where a QNT098
+  points, may differ. P1 reports a cycle in source order.
+- **Two modules of one name (QNT102) are both written**, in file order:
+  `sortModules` (quintParserFrontend.ts) returns the modules unsorted
+  once it finds a duplicate (with QNT101), the collector's `enterModule`
+  (quint/src/names/collector.ts:72-78) reports QNT102 at the second, and
+  its `exitModule` (:80-82) lets the last module walked win. With a
+  duplicate that walk is the file's order, never the module toposort's
+  (which `sortModules` skips): which copy is kept and where QNT102 points
+  did not change under the shift on any program run (the four seeds'
+  every mutation, the fixed programs), so rule 1 applies and P1 matches
+  them exactly: QNT102 present, the verdict refused, the later copy kept.
+  What the ids did change is the layer order inside each copy (the first
+  finding above), and the nightly's disagreement on seeds 20782003 and
+  20782015 was the form's: it keyed a module whose name repeats by a
+  digest of its content in quint's declaration order, so the shifted
+  stub's copy took another key. The digest now reads a module's
+  declarations as a multiset (canon's `signature`), as the form compares
+  them by layer; a copy with other content still keys apart. Should a
+  shift ever change which copy wins, the oracle fails there, and its
+  later errors become a class then.
+- **After a type error, which nodes have types is the ids' order.**
+  `TypeInferrer.inferTypes` (quint/src/types/inferrer.ts) walks a
+  module's declarations as the toposort left them, and each of
+  `ConstraintGeneratorVisitor`'s exits but a literal's, a var's and a
+  const's returns once its `errors` are not empty
+  (quint/src/types/constraintGenerator.ts): a declaration walked after
+  the first error gets no type, and which ones those are is a layer's
+  id order. `val bad = 1 + true` among `val a`, `b`, `c`: unshifted, `b`
+  and `c` are untyped; shifted, typed (the nightly's seeds 20782003 and
+  20782015, every QNT000 type-error mutation; a failed compile's `--out`
+  document carries the same types). Class `types-after-error`, in the
+  typecheck's and a failed compile's outputs: the same errors, no node
+  both type typed otherwise. P1 walks a layer in source order, then name.
+- **Twin declarations** (`var x: int` twice, QNT101) are both written,
+  each layer's in id order. The form told twins alike in name, kind and
+  content apart by quint's order (`x~var~<digest>~2`), so their source
+  spans crossed once the ids shifted (seed 20782014's
+  duplicate-definition): it now numbers them by their places in the
+  source map (canon's `keysOf`; the typecheck and a failed compile, which
+  carry none, read the parse's, `Options.Places`), where a front end has
+  to put them anyway: quint's output is the same under the shift, so
+  rule 1.
+
+**The rule for quint's id-dependent behaviour** (the maintainer's
+decision, 2026-11-25, a formal-methods architect's proposal):
+1. Wherever quint's output stays the same under its own id shift, P1
+   matches it. The shifted stub decides this empirically, and canon
+   compares (the form itself is fixed where it read quint's order: the
+   duplicate modules' and twins' keys above).
+2. Wherever quint's output changes under its own shift, there is no
+   quint behaviour to match. gotogether specifies an id-free choice
+   (source order, then name), and the oracle accepts the class the shift
+   produces, recorded in testdata/shift-known.txt by class name, against
+   any front end (`CompareKnown`; `Compare` is the form's alone):
+   `layer-order` (absorbed by the form's layers), `cycle-order`,
+   `types-after-error`, each `*`, for every program. A disagreement
+   outside its class (another error set, a module or type that differs)
+   fails.
+3. A verdict that flips under the shift is an upstream bug: Q2
+   implements the unshifted verdict, an issue is drafted in
+   docs/upstream/, and the entry is a `verdict-flip` line of
+   shift-known.txt.
+
+Binding is to sort its `Vars` by name (binding/model.go, DESIGN §111), which answers the question above.
 - A type error is reported once per module analysed before it: errors
   compare as the first, then the set (§3.4's set).
 - A node starting on a file's first line keeps that line's column shift
@@ -734,12 +816,101 @@ P5. It becomes `go` only after a period in shadow on the nightly
 | phase | size | delivers | exit criteria | risk |
 |---|---|---|---|---|
 | **Q3** (prerequisite) | M | §4: corpus, generators, `canon`, harness, nightly job | §4.4 | the corpus misses what users write (mitigated by mutation runs on the port, and by every adopter's model joining the corpus) |
-| **P1** parser and source map | M | internal/qfront/syntax: lexer (from quintnames' tables), parser, AST, source map, parse-phase QNT codes (QNT006 to QNT016) | the whole corpus parses; tier 1 equal (canonical modules, the source map's spans); syntax-error corpus: code and start position equal | the ANTLR ambiguities of §3.1; the grammar drifting upstream |
+| **P1** parser and source map (built, §5.1) | M | internal/qfront/syntax: lexer (from quintnames' tables), parser, AST, source map, parse-phase QNT codes (QNT006 to QNT016) | the whole corpus parses; tier 1 equal (canonical modules, the source map's spans); syntax-error corpus: code and start position equal | the ANTLR ambiguities of §3.1; the grammar drifting upstream |
 | **P2** names, imports, instances, flattening | L | source resolution, collector, resolver, toposort, unshadower, flattener, instance flattener (constants substituted, fresh ids), export, alias inliner | `quint parse --out`'s table equal canonically; typecheck's modules equal without types; compile's modules and table equal without types; QNT013, QNT098, QNT099, QNT101, QNT102 and QNT404 to QNT408 at quint's positions | instance flattening's interaction with analysis copies (§1.3, step 6); declaration order |
 | **P3** type checker | L | type-application resolution, constraint generation and solving with rows, polymorphism, builtin signatures ported (or parsed from quint's strings at build time), QNT000 type errors with reference spans | tier 2 types equal canonically; ill-typed corpus: first type error's position equal; N consecutive green nightlies with no disagreement | **the blamed node depends on the solver's order** (§6, risk 1); silent acceptance |
 | **P4** effects and modes | M | effect inference, the mode, nondet and multiple-updates checkers, the inferred effects are used for checking and not written (decision 5) | QNT200 to QNT206 and effect QNT000 at quint's positions; lint's unification regex replaced by structured errors | effects are large and unread, so the temptation is to skip the check; it must not be skipped, since an ill-moded model accepted is risk 2 |
 | **P5** wiring | M | the eight call sites of §1.1 behind one seam; `Differs` by `canon`; compiled artifact provenance (§3.2); doctor's line; `compile -check` without quint; RequireQuint skips that guarded only typecheck or compile removed | every example's suite green with `GOTOGETHER_FRONTEND=go` and with `shadow`; `gotogether compile` and `binding.LoadModel` with no quint on PATH | a behaviour change hidden in a reader that assumed quint's order or fields |
 | **P6** quint off consumer paths | S | with Q1's simulation and the in-process replays: no consumer path starts quint; quint is the oracle only (Q3 jobs, `shadow`, the confirmation of a failure where installed); Q11's one binary | a consumer's `go test` and `gotogether validate` with no Node on the machine, on every example | depends on Q1 and the replay work, not on Q2 alone |
+
+### 5.1 P1 as built (2026-11-25)
+
+internal/qfront: `ir` (quint's IR, written as quint writes it), `syntax`
+(the lexer, its keywords from internal/quintnames, and the parser, by
+hand: recursive descent, precedence climbing at ANTLR's precedences for
+Quint.g4's left-recursive alternatives) and `qfront.Parse` (the main file
+and the files it imports `from`, as quint's phases 1 and 2 load them),
+which writes `quint parse --out`'s modules and errors and `--source-map`'s
+map. Destructuring, `temporal` and `assume` parse from the start;
+`apalache::` names are ordinary qualified names to a parser, so its
+refusal is P2's (the resolver's).
+
+**In.** Every alternative of Quint.g4 at v0.33.1 but the REPL's
+`declarationOrExpr`; the listener's desugarings (sum types' constructors,
+`((a, b)) => e`, destructuring at module level and in lets, spread,
+`match`, `q::debug`'s text, the single-variant alias); the parse-phase
+errors: ANTLR's syntax errors (QNT000), Quint.g4's QNT006, QNT008 and
+QNT009, the listener's QNT007, QNT012, QNT014, QNT015 and QNT016, source
+resolution's QNT013 and QNT408; and the `depth` quint's name collector
+writes into the parse's declarations.
+
+**Numbering.** Nodes are numbered as ToIrListener numbers them (an id when
+its rule is left, children first, in each exit method's order; syntax
+errors first, as ANTLR reports them while parsing), with quint's spans
+(its end-column arithmetic). On the corpus the Go parse's source map
+equals quint's id for id on every program it parses alike: ids, files
+and spans, not only the canonical form. So the id-dependent behaviours
+of §4.5 (layer order, `quintTupledLambdaParam<id>`, the temporaries'
+names) come out as quint's wherever the parse is all the ids there are;
+the typecheck-order effects are P2's and P3's, and binding will order its
+variables itself (the maintainer's decision).
+
+**ANTLR's prediction.** Where a construct could go on at a token that also
+starts an expression (a binary `-`, `[`, a call's `(`, a reserved word
+read as a name, a def's `(`), ANTLR's SLL prediction follows the
+expression's exit into any context (a let's body) and, where both
+readings fail, takes the exit: its error is then at that token, not where
+the construct's reading stops (`f(1 +)` at `(`, `def f(x) = x +` at the
+def's `(`). Where both readings parse that far it reads on with the real
+context (full LL), and a let's value ends before its body
+(`val d = p - q` then `-b <= d`): two of quint's own programs need that.
+`syntax.continues` and `syntax.decide` reproduce these; ANTLR's lexer is
+followed too (an unclosed string skips the rest of the file; a lexer
+error is reported when the parser first reads past it, which may be after
+a syntax error before it).
+
+**Against quint** (P1's tier, `qoracle.P1`: the parse without its lookup
+table, the errors of P1's codes; after a syntax error the first error
+alone, by code and start, since P1 stops where ANTLR recovers), the whole
+corpus with quint 0.33.1, 2026-11-25:
+
+| entries | agree | of them, quint's ids | first error only |
+|---|---|---|---|
+| 863 | 861 | 833 | 28 |
+
+(833 is every entry compared with its modules: none agrees canonically
+with other ids.)
+
+By construct (an entry counts under each it uses): all agree on
+instances (153), sum types (68), destructuring (65), exports (61), `run`
+(57), doc comments (41), `match` (40), spread (37), temporal operators
+(28), `temporal` (27), polymorphic aliases (20), `assume` (20) and
+`apalache::` (1). The two that differ are one class, P2's: quint's
+toposort drops definitions in a cycle (QNT099, testFixture's
+_0100cyclicDefs and _0101noRecursion), which a parse alone keeps. The 28
+compared by their first error are every corpus entry with a syntax error
+(quint's fixtures and unit tests). Generated programs
+(`GOTOGETHER_QFRONT_SAMPLE=50`: 50 modules and three ill-typed mutations
+of each): all 50 well-typed agree, 141 of the 150 mutations; the 9 others
+are P2's mutations, in three classes: a definition cycle (QNT099, 4: the
+toposort's drop again), a duplicate module (QNT102, 4: canon keys two
+modules of one name by their content in quint's toposort order) and a
+duplicate definition (QNT101, 1: two equal declarations told apart by the
+same order). P1's fixtures (internal/qfront/testdata, 31 files) joined
+the manifest (894 entries). The harness's stub is
+`GOTOGETHER_QFRONT_STUB=go` (quint's parse cut by `qoracle.ParseTier`
+against `qoracle.GoParse`); internal/qfront's own push-tier test compares
+fixtures exercising every alternative and the parse-phase errors, by
+canonical form and by raw ids.
+
+**Out, left for P1.** Recovery after a syntax error (ANTLR's partial
+modules and later errors are not reproduced: P1 stops at the first);
+quint's listener's stacks after a record with two spreads, except as a
+definition's body; a count of Quint.g4's labelled alternatives against
+the corpus (the fixture covers them by hand); a nightly step running the
+corpus with the `go` stub (its two QNT099 entries would need a known list
+like shift-known.txt); and the after-P1 uses below (lint's token scanner,
+validate's import scan). Everything after the parse is P2 on.
 
 What can ship early, and on what:
 - **After P1.** lint's token scanner and validate's import scan become

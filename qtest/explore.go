@@ -785,16 +785,20 @@ func cachedCheck(cc *validate.Checker, inst string, cached *int) validate.BatchC
 			}
 		}
 	}
+	blind := newEffectBlind(cc)
 	return func(ctx context.Context, runs [][]qtrace.Step) ([]*validate.Report, []error) {
 		reps, errs := make([]*validate.Report, len(runs)), make([]error, len(runs))
 		keys := make([]string, len(runs))
+		views := make([][]qtrace.Step, len(runs)) // the steps a verdict is rebased on (effectBlind)
 		var todo [][]qtrace.Step
 		first := map[string]int{} // key -> index in todo
 		at := map[int]int{}       // run -> index in todo
 		for i, steps := range runs {
-			keys[i] = inst + cc.Key(steps)
+			var key []qtrace.Step
+			key, views[i] = blind.view(steps)
+			keys[i] = inst + cc.Key(key)
 			if v, ok := verdicts.get(keys[i]); ok && choiceWitnessesRebasable(v.rep, v.steps) {
-				reps[i] = rebase(v.rep, v.steps, steps)
+				reps[i] = rebase(v.rep, v.steps, views[i])
 				*cached++
 				continue
 			}
@@ -821,8 +825,9 @@ func cachedCheck(cc *validate.Checker, inst string, cached *int) validate.BatchC
 			if !ok {
 				continue
 			}
-			if reps[i], errs[i] = rebase(treps[j], todo[j], runs[i]), terrs[j]; errs[i] == nil && choiceWitnessesRebasable(treps[j], todo[j]) {
-				verdicts.put(keys[i], verdict{treps[j], todo[j]})
+			_, from := blind.view(todo[j])
+			if reps[i], errs[i] = rebase(treps[j], from, views[i]), terrs[j]; errs[i] == nil && choiceWitnessesRebasable(treps[j], from) {
+				verdicts.put(keys[i], verdict{treps[j], from})
 			}
 		}
 		return reps, errs
@@ -873,8 +878,8 @@ type verdictCache struct {
 	m  map[string]verdict
 }
 
-// A verdict is a report and the steps it was reached on, for the runs of
-// the same key it is given to (rebase).
+// A verdict is a report and the steps it was reached on (effectBlind's
+// view of them), for the runs of the same key it is given to (rebase).
 type verdict struct {
 	rep   *validate.Report
 	steps []qtrace.Step
@@ -930,7 +935,9 @@ func rebase(rep *validate.Report, from, to []qtrace.Step) *validate.Report {
 			return f
 		}
 		c, s, t := *f, *f.Step, &to[i]
-		s.Ref, s.Source, s.Recorder, s.Thread = t.Ref, t.Source, t.Recorder, t.Thread
+		// its seq too: runs of one key may differ in the effect records
+		// between their steps (effectBlind)
+		s.Ref, s.Source, s.Recorder, s.Thread, s.Seq = t.Ref, t.Source, t.Recorder, t.Thread, t.Seq
 		if s.Process = t.Process; s.Process == "" {
 			s.Process = t.Recorder // as Reconstruct fills it
 		}
@@ -981,6 +988,17 @@ func sortedKV[V any](m map[string]V) []string {
 // anyWithinJudged reports whether some run's report judged a
 // bounded-response obligation (an obligation open at a trace's end is not
 // judged, nor one whose vals were not computed).
+// allStalled reports whether every run has no verdict for a host stall
+// alone (Run.Stalled).
+func allStalled(runs []*Run) bool {
+	for _, r := range runs {
+		if r == nil || !r.Stalled() {
+			return false
+		}
+	}
+	return len(runs) > 0
+}
+
 func anyWithinJudged(runs []*Run) bool {
 	for _, r := range runs {
 		if r == nil || r.Report == nil {
@@ -1126,6 +1144,18 @@ func (x *Exploration) Expect(t testing.TB, claims ...Claim) {
 		t.Fatalf("gotogether: %s: conformance claimed, and the binding's eventual vals (%s) were judged in none of %d runs: no run's trace ends with a settle. "+
 			"Call Sim.Settle at the end of Run and return its error (or qobs.Settled after a probe), or claim what the runs show: None(Settles()) alongside, for runs that are not to settle",
 			x.ref(), strings.Join(x.checker.Binding.Eventually, ", "), len(x.Runs))
+	}
+	if allStalled(x.Runs) {
+		// a host that stalled in every run judged nothing: no verdict,
+		// which no claim over the runs can rest on (a bound's checks were
+		// judged, then excused, so the message below would mislead)
+		var said []string
+		for _, s := range x.Runs[0].HostStalls {
+			said = append(said, s.String())
+		}
+		t.Fatalf("gotogether: %s: every one of %d runs has no verdict (host stall): a bounded response came late while the host stalled long enough to make it so "+
+			"(the first run's stalls: %s), so the runs judged nothing; run them again on a quiet host, or find what stalls it (the stalls' details)",
+			x.ref(), len(x.Runs), strings.Join(said, "; "))
 	}
 	if x.checker != nil && len(x.checker.Binding.Within) > 0 && !anyWithinJudged(x.Runs) && claimsConformance(claims) {
 		// a system that stalls in silence would pass: its obligation open,

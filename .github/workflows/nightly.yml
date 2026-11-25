@@ -808,8 +808,22 @@ jobs:
           echo "seeds $((GOTOGETHER_SEED_OFFSET + 1))..."
           RAFTKV_REAL=1 RAFTKV_REAL_RUNS=10 RAFTKV_REAL_MUTANT_RUNS=5 RAFTKV_REAL_DIR="$RUNNER_TEMP/real" \
             go test -race -count=1 -timeout 25m -run 'TestRealNemesis|TestRealNoRequestID|TestRealSlowElection' -v .
+      - name: inconclusive runs (a bound broken while the host stalled, no verdict, left out of the claims)
+        id: stalls
+        if: always()
+        run: |
+          found=false
+          for f in "$RUNNER_TEMP"/real/*/inconclusive.txt; do
+            [ -f "$f" ] || continue
+            found=true
+            while IFS= read -r line; do
+              echo "::warning title=raftkv-real inconclusive::$line"
+              echo "- $line" >> "$GITHUB_STEP_SUMMARY"
+            done < "$f"
+          done
+          echo "found=$found" >> "$GITHUB_OUTPUT"
       - name: keep the runs' logs and journals (a faithful failure's log names its replay in the simulation)
-        if: failure()
+        if: failure() || steps.stalls.outputs.found == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: raftkv-real

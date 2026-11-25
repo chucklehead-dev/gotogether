@@ -1,6 +1,8 @@
 package canon
 
 import (
+	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -154,5 +156,132 @@ func TestSuffixedNames(t *testing.T) {
 		if strings.Contains(js, bad) {
 			t.Errorf("%s survived canonicalization", bad)
 		}
+	}
+}
+
+// dupModules is a parse output of two modules named main, as quint writes
+// it for QNT102 (both kept), its ids shifted by shift and the first
+// module's declarations in order (quint's: a layer sorted by its ids as
+// strings), the second's value again.
+func dupModules(t *testing.T, shift int, order []string, again int) []byte {
+	t.Helper()
+	ids := map[string]int{"a": 2, "b": 4, "e": 10}
+	val := map[string]int{"a": 1, "b": 2, "e": 5}
+	def := func(name string, id, v int) map[string]any {
+		return map[string]any{"id": id + shift, "kind": "def", "name": name, "qualifier": "val",
+			"expr": map[string]any{"id": id - 1 + shift, "kind": "int", "value": v}}
+	}
+	table := map[string]any{}
+	var decls []any
+	for _, n := range order {
+		d := def(n, ids[n], val[n])
+		decls = append(decls, d)
+		table[strconv.Itoa(ids[n]+shift)] = d
+	}
+	doc := map[string]any{
+		"stage": "parsing",
+		"modules": []any{
+			map[string]any{"id": 11 + shift, "name": "main", "declarations": decls},
+			map[string]any{"id": 14 + shift, "name": "main", "declarations": []any{def("again", 13, again)}},
+		},
+		"table":  table,
+		"errors": []any{},
+	}
+	b, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// Two modules of one name are keyed by their content, not by quint's
+// order of a layer, which is its ids': shifted by 7, a, b and e (ids 2,
+// 4, 10) come out b, e, a (ids "11", "17", "9"), and the forms are equal.
+// The duplicate's content still counts: another value differs.
+func TestDuplicateModulesKeyedByContent(t *testing.T) {
+	of := func(doc []byte) *Form {
+		f, err := Of(doc, nil, Options{Kind: Parse, Tier: Read})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return f
+	}
+	base := of(dupModules(t, 0, []string{"e", "a", "b"}, 1))
+	shifted := of(dupModules(t, 7, []string{"b", "e", "a"}, 1))
+	if d := Diff(base, shifted); len(d) > 0 {
+		t.Fatalf("duplicate modules with a layer reordered by shifted ids differ at %d places, first %v", len(d), d[0])
+	}
+	// the form of the form is the form: its key reads no $layer
+	if d := Diff(base, of(base.JSON())); len(d) > 0 {
+		t.Fatalf("canon of canon differs for duplicate modules at %d places, first %v", len(d), d[0])
+	}
+	other := of(dupModules(t, 7, []string{"b", "e", "a"}, 2))
+	d := Diff(base, other)
+	if len(d) == 0 {
+		t.Fatal("a duplicate module with another body has the same form")
+	}
+	for _, x := range d {
+		if !strings.HasPrefix(x.Path, "modules[main~~") {
+			t.Errorf("a difference outside the duplicate modules: %v", x)
+		}
+	}
+}
+
+// twinVars is a parse output and its source map of a module declaring
+// `var x: int` twice (QNT101), the first on line first, the second on
+// line second, written in order (quint's: by their ids as strings).
+func twinVars(t *testing.T, shift, first, second int, order []int) ([]byte, []byte) {
+	t.Helper()
+	ids := []int{2 + shift, 4 + shift}
+	lines := []int{first, second}
+	table := map[string]any{}
+	spans := map[string]any{}
+	var decls []any
+	for _, i := range order {
+		d := map[string]any{"id": ids[i], "kind": "var", "name": "x", "typeAnnotation": map[string]any{"id": ids[i] - 1, "kind": "int"}}
+		decls = append(decls, d)
+		table[strconv.Itoa(ids[i])] = d
+	}
+	for i, id := range ids {
+		pos := func(col int) map[string]any {
+			return map[string]any{"line": lines[i], "col": col, "index": 20*lines[i] + col}
+		}
+		spans[strconv.Itoa(id)] = []any{0, pos(2), pos(12)}
+		spans[strconv.Itoa(id-1)] = []any{0, pos(9), pos(12)}
+	}
+	doc, err := json.Marshal(map[string]any{"stage": "parsing", "modules": []any{map[string]any{"id": 5 + shift, "name": "main", "declarations": decls}}, "table": table, "errors": []any{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sm, err := json.Marshal(map[string]any{"sourceIndex": map[string]any{"0": "/ROOT/main.qnt"}, "map": spans})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return doc, sm
+}
+
+// Declarations alike in name, kind and content are told apart by their
+// places in the source, not by quint's order (its ids'): shifted by 7,
+// ids 2 and 4 become "9" and "11", which sort the other way, and the
+// forms are equal, spans included. A twin at another place differs.
+func TestTwinDeclarationsByPlace(t *testing.T) {
+	of := func(doc, sm []byte) *Form {
+		f, err := Of(doc, sm, Options{Kind: Parse, Tier: Read, Roots: []string{"/ROOT"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return f
+	}
+	base := of(twinVars(t, 0, 1, 2, []int{0, 1}))
+	shifted := of(twinVars(t, 7, 1, 2, []int{1, 0}))
+	if d := Diff(base, shifted); len(d) > 0 {
+		t.Fatalf("twin declarations in another order differ at %d places, first %v", len(d), d[0])
+	}
+	if d := Diff(base, of(base.JSON(), nil)); len(d) > 0 {
+		t.Fatalf("canon of canon differs for twin declarations at %d places, first %v", len(d), d[0])
+	}
+	moved := of(twinVars(t, 7, 1, 3, []int{1, 0}))
+	if len(Diff(base, moved)) == 0 {
+		t.Fatal("a twin declaration on another line has the same form")
 	}
 }

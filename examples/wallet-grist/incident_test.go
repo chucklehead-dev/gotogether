@@ -31,7 +31,7 @@ func lost(k int) gristsim.Config {
 // ledgerNoDedupe mutant posts again there (TestMutant).
 func TestRestoreReplays(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	runs := qtest.ExploreConfig{Seeds: 3, ShortSeeds: 1}
 	for _, k := range []int{4, 6} {
 		system(commits, lost(k)).WithRates(qenv.NoFaults).Explore(t, runs).
@@ -51,7 +51,7 @@ func TestRestoreReplays(t *testing.T) {
 // rejected.)
 func TestLostTail(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	runs := qtest.ExploreConfig{Seeds: 3, ShortSeeds: 1}
 	system(commits, lost(2)).WithRates(qenv.NoFaults).Explore(t, runs).Expect(t, qtest.Conforms())
 	system(calls, lost(2)).WithRates(qenv.NoFaults).Explore(t, runs).Expect(t, qtest.All(qtest.Mismatch("read")))

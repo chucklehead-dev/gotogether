@@ -70,7 +70,7 @@ func oldLog(t *testing.T) *gristtest.Tier {
 // side; then every read model's snapshots of the log, taken at each of
 // its positions, agree with a fold from its start (old events upcast).
 func TestOldLogConforms(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	tier := oldLog(t)
 	tier.Check(commits, calls)
 	gristtest.Snapshots(t, App, tier.Store)
@@ -83,7 +83,7 @@ func TestOldLogConforms(t *testing.T) {
 // checksum fails: a fold from the start).
 func TestSnapshots(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	cfg := contended
 	cfg.SnapshotEvery = 2
 	system(commits, cfg).WithRates(faulty.Set("store.library.snapshot", 0.3)).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 4}).

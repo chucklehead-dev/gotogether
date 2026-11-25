@@ -16,7 +16,7 @@ import (
 // FuzzFaithful explores schedules and faults guided by coverage, the model
 // judging every run.
 func FuzzFaithful(f *testing.F) {
-	qtest.RequireQuint(f)
+	qtest.RequireModel(f, binding)
 	system(checkout.Config{Isolation: qenv.SnapshotIsolation}).WithRates(crashy).Fuzz(f)
 }
 
@@ -24,7 +24,7 @@ func FuzzFaithful(f *testing.F) {
 // bytes from which the fuzzer's chooser makes the same run, rejected the
 // same way.
 func TestShrunkFailureAsCorpus(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	if testing.Short() {
 		t.Skip("shrinking against the model")
 	}

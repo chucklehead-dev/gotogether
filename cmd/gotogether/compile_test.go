@@ -135,7 +135,7 @@ func TestDoctorCompiled(t *testing.T) {
 	}
 }
 
-// gotogether compile without -o writes beside the binding
+// gotogether compile without -o writes beside the binding, gzipped
 // (validate.CompiledFor), and -check passes on that file, then fails,
 // naming what differs and the fix, once the binding changes; it writes
 // nothing either way.
@@ -148,12 +148,15 @@ func TestCompileCheck(t *testing.T) {
 		}
 	}
 	bind := filepath.Join(dir, "account.yaml")
-	model := filepath.Join(dir, "account.model.json")
+	model := filepath.Join(dir, "account.model.json.gz")
 	var out bytes.Buffer
 	if err := compileTo(&out, []string{"-binding", bind}); err != nil {
 		t.Fatal(err)
 	}
 	written := mustRead(t, model)
+	if !bytes.HasPrefix(written, []byte{0x1f, 0x8b}) {
+		t.Fatalf("the default artifact %s is not gzipped", model)
+	}
 	out.Reset()
 	if err := compileTo(&out, []string{"-binding", bind, "-check"}); err != nil || !strings.Contains(out.String(), "is current for") {
 		t.Fatalf("-check on a fresh compile: %v\n%s", err, out.String())

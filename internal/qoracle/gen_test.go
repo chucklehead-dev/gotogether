@@ -153,7 +153,7 @@ func TestIllReachesEveryCode(t *testing.T) {
 // a disagreement shrunk by the program's tree.
 func TestGeneratedHarness(t *testing.T) {
 	requireQuint(t)
-	fe := stub(t)
+	oracle, fe := stub(t)
 	sample := seeds(t, 1)
 	for _, s := range sample {
 		progs := []*GenProgram{Module(s)}
@@ -177,9 +177,14 @@ func TestGeneratedHarness(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					d, err := Compare(context.Background(), prog, Quint{}, fe, t.TempDir())
+					d, known, err := CompareKnown(context.Background(), prog, oracle, fe, t.TempDir())
 					if err != nil {
 						t.Fatalf("%s: %v", q, err)
+					}
+					if q == p {
+						for _, k := range known {
+							t.Logf("%s: quint and %s differ by an accepted class (testdata/shift-known.txt): %v", p, fe.Name(), k)
+						}
 					}
 					return d
 				}

@@ -37,7 +37,7 @@ func upgrade(t *testing.T, binding string, opts ...qtest.Option) qtest.System {
 // it (TestMutant).
 func TestRollingUpdate(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	n := qtest.ExploreConfig{Seeds: 10, ShortSeeds: 2}
 	upgrade(t, retiring).Explore(t, n).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Takes("retireCounter").Outcome("ok"))

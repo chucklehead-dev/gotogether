@@ -5344,7 +5344,7 @@ adjusting it is a field per format):
 | `gotogether.choices/1` | qenv.EncodeChoices' header (`BytesVersion`) | the current only |
 | `gotogether.run/3` | validate's run manifest | the current only |
 | `gotogether.evidence/3` | qtest's evidence | the current only |
-| `gotogether.model/1` | a compiled model (gotogether compile, §64) | the current only |
+| `gotogether.model/1` | a compiled model (gotogether compile, §64), kept gzipped (`<stem>.model.json.gz`, §113) | the current only; plain or gzipped |
 | `gotogether.mbt/1` | a spec compiled for connect's traces (gotogether compile -spec, §110) | the current only |
 | `gotogether.report/2` | validate's and simulate's `-json` (validate.Document, §68) | the current only |
 | `gotogether.nav/2` | navproto's Session and Node's `protocol` | the current only; unnamed protocols are refused |
@@ -7255,7 +7255,11 @@ deadlock, never at an unlucky draw, and a step one value in 1000 enables
 is taken. The distribution is not quint's (it is each choice's uniform
 draw, conditioned on the step being enabled), and a call's successors are
 drawn each time (no memo), so the sampler costs one path a step, not the
-step's successors. `Model.Simulate` is one trace: init sampled from no
+step's successors. It stays so by decision
+(2026-11-25): a sample backtracks past a disabling draw rather than end
+the trace there, as quint's may, and parity is by meaning (below), never
+by distribution; a check that needs quint's distribution (short traces
+where quint's end early) runs quint. `Model.Simulate` is one trace: init sampled from no
 state, step up to Steps times, each state judged by the invariants, the
 first false one ending it.
 
@@ -7412,6 +7416,11 @@ generated programs. Its first "front end" is quint again.
   sort, which compares ids as strings: shifting the ids reorders
   independent declarations. The form keeps the layer (`$layer`, ported
   from quint's call graph) and orders a layer by declaration key. A
+  module whose name repeats (QNT102: quint writes both) is keyed by its
+  content with its declarations as a multiset, never in quint's order,
+  and twins alike in name, kind and content (`var x: int` twice) are
+  numbered by their places in the source map (the parse's, for the
+  outputs that carry none). A
   front end numbering its nodes otherwise cannot match quint's order
   within a layer, so the bar is the layering.
 - **Names follow their binders.** The compile IR's unshadowed names
@@ -7447,6 +7456,20 @@ generated programs. Its first "front end" is quint again.
   the order, the doubled errors and an end-column quirk (a node starting
   on the first line keeps the shift in its end column wherever it ends)
   before any Go code.
+- **Quint's id-dependence, by class.** Where quint's own output follows
+  its ids beyond what the form can order, there is nothing to match
+  (q2-front-end.md §4.5's rule): the oracle's comparison, `CompareKnown`,
+  accepts the classes internal/qoracle/testdata/shift-known.txt lists by
+  name, against any front end, logs each by class and compares the
+  outputs after it. `cycle-order`: only the errors differ, the same set
+  once a QNT098 is its cycle's modules as a set, the first errors equal
+  or both a QNT099. `types-after-error`: a typecheck (or a failed
+  compile's document) with the same errors, equal but in which nodes have
+  types, none typed otherwise.
+  `layer-order` is the form's own; `verdict-flip` names a corpus entry
+  (an upstream bug). A missing, extra or moved error, a first error of
+  another code, or a node typed otherwise is a disagreement; `Compare`
+  is the form's comparison alone.
 - **The corpus is pinned, quint's part fetched.** testdata/corpus.json
   lists every entry (the repository's .qnt files, its bindings'
   evaluation and --invariant modules, quint's examples, fixtures and
@@ -7507,9 +7530,33 @@ began are no step's. Reconstruct attaches each record in seq order
 (`Step.Effects`, `Effect.By` "call" or "task"); any other is
 `Trace.Unattributed`, listed and never compared (a relay, a client whose
 step a service records). Effect records are in the verdict key (Keyer):
-two runs whose effects differ are two verdicts.
+two runs whose effects differ are two verdicts. An exploration whose
+binding compares no effects keys its runs without them (qtest's
+effectBlind: each step's seq renumbered past its recorder's effect
+records, so a missing seq is still a gap), since the doubles' sends fall
+at other seqs in runs of one model history: with them in the key,
+twophase's early-commit mutant replayed all 60 of its runs where 47 had
+been, and examples/twophase's -short tests cost about 10 CPU seconds
+more. A template that reads a seq, diagnostic evidence, a lost tail or a
+pending invocation keys the run whole.
 
-**Where effects are recorded** (§8.1, 6: always, for evidence too).
+**Where effects are recorded** (§8.1, 6: always, for evidence too). A
+double records wherever qobs.Effect would: an open call's scope (on that
+call's recorder, whatever the simulation's context carries), else From's
+recorder. The doubles of the core decide it through `qobs.EffectFunc`,
+which finds the recorder once and builds the record only for one (a send
+no run records allocates nothing); `qenv`'s own once asked `qobs.From`
+alone, and a call invoked on a recorder the simulation did not carry
+lost its Service request and Queue publish while its scope's
+`qobs.Effect` recorded (qenv's TestDoublesRecordWhereEffectDoes: every
+double's send against qobs.Effect beside it, under a recorder, a scope, a
+scope over `WithRecorder(nil)`, and neither). Rule 1 applies under the
+scope, rule 2 only outside one; a send after Done is Late, a pending
+call keeps its sends, and a frozen task's unwinding sends are dropped. A
+double in a published module of its own (qenv/simgrpc, qenv/kubesim,
+qenv/simvalkey) that records effects should do so through
+`qobs.EffectFunc` (or `qobs.Effect`), never by asking `qobs.From`: none
+records effects yet.
 `qenv.Service.Call` records `rpc.<name>.request` with the request's
 exported fields (`qenv.EffectFields`), after the call is sent and before
 the network decides its fate (one effect for a lost or duplicated
@@ -7626,3 +7673,63 @@ grist after P3 (§8.1, 8). simgrpc's calls go through a qenv.Service and
 are recorded as `rpc.<name>.request` with no fields (its request is
 unexported); its own kind (`grpc.<service>.<method>`), simvalkey's and
 kubesim's are their modules' to add, after the core's.
+
+## 113. Compiled models kept compressed
+
+Q0 kept each example's compiled model beside its binding so that its
+tests run with no quint, within a budget of 1 MB a checked-in artifact may
+take (internal/exampleapps' `maxModel`). A compiled model is mostly
+quint's JSON IR of the binding's evaluation module, which repeats its
+keys and ids: 31 bindings (the grist apps' generated models, twophase's
+vendored Choreo, edgepublish's 22 MB) were over it and left on quint. The
+maintainer chose a compressed artifact over a larger budget.
+
+**One document, in a container.** The artifact is the same
+`gotogether.model/1` JSON, gzipped: `<stem>.model.json.gz`, the
+convention `validate.CompiledFor` names (`validate.CompiledExt`).
+Compression is how the file is kept, not what it says, so it is no new
+major (§63): `Write` gzips a path ending in `.gz`; `LoadCompiled` reads
+either form, by the gzip magic (`1f 8b`, which no JSON document begins
+with), and refuses a broken container with the fix. Both stay readable
+because the cost is a branch, and a plain `-o model.json` (the Action's
+and the docs' canary, a file a person inspects with jq) keeps working;
+the repository keeps one form only, the gzipped one, and
+TestCompiledModels fails on a plain `.model.json` under examples/. An
+earlier gotogether's plain artifact beside a binding is not found by the
+convention: `GOTOGETHER_COMPILED=1` names it and the fix (pre-release, no
+migration).
+
+**Deterministic bytes.** The gzip header names no file, no modification
+time and OS "unknown" (255), at the best compression, so a compile twice
+writes identical bytes (TestCompiledGzipDeterministic) with one Go
+toolchain. Staleness never depends on them: `compile -check` compares a
+compile now by meaning (`Differs`), and `NewCompiledChecker` checks the
+hashes the document records. The digest a run manifest records is of the
+file as kept, the gzipped bytes.
+
+**The budget is the compressed size.** `maxModel` stays 1 MB, measured on
+the file as checked in. Every binding fits: IR compresses about 22-fold
+(edgepublish's 21,978,884 bytes to 779,023; counters' 8.2 MB to 367 KB),
+so all 54 example bindings keep their models (7,327,020 bytes; the 23
+earlier ones took 11,608,505 plain, 520,855 gzipped). Their tests moved to
+`qtest.RequireModel` where the compiled model alone judges them; what
+still needs quint is ci/needs-quint.txt's, with why: connect's traces,
+quint's checker built by hand (gristtest.StoredLogs, the CLI's validate),
+models written at run time, `quint run` of a rules module's agreement
+invariants, and payd's real runs, which fold outside the evaluator's
+fragment.
+
+**Staleness by meaning, escapes aside.** Checking the new models found
+twophase's and edgepublish's stale to `compile -check` straight after
+their compile: `json.Marshal` writes a RawMessage's `<`, `>` and `&` as
+`\u003c`, `\u003e`, `\u0026`, and quint's output, a compile now, does not.
+`Differs` compares the documents HTML-escaped alike
+(TestCompiledWrittenIsNotStale); the earlier 23 models held none.
+
+**Its cost.** Decompression is the load's only addition: loading
+edgepublish's artifact (`LoadCompiled`) took 123 ms gzipped and 103 ms
+plain (best of 15, on a loaded 4-core machine), the gunzip about 20-40
+ms of it, once per process (qtest builds each checker once).
+`gotogether.mbt/1` (connect's, §110) is unchanged: its artifacts are few
+and small.
+
