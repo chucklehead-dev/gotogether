@@ -668,8 +668,10 @@ item is its own decision before it starts; the red-nightly rule applies.
   `compile -check` compares meaning). Left: 30 bindings over 1 MB (counters
   8 MB, edgepublish 22 MB, the grist apps 2-7 MB; IR, about twenty-fold
   compressible): a compact artifact or a larger budget is the maintainer's
-  call; and the tests of Q1's fragment (`qtest.Model`, simulate; connect's
-  traces from a spec's compiled model since Q1's first slices), the checker's own callers and Q2's run-time models, each listed.
+  call; and connect's tests not yet moved to a spec's compiled model (Q1's
+  first slices), the checker's own callers and Q2's run-time models, each
+  listed (`qtest.Model` and simulate run from the binding's model since
+  Q1's next slice: lease's design binding keeps one, 23 models).
 - **Q1: the evaluator's whole fragment (M). First slices built** (DESIGN
   §110): the refusals inventoried (none of the repository's 67 agreeing
   models hits one but rr's order-dependent fold, on purpose), the builtins
@@ -680,10 +682,15 @@ item is its own decision before it starts; the red-nightly rule applies.
   (Go's traces replay in quint pinned, quint's are paths of the
   evaluator's, a small model's reachable sets agree), and connect's traces,
   Require, Eval and bound checks from a compiled spec (`gotogether compile
-  -spec`, `gotogether.mbt/1`, `GOTOGETHER_COMPILED`) with no quint. Left:
-  `qtest.Model` and `simulate` from a compiled binding model (the
-  artifact to carry the claims' PossibleModule; the cross-check and the
-  witness replays reported as not done; sampled invariants by Simulate),
+  -spec`, `gotogether.mbt/1`, `GOTOGETHER_COMPILED`) with no quint. Next
+  slice built (2026-11-25): `qtest.Model`'s claims, `gotogether simulate`
+  (sampling, `-graph`, `-matrix`, possibles) and `model.New` from the
+  binding's compiled model (its module carries the simulate section's
+  terminal and possibles' predicates; a literal constant overridden by a
+  literal; the cross-check against quint's samples and the witnesses'
+  replays reported not done, `-verify` refused; sampling by Simulate),
+  verdicts equal to quint's on the same bindings; hello's, crossdb's,
+  migrate-payments', requeue's and lease's design tests released. Left:
   connect.Test's runs (`then`, `reps`, `expect`, `fail`), integers past 64
   bits, and a nightly comparing Go's traces with quint's on every
   example's model. Seeds cannot match quint's generator, so parity is by
@@ -718,6 +725,21 @@ item is its own decision before it starts; the red-nightly rule applies.
   position; disagreements shrunk by `qshrink`. `evaluator-shadow` judges every
   verdict both ways. `ci/mutate-core.sh` on the port: a survivor is a program
   the corpus lacks. Bumping `QUINT_VERSION` re-runs it.
+  **Built (2026-11-25, q2-front-end.md §4.5):** internal/qoracle: the
+  canonical form (canon: ids as paths, declarations by toposort layer,
+  names by binder; brute-force and quint-output tests), the pinned corpus
+  manifest (repository, generated eval and --invariant modules, quint's
+  examples, fixtures and inline unit-test programs fetched at the tag by
+  `ci/fetch-quint-src.sh`), the harness (quint against quint with every id
+  shifted), ddmin over declarations and a tree shrink, the module and
+  ill-typed generators (every front-end QNT code reached, quint judging),
+  and the `qfront-differential` nightly. Left: a week of green nightlies
+  (exit criterion 5), Quint.g4's labelled alternatives counted against
+  the corpus, validate/model's simulate modules in the corpus, and, for
+  P5, `CompiledModel.Differs` by canon and `GOTOGETHER_FRONTEND=shadow` in
+  `evaluator-shadow` (both need P5's seam). One question for the
+  maintainer: quint orders a toposort layer by its ids as strings, and
+  binding's `Vars` follow that order.
 - **Stays external:** Apalache (`verify`, `simulate -prove`); the bounded
   graph covers small models in Go. Upstream: not contacted for now (the
   maintainer, 2026-11-25). gotogether proceeds on its own, and Q3 and Q2

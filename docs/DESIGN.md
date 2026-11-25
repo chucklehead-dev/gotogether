@@ -7327,16 +7327,134 @@ GenerateRun (qtest's FollowTraces, qhegel's VaryTraces) follows.
   TestCompiledMBTModelsAreCurrent keeps connect/testdata's artifacts a
   compile now (and fails with the imports' definitions not kept).
 
-**Left in Q1.** `qtest.Model` and `simulate` from a compiled binding
-model: the graph and the possibles' search are the evaluator's already,
-but read a PossibleModule quint compiles for the claims' predicates; the
-binding's artifact would carry it (every boolean val is a candidate
-invariant there, Q0's second slice), the cross-check against quint's
-samples and the witness replays be reported as not done, and the sampled
-(non-graph) invariants use Simulate. connect.Test's runs (`then`, `reps`,
-`expect`, `fail` as a trace's steps). Integers past 64 bits. A nightly
-job comparing Go's and quint's traces on every example's model, as
-TestAgreesWithQuint does for quint's alone.
+**The model alone without quint (2026-11-25).** `qtest.Model` and
+`gotogether simulate` (sampling, `-graph`, `-matrix`, the possibles) run
+from the binding's compiled model, by the same switch as its runs
+(`GOTOGETHER_COMPILED`, now one rule: `validate.CompiledChoice`, which
+qtest, `model.New` and `model.Simulate` read; `SimulateOptions.Compiled`
+names an artifact).
+- **The artifact.** The graph, the possibles' search and the liveness
+  search were the evaluator's already, but each asked validate for a
+  module of its own (`Binding.PossibleModule`: the evaluation module with
+  a val per predicate), which quint compiled. Every predicate a model
+  analysis reads is known when the binding is compiled: the invariants
+  and eventual vals (the module's already, every boolean val a candidate,
+  Q0's second slice), and the simulate section's terminal and possibles'
+  `when`, which the module now carries as vals (`analysisPredicates`;
+  qtest's scenarios are steps, and need none). So the format stays
+  `gotogether.model/1`: an artifact compiled before is refused as stale
+  (this gotogether writes the module otherwise), naming `gotogether
+  compile -binding` as the fix, as any change of the module is. A
+  compiled checker answers a module request by its own module
+  (`compiledState.analysis`): the request's predicates mapped to the
+  artifact's vals, one it lacks refused with the fix (name it in the
+  binding and compile again, or quint).
+- **The instance.** An analysis's instance overrides constants (the
+  simulate section's, a variant's, `-const`, `ModelOptions.Constants`).
+  A constant the binding gives as a literal is a parameter of the
+  compiled module (Q0's third slice), so another literal is a value
+  (`evalshare.Eval.Consts`): lease's design variants run from one
+  artifact. A constant the binding gives as an expression (hello's
+  `1.to(3)`) is inlined: another value is refused, naming the fix (a
+  literal in the binding), as is a parameter given no literal.
+- **What quint did, not done.** A complete graph's cross-check against
+  quint's samples and the witnesses' replays by quint test are reported
+  not done (`Report.NotDone`, a line of the text, a note of the JSON
+  document; a verdict's `Replayed` "not done: ..."), never as passed:
+  the verdicts are the evaluator's alone (§64), and a Refutes claim holds
+  by its witness saying its replay was not done. `-verify` (Apalache) is
+  refused.
+- **Sampling.** Without `-graph`, each invariant is judged in Samples
+  traces of Steps steps of the Go sampler (`qeval.Model.Simulate`, trace i
+  drawn from the seed and i), the first false state ending a trace, as
+  quint run --invariant; the possibles the search did not find are looked
+  for in the sampler's traces (a predicate in a state, steps in turn,
+  their arguments too, which quint's actionTaken cannot show), with or
+  without `-graph`. A trace the evaluator cannot draw is no verdict
+  (unchecked, exit 2), never a pass.
+- **Tests:** validate/model's TestCompiledSimulateAgreesWithQuint (the
+  same verdicts as quint's on graph, terminal, lasso, live, vending
+  sampled and graphed, a literal overridden, predicates found, impossible
+  and in a cut graph; not done reported where quint's were done) and
+  TestCompiledMatrixAgreesWithQuint, run with PATH empty after quint's;
+  TestCompiledAnalysisRefusals (an artifact without the predicates, a
+  predicate it lacks, an inlined constant overridden, a parameter given
+  no literal, -verify); TestCompiledChoiceInSimulate (the switch); qtest's
+  TestModelClaimsFromCompiledModel (every claim kind, passing and failing
+  as with quint) and TestModelCompiledRefused. The examples' Model and
+  simulate tests (hello, crossdb, migrate-payments, requeue, lease's
+  design matrix) are on RequireModel and run in CI with quint off PATH;
+  hello's model mutant, written at run time, stays quint's (Q2).
+
+**Left in Q1.** connect.Test's runs (`then`, `reps`, `expect`, `fail`
+as a trace's steps). Integers past 64 bits. A nightly job comparing Go's
+and quint's traces on every example's model, as TestAgreesWithQuint does
+for quint's alone.
+
+## 111. The front end's oracle: quint's outputs in canonical form
+
+ROADMAP Q3 (docs/q2-front-end.md §4): before a Go front end exists, the
+harness that will judge it. internal/qoracle runs two front ends on a
+program and compares their parse, typecheck and compile outputs by a
+canonical form (internal/qoracle/canon), over a pinned corpus and
+generated programs. Its first "front end" is quint again.
+
+- **Ids become paths, not counters.** A node's id is the path of the
+  node that first carries it, from its declaration
+  (`m/step/expr/args/1`), in a walk of each field in sorted order. §4.2
+  proposed a counter in walk order; a path makes a difference local (a
+  declaration changed renames nothing outside it), is invariant under
+  any renumbering, and keeps sharing (an inlined alias's node, two
+  places with one id, has one path). A form's path stays itself, so the
+  form of a form is the form.
+- **Order by layer.** quint toposorts a module's declarations (and the
+  modules) layer by layer and sorts a layer with JavaScript's default
+  sort, which compares ids as strings: shifting the ids reorders
+  independent declarations. The form keeps the layer (`$layer`, ported
+  from quint's call graph) and orders a layer by declaration key. A
+  front end numbering its nodes otherwise cannot match quint's order
+  within a layer, so the bar is the layering.
+- **Names follow their binders.** The compile IR's unshadowed names
+  (`p_<lambda id>`, a shadowing let's `x_<let id>`) become
+  `x_@<binder's path>` when the suffix is an id of a lambda or let
+  binding x; an instance's copy keeps its original's lambda id, absent
+  from the IR, and becomes `x_#k`, numbered within its declaration. A
+  suffix that is the id of a node binding no x, or on a name nothing
+  binds locally (`__gtg_inv_1`), is the user's and stays. The names
+  quint's parser makes from an id (`quintTupledLambdaParam<id>`,
+  `quintDestructTemp<id>`, `__undefinedParam<id>`) take the id's path in
+  every output. Type, row, effect and entity variables are renamed per
+  entry of `types` and `effects`, the unit every reader reads, and a row
+  of no fields over another is that other (quint writes a unit's fields
+  either way, by its solver's order).
+- **What no form can name is dropped.** A type node's id inside `types`
+  is from the modules' id space or from a builtin signature's, which
+  quint parses with ids of its own: they collide, and no reader uses
+  them (qeval decodes `Type.ID` and reads it nowhere). Errors are the
+  first, then the set of the rest: quint reports a type error once per
+  module analysed before it.
+- **Tested as the claim it makes.** On small random IRs, two forms are
+  equal exactly when some bijection of ids, of each declaration's
+  non-id suffixes and of each entry's variables maps one IR to the
+  other: brute force tries every bijection. On quint's own outputs: the
+  form is idempotent, a shifted model (a module consuming ids first) has
+  the model's form, and a definition renamed or changed differs there
+  alone.
+- **The stub that proves the plumbing.** The harness's stub front end is
+  quint with that shifting module written first on the main file's line
+  (its columns and offsets taken back, the module and its entries
+  stripped): over the corpus it is the shift test at scale, and it found
+  the order, the doubled errors and an end-column quirk (a node starting
+  on the first line keeps the shift in its end column wherever it ends)
+  before any Go code.
+- **The corpus is pinned, quint's part fetched.** testdata/corpus.json
+  lists every entry (the repository's .qnt files, its bindings'
+  evaluation and --invariant modules, quint's examples, fixtures and
+  unit tests' inline programs) with its text's sha256, its constructs,
+  compile's settings and quint's verdict. quint's files are fetched at
+  the tag (ci/fetch-quint-src.sh, the commit checked), never vendored;
+  per push a test fails on a repository .qnt file the manifest does not
+  pin, and the nightly on a verdict quint no longer gives.
 
 ## 112. I/O specifications: the effects a step must make (CW12 P1)
 

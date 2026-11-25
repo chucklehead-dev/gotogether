@@ -249,6 +249,13 @@ type SimulateOptions struct {
 	// (InvariantVerdict's Replayed): a violation the Go evaluator found is
 	// then quint's too.
 	Replay bool
+	// Compiled is the binding's compiled model (gotogether compile's) to
+	// analyse by, with no quint: the Go evaluator's graph, searches and
+	// sampling alone, what needs quint (the graph's cross-check against
+	// quint's samples, the witnesses' replays) reported not done, and
+	// -verify refused ("": as GOTOGETHER_COMPILED says, validate.CompiledChoice:
+	// the artifact beside the binding where quint is not installed).
+	Compiled string
 }
 
 // A Report is Simulate's: every verdict, with what bounds it,
@@ -281,6 +288,13 @@ type Report struct {
 	// EvaluatorBug, if set, is quint reaching a state the evaluator's
 	// complete graph lacks: the graph's verdicts are void.
 	EvaluatorBug string
+	// Compiled is the compiled model the report is the Go evaluator's
+	// by, "" for an analysis with quint (SimulateOptions.Compiled).
+	Compiled string
+	// NotDone are the parts of the analysis that need quint, not done by a
+	// compiled one (the cross-check, a witness's replay), each with why: no
+	// verdict rests on them, and none is reported passed.
+	NotDone []string
 	// Code is the verdict as the CLI exits: 0 for every verdict as the
 	// section says, 1 for one that fails, 2 for none failing and one with
 	// no verdict (the evaluator refused an invariant, or stopped).
@@ -390,6 +404,8 @@ type PossibleVerdict struct {
 type sim struct {
 	b   strings.Builder
 	rep *Report
+	// compiled is the compiled model analysed by ("" with quint)
+	compiled string
 }
 
 func (s *sim) printf(format string, a ...any) { fmt.Fprintf(&s.b, format, a...) }
@@ -476,6 +492,18 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 		s.printf("simulate %s: not verified: %s\n", bpath, sec.VerifySkip)
 		return s.rep, nil
 	}
+	if checker != nil {
+		opt.Compiled = checker.CompiledPath()
+	} else if opt.Compiled == "" {
+		if opt.Compiled, err = validate.CompiledChoice(bpath, opt.Quint); err != nil {
+			return nil, fmt.Errorf("simulate: %w", err)
+		}
+	}
+	if opt.Compiled != "" && opt.Verify > 0 {
+		return nil, fmt.Errorf("simulate -verify: quint verify (Apalache) checks every trace, and %s is analysed by its compiled model %s, with no quint: run -verify where quint is installed (GOTOGETHER_COMPILED=0), or -graph for the Go evaluator's bounded proof",
+			bpath, opt.Compiled)
+	}
+	s.compiled, s.rep.Compiled = opt.Compiled, opt.Compiled
 	if sec.VerifySteps > 0 && opt.Verify >= sec.VerifySteps {
 		opt.Verify, capped = sec.VerifySteps, ", the binding's verifySteps"
 	}
@@ -527,11 +555,18 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 		originalSources, _ = validate.CaptureModelSources(b.SpecPath())
 	}
 	var possibles []*possibleCheck
-	if len(possibleList) > 0 || opt.Graph {
+	if len(possibleList) > 0 || opt.Graph || opt.Compiled != "" {
 		// the possibles need the model's actions (a name alone is a step
-		// if it is one) and its evaluator, as the graph does
+		// if it is one) and its evaluator, as the graph does, and so does
+		// a compiled model's sampling
 		if checker == nil {
-			c, err := validate.NewChecker(ctx, bpath, validate.Options{Quint: opt.Quint})
+			var c *validate.Checker
+			var err error
+			if opt.Compiled != "" {
+				c, err = validate.NewCompiledChecker(bpath, opt.Compiled, validate.Options{})
+			} else {
+				c, err = validate.NewChecker(ctx, bpath, validate.Options{Quint: opt.Quint})
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -557,6 +592,13 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 	if opt.Graph {
 		prepared("completed")
 		if err := s.graph(ctx, bpath, b, checker, possibles, overrides, invariants, eventually, opt); err != nil {
+			return nil, err
+		}
+		return s.rep, nil
+	}
+	if opt.Compiled != "" {
+		prepared("completed")
+		if err := s.sampled(ctx, bpath, b, checker, possibles, possibleList, overrides, invariants, holds, allows, opt); err != nil {
 			return nil, err
 		}
 		return s.rep, nil

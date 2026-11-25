@@ -3,7 +3,6 @@ package model
 import (
 	"context"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 
@@ -176,11 +175,11 @@ func (c *modelChecker) Possible(ctx context.Context, ps []binding.Possible, cfg 
 	if !ok {
 		return nil, fmt.Errorf("possible: %s has no step action: the search takes step's transitions", b.Module)
 	}
-	if len(e.Module.Consts) > 0 {
+	if left := unvalued(e); len(left) > 0 {
 		return nil, fmt.Errorf("possible: the binding computes constants from a run's steps (%s): give them values (the simulate section's constants, or -const)",
-			strings.Join(slices.Sorted(maps.Keys(e.Module.Consts)), ", "))
+			strings.Join(left, ", "))
 	}
-	consts := map[string]qeval.Value{}
+	consts := e.Consts
 	init, err := e.Model.Init(consts, e.Module.Init)
 	if err != nil {
 		return nil, fmt.Errorf("possible: init: %w", err)

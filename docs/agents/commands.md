@@ -114,6 +114,20 @@ AGENTS.md has the general requirements.
   reports. They are bounded cases rather than automatic shrinking outputs.
   Complete finite sets come from separately rendered pure relation oracles;
   native action execution contributes sampled membership checks only.
+  The front end's oracle (internal/qoracle, Q3; docs/q2-front-end.md §4.5):
+  `QUINT_VERSION=0.33.1 ci/fetch-quint-src.sh DIR` fetches quint's sources
+  at the tag (`QUINT_SRC=DIR` for the tests); `GOTOGETHER_QFRONT_CORPUS=1`
+  runs the pinned corpus through the harness (quint against its stub,
+  `GOTOGETHER_QFRONT_STUB=shifted` unset, or `quint`),
+  `GOTOGETHER_QFRONT_ENTRY=<id substring>` some entries alone,
+  `GOTOGETHER_QFRONT_SAMPLE=n` generated programs from
+  `GOTOGETHER_SEED_OFFSET+1` and `GOTOGETHER_QFRONT_SEED=n` one (with every
+  ill-typed mutation), `GOTOGETHER_QFRONT_ILL=1` the reach of every front-end
+  QNT code; `GOTOGETHER_KEEP=/dir` keeps shrunk disagreements. The manifest
+  (internal/qoracle/testdata/corpus.json) is rewritten, with quint's
+  verdicts, by `GOTOGETHER_UPDATE_CORPUS=1 QUINT_SRC=DIR go test -run
+  TestUpdateManifest ./internal/qoracle/` (about 25 minutes; `=entries` with `GOTOGETHER_QFRONT_ENTRY` re-surveys some); testdata/shift-known.txt lists the entries whose verdict quint changes with its ids; per push,
+  TestManifestCurrent fails on a .qnt file it does not pin.
   validate keeps quint's typechecks and the evaluation modules' compiles
   across processes, by content (quint's version, the spec's and its
   imports' paths and contents, every .qnt beside them, the arguments),
@@ -167,7 +181,14 @@ AGENTS.md has the general requirements.
   quint is not on PATH and the file exists; `1`: always, and a binding
   without one fails the test (a job without quint); `0`: never. Keep it
   current with `gotogether compile -binding B -check` where quint is.
-  `qtest.RequireModel(t, binding)` skips only without both. connect's
+  `qtest.RequireModel(t, binding)` skips only without both. The same
+  switch analyses the model alone from it: `qtest.Model`'s claims,
+  `gotogether simulate` (sampling, `-graph`, `-matrix`, possibles) and
+  `model.New` run on the Go evaluator with no quint (the binding's
+  simulate.terminal and possibles' predicates are vals of the artifact's
+  module), the graph's cross-check against quint's samples and the
+  witnesses' replays reported not done (`Report.NotDone`), `-verify`
+  refused. connect's
   traces follow the same switch with a spec's compiled model
   (`gotogether compile -spec S [-main M]` writes `<stem>[.<main>].mbt.json`
   beside it; connect/testdata's bank and instance models have one, kept
