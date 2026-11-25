@@ -670,7 +670,8 @@ item is its own decision before it starts; the red-nightly rule applies.
   - the bar above;
   - quint's fixtures and examples fetched at `QUINT_VERSION`, not
     vendored;
-  - `temporal`, `assume`, destructuring and `apalache::` refused at first;
+  - destructuring, `temporal` (checked and passed through) and `assume`
+    accepted from the start, only `apalache::` refused at first;
   - no `effects` written: the Rust evaluator reads none;
   - internal for now;
   - `go` the default only after a nightly shadow period.

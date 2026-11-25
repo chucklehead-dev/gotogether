@@ -232,16 +232,30 @@ sum types, `match`, record spread, `run`s with `.then`, and
 declarations, `assume`, destructuring, `apalache::` or hex literals
 (checked with grep). That is the first subset.
 
-By the maintainer's decision 4, `temporal`, `assume`, destructuring and
-`apalache::` are refused at first, as `qeval.Unsupported` is ("needs
+By the maintainer's decision 4 (revised 2026-11-25), destructuring,
+`temporal` and `assume` are in the front end from P1/P2, and only
+`apalache::` is refused at first, as `qeval.Unsupported` is ("needs
 quint"), rather than guessed. quint's own corpus uses them far more than
-this repository does (counted by grep):
-- 29 of quint's 77 examples use at least one of them. By file: temporal
-  13, assume 8, destructuring 11, apalache:: 1. Hex literals appear in 3.
-- 6 of its 73 fixtures use at least one of them.
+this repository does. Counted by grep over the 77 examples with comments
+stripped, destructuring matching `val (a, b) = e` and `((a, b)) => e`:
+33 use at least one; destructuring 18 (13 use nothing else of the four),
+`temporal` 13 (9), `assume` 8 (3), `apalache::` 1 (1). Destructuring alone
+releases 13 examples, with `temporal` 24, with `assume` too 32; only the
+one `apalache::` example is left. 6 of the 73 fixtures use at least one.
 
-Until those constructs are implemented, those files enter Q3 as expected
-refusals, not as accepted programs.
+- **Destructuring** is sugar over tuples and records: resolved and
+  flattened into field reads (as quint's IR writes them), so the type
+  checker and qeval gain nothing new.
+- **`temporal`** definitions are parsed, typed and effect-checked, and
+  passed through. Judging one is a liveness question (Apalache, or the
+  graph's lassos), not a replay: a check that would evaluate a temporal
+  operator refuses there, naming it, while the rest of the model is used.
+- **`assume`** is a named boolean over constants: typed, and evaluated
+  once when an instance's constants are bound; a false one is reported
+  with its name and position.
+
+`apalache::` files enter Q3 as expected refusals, not as accepted
+programs.
 
 ### 2.2 Types and effects
 
@@ -699,8 +713,8 @@ What can ship early, and on what:
    implementation. That has value as an oracle for both, but the cost
    persists.
 5. **Scope creep toward full parity**: effects written, `documentation`,
-   the TLA+ target, `assume`, `temporal`. Keep to the consumed subset
-   and refuse the rest (decisions 4 and 5).
+   the TLA+ target, evaluating temporal operators. Keep to the consumed
+   subset and refuse the rest (decisions 4 and 5).
 
 **Decided** (the maintainer, 2026-11-25):
 1. **No contact with Informal Systems for now.** gotogether proceeds on
@@ -712,8 +726,11 @@ What can ship early, and on what:
    position parity (§3.4).
 3. **quint's fixtures and examples are fetched at the pinned tag**
    (`QUINT_VERSION`), not vendored.
-4. **`temporal`, `assume`, destructuring and `apalache::` are refused as
-   "needs quint" at first.**
+4. **Destructuring, `temporal` and `assume` are accepted from the start;
+   only `apalache::` is refused as "needs quint" at first** (revised the
+   same day from refusing all four: the three release 32 of quint's 77
+   examples, §2.1). `temporal` definitions are checked and passed
+   through; a check that would evaluate one refuses there.
 5. **`effects` is written only if the Rust evaluator's stdin path needs
    it.** At v0.33.1 it does not (§1.1), so the Go front end writes no
    `effects`.
