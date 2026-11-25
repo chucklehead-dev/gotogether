@@ -21,6 +21,10 @@ type Eval struct {
 	Model   *qeval.Model
 	Err     error
 	Literal func(s string) (qeval.Value, error)
+	// Consts are the values of Module.Consts' parameters the instance
+	// gives, by parameter name: a compiled model's, whose literal
+	// constants are parameters (nil: none given)
+	Consts map[string]qeval.Value
 }
 
 // EvaluatorOf is validate's evaluator of checker (a *validate.Checker)

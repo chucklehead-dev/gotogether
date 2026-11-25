@@ -658,8 +658,10 @@ item is its own decision before it starts; the red-nightly rule applies.
   `compile -check` compares meaning). Left: 30 bindings over 1 MB (counters
   8 MB, edgepublish 22 MB, the grist apps 2-7 MB; IR, about twenty-fold
   compressible): a compact artifact or a larger budget is the maintainer's
-  call; and the tests of Q1's fragment (`qtest.Model`, simulate; connect's
-  traces from a spec's compiled model since Q1's first slices), the checker's own callers and Q2's run-time models, each listed.
+  call; and connect's tests not yet moved to a spec's compiled model (Q1's
+  first slices), the checker's own callers and Q2's run-time models, each
+  listed (`qtest.Model` and simulate run from the binding's model since
+  Q1's next slice: lease's design binding keeps one, 23 models).
 - **Q1: the evaluator's whole fragment (M). First slices built** (DESIGN
   §110): the refusals inventoried (none of the repository's 67 agreeing
   models hits one but rr's order-dependent fold, on purpose), the builtins
@@ -670,10 +672,15 @@ item is its own decision before it starts; the red-nightly rule applies.
   (Go's traces replay in quint pinned, quint's are paths of the
   evaluator's, a small model's reachable sets agree), and connect's traces,
   Require, Eval and bound checks from a compiled spec (`gotogether compile
-  -spec`, `gotogether.mbt/1`, `GOTOGETHER_COMPILED`) with no quint. Left:
-  `qtest.Model` and `simulate` from a compiled binding model (the
-  artifact to carry the claims' PossibleModule; the cross-check and the
-  witness replays reported as not done; sampled invariants by Simulate),
+  -spec`, `gotogether.mbt/1`, `GOTOGETHER_COMPILED`) with no quint. Next
+  slice built (2026-11-25): `qtest.Model`'s claims, `gotogether simulate`
+  (sampling, `-graph`, `-matrix`, possibles) and `model.New` from the
+  binding's compiled model (its module carries the simulate section's
+  terminal and possibles' predicates; a literal constant overridden by a
+  literal; the cross-check against quint's samples and the witnesses'
+  replays reported not done, `-verify` refused; sampling by Simulate),
+  verdicts equal to quint's on the same bindings; hello's, crossdb's,
+  migrate-payments', requeue's and lease's design tests released. Left:
   connect.Test's runs (`then`, `reps`, `expect`, `fail`), integers past 64
   bits, and a nightly comparing Go's traces with quint's on every
   example's model. Seeds cannot match quint's generator, so parity is by

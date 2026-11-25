@@ -167,7 +167,14 @@ AGENTS.md has the general requirements.
   quint is not on PATH and the file exists; `1`: always, and a binding
   without one fails the test (a job without quint); `0`: never. Keep it
   current with `gotogether compile -binding B -check` where quint is.
-  `qtest.RequireModel(t, binding)` skips only without both. connect's
+  `qtest.RequireModel(t, binding)` skips only without both. The same
+  switch analyses the model alone from it: `qtest.Model`'s claims,
+  `gotogether simulate` (sampling, `-graph`, `-matrix`, possibles) and
+  `model.New` run on the Go evaluator with no quint (the binding's
+  simulate.terminal and possibles' predicates are vals of the artifact's
+  module), the graph's cross-check against quint's samples and the
+  witnesses' replays reported not done (`Report.NotDone`), `-verify`
+  refused. connect's
   traces follow the same switch with a spec's compiled model
   (`gotogether compile -spec S [-main M]` writes `<stem>[.<main>].mbt.json`
   beside it; connect/testdata's bank and instance models have one, kept

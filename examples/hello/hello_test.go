@@ -33,16 +33,24 @@ var retried = qtest.NamedScenario("a retry recognised",
 // whose replay needed something no run does would fail here, with the
 // search's extent, where every run would still conform to it.
 func TestRetryPossible(t *testing.T) {
+	qtest.RequireModel(t, "hello.binding.yaml")
 	qtest.Model(t, "hello.binding.yaml").Expect(t, qtest.Possible(retried))
 }
 
 // The model proves exactlyOnce for REQUESTS = 1.to(3) before any code
 // runs: no reachable state of its whole graph violates it, and every
-// state the step cannot leave is the client done. A model mutant whose
-// replay counts again (the design error a counter without dedupe makes)
-// is refuted, its shortest counterexample replayed by quint.
+// state the step cannot leave is the client done (where quint is not
+// installed, by the compiled model, the cross-check against quint's
+// samples not done).
 func TestModelProves(t *testing.T) {
+	qtest.RequireModel(t, "hello.binding.yaml")
 	qtest.Model(t, "hello.binding.yaml").Expect(t, qtest.Proves("exactlyOnce"), qtest.NoDeadlocks())
+}
+
+// A model mutant whose replay counts again (the design error a counter
+// without dedupe makes) is refuted, its shortest counterexample replayed
+// by quint: the mutant is written at run time, so only quint compiles it.
+func TestModelMutantRefuted(t *testing.T) {
 	qtest.Model(t, modelMutant(t)).Expect(t, qtest.Refutes("exactlyOnce").InAtMost(2))
 }
 

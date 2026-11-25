@@ -11,5 +11,6 @@ import (
 // cannot leave are those with the step's three database ids spent, the
 // abstraction's end (simulate.terminal), and no others.
 func TestGraphEndsWhenIdsSpent(t *testing.T) {
+	qtest.RequireModel(t, binding)
 	qtest.Model(t, binding).Expect(t, qtest.Refutes("oneDatabasePerResource").InAtMost(2), qtest.NoDeadlocks())
 }

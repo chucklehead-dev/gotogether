@@ -78,6 +78,7 @@ func TestRequirementsHaveProvenance(t *testing.T) {
 // possible in it (the binding's simulate.possible says the same to
 // gotogether simulate).
 func TestScenariosPossible(t *testing.T) {
+	qtest.RequireModel(t, bindingFile)
 	qtest.Model(t, bindingFile).Expect(t, qtest.Possible(
 		qtest.NamedScenario("R1 R3 R5 authorized, part captured, refunded in two, a third refused",
 			qtest.Takes("authorize").With("id", `"ch_1"`).With("amount", "1000").Outcome("ok"),
@@ -98,18 +99,20 @@ func TestScenariosPossible(t *testing.T) {
 // capture's stale doc comment), so R3's partial capture is impossible in
 // it: `gotogether simulate` prints FAIL for the binding's possible.
 func TestDraftForbidsPartialCapture(t *testing.T) {
-	qtest.RequireQuint(t)
-	c, err := validate.NewChecker(t.Context(), draftBinding, validate.Options{})
+	qtest.RequireModel(t, draftBinding)
+	// quint's checker, or the draft's compiled model where quint is not
+	// installed: the search is the Go evaluator's either way
+	a, err := model.New(t.Context(), draftBinding, validate.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.Close()
-	sim := c.Binding.Simulate
+	defer a.Close()
+	sim := a.Checker().Binding.Simulate
 	var consts []string
 	for k, v := range sim.Constants {
 		consts = append(consts, k+"="+v)
 	}
-	rs, err := model.For(c).Possible(t.Context(), sim.Possible, model.PossibleSearch{Constants: consts})
+	rs, err := a.Possible(t.Context(), sim.Possible, model.PossibleSearch{Constants: consts})
 	if err != nil {
 		t.Fatal(err)
 	}

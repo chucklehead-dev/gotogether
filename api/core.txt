@@ -2459,6 +2459,7 @@ var Renamed = map[string]string{"quint-start": "gotogether-start", "quint-model-
 var Targets = map[string]string{…}
 
 == github.com/chucklehead-dev/gotogether/validate
+const CompiledEnv = "GOTOGETHER_COMPILED"
 const CompiledFormat = "gotogether.model/1"
 const DefaultChoiceLimit = 20000
 const DefaultHiddenDepth = 4
@@ -2483,6 +2484,7 @@ func Cached(ctx context.Context, bindingPath string, o Options) (*Checker, error
 func CaptureModelSources(spec string) (*SourceGuard, error)
 func Compile(bindingPath string, opt Options) (*CompiledModel, error)
 func CompileMBT(ctx context.Context, c MBTOptions, out string) (*MBTModel, error)
+func CompiledChoice(bindingPath, quint string) (string, error)
 func CompiledFor(bindingPath string) string
 func CurrentTools(o Options) Tools
 func EventuallyName(val string) string
@@ -2539,6 +2541,7 @@ type Checker struct
     method (*Checker) CheckBatch(ctx context.Context, runs [][]qtrace.Step, perProcess int) (reports []*Report, errs []error)
     method (*Checker) Close() error
     method (*Checker) Compiled() *CompiledModel
+    method (*Checker) CompiledPath() string
     method (*Checker) Judge(ctx context.Context, steps []qtrace.Step, opt SearchOptions) (*Judgment, error)
     method (*Checker) JudgeBatch(ctx context.Context, runs [][]qtrace.Step, opt SearchOptions, check BatchCheck) (js []*Judgment, errs []error)
     method (*Checker) Key(steps []qtrace.Step) string
@@ -3523,6 +3526,8 @@ type Report struct
     field Deadlocks *Verdict
     field Dead *Verdict
     field EvaluatorBug string
+    field Compiled string
+    field NotDone []string
     field Code int
     field Text string
     field Sources map[string]string
@@ -3551,6 +3556,7 @@ type SimulateOptions struct
     field Out string
     field Deadline time.Time
     field Replay bool
+    field Compiled string
 type StepActionReachability struct
     field Status string
     field Reason string

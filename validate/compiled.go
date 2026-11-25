@@ -8,9 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/binding"
@@ -130,7 +133,7 @@ func Compile(bindingPath string, opt Options) (*CompiledModel, error) {
 		return nil, fmt.Errorf("compile: the evaluation module is written beside the model, for its import: %w", err)
 	}
 	defer os.RemoveAll(dir)
-	em, err := compiledBinding(b, m).EvalModule(m, filepath.Join(dir, "eval.qnt"))
+	em, err := compiledModule(b, m, filepath.Join(dir, "eval.qnt"))
 	if err != nil {
 		return nil, fmt.Errorf("compile: the binding has no evaluation module, so the Go evaluator cannot judge its runs (%v): validate them with quint", err)
 	}
@@ -219,6 +222,43 @@ func CompiledFor(bindingPath string) string {
 	}
 	name = strings.TrimSuffix(name, ".binding")
 	return filepath.Join(dir, name+".model.json")
+}
+
+// CompiledEnv is the variable that says when a binding's compiled model
+// (CompiledFor) stands in for quint: qtest's checks, qtest.Model and
+// gotogether simulate (validate/model) read it alike.
+const CompiledEnv = "GOTOGETHER_COMPILED"
+
+// CompiledChoice is the compiled model a check of bindingPath uses in
+// place of quint, per GOTOGETHER_COMPILED, "" for none: unset, the one at
+// CompiledFor where quint (the binary quint names, "" for quint) is not on
+// PATH; "1", always, an error where the binding has none; "0", never.
+func CompiledChoice(bindingPath, quint string) (string, error) {
+	path := CompiledFor(bindingPath)
+	_, statErr := os.Stat(path)
+	switch mode := os.Getenv(CompiledEnv); mode {
+	case "0":
+		return "", nil
+	case "1":
+		if statErr != nil {
+			return "", fmt.Errorf("%s=1 checks by the binding's compiled model, and %s has none at %s (%v): compile it (gotogether compile -binding %s) where quint is installed",
+				CompiledEnv, bindingPath, path, statErr, bindingPath)
+		}
+		return path, nil
+	case "":
+		if statErr != nil {
+			return "", nil
+		}
+		if quint == "" {
+			quint = "quint"
+		}
+		if _, err := exec.LookPath(quint); err == nil {
+			return "", nil
+		}
+		return path, nil
+	default:
+		return "", fmt.Errorf("%s=%q: want 1 (always the compiled model), 0 (never) or unset (where quint is not installed)", CompiledEnv, mode)
+	}
 }
 
 // Differs lists what differs in meaning between cm and other: the binding
@@ -311,6 +351,9 @@ type compiledState struct {
 	ev      *evaluator
 	notes   []string
 	sources []File // source files actually checked when this artifact was loaded
+	// constants are the binding's as it was loaded (the artifact's: its
+	// hash is), so that a model analysis's instance is compared with them
+	constants map[string]string
 }
 
 // noQuint is a compiled checker's quint: no binary, so a check that
@@ -375,7 +418,7 @@ func NewCompiledChecker(bindingPath, compiledPath string, opt Options) (*Checker
 	// the evaluation module this gotogether writes for the binding: one
 	// another wrote (an older toolkit's, its vals or expects otherwise)
 	// is another check
-	em, err := compiledBinding(b, m).EvalModule(m, filepath.Join(filepath.Dir(b.SpecPath()), compiledEvalDir, "eval.qnt"))
+	em, err := compiledModule(b, m, filepath.Join(filepath.Dir(b.SpecPath()), compiledEvalDir, "eval.qnt"))
 	if err != nil {
 		return nil, fmt.Errorf("compiled model %s: the binding has no evaluation module (%v)", compiledPath, err)
 	}
@@ -388,8 +431,69 @@ func NewCompiledChecker(bindingPath, compiledPath string, opt Options) (*Checker
 		return nil, fmt.Errorf("compiled model %s: %w: %s", compiledPath, err, recompile)
 	}
 	opt.Quint = noQuint
-	cs := &compiledState{path: compiledPath, model: cm, ev: &evaluator{em: cm.Eval, m: qm}, notes: notes, sources: checkedSources}
+	cs := &compiledState{path: compiledPath, model: cm, ev: &evaluator{em: cm.Eval, m: qm}, notes: notes, sources: checkedSources, constants: maps.Clone(b.Constants)}
 	return &Checker{Binding: b, Model: m, Options: opt, scratch: &scratch{}, compiled: cs}, nil
+}
+
+// analysis is the artifact's evaluator for a model analysis of c's
+// instance (validate/model: the graph, the possibles' search, sampling),
+// which asks for the module make writes: the compiled module itself, its
+// Possible named by the artifact's vals of the predicates make's names
+// (an invariant, an eventual val, or one of the simulate section's
+// predicates: analysisPredicates), and its constants given as the
+// instance gives them. What the artifact cannot answer is refused,
+// naming the fix, never compiled: a predicate it carries no val of; a
+// constant it takes as a parameter given as no literal; a constant it
+// inlined (no literal in the binding) given another value.
+func (cs *compiledState) analysis(c *Checker, make func(path string) (*binding.EvalModule, error)) *evaluator {
+	recompile := fmt.Sprintf("compile it again (gotogether compile -binding %s -o %s)", c.Binding.Path, cs.path)
+	want, err := make(filepath.Join(filepath.Dir(c.Binding.SpecPath()), compiledEvalDir, "eval.qnt"))
+	if err != nil {
+		return &evaluator{err: err}
+	}
+	have := cs.ev.em
+	view := *have
+	view.Possible = map[string]string{}
+	var missing []string
+	for _, p := range slices.Sorted(maps.Keys(want.Possible)) {
+		switch {
+		case have.Possible[p] != "":
+			view.Possible[p] = have.Possible[p]
+		case have.Invariants[p] != "":
+			view.Possible[p] = have.Invariants[p]
+		case have.Eventually[p] != "":
+			view.Possible[p] = have.Eventually[p]
+		default:
+			missing = append(missing, p)
+		}
+	}
+	if len(missing) > 0 {
+		return &evaluator{err: fmt.Errorf("%w: the compiled model %s carries no val for %s: name it in the binding (its invariants, or simulate.terminal or simulate.possible) and %s, or run with quint (GOTOGETHER_COMPILED=0)",
+			ErrNeedsQuint, cs.path, strings.Join(missing, ", "), recompile)}
+	}
+	consts := map[string]qeval.Value{}
+	for _, k := range slices.Sorted(maps.Keys(have.Consts)) {
+		v, ok := c.Binding.Constants[k]
+		if !ok || strings.Contains(v, "{{") {
+			continue // no value: the analysis names it, as without the artifact
+		}
+		x, err := cs.ev.literal(v)
+		if err != nil {
+			return &evaluator{err: fmt.Errorf("%w: constant %s = %s: the compiled model %s takes %s as a literal, and %s is none the Go evaluator reads (%v): give a literal (Set(1, 2, 3), not 1.to(3)), or run with quint (GOTOGETHER_COMPILED=0)",
+				ErrNeedsQuint, k, v, cs.path, k, v, err)}
+		}
+		consts[have.Consts[k]] = x
+	}
+	for _, k := range slices.Sorted(maps.Keys(cs.constants)) {
+		if _, param := have.Consts[k]; param {
+			continue
+		}
+		if v := c.Binding.Constants[k]; strings.TrimSpace(v) != strings.TrimSpace(cs.constants[k]) {
+			return &evaluator{err: fmt.Errorf("%w: constant %s = %s: the compiled model %s holds the binding's %s = %s in its module (no literal, so no parameter): give the binding a literal for it and %s, or run with quint (GOTOGETHER_COMPILED=0)",
+				ErrNeedsQuint, k, v, cs.path, k, cs.constants[k], recompile)}
+		}
+	}
+	return &evaluator{em: &view, m: cs.ev.m, consts: consts}
 }
 
 func short12(h string) string {
@@ -413,6 +517,15 @@ func (c *Checker) Compiled() *CompiledModel {
 		return nil
 	}
 	return c.compiled.model
+}
+
+// CompiledPath is the path of the compiled model c judges by, as
+// NewCompiledChecker was given it; "" for a checker that asks quint.
+func (c *Checker) CompiledPath() string {
+	if c.compiled == nil {
+		return ""
+	}
+	return c.compiled.path
 }
 
 // checkCompiled is Check by the compiled model alone: each actor's plan

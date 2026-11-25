@@ -11,7 +11,7 @@ back; a model that says every request counts once. The whole system is
 | [hello.binding.yaml](hello.binding.yaml) | the recorded steps as calls of the model's actions (`id` is the step's field of that name); what the model must be able to do (`simulate.possible`: a retry recognised, the client done) |
 | [hello.go](hello.go) | the service (`Counter.Add`, which records `apply` or `replay`), the retrying client, `Run` on a qenv simulation |
 | [hello_test.go](hello_test.go) | one `qtest.System`, explored by seeds; `TestMutant` says what catches each mutant |
-| [hello.model.json](hello.model.json) | the model compiled for the Go evaluator (`gotogether compile -binding hello.binding.yaml`): where quint is not installed, the trace tests are judged by it (`qtest.RequireModel`); CI checks it is current (`gotogether compile -binding hello.binding.yaml -check`) |
+| [hello.model.json](hello.model.json) | the model compiled for the Go evaluator (`gotogether compile -binding hello.binding.yaml`): where quint is not installed, the trace tests are judged by it, and the model's own claims analysed by it (`qtest.RequireModel`); CI checks it is current (`gotogether compile -binding hello.binding.yaml -check`) |
 | [testdata/mutants](testdata/mutants) | `noDedupe`: a `hello.go` whose `Add` counts a retried or duplicated request again, the bug planted by hand (a `go test -overlay`, built and run by `qtest.Mutants`) |
 
 ## What each test catches
@@ -19,7 +19,8 @@ back; a model that says every request counts once. The whole system is
 | test | mutant | check | verdict |
 |---|---|---|---|
 | `TestRetryPossible` | none: the model alone | the scenario `a retry recognised` (`qtest.NamedScenario`: `apply` of request 1, its `replay`, then `done`) searched in the model on its own (`qtest.Model(...).Expect(t, qtest.Possible(...))`); the binding's `simulate.possible` says the same of any retry (`gotogether simulate`) | possible, with the witness `apply(id = 1), replay(id = 1), ...`; a model too strict to replay (a guard no run meets) fails here, "impossible", where every run would still conform |
-| `TestModelProves` | none: the model alone | `qtest.Proves("exactlyOnce")` and `qtest.NoDeadlocks()` over the model's whole state graph, then a model mutant whose replay counts again, `qtest.Refutes("exactlyOnce").InAtMost(2)` | proved for `REQUESTS = 1.to(3)` (8 states); the mutant refuted by `apply(id = 1), replay(id = 1)`, replayed by quint test |
+| `TestModelProves` | none: the model alone | `qtest.Proves("exactlyOnce")` and `qtest.NoDeadlocks()` over the model's whole state graph | proved for `REQUESTS = 1.to(3)` (8 states); without quint by the compiled model, the cross-check against quint's samples not done |
+| `TestModelMutantRefuted` | a model mutant whose replay counts again (written at run time: quint's) | `qtest.Refutes("exactlyOnce").InAtMost(2)` | refuted by `apply(id = 1), replay(id = 1)`, replayed by quint test |
 | `TestFaithfulConforms` | none | 30 seeds, one message fault in five | every run conforms, and some run follows the scenario (`Some(retried)`) |
 | `TestExhaustive` | none | every run within 2 delays and 2 faults (`System.Exhaust`) | all 4430 conform, the search complete |
 | `TestMutationOfTheCounter` | every mutant `qweave -mutate` weaves (9), when woven (CI does) | 30 seeds each, and the client done in 90% of runs (`Takes("done")`) | `NoSurvivors`, two marked equivalent with their reasons; a client that sent too few requests is killed by `done`, an action that needs every request applied |
