@@ -682,9 +682,10 @@ and for 1-minimality over the reductions).
 - The toposort sorts a layer with JavaScript's default sort, comparing
   ids as strings: shifting ids reorders independent declarations, and
   modules. Bar (2)'s "declaration order is part of it" holds only up to
-  the layer. *For the maintainer:* binding's `Vars` follow the
-  typecheck's order; either binding orders them itself, or P1 must
-  number nodes exactly as quint does.
+  the layer. *Decided:* binding orders its `Vars` itself, by name
+  (as qeval and typegen already did), so checkpoints and lint lists no
+  longer follow the typecheck's order, and P1 need not number nodes as
+  quint does for them.
 - **quint's verdict itself depends on its ids** on two corpus entries:
   examples/language-features/importFrom.qnt is refused (QNT405 'basics',
   QNT404 through an export) once a module is written before it, and

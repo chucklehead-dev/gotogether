@@ -7413,7 +7413,8 @@ generated programs. Its first "front end" is quint again.
   independent declarations. The form keeps the layer (`$layer`, ported
   from quint's call graph) and orders a layer by declaration key. A
   front end numbering its nodes otherwise cannot match quint's order
-  within a layer, so the bar is the layering.
+  within a layer, so the bar is the layering. Consumers read no quint
+  order within a layer: binding sorts its Vars by name.
 - **Names follow their binders.** The compile IR's unshadowed names
   (`p_<lambda id>`, a shadowing let's `x_<let id>`) become
   `x_@<binder's path>` when the suffix is an id of a lambda or let
