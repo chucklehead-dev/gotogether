@@ -91,7 +91,7 @@ func kubeAPI(s *qenv.Sim, raw client.WithWatch) client.Client {
 		}
 		return nil
 	}
-	st := &stamps{s: s, virtual: map[string]string{}}
+	st := &stamps{s: s, handed: map[string]string{}}
 	return interceptor.NewClient(raw, interceptor.Funcs{
 		Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 			qenv.Yield(ctx)
@@ -145,32 +145,56 @@ var timeAnnotations = []string{meta.AnnotationKeyExternalCreatePending, meta.Ann
 
 // stamps translates crossplane-runtime's timestamps at the API seam: they
 // are stored in virtual time and handed to the reconciler in real time, so
-// its grace periods measure virtual time. One real stamp is one virtual
-// stamp, whenever it is converted:
+// its grace periods measure virtual time, the same in every run of a seed:
 //   - A stamp the reconciler writes back as it was handed out is the
 //     stored one again. Converted both ways, it would move by the virtual
 //     time less the real time between the read and the write: a
 //     create-pending stamp seeming newer or older than it is.
-//   - crossplane-runtime writes whole wall-clock seconds, so a create's
-//     pending and succeeded stamps are often the same string. Converted
-//     at two real instants they would be two virtual times, succeeded
-//     possibly before pending: an incomplete create, which the reconciler
-//     refuses to go past.
+//   - A stamp it was not handed is one it made: time.Now(), cut to the
+//     second, written with no virtual time passing in between (its
+//     create-pending, succeeded and failed stamps, and the critical
+//     annotation updater adding them back after a conflict). It is stored
+//     as the virtual instant of this write, whatever the string. Through
+//     ToVirtual it kept the fraction of a second the format cut off, the
+//     wall clock's phase; looked up by its string, it took the virtual
+//     time of whichever stamp of any resource had been made in the same
+//     wall-clock second. Either way a resource's 30 s creation grace
+//     ended at a reconcile that depended on the wall clock, and seed 1
+//     run twice made a call to the cloud at 30 s in one run only. A
+//     create's pending and succeeded stamps of one second stay in order:
+//     the succeeded one is written no earlier in virtual time.
+//   - A stamp handed out is judged later, by time.Since after the
+//     reconciler's calls to the cloud (its creation grace, and the
+//     provider's), when real time has passed that virtual time need not
+//     have, more of it the busier the machine. Handed out at its exact
+//     virtual age, a stamp just under 30 s old would read as under or
+//     over the grace depending on that slack. It is handed out at its age
+//     rounded up to a whole second (crossplane-runtime's own resolution),
+//     plus under a millisecond that keeps stamps distinct and in order: a
+//     check against a grace of whole seconds then decides as virtual time
+//     does unless more than a real second passes between the read and
+//     the check.
 //
 // Virtual stamps keep their fraction of a second (RFC3339Nano, which
 // crossplane-runtime's RFC 3339 parse accepts).
 type stamps struct {
-	s       *qenv.Sim
-	mu      sync.Mutex
-	virtual map[string]string // a real stamp (handed out or written) -> its virtual one
+	s      *qenv.Sim
+	mu     sync.Mutex
+	handed map[string]string // a real stamp handed out -> the virtual one it stands for
 }
 
 func (c *stamps) toReal(obj client.Object) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.each(obj, func(v string, t time.Time) string {
-		r := c.s.ToReal(t).Format(time.RFC3339Nano)
-		c.virtual[r] = v
+		age := c.s.Now().Sub(t)
+		whole := age.Truncate(time.Second) // rounded up to a second: age in (whole-1s, whole]
+		if whole < age {
+			whole += time.Second
+		}
+		order := (age - (whole - time.Second)) / 1000 // (0, 1ms], larger for an older stamp
+		r := c.s.ToReal(c.s.Now().Add(-whole - order)).Format(time.RFC3339Nano)
+		c.handed[r] = v
 		return r
 	})
 }
@@ -178,13 +202,11 @@ func (c *stamps) toReal(obj client.Object) {
 func (c *stamps) toVirtual(obj client.Object) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.each(obj, func(v string, t time.Time) string {
-		if stored, ok := c.virtual[v]; ok {
+	c.each(obj, func(v string, _ time.Time) string {
+		if stored, ok := c.handed[v]; ok {
 			return stored
 		}
-		vt := c.s.ToVirtual(t).Format(time.RFC3339Nano)
-		c.virtual[v] = vt
-		return vt
+		return c.s.Now().Format(time.RFC3339Nano)
 	})
 }
 

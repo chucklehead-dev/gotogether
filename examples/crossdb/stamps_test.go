@@ -17,11 +17,14 @@ import (
 // A create-pending stamp the reconciler reads and writes back unchanged is
 // stored as it was, however much virtual time passed in between: the grace
 // period counts from the create, not from its last write-back. A stamp the
-// reconciler makes keeps its fraction of a second.
+// reconciler makes (time.Now(), cut to the second) is stored as the
+// virtual instant it was written, whatever fraction of a second the wall
+// clock was at: kept, that fraction moved the end of the creation grace
+// from run to run, and seed 1 run twice made two runs.
 func TestStampsRoundTrip(t *testing.T) {
 	s := qenv.New(qenv.NewSeeded(1))
 	defer s.Close()
-	st := &stamps{s: s, virtual: map[string]string{}}
+	st := &stamps{s: s, handed: map[string]string{}}
 	stored := "2026-01-01T00:00:10.25Z"
 	s.Spawn("reconciler", func(ctx context.Context) {
 		db := &v1alpha1.Database{}
@@ -37,7 +40,7 @@ func TestStampsRoundTrip(t *testing.T) {
 		// crossplane-runtime's pending and succeeded stamps of one create:
 		// the same wall-clock second, written with no virtual time between, each
 		// write converted to virtual time and back (the interceptor's defer)
-		now := s.ToReal(s.Now().Add(1500 * time.Millisecond))
+		now := time.Now() //qenv:ok the reconciler's own clock, which the seam translates
 		meta.SetExternalCreatePending(db, now)
 		st.toVirtual(db)
 		pending := db.GetAnnotations()[meta.AnnotationKeyExternalCreatePending]
@@ -55,10 +58,11 @@ func TestStampsRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// crossplane-runtime writes whole seconds; the translation must not
-		// lose more than that
-		if d := got.Sub(s.Now()); d < 500*time.Millisecond || d > 1500*time.Millisecond+10*time.Millisecond {
-			t.Errorf("a new stamp 1.5 s ahead is stored %v from then", d)
+		// crossplane-runtime writes whole seconds of the wall clock; the
+		// stamp is the virtual instant of its write, with none of the wall
+		// clock's fraction of a second
+		if !got.Equal(s.Now()) {
+			t.Errorf("a new stamp written at %v is stored as %v", s.Now(), got)
 		}
 	})
 	if err := s.Run(time.Hour); err != nil {
@@ -122,6 +126,90 @@ func TestStampsSurviveConflictRetry(t *testing.T) {
 			}
 			if got.Before(start.Add(-time.Second)) || got.After(s.Now().Add(time.Second)) {
 				t.Errorf("%s stored at %v, the stamps were written from %v to %v", k, got, start, s.Now())
+			}
+		}
+	})
+	if err := s.Run(time.Hour); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A stamp handed out is judged by time.Since after the reconciler's calls
+// to the cloud, when real time has passed that virtual time need not have.
+// It is judged at its age rounded up to a second, so a grace of whole
+// seconds decides as virtual time does however slow the machine was (up
+// to a second): a stamp 29 s old reads as under 30 s, one a microsecond
+// older as 30 s. Handed out at their exact ages, both read as under the
+// grace, until the slack passed the second's last microsecond: seed 1 run
+// twice then made a call to the cloud at 30 s in one run only. Two stamps
+// of one second stay distinct and in order, and come back as they were.
+func TestStampsJudgedLater(t *testing.T) {
+	s := qenv.New(qenv.NewSeeded(1))
+	defer s.Close()
+	st := &stamps{s: s, handed: map[string]string{}}
+	const grace = 30 * time.Second
+	s.Spawn("reconciler", func(ctx context.Context) {
+		qenv.Sleep(ctx, time.Minute)
+		at := func(age time.Duration) string { return s.Now().Add(-age).Format(time.RFC3339Nano) }
+		young, old := at(grace-time.Second), at(grace-time.Second+time.Microsecond)
+		db := &v1alpha1.Database{}
+		db.SetAnnotations(map[string]string{meta.AnnotationKeyExternalCreatePending: young, meta.AnnotationKeyExternalCreateSucceeded: old})
+		st.toReal(db)
+		time.Sleep(5 * time.Millisecond) //qenv:ok real time passes during a reconcile's calls, virtual time need not
+		if meta.ExternalCreateSucceededDuring(db, grace) {
+			t.Error("a stamp over 29 s old, judged after a few real milliseconds, reads as within the 30 s grace")
+		}
+		if d := time.Since(meta.GetExternalCreatePending(db)); d >= grace { //qenv:ok the check crossplane-runtime and the provider make, on the real clock
+			t.Errorf("a stamp 29 s old, judged after a few real milliseconds, reads as %v old", d)
+		}
+		// pending a third of a second after succeeded, in one second
+		db.SetAnnotations(map[string]string{meta.AnnotationKeyExternalCreatePending: at(1200 * time.Millisecond), meta.AnnotationKeyExternalCreateSucceeded: at(1500 * time.Millisecond)})
+		st.toReal(db)
+		if p, ok := meta.GetExternalCreatePending(db), meta.GetExternalCreateSucceeded(db); !p.After(ok) {
+			t.Errorf("handed out, a pending stamp after its succeeded one reads as %v, the succeeded %v", p, ok)
+		}
+		st.toVirtual(db)
+		if got := db.GetAnnotations()[meta.AnnotationKeyExternalCreatePending]; got != at(1200*time.Millisecond) {
+			t.Errorf("written back unchanged, the pending stamp moved to %s", got)
+		}
+		if got := db.GetAnnotations()[meta.AnnotationKeyExternalCreateSucceeded]; got != at(1500*time.Millisecond) {
+			t.Errorf("written back unchanged, the succeeded stamp moved to %s", got)
+		}
+	})
+	if err := s.Run(time.Hour); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Stamps the reconciler makes in one wall-clock second, for two resources
+// half a second of virtual time apart, are the same string. Each is
+// stored as the virtual instant of its own write: looked up by its
+// string, the second took the first's virtual time, unless the wall clock
+// crossed a second between the two writes, and the second resource's
+// creation grace ended at another reconcile from run to run.
+func TestStampsOfOneSecond(t *testing.T) {
+	s := qenv.New(qenv.NewSeeded(1))
+	defer s.Close()
+	st := &stamps{s: s, handed: map[string]string{}}
+	s.Spawn("reconciler", func(ctx context.Context) {
+		now := time.Now() //qenv:ok the reconciler's own clock, which the seam translates
+		first, second := &v1alpha1.Database{}, &v1alpha1.Database{}
+		meta.SetExternalCreatePending(first, now)
+		st.toVirtual(first)
+		written := s.Now()
+		qenv.Sleep(ctx, 500*time.Millisecond) // the next resource's reconcile
+		meta.SetExternalCreatePending(second, now)
+		st.toVirtual(second)
+		for _, c := range []struct {
+			db *v1alpha1.Database
+			at time.Time
+		}{{first, written}, {second, s.Now()}} {
+			got, err := time.Parse(time.RFC3339Nano, c.db.GetAnnotations()[meta.AnnotationKeyExternalCreatePending])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !got.Equal(c.at) {
+				t.Errorf("a stamp written at %v is stored as %v", c.at, got)
 			}
 		}
 	})
