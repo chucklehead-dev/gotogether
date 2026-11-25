@@ -32,7 +32,8 @@ func repoRoot(t *testing.T) string {
 
 // The push tier's fixed batch: quint against quint shifted, on a model of
 // instances, aliases and sum types compiled, and on programs quint
-// refuses (a parse error, and a type error on the first line, where the
+// refuses (a parse error after a shebang, which puts the shift on the
+// second line, and a type error on the first line, where the
 // shift's columns are taken back and quint doubles the error). The
 // nightly runs the corpus.
 func TestHarnessPushTier(t *testing.T) {
@@ -40,7 +41,7 @@ func TestHarnessPushTier(t *testing.T) {
 	root := repoRoot(t)
 	progs := []Program{
 		{ID: "canon-m", File: filepath.Join(root, "internal/qoracle/canon/testdata/m.qnt"), Main: "m"},
-		{ID: "parse-error", File: filepath.Join(t.TempDir(), "p.qnt"), Text: "module p {\n  val a = 1 +\n}\n"},
+		{ID: "parse-error", File: filepath.Join(t.TempDir(), "p.qnt"), Text: "#!/usr/bin/env -S quint typecheck\nmodule p {\n  val a = 1 +\n}\n"},
 		{ID: "first-line", File: filepath.Join(t.TempDir(), "f.qnt"), Text: "module f { val bad = 1 + true }\n"},
 	}
 	for _, p := range progs {

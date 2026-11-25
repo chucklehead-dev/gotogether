@@ -157,10 +157,10 @@ func or(s, d string) string {
 const shiftModule = "module __gtg_shift { pure val __gtg_s1 = 1 pure val __gtg_s2 = Set(1, 2) } "
 
 // Shifted is quint run on the program with a module consuming ids written
-// first, on the main file's first line, and that module stripped from
-// its outputs, its columns on that line and its characters' offsets
-// taken back. Every id differs from Quint's and nothing else should: the
-// harness comparing Quint with Shifted checks the canonical form over the
+// first, on the main file's first line (the second after a shebang), and
+// that module stripped from its outputs, its columns on that line and
+// its characters' offsets taken back. Every id differs from Quint's and
+// nothing else should: the harness comparing Quint with Shifted checks the canonical form over the
 // whole corpus, as Q2's front end, numbering its nodes otherwise, will
 // need it to hold.
 type Shifted struct {
@@ -180,7 +180,15 @@ func (s Shifted) Run(ctx context.Context, p Program, dir string) (*Output, error
 	if err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(file, append([]byte(shiftModule), text...), 0o644); err != nil {
+	// at the start of the first line, or of the second after a shebang
+	sh := shift{n: len(shiftModule)}
+	if strings.HasPrefix(string(text), "#!") {
+		if i := strings.IndexByte(string(text), '\n'); i >= 0 {
+			sh.line, sh.at = 1, i+1
+		}
+	}
+	shifted := string(text[:sh.at]) + shiftModule + string(text[sh.at:])
+	if err := os.WriteFile(file, []byte(shifted), 0o644); err != nil {
 		return nil, err
 	}
 	out, err := s.run(ctx, p, dir, file)
@@ -188,12 +196,15 @@ func (s Shifted) Run(ctx context.Context, p Program, dir string) (*Output, error
 		return nil, err
 	}
 	rel, _ := filepath.Rel(dir, file)
-	return unshift(out, rel, len(shiftModule))
+	return unshift(out, rel, sh)
 }
 
 // unshift takes the shift module out of out: the module, the entries of
 // its ids, and its characters from the main file's positions.
-func unshift(out *Output, file string, n int) (*Output, error) {
+// A shift is where the shift module went: its line, its offset, its length.
+type shift struct{ line, at, n int }
+
+func unshift(out *Output, file string, n shift) (*Output, error) {
 	_, ids, err := canon.StripModule(out.Typecheck, "__gtg_shift", nil)
 	if err != nil {
 		return nil, err
@@ -244,7 +255,7 @@ func moduleIDs(doc []byte, name string) (map[string]bool, error) {
 
 // back is a position {line, col, index} less the shift: n columns on the
 // first line, n characters everywhere.
-func back(v any, n int) {
+func back(v any, n shift) {
 	m, ok := v.(map[string]any)
 	if !ok {
 		return
@@ -257,25 +268,25 @@ func back(v any, n int) {
 		i, err := x.Int64()
 		return int(i), err == nil
 	}
-	if line, ok := num("line"); ok && line == 0 {
+	if line, ok := num("line"); ok && line == n.line {
 		if c, ok := num("col"); ok {
-			m["col"] = json.Number(fmt.Sprint(c - n))
+			m["col"] = json.Number(fmt.Sprint(c - n.n))
 		}
 	}
-	if i, ok := num("index"); ok {
-		m["index"] = json.Number(fmt.Sprint(i - n))
+	if i, ok := num("index"); ok && i >= n.at+n.n {
+		m["index"] = json.Number(fmt.Sprint(i - n.n))
 	}
 }
 
 // backSpan takes the shift back from a span. quint's end column of a node
 // that starts on the first line is shifted wherever it ends (a module's
 // closing brace lines below), so it is taken back when the start is.
-func backSpan(start, end any, n int) {
-	if lineOf(start) == 0 && lineOf(end) > 0 {
+func backSpan(start, end any, n shift) {
+	if lineOf(start) == n.line && lineOf(end) > n.line {
 		if m, ok := end.(map[string]any); ok {
 			if c, ok := m["col"].(json.Number); ok {
 				if i, err := c.Int64(); err == nil {
-					m["col"] = json.Number(fmt.Sprint(int(i) - n))
+					m["col"] = json.Number(fmt.Sprint(int(i) - n.n))
 				}
 			}
 		}
@@ -302,7 +313,7 @@ func decodeJSON(b []byte) (any, error) {
 	return v, err
 }
 
-func shiftErrors(doc []byte, isMain func(string) bool, n int) ([]byte, error) {
+func shiftErrors(doc []byte, isMain func(string) bool, n shift) ([]byte, error) {
 	v, err := decodeJSON(doc)
 	if err != nil {
 		return nil, err
@@ -322,7 +333,7 @@ func shiftErrors(doc []byte, isMain func(string) bool, n int) ([]byte, error) {
 	return json.Marshal(top)
 }
 
-func shiftSpans(sm []byte, isMain func(string) bool, n int) ([]byte, error) {
+func shiftSpans(sm []byte, isMain func(string) bool, n shift) ([]byte, error) {
 	v, err := decodeJSON(sm)
 	if err != nil {
 		return nil, err

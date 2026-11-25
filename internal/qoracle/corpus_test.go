@@ -243,6 +243,7 @@ func TestCorpus(t *testing.T) {
 	}
 	fe := stub(t)
 	keep := keepDir(t)
+	known := shiftKnown(t)
 	var (
 		mu                             sync.Mutex
 		ran, agreed, stale, verdictOff int
@@ -302,6 +303,14 @@ func TestCorpus(t *testing.T) {
 				t.Errorf("%s: %v", e.ID, err)
 				return
 			}
+			if reason, ok := known[e.ID]; ok && fe.Name() == (Shifted{}).Name() {
+				if d == nil {
+					t.Errorf("%s: no longer disagrees with quint shifted: take it out of testdata/shift-known.txt", e.ID)
+				} else {
+					t.Logf("%s: quint shifted differs, as known (%s): %s", e.ID, reason, d.Tier)
+				}
+				return
+			}
 			if d == nil {
 				return
 			}
@@ -322,6 +331,31 @@ func TestCorpus(t *testing.T) {
 	if ran == 0 {
 		t.Fatalf("no entry ran (GOTOGETHER_QFRONT_ENTRY=%q)", only)
 	}
+}
+
+// shiftKnown are the entries on which quint's own verdict depends on its
+// ids (testdata/shift-known.txt: an id, then # and the reason): quint
+// shifted differs from quint there, and a Go front end, numbering its
+// nodes otherwise, will meet the same. Each is a finding about quint, not
+// the form's; an entry there that agrees fails, so the list stays true.
+func shiftKnown(t *testing.T) map[string]string {
+	b, err := os.ReadFile("testdata/shift-known.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]string{}
+	for _, l := range strings.Split(string(b), "\n") {
+		l = strings.TrimSpace(l)
+		if l == "" || strings.HasPrefix(l, "#") {
+			continue
+		}
+		id, reason, ok := strings.Cut(l, " # ")
+		if !ok {
+			t.Fatalf("testdata/shift-known.txt: %q: want an id, \" # \" and the reason", l)
+		}
+		out[strings.TrimSpace(id)] = reason
+	}
+	return out
 }
 
 // merge is old with fresh's entries in place of theirs, and fresh's new

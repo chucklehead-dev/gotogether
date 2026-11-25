@@ -44,6 +44,8 @@ package canon
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -307,29 +309,78 @@ func orEmpty(s []any) []any {
 	return s
 }
 
-// keysOf names each element of xs by name, or by kind and position when it
-// has none; a repeated name takes ~2, ~3.
+// keysOf names each element of xs by name, or by kind and content when it
+// has none.
+//
+// The key must not depend on the elements' order, which within a layer is
+// quint's ids': an element with no name is keyed by its kind and content
+// (signature), a repeated name by its kind and then its content, and only
+// elements alike in all of these by ~2, ~3.
 func keysOf(xs []any, name func(int, map[string]any) string, kind string) []string {
 	keys := make([]string, len(xs))
-	seen := map[string]int{}
-	unnamed := 0
+	maps := make([]map[string]any, len(xs))
+	count := map[string]int{}
 	for i, x := range xs {
 		m, _ := x.(map[string]any)
+		maps[i] = m
 		k := ""
 		if m != nil {
 			k = name(i, m)
 		}
 		if k == "" {
-			k = fmt.Sprintf("%s@%d", kind, unnamed)
-			unnamed++
-		}
-		seen[k]++
-		if n := seen[k]; n > 1 {
-			k = fmt.Sprintf("%s~%d", k, n)
+			k = fmt.Sprintf("%s@%s", kind, signature(m))
 		}
 		keys[i] = k
+		count[k]++
+	}
+	for i, k := range keys {
+		if count[k] > 1 {
+			kk, _ := maps[i]["kind"].(string)
+			keys[i] = k + "~" + kk + "~" + signature(maps[i])
+		}
+	}
+	seen := map[string]int{}
+	for i, k := range keys {
+		seen[k]++
+		if n := seen[k]; n > 1 {
+			keys[i] = fmt.Sprintf("%s~%d", k, n)
+		}
 	}
 	return keys
+}
+
+// signature is a short digest of n's content without its ids, the names
+// quint makes from ids reduced to their prefixes.
+func signature(n any) string {
+	var strip func(v any) any
+	strip = func(v any) any {
+		switch x := v.(type) {
+		case map[string]any:
+			out := map[string]any{}
+			for k, e := range x {
+				if k != "id" && k != "reference" {
+					out[k] = strip(e)
+				}
+			}
+			return out
+		case []any:
+			out := make([]any, len(x))
+			for i, e := range x {
+				out[i] = strip(e)
+			}
+			return out
+		case string:
+			for _, p := range generatedPrefixes {
+				if strings.Contains(x, p) {
+					return p // its id, raw or as a form's path, is no content
+				}
+			}
+		}
+		return v
+	}
+	b, _ := json.Marshal(strip(n))
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:4])
 }
 
 func declKeys(decls []any) []string {
