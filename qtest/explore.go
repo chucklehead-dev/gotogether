@@ -276,7 +276,9 @@ func envUint(name string) (uint64, error) {
 
 func empty(runs []*Run) bool {
 	for _, r := range runs {
-		if len(r.Steps) > 0 {
+		// an effect record is no step: the doubles record every send of
+		// a system whose steps are not recorded yet
+		if slices.ContainsFunc(r.Steps, func(s qtrace.Step) bool { return s.Effect == "" }) {
 			return false
 		}
 	}

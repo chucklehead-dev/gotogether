@@ -15,6 +15,14 @@ actions:
     expect: 'stock == {{.obs.stock}}'
   refuse:
     expect: 'stock == {{.obs.stock}}'
+  # Paying is a call (qobs.Invoke around the capture's retries): the
+  # provider's requests made under its scope are its effects, compared
+  # with the model's payEffects (one capture of the order's money; the
+  # tries of one request under one key are one). A capture that failed or
+  # was voided still sent what it sent.
+  pay:
+    match: retried
+    outcomes: { error: call }
   charge: {}
   refund: {}
   markPaid: {}
@@ -23,6 +31,17 @@ actions:
     expect: 'stock == {{.obs.stock}}'
   settle: {}
 invariants: [chargedAtMostOnce, settledCorrectly]
+
+# The effects compared (I/O specifications): a capture request, as qenv's
+# Service records it at the send (its PayReq's fields). A void, the
+# shop's other request, is no pay's and is not compared.
+effects:
+  kinds:
+    Capture:
+      from: rpc.provider.request
+      where: { Op: capture }
+      fields: { order: '{{.Order}}', amount: '{{.Amount}}' }
+      same: [Key]
 
 # The model on its own (gotogether simulate): which invariants the design
 # guarantees, which it allows to fail and the code must not.

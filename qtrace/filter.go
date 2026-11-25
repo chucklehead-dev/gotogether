@@ -82,12 +82,13 @@ func (f Filter) Apply(steps []Step) []Step {
 			out = append(out, s)
 			continue
 		}
-		if !match(f.Actors, s.Actor) || !match(f.Actions, s.Action) ||
+		if !match(f.Actors, s.Actor) || s.Effect == "" && !match(f.Actions, s.Action) ||
 			(!f.Since.IsZero() && s.Time.Before(f.Since)) || (!f.Until.IsZero() && !s.Time.Before(f.Until)) {
 			continue
 		}
 		var keep map[string]bool
-		if f.Keep != nil {
+		if f.Keep != nil && s.Effect == "" { // an effect record's fields are what a binding's effects compare: kept whole
+
 			keep = map[string]bool{}
 			for _, k := range f.Keep[s.Action] {
 				keep[k] = true

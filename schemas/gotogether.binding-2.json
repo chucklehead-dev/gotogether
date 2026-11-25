@@ -18,8 +18,16 @@
               "null"
             ]
           },
+          "effects": {
+            "description": "Effects is the model's def stating the effects the action's step must make (`def payEffects(order: str): List[Effect]`, over the post-state, called with the action's arguments of its parameters' names): its expect gains `payEffects(...) == <the effects made>`. Empty: <action>Effects, if the binding maps effect kinds and the model has it; \"-\": none.",
+            "type": "string"
+          },
           "expect": {
             "description": "Expect is a Quint boolean over the post-state that must hold after the step: the observed state projection (quint.obs.*) checked against the model's state.",
+            "type": "string"
+          },
+          "match": {
+            "description": "Match is how the effects made compare with the def's (exact, the default: in order, every one; retried: consecutive tries of one effect, its kind's Same fields alike, are one; set: unordered, deduplicated).",
             "type": "string"
           },
           "outcomes": {
@@ -126,6 +134,63 @@
         ]
       },
       "description": "DiagnosticEvidence relates model diagnostic items to observed model calls.",
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "effects": {
+      "additionalProperties": false,
+      "description": "Effects maps recorded effects (qobs.Effect, qenv's doubles at the send) onto the model's effect constructors, for the actions whose effects the binding compares (Action.Effects): the I/O specification of each step, checked in its expect.",
+      "properties": {
+        "kinds": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "properties": {
+              "fields": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Fields map the constructor's record fields to Quint templates over the effect's recorded fields ('{{.Amount}}'), rendered as an action's arguments are. None: a constructor of no payload.",
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "from": {
+                "description": "From is the recorded effect's kind (qtrace.Effect.Kind: \"rpc.provider.request\", \"queue.payments.publish\").",
+                "type": "string"
+              },
+              "same": {
+                "description": "Same are recorded fields every try of one effect carries alike (an idempotency key): under match retried, consecutive equal effects collapse into one only if these agree too, so a retry under a fresh key is two effects where the model makes one.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "where": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Where, if set, keeps the effects of From whose recorded fields have these values (as text): one kind of request carries several operations ({ Op: capture }).",
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "description": "Kinds maps each of the model's effect constructors to the effects recorded as it.",
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
       "type": [
         "object",
         "null"

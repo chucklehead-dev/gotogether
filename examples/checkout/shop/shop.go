@@ -61,11 +61,16 @@ const (
 	// before it goes out loses the event, and the order is never paid or
 	// shipped.
 	DualWrite
+	// CaptureUnits captures the order's units instead of its money
+	// (o.Qty for o.Qty*10): the provider charges the wrong amount. No
+	// state the model reads changes, so without the capture compared
+	// with the model's (pay's effects) it conforms in every run.
+	CaptureUnits
 )
 
 // String is the mutation's name, as its constant's.
 func (m Mutation) String() string {
-	names := []string{"Faithful", "NoLocks", "LockWithoutWrite", "NoIdempotencyKey", "DualWrite"}
+	names := []string{"Faithful", "NoLocks", "LockWithoutWrite", "NoIdempotencyKey", "DualWrite", "CaptureUnits"}
 	if m >= 0 && int(m) < len(names) {
 		return names[m]
 	}
@@ -337,15 +342,26 @@ func (s *Shop) pay(ctx context.Context, id string) error {
 	if o.Paid || o.Cancelled || cancelledRow {
 		return nil
 	}
+	// The capture is a model step (pay), recorded as a call: its context
+	// carries the call's scope, so the provider's requests it sends (each
+	// try) are its effects, which the binding compares with the model's
+	// payEffects (one capture of the order's amount, retries under one key).
+	call := qobs.Invoke(ctx, "pay", "order", id)
 	attempt := 0
-	err = s.retry(ctx, func() error {
+	amount := o.Qty * 10
+	if s.Mutation == CaptureUnits {
+		amount = o.Qty
+	}
+	pctx := call.Scope(ctx)
+	err = s.retry(pctx, func() error {
 		attempt++
 		key := "cap:" + id
 		if s.Mutation == NoIdempotencyKey {
 			key = fmt.Sprintf("cap:%s:%d", id, attempt)
 		}
-		return s.Payments.Capture(ctx, key, id, o.Qty*10)
+		return s.Payments.Capture(pctx, key, id, amount)
 	})
+	call.Done(err)
 	if errors.Is(err, ErrVoided) {
 		return nil // cancelled meanwhile; Void refunded nothing or the charge
 	}

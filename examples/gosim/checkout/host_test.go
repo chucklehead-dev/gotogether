@@ -63,9 +63,11 @@ func TestMutantsOnGosim(t *testing.T) {
 		// Fresh keys per attempt: a retry after a lost response charges
 		// again, and a cancellation's void (by the order's key) finds no
 		// charge to refund. qenv's scheduler shows the first; gosim's
-		// schedules, where a cancel races the payment, mostly the second.
+		// schedules, where a cancel races the payment, mostly the second;
+		// pay's effects (I/O specifications) catch a retry under a fresh
+		// key at its pay, before the charge twice.
 		{shop.NoIdempotencyKey, qenv.Serializable, 30, qenv.DefaultRates,
-			qtest.AnyOf(qtest.Violates("chargedAtMostOnce"), qtest.Violates("settledCorrectly"))},
+			qtest.AnyOf(qtest.Mismatch("pay"), qtest.Violates("chargedAtMostOnce"), qtest.Violates("settledCorrectly"))},
 	}
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%d/%s", c.m, c.iso), func(t *testing.T) {

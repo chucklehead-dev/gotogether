@@ -67,6 +67,20 @@ const (
 	// KeyAssumed marks an assumed step (Step.Ambiguous): a pending call's
 	// effect a resolution placed, with no expect checked after it.
 	KeyAssumed = "quint.assumed"
+	// KeyEffect marks an effect record (qobs.Effect, and qenv's doubles
+	// at the send): an effect the code made, a request sent, a message
+	// published, written when it was made so a crash after it keeps it.
+	// Its value is the effect's kind ("rpc.provider.request"), its fields
+	// are quint.arg.*, and quint.call, if set, is the invocation open in
+	// its context (attribution rule 1). A record, not a step: Reconstruct
+	// attaches it to its step (Step.Effects).
+	KeyEffect = "quint.effect"
+	// KeyEffects is, on a step, the seqs of the effect records its task
+	// made since its last record, outside any invocation's scope
+	// (attribution rule 2: the task's next step), comma-separated. Present,
+	// even empty, it says the step's effects were observed: a step without
+	// it was recorded where nothing records effects.
+	KeyEffects = "quint.effects"
 	// KeyRef is a step's link to the artifact it came from (Step.Ref): an
 	// external driver's trace line, a screenshot. Free text for people
 	// reading a failure; no check reads it.
@@ -115,6 +129,18 @@ type Step struct {
 	// It has no outcome and no observations, and the binding checks no
 	// expect after it.
 	Ambiguous bool
+	// Made are the effect records (their seqs, on the step's recorder) its
+	// task made since its last record outside an invocation's scope
+	// (KeyEffects): the step's by attribution rule 2. EffectsObserved says
+	// the step was recorded where effects are recorded (a simulation, a
+	// recorder that observes them), so that none made means none, not
+	// unknown.
+	Made            []uint64
+	EffectsObserved bool
+	// Effects are the effects attributed to the step, in the order made
+	// (Reconstruct): those made under its invocation's scope (rule 1) and
+	// those its task made before it (rule 2, Made). Empty on a record.
+	Effects []Effect
 	// Args are scalars: string, int64, bool, float64, or json.Number
 	// for an integer past int64 (a step log's, a request log's), kept
 	// whole. A collection is its JSON text, as qobs records one.
@@ -163,6 +189,49 @@ type Record struct {
 	// (KeyCompleteThrough): its recorder's steps through this time are
 	// all in the input.
 	CompleteThrough time.Time
+	// Effect, if set, marks an effect record (KeyEffect): its kind. Its
+	// fields are the record's Args, and its Call the invocation open
+	// where it was made, if any.
+	Effect string
+}
+
+// An Effect is an effect the code made, as Reconstruct attaches it to the
+// step it is attributed to (Step.Effects) or lists it as made by no step
+// (Trace.Unattributed): an effect record's kind, fields and place.
+type Effect struct {
+	Kind   string         // the effect's kind: "rpc.provider.request", "queue.payments.publish"
+	Fields map[string]any // its fields, as recorded (an effect record's Args)
+	// Recorder and Seq are its record's: its place among its recorder's
+	// steps.
+	Recorder string
+	Seq      uint64
+	Time     time.Time
+	// By is how it was attributed: "call" (made under the step's
+	// invocation, rule 1), "task" (made by the step's task before it,
+	// rule 2), or "" (made by no step).
+	By string
+	// Late marks an effect made under a call's scope after the call
+	// completed: a goroutine the step started, still sending.
+	Late bool
+	// Call is the invocation it was made under (rule 1), 0 if none.
+	Call   uint64
+	Source string
+}
+
+// String is the effect as a report names it: its kind and fields, and
+// where it was recorded.
+func (e Effect) String() string {
+	var b strings.Builder
+	b.WriteString(e.Kind)
+	b.WriteString("(")
+	for i, k := range slices.Sorted(maps.Keys(e.Fields)) {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		fmt.Fprintf(&b, "%s=%v", k, e.Fields[k])
+	}
+	fmt.Fprintf(&b, ") at seq %d", e.Seq)
+	return b.String()
 }
 
 // SpanSource is the Source of a step read from an OTel span: "span
@@ -177,11 +246,11 @@ func SpanSource(spanID, traceID string) string {
 }
 
 // Model reports whether s is a model step: not an invocation record, a
-// settle record, a loss record or a watermark record, which Reconstruct
+// settle record, a loss record, a watermark record or an effect record, which Reconstruct
 // takes out of the steps. A sink that counts or replays steps skips the
 // others.
 func (s *Step) Model() bool {
-	return !s.Invocation && !s.Settled && s.Lost == "" && s.CompleteThrough.IsZero()
+	return !s.Invocation && !s.Settled && s.Lost == "" && s.CompleteThrough.IsZero() && s.Effect == ""
 }
 
 // Get returns an argument or, with the "obs." prefix, an observation.
@@ -285,6 +354,20 @@ func FromAttributes(t time.Time, layers ...map[string]any) (Step, error) {
 			}
 			s.CompleteThrough = time.Unix(0, n)
 		}
+		if v, ok := layers[0][KeyEffect]; ok {
+			s.Effect = fmt.Sprint(v)
+			if s.Effect == "" {
+				return s, fmt.Errorf("%s: %s: an effect record names its kind", EventName, KeyEffect)
+			}
+		}
+		if v, ok := layers[0][KeyEffects]; ok {
+			s.EffectsObserved = true
+			made, err := ParseMade(fmt.Sprint(v))
+			if err != nil {
+				return s, fmt.Errorf("%s: %s: %w", EventName, KeyEffects, err)
+			}
+			s.Made = made
+		}
 		if v, ok := layers[0][KeyAssumed]; ok {
 			s.Ambiguous = v == true || fmt.Sprint(v) == "true"
 		}
@@ -324,6 +407,35 @@ func FromAttributes(t time.Time, layers ...map[string]any) (Step, error) {
 		s.Process = s.Recorder
 	}
 	return s, nil
+}
+
+// FormatMade is a step's Made as KeyEffects carries it: its seqs,
+// comma-separated ("" for none).
+func FormatMade(made []uint64) string {
+	var b []byte
+	for i, q := range made {
+		if i > 0 {
+			b = append(b, ',')
+		}
+		b = strconv.AppendUint(b, q, 10)
+	}
+	return string(b)
+}
+
+// ParseMade reads KeyEffects' value (FormatMade's).
+func ParseMade(v string) ([]uint64, error) {
+	if v == "" {
+		return nil, nil
+	}
+	var out []uint64
+	for _, f := range strings.Split(v, ",") {
+		n, err := strconv.ParseUint(strings.TrimSpace(f), 10, 64)
+		if err != nil || n == 0 {
+			return nil, fmt.Errorf("%q is not a list of seqs (1,2,3)", v)
+		}
+		out = append(out, n)
+	}
+	return out, nil
 }
 
 func toInt(v any) (int64, error) {

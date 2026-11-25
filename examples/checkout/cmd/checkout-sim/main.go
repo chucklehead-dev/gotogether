@@ -28,7 +28,7 @@ func main() {
 	cfg := checkout.Config{
 		Isolation: map[string]qenv.Isolation{"serializable": qenv.Serializable, "snapshot": qenv.SnapshotIsolation, "read-committed": qenv.ReadCommitted}[*iso],
 		Mutation: map[string]shop.Mutation{"": shop.Faithful, "no-locks": shop.NoLocks, "lock-without-write": shop.LockWithoutWrite,
-			"no-idempotency-key": shop.NoIdempotencyKey, "dual-write": shop.DualWrite}[*mut],
+			"no-idempotency-key": shop.NoIdempotencyKey, "dual-write": shop.DualWrite, "capture-units": shop.CaptureUnits}[*mut],
 	}
 	if err := os.MkdirAll(*out, 0o755); err != nil {
 		fail(err)

@@ -36,8 +36,15 @@ func (k *Keyer) Step(s *Step) string {
 		if s.carried {
 			rec += fmt.Sprintf("|carried%v", s.carriedWhole)
 		}
+	case s.Effect != "":
+		// an effect's kind and fields (in String's args) and its call: a
+		// step's effects are part of its verdict
+		rec = fmt.Sprintf("|effect %s|call%d", s.Effect, s.Call)
 	case s.Call != 0:
 		rec = fmt.Sprintf("|call%d", s.Call)
+	}
+	if s.EffectsObserved {
+		rec += "|made" + FormatMade(s.Made)
 	}
 	if s.Ambiguous {
 		rec += "|assumed"

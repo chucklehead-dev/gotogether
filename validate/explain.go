@@ -199,6 +199,9 @@ func (c *Checker) explainResult(p *binding.Plan, res *Result, o Options) {
 		if e := get(); e.err == nil {
 			f.Changes = e.changed(c, p, f.Index, f.State)
 		}
+		if f.Kind == "state" {
+			f.Effects = c.effectsMismatch(get, p, f.Index, f.State)
+		}
 	}
 }
 

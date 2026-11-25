@@ -18,6 +18,7 @@ and whether the invariants hold.
 - Logs that lost a head or a tail, production logs: [references/partial-logs.md](references/partial-logs.md), [references/production-logs.md](references/production-logs.md).
 - Bombadil, Playwright, `ShrinkActions`: [references/external-drivers.md](references/external-drivers.md).
 - Does the check read what was recorded: [references/observation-mutants.md](references/observation-mutants.md).
+- What a step sent (a request, a publish) against the model's effects def: [references/effects.md](references/effects.md).
 - Concurrent services, restarts, Lamport clocks: [references/patterns.md](references/patterns.md).
 
 ## Steps
@@ -52,6 +53,7 @@ and whether the invariants hold.
 |---|---|---|
 | `record <id> is not a transition` (QNT513) | the model cannot take the step | `why:` and `the model expects:` first: the code, or the binding's mapping, outcome or restart |
 | `state does not match what was observed` (QNT508) | the observed state differs | `expect:` vs `obs:` |
+| `the effects made are not the model's payEffects(...)` | a step sent other than its effects def | `first difference:`; [effects.md](references/effects.md) |
 | `invariant X: FAIL, violated after record <id>` | a design bug now seen in code | `the step changed` lines; fix the design, or the property |
 | `issue: error gap` | steps lost or sampled | fix the pipeline: no verdict |
 | `issue: error lost-prefix` | a log started after seq 1 | a snapshot step, or `resume:` |

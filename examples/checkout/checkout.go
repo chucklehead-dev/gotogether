@@ -27,6 +27,9 @@ type Config struct {
 	Orders, Stock int
 	// NoCrashes keeps every process up.
 	NoCrashes bool
+	// NoCancels keeps every order: no client cancels (a contrast whose
+	// witness must not be a void's).
+	NoCancels bool
 	// Partitions gives the queues a broker of its own and makes every link
 	// between it, the relay and the consumers a nemesis (qenv's
 	// Network.PartitionNemesis): a publish waits out a cut, and a consumer cut off
@@ -53,6 +56,7 @@ type Deployment struct {
 	// ShipQueue carries "paid" events to shipping.
 	ShipQueue *qenv.Queue
 	api       *qenv.Service[apiReq, string]
+	noCancels bool
 }
 
 type apiReq struct{ Op, Order string }
@@ -101,7 +105,7 @@ func Deploy(s *qenv.Sim, cfg Config) *Deployment {
 	if cfg.Stock == 0 {
 		cfg.Stock = 2
 	}
-	d := &Deployment{Sim: s, DB: qenv.NewStore(s, "shop", cfg.Isolation), Provider: qenv.NewStore(s, "provider", qenv.Serializable)}
+	d := &Deployment{Sim: s, DB: qenv.NewStore(s, "shop", cfg.Isolation), Provider: qenv.NewStore(s, "provider", qenv.Serializable), noCancels: cfg.NoCancels}
 	d.DB.Load("stock/widget", cfg.Stock)
 	provider := &shop.Provider{DB: d.Provider}
 	paySvc := qenv.NewService(s, "provider", nil, provider.Handle)
@@ -160,7 +164,7 @@ func (d *Deployment) Workload(orders int) {
 	for i := 1; i <= orders; i++ {
 		id := fmt.Sprintf("o%d", i)
 		d.Sim.Spawn("client."+id, func(ctx context.Context) {
-			if d.call(ctx, apiReq{"place", id}) != "ok" {
+			if d.call(ctx, apiReq{"place", id}) != "ok" || d.noCancels {
 				return
 			}
 			if k := d.Sim.Choose("sched.client.cancel", 10); k > 0 {

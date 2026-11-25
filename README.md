@@ -314,6 +314,7 @@ table for agents):
 | Does my code do what the model's traces do? | `connect.Run`: the model drives the code |
 | Does the code accept inputs the model forbids? | `qhegel.Test`, `FindViolation`: Hegel drives, the model judges |
 | Do runs of the real system conform? | `qobs`, `//quint:action`, `convert` (OTel spans), a binding, `gotogether validate` |
+| Does each step send what the model says it sends (a capture's amount, one key across retries, a notice)? | an effects def per action in the model (`def payEffects(order: str): List[Effect]`) and the binding's `effects:` kinds; qenv's doubles record every send, `qobs.Effect` and `Call.Scope` elsewhere; a difference is `Mismatch(action)` naming the first differing effect and field ([examples/checkout](examples/checkout)'s `pay`, DESIGN §111) |
 | Is it correct under crashes, lost responses, redelivery, isolation levels? | `qenv` and `qtest.System`: `Explore`, `Exhaust`, `Sweep`, `FaultOrders`, `Fuzz`, `qhegel.Shrink` |
 | Does the whole system survive the faults my model's traces have? | `System.FollowTraces`: each trace's fault actions become the simulation's faults (`qtest.FaultMap`), the rest of the run is the system's, checked by the model |
 | What did no run reach? What does the model not constrain? | `qweave -cover`, `qweave -mutate`, `System.Mutate`, `Exploration.Evidence`; over a suite, `gotogether evidence` |

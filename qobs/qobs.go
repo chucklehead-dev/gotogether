@@ -40,9 +40,18 @@ type Outcomer interface{ QuintOutcome() string }
 
 // Recorder assigns each step a dense sequence number and hands it to a sink.
 type Recorder struct {
-	id    string
-	seq   atomic.Uint64
-	added atomic.Uint64 // steps written by Add
+	id      string
+	seq     atomic.Uint64
+	added   atomic.Uint64 // steps written by Add
+	effects atomic.Uint64 // effect records written (Effect): they take seqs, and are no steps Count counts
+	// observe marks every step observed for effects outside a simulation
+	// too (ObserveEffects)
+	observe bool
+	// made are, by task, the effect records it made outside a call's
+	// scope since its last record (rule 2), for its next step's Made;
+	// pending counts them, so a step looks only when there are some
+	made    map[any][]uint64
+	pending atomic.Int64
 	// stampMu makes a step's seq and time one stamp (stamp): taken apart,
 	// two goroutines' steps were numbered in one order and timed in the
 	// other, and a bound judged along seq order saw time go back
@@ -201,9 +210,21 @@ func NewRecorder(sink Sink, opts ...Option) *Recorder {
 	return r
 }
 
-// Count is how many steps the recorder has recorded (Add's included): a
-// run's progress, which its choices are aligned to (qenv.Choice.Step).
-func (r *Recorder) Count() int { return int(r.seq.Load() + r.added.Load()) }
+// Count is how many steps the recorder has recorded (Add's included, its
+// effect records not): a run's progress, which its choices are aligned to
+// (qenv.Choice.Step). An effect record takes a seq but is no progress:
+// the doubles record one at every send, and the choices of a run recorded
+// before they did still align.
+func (r *Recorder) Count() int { return int(r.seq.Load() - r.effects.Load() + r.added.Load()) }
+
+// ObserveEffects makes every step the recorder records say that its
+// effects were observed (qtrace.Step.EffectsObserved), outside a
+// simulation too (inside one, the doubles record every send, and a step
+// says so already): for a program whose dependencies are all reached
+// through code that records its effects (qobs.Effect, a recording
+// transport), so that a step that made none made none, rather than
+// none known.
+func ObserveEffects() Option { return func(r *Recorder) { r.observe = true } }
 
 // ID is the recorder id (the scope of quint.seq).
 func (r *Recorder) ID() string { return r.id }
@@ -449,10 +470,133 @@ func (r *Recorder) record(ctx context.Context, action string, err error, kv []an
 		return
 	}
 	r.checkRecordedThread(ctx, s, site.GoroutineID)
+	// the effects its task made since its last record are its own
+	// (attribution rule 2), and it says whether effects are recorded here
+	s.Made = r.take(site)
+	s.EffectsObserved = r.observe || site.Clock != nil
 	// seq is taken here, after the effect the step describes has happened.
 	// Two concurrent steps may be numbered in either order, but their
 	// times are in the same one (stamp).
 	s.Seq, s.Time = r.stamp(site)
+	r.write(ctx, s)
+}
+
+// taskOf is the task a record at site is made by, for rule 2: the
+// simulation's task, else the goroutine.
+func taskOf(site hooks.Site) any {
+	if site.Task != nil {
+		return site.Task
+	}
+	if site.GoroutineID != 0 {
+		return site.GoroutineID
+	}
+	return hooks.GoroutineID()
+}
+
+// take is, and forgets, the effect records site's task made since its
+// last record.
+func (r *Recorder) take(site hooks.Site) []uint64 {
+	if r.pending.Load() == 0 {
+		return nil // the common case: no effect outstanding, no lookup
+	}
+	k := taskOf(site)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	made := r.made[k]
+	if len(made) > 0 {
+		delete(r.made, k)
+		r.pending.Add(-int64(len(made)))
+	}
+	return made
+}
+
+type callKey struct{}
+
+// Scope returns ctx carrying c as its open invocation: an effect recorded
+// through it (qobs.Effect, a qenv double's send) is c's (attribution rule
+// 1), whatever goroutine makes it, and one made after c's Done is a late
+// effect of c's step. A nil Call's scope is ctx.
+//
+//	c := qobs.Invoke(ctx, "pay", "order", id)
+//	ctx = c.Scope(ctx)
+//	err := payments.Capture(ctx, key, id, amount) // its request is pay's effect
+//	c.Done(err)
+func (c *Call) Scope(ctx context.Context) context.Context {
+	if c == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, callKey{}, c)
+}
+
+// Effect records an effect the code made (a request sent, a message
+// published) through the context's recorder, found as Record finds it,
+// at once, so that a crash after it keeps it: an effect record of kind
+// (qtrace.KeyEffect), its fields kv as Record's arguments. It is the
+// step's whose invocation is open in ctx (Call.Scope: rule 1), else its
+// task's next step's (rule 2: the effects a task made before a step are
+// that step's, as code coverage attributes code). A binding's effects
+// section compares a step's effects with the model's (I/O
+// specifications); qenv's doubles record theirs at the send. A no-op with
+// no recorder.
+//
+//	qobs.Effect(ctx, "mail.send", "to", addr, "template", "receipt")
+func Effect(ctx context.Context, kind string, kv ...any) {
+	if c, ok := ctx.Value(callKey{}).(*Call); ok && c != nil {
+		c.r.effect(ctx, kind, expand(kv), c, 0)
+		return
+	}
+	if r, id := from(ctx); r != nil {
+		r.effect(ctx, kind, expand(kv), nil, id)
+	}
+}
+
+// Effect records an effect (the package's Effect) on r.
+func (r *Recorder) Effect(ctx context.Context, kind string, kv ...any) {
+	c, _ := ctx.Value(callKey{}).(*Call)
+	if c != nil && c.r != r {
+		c = nil // another recorder's call: no seq of r's names it
+	}
+	r.effect(ctx, kind, expand(kv), c, 0)
+}
+
+func (r *Recorder) effect(ctx context.Context, kind string, kv []any, c *Call, id int64) {
+	if r == nil || kind == "" {
+		return
+	}
+	site := hooks.SiteOf(ctx, id)
+	if site.Discard {
+		return // a frozen task's unwinding sends nothing
+	}
+	// every key is a field (a request's "actor" is its own, no override)
+	s := &qtrace.Step{Action: "effect", Recorder: r.id, Actor: r.actor, Process: r.process, Record: qtrace.Record{Effect: kind}}
+	if t, ok := ctx.Value(threadKey{}).(string); ok {
+		s.Thread = t
+	}
+	for i := 0; i+1 < len(kv); i += 2 {
+		if _, ok := kv[i].(refKey); ok {
+			s.Ref = kv[i+1].(string)
+			continue
+		}
+		if s.Args == nil {
+			s.Args = map[string]any{}
+		}
+		s.Args[fmt.Sprint(kv[i])] = normalize(kv[i+1])
+	}
+	if c != nil {
+		s.Call = c.seq
+	}
+	r.effects.Add(1)
+	s.Seq, s.Time = r.stamp(site)
+	if c == nil {
+		k := taskOf(site)
+		r.mu.Lock()
+		if r.made == nil {
+			r.made = map[any][]uint64{}
+		}
+		r.made[k] = append(r.made[k], s.Seq)
+		r.mu.Unlock()
+		r.pending.Add(1)
+	}
 	r.write(ctx, s)
 }
 
@@ -522,6 +666,9 @@ func (r *Recorder) invoke(ctx context.Context, action string, kv []any, id int64
 	s, _ := r.step(ctx, action, nil, keys)
 	r.checkRecordedThread(ctx, s, site.GoroutineID)
 	s.Invocation, s.Outcome = true, ""
+	// effects its task made before the call began are no step's: the
+	// call's are made under its scope, and its completion's own
+	_ = r.take(site)
 	c.seq, s.Time = r.stamp(site)
 	s.Seq = c.seq
 	r.write(ctx, s)

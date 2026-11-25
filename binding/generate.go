@@ -36,6 +36,10 @@ type Call struct {
 	Action     string            // the model action
 	Args       map[string]string // parameter -> the Quint expression passed
 	Note       string            // description, for calls that come from an ITF state
+	// Effects is the comparison of the step's effects with its action's
+	// effects def, when the binding gives one: the conjunct it added to
+	// Expect, for a report
+	Effects *EffectCheck
 }
 
 // Plan is the binding applied to one actor's trace: the instance's
@@ -325,6 +329,27 @@ func (p *Planner) Plan(t *qtrace.Trace) (*Plan, error) {
 						"record it with the step (observations as \"obs.NAME\")", i+1, s.Action, where(s), s.Action, f, hasFields(s))
 				}
 				return nil, fmt.Errorf("step %d (%s%s): expect: %w", i+1, s.Action, where(s), err)
+			}
+		}
+		if def, match := b.effectsDef(m, s.Action); def != "" && !s.Ambiguous && m != nil {
+			if !s.EffectsObserved && len(s.Effects) == 0 {
+				return nil, fmt.Errorf("step %d (%s, seq %d%s): the step recorded no effect scope, and the binding gives %s effects (%s): "+
+					"record it where effects are recorded (a simulation's doubles; qobs.Invoke with Call.Scope around the call; a recorder made with qobs.ObserveEffects), "+
+					"or drop them for %s (effects: \"-\")", i+1, s.Action, s.Seq, where(s), s.Action, def, s.Action)
+			}
+			ec, defArgs, err := b.effectCheck(rd, m, def, match, s, c.Args)
+			if err != nil {
+				return nil, fmt.Errorf("step %d (%s, seq %d%s): %w", i+1, s.Action, s.Seq, where(s), err)
+			}
+			c.Effects = ec
+			conj := effectsConjunct(def, defArgs, match, ec.Literal)
+			if c.Expect == "" {
+				c.Expect, c.ExpectArgs = conj, []string{}
+			} else {
+				c.Expect = "(" + c.Expect + ") and " + conj
+			}
+			if c.ExpectArgs != nil { // the evaluation module's expect takes the def's arguments and the effects made
+				c.ExpectArgs = append(append(c.ExpectArgs, defArgs...), ec.Literal)
 			}
 		}
 		if snapshotStart {

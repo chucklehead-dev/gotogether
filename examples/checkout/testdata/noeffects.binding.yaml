@@ -1,0 +1,43 @@
+# checkout.binding.yaml with pay's effects ablated (effects: "-"): the
+# checks as they were before I/O specifications, the baseline the effects
+# tests measure against (checkout_test.go's TestEffects*). Keep it in
+# step with checkout.binding.yaml.
+spec: ../model/checkout.qnt
+module: checkout
+constants:
+  STOCK: '2'
+actions:
+  place:
+    expect: 'stock == {{.obs.stock}}'
+  refuse:
+    expect: 'stock == {{.obs.stock}}'
+  # Paying is a call (qobs.Invoke around the capture's retries): the
+  # provider's requests made under its scope are its effects, compared
+  # with the model's payEffects (one capture of the order's money; the
+  # tries of one request under one key are one). A capture that failed or
+  # was voided still sent what it sent.
+  pay:
+    effects: "-"
+    outcomes: { error: call }
+  charge: {}
+  refund: {}
+  markPaid: {}
+  ship: {}
+  cancel:
+    expect: 'stock == {{.obs.stock}}'
+  settle: {}
+invariants: [chargedAtMostOnce, settledCorrectly]
+
+# The effects compared (I/O specifications): a capture request, as qenv's
+# Service records it at the send (its PayReq's fields). A void, the
+# shop's other request, is no pay's and is not compared.
+effects:
+  kinds:
+    Capture:
+      from: rpc.provider.request
+      where: { Op: capture }
+      fields: { order: '{{.Order}}', amount: '{{.Amount}}' }
+      same: [Key]
+
+simulate:
+  skip: the ablated copy of checkout.binding.yaml, whose simulation covers the same model

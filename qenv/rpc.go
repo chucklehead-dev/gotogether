@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // ErrTimeout is returned by Call when no response arrived in time. The
@@ -85,6 +87,11 @@ type Service[Req, Resp any] struct {
 	// Rejected and Shed count requests refused by a full queue, and dropped
 	// because their caller had given up.
 	Rejected, Shed int
+	// Effect, if set, is how Call records a request as its caller's
+	// effect (qobs.Effect): its kind and fields, or kind "" for none (a
+	// double above it records its own: qhttp's Transport). Nil: kind
+	// "rpc.<name>.request", the request's fields (EffectFields).
+	Effect func(req Req) (kind string, fields []any)
 
 	busy, waiting int
 	free          Signal
@@ -171,6 +178,13 @@ func (svc *Service[Req, Resp]) Call(ctx context.Context, req Req, timeout time.D
 	var zero Resp
 	if cancelled(ctx) {
 		return zero, ctx.Err()
+	}
+	// sent: the caller's effect, one per Call, whatever the network makes
+	// of it (a lost request, a duplicate, a late delivery)
+	if svc.Effect == nil {
+		effect(ctx, "rpc."+svc.Name+".request", req)
+	} else if kind, fields := svc.Effect(req); kind != "" {
+		qobs.Effect(ctx, kind, fields...)
 	}
 	s := svc.sim
 	res := &result[Resp]{}

@@ -1,6 +1,10 @@
 == github.com/chucklehead-dev/gotogether/binding
 const FormatName = "gotogether.binding/2"
+const MatchExact = "exact"
+const MatchRetried = "retried"
+const MatchSet = "set"
 func AnnotationsOf(fset *token.FileSet, f *ast.File) []Annotation
+func FirstDifference(made, expected []string) (index int, field, got, want string)
 func InstanceConstants(spec, instance string) (module string, constants []string, err error)
 func LintRecords(m *Model, recs []RecordCall) []string
 func LintSourceFindings(bs []Bound, anns []Annotation, recs []RecordCall) []LintFinding
@@ -17,6 +21,8 @@ func ScanRecords(dir string) ([]RecordCall, error)
 type Action struct
     field Args map[string]string `yaml:"args"`
     field Expect string `yaml:"expect"`
+    field Effects string `yaml:"effects"`
+    field Match string `yaml:"match"`
     field Outcomes map[string]string `yaml:"outcomes"`
     method (Action) Fields(ps ...Param) []string
     method (Action) Template(p Param) string
@@ -43,6 +49,7 @@ type Binding struct
     field Antecedents map[string]string `yaml:"antecedents"`
     field Actors []string `yaml:"actors"`
     field Actions map[string]Action `yaml:"actions"`
+    field Effects *Effects `yaml:"effects"`
     field Invariants []string `yaml:"invariants"`
     field Eventually []string `yaml:"eventually"`
     field Complete bool `yaml:"complete"`
@@ -94,7 +101,24 @@ type Call struct
     field Action string
     field Args map[string]string
     field Note string
+    field Effects *EffectCheck
     method (Call) String() string
+type EffectCheck struct
+    field Def string
+    field Call string
+    field Match string
+    field Made []string
+    field From []qtrace.Effect
+    field Literal string
+    field Tries []string
+    field NotCompared []qtrace.Effect
+type EffectKind struct
+    field From string `yaml:"from"`
+    field Where map[string]string `yaml:"where"`
+    field Fields map[string]string `yaml:"fields"`
+    field Same []string `yaml:"same"`
+type Effects struct
+    field Kinds map[string]EffectKind `yaml:"kinds"`
 type EvalModule struct
     field Name string
     field Text string
@@ -102,6 +126,7 @@ type EvalModule struct
     field Consts map[string]string
     field Actions map[string]string
     field Expects map[string]string
+    field Effects map[string]string
     field Invariants map[string]string
     field Eventually map[string]string
     field Vals map[string]string
@@ -138,6 +163,7 @@ type Model struct
     field Module string
     field Actions map[string][]Param
     field Vals map[string]bool
+    field Defs map[string][]string
     field Diagnostics map[string]string
     field Antecedents map[string]string
     field Vars []string
@@ -755,6 +781,7 @@ func CoverageWith(runs [][]Choice, sites ...map[string][]string) *Coverage
 func Daemon(ctx context.Context)
 func DeclareFaultSite(kind, site string)
 func DeclareFaults(name string, options ...string) FaultKind
+func EffectFields(v any) []any
 func EncodeChoices(choices []Choice, rates Rates) ([]byte, error)
 func EntropyOf(c Chooser) func(n int) []byte
 func FaultPoint(ctx context.Context, kind string, crash bool, errs ...error) error
@@ -1007,6 +1034,7 @@ type Service[Req, Resp any] struct
     field NoCrashWindow bool
     field Rejected int
     field Shed int
+    field Effect func(req Req) (kind string, fields []any)
     method (*Service[Req, Resp]) Call(ctx context.Context, req Req, timeout time.Duration) (Resp, error)
     method (*Service[Req, Resp]) InSystem() int
 type Signal struct
@@ -1701,6 +1729,7 @@ const Buffered Durability = iota (spec 2 of its group)
 const PerStep Durability = iota
 const Synced Durability = iota (spec 1 of its group)
 func CompleteThrough(ctx context.Context, t time.Time)
+func Effect(ctx context.Context, kind string, kv ...any)
 func FileSink(path string, d Durability) (*JSONLSink, error)
 func From(ctx context.Context) *Recorder
 func Global() *Recorder
@@ -1710,6 +1739,7 @@ func NewJSONLSink(w io.Writer, d Durability) *JSONLSink
 func NewOTelSink(tp trace.TracerProvider) *OTelSink
 func NewRecorder(sink Sink, opts ...Option) *Recorder
 func NewSlogHandler(next slog.Handler) *SlogHandler
+func ObserveEffects() Option
 func Record(ctx context.Context, action string, err error, kv ...any)
 func Ref(s string) StepRef
 func SetGlobal(r *Recorder)
@@ -1721,6 +1751,7 @@ func WithProcess(p string) Option
 func WithRecorder(ctx context.Context, r *Recorder) context.Context
 type Call struct
     method (*Call) Done(err error, kv ...any)
+    method (*Call) Scope(ctx context.Context) context.Context
 type Durability int
 type JSONLSink struct
     method (*JSONLSink) Close() error
@@ -1743,6 +1774,7 @@ type Recorder struct
     method (*Recorder) Close() error
     method (*Recorder) CompleteThrough(ctx context.Context, t time.Time)
     method (*Recorder) Count() int
+    method (*Recorder) Effect(ctx context.Context, kind string, kv ...any)
     method (*Recorder) ID() string
     method (*Recorder) Interrupted() []qtrace.Step
     method (*Recorder) Invoke(ctx context.Context, action string, kv ...any) *Call
@@ -2263,6 +2295,8 @@ const KeyActor = "quint.actor"
 const KeyAssumed = "quint.assumed"
 const KeyCall = "quint.call"
 const KeyCompleteThrough = "quint.complete_through_unix_nano"
+const KeyEffect = "quint.effect"
+const KeyEffects = "quint.effects"
 const KeyError = "quint.error"
 const KeyFormat = "quint.format"
 const KeyInvocation = "quint.invocation"
@@ -2293,6 +2327,7 @@ func CollectedThrough(steps []Step) map[string]time.Time
 func ForcedOrder(steps []Step) ([]Step, bool)
 func ForcedOrderWithin(steps []Step, skew time.Duration) ([]Step, bool)
 func FormatLine() []byte
+func FormatMade(made []uint64) string
 func FromAttributes(t time.Time, layers ...map[string]any) (Step, error)
 func HistorySVG(recorded, order []Step, failedAt int) []byte
 func Key(steps []Step) string
@@ -2302,6 +2337,7 @@ func MarkLost(steps []Step, l Lost) []Step
 func MutateLimit(n int) MutationOption
 func MutateOps(ops ...string) MutationOption
 func Mutations(steps []Step, opts ...MutationOption) []StepMutant
+func ParseMade(v string) ([]uint64, error)
 func ReadJSONL(r io.Reader) ([]Step, error)
 func Reconstruct(steps []Step) ([]*Trace, []Issue)
 func SameRecord(a, b *Step) bool
@@ -2314,6 +2350,17 @@ type ClockAssumption struct
     field Closest time.Duration
     field Recorders []string
     method (ClockAssumption) String() string
+type Effect struct
+    field Kind string
+    field Fields map[string]any
+    field Recorder string
+    field Seq uint64
+    field Time time.Time
+    field By string
+    field Late bool
+    field Call uint64
+    field Source string
+    method (Effect) String() string
 type Filter struct
     field Actors []string
     field Actions []string
@@ -2373,6 +2420,7 @@ type Record struct
     field LostAfter uint64
     field LostBefore time.Time
     field CompleteThrough time.Time
+    field Effect string
 type Step struct
     field Action string
     field Seq uint64
@@ -2387,6 +2435,9 @@ type Step struct
     field Call uint64
     embed Record
     field Ambiguous bool
+    field Made []uint64
+    field EffectsObserved bool
+    field Effects []Effect
     field Args map[string]any
     field Obs map[string]any
     field Order map[string]int64
@@ -2421,12 +2472,13 @@ type Trace struct
     field Lost []Lost
     field Gaps []Gap
     field Collected []Watermark
+    field Unattributed []Effect
     method (*Trace) CompleteThrough() (through time.Time, every bool)
 type Watermark struct
     field Recorder string
     field Through time.Time
     method (Watermark) String() string
-var MutationOps = []string{"drop", "dup", "swap", "corrupt", "retime", "reactor", "gap"}
+var MutationOps = []string{"drop", "dup", "swap", "corrupt", "retime", "reactor", "gap", "effect-drop", "effect-dup", "effect-swap", "effect-corrupt"}
 
 == github.com/chucklehead-dev/gotogether/schemas
 const BindingURL = "https://raw.githubusercontent.com/chucklehead-dev/gotogether/main/schemas/gotogether.binding-2.json"
@@ -2693,6 +2745,7 @@ type DocFailure struct
     field ExpectTemplate string `json:"expectTemplate,omitempty"`
     field Why *Explanation `json:"why,omitempty"`
     field Changes []Change `json:"changes,omitempty"`
+    field Effects *EffectsMismatch `json:"effects,omitempty"`
     field State map[string]string `json:"state,omitempty"`
     field StateAfter bool `json:"stateAfter,omitempty"`
     field Note string `json:"note,omitempty"`
@@ -2836,6 +2889,20 @@ type Edge struct
     field Action string `json:"action"`
     field Args []NamedValue `json:"args,omitempty"`
     field Picks []NamedValue `json:"picks,omitempty"`
+type EffectsMismatch struct
+    field Call string `json:"call"`
+    field Match string `json:"match"`
+    field Made []string `json:"made"`
+    field MadeAt []string `json:"madeAt,omitempty"`
+    field Expected []string `json:"expected,omitempty"`
+    field Index int `json:"index,omitempty"`
+    field Field string `json:"field,omitempty"`
+    field Got string `json:"got,omitempty"`
+    field Want string `json:"want,omitempty"`
+    field Tries []string `json:"tries,omitempty"`
+    field Late []string `json:"late,omitempty"`
+    field Unexplained string `json:"unexplained,omitempty"`
+    method (*EffectsMismatch) Brief() string
 type EvaluationSampling struct
     field Rate float64
     field Seed string
@@ -2869,6 +2936,7 @@ type Failure struct
     field StateAfter bool
     field Why *Explanation
     field Changes []Change
+    field Effects *EffectsMismatch
     method (*Failure) At() string
     method (*Failure) Doc(check string, verdict Verdict) DocFailure
 type File struct

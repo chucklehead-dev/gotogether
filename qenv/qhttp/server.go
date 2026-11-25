@@ -102,6 +102,9 @@ var errNotListening = errors.New("qhttp: no handler installed")
 func NewServer(s *qenv.Sim, name string, p *qenv.Process) *Server {
 	srv := &Server{Name: name, sim: s}
 	srv.Service = qenv.NewService(s, name, p, srv.serve)
+	// the Transport records a request as its own effect (method, path,
+	// headers, body), not as the bytes on the wire
+	srv.Service.Effect = func([]byte) (string, []any) { return "", nil }
 	srv.Proc = srv.Service.Proc
 	srv.conn = qenv.DeclareFaults("http."+name+".conn", "refused").At(srv.Proc)
 	return srv

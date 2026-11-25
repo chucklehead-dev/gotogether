@@ -7,14 +7,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"syscall"
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // DefaultTimeout is how long a Transport waits for a response when its
@@ -144,7 +147,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 			timeout, byDeadline = left, true
 		}
 	}
-	wire, err := writeRequest(req)
+	wire, body, err := writeRequest(req)
 	if err != nil {
 		return nil, err
 	}
@@ -163,6 +166,10 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		from = p.Name + ":0"
 	}
 	in := append(append([]byte(from), 0), wire...)
+	// the request as the code sent it, before the network decides its
+	// fate: an effect of the step the call is made for (I/O
+	// specifications); the Service under it records none of its own
+	qobs.Effect(ctx, "http."+srv.Name+".request", requestFields(req, body)...)
 	resp, err := srv.Service.Call(ctx, in, timeout)
 	switch {
 	case errors.Is(err, qenv.ErrTimeout):
@@ -187,13 +194,13 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 // body and an empty one, not at all: what net/http decides by reading a
 // byte of it on a goroutine raced against a real 200 ms timer
 // (transferWriter.probeRequestBody), here decided without either.
-func writeRequest(req *http.Request) ([]byte, error) {
+func writeRequest(req *http.Request) (wire, body []byte, err error) {
 	r := *req // RoundTrip must not modify the request
 	if req.Body != nil && req.Body != http.NoBody {
-		body, err := io.ReadAll(req.Body)
+		body, err = io.ReadAll(req.Body)
 		req.Body.Close()
 		if err != nil {
-			return nil, fmt.Errorf("qhttp: reading the body of %s %s: %w", req.Method, req.URL, err)
+			return nil, nil, fmt.Errorf("qhttp: reading the body of %s %s: %w", req.Method, req.URL, err)
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
 		// CONNECT keeps Request.Write's special framing rule, which avoids
@@ -208,9 +215,30 @@ func writeRequest(req *http.Request) ([]byte, error) {
 	}
 	var b bytes.Buffer
 	if err := r.Write(&b); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return b.Bytes(), nil
+	return b.Bytes(), body, nil
+}
+
+// requestFields are a request's fields as its effect record carries them
+// (qobs.Effect): method, path, query (if any), body (as text, if any),
+// and each header's first value as header.<Canonical-Name>, the
+// idempotency key's among them, which relates the request to its
+// handling at a service (rule 3).
+func requestFields(req *http.Request, body []byte) []any {
+	kv := []any{"method", req.Method, "path", req.URL.Path}
+	if req.URL.RawQuery != "" {
+		kv = append(kv, "query", req.URL.RawQuery)
+	}
+	if len(body) > 0 {
+		kv = append(kv, "body", string(body))
+	}
+	for _, k := range slices.Sorted(maps.Keys(req.Header)) {
+		if v := req.Header[k]; len(v) > 0 {
+			kv = append(kv, "header."+k, v[0])
+		}
+	}
+	return kv
 }
 
 // lacksBody is net/http's requestMethodUsuallyLacksBody.

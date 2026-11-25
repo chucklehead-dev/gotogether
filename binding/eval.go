@@ -29,7 +29,9 @@ type EvalModule struct {
 	Consts map[string]string
 	// Actions are the model's actions, each the name of the module's that
 	// applies it; Expects each action's expect, its definition's name
-	Actions, Expects map[string]string
+	// (with its effects' conjunct, I/O specifications); Effects each
+	// action's effects def, the module's definition that applies it
+	Actions, Expects, Effects map[string]string
 	// Invariants and Eventually are the binding's vals, each the name of
 	// the module's val that reads it; Vals every val a Within names
 	Invariants, Eventually, Vals map[string]string
@@ -110,14 +112,19 @@ func (b *Binding) evalModule(m *Model, qntPath string, preds []string) (*EvalMod
 	if b.Defs != "" {
 		w.WriteString(b.Defs + "\n")
 	}
+	em.Effects = map[string]string{}
 	for _, a := range slices.Sorted(maps.Keys(b.Actions)) {
 		ab := b.Actions[a]
-		if ab.Expect == "" {
+		def, match := b.effectsDef(m, a)
+		if ab.Expect == "" && def == "" {
 			continue
 		}
-		parts, holes, err := splitTemplate(ab.Expect)
-		if err != nil {
-			return nil, fmt.Errorf("action %s's expect: %w", a, err)
+		parts, holes := []string{""}, []string(nil)
+		if ab.Expect != "" {
+			var err error
+			if parts, holes, err = splitTemplate(ab.Expect); err != nil {
+				return nil, fmt.Errorf("action %s's expect: %w", a, err)
+			}
 		}
 		name := evalPrefix + "expect_" + a
 		params := make([]string, len(holes))
@@ -127,6 +134,28 @@ func (b *Binding) evalModule(m *Model, qntPath string, preds []string) (*EvalMod
 			body.WriteString(parts[i] + params[i])
 		}
 		body.WriteString(parts[len(holes)])
+		if def != "" {
+			// the effects' conjunct, as Plan adds it: the def's arguments
+			// and the effects made are the expect's last parameters
+			// (Call.ExpectArgs), and the def alone is a definition of its
+			// own, for a report's expected effects
+			var eps []string
+			for i := range m.Defs[def] {
+				eps = append(eps, fmt.Sprintf("%sea%d", evalPrefix, i))
+			}
+			conj := effectsConjunct(def, eps, match, evalPrefix+"em")
+			text := body.String()
+			body.Reset()
+			if ab.Expect == "" {
+				body.WriteString(conj)
+			} else {
+				body.WriteString("(" + text + ") and " + conj)
+			}
+			params = append(append(params, eps...), evalPrefix+"em")
+			fx := evalPrefix + "effects_" + a
+			fmt.Fprintf(&w, "  def %s(%s) = %s(%s)\n", fx, strings.Join(eps, ", "), def, strings.Join(eps, ", "))
+			em.Effects[a] = fx
+		}
 		sig := ""
 		if len(params) > 0 {
 			sig = "(" + strings.Join(params, ", ") + ")"

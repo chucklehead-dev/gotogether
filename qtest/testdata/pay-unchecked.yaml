@@ -1,0 +1,10 @@
+# pay.yaml with its effects check ablated: the same steps, no effects
+# compared. A wrong capture conforms here.
+spec: pay.qnt
+module: pay
+actions:
+  place: {}
+  pay: {}
+  refund: {}
+simulate:
+  skip: a fixture of effects

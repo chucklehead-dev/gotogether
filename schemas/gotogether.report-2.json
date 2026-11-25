@@ -309,6 +309,73 @@
                   "description": "Check is what failed: \"conformance\", or the invariant's name.",
                   "type": "string"
                 },
+                "effects": {
+                  "additionalProperties": false,
+                  "description": "Effects, for a mismatch of a step's effects (I/O specifications), are the effects made and the model's, and where they first differ.",
+                  "properties": {
+                    "call": {
+                      "description": "Call is the def applied to the step's arguments (payEffects(\"o1\")), Match the binding's mode.",
+                      "type": "string"
+                    },
+                    "expected": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "field": {
+                      "type": "string"
+                    },
+                    "got": {
+                      "type": "string"
+                    },
+                    "index": {
+                      "description": "Index is the first effect that differs (1-based), Field its field when both are one constructor's records, Got and Want its values.",
+                      "type": "integer"
+                    },
+                    "late": {
+                      "description": "Late are the effects made under the step's call after it completed.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "made": {
+                      "description": "Made are the step's effects as the model's values (normalized by Match), MadeAt where each was recorded (\"rpc.provider.request at seq 29\"); Expected the def's value in the state after the step, when the Go evaluator could compute it.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "madeAt": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "match": {
+                      "type": "string"
+                    },
+                    "tries": {
+                      "description": "Tries are the retries under another key (match retried's Same).",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "unexplained": {
+                      "description": "Unexplained says why Expected is unknown.",
+                      "type": "string"
+                    },
+                    "want": {
+                      "type": "string"
+                    }
+                  },
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
                 "expect": {
                   "description": "a mismatch's post-state check, as rendered",
                   "type": "string"
