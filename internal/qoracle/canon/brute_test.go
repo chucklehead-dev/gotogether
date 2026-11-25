@@ -74,7 +74,9 @@ func (g *bgen) expr(d int, params map[string]int, table map[string]any) map[stri
 }
 
 func (g *bgen) typ() map[string]any {
-	v := func() map[string]any { return map[string]any{"kind": "var", "name": []string{"_t1", "_t2"}[g.r.IntN(2)]} }
+	v := func() map[string]any {
+		return map[string]any{"kind": "var", "name": []string{"_t1", "_t2"}[g.r.IntN(2)]}
+	}
 	if g.r.IntN(2) == 0 {
 		return v()
 	}

@@ -177,7 +177,7 @@ type canonicalizer struct {
 	kept     map[string]bool
 	modOrder []int
 	modLayer map[string]int
-	dropped map[string]int
+	dropped  map[string]int
 }
 
 // idText is v as an id's key: a number's text or a form's string.
