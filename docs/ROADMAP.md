@@ -658,13 +658,27 @@ item is its own decision before it starts; the red-nightly rule applies.
   `compile -check` compares meaning). Left: 30 bindings over 1 MB (counters
   8 MB, edgepublish 22 MB, the grist apps 2-7 MB; IR, about twenty-fold
   compressible): a compact artifact or a larger budget is the maintainer's
-  call; and the tests of Q1's fragment (`qtest.Model`, simulate, connect's
-  traces), the checker's own callers and Q2's run-time models, each listed.
-- **Q1: the evaluator's whole fragment (M).** qeval's refusals
-  (`qeval.Unsupported`) closed, and `quint run`'s random simulation in Go.
-  Seeds cannot match quint's generator, so parity is by meaning: every trace
-  Go makes replays in quint, every trace quint makes replays in Go, and
-  small models' reachable sets agree.
+  call; and the tests of Q1's fragment (`qtest.Model`, simulate; connect's
+  traces from a spec's compiled model since Q1's first slices), the checker's own callers and Q2's run-time models, each listed.
+- **Q1: the evaluator's whole fragment (M). First slices built** (DESIGN
+  §110): the refusals inventoried (none of the repository's 67 agreeing
+  models hits one but rr's order-dependent fold, on purpose), the builtins
+  quint's simulator runs closed (`setOfMaps`, `allListsUpTo`,
+  `getOnlyElement`, `q::debug`), `quint run`'s random simulation in Go
+  (`qeval.Model.Sample`, `Simulate`, `ActionTaken`: sound and complete
+  draws, quint's `mbt::actionTaken`), parity by meaning on both backends
+  (Go's traces replay in quint pinned, quint's are paths of the
+  evaluator's, a small model's reachable sets agree), and connect's traces,
+  Require, Eval and bound checks from a compiled spec (`gotogether compile
+  -spec`, `gotogether.mbt/1`, `GOTOGETHER_COMPILED`) with no quint. Left:
+  `qtest.Model` and `simulate` from a compiled binding model (the
+  artifact to carry the claims' PossibleModule; the cross-check and the
+  witness replays reported as not done; sampled invariants by Simulate),
+  connect.Test's runs (`then`, `reps`, `expect`, `fail`), integers past 64
+  bits, and a nightly comparing Go's traces with quint's on every
+  example's model. Seeds cannot match quint's generator, so parity is by
+  meaning: every trace Go makes replays in quint, every trace quint makes
+  replays in Go, and small models' reachable sets agree.
 - **Q2: the front end (L).** Parser (from Quint's ANTLR grammar or by hand,
   for quint's error positions), name resolution, imports, instances and
   `export` flattened to the IR `quint compile` writes, then the type and

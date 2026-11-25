@@ -23,6 +23,11 @@ func TestModelDiffPreflightReportsErrorsBeforeQuint(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake Quint uses POSIX shell")
 	}
+	// quint's cross-process cache is keyed by the binary's version, which the
+	// fake reports as the real 0.33.1: another test's typecheck of the same
+	// spec (validate/model's compare tests) would answer the positive control
+	// below from the cache, and it would never reach the fake.
+	t.Setenv("GOTOGETHER_CACHE", "off")
 	quint := filepath.Join(t.TempDir(), "quint")
 	if err := os.WriteFile(quint, []byte("#!/bin/sh\nif [ \"$1\" = --version ]; then printf '0.33.1\\n'; : > \"$0.versioned\"; exit 0; fi\nprintf '%s\\n' \"$1\" > \"$0.started\"\nexit 1\n"), 0o755); err != nil {
 		t.Fatal(err)

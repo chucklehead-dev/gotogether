@@ -5345,6 +5345,7 @@ adjusting it is a field per format):
 | `gotogether.run/3` | validate's run manifest | the current only |
 | `gotogether.evidence/3` | qtest's evidence | the current only |
 | `gotogether.model/1` | a compiled model (gotogether compile, §64) | the current only |
+| `gotogether.mbt/1` | a spec compiled for connect's traces (gotogether compile -spec, §110) | the current only |
 | `gotogether.report/2` | validate's and simulate's `-json` (validate.Document, §68) | the current only |
 | `gotogether.nav/2` | navproto's Session and Node's `protocol` | the current only; unnamed protocols are refused |
 
@@ -7213,3 +7214,126 @@ adopters already keep those tables in their design documents and CI.
   The sound form is a region the author marks as claims, where every
   sentence must cite a property or an assumption by name; its form (the
   marker, what a sentence is) is the maintainer's to choose.
+
+## 110. The evaluator's fragment and quint run in Go (Q1)
+
+Q0 judged runs with no quint; a consumer still needed quint (and Node) for
+connect's traces, `simulate` and `qtest.Model`. Q1's first slices close
+the builtins the evaluator lacked, put `quint run`'s random simulation in
+Go, and run connect from a compiled spec.
+
+**The refusals, inventoried (2026-11-25).** Every `qeval.Unsupported`
+path, and which of the repository's models reach it. TestAgreesWithQuint
+(every binding's model: the examples', testdata's, grist's generated
+ones) found 67 models agreeing with quint, and refused 2, both rr's
+order-dependent fold, on purpose. The models' text uses none of the
+missing builtins; run operators appear only in `run` definitions (7 files:
+retrystorm's `reps`, twophase's `fail`, `expect` in bank, twophase,
+retrystorm and four adoption fixtures).
+
+| refusal | the repository's models | now |
+|---|---|---|
+| `setOfMaps`, `allListsUpTo`, `getOnlyElement`, `q::debug`: no case | none | closed, against both backends (differentialFindings, the generator) |
+| `allLists` | none | refused, as quint's simulator refuses it (QNT501): use `allListsUpTo` |
+| temporal operators (`always`, `eventually`, `next`, `enabled`, `orKeep`, `mustChange`, `weakFair`, `strongFair`, `leadsTo`) | none in a val the evaluator reads | refused, as quint run and test refuse them: Apalache's |
+| a run's operators (`then`, `reps`, `expect`, `fail`) | 7 files' `run`s | refused: connect.Test (a quint test's run) needs quint; open |
+| a set fold whose result depends on quint's order, or over more than 10 elements of an operator not known to commute (fold.go, I2) | rr (qtest, validate testdata) | stays: no quint version promises its set order |
+| what quint's two backends disagree on: `setToMap` of one key twice, `exists`/`forall` with an element failing where another decides, `range` counting down | none | stays: no answer is quint's |
+| integers past 64 bits (literals, `+`, `*`, `^`, negation, ITF) | none | stays; a big-integer evaluator would close it |
+| sizes past 2^16 (a range, `tuples`, a powerset of more than 16, an action's successors) | none | stays; the sampler draws one successor and never enumerates them |
+| a choice quint's replay samples (AsReplayed's partial nondet, Step's several successors) | by design | a replay's, not the simulation's (§56, I4) |
+| recursion past 10000, an IR kind or name the evaluator does not know | none | the evaluator's own failure, quint's to judge |
+
+**Sampling, not enumerating.** `Model.Sample` evaluates an action as
+Successors does, with each choice drawn: a nondet's value and an any {}'s
+branch uniformly, at random. quint draws each once and ends the sample
+where its draw disables the step; the sampler puts a disabling value or
+branch aside and draws another, until one enables the action or none is
+left. So a sample is one of Successors (sound) and a step is disabled only
+where no choice enables it (complete): a trace ends at the model's
+deadlock, never at an unlucky draw, and a step one value in 1000 enables
+is taken. The distribution is not quint's (it is each choice's uniform
+draw, conditioned on the step being enabled), and a call's successors are
+drawn each time (no memo), so the sampler costs one path a step, not the
+step's successors. `Model.Simulate` is one trace: init sampled from no
+state, step up to Steps times, each state judged by the invariants, the
+first false one ending it.
+
+**The action taken.** quint's `mbt::actionTaken` is not the outermost
+action step applies: probing both backends showed it is the branch the
+last any {} on the path took (its action's name, through lets and
+nondets, or "" for an anonymous branch), and the step's own name where no
+any {} chose (`step = wrap` takes "step"; `nested = any { inc(2), keep }`
+takes inc or keep; a branch's inner anonymous any {} takes ""). A labelled
+evaluation now carries it (succ.taken); `Model.ActionTaken` reads it, or
+computes it again for a graph's path, which does not carry it. connect's
+witness traces (Config.Require) name it so too: they named the outermost
+action, which differed from quint's for a step without any {} and for a
+branch with an any {} inside.
+
+**Parity by meaning.** Seeds cannot match quint's generator, so:
+- every trace the sampler makes replays in quint: each transition pinned
+  (PinAction, I4's) and each state expected, a run per trace, on both
+  backends, with a control expecting a wrong state that must fail
+  (TestSimulationParityWithQuint);
+- every trace quint makes is a path of the evaluator's, with the action it
+  names among the evaluator's for that transition (the same test on
+  sample.qnt; TestAgreesWithQuint on every model of the repository);
+- on a small model (sample.qnt, 24 states) the Go samples, quint's samples
+  and the complete graph reach the same states;
+- the sampler against brute force: in every state of the graph each of 300
+  seeded samples is one of Transitions', enabled exactly where one is, and
+  every successor drawn (TestSampleAgainstBruteForce); and on every
+  generated action of the differential test, against the enumeration.
+Each fails with its piece ablated: no backtracking, no action taken, a
+wrong pick's label.
+
+**connect without quint.** `gotogether compile -spec S [-main M]`
+(validate.CompileMBT) writes `gotogether.mbt/1` beside the spec
+(connect.CompiledFor: `<stem>.mbt.json`, `<stem>.<main>.mbt.json` for
+another module than the file's): quint's IR of the main module with every
+definition its scope names kept, the definitions of whole-module imports
+and instances included (quint's flattening keeps only what init and step
+use, which in an instance module is none of the vals Config.Require and
+Step.Eval name), and the spec's and its imports' sha256. A source present
+and changed refuses it, naming `gotogether compile -spec` as the fix; one
+absent is noted. Not the binding's `gotogether.model/1`: connect names a
+spec and a module, not a binding, and a design's instance module is
+usually not the binding's. `GOTOGETHER_COMPILED` decides, as for qtest:
+unset, where quint is not on PATH and the file exists; 1, always, failing
+without one; 0, never. Then GenerateRun writes the Go evaluator's traces
+as quint run --mbt writes them (each state's variables, the action taken,
+every nondet of init and step, Some where the transition chose it), trace
+i drawn from the seed and i, so one replays alone; Config.Require,
+Step.Eval and a bound driver's check read the artifact's IR. What calls
+GenerateRun (qtest's FollowTraces, qhegel's VaryTraces) follows.
+- **What stays quint's, refused with the fix:** connect.Test (a quint test's
+  run); a Config.Args but `--invariant` (the simulation would not do what
+  it asks); an evaluator refusal (its construct, and quint as the fix); a
+  violated invariant fails the batch, as quint's run does, with the trace
+  written. Nothing falls back to quint unasked: a run that would need it
+  is a failure, never a pass on fewer traces.
+- **Where quint is installed** connect runs `quint run` as before: quint
+  stays the generator and the oracle there, and the sampler's agreement
+  with it is the parity tests', on every push, not each run's. This
+  follows §64 (the evaluator alone judges a compiled run, and says so:
+  the run's log names the compiled model), not §56's sampling of passes,
+  since a generated trace has no verdict of quint's to sample.
+- **Tests:** connect's TestCompiled* run with PATH empty and
+  `GOTOGETHER_COMPILED=1`: Run with the state, Step.Eval, Require and its
+  witnesses; Bind's Run; an instance module's vals and defs; the transfer
+  bug caught by the Go traces and the faithful bank passing; each refusal's
+  message; the switch's three values. validate's
+  TestCompiledMBTModelsAreCurrent keeps connect/testdata's artifacts a
+  compile now (and fails with the imports' definitions not kept).
+
+**Left in Q1.** `qtest.Model` and `simulate` from a compiled binding
+model: the graph and the possibles' search are the evaluator's already,
+but read a PossibleModule quint compiles for the claims' predicates; the
+binding's artifact would carry it (every boolean val is a candidate
+invariant there, Q0's second slice), the cross-check against quint's
+samples and the witness replays be reported as not done, and the sampled
+(non-graph) invariants use Simulate. connect.Test's runs (`then`, `reps`,
+`expect`, `fail` as a trace's steps). Integers past 64 bits. A nightly
+job comparing Go's and quint's traces on every example's model, as
+TestAgreesWithQuint does for quint's alone.

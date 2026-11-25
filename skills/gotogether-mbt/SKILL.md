@@ -76,6 +76,7 @@ compared with the model's. The Go counterpart of quint-connect.
 | `FAIL f.go: stale: type X changed` or `missing` (`gotogether types -check`) | the model's types changed since the file was generated, or it was never written | the `run gotogether types ...` it names, then commit the file |
 | `the implementations disagree` | a `connect.Differential`'s implementations differ, where the model may say nothing | decide which is right, fix the other |
 | `reproduce with QUINT_SEED=0x...` | the failing trace | rerun with it, `QUINT_VERBOSE=2` |
+| `generated N traces ... by the Go evaluator from the compiled model`, or `has none at S.mbt.json` | no quint: traces from `gotogether compile -spec` (driver.md, Without quint) | compile it where quint is, `-check` in CI |
 
 ## Run it, do not infer it
 

@@ -175,3 +175,40 @@ func TestCompileCheck(t *testing.T) {
 		t.Fatalf("-check without the file: %v", err)
 	}
 }
+
+// gotogether compile -spec: a spec's main module for connect, beside it by
+// default (connect.CompiledFor), current under -check, stale after its
+// source changes, and -main only with -spec.
+func TestCompileSpecForConnect(t *testing.T) {
+	skip.Quint(t)
+	dir := t.TempDir()
+	b, err := os.ReadFile("../../connect/testdata/instance.qnt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := filepath.Join(dir, "instance.qnt")
+	if err := os.WriteFile(spec, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := compileTo(&out, []string{"-spec", spec, "-main", "design"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "instance.design.mbt.json")); err != nil {
+		t.Fatalf("no compiled model beside the spec: %v\n%s", err, out.String())
+	}
+	out.Reset()
+	if err := compileTo(&out, []string{"-spec", spec, "-main", "design", "-check"}); err != nil || !strings.Contains(out.String(), "is current") {
+		t.Fatalf("-check of a current model: %v\n%s", err, out.String())
+	}
+	if err := os.WriteFile(spec, append(b, "\n// changed\n"...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err = compileTo(&out, []string{"-spec", spec, "-main", "design", "-check"})
+	if err == nil || !strings.Contains(err.Error(), "is stale") {
+		t.Fatalf("-check after the spec changed: %v", err)
+	}
+	if err := compileTo(&out, []string{"-binding", "x.yaml", "-main", "m"}); err == nil {
+		t.Fatal("-main with -binding was taken")
+	}
+}

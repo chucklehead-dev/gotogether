@@ -408,6 +408,7 @@ func (g *gen) expr(t *gtyp, d int, env []gbind) *gnode {
 
 	// any type
 	add(2, func() *gnode { return app(t, "ite", e(tBool), e(t), e(t)) })
+	add(1, func() *gnode { return app(t, "getOnlyElement", e(setOfT(t))) })
 	add(1, func() *gnode {
 		u := g.randType(1)
 		b := gbind{g.name("n"), u}
@@ -579,6 +580,17 @@ func (g *gen) expr(t *gtyp, d int, env []gbind) *gnode {
 		if t.elem.k == kInt {
 			add(2, func() *gnode { return app(t, "to", g.small(env), g.small(env)) })
 			add(1, func() *gnode { return app(t, "indices", e(listOfT(g.randType(1)))) })
+		}
+		if t.elem.k == kMap {
+			// every map of a domain to a range (Q1): small sets, so few maps
+			add(1, func() *gnode {
+				return app(t, "setOfMaps", g.expr(setOfT(t.elem.elem), min(d-1, 2), env), g.expr(setOfT(t.elem.val), min(d-1, 2), env))
+			})
+		}
+		if t.elem.k == kList {
+			add(1, func() *gnode {
+				return app(t, "allListsUpTo", g.expr(setOfT(t.elem.elem), min(d-1, 2), env), lit(tInt, []string{"0", "1", "2"}[g.r.IntN(3)]))
+			})
 		}
 		if t.elem.k == kSet && t.elem.elem.k != kSet {
 			// a powerset of a set of no sets: quint builds it whole

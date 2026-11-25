@@ -59,6 +59,11 @@ type Transition struct {
 	State  State
 	// key is State's Key, where Transitions computed it
 	key string
+	// taken is the action quint's --mbt names for it (succ.taken), and
+	// takenKnown whether it is known: Transitions and Sample know it, a
+	// graph's path does not (ActionTaken computes it again)
+	taken      *string
+	takenKnown bool
 }
 
 // appendEvents appends a list of events' encoding (appendEvent), ended
@@ -158,7 +163,7 @@ func (m *Model) Transitions(consts map[string]Value, s State, name string, args 
 				}
 				evs[i] = l
 			}
-			out = append(out, Transition{Events: evs, State: bs.st, key: bs.key})
+			out = append(out, Transition{Events: evs, State: bs.st, key: bs.key, taken: sc.taken, takenKnown: true})
 		}
 	}
 	return out, nil

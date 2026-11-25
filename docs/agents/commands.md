@@ -167,7 +167,12 @@ AGENTS.md has the general requirements.
   quint is not on PATH and the file exists; `1`: always, and a binding
   without one fails the test (a job without quint); `0`: never. Keep it
   current with `gotogether compile -binding B -check` where quint is.
-  `qtest.RequireModel(t, binding)` skips only without both.
+  `qtest.RequireModel(t, binding)` skips only without both. connect's
+  traces follow the same switch with a spec's compiled model
+  (`gotogether compile -spec S [-main M]` writes `<stem>[.<main>].mbt.json`
+  beside it; connect/testdata's bank and instance models have one, kept
+  current by validate's TestCompiledMBTModelsAreCurrent): the Go
+  evaluator's simulation, no quint; `connect.RequireTraces(t, cfg)`.
   The examples' compiled models: `ci/compiled-examples.sh check` (with
   quint: every `examples/**/*.model.json` current, `compile -check`; `check
   MODEL...` for some), `ci/compiled-examples.sh test` (quint taken off PATH,

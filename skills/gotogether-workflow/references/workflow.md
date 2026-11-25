@@ -297,7 +297,9 @@ deliberately and say why in the commit and the README.
   binding's compiled model (`gotogether compile`; `gotogether doctor` lists
   bindings with none). The tiers (per push, nightly, per release), a job
   with no quint (`GOTOGETHER_COMPILED=1`) and a pipeline with none
-  (`validate -compiled`): gotogether-start's references/ci.md.
+  (`validate -compiled`): gotogether-start's references/ci.md. connect's model-based tests
+  run without quint too, from `gotogether compile -spec` (gotogether-mbt's
+  driver.md, "Without quint"); `qtest.Model` and `simulate` still need it.
 - **Strict mode.** Set `GOTOGETHER_STRICT=1` (or `true`; another value
   but `0` or `false` fails, naming it) in every job that installs
   what its tests need: each toolkit skip then fails with its message
