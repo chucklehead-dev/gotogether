@@ -7507,7 +7507,15 @@ began are no step's. Reconstruct attaches each record in seq order
 (`Step.Effects`, `Effect.By` "call" or "task"); any other is
 `Trace.Unattributed`, listed and never compared (a relay, a client whose
 step a service records). Effect records are in the verdict key (Keyer):
-two runs whose effects differ are two verdicts.
+two runs whose effects differ are two verdicts. An exploration whose
+binding compares no effects keys its runs without them (qtest's
+effectBlind: each step's seq renumbered past its recorder's effect
+records, so a missing seq is still a gap), since the doubles' sends fall
+at other seqs in runs of one model history: with them in the key,
+twophase's early-commit mutant replayed all 60 of its runs where 47 had
+been, and examples/twophase's -short tests cost about 10 CPU seconds
+more. A template that reads a seq, diagnostic evidence, a lost tail or a
+pending invocation keys the run whole.
 
 **Where effects are recorded** (§8.1, 6: always, for evidence too).
 `qenv.Service.Call` records `rpc.<name>.request` with the request's
