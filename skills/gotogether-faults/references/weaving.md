@@ -25,3 +25,32 @@ real code, or the real code), weave it:
 
 Inside a simulation the woven locks are scheduling points, so seeds and
 Hegel explore their interleavings. Outside one, the real methods run.
+
+## Lock invariants
+
+A property of the state a mutex guards that must hold whenever the lock
+is released (Gobra's mutex invariant, checked rather than proved): attach
+it in the run, after `qenv.New`, from a task or the goroutine that made
+the simulation:
+
+```go
+s := qenv.New(c)
+qenv.Guard(s.Context(), &acct.mu, "ledgerMatchesBalance", acct.consistent)
+```
+
+- `holds` runs at every woven `Unlock` of that `*sync.Mutex` or
+  `*sync.RWMutex` (not `RUnlock`), the lock still held. It may be false
+  inside the critical section; at the release it must be true, or the
+  task panics with `qenv: lock invariant <name> (guarded at <file:line>)
+  broken at Unlock (<file:line>) by task <task> (step <n>)`, and the
+  exploration fails that run, replayable by its seed. Through a method
+  value (`unlock := l.Lock()` returning `mu.Unlock`) the site is the
+  line that made it.
+- `holds` only reads: a seam inside it (Yield, Wait, Sleep, Go, a choice,
+  a lock, Notify) or a recorded step panics with the fix, so a guarded
+  run makes the choices of the unguarded one.
+- It checks an internal invariant the model does not see (an index that
+  matches its rows, a ledger that sums to its balance): what the model
+  sees, a binding already checks.
+- Outside a simulation it does nothing; under gosim it refuses (gosim's
+  `sync` reaches no qenv Unlock); guards end with the simulation's Close.
