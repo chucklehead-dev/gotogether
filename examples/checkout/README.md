@@ -35,7 +35,7 @@ A line-of-business app checked against its model under fault injection.
   context the call's scope): the provider's requests it sends are its
   effects, which the binding compares with the model's `payEffects` (one
   capture of the order's money; the tries of one request under one key
-  are one; DESIGN §111).
+  are one; DESIGN §112).
 
 ```sh
 go test ./examples/checkout/...                 # explorations of every case below, Hegel shrinking (~2 min; -short: fewer seeds)
@@ -75,7 +75,7 @@ only in full. Each test states the verdict it expects with
 | `TestCaptureUnits` | `CaptureUnits`, with and without pay's effects (testdata/noeffects.binding.yaml) | conforms without them in every run (the baseline); with them, `Mismatch("pay")` in every run that completes a payment |
 | `TestNoIdempotencyKeyKilledByEffects` | `NoIdempotencyKey` on the same seeds with and without pay's effects | killed in more runs with them (below) |
 
-Pay's effects, measured on the same seeds with and without them (Serializable; DESIGN §111):
+Pay's effects, measured on the same seeds with and without them (Serializable; DESIGN §112):
 
 | Case | without pay's effects | with them |
 |---|---|---|

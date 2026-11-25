@@ -4,7 +4,7 @@ Read this when a binding should check what a step sends (a request, a
 publish), not only the state it leaves: a capture of the wrong amount, a
 retry under a fresh idempotency key, a notice never sent. The model side
 (an effects def per action) is the gotogether-patterns skill's
-references/effects.md; the design is DESIGN §111.
+references/effects.md; the design is DESIGN §112.
 
 ## Record
 

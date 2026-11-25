@@ -42,7 +42,7 @@ Done completely it is sound and needs no machinery. Its gaps:
 When the effect's payload follows from the step (the amount from the
 order), state it per action: a def over the post-state, over a sum type
 the model declares, and let the binding compare it with what the step
-made (`qobs.Effect`, qenv's doubles at the send; DESIGN §111).
+made (`qobs.Effect`, qenv's doubles at the send; DESIGN §112).
 
 ```quint
 type Effect = Capture({ order: str, amount: int })

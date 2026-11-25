@@ -1,6 +1,6 @@
 # I/O specifications: the effects a step must make
 
-Status: P0 and P1 built (2026-11-25): DESIGN §111 supersedes this note's
+Status: P0 and P1 built (2026-11-25): DESIGN §112 supersedes this note's
 §2.2, §3.1–§3.3 (rules 1 and 2), §4.1 and §4.3 for what P1 built, and adds
 `where:` to the binding's kinds. The rest (P2–P4) is the design still.
 ROADMAP CW12; the maintainer's answers to §8's questions are in §8.1.

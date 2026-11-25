@@ -7338,7 +7338,7 @@ samples and the witness replays be reported as not done, and the sampled
 job comparing Go's and quint's traces on every example's model, as
 TestAgreesWithQuint does for quint's alone.
 
-## 111. I/O specifications: the effects a step must make (CW12 P1)
+## 112. I/O specifications: the effects a step must make (CW12 P1)
 
 A step can update its state correctly and still send the wrong request,
 send it twice, or send nothing; the expect compares what the code reports

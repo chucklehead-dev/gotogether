@@ -18,7 +18,7 @@ const noEffects = "testdata/noeffects.binding.yaml"
 // pays reports whether a run completed a pay step: a run whose orders
 // were all cancelled before payment has none, and one whose payments
 // consumer crashed during its only payment has it pending, its effects
-// attached to the pending call and not compared (DESIGN §111, left for
+// attached to the pending call and not compared (DESIGN §112, left for
 // P2: the pending-call rule).
 func pays(r *qtest.Run) bool {
 	return slices.ContainsFunc(r.Recorded, func(s qtrace.Step) bool { return s.Action == "pay" && s.Model() })

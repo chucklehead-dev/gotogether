@@ -1,4 +1,4 @@
-- I/O specifications (ROADMAP CW12, P1; DESIGN §111): a step's effects
+- I/O specifications (ROADMAP CW12, P1; DESIGN §112): a step's effects
   are compared with its action's effects def in the model
   (`def payEffects(order: str): List[Effect]`, over the post-state), as one
   more conjunct of its expect, judged by quint and the Go evaluator; a
