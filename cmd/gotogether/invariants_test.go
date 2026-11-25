@@ -77,12 +77,13 @@ func TestInvariantsGolden(t *testing.T) {
 	var out, errw bytes.Buffer
 	args := []string{"-spec", fixture + "/model/counter.qnt", "-check", doc, "-require", "enforced,recorded", fixture + "/counter"}
 	code, err := invariants(t.Context(), &out, &errw, args)
-	if err != nil || !strings.Contains(out.String(), "ok   "+doc+": current (3 properties of model counter: 2 enforced, 2 checked; 3 actions: 2 recorded, 2 driven)") {
+	if err != nil || !strings.Contains(out.String(), "ok   "+doc+": current (3 properties of model counter: 2 enforced, 2 checked; 3 actions: 2 recorded, 2 driven; 3 assumptions: 1 exercised, 1 monitored)") {
 		t.Fatalf("the checked-in table: %d, %v\n%s%s(write it again: cd %s && gotogether invariants -spec model/counter.qnt -write docs/walkthrough.md ./counter)", code, err, out.String(), errw.String(), fixture)
 	}
 	// a required kind's bare rows each a FAIL; another's one note
 	want := "note: 1 property no test checks (checked is not required): atCap\n" +
 		"note: 1 action nothing drives (driven is not required): idle\n" +
+		"note: 1 assumption nothing targets (targeted is not required): capFixed\n" +
 		"FAIL property atCap: nothing enforces it: put //quint:enforces atCap on the code that does\n" +
 		"FAIL action idle: nothing records it: put //quint:action action:idle on the function that does it, or record it with qobs.Record(ctx, \"idle\", ...)\n"
 	if code != 1 || errw.String() != want {
@@ -114,7 +115,7 @@ func TestInvariantsWriteCheck(t *testing.T) {
 	if n, out, _ := run("-spec", spec, "-check", doc, code); n != 1 || !strings.Contains(out, "FAIL "+doc+": stale: row atCap added, row idle added: run gotogether invariants -spec "+spec+" -write "+doc+" "+code+"\n") {
 		t.Fatalf("a row missing: %d\n%s", n, out)
 	}
-	if n, out, _ := run("-spec", spec, "-write", doc, code); n != 0 || out != doc+": written (3 properties of model counter: 2 enforced, 2 checked; 3 actions: 2 recorded, 2 driven)\n" {
+	if n, out, _ := run("-spec", spec, "-write", doc, code); n != 0 || out != doc+": written (3 properties of model counter: 2 enforced, 2 checked; 3 actions: 2 recorded, 2 driven; 3 assumptions: 1 exercised, 1 monitored)\n" {
 		t.Fatalf("write: %d\n%s", n, out)
 	}
 	if n, out, _ := run("-spec", spec, "-write", doc, code); n != 0 || !strings.Contains(out, "current, unchanged") {
@@ -127,7 +128,7 @@ func TestInvariantsWriteCheck(t *testing.T) {
 	}
 	// Reset moves down a line: its rows are stale, the others are not
 	edit(t, filepath.Join(code, "counter.go"), "// Reset starts again from zero,", "// Reset starts again from zero,\n// whatever the count,")
-	if n, out, _ := run("-spec", spec, "-check", doc, code); n != 1 || !strings.Contains(out, "stale: row nonNegative changed, row reset changed: run gotogether invariants") {
+	if n, out, _ := run("-spec", spec, "-check", doc, code); n != 1 || !strings.Contains(out, "stale: row nonNegative changed, row reset changed, row oneCaller changed: run gotogether invariants") {
 		t.Errorf("a moved line: %d\n%s", n, out)
 	}
 	if now, _ := os.ReadFile(doc); !bytes.Equal(now, written) {
@@ -139,8 +140,8 @@ func TestInvariantsWriteCheck(t *testing.T) {
 	edit(t, filepath.Join(code, "counter_test.go"), `Action("inc"`, `Action("ince"`)
 	n, out, errw := run("-spec", spec, "-check", doc, code)
 	at := filepath.Join(code, "counter.go") + ":23: //quint:enforces names withinCapp: model counter has no property withinCapp: did you mean withinCap? name one of model counter's properties: withinCap, nonNegative, atCap\n" +
-		filepath.Join(code, "counter_test.go") + `:38: .Action("ince", ...) names ince, which is no action of model counter: did you mean inc? name one of its actions (inc, reset, idle), or leave code of another model out of the patterns` + "\n"
-	if n != 1 || errw != at || out != "FAIL 2 annotations naming no property or action of model counter, or annotating nothing: the tables are not written (fix each as it says)\n" {
+		filepath.Join(code, "counter_test.go") + `:39: .Action("ince", ...) names ince, which is no action of model counter: did you mean inc? name one of its actions (inc, reset, idle), or leave code of another model out of the patterns` + "\n"
+	if n != 1 || errw != at || out != "FAIL 2 annotations naming no property, action or assumption of model counter, or annotating nothing: the tables are not written (fix each as it says)\n" {
 		t.Errorf("unknown property: %d\n%s%s\nwant\n%s", n, out, errw, at)
 	}
 }
@@ -168,7 +169,7 @@ func TestInvariantsBinding(t *testing.T) {
 	}
 	edit(t, filepath.Join(dir, "counter", "counter_test.go"), "//quint:checks withinCap\n", "//quint:checks withinCap atCap\n")
 	out.Reset()
-	if n, err := invariants(t.Context(), &out, &errw, []string{"-binding", b, filepath.Join(dir, "counter")}); n != 1 || err != nil || !strings.Contains(errw.String(), "counter_test.go:12: //quint:checks names atCap: atCap is a val of model counterBase that this table leaves out (the binding does not check it, or -props, -invariant or -exclude left it out): add it to the selection, or name one the table has (withinCap, nonNegative)\n") {
+	if n, err := invariants(t.Context(), &out, &errw, []string{"-binding", b, filepath.Join(dir, "counter")}); n != 1 || err != nil || !strings.Contains(errw.String(), "counter_test.go:13: //quint:checks names atCap: atCap is a val of model counterBase that this table leaves out (the binding does not check it, or -props, -invariant or -exclude left it out): add it to the selection, or name one the table has (withinCap, nonNegative)\n") {
 		t.Errorf("a val the binding does not check: %d, %v\n%s%s", n, err, out.String(), errw.String())
 	}
 }
@@ -183,10 +184,11 @@ func TestInvariantsFlags(t *testing.T) {
 		{nil, "invariants needs -spec model.qnt -main M, or -binding b.yaml: gotogether invariants -spec"},
 		{[]string{"-binding", "b.yaml", "-main", "m"}, "-binding names the spec and its module"},
 		{[]string{"-spec", "m.qnt", "-write", doc, "-check", doc}, "-write writes the table and -check compares it, writing nothing: give one"},
-		{[]string{"-spec", "m.qnt", "-require", "enforced,tested"}, "-require enforced,tested: give a comma-separated list of enforced and checked (each property), recorded and driven (each action)"},
-		{[]string{"-spec", "m.qnt", "-write", fixture + "/counter.binding.yaml"}, "invariants -write: " + fixture + "/counter.binding.yaml has no table of model m: add <!-- gotogether:invariants m --> ... <!-- /gotogether:invariants m -->, or <!-- gotogether:actions m --> ... <!-- /gotogether:actions m -->, each alone on its line where the table goes (unnamed markers serve a document of one model)"},
-		{[]string{"-spec", "m.qnt", "-name", "other", "-write", golem + "/docs/design.md"}, "has no table of model other: add <!-- gotogether:invariants other --> ... <!-- /gotogether:invariants other -->, or <!-- gotogether:actions other --> ... <!-- /gotogether:actions other -->, each alone on its line where the table goes (unnamed markers serve a document of one model); its tables are named attempts, publication (-name picks one)"},
+		{[]string{"-spec", "m.qnt", "-require", "enforced,tested"}, "-require enforced,tested: give a comma-separated list of enforced and checked (each property), recorded and driven (each action), exercised, monitored and targeted (each assumption)"},
+		{[]string{"-spec", "m.qnt", "-write", fixture + "/counter.binding.yaml"}, "invariants -write: " + fixture + "/counter.binding.yaml has no table of model m: add <!-- gotogether:invariants m --> ... <!-- /gotogether:invariants m -->, <!-- gotogether:actions m --> ... <!-- /gotogether:actions m -->, or <!-- gotogether:assumptions m --> ... <!-- /gotogether:assumptions m -->, each alone on its line where the table goes (unnamed markers serve a document of one model)"},
+		{[]string{"-spec", "m.qnt", "-name", "other", "-write", golem + "/docs/design.md"}, "has no table of model other: add <!-- gotogether:invariants other --> ... <!-- /gotogether:invariants other -->, <!-- gotogether:actions other --> ... <!-- /gotogether:actions other -->, or <!-- gotogether:assumptions other --> ... <!-- /gotogether:assumptions other -->, each alone on its line where the table goes (unnamed markers serve a document of one model); its tables are named attempts, publication (-name picks one)"},
 		{[]string{"-spec", "m.qnt", "-write", golem + "/docs/design.md", "-name", "publication", "-require", "enforced,driven"}, "invariants: -require driven is of the actions table, and " + golem + "/docs/design.md has none of model publication (<!-- gotogether:actions publication --> ... <!-- /gotogether:actions publication -->, or unnamed): add the pair, or require only enforced and checked"},
+		{[]string{"-spec", "m.qnt", "-write", golem + "/docs/design.md", "-name", "publication", "-require", "targeted"}, "invariants: -require targeted is of the assumptions table, and " + golem + "/docs/design.md has none of model publication (<!-- gotogether:assumptions publication --> ... <!-- /gotogether:assumptions publication -->, or unnamed): add the pair, or require it of no assumption"},
 		{[]string{"-spec", "m.qnt", "-props", "a", "-invariant", "b"}, "-props names the properties and -invariant derives them: give one"},
 		{[]string{"-spec", "m.qnt", "-links", "short"}, "-links short: give line (file:line links) or name (package and function, linked to the file)"},
 		{[]string{"-spec", "design.md", "-literate=false"}, "-spec design.md is Markdown and -literate=false reads no model from it: name the .qnt your tangler writes from it (design.qnt)"},

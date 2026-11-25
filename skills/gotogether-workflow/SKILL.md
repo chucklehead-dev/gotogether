@@ -16,7 +16,7 @@ invariant and judges code that never shows it faithful.
 - Every stage's commands and code, triage, CI: [references/workflow.md](references/workflow.md).
 - A verdict or claim: [references/verdicts.md](references/verdicts.md).
 - Planting a mutant: [references/overlays.md](references/overlays.md).
-- A design document's tables: each invariant's enforcement and tests, each action's recording and driver (`gotogether invariants`): [references/invariants.md](references/invariants.md).
+- A design document's tables: each invariant's enforcement and tests, each action's recording and driver, each listed assumption (`// @assume`) and what targets it (`gotogether invariants`): [references/invariants.md](references/invariants.md).
 - The model's conventions and patterns: gotogether-model, gotogether-patterns.
 
 ## Steps
@@ -47,7 +47,7 @@ Before merging:
 - [ ] The faithful system conforms, settles, and `Reaches(...).Faulted()` the faults it must survive.
 - [ ] Every mutant is caught as its test states; the README's table lists them.
 - [ ] `qtest.MutateSteps` has run on a recorded log.
-- [ ] A walkthrough's tables are generated: `gotogether invariants -check doc.md -require enforced,checked,recorded` in CI.
+- [ ] A walkthrough's tables are generated, what the model leaves out listed and targeted: `gotogether invariants -check doc.md -require enforced,checked,recorded,targeted` in CI.
 - [ ] CI: `simulate` per binding, `go test -short`, `GOTOGETHER_STRICT=1`.
 
 ## Results
