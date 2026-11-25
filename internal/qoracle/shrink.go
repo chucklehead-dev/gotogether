@@ -163,7 +163,7 @@ func ShrinkDecls(ctx context.Context, p Program, text string, orig *Disagreement
 	kept, res := MinimizeDecls(d, func(text string) ddmin.Outcome {
 		q := p
 		q.Text = text
-		got, err := Compare(ctx, q, a, b, tmp)
+		got, _, err := CompareKnown(ctx, q, a, b, tmp)
 		switch {
 		case err != nil:
 			return ddmin.Unknown

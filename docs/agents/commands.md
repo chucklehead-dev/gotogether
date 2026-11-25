@@ -127,7 +127,7 @@ AGENTS.md has the general requirements.
   QNT code; `GOTOGETHER_KEEP=/dir` keeps shrunk disagreements. The manifest
   (internal/qoracle/testdata/corpus.json) is rewritten, with quint's
   verdicts, by `GOTOGETHER_UPDATE_CORPUS=1 QUINT_SRC=DIR go test -run
-  TestUpdateManifest ./internal/qoracle/` (about 25 minutes; `=entries` with `GOTOGETHER_QFRONT_ENTRY` re-surveys some); testdata/shift-known.txt lists the entries whose verdict quint changes with its ids; per push,
+  TestUpdateManifest ./internal/qoracle/` (about 25 minutes; `=entries` with `GOTOGETHER_QFRONT_ENTRY` re-surveys some); testdata/shift-known.txt lists, by class, what quint changes with its ids (cycle-order, types-after-error: accepted; verdict-flip: per entry); per push,
   TestManifestCurrent fails on a .qnt file it does not pin.
   validate keeps quint's typechecks and the evaluation modules' compiles
   across processes, by content (quint's version, the spec's and its

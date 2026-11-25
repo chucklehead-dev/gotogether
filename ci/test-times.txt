@@ -44,7 +44,7 @@ grist/gristtest 70 # initial 69.3 CPU s/80.2 s wall; final 64.7/72.9
 grist/model 22 # TestGristFoldsAgree (#142): quint run --max-samples=2000 --max-steps=10 of folds.qnt; CI printed 16.7, 17.1, 17.5, 22.2 CPU s (before: 10.6/9.3 s wall initial, 9.6/10.8 final)
 internal/qeval 531 # 531 CPU s on CI (run 524, its validate 980): TestDifferentialAgainstQuint's two push batches of generated expressions (I11), each three quint processes, added to TestAgreesWithQuint, which runs quint on every model of the repository; 473 in run 523 before them (its validate 1080), 340 and 358 in runs 447 and 460
 internal/qfront 25 # 20.8 CPU s locally (2026-11-25, 4 cores): Q2 P1's push tier, TestParseAgreesWithQuint, a quint parse per fixture (31: every alternative of Quint.g4 and the parse-phase errors); skipped under -short; the corpus with the go stub is the oracle's (TestCorpus)
-internal/qoracle 45 # 36 CPU s locally (2026-11-25, 4 cores): Q3's push tier, about 30 quint processes (TestHarnessPushTier's three programs and the difference tests through two front ends, one generated program well-typed and one ill); skipped under -short; the corpus is the nightly's (qfront-differential)
+internal/qoracle 53 # 52.7 CPU s locally (2026-11-25, 4 cores; 36 before TestKnownIDDependence's four fixed programs, two compiled): Q3's push tier, about 40 quint processes (TestHarnessPushTier's three programs and the difference tests through two front ends, one generated program well-typed and one ill, the id-dependence cases' four); skipped under -short; the corpus is the nightly's (qfront-differential)
 internal/simdeps 20 # 14.3 CPU s on CI (run 348), under 4 here with a warm build cache
 qenv/internal/profile 15 # 10.9 CPU s on CI (run 348)
 qload 13 # 8-12 CPU s
