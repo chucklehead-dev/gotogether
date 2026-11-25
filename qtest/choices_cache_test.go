@@ -17,7 +17,7 @@ func TestChoiceCacheSeparatesEffectiveLimits(t *testing.T) {
 	for _, limit := range []int{1, validate.DefaultChoiceLimit} {
 		checker.Options.ChoiceLimit = limit
 		report := &validate.Report{Actors: []*validate.Result{{Conforms: validate.NotEvaluated, Choices: &validate.ChoiceSearch{Limit: limit}}}}
-		verdicts.put(instance+checker.Key(steps), verdict{report, steps})
+		verdicts.put(verdictKey(instance, checker.Key(steps)), verdict{report, anchorsOf(report, steps)})
 	}
 	for _, limit := range []int{1, 0, validate.DefaultChoiceLimit} {
 		checker.Options.ChoiceLimit = limit

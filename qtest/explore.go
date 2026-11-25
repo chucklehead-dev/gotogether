@@ -792,9 +792,9 @@ func cachedCheck(cc *validate.Checker, inst string, cached *int) validate.BatchC
 		first := map[string]int{} // key -> index in todo
 		at := map[int]int{}       // run -> index in todo
 		for i, steps := range runs {
-			keys[i] = inst + cc.Key(steps)
-			if v, ok := verdicts.get(keys[i]); ok && choiceWitnessesRebasable(v.rep, v.steps) {
-				reps[i] = rebase(v.rep, v.steps, steps)
+			keys[i] = verdictKey(inst, cc.Key(steps))
+			if v, ok := verdicts.get(keys[i]); ok {
+				reps[i] = v.anchors.rebase(v.rep, steps)
 				*cached++
 				continue
 			}
@@ -822,7 +822,7 @@ func cachedCheck(cc *validate.Checker, inst string, cached *int) validate.BatchC
 				continue
 			}
 			if reps[i], errs[i] = rebase(treps[j], todo[j], runs[i]), terrs[j]; errs[i] == nil && choiceWitnessesRebasable(treps[j], todo[j]) {
-				verdicts.put(keys[i], verdict{treps[j], todo[j]})
+				verdicts.put(keys[i], verdict{detached(treps[j]), anchorsOf(treps[j], todo[j])})
 			}
 		}
 		return reps, errs
@@ -864,7 +864,13 @@ func choiceWitnessesRebasable(rep *validate.Report, steps []qtrace.Step) bool {
 // is not checked again. Fuzzing needs it (most inputs repeat a run's
 // model-level steps, and quint takes a second), as do mutants (most of
 // their runs repeat the baseline's) and explorations whose seeds repeat
-// runs.
+// runs. It holds every distinct run the binary judged, so an entry keeps
+// no run's records: its key is hashed (verdictKey), its steps are the
+// few positions its report names (anchors), and its report's steps carry
+// no effects (detached). Holding the steps, the key and the report whole
+// kept every run of every exploration alive, its doubles' effect records
+// with it (thousands a run in raftkv, each with the message it sent),
+// until a nightly's 500 seeds a test ran the runner out of memory.
 // Process-wide.
 var verdicts verdictCache
 
@@ -873,11 +879,68 @@ type verdictCache struct {
 	m  map[string]verdict
 }
 
-// A verdict is a report and the steps it was reached on, for the runs of
-// the same key it is given to (rebase).
+// A verdict is a report and where in the steps it was reached on its
+// report's steps are, for the runs of the same key it is given to
+// (anchors.rebase).
 type verdict struct {
-	rep   *validate.Report
-	steps []qtrace.Step
+	rep     *validate.Report
+	anchors anchors
+}
+
+// detached is rep as the verdict cache keeps it: its steps (each call's,
+// each failure's, each pending call's) without the effect records
+// attributed to them (qtrace.Step.Effects), copies, so rep keeps its own.
+// A verdict names steps; their effects are the run's, which a run served
+// from the cache has in its own Steps, and no reader of a report reads
+// them from it (an effects mismatch is the Failure's Effects, kept).
+func detached(rep *validate.Report) *validate.Report {
+	if rep == nil {
+		return nil
+	}
+	step := func(s *qtrace.Step) *qtrace.Step {
+		if s == nil || s.Effects == nil {
+			return s
+		}
+		c := *s
+		c.Effects = nil
+		return &c
+	}
+	failure := func(f *validate.Failure) *validate.Failure {
+		if f == nil || f.Step == nil || f.Step.Effects == nil {
+			return f
+		}
+		c := *f
+		c.Step = step(f.Step)
+		return &c
+	}
+	out := *rep
+	out.Actors = make([]*validate.Result, len(rep.Actors))
+	for i, a := range rep.Actors {
+		c := *a
+		c.Failure = failure(a.Failure)
+		c.Invariants = slices.Clone(a.Invariants)
+		for j := range c.Invariants {
+			c.Invariants[j].Failure = failure(c.Invariants[j].Failure)
+		}
+		c.Calls = slices.Clone(a.Calls)
+		for j := range c.Calls {
+			c.Calls[j].Step = step(c.Calls[j].Step)
+		}
+		c.Pending = slices.Clone(a.Pending)
+		for j := range c.Pending {
+			c.Pending[j].Effects = nil
+		}
+		out.Actors[i] = &c
+	}
+	return &out
+}
+
+// verdictKey is the cache key of steps whose checker key (Checker.Key) is
+// key, against the instance inst: the key hashed, since a run's key
+// renders every record (a run of raftkv's, hundreds of kilobytes).
+func verdictKey(inst, key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return inst + hex.EncodeToString(sum[:])
 }
 
 func (v *verdictCache) get(k string) (verdict, bool) {
@@ -898,34 +961,101 @@ func (v *verdictCache) put(k string, r verdict) {
 
 // rebase is rep, the verdict on the steps from, as the report of to,
 // steps of the same key (qtrace.Key) that may differ in what no verdict
-// reads: each failing step's ref, source and identity (its recorder,
-// process and thread ids, random per run) are to's, so a run's report
-// links to its own artifacts (a driver's trace line, a screenshot) and
-// names its own recorder, not those of the run its verdict was first
-// reached on. Steps of one key correspond by position; a failing step is
-// found in from by what it is (recorder, seq, action, time), since seqs
-// may be absent (0) in a log that has none.
+// reads (anchors.rebase).
 func rebase(rep *validate.Report, from, to []qtrace.Step) *validate.Report {
-	if rep == nil || len(from) != len(to) {
-		return rep
+	return anchorsOf(rep, from).rebase(rep, to)
+}
+
+// stepID is what a failing step is found by in the steps a verdict was
+// reached on: seqs may be absent (0) in a log that has none.
+type stepID struct {
+	rec, action string
+	seq         uint64
+	at          int64
+}
+
+func idOf(s *qtrace.Step) stepID { return stepID{s.Recorder, s.Action, s.Seq, s.Time.UnixNano()} }
+
+// witnessID is a choice witness's step (validate.ChoiceStep).
+type witnessID struct {
+	rec string
+	seq uint64
+}
+
+// anchors are the positions, in the steps a report was reached on, of the
+// steps it names: each failing step's (the first of steps alike) and each
+// choice witness's (the first of its recorder and seq). They are all
+// rebase reads of those steps, so a cached verdict keeps them and not
+// the steps.
+type anchors struct {
+	n         int // how many steps the verdict was reached on
+	failures  map[stepID]int
+	witnesses map[witnessID]int
+}
+
+// anchorsOf are rep's anchors in from.
+func anchorsOf(rep *validate.Report, from []qtrace.Step) anchors {
+	a := anchors{n: len(from)}
+	if rep == nil {
+		return a
 	}
-	type id struct {
-		rec, action string
-		seq         uint64
-		at          int64
-	}
-	idOf := func(s *qtrace.Step) id { return id{s.Recorder, s.Action, s.Seq, s.Time.UnixNano()} }
-	at := make(map[id]int, len(from))
-	for i := range from {
-		if _, dup := at[idOf(&from[i])]; !dup { // the first of steps alike, as positions go
-			at[idOf(&from[i])] = i
+	want := map[stepID]bool{}
+	wanted := map[witnessID]bool{}
+	note := func(f *validate.Failure) {
+		if f != nil && f.Step != nil {
+			want[idOf(f.Step)] = true
 		}
+	}
+	for _, r := range rep.Actors {
+		note(r.Failure)
+		for _, inv := range r.Invariants {
+			note(inv.Failure)
+		}
+		if r.Choices != nil {
+			for _, w := range r.Choices.Witness {
+				wanted[witnessID{w.Recorder, w.Seq}] = true
+			}
+		}
+	}
+	for i := range from {
+		if id := idOf(&from[i]); want[id] {
+			if _, dup := a.failures[id]; !dup { // the first of steps alike, as positions go
+				if a.failures == nil {
+					a.failures = map[stepID]int{}
+				}
+				a.failures[id] = i
+			}
+		}
+		if w := (witnessID{from[i].Recorder, from[i].Seq}); wanted[w] {
+			if _, dup := a.witnesses[w]; !dup {
+				if a.witnesses == nil {
+					a.witnesses = map[witnessID]int{}
+				}
+				a.witnesses[w] = i
+			}
+		}
+	}
+	return a
+}
+
+// rebase is rep, the verdict on the steps a were taken from, as the
+// report of to, steps of the same key (qtrace.Key) that may differ in
+// what no verdict reads: each failing step's ref, source and identity
+// (its recorder, process and thread ids, random per run) are to's, so a
+// run's report links to its own artifacts (a driver's trace line, a
+// screenshot) and names its own recorder, not those of the run its
+// verdict was first reached on. Steps of one key correspond by position;
+// a failing step is found by what it is (recorder, seq, action, time),
+// since seqs may be absent (0) in a log that has none.
+func (a anchors) rebase(rep *validate.Report, to []qtrace.Step) *validate.Report {
+	if rep == nil || a.n != len(to) {
+		return rep
 	}
 	fix := func(f *validate.Failure) *validate.Failure {
 		if f == nil || f.Step == nil {
 			return f
 		}
-		i, ok := at[idOf(f.Step)]
+		i, ok := a.failures[idOf(f.Step)]
 		if !ok {
 			return f
 		}
@@ -939,24 +1069,21 @@ func rebase(rep *validate.Report, from, to []qtrace.Step) *validate.Report {
 	}
 	out := *rep
 	out.Actors = make([]*validate.Result, len(rep.Actors))
-	for i, a := range rep.Actors {
-		c := *a
-		c.Choices = a.Choices.Clone()
+	for i, r := range rep.Actors {
+		c := *r
+		c.Choices = r.Choices.Clone()
 		if c.Choices != nil {
 			for j := range c.Choices.Witness {
 				w := &c.Choices.Witness[j]
 				// Choices belong to an actor's planned calls, so Index is
 				// not an index into the complete captured history.
-				for k := range from {
-					if from[k].Recorder == w.Recorder && from[k].Seq == w.Seq {
-						w.Recorder, w.Seq = to[k].Recorder, to[k].Seq
-						break
-					}
+				if k, ok := a.witnesses[witnessID{w.Recorder, w.Seq}]; ok {
+					w.Recorder, w.Seq = to[k].Recorder, to[k].Seq
 				}
 			}
 		}
-		c.Failure = fix(a.Failure)
-		c.Invariants = slices.Clone(a.Invariants)
+		c.Failure = fix(r.Failure)
+		c.Invariants = slices.Clone(r.Invariants)
 		for j := range c.Invariants {
 			c.Invariants[j].Failure = fix(c.Invariants[j].Failure)
 		}
