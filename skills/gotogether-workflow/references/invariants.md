@@ -6,7 +6,8 @@ which tests check it. Written by hand, such a table drifts with every
 edit, and re-tracing its file:line references is a pass of its own.
 Annotate the code instead, and generate the table; a second table, of
 the model's actions, says which code records each step and which driver
-runs it, from the code that already does so.
+runs it, from the code that already does so; a third lists what the
+model says it leaves out (its assumptions) and the code aimed at each.
 
 ## The annotations
 
@@ -126,6 +127,75 @@ action bare, as a trace does), so with a table in play:
   counted in the other-model note;
 - any other unknown action stays an error.
 
+## Assumptions: what the model leaves out
+
+A model is right about what it says; the bugs are often in what it
+leaves out (an unbounded queue where the real one caps, one signing key
+where keys rotate, a retention it never counts). Name each such
+simplification on a line of its own in the model, a plain `//` comment,
+so quint reads the model unchanged:
+
+```quint
+module queue {
+  var q: List[int]
+  // @assume unboundedQueue = underCap: the queue never fills; the real one caps at 10k
+  // @assume oneSigningKey: one key signs every document; production rotates keys
+  val underCap = q.length() < 10000
+  /* ... */
+}
+```
+
+- `// @assume NAME: statement` is one line, reviewed like a property;
+  NAME is its own and may not be a name the main module sees (a
+  directive naming it could otherwise mean a property). A literate
+  model's quint blocks carry the lines as any comment; problems are
+  reported at the document's line.
+- `= val` names a boolean val that states it (a state inside the
+  assumption satisfies it), for a trace to be checked against later; the
+  val then leaves the default properties (no "nothing enforces it" row),
+  unless `-props` or a binding selects it. Prose alone is allowed.
+- Not `///`: quint joins a doc comment to the next definition's (and
+  refuses one at a module's end). An `@assume` after code, a line with
+  no name or colon, a repeated name, a clash, or a `= val` that is no
+  boolean val is an error at its line (exit 1, no table written).
+
+Code aimed at an assumption says so, placed as `//quint:enforces` is (a
+declaration's doc comment, or the line above a statement), in tests or
+not:
+
+```go
+// TestQueueFull fills the real queue past the model's assumption.
+//
+//quint:exercises unboundedQueue
+func TestQueueFull(t *testing.T) { /* ... */ }
+
+//quint:monitors unboundedQueue
+func (q *Queue) reportDepth() { /* ... */ }
+```
+
+`//quint:exercises` is a test, a double's fault, a sweep row or a
+generator that goes past the assumption on purpose; `//quint:monitors`
+is the production check that watches it. Names resolve as properties
+do (bare, or qualified by the declaring module, the main module or one
+that sees it; another model's module is noted and left out). A
+directive naming no assumption, `//quint:exercises` naming a property,
+and `//quint:enforces` naming an assumption or the val that states one,
+are each an error at its line with the fix.
+
+The table goes between `<!-- gotogether:assumptions -->` markers (named
+for one of several models as the others are), a row per assumption in
+the source's order:
+
+```markdown
+| assumption | statement | stated by | exercised by | monitored by |
+|---|---|---|---|---|
+| `noOverflow` | n + 1 never overflows; Go's int wraps past math.MaxInt | `belowMaxInt` | `TestIncPastMaxInt` [../counter/counter_test.go:46](../counter/counter_test.go#L46) | — |
+| `capFixed` | the cap never changes; the real Cap is a field anyone may set | — | — | — |
+```
+
+The "stated by" column is there when an assumption names a val. Printed
+(no document), the table follows the others when the model lists any.
+
 ## The command
 
 ```sh
@@ -137,9 +207,12 @@ gotogether invariants -binding exposure.binding.yaml -check docs/walkthrough.md 
 `-require` takes any of `enforced` (every property has a
 `//quint:enforces`), `checked` (every property a `//quint:checks` in a
 test), `recorded` (every action a directive or literal Record: trace
-validation can see it) and `driven` (every action a connect driver's
-entry: model-based tests run it), and fails (exit 1) where the table has
-`—` instead of warning.
+validation can see it), `driven` (every action a connect driver's
+entry: model-based tests run it), `exercised`, `monitored` and
+`targeted` (every assumption a `//quint:exercises`, a
+`//quint:monitors`, or either), and fails (exit 1) where the table has
+`—` instead of warning. An assumption kind with no assumptions table in
+the document is a bad invocation (exit 2).
 
 The arguments are directories, or `dir/...` (default `./...`: vendor,
 testdata, hidden and `_` directories left out, and other modules, as the
@@ -215,6 +288,10 @@ above it moves (the default, `line`, links each `file:line`):
 | `FAIL property p: nothing enforces it: put //quint:enforces p ...`, `FAIL action a: nothing records it: ...` (exit 1) | a bare row of a kind `-require` names | the directive or driver it names |
 | `note: 3 connect driver entries in files whose connect.Config names another spec ...` | another model's drivers in the tree | nothing: their own run tables them |
 | `invariants: -require driven is of the actions table, and doc.md has none of model M ...` (exit 2) | an action kind required with no actions table in play | add the pair, or require enforced and checked alone |
+| `model.qnt:12: @assume withinCap has the name of model M's definition ...`, `/// @assume is a doc comment ...` (exit 1, no table written) | an `@assume` line declaring no assumption the table can show | the fix it names: rename, write it with `//`, give `name: statement` |
+| `f.go:9: //quint:exercises names noOverflw: model M has no assumption noOverflw: did you mean noOverflow? ...` | a directive naming no assumption | fix the name, or declare it in the model |
+| `f.go:9: //quint:enforces names oneCaller: oneCaller is an assumption of model M (what it leaves out), not a property ...` | a property directive naming an assumption (or `... states assumption a`: its val) | `//quint:exercises` or `//quint:monitors` |
+| `FAIL assumption a: nothing targets it: put //quint:exercises a ...` (exit 1) | `-require targeted`, and nothing aimed at it | a test or double past it, or a production check |
 | `FAIL doc.md: stale: row p changed, row q added: run gotogether invariants ...` (exit 1) | the code moved, or the annotations changed | run the command it names, commit the document |
 | `FAIL doc.md: missing: doc.md has no table of model M: add <!-- gotogether:invariants M --> ...` | the document has no markers of this model, nor unnamed ones | add the pair where the table goes |
 | exit 2 | a bad invocation, a Go file that does not parse, a model quint refuses | the message says which |

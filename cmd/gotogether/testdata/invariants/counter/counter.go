@@ -37,3 +37,9 @@ func (c *Counter) Reset(ctx context.Context) {
 	c.N = 0
 	obs.Record(ctx, "reset", nil)
 }
+
+// Busy reports more than one caller inside the counter at once: the
+// production check of the model's oneCaller assumption.
+//
+//quint:monitors oneCaller
+func Busy(inside int) bool { return inside > 1 }
