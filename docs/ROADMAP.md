@@ -626,6 +626,15 @@ item is its own decision before it starts; the red-nightly rule applies.
   for quint's error positions), name resolution, imports, instances and
   `export` flattened to the IR `quint compile` writes, then the type and
   effect checker with quint's QNT codes. Most of the risk is here.
+  Design and plan: [q2-front-end.md](q2-front-end.md). It recommends a
+  hand-written parser and a port of quint's phases one for one, writing
+  quint's JSON. The bar is IR equal after canonical renumbering (ids and
+  the names derived from them) over the subset qeval and binding read,
+  with qeval's agreement as the backstop, and QNT codes at quint's
+  positions. Phases P1 (parser, M), P2 (names and flattening, L), P3
+  (types, L), P4 (effects and modes, M), P5 (wiring, M) and P6 (quint off
+  consumer paths, S) come after Q3's exit criteria. `CompiledModel.Differs`
+  compares IR bytes today and must compare canonical forms first.
 - **Q3: the oracle (M, with Q1 and Q2).** A differential job like
   `qeval-differential`: a corpus (quint's examples and fixtures, every
   example's model, qeval's generator grown to ill-typed programs) compiled
