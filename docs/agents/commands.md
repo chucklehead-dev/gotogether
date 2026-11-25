@@ -118,7 +118,8 @@ AGENTS.md has the general requirements.
   `QUINT_VERSION=0.33.1 ci/fetch-quint-src.sh DIR` fetches quint's sources
   at the tag (`QUINT_SRC=DIR` for the tests); `GOTOGETHER_QFRONT_CORPUS=1`
   runs the pinned corpus through the harness (quint against its stub,
-  `GOTOGETHER_QFRONT_STUB=shifted` unset, or `quint`),
+  `GOTOGETHER_QFRONT_STUB=shifted` unset, or `quint`, or `go`: Q2's
+  Go parse, internal/qfront, against `quint parse`, both cut to P1's tier),
   `GOTOGETHER_QFRONT_ENTRY=<id substring>` some entries alone,
   `GOTOGETHER_QFRONT_SAMPLE=n` generated programs from
   `GOTOGETHER_SEED_OFFSET+1` and `GOTOGETHER_QFRONT_SEED=n` one (with every

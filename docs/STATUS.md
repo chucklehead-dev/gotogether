@@ -45,7 +45,8 @@ pins from the checked-in go.mod files, not from historical handoff paragraphs.
 | Area | Current boundary |
 |---|---|
 | Quint admission | Managed runtime work and compiled models require stable Quint 0.33.1 or later. CLI support and installer verification of evaluator bytes are distinct checks. |
-| Front-end oracle (Q3) | internal/qoracle compares two front ends' parse, typecheck and compile outputs by canonical form over a pinned corpus (quint's part fetched at the tag) and generated programs; the nightly `qfront-differential` runs quint against quint with every id shifted until Q2's P1. Its exit criterion 5 (a green week) is open; q2-front-end.md §4.5. |
+| Front-end oracle (Q3) | internal/qoracle compares two front ends' parse, typecheck and compile outputs by canonical form over a pinned corpus (quint's part fetched at the tag) and generated programs; the nightly `qfront-differential` runs quint against quint with every id shifted. Its exit criterion 5 (a green week) is open; q2-front-end.md §4.5. |
+| Go front end (Q2) | P1's parser is built: internal/qfront parses Quint into quint's parse IR and source map, numbering nodes as quint does; against quint (`GOTOGETHER_QFRONT_STUB=go`) 861 of the 863 corpus entries agree in P1's tier, the two others quint's toposort's (P2). Nothing reads it yet (P5); names, types, effects and flattening are P2 to P4. q2-front-end.md §5.1. |
 | Protocol composition | Universal claims over permitted causal orders are explicit in receipts, aggregate reasons and TUI; they remain separate from local conformance. |
 | Finite choices | Confirmed passing witnesses report both evaluators; Go-only negatives retain evaluator provenance. Strict Quint/shadow negative proofs are inconclusive without independent confirmation. |
 | Verdict caching | Exact-run Hegel caching remains; a selected invariant path or finite-choice search is not a rejected-prefix certificate. |
