@@ -661,7 +661,7 @@ jobs:
   webjobs-live:
     needs: select
     if: github.event_name != 'workflow_dispatch' || inputs.jobs == '' || contains(fromJSON(needs.select.outputs.jobs), 'webjobs-live')
-    # webjobs explored live by Bombadil (headless, ubuntu's Chrome): the
+    # webjobs explored live by Bombadil (headless, a pinned Chrome): the
     # faithful app for 45s (a finished journey, its manifest replayed,
     # then --reproduce), and each mutant's server for 45s (its invariant
     # violated); a Playwright journey through adapters/playwright. Strict:
@@ -689,11 +689,29 @@ jobs:
       - name: Admit Playwright and its real journey before live workloads
         timeout-minutes: 15
         run: ../../ci/admit-playwright.sh
-      - name: Install Bombadil (pinned)
+      - name: Install Bombadil and its Chrome (pinned)
+        # Bombadil pauses the page in the debugger for every state it
+        # captures and evaluates on the paused frame. In Chrome 158 (and,
+        # by the failures' shape, ubuntu's 157) the renderer's cost of
+        # those evaluations grows over a session: freezes of 0.3-1.2s by
+        # a 45s run's 30th second, in which the page's 100ms poll cannot
+        # run, so a job committed just before one was shown past the
+        # 500ms bound (2026-11-14, 11-23). Chrome for Testing 153 shows
+        # none (examples/webjobs/README.md, "The browser"). CHROME names
+        # it for Bombadil.
+        env:
+          CFT_VERSION: 153.0.8010.12
+          CFT_SHA256: a9da028861a0cf789ff25c2fed45f5f1aaf969ed9247835b6a7821a4f7af9d1d
         run: |
           npm i -g @antithesishq/bombadil@0.7.9
           bombadil --version
-          google-chrome --version
+          zip="$RUNNER_TEMP/chrome-headless-shell.zip"
+          curl -fsSL -o "$zip" "https://storage.googleapis.com/chrome-for-testing-public/$CFT_VERSION/linux64/chrome-headless-shell-linux64.zip"
+          echo "$CFT_SHA256  $zip" | sha256sum -c -
+          unzip -q -d "$RUNNER_TEMP" "$zip"
+          chrome="$RUNNER_TEMP/chrome-headless-shell-linux64/chrome-headless-shell"
+          "$chrome" --version
+          echo "CHROME=$chrome" >> "$GITHUB_ENV"
       - name: live journeys
         run: WEBJOBS_JOURNEYS="$RUNNER_TEMP/journeys" go test -count=1 -timeout 25m -run 'TestLive$|TestMutants$' -v .
       - name: each mutant's failure shrunk (TestShrink, TestShrinkRecorded)
