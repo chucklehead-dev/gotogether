@@ -3871,12 +3871,14 @@ func MutantOn(id int) bool
 func MutexLock(m *sync.Mutex)
 func MutexTryLock(m *sync.Mutex) bool
 func MutexUnlock(m *sync.Mutex)
+func MutexUnlockGuarded(g GuardedMutex)
 func Pick(id int, orig, mutated bool) bool
 func RLock(m *sync.RWMutex)
 func RUnlock(m *sync.RWMutex)
 func RWLock(m *sync.RWMutex)
 func RWTryLock(m *sync.RWMutex) bool
 func RWUnlock(m *sync.RWMutex)
+func RWUnlockGuarded(g GuardedRWMutex)
 func RegisterBlocks(bs []Block) int
 func RegisterMutants(ms []Mutant) int
 func TryRLock(m *sync.RWMutex) bool
@@ -3889,6 +3891,16 @@ type Block = wovenrt.Block
     field Func string
     field Stmts int
     field ID int
+type GuardedMutex struct
+    field Mutex *sync.Mutex
+    field Invariants []Invariant
+type GuardedRWMutex struct
+    field RWMutex *sync.RWMutex
+    field Invariants []Invariant
+type Invariant = wovenrt.Invariant
+    field Name string
+    field Site string
+    field Holds func() bool
 type Mutant = wovenrt.Mutant
     field ID int
     field File string

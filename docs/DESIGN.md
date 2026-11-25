@@ -1369,8 +1369,47 @@ a Platform; `RUnlock` is not checked (a reader publishes nothing).
 - **gosim.** gosim simulates `sync` itself and is never woven with
   qenv/weave, so no Unlock reaches qenv there: Guard on a native
   simulation with a Platform panics rather than check nothing.
-- **Not done.** A declarative `//quint:guards` directive; Store's row
-  locks, which are not `sync.Locker`s (ROADMAP LI2–LI4).
+- **The directive (`//quint:guards`, qweave).** `mu sync.Mutex
+  //quint:guards conserved` (or the directive on the field's doc) names
+  methods of the struct, `func() bool`, checked in order. Registering a
+  guard where the struct is made would need every construction site
+  (composite literals, `new`, zero values, copies) and a simulation to
+  register in, which a zero value made before `qenv.New` has none of.
+  The Unlock's call site has both: it knows the struct (`x` of
+  `x.mu.Unlock()`) and runs in the task's simulation. So qweave weaves
+  each Unlock of a guarded field (a call, a defer, a method value), in
+  place of qenv/weave's `woven.MutexUnlock` or `RWUnlock`, into
+  `woven.MutexUnlockGuarded` or `RWUnlockGuarded`, whose argument binds
+  the struct once (where and when the original receiver was evaluated,
+  so a deferred Unlock's at the defer) and carries the invariants as
+  closures over it, named `Type.method`, "guarded at" the field's line.
+  `unlockKey` checks them after the mutex's Guards, with the same
+  semantics: the lock held, every seam refused, a killed task unchecked,
+  nothing outside a simulation.
+- **What a call site cannot see.** An Unlock not through the field: the
+  field's address handed on (`&x.mu` to a function, a `sync.Locker`,
+  `sync.NewCond`) or the lock copied. qweave finds every use of a guarded
+  field in the main module (with types) and refuses one other than as
+  its methods' receiver, naming `qenv.Guard` (which sees every simulated
+  Unlock of the mutex) as the fix. It refuses an embedded lock (the
+  struct is then a Locker, and a conversion to one escapes unseen), a
+  pointer field (the mutex may be shared), a directive naming no method
+  of type `func() bool`, and an Unlock in another package whose
+  invariant is unexported there.
+- **One weaving path.** Orchestrion's aspect language has no join point
+  for "the receiver is a field carrying a directive", and an aspect file
+  using one would not load under Orchestrion at all, so the directive is
+  qweave's: an Orchestrion build weaves the plain Unlock, and
+  `gotogether lint -weave` (about Orchestrion builds) flags the field.
+  gosim's tool file names no qenv/weave, so qweave weaves no Unlock there
+  and reports each guarded field as skipped (LI3).
+- **The ABI.** The guarded unlocks are added functions of `woven`, which
+  leave every existing function's meaning, and code woven against ABI1,
+  as it was: no rename (§63). qweave writes them, so before weaving a
+  guarded Unlock it checks the module's core has them and refuses an
+  older core with the fix.
+- **Not done.** Store's row locks, which are not `sync.Locker`s, and
+  gosim's own sync (ROADMAP LI3, LI4).
 
 **Not done.**
 - `sync.Cond`, `sync.Once` (harmless: it never blocks across simulated
@@ -5355,7 +5394,11 @@ the version: every file qweave instruments references it (`var _ =
 quintwoven.ABI1`), so a skew fails to compile naming it, and before
 weaving with -cover or -mutate qweave loads the module's `woven` and
 refuses one without `ABI1`, naming the module's core and the fix. Any
-change to woven's functions renames it (ABI2). Orchestrion's aspects
+change to an existing function of woven, or to its meaning, renames it
+(ABI2). An added function leaves old woven code as it was and does not
+(`GroupGo`, `MutexUnlockGuarded`): qweave checks the module's core for
+an added function before writing a call of it, and refuses an older
+core naming the fix. Orchestrion's aspects
 (qenv/weave's orchestrion.yml) ship with the core they call, so they
 cannot skew. `qweave -version` prints the ABI its code calls.
 

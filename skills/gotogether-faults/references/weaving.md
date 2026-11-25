@@ -54,3 +54,31 @@ qenv.Guard(s.Context(), &acct.mu, "ledgerMatchesBalance", acct.consistent)
   sees, a binding already checks.
 - Outside a simulation it does nothing; under gosim it refuses (gosim's
   `sync` reaches no qenv Unlock); guards end with the simulation's Close.
+
+With qweave, declare it on the field instead, and nothing registers it:
+
+```go
+type Account struct {
+	mu   sync.Mutex //quint:guards conserved
+	a, b int
+}
+
+func (x *Account) conserved() bool { return x.a+x.b == 100 }
+```
+
+- The directive names methods of the struct (`func() bool`, several
+  checked in order), in the field's line comment or its doc. qweave weaves
+  every `Unlock` of that field (a call, a defer, a method value) into one
+  that checks them as Guard's are, bound to the struct the Unlock reached
+  it through: zero values and every constructor are covered. The error
+  names `Account.conserved`, guarded at the field's line.
+- A use of the field other than as its methods' receiver (`&x.mu` handed
+  on, a `sync.Locker`, `sync.NewCond`, a copy) is refused: an Unlock
+  through it would go unchecked. Use `qenv.Guard`, which sees every
+  simulated Unlock of the mutex, for such a lock. Embedded and pointer
+  locks are refused too, as are unexported invariants of an Unlock in
+  another package.
+- qweave only: an Orchestrion build weaves the plain Unlock and checks
+  nothing (`gotogether lint -weave` flags the field); under gosim's tool
+  file (no qenv/weave) qweave weaves nothing and reports each field
+  skipped (`qweave -v`).

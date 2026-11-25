@@ -20,7 +20,9 @@
 // method value (return mu.RUnlock) becomes a function literal around the
 // advised call, and a call promoted through an embedded field
 // (t.Lock() on struct{ sync.Mutex }) matches the field's type and advises
-// the call on the field (t.Mutex).
+// the call on the field (t.Mutex). An Unlock of a lock field marked
+// //quint:guards is woven to check the invariants it names (guards.go),
+// which Orchestrion's aspects cannot express.
 //
 // Aspects using anything else are skipped and reported.
 package qweave

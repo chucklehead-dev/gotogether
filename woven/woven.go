@@ -4,7 +4,9 @@
 //   - qenv/weave's aspects (Orchestrion's orchestrion.yml, or qweave):
 //     sync.Mutex, sync.RWMutex and sync.WaitGroup method calls of the
 //     root module become MutexLock, RLock, Add and the others, and a go
-//     statement marked //qenv:go becomes go Go(fn)();
+//     statement marked //qenv:go becomes go Go(fn)(); with qweave, the
+//     Unlock of a field marked //quint:guards becomes MutexUnlockGuarded
+//     or RWUnlockGuarded, carrying the invariants the directive names;
 //   - qweave -cover: a call of Hit at the start of every block, and each
 //     file's blocks registered at init (RegisterBlocks), read by qcover;
 //   - qweave -mutate: every mutant behind Cond, Pick or MutantOn, and each
@@ -44,9 +46,12 @@ import (
 // ABI1 names the woven ABI this version provides, and its number. Code
 // qweave writes references it, so a build against a core of another ABI
 // fails to compile naming it, and qweave checks the module's core for it
-// before weaving. Any change to this package's functions or their meaning
-// renames it (ABI2), so old woven code stops compiling instead of calling
-// a function whose meaning changed.
+// before weaving. Any change to an existing function of this package, or
+// to its meaning, renames it (ABI2), so old woven code stops compiling
+// instead of calling a function whose meaning changed. An added function
+// (GroupGo, MutexUnlockGuarded) leaves old woven code as it was and does
+// not rename it: qweave checks the module's core for an added function
+// before writing a call of it (checkGuardABI), naming the fix.
 const ABI1 = 1
 
 // Go is a go statement marked //qenv:go: in a simulation, fn runs as a new
@@ -104,6 +109,52 @@ func RWUnlock(m *sync.RWMutex) {
 		return
 	}
 	m.Unlock()
+}
+
+// Invariant is a lock invariant a field marked //quint:guards declares:
+// qweave passes one per method the directive names to the field's
+// exclusive unlocks (MutexUnlockGuarded, RWUnlockGuarded), Name being
+// Type.method, Site the field's declaration (file:line), and Holds the
+// method bound to the struct the unlock's field belongs to.
+type Invariant = wovenrt.Invariant
+
+// GuardedMutex is an Unlock of a sync.Mutex field marked //quint:guards:
+// the mutex and its invariants. qweave writes it as one value, built where
+// the original receiver was evaluated, so the struct is evaluated once (a
+// deferred Unlock's at the defer, as the original's was).
+type GuardedMutex struct {
+	Mutex      *sync.Mutex
+	Invariants []Invariant
+}
+
+// GuardedRWMutex is a GuardedMutex of a sync.RWMutex field.
+type GuardedRWMutex struct {
+	RWMutex    *sync.RWMutex
+	Invariants []Invariant
+}
+
+// MutexUnlockGuarded is (*sync.Mutex).Unlock of a field marked
+// //quint:guards: in a simulation, the invariants are checked as
+// qenv.Guard's are, just before the release, the lock still held (every
+// seam refused while they run; a false one panics the task with a
+// *qenv.LockInvariantError); outside one, the real Unlock alone.
+func MutexUnlockGuarded(g GuardedMutex) {
+	if ctx, ok := wovenrt.Current(); ok {
+		wovenrt.UnlockGuarded(ctx, g.Mutex, g.Invariants)
+		return
+	}
+	g.Mutex.Unlock()
+}
+
+// RWUnlockGuarded is (*sync.RWMutex).Unlock of a field marked
+// //quint:guards, checked as MutexUnlockGuarded's (RUnlock is not: a
+// reader publishes nothing).
+func RWUnlockGuarded(g GuardedRWMutex) {
+	if ctx, ok := wovenrt.Current(); ok {
+		wovenrt.UnlockGuarded(ctx, g.RWMutex, g.Invariants)
+		return
+	}
+	g.RWMutex.Unlock()
 }
 
 // RWTryLock is (*sync.RWMutex).TryLock.

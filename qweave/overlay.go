@@ -2,6 +2,7 @@ package qweave
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -263,13 +264,26 @@ func Weave(c Config) (*Result, error) {
 		}
 		return nil, fmt.Errorf("qweave: loading %s in %s: %v%s", strings.Join(patterns, " "), c.dir(), *listErr, hint)
 	}
+	guards, err := collectGuards(pc.Fset, pkgs)
+	if err != nil {
+		return nil, err
+	}
+	if len(guards) > 0 && !weavesUnlocks(aspects) {
+		r.Skipped = append(r.Skipped, skippedGuards(guards)...)
+		guards = nil
+	}
+	if len(guards) > 0 {
+		if err := c.checkGuardABI(); err != nil {
+			return nil, err
+		}
+	}
 	done := map[string]bool{}
 	var visitErr error
 	packages.Visit(pkgs, nil, func(p *packages.Package) {
 		if visitErr != nil || p.Module == nil || len(p.Errors) > 0 {
 			return // the standard library, or a package that does not build
 		}
-		pi := pkgInfo{fset: pc.Fset, info: p.TypesInfo, path: p.PkgPath, root: p.Module.Main, cover: c.Cover && c.covers(p.PkgPath, p.Module.Main), mutate: c.Mutate && c.covers(p.PkgPath, p.Module.Main), modDir: p.Module.Dir}
+		pi := pkgInfo{fset: pc.Fset, info: p.TypesInfo, path: p.PkgPath, root: p.Module.Main, cover: c.Cover && c.covers(p.PkgPath, p.Module.Main), mutate: c.Mutate && c.covers(p.PkgPath, p.Module.Main), modDir: p.Module.Dir, guards: guards}
 		for i, f := range p.Syntax {
 			name := p.CompiledGoFiles[i]
 			if done[name] {
@@ -284,6 +298,9 @@ func Weave(c Config) (*Result, error) {
 			out, sk, err := weaveFile(pi, f, src, name, aspects)
 			if err != nil {
 				visitErr = fmt.Errorf("qweave: %s: %w", name, err)
+				if _, ok := errors.AsType[positioned](err); ok {
+					visitErr = fmt.Errorf("qweave: %w", err)
+				}
 				return
 			}
 			r.Skipped = append(r.Skipped, sk...)

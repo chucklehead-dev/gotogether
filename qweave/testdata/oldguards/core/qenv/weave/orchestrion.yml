@@ -1,0 +1,15 @@
+meta:
+  name: github.com/chucklehead-dev/gotogether/qenv/weave
+  description: An older core's Unlock aspect.
+
+aspects:
+  - id: qenv-mutex-unlock-value
+    join-point:
+      all-of:
+        - package-filter: { root: true }
+        - method-call: { receiver: 'sync.Mutex', name: Unlock, match: value-only }
+    advice:
+      - wrap-expression:
+          imports:
+            woven: github.com/chucklehead-dev/gotogether/woven
+          template: 'woven.MutexUnlock(&{{ .AST.Fun.X }})'

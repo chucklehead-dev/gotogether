@@ -78,7 +78,7 @@ var t1 = time.Now() //qenv:ok measures the real cost
 }
 
 // LintWoven finds go statements and lock method values that weaving
-// cannot rewrite.
+// cannot rewrite, and lock invariants an Orchestrion build does not weave.
 func TestLintWoven(t *testing.T) {
 	dir := t.TempDir()
 	src := `package app
@@ -101,6 +101,11 @@ func (s *st) acquire() func() {
 	defer func() { s.mu.RUnlock() }()
 	return s.mu.RUnlock
 }
+
+type box struct {
+	mu sync.Mutex //quint:guards full
+	n  int
+}
 `
 	if err := os.WriteFile(filepath.Join(dir, "app.go"), []byte(src), 0o644); err != nil {
 		t.Fatal(err)
@@ -118,6 +123,7 @@ func (s *st) acquire() func() {
 		"app.go:9:16 embedded sync.WaitGroup: calls promoted through the struct are not woven (weaving matches the receiver's type)",
 		"app.go:14:2 go statement not marked //qenv:go: its goroutine runs outside the simulation",
 		"app.go:19:9 method value RUnlock is not woven (weaving rewrites calls)",
+		"app.go:23:16 //quint:guards is woven by qweave alone: an Orchestrion build weaves the field's plain Unlock and checks no invariant",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
