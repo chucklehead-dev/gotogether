@@ -226,6 +226,10 @@ type Failure struct {
 	// A rejected step's are its Why's: what the step the model expects
 	// instead would change.
 	Changes []Change
+	// Effects, for a mismatch whose step's effects are not the model's
+	// (its action's effects def: I/O specifications), are the effects
+	// made and expected and their first difference; nil otherwise.
+	Effects *EffectsMismatch
 	// noState says why State is empty, where the report would show it
 	noState string
 	// window is when a within failure's response was due (its trigger's
@@ -1003,12 +1007,25 @@ func (f *Failure) At() string {
 	return fmt.Sprintf("step %d", f.Index+1)
 }
 
+// stepName names f's step for an effects mismatch: its action and seq,
+// and its arguments.
+func (f *Failure) stepName() string {
+	if f.Step == nil {
+		return f.Call
+	}
+	return fmt.Sprintf("%s, seq %d", f.Step.String(), f.Step.Seq)
+}
+
 // describeKind says what kind of failure f is, and where.
 func (f *Failure) describeKind(b *strings.Builder, pfx string) {
 	switch f.Kind {
 	case "disabled":
 		fmt.Fprintf(b, "%s%s is not a transition of the model from the state reached\n", pfx, f.At())
 	case "state":
+		if f.Effects.differs() {
+			fmt.Fprintf(b, "%sat %s (%s) the effects made are not the model's %s\n", pfx, f.At(), f.stepName(), f.Effects.Call)
+			break
+		}
 		fmt.Fprintf(b, "%safter %s the model's state does not match what was observed\n", pfx, f.At())
 	case "invariant":
 		if f.Index < 0 {
@@ -1052,6 +1069,9 @@ func (f *Failure) describeRest(b *strings.Builder, pfx string, verbose bool) str
 		fmt.Fprintf(b, "%s  expect:   %s\n", pfx, f.Expect)
 		if t := f.ExpectTemplate; t != "" && t != f.Expect {
 			fmt.Fprintf(b, "%s  binding:  %s\n", pfx, t)
+		}
+		if f.Effects.differs() {
+			b.WriteString(f.Effects.render(pfx + "  "))
 		}
 	}
 	if f.Step == nil && f.Note != "" && f.Kind != "within" {

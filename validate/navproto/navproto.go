@@ -52,9 +52,17 @@ type Node struct {
 	Branches []Branch `json:"branches"`
 	// Steps are the steps recorded before the choice, Tasks the
 	// simulation's tasks then (Sim.Tasks), Elapsed its virtual time
-	Steps   []string `json:"steps"`
-	Tasks   []string `json:"tasks,omitempty"`
-	Elapsed string   `json:"elapsed,omitempty"`
+	Steps []string `json:"steps"`
+	// StepEffects are, for each of Steps (by index), the effects
+	// attributed to it (qtrace's Step.Effects, as Effect.String names
+	// them), none when no step has any; Unattributed are the effects made
+	// by no step so far (Trace.Unattributed: a task whose step is not yet
+	// recorded, or that records none). An effect record is no step: it is
+	// in neither Steps nor its count.
+	StepEffects  [][]string `json:"stepEffects,omitempty"`
+	Unattributed []string   `json:"unattributed,omitempty"`
+	Tasks        []string   `json:"tasks,omitempty"`
+	Elapsed      string     `json:"elapsed,omitempty"`
 	// Model is each actor's model state after Steps (the Go evaluator's
 	// replay of its plan), or why there is none (a step the model
 	// rejects: the explanation)

@@ -12,6 +12,7 @@ names the mistake and the fix.
 ## Choose your path
 
 - Every pattern in full with its examples, settles, quorums, journeys that must finish: [references/patterns.md](references/patterns.md).
+- What a step sends (a capture, a publish): effects as site steps, or a step's effects def compared at its step: [references/effects.md](references/effects.md).
 - The conventions every checked model follows: the gotogether-model skill.
 
 ## Steps: the patterns, in the order to check them
@@ -52,6 +53,7 @@ names the mistake and the fix.
 | a val false in every run before quiet | 5: an eventual property written as an invariant | `eventually:` |
 | state grows without bound | 6: spec-level state | a mechanism model and its lemma |
 | `Rejects` on a refused call | 7: no step for a refusal | an outcome value, the binding's `outcomes` |
+| a mutant sending a wrong request survives | its effect is recorded nowhere, or partly | [effects.md](references/effects.md): an effects def |
 
 ## Run it, do not infer it
 

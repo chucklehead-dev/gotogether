@@ -43,6 +43,8 @@ const (
 	fLostBefore
 	fCompleteThrough
 	fAssumed
+	fEffect
+	fEffects
 	fArgs
 	fObs
 	fOrder
@@ -59,7 +61,7 @@ var fieldKey = [nFields]string{
 	fActor: KeyActor, fProcess: KeyProcess, fThread: KeyThread, fError: KeyError, fRef: KeyRef,
 	fInvoked: KeyInvoked, fInvocation: KeyInvocation, fCall: KeyCall, fSettled: KeySettled,
 	fLost: KeyLost, fLostAfter: KeyLostAfter, fLostBefore: KeyLostBefore,
-	fCompleteThrough: KeyCompleteThrough, fAssumed: KeyAssumed,
+	fCompleteThrough: KeyCompleteThrough, fAssumed: KeyAssumed, fEffect: KeyEffect, fEffects: KeyEffects,
 	fArgs: PrefixArg, fObs: PrefixObs, fOrder: PrefixOrder,
 }
 
@@ -185,6 +187,14 @@ func (s *Step) appendLine(b []byte) ([]byte, bool) {
 		case fAssumed:
 			if s.Ambiguous {
 				yes(KeyAssumed)
+			}
+		case fEffect:
+			if s.Effect != "" {
+				str(KeyEffect, s.Effect)
+			}
+		case fEffects:
+			if s.EffectsObserved {
+				str(KeyEffects, FormatMade(s.Made))
 			}
 		case fArgs, fObs:
 			m := s.Args

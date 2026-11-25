@@ -46,7 +46,7 @@ func (m StepMutant) String() string { return m.Op + " " + m.Detail }
 // mutants can only be undecided (a failure a dropped step may explain is
 // no verdict), so it tests the absence path, not the run, and in every
 // report it was noise. Read-only.
-var MutationOps = []string{"drop", "dup", "swap", "corrupt", "retime", "reactor", "gap"}
+var MutationOps = []string{"drop", "dup", "swap", "corrupt", "retime", "reactor", "gap", "effect-drop", "effect-dup", "effect-swap", "effect-corrupt"}
 
 // A MutationOption narrows Mutations.
 type MutationOption func(*mutationConfig)
@@ -128,6 +128,14 @@ func MutateLimit(n int) MutationOption { return func(c *mutationConfig) { c.limi
 //     the log has several, in that actor's process at the time (its
 //     latest step's at or before, else its first), so no actor shows two
 //     incarnations at once.
+//   - effect-drop, effect-dup, effect-swap, effect-corrupt: an effect
+//     record (an effect the code made: qobs.Effect, a double's send)
+//     taken out, recorded twice, exchanged with the next effect of the
+//     same cause (the same invocation, or the same step's Made), or one
+//     of its fields changed as corrupt changes a step's; the step that
+//     names it by seq (Made) follows the renumbering. The log of a
+//     double that recorded one send wrong: killed only where a binding's
+//     effects compare that kind (I/O specifications).
 //   - gap: one step taken out and nothing renumbered, so its recorder's
 //     seqs show the hole: the log of a sink or an exporter that dropped
 //     it. Not a question of the model's but of the absence path's: a
@@ -168,6 +176,14 @@ func Mutations(steps []Step, opts ...MutationOption) []StepMutant {
 			ms = reactors(steps)
 		case "gap":
 			ms = holes(steps)
+		case "effect-drop":
+			ms = effectDrops(steps)
+		case "effect-dup":
+			ms = effectDups(steps)
+		case "effect-swap":
+			ms = effectSwaps(steps)
+		case "effect-corrupt":
+			ms = effectCorruptions(steps)
 		}
 		exempt := ""
 		if op == "gap" {
@@ -266,6 +282,12 @@ func renumber(steps []Step, rec string, from uint64, delta int) {
 		move(&s.Seq)
 		if s.Call != 0 {
 			move(&s.Call)
+		}
+		if len(s.Made) > 0 {
+			s.Made = slices.Clone(s.Made) // the original's, shared by the clone
+			for k := range s.Made {
+				move(&s.Made[k])
+			}
 		}
 	}
 }
@@ -484,6 +506,148 @@ func corruptions(steps []Step) []StepMutant {
 					}
 					out = append(out, StepMutant{Op: "corrupt", Index: i, Action: s.Action, Field: field, Change: ch[0].(string), Detail: detail, Steps: m})
 				}
+			}
+		}
+	}
+	return out
+}
+
+// effectCause is the action of the step effect record e (src[i]) is
+// attributed to: the completion of its call, or the step whose Made
+// names it; its kind if neither.
+func effectCause(steps []Step, i int) string {
+	e := &steps[i]
+	for j := range steps {
+		s := &steps[j]
+		if !s.Model() || s.Recorder != e.Recorder {
+			continue
+		}
+		if e.Call != 0 && s.Call == e.Call || slices.Contains(s.Made, e.Seq) {
+			return s.Action
+		}
+	}
+	return e.Effect
+}
+
+// sameCause reports whether two effect records are attributed alike: under
+// one call, or named by one step's Made.
+func sameCause(steps []Step, a, b *Step) bool {
+	if a.Call != 0 || b.Call != 0 {
+		return a.Call == b.Call
+	}
+	for j := range steps {
+		if m := steps[j].Made; slices.Contains(m, a.Seq) && slices.Contains(m, b.Seq) {
+			return true
+		}
+	}
+	return false
+}
+
+// unmake takes seq q of recorder rec out of every step's Made (copied).
+func unmake(steps []Step, rec string, q uint64) {
+	for j := range steps {
+		if s := &steps[j]; s.Recorder == rec && slices.Contains(s.Made, q) {
+			s.Made = slices.DeleteFunc(slices.Clone(s.Made), func(x uint64) bool { return x == q })
+		}
+	}
+}
+
+func effectDrops(steps []Step) []StepMutant {
+	var out []StepMutant
+	for i := range steps {
+		e := &steps[i]
+		if e.Effect == "" {
+			continue
+		}
+		m := slices.Delete(slices.Clone(steps), i, i+1)
+		detail := fmt.Sprintf("of %s %s (recorder %s seq %d)", e.Effect, e.String(), e.Recorder, e.Seq)
+		if e.Seq != 0 {
+			unmake(m, e.Recorder, e.Seq)
+			renumber(m, e.Recorder, e.Seq, -1)
+		}
+		out = append(out, StepMutant{Op: "effect-drop", Index: i, Action: effectCause(steps, i), Detail: detail, Steps: m})
+	}
+	return out
+}
+
+func effectDups(steps []Step) []StepMutant {
+	var out []StepMutant
+	for i := range steps {
+		e := &steps[i]
+		if e.Effect == "" || e.Seq == 0 {
+			continue
+		}
+		m := slices.Clone(steps)
+		renumber(m, e.Recorder, e.Seq, +1)
+		cp := *e
+		cp.Seq = e.Seq + 1
+		for j := range m { // the copy is the same step's
+			if s := &m[j]; s.Recorder == e.Recorder && slices.Contains(s.Made, e.Seq) {
+				k := slices.Index(s.Made, e.Seq)
+				s.Made = slices.Insert(slices.Clone(s.Made), k+1, cp.Seq)
+			}
+		}
+		m = slices.Insert(m, i+1, cp)
+		out = append(out, StepMutant{Op: "effect-dup", Index: i, Action: effectCause(steps, i),
+			Detail: fmt.Sprintf("of %s %s (recorder %s seq %d), the copy seq %d", e.Effect, e.String(), e.Recorder, e.Seq, cp.Seq), Steps: m})
+	}
+	return out
+}
+
+func effectSwaps(steps []Step) []StepMutant {
+	byRec := map[string][]int{}
+	for i := range steps {
+		if steps[i].Lost == "" && steps[i].CompleteThrough.IsZero() && steps[i].Seq != 0 {
+			byRec[steps[i].Recorder] = append(byRec[steps[i].Recorder], i)
+		}
+	}
+	var pairs [][2]int
+	for _, idx := range byRec {
+		sort.SliceStable(idx, func(a, b int) bool { return steps[idx[a]].Seq < steps[idx[b]].Seq })
+		for k := 0; k+1 < len(idx); k++ {
+			a, b := &steps[idx[k]], &steps[idx[k+1]]
+			if a.Effect != "" && b.Effect != "" && sameCause(steps, a, b) && (a.Effect != b.Effect || !reflect.DeepEqual(a.Args, b.Args)) {
+				pairs = append(pairs, [2]int{idx[k], idx[k+1]})
+			}
+		}
+	}
+	sort.Slice(pairs, func(a, b int) bool { return pairs[a][0] < pairs[b][0] })
+	var out []StepMutant
+	for _, p := range pairs {
+		m := slices.Clone(steps)
+		a, b := &m[p[0]], &m[p[1]]
+		// their contents exchanged, their places kept: the order made
+		// changes, and every seq that names them still does
+		a.Effect, b.Effect = b.Effect, a.Effect
+		a.Args, b.Args = b.Args, a.Args
+		out = append(out, StepMutant{Op: "effect-swap", Index: min(p[0], p[1]), Action: effectCause(steps, p[0]),
+			Detail: fmt.Sprintf("of %s (seq %d) and %s (seq %d)", steps[p[0]].String(), steps[p[0]].Seq, steps[p[1]].String(), steps[p[1]].Seq), Steps: m})
+	}
+	return out
+}
+
+func effectCorruptions(steps []Step) []StepMutant {
+	var out []StepMutant
+	for i := range steps {
+		e := &steps[i]
+		if e.Effect == "" {
+			continue
+		}
+		cause := effectCause(steps, i)
+		for _, k := range slices.Sorted(maps.Keys(e.Args)) {
+			v := e.Args[k]
+			for _, ch := range append(corrupted(v), [2]any{"remove", nil}) {
+				m := slices.Clone(steps)
+				nv := maps.Clone(e.Args)
+				detail := fmt.Sprintf("%s of effect %s (recorder %s seq %d): %v -> %v", k, e.Effect, e.Recorder, e.Seq, fmtValue(v), fmtValue(ch[1]))
+				if ch[0] == "remove" {
+					delete(nv, k)
+					detail = fmt.Sprintf("%s of effect %s (recorder %s seq %d): %v removed", k, e.Effect, e.Recorder, e.Seq, fmtValue(v))
+				} else {
+					nv[k] = ch[1]
+				}
+				m[i].Args = nv
+				out = append(out, StepMutant{Op: "effect-corrupt", Index: i, Action: cause, Field: k, Change: ch[0].(string), Detail: detail, Steps: m})
 			}
 		}
 	}

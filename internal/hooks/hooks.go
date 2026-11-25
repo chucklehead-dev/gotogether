@@ -40,6 +40,10 @@ type Site struct {
 	// GoroutineID is an identity already read during this operation. Zero means
 	// no lookup was needed. It is never an ownership snapshot or a cached site.
 	GoroutineID int64
+	// Task is the simulation task recording (comparable; nil outside a
+	// simulation): the effects a task made are its next step's
+	// (qobs.Effect's attribution rule 2).
+	Task any
 }
 
 // Now is the time a step recorded now at the site carries: its

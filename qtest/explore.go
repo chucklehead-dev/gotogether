@@ -276,11 +276,18 @@ func envUint(name string) (uint64, error) {
 
 func empty(runs []*Run) bool {
 	for _, r := range runs {
-		if len(r.Steps) > 0 {
+		if !r.noStep() {
 			return false
 		}
 	}
 	return true
+}
+
+// noStep reports whether the run recorded no step. An effect record is no
+// step: the doubles record every send of a system whose steps are not
+// recorded yet.
+func (r *Run) noStep() bool {
+	return !slices.ContainsFunc(r.Steps, func(s qtrace.Step) bool { return s.Effect == "" })
 }
 
 // explore runs the scenario once per seed and checks every run (System.Explore):
@@ -1718,7 +1725,7 @@ func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 	default:
 		fmt.Fprintf(&b, "%s, %s\n%s", x.nameOf(r), r.faultsSaid(), r.Report.Summary())
 	}
-	if len(r.Steps) == 0 {
+	if r.noStep() {
 		fmt.Fprintf(&b, "  %s\n", r.noSteps())
 	}
 	if len(r.Unscripted) > 0 {

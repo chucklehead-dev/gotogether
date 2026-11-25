@@ -46,6 +46,12 @@ type Trace struct {
 	// stated watermark does not reach settles nothing: a step recorded
 	// after it may be uncollected yet.
 	Collected []Watermark
+	// Unattributed are the effects of this actor's recorders made by no
+	// step (Effect.By ""), in the order made: a task that recorded no
+	// step after them (a relay, a client whose step a service records),
+	// an invocation begun before its task's next step, a caller that
+	// crashed before its step. They are listed, never compared.
+	Unattributed []Effect
 	// carriedWhole: a search's carried watermark says some recorder of
 	// the actor stated none (CarryWatermark)
 	carriedWhole bool
@@ -296,9 +302,12 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	invokedAt := map[rk]time.Time{}
 	invokedRef := map[rk]string{}
 	lastSettle, last := map[string]uint64{}, map[string]uint64{}
+	var effs []int // the effect records, attached to their steps after the order
 	for _, i := range uniq {
 		s := &steps[i]
-		if s.Call != 0 {
+		if s.Effect != "" {
+			effs = append(effs, i) // its Call names the invocation it was made under, which it does not complete
+		} else if s.Call != 0 {
 			completed[rk{s.Recorder, s.Call}] = true
 		}
 		if s.Invocation {
@@ -380,7 +389,7 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 	for _, i := range uniq {
 		s := &steps[i]
 		switch {
-		case s.Settled, s.Lost != "", !s.CompleteThrough.IsZero():
+		case s.Settled, s.Lost != "", !s.CompleteThrough.IsZero(), s.Effect != "":
 		case !s.Invocation:
 			// a completion was invoked when its invocation record was
 			// written: the recorder's own clock, the one its Time is on (a
@@ -441,7 +450,96 @@ func Reconstruct(steps []Step) ([]*Trace, []Issue) {
 		t.Issues = append(t.Issues, dupIssues[a]...)
 		out = append(out, t)
 	}
+	// 5. Effects: each effect record attached to the step it is
+	// attributed to, in the order made.
+	if len(effs) > 0 {
+		issues = append(issues, attachEffects(steps, effs, out)...)
+	}
 	return out, issues
+}
+
+// attachEffects attaches the effect records effs (indices into src) to
+// the traces' steps they are attributed to (Step.Effects): rule 1, the
+// completion of the invocation open where the effect was made (its
+// Call), or that invocation pending (a crashed caller's send survives
+// it); rule 2, the step whose Made names it (its task's next step). An
+// effect made under a call after the call's completion is Late. Any
+// other is made by no step: its actor's trace's Unattributed, or, for an
+// actor with no trace, an info issue counting it.
+func attachEffects(src []Step, effs []int, traces []*Trace) []Issue {
+	type rk struct {
+		rec string
+		seq uint64
+	}
+	at := map[rk]int{}       // each effect record by its place
+	byCall := map[rk][]int{} // the effect records made under each invocation
+	for _, i := range effs {
+		e := &src[i]
+		at[rk{e.Recorder, e.Seq}] = i
+		if e.Call != 0 {
+			byCall[rk{e.Recorder, e.Call}] = append(byCall[rk{e.Recorder, e.Call}], i)
+		}
+	}
+	claimed := make(map[int]bool, len(effs))
+	effect := func(i int, by string) Effect {
+		e := &src[i]
+		return Effect{Kind: e.Effect, Fields: e.Args, Recorder: e.Recorder, Seq: e.Seq, Time: e.Time, By: by, Call: e.Call, Source: e.Source}
+	}
+	bySeq := func(es []Effect) {
+		sort.SliceStable(es, func(a, b int) bool { return es[a].Seq < es[b].Seq })
+	}
+	for _, t := range traces {
+		for j := range t.Steps {
+			s := &t.Steps[j]
+			var es []Effect
+			if s.Call != 0 {
+				for _, i := range byCall[rk{s.Recorder, s.Call}] {
+					e := effect(i, "call")
+					e.Late = s.Seq != 0 && e.Seq > s.Seq
+					es = append(es, e)
+					claimed[i] = true
+				}
+			}
+			for _, q := range s.Made {
+				if i, ok := at[rk{s.Recorder, q}]; ok && !claimed[i] {
+					es = append(es, effect(i, "task"))
+					claimed[i] = true
+				}
+			}
+			bySeq(es)
+			s.Effects = es
+		}
+		for j := range t.Pending {
+			p := &t.Pending[j]
+			var es []Effect
+			for _, i := range byCall[rk{p.Recorder, p.Seq}] {
+				es = append(es, effect(i, "call"))
+				claimed[i] = true
+			}
+			bySeq(es)
+			p.Effects = es
+		}
+	}
+	byActor := map[string]*Trace{}
+	for _, t := range traces {
+		byActor[t.Actor] = t
+	}
+	orphans := map[string]int{}
+	for _, i := range effs {
+		if claimed[i] {
+			continue
+		}
+		if t := byActor[src[i].Actor]; t != nil {
+			t.Unattributed = append(t.Unattributed, effect(i, ""))
+		} else {
+			orphans[src[i].Actor]++
+		}
+	}
+	var issues []Issue
+	for _, a := range slices.Sorted(maps.Keys(orphans)) {
+		issues = append(issues, Issue{"info", "effects", fmt.Sprintf("%d effects of actor %s were made by no step, and the actor recorded none", orphans[a], a)})
+	}
+	return issues
 }
 
 // SameRecord reports whether two captured records are equivalent. Display

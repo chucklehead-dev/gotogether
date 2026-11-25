@@ -29,6 +29,10 @@ type Model struct {
 	Module  string
 	Actions map[string][]Param
 	Vals    map[string]bool
+	// Defs are the module's operators (def, pure def with parameters),
+	// each with its parameters' names, in order: an action's effects def
+	// is one (Action.Effects).
+	Defs map[string][]string
 	// Diagnostics associates Boolean properties with model-authored record-set vals,
 	// discovered from /// gotogether: diagnostic <val> documentation.
 	Diagnostics map[string]string
@@ -525,7 +529,7 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 			continue
 		}
 		gather(module)
-		m := &Model{Module: module, Actions: map[string][]Param{}, Vals: map[string]bool{}, Consts: map[string]string{}, Antecedents: map[string]string{}, Helpers: map[string]bool{},
+		m := &Model{Module: module, Actions: map[string][]Param{}, Vals: map[string]bool{}, Defs: map[string][]string{}, Consts: map[string]string{}, Antecedents: map[string]string{}, Helpers: map[string]bool{},
 			assigns: assigns, calls: calls, reads: reads, chooses: chooses, typedefs: typedefs, types: &memo.Map[string, typeResult]{},
 			schema: schemaOf(&tc, module)}
 		m.checkpointScope = checkpointScope(module, decls, visible)
@@ -574,9 +578,19 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 				if unchanging(d.RawExpr) {
 					frames[d.Name] = true
 				}
-			case d.Kind == "def" && (d.Qualifier == "val" || d.Qualifier == "def"):
+			case d.Kind == "def" && (d.Qualifier == "val" || d.Qualifier == "def" || d.Qualifier == "puredef" || d.Qualifier == "pureval"):
+				// operators, by their parameters' names: an action's effects
+				// def (I/O specifications) is called with the action's
+				// arguments of those names
+				if d.Expr != nil && d.Expr.Kind == "lambda" && (d.Qualifier == "def" || d.Qualifier == "puredef") {
+					ps := []string{}
+					for _, p := range d.Expr.Params {
+						ps = append(ps, p.Name)
+					}
+					m.Defs[d.Name] = ps
+				}
 				// candidate invariants: boolean vals (not operators, not sum-type constructors)
-				if d.Expr != nil && d.Expr.Kind != "lambda" {
+				if (d.Qualifier == "val" || d.Qualifier == "def") && d.Expr != nil && d.Expr.Kind != "lambda" {
 					if t, ok := tc.Types[string(d.ID)]; ok && renderType(t.Type) == "bool" {
 						m.Vals[d.Name] = true
 						if a, ok := antecedent(d.RawExpr); ok {

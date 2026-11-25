@@ -38,7 +38,7 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Proposed queue | L1–L8: golem's first use ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6833092588)) | L1 (#191), L3 (#195), L5 (#194) and L6's docs landed after J7c; the rest as projects ask. |
 | Proposed queue | M1–M6: golem's graph search and Valkey ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6835911012)) | M1 (a bounded result: `-memory`, `-process-memory`, `peakResident`) and M2 done; next M3 (symmetry). |
 | Proposed queue | N1–N7: golem's driver asks ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6843138891)) | N1 (`Config.Require`, its witnesses), N3 (`Step.Eval`), N5 (actionmap `-roundtrips`) and N7 (`connect.Differential`) done. Next N2 (`connect.Compose`). Open in N1: a witness continued past its target (documented for now: require the state after the step under test). |
-| Proposed queue | CW1–CW11: a contract from design to operation ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6885259328), [#220](https://github.com/chucklehead-dev/gotogether/issues/220#issuecomment-6884857732)) | CW1 (literate models; Goo adopted it), CW2 (the design matrix with per-variant search, `dead`, `-variant` and memory released per variant; golem adopted it for four models) and CW4 done. CW5's runtime half done (`connect.Bind` with `Returns` and `Observes`), and its static half (a binding checked against the model's actions, picks and types before any trace; Go types generated from the model's, `gotogether types [-check]`; the walkthrough's tables and the alignment lint, `gotogether invariants [-write|-check] [-require enforced,checked,recorded,driven]`: properties from `//quint:enforces` and `//quint:checks`, actions from the code that records and drives them); left in CW5: Go to Quint (if ever), golem's `expDriver` the first outside case, a world that is not one `T` an open question. CW3's first slice done (listed assumptions: `// @assume` lines in the model, `//quint:exercises` and `//quint:monitors`, the assumptions table, `-require targeted`); left in CW3: the doc lint, a predicate checked on traces. CW11 (asynchronous drivers) its own design. Left in CW1: `lint -model doc.md`, stable IDs; in CW2: possibles per variant, iterative deepening. |
+| Proposed queue | CW1–CW12: a contract from design to operation ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6885259328), [#220](https://github.com/chucklehead-dev/gotogether/issues/220#issuecomment-6884857732)) | CW1 (literate models; Goo adopted it), CW2 (the design matrix with per-variant search, `dead`, `-variant` and memory released per variant; golem adopted it for four models) and CW4 done. CW5's runtime half done (`connect.Bind` with `Returns` and `Observes`), and its static half (a binding checked against the model's actions, picks and types before any trace; Go types generated from the model's, `gotogether types [-check]`; the walkthrough's tables and the alignment lint, `gotogether invariants [-write|-check] [-require enforced,checked,recorded,driven]`: properties from `//quint:enforces` and `//quint:checks`, actions from the code that records and drives them); left in CW5: Go to Quint (if ever), golem's `expDriver` the first outside case, a world that is not one `T` an open question. CW3's first slice done (listed assumptions: `// @assume` lines in the model, `//quint:exercises` and `//quint:monitors`, the assumptions table, `-require targeted`); left in CW3: the doc lint, a predicate checked on traces. CW11 (asynchronous drivers) its own design. CW12 (I/O specifications) P0 and P1 done (DESIGN §112); next its pending-call rule, then P2. Left in CW1: `lint -model doc.md`, stable IDs; in CW2: possibles per variant, iterative deepening. |
 | Proposed queue | O1–O2: external drivers ([#220](https://github.com/chucklehead-dev/gotogether/issues/220)) | O1 done (a `settled` record in `gotogether.requests/1`, written by the Playwright adapter's `settled()`): it retires Goo's drain bridge. Next O2, the compact external-driver example. |
 | Proposed queue | LI1–LI4: [lock invariants, after Gobra](#lock-invariants-li-after-gobra) | LI1 (`qenv.Guard`, checked at every simulated Unlock) and LI2 (`//quint:guards`, woven by qweave at the field's Unlocks) done. LI3 (gosim) and LI4 (the doubles' row locks) as projects ask. |
 | Proposed queue | Q0–Q11: a Go Quint | A design item, each its own decision. Q0 first (no quint for consumers, small); Q2's front end only once Q3's corpus and ill-typed generator exist. No upstream contact for now (maintainer, 2026-11-25): gotogether proceeds on its own. |
@@ -604,13 +604,23 @@ Items, each its own decision before it starts:
   for the implementation's next point, as golem's `settle` does by hand
   today: connect's steps are synchronous calls. Its own design, golem's
   driver its first case; it is not `Bind`'s ([#144](https://github.com/chucklehead-dev/gotogether/issues/144)).
-- **CW12: I/O specifications (proposed, after Gobra).** A step's outbound
-  effects (calls, publishes, writes) stated per action in the model and
-  compared with what the doubles recorded during the step: a wrong
-  payload, a missing, duplicated, extra, reordered or late send caught at
-  its step, not at a settle. Design, phases and the maintainer's answers
-  (2026-11-25): [io-specs.md](io-specs.md). Nothing built; P0 and P1 next,
-  after CW3's first slice.
+- **CW12: I/O specifications (after Gobra). P0 and P1 built** (DESIGN
+  §112): a step's synchronous effects stated per action in the model (an
+  effects def over the post-state) and compared, as one more conjunct of
+  its expect, with what the doubles recorded during the step (effect
+  records in `gotogether.steps/1`, attributed by the open call's scope,
+  else the task's next step; Service, Queue, simlog and qhttp record at the
+  send); the binding's `effects:` kinds and `match` (exact, retried with
+  `same:` keys, set); `Mismatch(action)` naming the first differing effect
+  and field; the effect observation mutants; checkout's `pay` and
+  `CaptureUnits` (conforming in every run before, a mismatch in every run that
+  completes a payment now), today's pattern in gotogether-patterns' effects.md.
+  Left: the pending-call rule's enforcement in ResolvePending (decided:
+  a recorded effect means the call took effect), then P2 (commit writes,
+  internal effects by opt-in, `Bind(...).Emits`, qweave's duplicate and
+  swap operators), P3 (owed effects across processes by key, the real
+  tier's transport and spans), P4 (Choreo projection); grist after P3.
+  Design, phases and the maintainer's answers: [io-specs.md](io-specs.md).
 
 Kept on purpose, both projects say: the model as an independent text,
 Apalache for proofs, necessity runs, native source and arithmetic oracles

@@ -15,6 +15,8 @@ what was checked: fail · collected history
 
 steps so far (1)
   apply(id=1)
+  effects made by no step so far (1)
+    ↳ effect rpc.counter.request(value=1) at seq 1
 
 model (default)
   applied = Set(1)
@@ -30,9 +32,7 @@ effective run profile TestMutant#1:
   mode navigation; chooser navigation; parallel 1
   mutant noDedupe
   replay TestMutant#1:seed=1 node=0:1,1:1,2:2,4:1@5
-  fixed choice prefix; nominal continuation; no seeded fault draws
-  primary binding hello.binding.yaml
-── lines 1–26 of 37 (pgup/pgdn scroll)
+── lines 1–26 of 39 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -56,6 +56,8 @@ what was checked: fail · collected history
 steps so far (2)
   apply(id=1)
   apply(id=1)
+  effects made by no step so far (1)
+    ↳ effect rpc.counter.request(value=1) at seq 1
 
 model (default)
   the model rejects a step so far:
@@ -70,9 +72,7 @@ tasks
   client: waiting until 100ms
   counter.handle: runnable
   counter.handle: runnable
-  counter.main: runnable
-
-── lines 1–26 of 43 (pgup/pgdn scroll)
+── lines 1–26 of 45 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -95,6 +95,8 @@ what was checked: fail · collected history
 
 steps so far (1)
   apply(id=1)
+  effects made by no step so far (1)
+    ↳ effect rpc.counter.request(value=1) at seq 1
 
 model (default)
   applied = Set(1)
@@ -110,9 +112,7 @@ effective run profile TestMutant#1:
   mode navigation; chooser navigation; parallel 1
   mutant noDedupe
   replay TestMutant#1:seed=1 node=0:1,1:1,2:2,4:1@5
-  fixed choice prefix; nominal continuation; no seeded fault draws
-  primary binding hello.binding.yaml
-── lines 1–26 of 37 (pgup/pgdn scroll)
+── lines 1–26 of 39 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -135,6 +135,8 @@ what was checked: fail · collected history
 
 steps so far (1)
   apply(id=1)
+  effects made by no step so far (1)
+    ↳ effect rpc.counter.request(value=1) at seq 1
 
 model (default)
   applied = Set(1)
@@ -150,9 +152,7 @@ effective run profile TestMutant#1:
   mode navigation; chooser navigation; parallel 1
   mutant noDedupe
   replay TestMutant#1:seed=1 node=0:1,1:1,2:2,4:1@5
-  fixed choice prefix; nominal continuation; no seeded fault draws
-  primary binding hello.binding.yaml
-── lines 1–26 of 37 (pgup/pgdn scroll)
+── lines 1–26 of 39 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -174,6 +174,8 @@ what was checked: fail · collected history
 
 steps so far (1)
   apply(id=1)
+  effects made by no step so far (1)
+    ↳ effect rpc.counter.request(value=1) at seq 1
 
 model (default)  (* changed since the last node)
   applied = Set(1)
@@ -190,9 +192,7 @@ effective run profile TestMutant#1:
   mutant noDedupe
   replay TestMutant#1:seed=1 node=0:1,1:1,2:2,4:1,5:1@6
   fixed choice prefix; nominal continuation; no seeded fault draws
-  primary binding hello.binding.yaml
-    constant REQUESTS = 1.to(3)
-── lines 1–27 of 37 (pgup/pgdn scroll)
+── lines 1–27 of 39 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -214,6 +214,8 @@ what was checked: fail · collected history
 
 steps so far (1)
   apply(id=1)
+  effects made by no step so far (1)
+    ↳ effect rpc.counter.request(value=1) at seq 1
 
 model (default)  (* changed since the last node)
   applied = Set(1)
@@ -229,9 +231,7 @@ effective run profile TestMutant#1:
   mode navigation; chooser navigation; parallel 1
   mutant noDedupe
   replay TestMutant#1:seed=1 node=0:1,1:1,2:2,4:1,5:1@6
-  fixed choice prefix; nominal continuation; no seeded fault draws
-  primary binding hello.binding.yaml
-── lines 1–26 of 37 (pgup/pgdn scroll)
+── lines 1–26 of 39 (pgup/pgdn scroll)
 
 saved to the corpus: /tmp/gotogether-nav-tape-corpus/TestMutant/0ad08a7ca068.json
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit

@@ -25,6 +25,7 @@
 
 # bindings without a compiled model
 examples/checkout/checkout.binding.yaml | size | its compiled model is 1.3 MB
+examples/checkout/testdata/noeffects.binding.yaml | size | checkout.binding.yaml with pay's effects ablated, its compiled model the same size
 examples/counters/counters.binding.yaml | size | its compiled model is 8.1 MB
 examples/counters/counters.calls.binding.yaml | size | its compiled model is 7.4 MB
 examples/counters/counters.exactly.binding.yaml | size | its compiled model is 7.9 MB

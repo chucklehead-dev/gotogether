@@ -93,9 +93,12 @@ func TestMutants(t *testing.T) {
 		// though 3 of the first 50): 70 seeds miss it 0.1% to 1.4% of the
 		// time
 		{shop.LockWithoutWrite, qenv.SnapshotIsolation, qenv.DefaultRates, []qtest.Claim{qtest.Some(shipOrCancel)}, 0, 70},
-		// a retry after a lost response charges again (15 of 100): 25 seeds
-		// miss it 1.7% of the time
-		{shop.NoIdempotencyKey, qenv.Serializable, qenv.DefaultRates, []qtest.Claim{qtest.Some(qtest.Violates("chargedAtMostOnce"))}, 0, 25},
+		// a retry under a fresh key is a second capture where pay's
+		// effects make one (5 of 25 runs, 20%: 25 seeds miss it 0.4% of the
+		// time); it is caught at that pay, before the charge twice it may
+		// lead to (TestStormChargesTwiceWithoutKeys and the sweep judge the
+		// invariants without pay's effects)
+		{shop.NoIdempotencyKey, qenv.Serializable, qenv.DefaultRates, []qtest.Claim{qtest.Some(qtest.Mismatch("pay"))}, 0, 25},
 		// a crash between commit and publish loses the order's payment: a
 		// one-step window, found with crashes ten times as often, in about
 		// one run in fifty (5 and 6 of 300, measured with and without late

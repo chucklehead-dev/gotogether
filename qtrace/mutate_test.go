@@ -593,7 +593,8 @@ func TestMutationsKeepTheRecorderContract(t *testing.T) {
 		}
 		return n
 	}
-	raw := map[string]func([]Step) []StepMutant{"drop": drops, "dup": dups, "swap": swaps, "corrupt": corruptions, "retime": retimes, "reactor": reactors, "gap": holes}
+	raw := map[string]func([]Step) []StepMutant{"drop": drops, "dup": dups, "swap": swaps, "corrupt": corruptions, "retime": retimes, "reactor": reactors, "gap": holes,
+		"effect-drop": effectDrops, "effect-dup": effectDups, "effect-swap": effectSwaps, "effect-corrupt": effectCorruptions}
 	filtered := map[string]map[string]int{"lamport": {"reactor": 2}}
 	for name, log := range shapes() {
 		if base := reconstructErrors(log); len(base) > 0 {
@@ -691,7 +692,7 @@ func TestMutationsKeepTheRecorderContract(t *testing.T) {
 		}
 		// every op makes some mutant of each shape it applies to
 		for _, op := range MutationOps {
-			if op == "gap" && len(holes(log)) == 0 {
+			if op == "gap" && len(holes(log)) == 0 || strings.HasPrefix(op, "effect-") && !slices.ContainsFunc(log, func(s Step) bool { return s.Effect != "" }) {
 				continue // no recorder with a step between two of its records
 			}
 			if byOp[op] == 0 {

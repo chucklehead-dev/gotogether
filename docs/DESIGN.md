@@ -7455,3 +7455,174 @@ generated programs. Its first "front end" is quint again.
   the tag (ci/fetch-quint-src.sh, the commit checked), never vendored;
   per push a test fails on a repository .qnt file the manifest does not
   pin, and the nightly on a verdict quint no longer gives.
+
+## 112. I/O specifications: the effects a step must make (CW12 P1)
+
+A step can update its state correctly and still send the wrong request,
+send it twice, or send nothing; the expect compares what the code reports
+of its state, and §10.4's site steps judge an effect where it lands,
+partly and without its cause ([io-specs.md](io-specs.md) §1). P1 states a
+step's synchronous effects in the model and compares them with what the
+step made, under simulation. This section supersedes io-specs.md's §2.2,
+§3.1–§3.3 (rules 1 and 2), §4.1 and §4.3 for what P1 built; the note keeps
+the design of P2–P4 and the maintainer's answers (§8.1), which this
+follows.
+
+**The model.** A def per action over the post-state, as an expect reads
+it (§8.1, 1), returning a list of the model's own effect type:
+
+```quint
+type Effect = Capture({ order: str, amount: int })
+def payEffects(order: str): List[Effect] = [Capture({ order: order, amount: orders.get(order) * PRICE })]
+```
+
+Its parameters are the action's, by name (binding.Model.Defs). An effect
+that depends on a choice made inside the action needs that choice as a
+parameter, as an expect does.
+
+**The record.** An effect record is a record of the step log, like an
+invocation: `quint.effect` its kind (`rpc.provider.request`), its fields
+`quint.arg.*`, `quint.call` the invocation open where it was made (rule
+1), written at once by `qobs.Effect` so that a crash after the send keeps
+it. A step carries `quint.effects`, the seqs of the effect records its
+task made since its last record (rule 2), comma-separated; present, even
+empty, it says the step's effects were observed. That is the format
+decision (§8.1, 7): an optional record kind and key of
+`gotogether.steps/1`, no new major (§63's rule for an added optional
+field). An older reader reads an effect record as a step of action
+`effect`, which no model has: it fails loudly, never drops the effects
+silently. An effect record takes a seq (the recorder's order is the
+effects' order within a step) but no place in `Recorder.Count`, so the
+choices of runs recorded before the doubles recorded effects still align.
+
+**Attribution** (§8.1, 4). Rule 1: an effect made under a call's scope
+(`qobs.Invoke`'s `Call.Scope(ctx)`, which `qenv.Go` goroutines inherit)
+is the call's: its completion's, or the pending invocation's if the call
+never completed (a crashed caller's send survives it). One made after the
+completion is Late. Rule 2, on by default as coverage's attribution is
+(§17): an effect made outside any scope is its task's next step's
+(`hooks.Site.Task`: the simulation's task, else the goroutine). An
+invocation record takes no effects: those its task made before the call
+began are no step's. Reconstruct attaches each record in seq order
+(`Step.Effects`, `Effect.By` "call" or "task"); any other is
+`Trace.Unattributed`, listed and never compared (a relay, a client whose
+step a service records). Effect records are in the verdict key (Keyer):
+two runs whose effects differ are two verdicts.
+
+**Where effects are recorded** (§8.1, 6: always, for evidence too).
+`qenv.Service.Call` records `rpc.<name>.request` with the request's
+exported fields (`qenv.EffectFields`), after the call is sent and before
+the network decides its fate (one effect for a lost or duplicated
+request; a retry is another `Call`, another effect); `Service.Effect`
+replaces or suppresses it. `Queue.Publish` records `queue.<name>.publish`
+at entry; simlog's `Produce` `log.<name>.produce` (key, value); qhttp's
+Transport `http.<server>.request` (method, path, query, body, each
+header's first value, the idempotency key's among them), its Service
+recording none. A step recorded inside a simulation is observed; outside
+one, under a recorder made with `qobs.ObserveEffects()`.
+
+**The binding.**
+
+```yaml
+effects:
+  kinds:
+    Capture:                          # the model's constructor
+      from: rpc.provider.request      # the recorded kind
+      where: { Op: capture }          # the recorded fields it must have (as text)
+      fields: { order: '{{.Order}}', amount: '{{.Amount}}' }
+      same: [Key]                     # every try of one effect carries one key
+actions:
+  pay:
+    match: retried                    # exact (default) | retried | set
+    # effects: payEffects             # default <action>Effects when the binding maps kinds; "-" for none
+```
+
+`where` is P1's addition to the note: one recorded kind carries several
+operations (a capture and a void are both provider requests). Plan
+renders each mapped effect by its constructor's templates, normalizes the
+list by `match` (exact: as made; retried: consecutive equal effects whose
+`same:` fields agree collapse into one, and two with another key stay
+two, the retry the model counts twice; set: deduplicated and sorted), and
+adds one conjunct to the step's expect, `payEffects("o1") ==
+[Capture({ amount: 20, order: "o1" })]` (for set, the def's list as a
+set). Nothing new judges it: quint replays it, the Go evaluator decides
+it through the evaluation module, whose expect definition takes the def's
+arguments and the effects made as its last parameters (`Call.ExpectArgs`),
+with the def alone beside it for the report. Effects of unmapped kinds are
+`EffectCheck.NotCompared`. A step of an action with effects whose effects
+were not observed is the binding's error, naming the fix (record it where
+effects are recorded, or `effects: "-"`): none known is not none made.
+Lint checks the def exists, takes only the action's parameters, the
+kinds map something, and `match` is a mode.
+
+**The verdict** (§8.1, 3). An effects mismatch is the expect's failure:
+`Mismatch("pay")`, so existing claims work unchanged. The report
+(validate's Failure.Effects, the document's `effects`) names the step and
+the first difference, the expected list computed by the Go evaluator in
+the state after the step:
+
+```text
+at record seed1.jsonl:13 (pay(order=o1), seq 12) the effects made are not the model's payEffects("o1")
+  effects:  not the model's payEffects("o1") (match retried):
+    made     [Capture({ amount: 1, order: "o1" })]   (rpc.provider.request at seq 9)
+    expected [Capture({ amount: 10, order: "o1" })]
+    first difference: effect 1, field amount: 1, expected 10
+    Fix the code's effect, or payEffects if the model is wrong; the effects' fields come from effects.kinds in checkout.binding.yaml.
+```
+
+A pay pending (its caller crashed during it) has its effects attached
+(`Trace.Pending[i].Effects`) and not compared: its effects say the call
+took effect (§8.1, 5), which the search does not use yet (below).
+
+A retry under another key adds `effect Capture(...) was tried again under
+another Key: "cap:o2:1" (seq 18), then "cap:o2:2" (seq 26)`; a late effect
+says it was made after the step completed.
+
+**Observation mutants.** `qtrace.Mutations` gains `effect-drop`,
+`effect-dup`, `effect-swap` (two effects of one cause exchanged) and
+`effect-corrupt` (a field, as corrupt changes a step's), the claiming
+step's `Made` following the renumbering. qtest's TestEffectsMutateSteps:
+each is killed where the binding compares its kind, a copy of a retry
+under its key survives by right (match retried), and every one survives
+with the effects ablated.
+
+**Checkout** (P0 and P1's acceptance). The shop records `pay` as a call
+around the capture's retries, its context the call's scope;
+`model/checkout.qnt` gains `pay` (any placed order, any number of times:
+a redelivered event pays again) and `payEffects`. Measured, at crashy's
+rates (a crash one scheduling step in twenty, every fault at 0.05):
+
+| | without pay's effects (testdata/noeffects.binding.yaml) | with them |
+|---|---|---|
+| `CaptureUnits` (the units captured for the money), 40 seeds | conforms in 40 of 40 runs (P0's baseline) | `Mismatch("pay")` in every run that completes a payment (38 of 40; the other two conform, their payment pending after a crash) |
+| `NoIdempotencyKey`, DefaultRates, 100 seeds | killed in 50 | killed in 51, the first retry under a fresh key a mismatch at its pay |
+| `NoIdempotencyKey`, lost provider requests only (0.3), no crash, no cancellation | killed in 0 | killed in 33 (every run with a lost request) |
+| faithful, every level | conforms | conforms |
+
+The double charge NoIdempotencyKey makes is still judged by
+chargedAtMostOnce in the sweep and the storm, without pay's effects: with
+them the mismatch at the first retry comes first.
+
+**Cost.** Measured on the faithful shop's exploration (200 seeds at
+serializable, crashy's rates, `GOTOGETHER_EVAL_SAMPLE=0` so that only the
+Go evaluator judges, two runs each, CPU seconds): 1.84 and 1.87 on main
+(2,276 records), 1.96 and 1.87 with pay's effects (6,341 records: 2,472
+steps, the rest effect records and pay's invocations), 1.95 and 2.01
+with them ablated. The comparison costs nothing measurable; recording
+every send roughly triples the records, within the runs' noise in CPU.
+checkout's `go test -short` costs 64 CPU seconds, 51 on main (its line in
+ci/test-times.txt is 110): the difference is the two new tests.
+
+**Left for P2 and later** (io-specs.md §7). Commit writes as effects
+(`qenv.Store`, qsql's changes) and a binding opting into internal effects
+(§8.1, 2); `connect.Bind`'s `Emits` and its static check; qweave's
+duplicate and swap operators; the pending-call rule (§8.1, 5: a pending
+call whose effect was recorded took effect, so ResolvePending must place
+it) is decided and its data is there (a pending invocation's
+`Step.Effects`), the search does not enforce it yet; owed effects and key
+matching across processes (P3), the real tier's recording transport
+(`qobshttp`) and convert rules for client spans; Choreo projection (P4);
+grist after P3 (§8.1, 8). simgrpc's calls go through a qenv.Service and
+are recorded as `rpc.<name>.request` with no fields (its request is
+unexported); its own kind (`grpc.<service>.<method>`), simvalkey's and
+kubesim's are their modules' to add, after the core's.

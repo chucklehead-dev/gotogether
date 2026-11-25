@@ -46,6 +46,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // A Record is one record of the log, as a consumer reads it: its
@@ -252,6 +253,9 @@ func (l *Log) Producer(idempotent bool) *Producer {
 // Produce implements Writer. The value is copied: the caller may reuse
 // it.
 func (p *Producer) Produce(ctx context.Context, key string, value []byte, done func(error)) {
+	// the producer's effect: the record the code produced, once (the
+	// idempotent producer's retries are the double's, not the code's)
+	qobs.Effect(ctx, "log."+p.log.Name+".produce", "key", key, "value", string(value))
 	part := p.log.Partition(key)
 	p.pseq[part]++
 	p.unsent[part] = append(p.unsent[part], &pending{Record{Partition: part, Key: key, Value: bytes.Clone(value)}, p.pseq[part], done})

@@ -55,7 +55,9 @@ func run(t *testing.T, cfg gristsim.Config) []qtrace.Step {
 // own recorder, on simstore and on sqlstore over qsql alike, the clients
 // calling over a qenv.Service or the HTTP API; at the clients, every
 // command and query is a call (invoked, then done) of actor
-// <app>/<tenant>/clients.
+// <app>/<tenant>/clients. The clients' sends (the doubles' effect
+// records: a request to the API) are no steps: each is the effect of the
+// client's call that made it, as qtrace attributes it.
 func TestBothSides(t *testing.T) {
 	for _, cfg := range []gristsim.Config{{Check: true}, {Check: true, SQL: true}, {Check: true, HTTP: true}, {Check: true, SQL: true, HTTP: true}} {
 		bothSides(t, run(t, cfg))
@@ -80,10 +82,12 @@ func bothSides(t *testing.T, steps []qtrace.Step) {
 	if len(steps) == 0 || !steps[len(steps)-1].Settled {
 		t.Fatalf("the run's last record is no settle: %v", steps[len(steps)-1])
 	}
-	probes, commits, calls, done := 0, 0, 0, 0
+	probes, commits, calls, done, effects := 0, 0, 0, 0, 0
 	for _, s := range steps {
 		switch {
 		case s.Settled:
+		case s.Effect != "":
+			effects++
 		case s.Actor == "notes/t1/clients" || s.Actor == "notes/t2/clients":
 			if s.Invocation {
 				calls++
@@ -110,6 +114,22 @@ func bothSides(t *testing.T, steps []qtrace.Step) {
 	}
 	if calls == 0 || calls != done {
 		t.Errorf("%d invocations, %d completions: want every call answered (a client retries a lost answer)", calls, done)
+	}
+	traces, _ := qtrace.Reconstruct(steps)
+	attributed := 0
+	for _, tr := range traces {
+		for _, s := range tr.Steps {
+			if len(s.Effects) > 0 && !strings.HasSuffix(s.Actor, "/clients") {
+				t.Errorf("step %s of actor %s has effects %v: want only the clients' calls to send", s.Action, s.Actor, s.Effects)
+			}
+			attributed += len(s.Effects)
+		}
+		if len(tr.Unattributed) > 0 {
+			t.Errorf("actor %s: effects made by no step %v: want each a client's call's", tr.Actor, tr.Unattributed)
+		}
+	}
+	if effects == 0 || attributed != effects {
+		t.Errorf("%d effect records, %d attributed: want the clients' sends, each attributed to its call", effects, attributed)
 	}
 }
 

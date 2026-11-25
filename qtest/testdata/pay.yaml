@@ -1,0 +1,23 @@
+# pay.qnt's steps, each pay and refund compared with its effects def:
+# the provider's requests (a capture's under one key, however often it is
+# retried) and the mail queue's notices, as qenv's doubles record them.
+spec: pay.qnt
+module: pay
+actions:
+  place: {}
+  pay:
+    match: retried
+  refund:
+    match: set
+effects:
+  kinds:
+    Capture:
+      from: rpc.provider.request
+      where: { Op: capture }
+      fields: { order: '{{.Order}}', amount: '{{.Amount}}' }
+      same: [Key]
+    Notify:
+      from: queue.mail.publish
+      fields: { order: '{{.Order}}' }
+simulate:
+  skip: a fixture of effects

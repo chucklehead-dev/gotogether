@@ -92,7 +92,9 @@ enter take • ←/⌫ back • f fold • g failing step • s save • / filte
 
 A run's node: the verdict of the run it makes (nominal after it), the
 next choice's options (`◂ the run took` marks the base run's), the steps
-recorded so far, each actor's model state (changes from the node before
+recorded so far (each one's effects under it, `↳ effect`, the requests and
+messages qtrace attributes to it, and those made by no step so far apart;
+an effect is not counted as a step), each actor's model state (changes from the node before
 marked `*`; a step the model rejects, with why), the simulation's tasks.
 
 ```
@@ -108,6 +110,8 @@ next choice: sched.task (3 options)
 steps so far (2)
   apply(id=1)
   apply(id=1)
+  effects made by no step so far (1)
+    ↳ effect rpc.counter.request(value=1) at seq 1
 
 model (default)
   the model rejects a step so far:

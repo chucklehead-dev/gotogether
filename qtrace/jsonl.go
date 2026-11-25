@@ -62,6 +62,12 @@ func (s *Step) Attributes() map[string]any {
 	if s.Ambiguous {
 		m[KeyAssumed] = true
 	}
+	if s.Effect != "" {
+		m[KeyEffect] = s.Effect
+	}
+	if s.EffectsObserved {
+		m[KeyEffects] = FormatMade(s.Made)
+	}
 	for k, v := range s.Args {
 		m[PrefixArg+k] = v
 	}

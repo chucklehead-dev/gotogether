@@ -3,9 +3,10 @@
 // code its steps ran (qcover's per-step map, DESIGN §17).
 //
 // A function is a site of action A if it carries //quint:action action:A,
-// or calls qobs.Record with the constant action A (directly or in a
-// function literal: checkout records at commit, in tx.OnCommit's
-// closure). From each site, reachability follows a VTA call graph
+// or calls qobs.Record or qobs.Invoke with the constant action A
+// (directly or in a function literal: checkout records at commit, in
+// tx.OnCommit's closure, and records pay as a call, invoked before its
+// capture so that the capture's requests are its effects). From each site, reachability follows a VTA call graph
 // (golang.org/x/tools/go/callgraph/vta, seeded by CHA) and every function
 // literal the site defines, restricted to the loaded packages. Functions
 // are named as qcover names a block's function: pkgpath.Func or
@@ -46,7 +47,13 @@ import (
 	"github.com/chucklehead-dev/gotogether/qenv"
 )
 
-const recordFunc = "github.com/chucklehead-dev/gotogether/qobs.Record"
+// recordFuncs record a step of the constant action their second
+// argument names: Record a step, Invoke a call (its invocation, and the
+// step its Call.Done completes).
+var recordFuncs = map[string]bool{ // read-only
+	"github.com/chucklehead-dev/gotogether/qobs.Record": true,
+	"github.com/chucklehead-dev/gotogether/qobs.Invoke": true,
+}
 
 // A Map is each action's sites and the functions they reach.
 type Map struct {
@@ -141,7 +148,7 @@ func Static(dir string, patterns ...string) (*Map, error) {
 }
 
 // actionsOf are the actions fd is a site of: its //quint:action, and the
-// constant actions of the qobs.Record calls in its body.
+// constant actions of the qobs.Record and qobs.Invoke calls in its body.
 func actionsOf(p *packages.Package, fd *ast.FuncDecl) []string {
 	var out []string
 	file := &ast.File{Decls: []ast.Decl{fd}}
@@ -165,7 +172,7 @@ func actionsOf(p *packages.Package, fd *ast.FuncDecl) []string {
 		if id == nil {
 			return true
 		}
-		if f, ok := p.TypesInfo.Uses[id].(*types.Func); !ok || f.FullName() != recordFunc {
+		if f, ok := p.TypesInfo.Uses[id].(*types.Func); !ok || !recordFuncs[f.FullName()] {
 			return true
 		}
 		if tv, ok := p.TypesInfo.Types[call.Args[1]]; ok && tv.Value != nil && tv.Value.Kind() == constant.String {

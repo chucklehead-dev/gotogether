@@ -128,7 +128,9 @@ func TestStormIsCorrect(t *testing.T) {
 
 // Without idempotency keys, the storm alone, with no injected fault,
 // charges orders twice: a timeout is as ambiguous as a lost response, and
-// a storm is thousands of timeouts.
+// a storm is thousands of timeouts. The double charge violates
+// chargedAtMostOnce (judged without pay's effects); with them, the first
+// retry under a fresh key is already a mismatch at its pay.
 func TestStormChargesTwiceWithoutKeys(t *testing.T) {
 	qtest.RequireQuint(t)
 	if testing.Short() {
@@ -140,5 +142,6 @@ func TestStormChargesTwiceWithoutKeys(t *testing.T) {
 	if r.Overpaid == 0 {
 		t.Error("no order charged twice")
 	}
-	qtest.Validate(t, binding, mem.Steps(), loadStock).Expect(t, qtest.Violates("chargedAtMostOnce"))
+	qtest.Validate(t, noEffects, mem.Steps(), loadStock).Expect(t, qtest.Violates("chargedAtMostOnce"))
+	qtest.Validate(t, binding, mem.Steps(), loadStock).Expect(t, qtest.Mismatch("pay"))
 }

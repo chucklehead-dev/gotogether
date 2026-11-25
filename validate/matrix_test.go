@@ -58,6 +58,7 @@ var (
 		"HiddenDepth": {"hidden"},
 		"Snapshot":    {"snapshot"},
 		"Resume":      {"resume"},
+		"Effects":     {"effects"},
 	}
 	otherFields = map[string]string{
 		"sha256":             "private fingerprint of parsed source bytes; capture provenance, not a model verdict",
@@ -134,6 +135,11 @@ func matrixFeatures(t *testing.T) []matrixFeature {
 		{name: "within", binding: "testdata/within.yaml",
 			pass: seq(timed("crash", 0), timed("heal", 1), timed("elect", 2)), fail: seq(timed("crash", 0), timed("heal", 1), timed("elect", 5)),
 			failed: func(c *Checker, rep *Report) bool { return invariant(c.Binding.Within[0].Name())(c, rep) }},
+		// the capture's amount alone: its effects def's, or the units (I/O
+		// specifications, attributed by the pay step's task: Made)
+		{name: "effects", binding: "../qtest/testdata/pay.yaml",
+			pass: seq(payPlaced(), payCapture(20), payNotice(), payStep()), fail: seq(payPlaced(), payCapture(2), payNotice(), payStep()),
+			failed: nonconforming},
 		// the value read alone: gossiped, or never written
 		{name: "hidden", binding: "testdata/gossip.yaml",
 			pass: []qtrace.Step{gossipStep(1, "a", 1, nil), gossipStep(2, "b", 0, []int{1})}, fail: []qtrace.Step{gossipStep(1, "a", 1, nil), gossipStep(2, "b", 0, []int{9})},
@@ -205,6 +211,26 @@ func matrixConsumers() []matrixConsumer {
 		{name: "Judge, linearized", judge: judge("", true), na: map[string]string{"hidden": hiddenSearch, "resume": resumeSearch, "gap": gapSearch}},
 		{name: "Judge, linearized (quint alone)", judge: judge("quint", true), na: map[string]string{"hidden": hiddenSearch, "resume": resumeSearch, "gap": gapSearch}},
 	}
+}
+
+// pay.qnt's steps for the effects feature: o1 placed for 2 units, its
+// capture and notice made by the pay step's task (its Made, seqs 2 and 3
+// as seq numbers the matrix's log), the pay step.
+func payPlaced() qtrace.Step {
+	return qtrace.Step{Action: "place", EffectsObserved: true, Args: map[string]any{"order": "o1", "qty": int64(2)}}
+}
+
+func payCapture(amount int64) qtrace.Step {
+	return qtrace.Step{Action: "effect", Record: qtrace.Record{Effect: "rpc.provider.request"},
+		Args: map[string]any{"Op": "capture", "Key": "cap:o1", "Order": "o1", "Amount": amount}}
+}
+
+func payNotice() qtrace.Step {
+	return qtrace.Step{Action: "effect", Record: qtrace.Record{Effect: "queue.mail.publish"}, Args: map[string]any{"Order": "o1"}}
+}
+
+func payStep() qtrace.Step {
+	return qtrace.Step{Action: "pay", EffectsObserved: true, Made: []uint64{2, 3}, Args: map[string]any{"order": "o1"}}
 }
 
 func TestVerdictMatrix(t *testing.T) {

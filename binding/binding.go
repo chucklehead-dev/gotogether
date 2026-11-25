@@ -89,6 +89,11 @@ type Binding struct {
 	Actors []string `yaml:"actors"`
 	// Actions maps a model action to the templates that build its call.
 	Actions map[string]Action `yaml:"actions"`
+	// Effects maps recorded effects (qobs.Effect, qenv's doubles at the
+	// send) onto the model's effect constructors, for the actions whose
+	// effects the binding compares (Action.Effects): the I/O
+	// specification of each step, checked in its expect.
+	Effects *Effects `yaml:"effects"`
 	// Invariants are vals of the model checked in every observed state.
 	Invariants []string `yaml:"invariants"`
 	// Eventually are vals of the model that must hold when the run ends
@@ -344,6 +349,18 @@ type Action struct {
 	// step: the observed state projection (quint.obs.*) checked against the
 	// model's state.
 	Expect string `yaml:"expect"`
+	// Effects is the model's def stating the effects the action's step
+	// must make (`def payEffects(order: str): List[Effect]`, over the
+	// post-state, called with the action's arguments of its parameters'
+	// names): its expect gains `payEffects(...) == <the effects made>`.
+	// Empty: <action>Effects, if the binding maps effect kinds and the
+	// model has it; "-": none.
+	Effects string `yaml:"effects"`
+	// Match is how the effects made compare with the def's (exact, the
+	// default: in order, every one; retried: consecutive tries of one
+	// effect, its kind's Same fields alike, are one; set: unordered,
+	// deduplicated).
+	Match string `yaml:"match"`
 	// Outcomes overrides the binding's outcome map for this action. "skip"
 	// drops steps with that outcome (the model has no such step); "call"
 	// replays them like successful ones. A non-ok outcome of an action whose
@@ -751,6 +768,7 @@ func (b *Binding) LintFindings(m *Model) []LintFinding {
 			}
 		}
 	}
+	b.lintEffects(m, add)
 	if b.Restart != "" {
 		if ps, ok := m.Actions[b.Restart]; !ok {
 			add("binding.restart.unknown", b.Restart, "Choose a model action for restart.", "restart: "+m.notAnAction(b.Restart))

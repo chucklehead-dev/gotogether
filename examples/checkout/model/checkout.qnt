@@ -11,6 +11,13 @@
 module checkout {
   const STOCK: int
 
+  // What the shop sends the payment provider (I/O specifications: an
+  // action's effects def says what its step must send).
+  type Effect = Capture({ order: str, amount: int })
+
+  // an order's price is ten a unit
+  pure val PRICE = 10
+
   var stock: int
   var orders: str -> int     // placed order -> quantity
   var paid: Set[str]
@@ -55,6 +62,21 @@ module checkout {
     stock' = stock, orders' = orders, paid' = paid, shipped' = shipped, cancelled' = cancelled,
     refunds' = refunds, settled' = settled,
   }
+
+  // The shop pays a placed order: it asks the provider to capture the
+  // order's money. It changes nothing the model keeps (the charge is the
+  // provider's step), and may happen any number of times (a redelivered
+  // event pays again, under the same key); what it must send is
+  // payEffects.
+  action pay(order: str): bool = all {
+    orders.keys().contains(order),
+    stock' = stock, orders' = orders, paid' = paid, shipped' = shipped, cancelled' = cancelled,
+    charges' = charges, refunds' = refunds, doubleCharge' = doubleCharge, settled' = settled,
+  }
+
+  // what paying sends: one capture of the order's money (its retries are
+  // the same request, under one key: the binding's match retried)
+  def payEffects(order: str): List[Effect] = [Capture({ order: order, amount: orders.get(order) * PRICE })]
 
   // The provider refunds only what it charged.
   action refund(order: str): bool = all {
@@ -106,7 +128,7 @@ module checkout {
   action step = {
     nondet order = Set("o1", "o2", "o3").oneOf()
     nondet qty = 1.to(2).oneOf()
-    any { place(order, qty), refuse(order, qty), charge(order), refund(order), markPaid(order), ship(order), cancel(order) }
+    any { place(order, qty), refuse(order, qty), pay(order), charge(order), refund(order), markPaid(order), ship(order), cancel(order) }
   }
 }
 

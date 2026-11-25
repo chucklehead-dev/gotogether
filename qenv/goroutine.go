@@ -80,7 +80,7 @@ func init() {
 		if ctx != nil {
 			if t, ok := ctx.Value(ctxKey{}).(*task); ok {
 				t.sim.refuse("recording a step", "")
-				return hooks.Site{Clock: t.sim, Discard: t.killed, GoroutineID: id}
+				return hooks.Site{Clock: t.sim, Discard: t.killed, GoroutineID: id, Task: t}
 			}
 		}
 		if id == 0 {
@@ -89,7 +89,11 @@ func init() {
 		if o, ok := ownerOf(id); ok {
 			o.s.refuse("recording a step", "")
 			// true time: a process's clock may be skewed, a step's time is the run's
-			return hooks.Site{Clock: o.s, Discard: o.t != nil && o.t.killed, GoroutineID: id}
+			var task any = o.s // the goroutine that created the simulation: one task of its own
+			if o.t != nil {
+				task = o.t
+			}
+			return hooks.Site{Clock: o.s, Discard: o.t != nil && o.t.killed, GoroutineID: id, Task: task}
 		}
 		return hooks.Site{GoroutineID: id}
 	})

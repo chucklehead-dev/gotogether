@@ -23,7 +23,7 @@ func (r *Run) Brief() string {
 	if r == nil || r.Report == nil || r.Report.OK() {
 		return ""
 	}
-	if len(r.Steps) == 0 {
+	if r.noStep() {
 		return r.noSteps()
 	}
 	return briefOf(r.Report)
@@ -93,6 +93,9 @@ func failureBrief(f *validate.Failure) string {
 	case "disabled":
 		return fmt.Sprintf("step %d, %s: %s", f.Index+1, step, whyBrief(f.Why))
 	case "state":
+		if f.Effects != nil {
+			return fmt.Sprintf("after step %d, %s: %s", f.Index+1, step, f.Effects.Brief())
+		}
 		exp := ""
 		if f.Expect != "" {
 			exp = " (" + f.Expect + ")"

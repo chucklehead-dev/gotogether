@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Simulate the shop under each isolation level, then check the step logs
 # against the model with gotogether. MUTANT=noLocks | lockWithoutWrite |
-# noIdempotencyKey | dualWrite injects a bug; ISOLATIONS picks levels. A
+# noIdempotencyKey | dualWrite | captureUnits injects a bug; ISOLATIONS picks levels. A
 # mutant is caught when some level's runs fail their check.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -19,8 +19,8 @@ finish() {
   exit 1
 }
 case "${MUTANT:-}" in
-"" | noLocks | lockWithoutWrite | noIdempotencyKey | dualWrite) ;;
-*) echo "unknown MUTANT=$MUTANT (noLocks, lockWithoutWrite, noIdempotencyKey, dualWrite)" >&2; exit 2 ;;
+"" | noLocks | lockWithoutWrite | noIdempotencyKey | dualWrite | captureUnits) ;;
+*) echo "unknown MUTANT=$MUTANT (noLocks, lockWithoutWrite, noIdempotencyKey, dualWrite, captureUnits)" >&2; exit 2 ;;
 esac
 # the binary takes the mutation kebab-cased (noLocks: no-locks)
 mutation=$(printf '%s' "${MUTANT:-}" | sed -E 's/([A-Z])/-\1/g' | tr '[:upper:]' '[:lower:]')

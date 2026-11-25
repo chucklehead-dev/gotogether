@@ -66,7 +66,10 @@ func TestFaithfulSweep(t *testing.T) {
 // them apart. A cancellation's void cannot find the charge in every row,
 // faults or none (settledCorrectly). A double charge needs the provider's
 // faults: some run of every row with them charges twice, and no run of a
-// row without them does.
+// row without them does. The rows are judged without pay's effects
+// (noEffects), whose comparison catches every retry under a fresh key at
+// its pay first (TestNoIdempotencyKeyKilledByEffects): the invariants are
+// the question here.
 func TestNoIdempotencyKeySweep(t *testing.T) {
 	qtest.RequireQuint(t)
 	if testing.Short() {
@@ -77,7 +80,9 @@ func TestNoIdempotencyKeySweep(t *testing.T) {
 	// provider response at the right moment, in 2 runs of 100 at crashy's
 	// rates and 13 of 100 at this one; the rarest rows show theirs in 4
 	// runs of 30, which 50 seeds miss about once in a thousand
-	sweepSystem(shop.NoIdempotencyKey).WithRates(crashy.Set("rpc.provider", 0.25)).Sweep(t, qtest.SweepConfig{Factors: space, Explore: qtest.ExploreConfig{Seeds: 50},
+	sys := sweepSystem(shop.NoIdempotencyKey)
+	sys.Binding = noEffects
+	sys.WithRates(crashy.Set("rpc.provider", 0.25)).Sweep(t, qtest.SweepConfig{Factors: space, Explore: qtest.ExploreConfig{Seeds: 50},
 		Expect: func(row qsweep.Row) []qtest.Claim {
 			if row.On("rpc.provider") {
 				return []qtest.Claim{qtest.Some(qtest.Violates("chargedAtMostOnce"))}

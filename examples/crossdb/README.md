@@ -156,6 +156,17 @@ the ID. The faithful provider's answer:
   an incomplete create, and the reconciler stopped. Each real stamp now
   maps to one virtual stamp, kept to the nanosecond (`stamps`,
   `TestStampsRoundTrip`).
+- **The same stamps in every run of a seed.** Once each request to the
+  cloud was recorded as an effect, the determinism check (seed 1, run
+  twice) saw a call at 30 s in one run only: a resource's creation grace
+  ended at a reconcile that depended on the wall clock. A new stamp was
+  translated with its lost fraction of a second, the wall clock's phase,
+  and was looked up by its whole-second string, which another resource's
+  stamp of the same wall-clock second shared. A new stamp is now the
+  virtual instant of its write, and a stamp handed out is aged in whole
+  seconds, so the real time between the read and `time.Since` does not
+  move it across the grace (`TestStampsOfOneSecond`,
+  `TestStampsJudgedLater`).
 - **One thread per goroutine.** The driver first recorded every
   goroutine's steps as one thread, so wall-clock order contradicted
   program order, and validation reported a cycle.

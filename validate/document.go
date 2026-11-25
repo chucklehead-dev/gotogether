@@ -149,6 +149,9 @@ type DocFailure struct {
 	// Changes are what a mismatched or violating step changed in the
 	// model's state.
 	Changes []Change `json:"changes,omitempty"`
+	// Effects, for a mismatch of a step's effects (I/O specifications),
+	// are the effects made and the model's, and where they first differ.
+	Effects *EffectsMismatch `json:"effects,omitempty"`
 	// State is the model's state at the failure (before a rejected step,
 	// after any other), each variable as a Quint literal, whole.
 	State      map[string]string `json:"state,omitempty"`
@@ -516,7 +519,7 @@ func (f *Failure) Doc(check string, verdict Verdict) DocFailure {
 		d.Verdict = string(NotEvaluated)
 	}
 	if f.Kind == "state" {
-		d.Expect, d.ExpectTemplate = f.Expect, f.ExpectTemplate
+		d.Expect, d.ExpectTemplate, d.Effects = f.Expect, f.ExpectTemplate, f.Effects
 	}
 	if f.Step != nil {
 		r := recordDoc(f.Step, f.Index)
@@ -546,6 +549,8 @@ func (f *Failure) brief() string {
 		what = f.At()
 	}
 	switch {
+	case f.Effects != nil:
+		return what + "; " + f.Effects.Brief()
 	case f.Why != nil && f.Why.Expected != "":
 		return what + "; the model expects " + f.Why.Expected
 	case f.Why != nil && len(f.Why.Conditions) > 0:
