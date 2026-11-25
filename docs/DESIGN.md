@@ -7255,7 +7255,11 @@ deadlock, never at an unlucky draw, and a step one value in 1000 enables
 is taken. The distribution is not quint's (it is each choice's uniform
 draw, conditioned on the step being enabled), and a call's successors are
 drawn each time (no memo), so the sampler costs one path a step, not the
-step's successors. `Model.Simulate` is one trace: init sampled from no
+step's successors. It stays so by decision
+(2026-11-25): a sample backtracks past a disabling draw rather than end
+the trace there, as quint's may, and parity is by meaning (below), never
+by distribution; a check that needs quint's distribution (short traces
+where quint's end early) runs quint. `Model.Simulate` is one trace: init sampled from no
 state, step up to Steps times, each state judged by the invariants, the
 first false one ending it.
 
