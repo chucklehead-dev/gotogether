@@ -122,7 +122,9 @@ templates (collections, outcomes, ITF), or setting up the analyzers
   `qtest.Record(t, "bank.binding.yaml", func(*qobs.Recorder) { scenario() }).Expect(t, qtest.Conforms())`.
   Use `qtest.Validate` for steps recorded elsewhere: every verdict is an
   `Expect`. Start with
-  `qtest.RequireQuint(t)`, which skips the test without quint.
+  `qtest.RequireModel(t, "bank.binding.yaml")`, which skips the test only
+  without both quint and the binding's compiled model (`gotogether
+  compile`): with the model, the Go evaluator judges the run alone.
   The scenario's goroutine records into the run. Steps from goroutines
   it starts fail the test (strict: none is lost silently) unless they
   record through a context carrying the run's recorder

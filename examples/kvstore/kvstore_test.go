@@ -69,7 +69,7 @@ var catalog = qtest.Catalog{Name: "kvstore", Takes: []qtest.Take{
 // nothing of the CAS.
 func TestServiceUnderLoadConforms(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "kv.binding.yaml")
 	run := qtest.Record(t, "kv.binding.yaml", func(rec *qobs.Recorder) {
 		srv := httptest.NewServer(qobshttp.Handler(kv.NewServer(kv.NewStore(), sdktrace.NewTracerProvider()).Handler(), rec))
 		defer srv.Close() // waits for the handlers: their steps are in the run
@@ -84,7 +84,7 @@ func TestServiceUnderLoadConforms(t *testing.T) {
 // kv.convert.yaml. Spans of concurrent requests end in any order; kv.op
 // (the store's linearization index) puts them back in the store's order.
 func TestServiceSpansConform(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "kv.binding.yaml")
 	qtest.Validate(t, "kv.binding.yaml", loadSpans(t, 1)).Expect(t, qtest.Conforms())
 }
 
@@ -126,7 +126,7 @@ func clientHistory(t *testing.T, clients, ops int, seed uint64) []qtrace.Step {
 // that order the history is rejected (every load tried). Linearize finds
 // an order the operations' intervals allow that the model accepts.
 func TestClientHistoryLinearizes(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "kv.binding.yaml")
 	if testing.Short() {
 		t.Skip("searches orders, a quint check each")
 	}
@@ -225,7 +225,7 @@ func lostPrefix(run *qtest.Run) bool {
 // Without that head the same steps are a lost prefix, no verdict to
 // trust: replayed from init, they would be judged against an empty store.
 func TestRotatedLogConformsAlone(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "kv.binding.yaml")
 	logs := rotatedLoad(t, 40)
 	last := logs[len(logs)-1]
 	qtest.Validate(t, "kv.binding.yaml", last).Expect(t, qtest.Conforms())
@@ -328,7 +328,7 @@ func (m *machine) RuleGet(tc hegel.TestCase) {
 // Hegel's rules call the service over HTTP; the store's model steps go to
 // each case's recorder (Global) and the runs are checked after the test.
 func TestHegelDrivesService(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "kv.binding.yaml")
 	var previous *kv.Client
 	cases := 0
 	qhegel.Test(t, qhegel.Config{Binding: "kv.binding.yaml", Mode: qhegel.After, Opts: []qtest.Option{qtest.Global()}, AllowEmpty: true},
@@ -414,7 +414,7 @@ func TestMutant(t *testing.T) {
 	if mutant == "" {
 		t.Skip("the store as it is: TestMutants runs this test built with each mutant's overlay")
 	}
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "kv.binding.yaml")
 	switch mutant {
 	case "staleCAS":
 		// The version is checked under a read lock, released, then written

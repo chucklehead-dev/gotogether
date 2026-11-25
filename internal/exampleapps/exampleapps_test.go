@@ -1,9 +1,10 @@
 // Package exampleapps checks AGENTS.md's rule for an example app against
 // every example directory: a README with the table of its tests, a row
 // in examples/README.md's tracks and its name in the README's, a model,
-// a run-demo.sh in the conventions examples/README.md states, and a
-// mutant. Four examples once had no run-demo.sh and nothing said so
-// (review 11).
+// a run-demo.sh in the conventions examples/README.md states, a
+// mutant, and each binding's compiled model or its line in
+// ci/needs-quint.txt (compiled_test.go). Four examples once had no
+// run-demo.sh and nothing said so (review 11).
 package exampleapps
 
 import (

@@ -6,7 +6,65 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 )
+
+// doctor lists the module's bindings by their compiled models: one
+// without, with the command that writes it; none in testdata or a nested
+// module (go's ./... leaves them, and so does doctor). With quint, a
+// compiled one is current, then stale once its binding changes: a skew,
+// found by its hashes, with no quint run.
+func TestDoctorListsBindingsWithoutModel(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	dir := t.TempDir()
+	for _, d := range []string{"svc", "testdata", "nested"} {
+		if err := os.MkdirAll(filepath.Join(dir, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range []string{"account.yaml", "account.qnt"} {
+			if err := os.WriteFile(filepath.Join(dir, d, f), mustRead(t, filepath.Join("../../validate/testdata", f)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	for f, s := range map[string]string{"nested/go.mod": "module nested\n", "svc/rules.convert.yaml": "rules: []\n"} {
+		if err := os.WriteFile(filepath.Join(dir, f), []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	bind := filepath.Join(dir, "svc", "account.yaml")
+	if got := findBindings(dir); len(got) != 1 || got[0] != bind {
+		t.Fatalf("bindings found: %v, want only %s", got, bind)
+	}
+	var out bytes.Buffer
+	if _, err := doctor(&out, []string{"-C", dir}); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"compiled models", bind + " ", "none", "gotogether compile -binding " + bind} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("no %q in:\n%s", want, out.String())
+		}
+	}
+	if strings.Contains(out.String(), filepath.Join(dir, "testdata")) || strings.Contains(out.String(), filepath.Join(dir, "nested")) {
+		t.Errorf("a binding of testdata or a nested module listed:\n%s", out.String())
+	}
+	skip.Quint(t)
+	if err := compileTo(&bytes.Buffer{}, []string{"-binding", bind}); err != nil {
+		t.Fatal(err)
+	}
+	if ps := modelPieces(dir, nil, nil); len(ps) != 1 || ps[0].version != "current" || ps[0].skew != "" || !strings.Contains(ps[0].note, "-check") {
+		t.Errorf("a current compiled model: %+v", ps)
+	}
+	if err := os.WriteFile(bind, append(mustRead(t, bind), "\n# edited\n"...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	code, err := doctor(&out, []string{"-C", dir, "-strict"})
+	if err != nil || code != 1 || !strings.Contains(out.String(), "is stale") || !strings.Contains(out.String(), "gotogether compile -binding") {
+		t.Errorf("a stale compiled model: exit %d, %v:\n%s", code, err, out.String())
+	}
+}
 
 // A build of a commit is the pseudo-version naming it; a tagged build is
 // its tag; a replaced module agrees with anything doctor cannot read.

@@ -25,7 +25,7 @@ var crashy = qenv.Rates{Default: 0.05, Kinds: map[string]float64{"nemesis": 0.02
 // makes one database per resource, deletes them all, and writes secrets
 // that open them: 60 seeds, 6 under -short.
 func TestFaithfulConforms(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "crossdb.binding.yaml")
 	t.Parallel()
 	explore(t, crossdb.Config{}, crashy, qtest.ExploreConfig{Seeds: 60, ShortSeeds: 6}).Expect(t, qtest.Conforms(), qtest.NotVacuous())
 }
@@ -38,7 +38,7 @@ func TestFaithfulConforms(t *testing.T) {
 // API's stamp translation (TestStampsSurviveConflictRetry): the stamps
 // came out months old and the grace over.
 func TestLateCreateCoveredByCreationGrace(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "crossdb.binding.yaml")
 	if testing.Short() {
 		t.Skip("300 runs")
 	}
@@ -53,7 +53,7 @@ func TestLateCreateCoveredByCreationGrace(t *testing.T) {
 // is worse: Crossplane refuses to go on. Under -short the run with no
 // faults, which claims no catch, is left to the full tests.
 func TestGeneratedExternalName(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "crossdb.binding.yaml")
 	t.Parallel()
 	t.Run("no faults", func(t *testing.T) {
 		if testing.Short() {
@@ -84,7 +84,7 @@ func TestGeneratedExternalName(t *testing.T) {
 // Without a client token, a create whose response was lost is retried as a
 // failure: a second database.
 func TestNoClientTokenDuplicates(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "crossdb.binding.yaml")
 	t.Parallel()
 	// in about one run in ten (4 of 40, 6 of 70): 70 seeds miss it about
 	// once in a thousand, the 40 of -short 2.7% of the time
@@ -96,7 +96,7 @@ func TestNoClientTokenDuplicates(t *testing.T) {
 // result: a lost response (the retry's new password is ignored by the
 // idempotent cloud) leaves a secret that does not open the database.
 func TestPasswordFromCreate(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "crossdb.binding.yaml")
 	t.Parallel()
 	lossy := qenv.Rates{Default: 0.05, Kinds: map[string]float64{"rpc.dbaas.response": 0.3}}
 	// in about one run in six (6 of 40, 9 of 50): 50 seeds, the 18 of
@@ -107,7 +107,7 @@ func TestPasswordFromCreate(t *testing.T) {
 
 // Hegel shrinks the duplicate to the fault it needs: one lost response.
 func TestHegelShrinksDuplicate(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "crossdb.binding.yaml")
 	if testing.Short() {
 		t.Skip("shrinking against the model")
 	}

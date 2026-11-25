@@ -28,7 +28,7 @@ var faulty = qenv.Rates{Default: 0.1, Kinds: map[string]float64{"nemesis": 0.05}
 // rewound fetches, evictions mid-batch and consumer crashes (80 seeds,
 // 12 under -short, which still fault every kind).
 func TestFaithfulConforms(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "streams.binding.yaml")
 	x := system(streams.Config{}).WithRates(faulty).Explore(t, qtest.ExploreConfig{Seeds: 80, ShortSeeds: 12})
 	x.Expect(t, qtest.Conforms(), qtest.NotVacuous())
 	t.Log(x.Evidence())
@@ -38,7 +38,7 @@ func TestFaithfulConforms(t *testing.T) {
 // pipeline conforms in each, and the two bugs that need a fault show in
 // some: a redelivery applied twice, a retried record behind the next.
 func TestExhaustiveOneFault(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "streams.binding.yaml")
 	if testing.Short() {
 		t.Skip("hundreds of runs, three times")
 	}
@@ -54,7 +54,7 @@ func TestExhaustiveOneFault(t *testing.T) {
 // meet is missed at most one time in twenty; the mutants run in parallel,
 // since the small explorations leave the CPUs idle between quint's phases.
 func TestMutants(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "streams.binding.yaml")
 	cases := []struct {
 		m            pipeline.Mutation
 		seeds, short int

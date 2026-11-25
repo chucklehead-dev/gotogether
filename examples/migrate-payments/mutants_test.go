@@ -24,7 +24,7 @@ func TestMutant(t *testing.T) {
 	if qtest.Mutant() == "" {
 		t.Skip("the code as it is: TestMutants runs this test in each mutant's binary")
 	}
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, bindingFile)
 	// what the legacy suite sees: its assertions pass, its runs conform
 	qtest.Runs(legacyRuns(t)...).Expect(t, qtest.All(qtest.Conforms()))
 	day := logSteps(t, productionLog)

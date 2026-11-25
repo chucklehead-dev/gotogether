@@ -367,7 +367,9 @@ verdict, a stale artifact refused (DESIGN §64). The same file kept beside the
 binding (`gotogether compile -binding b.yaml` writes `b.model.json`) lets
 the binding's tests run where quint is not installed (`GOTOGETHER_COMPILED`,
 `qtest.RequireModel`), with `gotogether compile -binding b.yaml -check` in a
-CI job that has quint keeping it current.
+CI job that has quint keeping it current; `gotogether doctor` lists the
+bindings that have none. Sixteen of the examples keep theirs
+(`ci/compiled-examples.sh`; `ci/needs-quint.txt` says why the rest do not).
 
 Every file format is named and versioned (`gotogether.steps/1`,
 `gotogether.binding/2`, ...); pre-release, only the current major is

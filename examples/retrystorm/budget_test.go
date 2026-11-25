@@ -18,13 +18,13 @@ func budget(m retry.Mutation) *retry.Budget {
 // The budget's steps are transitions of model/retry.qnt, with its balance,
 // and keep the amplification bound and the cap.
 func TestBudgetConforms(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "retrystorm.binding.yaml")
 	qtest.Record(t, "retrystorm.binding.yaml", func(*qobs.Recorder) { Burst(budget(retry.Faithful)) }).Expect(t, qtest.Conforms())
 }
 
 // Uncapped: the 100th deposit of the quiet period overfills the bucket.
 func TestBudgetCatchesUncapped(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "retrystorm.binding.yaml")
 	run := qtest.Record(t, "retrystorm.binding.yaml", func(*qobs.Recorder) { Burst(budget(retry.Uncapped)) })
 	run.Expect(t, qtest.Mismatch("request"))
 }
@@ -32,7 +32,7 @@ func TestBudgetCatchesUncapped(t *testing.T) {
 // DepositOnRetry: the first admitted retry leaves a balance the model does
 // not have.
 func TestBudgetCatchesDepositOnRetry(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "retrystorm.binding.yaml")
 	run := qtest.Record(t, "retrystorm.binding.yaml", func(*qobs.Recorder) { Burst(budget(retry.DepositOnRetry)) })
 	run.Expect(t, qtest.Mismatch("retry"))
 }
@@ -58,7 +58,7 @@ var hegelOpts = []qtest.Option{qtest.Global()}
 
 // Hegel drives the faithful budget; every run satisfies the model.
 func TestHegelBudgetConforms(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "retrystorm.binding.yaml")
 	qhegel.Test(t, qhegel.Config{Binding: budgetBinding, Mode: qhegel.After, Opts: hegelOpts, AllowEmpty: true}, func(ht hegel.TestCase, _ *qhegel.Case) {
 		hegel.RunStateful(ht, &machine{b: budget(retry.Faithful)}, hegel.WithStatefulStepCount(6))
 	}, hegel.WithTestCases(20), hegel.WithDatabase(""))
@@ -67,7 +67,7 @@ func TestHegelBudgetConforms(t *testing.T) {
 // Hegel finds the Uncapped mutant and shrinks it to a run that overfills
 // the bucket.
 func TestHegelCatchesUncapped(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "retrystorm.binding.yaml")
 	if testing.Short() {
 		t.Skip("shrinking against the model runs quint ~100 times")
 	}

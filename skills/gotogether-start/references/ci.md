@@ -91,3 +91,14 @@ GOTOGETHER_COMPILED=1 go test ./...                     # CI, without quint: eve
 `GOTOGETHER_COMPILED=1` fails a test whose binding has no compiled model, so a
 quint left on PATH cannot hide a missing one; unset, the compiled model is used
 only where quint is absent; `0` never uses it.
+
+`gotogether doctor` lists the module's bindings by their compiled models:
+`none` with the `gotogether compile -binding B` that writes one, `current`, or
+`stale`, a skew under `-strict`. Without quint it compares hashes (the
+binding's, the sources', the evaluation module's), as the tests do; only
+`compile -check` compares a compile now by meaning. A test that still needs
+quint (`qtest.Model`, simulate, connect's traces) keeps `RequireQuint`: run
+those in a job with quint, the rest by name (`-run`) in the job without it.
+This repository's examples do so: `ci/compiled-examples.sh check|test` finds
+every `*.model.json` and every `RequireModel` test, and `ci/needs-quint.txt`
+says why each other binding or test still needs quint.

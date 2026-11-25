@@ -53,7 +53,7 @@ func runKafka(t *testing.T, m pipeline.Mutation) ([]qtrace.Step, *tier.Result) {
 // protocol assigns them the partitions), checked by the same model and
 // binding as the simulated runs.
 func TestKafkaConforms(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "../streams.binding.yaml")
 	steps, res := runKafka(t, pipeline.Faithful)
 	if !res.Complete {
 		t.Fatalf("the projection is incomplete after the timeout")
@@ -74,7 +74,7 @@ func TestKafkaConforms(t *testing.T) {
 // The bugs a fault-free run shows on Kafka too: a commit ahead of its
 // applies, and each partition's first record skipped.
 func TestKafkaMutants(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "../streams.binding.yaml")
 	for _, m := range []pipeline.Mutation{pipeline.CommitFirst, pipeline.OffByOne} {
 		t.Run(fmt.Sprint(m), func(t *testing.T) {
 			steps, _ := runKafka(t, m)

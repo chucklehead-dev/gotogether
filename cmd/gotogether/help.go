@@ -77,7 +77,7 @@ var commands = map[string]command{
 		"the agent skills: list them, or install them into a project"},
 	"skills install": {"install the agent skills into a project (.agents/skills and .claude/skills by default)", "gotogether skills install",
 		"install the agent skills into a project"},
-	"doctor": {"report the installed pieces' versions (the CLI and its core, the module's core and published modules, qweave's woven ABI, gotogether-nav, binaries named, quint, its evaluator, Node), the quint cache, bindings' formats, compiled models' staleness and the formats this version reads, naming each skew with its fix",
+	"doctor": {"report the installed pieces' versions (the CLI and its core, the module's core and published modules, qweave's woven ABI, gotogether-nav, binaries named, quint, its evaluator, Node), the quint cache, bindings' formats, the module's bindings by their compiled models (none, with the compile that writes one; current; stale by their hashes, a skew) and the formats this version reads, naming each skew with its fix",
 		"gotogether doctor\n  gotogether doctor -C ./service -strict -binding stock.binding.yaml -compiled stock.model.json ./bin/service",
 		"do the installed pieces fit together? every version, and each skew with its fix"},
 }

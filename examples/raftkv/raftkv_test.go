@@ -39,7 +39,7 @@ var faulty = qenv.DefaultRates.Set("rpc", 0.05).Set("nemesis.crash", 0.05)
 // clients' history is a linearizable store's, every call answers, the
 // system settles and every node converges.
 func TestFaithful(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "raftkv.binding.yaml")
 	system(Config{}).Explore(t, qtest.ExploreConfig{Seeds: 10}).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.All(qtest.Completes()))
 }
 
@@ -50,7 +50,7 @@ func TestFaithful(t *testing.T) {
 // converged (a review found it); the node reports failed sends and
 // retries a snapshot left unacknowledged.
 func TestLostSnapshots(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "raftkv.binding.yaml")
 	if testing.Short() {
 		t.Skip("explores 40 runs with compaction under one message fault in ten")
 	}
@@ -73,7 +73,7 @@ func TestClusterFaithful(t *testing.T) {
 // a new request id (NoRequestID) applies a transfer twice, which no
 // placement of one call explains.
 func TestPendingTransfers(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "raftkv.binding.yaml")
 	if testing.Short() {
 		t.Skip("explores runs linearized with their pending calls placed")
 	}
@@ -156,7 +156,7 @@ func isolateFirst(ctx context.Context, d *Deployment) {
 // 3 read stale. The faithful leader confirms it still leads with a quorum
 // before it reads (ReadOnlySafe), whatever the clocks.
 func TestLeaseRead(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "raftkv.binding.yaml")
 	if testing.Short() {
 		t.Skip("explores every combination of three clocks' drifts, twice")
 	}
@@ -180,7 +180,7 @@ func TestLeaseRead(t *testing.T) {
 // its log with v2 code, unless it compacted the skipped entries away
 // first.
 func TestRollingUpgrade(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "raftkv.binding.yaml")
 	if testing.Short() {
 		t.Skip("explores rollouts, the mutant's failing runs proved by search")
 	}
@@ -239,7 +239,7 @@ func TestUnpersistedVote(t *testing.T) {
 // linearized whole: a transfer touches two keys, so no partition by key
 // helps, and the search orders the whole history.
 func TestLinearizeScale(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "raftkv.binding.yaml")
 	if testing.Short() {
 		t.Skip("linearizes five histories of 200 operations")
 	}
