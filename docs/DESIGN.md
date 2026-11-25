@@ -7452,6 +7452,10 @@ at record seed1.jsonl:13 (pay(order=o1), seq 12) the effects made are not the mo
     Fix the code's effect, or payEffects if the model is wrong; the effects' fields come from effects.kinds in checkout.binding.yaml.
 ```
 
+A pay pending (its caller crashed during it) has its effects attached
+(`Trace.Pending[i].Effects`) and not compared: its effects say the call
+took effect (§8.1, 5), which the search does not use yet (below).
+
 A retry under another key adds `effect Capture(...) was tried again under
 another Key: "cap:o2:1" (seq 18), then "cap:o2:2" (seq 26)`; a late effect
 says it was made after the step completed.
@@ -7472,7 +7476,7 @@ rates (a crash one scheduling step in twenty, every fault at 0.05):
 
 | | without pay's effects (testdata/noeffects.binding.yaml) | with them |
 |---|---|---|
-| `CaptureUnits` (the units captured for the money) | conforms in 40 of 40 runs (P0's baseline) | `Mismatch("pay")` in every run that pays (40 of 40) |
+| `CaptureUnits` (the units captured for the money), 40 seeds | conforms in 40 of 40 runs (P0's baseline) | `Mismatch("pay")` in every run that completes a payment (38 of 40; the other two conform, their payment pending after a crash) |
 | `NoIdempotencyKey`, DefaultRates, 100 seeds | killed in 50 | killed in 51, the first retry under a fresh key a mismatch at its pay |
 | `NoIdempotencyKey`, lost provider requests only (0.3), no crash, no cancellation | killed in 0 | killed in 33 (every run with a lost request) |
 | faithful, every level | conforms | conforms |
@@ -7481,7 +7485,15 @@ The double charge NoIdempotencyKey makes is still judged by
 chargedAtMostOnce in the sweep and the storm, without pay's effects: with
 them the mismatch at the first retry comes first.
 
-**Cost.** EFFECTS_COST
+**Cost.** Measured on the faithful shop's exploration (200 seeds at
+serializable, crashy's rates, `GOTOGETHER_EVAL_SAMPLE=0` so that only the
+Go evaluator judges, two runs each, CPU seconds): 1.84 and 1.87 on main
+(2,276 records), 1.96 and 1.87 with pay's effects (6,341 records: 2,472
+steps, the rest effect records and pay's invocations), 1.95 and 2.01
+with them ablated. The comparison costs nothing measurable; recording
+every send roughly triples the records, within the runs' noise in CPU.
+checkout's `go test -short` costs 64 CPU seconds, 51 on main (its line in
+ci/test-times.txt is 110): the difference is the two new tests.
 
 **Left for P2 and later** (io-specs.md §7). Commit writes as effects
 (`qenv.Store`, qsql's changes) and a binding opting into internal effects

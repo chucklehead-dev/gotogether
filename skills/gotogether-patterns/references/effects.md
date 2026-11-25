@@ -62,4 +62,4 @@ def payEffects(order: str): List[Effect] = [Capture({ order: order, amount: orde
 
 checkout's `captureUnits` (the capture's units for its money) conformed in
 every run under the site-step pattern alone, its `charge` carrying no
-amount; with `payEffects` it is `Mismatch("pay")` in every run that pays.
+amount; with `payEffects` it is `Mismatch("pay")` in every run that completes a payment.

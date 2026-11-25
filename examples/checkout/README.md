@@ -61,7 +61,7 @@ only in full. Each test states the verdict it expects with
 | `LockWithoutWrite` (FOR UPDATE, results in their own tables) | conforms | **rejects** `ship` or `cancel` (write skew) | conforms (reads after the lock see the latest commit) |
 | `NoIdempotencyKey` | **mismatch** after `pay` at the first retry under a fresh key (two captures where the model makes one); without pay's effects, **violates** `chargedAtMostOnce` (a retry after a lost response) or `settledCorrectly` (the void can't find the charge) | | |
 | `DualWrite` (publish in the background after commit) | **violates** `settledCorrectly`: a crash before the publish loses the order (a one-step window, found at a higher crash rate) | | |
-| `CaptureUnits` (the capture's units, not its money) | **mismatch** after `pay` in every run that pays: its capture is not `payEffects`'s | | |
+| `CaptureUnits` (the capture's units, not its money) | **mismatch** after `pay` in every run that completes a payment: its capture is not `payEffects`'s | | |
 
 | Test | What it runs | Catches |
 |---|---|---|
@@ -72,14 +72,14 @@ only in full. Each test states the verdict it expects with
 | `TestNoIdempotencyKeySweep`, `TestFaultOrders` | parameter covering arrays and bounded directed fault-pair attempts | model checks plus witnessed/unreached fault-order evidence |
 | `TestStormChargesTwiceWithoutKeys` | the shop under a retry storm, without idempotency keys | charges twice (`TestStormIsCorrect` is the contrast) |
 | `TestMutationOfTheShop` | qweave's mutant schemata over the shop | the survivors, each an unobserved effect or equivalent |
-| `TestCaptureUnits` | `CaptureUnits`, with and without pay's effects (testdata/noeffects.binding.yaml) | conforms without them in every run (the baseline); with them, `Mismatch("pay")` in every run that pays |
+| `TestCaptureUnits` | `CaptureUnits`, with and without pay's effects (testdata/noeffects.binding.yaml) | conforms without them in every run (the baseline); with them, `Mismatch("pay")` in every run that completes a payment |
 | `TestNoIdempotencyKeyKilledByEffects` | `NoIdempotencyKey` on the same seeds with and without pay's effects | killed in more runs with them (below) |
 
 Pay's effects, measured on the same seeds with and without them (Serializable; DESIGN §111):
 
 | Case | without pay's effects | with them |
 |---|---|---|
-| `CaptureUnits`, crashy's rates (40 seeds) | conforms in 40 of 40 | a mismatch after `pay` in 40 of 40 (every run paid) |
+| `CaptureUnits`, crashy's rates (40 seeds) | conforms in 40 of 40 | a mismatch after `pay` in each of the 38 runs that completed a payment (the other two conform: their payment pending after a crash) |
 | `NoIdempotencyKey`, DefaultRates | killed in 50 of 100 | killed in 51 of 100 |
 | `NoIdempotencyKey`, lost provider requests only (0.3), no crash, no cancellation | killed in 0 of 100 | killed in 33 of 100: every run with a lost request |
 

@@ -15,10 +15,13 @@ import (
 // were before I/O specifications.
 const noEffects = "testdata/noeffects.binding.yaml"
 
-// pays reports whether a run recorded a pay step (its invocation, at
-// least): a run whose orders were all cancelled before payment has none.
+// pays reports whether a run completed a pay step: a run whose orders
+// were all cancelled before payment has none, and one whose payments
+// consumer crashed during its only payment has it pending, its effects
+// attached to the pending call and not compared (DESIGN §111, left for
+// P2: the pending-call rule).
 func pays(r *qtest.Run) bool {
-	return slices.ContainsFunc(r.Recorded, func(s qtrace.Step) bool { return s.Action == "pay" })
+	return slices.ContainsFunc(r.Recorded, func(s qtrace.Step) bool { return s.Action == "pay" && s.Model() })
 }
 
 // failing counts an exploration's runs that fail, for a measure.
@@ -33,9 +36,9 @@ func failing(x *qtest.Exploration) (n int) {
 
 // A capture of the order's units, not its money, changes nothing the
 // model's state keeps: without pay's effects compared it conforms in
-// every run (the baseline, measured: 40 of 40 at every fault and crash
-// rate below), and with them it is Mismatch("pay") in every run that
-// pays. The faithful shop conforms under the same binding at every level
+// every run (the baseline, measured: 40 of 40 at crashy's rates), and
+// with them it is Mismatch("pay") in every run that completes a payment.
+// The faithful shop conforms under the same binding at every level
 // (TestFaithfulConformsAtEveryLevel).
 func TestCaptureUnits(t *testing.T) {
 	qtest.RequireQuint(t)

@@ -613,8 +613,8 @@ Items, each its own decision before it starts:
   send); the binding's `effects:` kinds and `match` (exact, retried with
   `same:` keys, set); `Mismatch(action)` naming the first differing effect
   and field; the effect observation mutants; checkout's `pay` and
-  `CaptureUnits` (conforming in every run before, a mismatch in every run
-  that pays now), today's pattern in gotogether-patterns' effects.md.
+  `CaptureUnits` (conforming in every run before, a mismatch in every run that
+  completes a payment now), today's pattern in gotogether-patterns' effects.md.
   Left: the pending-call rule's enforcement in ResolvePending (decided:
   a recorded effect means the call took effect), then P2 (commit writes,
   internal effects by opt-in, `Bind(...).Emits`, qweave's duplicate and
