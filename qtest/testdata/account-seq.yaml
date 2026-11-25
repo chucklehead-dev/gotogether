@@ -1,0 +1,14 @@
+# account.yaml with an expect that reads a step's seq: a binding whose runs
+# are keyed whole, effect records and all (effectBlind)
+spec: ../../validate/testdata/account.qnt
+module: account
+constants:
+  LIMIT: '100'
+actions:
+  deposit:
+    args: { amount: '{{.amount}}' }
+    expect: 'balance == {{.obs.balance}} and {{.seq}} > 0'
+  withdraw:
+    args: { amount: '{{.amount}}' }
+    expect: 'balance == {{.obs.balance}}'
+invariants: [nonNegative, underLimit]
