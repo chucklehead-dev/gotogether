@@ -924,6 +924,23 @@ func (c *canonicalizer) errors(v any) any {
 		}
 		out = append(out, o)
 	}
+	if c.o.Tier == Read && len(out) > 1 {
+		// the first error, then the set of the others: quint reports a
+		// type error once per module analysed before it, so a module
+		// written first doubles it (TestHarnessPushTier's first-line)
+		first := out[0]
+		rest := map[string]any{}
+		fk := fullJSON(first)
+		for _, e := range out[1:] {
+			if k := fullJSON(e); k != fk {
+				rest[k] = e
+			}
+		}
+		out = []any{first}
+		for _, k := range sortedKeys(rest) {
+			out = append(out, rest[k])
+		}
+	}
 	return out
 }
 
@@ -955,4 +972,10 @@ func (c *canonicalizer) sourceMap(sm map[string]any) any {
 		return []any{f, c.pos(l[1]), c.pos(l[2])}
 	})
 	return map[string]any{"spans": spans}
+}
+
+// fullJSON is v's encoding, whole.
+func fullJSON(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
 }
