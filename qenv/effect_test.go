@@ -129,8 +129,8 @@ func TestRecorderOfATaskFoundThroughItsGoroutine(t *testing.T) {
 // every lookup in the process pay.
 func noRecorderRuns(t *testing.T) {
 	t.Helper()
-	settled := time.Now().Add(5 * time.Second)
-	for hooks.MayResolveRecorder() && time.Now().Before(settled) {
+	settled := time.Now().Add(5 * time.Second)                     //qenv:ok a deadline outside any simulation
+	for hooks.MayResolveRecorder() && time.Now().Before(settled) { //qenv:ok against that deadline
 		time.Sleep(time.Millisecond) //qenv:ok waiting, outside any simulation, for another test's runs to end
 	}
 	if hooks.MayResolveRecorder() {

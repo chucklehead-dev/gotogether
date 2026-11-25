@@ -357,7 +357,7 @@ func TestNativeUnwindingTaskFindsItsRecorderAfterClose(t *testing.T) {
 		s := qenv.NewNative(qenv.Nominal{}, coopPlatform{})
 		s.Spawn("driver", func(ctx context.Context) {
 			qenv.Go(qobs.WithRecorder(ctx, rec), "shop", func(ctx context.Context) {
-				defer qobs.Record(context.Background(), "unwound", nil) // as //quint:action records on return
+				defer qobs.Record(context.Background(), "unwound", nil) //qenv:ok through the goroutine, as //quint:action records on return
 				qenv.Sleep(ctx, time.Hour)
 			})
 		})
