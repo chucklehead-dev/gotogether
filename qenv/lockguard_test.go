@@ -204,14 +204,15 @@ func TestLockInvariantRefusesSeams(t *testing.T) {
 				woven.MutexUnlock(&mu)
 			})
 			var got any
+			var runErr error
 			func() {
 				defer func() { got = recover() }()
-				_ = s.Run(time.Minute)
+				runErr = s.Run(time.Minute)
 			}()
 			msg, _ := got.(string)
 			if !strings.HasPrefix(msg, "qenv: "+seam+" inside lock invariant inv's holds (guarded at lockguard_test.go:") ||
 				!strings.Contains(msg, ", task holder): ") || !strings.HasSuffix(msg, "Read the state without it") {
-				t.Fatalf("panic %v", got)
+				t.Fatalf("panic %v (Run returned %v)", got, runErr)
 			}
 		})
 	}
@@ -346,11 +347,15 @@ func TestLockInvariantNative(t *testing.T) {
 			})
 		}
 		var got any
+		var runErr error
 		func() {
 			defer func() { got = recover() }()
-			_ = s.Run(50 * time.Millisecond)
+			runErr = s.Run(50 * time.Millisecond)
 		}()
 		s.Close()
+		if runErr != nil {
+			t.Fatalf("Run: %v", runErr)
+		}
 		e, _ := got.(*qenv.LockInvariantError)
 		switch {
 		case !broken && got != nil:
