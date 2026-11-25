@@ -154,11 +154,15 @@ jobs:
         run: go test -short -shuffle=on -count=2 -timeout 40m ./...
       - name: test (qenv self-checks)
         if: matrix.part == 'core-variants'
-        run: GOTOGETHER_CHECK=1 go test -short -count=1 ./qenv/ ./qload/ ./qtest/ ./qcover/ ./qrun/
+        run: GOTOGETHER_CHECK=1 go test -short -count=1 -timeout 30m ./qenv/ ./qload/ ./qtest/ ./qcover/ ./qrun/
       - name: test (typescript backend)
         if: matrix.part == 'core-variants'
+        # -timeout as the other root steps: validate alone takes 5-8 of go
+        # test's default 10 minutes on the TypeScript backend, and a busy
+        # runner passed it (2026-11-25, #253). The core job's CPU budgets
+        # (ci/test-times.txt), not this timeout, hold a package's cost.
         run: |
-          QUINT_BACKEND=typescript go test -short -count=1 ./connect/ ./validate/
+          QUINT_BACKEND=typescript go test -short -count=1 -timeout 30m ./connect/ ./validate/
           (cd examples/bank && QUINT_BACKEND=typescript go test -short -count=1 .)
       - name: qhegel (its own module, so the core needs no Hegel)
         if: matrix.part == 'hegel'
