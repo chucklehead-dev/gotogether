@@ -10,6 +10,8 @@ module lib {
   pure def getf(r) = r.f
   pure def upd(r: { f: int, g: str }): { f: int, g: str } = { ...r, f: 1 }
   pure def mv(v: V): int = match v { | A(i) => i | B => 0 }
+  pure def tl(ps: Set[(int, int)]): Set[int] = ps.map(((a, b)) => a + b)
+  pure val (d1, d2) = (1, 2)
 }
 module m {
   import lib(N = 3) as L

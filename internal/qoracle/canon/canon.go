@@ -143,7 +143,7 @@ func Of(data, sourceMap []byte, o Options) (*Form, error) {
 			return nil, fmt.Errorf("canon: the source map is not a JSON object")
 		}
 	}
-	c := &canonicalizer{o: o, ids: map[string]string{}, binds: map[string]map[string]bool{}, sfx: map[string]map[string]int{}, declOf: map[string]string{}, dropped: map[string]int{}}
+	c := &canonicalizer{o: o, ids: map[string]string{}, binds: map[string]map[string]bool{}, bound: map[string]bool{}, sfx: map[string]map[string]int{}, declOf: map[string]string{}, dropped: map[string]int{}}
 	return &Form{Tree: c.run(top, sm)}, nil
 }
 
@@ -165,6 +165,8 @@ type canonicalizer struct {
 	// binds is the names each lambda and let binds, by its id (name);
 	// sfx numbers, per declaration, the suffixes that are no id
 	binds map[string]map[string]bool
+	// bound is every name some lambda or let binds, less its suffix
+	bound map[string]bool
 	sfx   map[string]map[string]int
 	// declOf is the declaration path each id first occurs in, and scope
 	// the declaration being written
@@ -333,6 +335,13 @@ func keysOf(xs []any, name func(int, map[string]any) string, kind string) []stri
 func declKeys(decls []any) []string {
 	return keysOf(decls, func(_ int, d map[string]any) string {
 		if s, ok := d["name"].(string); ok && s != "" {
+			// a name quint made from an id (a destructuring's temporary)
+			// is keyed without it: its repeats are told apart by ~n
+			for _, p := range generatedPrefixes {
+				if last := lastSegment(s); strings.HasPrefix(last, p) {
+					return strings.TrimSuffix(s, last) + p + "@"
+				}
+			}
 			return s
 		}
 		// imports, exports and instances: what they name
@@ -418,6 +427,10 @@ func (c *canonicalizer) collectBinders(n any) {
 				c.binds[own] = map[string]bool{}
 			}
 			c.binds[own][s] = true
+			c.bound[s] = true
+			if m := suffixRE.FindStringSubmatch(s); m != nil {
+				c.bound[m[1]] = true // an instance's copy, suffixed by its original's
+			}
 		}
 		switch x["kind"] {
 		case "lambda":
@@ -460,43 +473,83 @@ func (c *canonicalizer) id(v any, where string) any {
 	return p
 }
 
-// name is a compile IR's name with the id it embeds made canonical: the
-// unshadower's `x_<binder id>`, the binder a lambda or a let that binds
+// name is a name with the ids it embeds made canonical. The compile IR's
+// // unshadower's `x_<binder id>`, the binder a lambda or a let that binds
 // x (an instance's copy names the original's, which compile's output
 // keeps in the original's module), becomes `x_@<binder's path>`. A
 // suffix that is no id of the output becomes `x_#k`, k numbered by first
 // appearance in its declaration; one that is an id of a node binding no
 // x is the user's and stays.
+//
+// Every output's names that quint's parser makes from an id
+// (`quintTupledLambdaParam<id>` for `((a, b)) => e`, `quintDestructTemp<id>`
+// for destructuring, `__undefinedParam<id>` and `_undefinedDeclaration<id>`
+// where a parse failed) take the id's path the same way (`@path`), or
+// `#k` where the output holds no such id.
 func (c *canonicalizer) name(v any) any {
-	if c.o.Kind != Compile {
-		return v
-	}
 	s, ok := v.(string)
 	if !ok {
 		return v
 	}
-	m := suffixRE.FindStringSubmatch(s)
-	if m == nil {
-		return v
-	}
-	if _, seen := c.declOf[m[2]]; seen {
-		p := c.ids[m[2]]
-		if c.binds[m[2]][lastSegment(m[1])] {
-			return m[1] + "_@" + p
+	base, suffix := s, ""
+	if c.o.Kind == Compile {
+		if m := suffixRE.FindStringSubmatch(s); m != nil {
+			base, suffix = c.unshadowed(s, m)
 		}
-		return v
 	}
+	return c.generated(base) + suffix
+}
+
+// unshadowed splits a compile IR's name x_<digits> into x and its
+// canonical suffix, or keeps it whole (the user's).
+func (c *canonicalizer) unshadowed(s string, m []string) (string, string) {
+	if _, seen := c.declOf[m[2]]; seen {
+		if c.binds[m[2]][lastSegment(m[1])] {
+			return m[1], "_@" + c.ids[m[2]]
+		}
+		return s, ""
+	}
+	if !c.bound[lastSegment(m[1])] {
+		return s, "" // no local name: the user's (`__gtg_inv_1`)
+	}
+	return m[1], fmt.Sprintf("_#%d", c.unseen("u"+m[2]))
+}
+
+// unseen numbers, within the declaration written, an id no module holds.
+func (c *canonicalizer) unseen(key string) int {
 	sx := c.sfx[c.scope]
 	if sx == nil {
 		sx = map[string]int{}
 		c.sfx[c.scope] = sx
 	}
-	k, ok := sx[m[2]]
+	k, ok := sx[key]
 	if !ok {
 		k = len(sx) + 1
-		sx[m[2]] = k
+		sx[key] = k
 	}
-	return fmt.Sprintf("%s_#%d", m[1], k)
+	return k
+}
+
+// generatedPrefixes start the names quint's parser makes from an id
+// (read-only).
+var generatedPrefixes = []string{"quintTupledLambdaParam", "quintDestructTemp", "__undefinedParam", "_undefinedDeclaration"}
+
+var generatedRE = regexp.MustCompile(`^(quintTupledLambdaParam|quintDestructTemp|__undefinedParam|_undefinedDeclaration)([0-9]+)$`)
+
+// generated is a name with the id quint's parser put in it made canonical.
+func (c *canonicalizer) generated(s string) string {
+	ns, last := "", s
+	if i := strings.LastIndex(s, "::"); i >= 0 {
+		ns, last = s[:i+2], s[i+2:]
+	}
+	m := generatedRE.FindStringSubmatch(last)
+	if m == nil {
+		return s
+	}
+	if _, seen := c.declOf[m[2]]; seen {
+		return ns + m[1] + "@" + c.ids[m[2]]
+	}
+	return fmt.Sprintf("%s%s#%d", ns, m[1], c.unseen("g"+m[2]))
 }
 
 // generic is n with its ids and names rewritten and every field kept.
@@ -609,8 +662,11 @@ func (c *canonicalizer) decl(d map[string]any) any {
 	}
 	if c.o.Kind == Typecheck {
 		return pick(d, typecheckDecl, func(k string, v any) any {
-			if k == "id" {
+			switch k {
+			case "id":
 				return c.id(v, "")
+			case "name":
+				return c.name(v)
 			}
 			return c.generic(v, "")
 		})
@@ -775,6 +831,12 @@ func (c *canonicalizer) typeEntry(key string, e any) any {
 func (c *canonicalizer) typeNode(v any, where string, vs *vars) any {
 	switch x := v.(type) {
 	case map[string]any:
+		// a row of no fields over another is that other: quint writes a
+		// unit's fields as {row, [], empty} or as {empty}, by the order its
+		// solver substituted in (ids again: binding/testdata/typed.qnt shifted)
+		if fs, ok := x["fields"].([]any); ok && x["kind"] == "row" && len(fs) == 0 && x["other"] != nil {
+			return c.typeNode(x["other"], where, vs)
+		}
 		out := map[string]any{}
 		for _, k := range sortedKeys(x) {
 			if c.o.Tier == Read && !slices.Contains(typeNodeFields, k) && !slices.Contains(rowFields, k) && k != "fieldName" && k != "fieldType" {

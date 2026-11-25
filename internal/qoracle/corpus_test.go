@@ -38,8 +38,9 @@ func pinnedCommit(t *testing.T, root string) (string, string) {
 }
 
 func TestUpdateManifest(t *testing.T) {
-	if os.Getenv("GOTOGETHER_UPDATE_CORPUS") != "1" {
-		t.Skip("GOTOGETHER_UPDATE_CORPUS=1 rewrites testdata/corpus.json (quint and QUINT_SRC needed)")
+	mode := os.Getenv("GOTOGETHER_UPDATE_CORPUS")
+	if mode != "1" && mode != "entries" {
+		t.Skip("GOTOGETHER_UPDATE_CORPUS=1 rewrites testdata/corpus.json (quint and QUINT_SRC needed); =entries re-surveys those whose id contains GOTOGETHER_QFRONT_ENTRY, and adds new ones")
 	}
 	requireQuint(t)
 	r := roots(t)
@@ -51,9 +52,14 @@ func TestUpdateManifest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	gen, gtexts, skipped, err := Generated(ctx, r)
-	if err != nil {
-		t.Fatal(err)
+	only := os.Getenv("GOTOGETHER_QFRONT_ENTRY")
+	var gen []Entry
+	gtexts := map[string]string{}
+	var skipped []string
+	if mode == "1" || strings.HasPrefix(only, SourceEval) || strings.HasPrefix(only, SourceInvariant) {
+		if gen, gtexts, skipped, err = Generated(ctx, r); err != nil {
+			t.Fatal(err)
+		}
 	}
 	for _, s := range skipped {
 		t.Logf("generated: skipped %s", s)
@@ -62,8 +68,28 @@ func TestUpdateManifest(t *testing.T) {
 		texts[k] = v
 	}
 	all := append(files, gen...)
+	var old *Manifest
+	if mode == "entries" {
+		if old, err = LoadManifest(); err != nil {
+			t.Fatal(err)
+		}
+		known := map[string]bool{}
+		for _, e := range old.Entries {
+			known[e.ID] = true
+		}
+		var some []Entry
+		for _, e := range all {
+			if (only != "" && strings.Contains(e.ID, only)) || !known[e.ID] {
+				some = append(some, e)
+			}
+		}
+		all = some
+	}
 	start := time.Now()
 	surveyed, errs := Survey(ctx, r, all, texts, t.TempDir(), 4)
+	if old != nil {
+		surveyed = merge(old.Entries, surveyed)
+	}
 	t.Logf("surveyed %d entries in %v", len(surveyed), time.Since(start))
 	version, commit := pinnedCommit(t, r.Repo)
 	m := &Manifest{Quint: version, Commit: commit, Entries: surveyed}
@@ -296,6 +322,29 @@ func TestCorpus(t *testing.T) {
 	if ran == 0 {
 		t.Fatalf("no entry ran (GOTOGETHER_QFRONT_ENTRY=%q)", only)
 	}
+}
+
+// merge is old with fresh's entries in place of theirs, and fresh's new
+// ones after.
+func merge(old, fresh []Entry) []Entry {
+	byID := map[string]Entry{}
+	for _, e := range fresh {
+		byID[e.ID] = e
+	}
+	var out []Entry
+	for _, e := range old {
+		if f, ok := byID[e.ID]; ok {
+			e = f
+			delete(byID, e.ID)
+		}
+		out = append(out, e)
+	}
+	for _, e := range fresh {
+		if _, ok := byID[e.ID]; ok {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 func sameVerdict(a, b Verdict) bool {

@@ -12,6 +12,9 @@ import (
 
 func requireQuint(t *testing.T) {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("runs quint: the full tier's")
+	}
 	if _, err := exec.LookPath("quint"); err != nil {
 		t.Skip("quint is not installed")
 	}
