@@ -2,12 +2,14 @@ package validate
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"os/exec"
@@ -204,13 +206,68 @@ func (cm *CompiledModel) Write(path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(data, '\n'), 0o644)
+	data = append(data, '\n')
+	if strings.HasSuffix(path, ".gz") {
+		if data, err = gzipCompiled(data); err != nil {
+			return err
+		}
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
+// CompiledExt is the name's end of a compiled model kept by convention
+// (CompiledFor): its gotogether.model/1 JSON in a gzip container. The
+// format is the JSON document; the container is how it is kept (DESIGN
+// §63, §113): Write compresses a path ending in .gz, and LoadCompiled
+// reads either, by the gzip magic, so `-o model.json` writes it plain.
+const CompiledExt = ".model.json.gz"
+
+// gzipCompiled is data in a gzip stream that depends on data alone: the
+// header names no file, no modification time and no OS (gzip's
+// "unknown"), at the best compression, so a compile twice writes the
+// same bytes with one Go toolchain (compile -check compares meaning, not
+// bytes, so another toolchain's deflate is no staleness).
+func gzipCompiled(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	zw, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	if err != nil {
+		return nil, err
+	}
+	zw.Header = gzip.Header{OS: 255}
+	if _, err := zw.Write(data); err != nil {
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// gzipMagic begins every gzip stream; no JSON document begins so.
+var gzipMagic = []byte{0x1f, 0x8b} // read-only
+
+// gunzipCompiled is the JSON document of a compiled model's file bytes:
+// data itself when plain, its decompression when gzip's.
+func gunzipCompiled(data []byte) ([]byte, error) {
+	if !bytes.HasPrefix(data, gzipMagic) {
+		return data, nil
+	}
+	zr, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	zr.Multistream(false)
+	out, err := io.ReadAll(zr)
+	if err != nil {
+		return nil, err
+	}
+	return out, zr.Close()
 }
 
 // CompiledFor is where bindingPath's compiled model is kept by
 // convention: beside the binding, its name's stem (the name without .yaml
-// or .yml, then without .binding) with .model.json, so stock.binding.yaml's
-// is stock.model.json. qtest finds it there (a test without quint), and
+// or .yml, then without .binding) with CompiledExt, so stock.binding.yaml's
+// is stock.model.json.gz. qtest finds it there (a test without quint), and
 // gotogether compile writes and checks it there when -o is not given.
 func CompiledFor(bindingPath string) string {
 	dir, name := filepath.Split(bindingPath)
@@ -221,7 +278,7 @@ func CompiledFor(bindingPath string) string {
 		}
 	}
 	name = strings.TrimSuffix(name, ".binding")
-	return filepath.Join(dir, name+".model.json")
+	return filepath.Join(dir, name+CompiledExt)
 }
 
 // CompiledEnv is the variable that says when a binding's compiled model
@@ -241,8 +298,12 @@ func CompiledChoice(bindingPath, quint string) (string, error) {
 		return "", nil
 	case "1":
 		if statErr != nil {
-			return "", fmt.Errorf("%s=1 checks by the binding's compiled model, and %s has none at %s (%v): compile it (gotogether compile -binding %s) where quint is installed",
-				CompiledEnv, bindingPath, path, statErr, bindingPath)
+			plain := ""
+			if _, err := os.Stat(strings.TrimSuffix(path, ".gz")); err == nil {
+				plain = fmt.Sprintf(" (%s is the plain form an earlier gotogether kept there: remove it)", strings.TrimSuffix(path, ".gz"))
+			}
+			return "", fmt.Errorf("%s=1 checks by the binding's compiled model, and %s has none at %s (%v): compile it (gotogether compile -binding %s) where quint is installed%s",
+				CompiledEnv, bindingPath, path, statErr, bindingPath, plain)
 		}
 		return path, nil
 	case "":
@@ -299,25 +360,36 @@ func (cm *CompiledModel) Differs(other *CompiledModel) []string {
 	return d
 }
 
-// sameJSON reports whether a and b are the same JSON, whitespace aside.
+// sameJSON reports whether a and b are the same JSON, whitespace and
+// HTML escapes aside: json.Marshal writes a RawMessage's <, > and & as
+// \u003c, \u003e and \u0026, so an artifact written holds them so where
+// quint's output, a compile now, does not (twophase's and edgepublish's
+// typechecks were stale to compile -check by that alone).
 func sameJSON(a, b json.RawMessage) bool {
-	var ca, cb bytes.Buffer
+	var ca, cb, ea, eb bytes.Buffer
 	if json.Compact(&ca, a) != nil || json.Compact(&cb, b) != nil {
 		return bytes.Equal(a, b)
 	}
-	return bytes.Equal(ca.Bytes(), cb.Bytes())
+	json.HTMLEscape(&ea, ca.Bytes())
+	json.HTMLEscape(&eb, cb.Bytes())
+	return bytes.Equal(ea.Bytes(), eb.Bytes())
 }
 
-// LoadCompiled reads a compiled model (Compile's), refusing another
-// format or a later major than this gotogether reads, and a Quint version
-// outside the current stable admission policy.
+// LoadCompiled reads a compiled model (Compile's), plain or gzipped
+// (CompiledExt), refusing another format or a later major than this
+// gotogether reads, and a Quint version outside the current stable
+// admission policy. Its digest is of the file's bytes, as kept.
 func LoadCompiled(path string) (*CompiledModel, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
+	doc, err := gunzipCompiled(data)
+	if err != nil {
+		return nil, fmt.Errorf("compiled model %s: its gzip container: %w: compile it again (gotogether compile -binding B -o %s)", path, err, path)
+	}
 	var cm CompiledModel
-	if err := json.Unmarshal(data, &cm); err != nil {
+	if err := json.Unmarshal(doc, &cm); err != nil {
 		return nil, fmt.Errorf("compiled model %s: %w: compile it again (gotogether compile -binding B -o %s)", path, err, path)
 	}
 	if _, err := formats.Model.Check(cm.Format); err != nil {

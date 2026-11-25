@@ -114,7 +114,7 @@ func stormRun(t *testing.T, cfg checkout.LoadConfig) (checkout.LoadRun, *qobs.Me
 // top, the faithful shop stays correct: every capture is retried many
 // times, and the idempotency key keeps each order charged once.
 func TestStormIsCorrect(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	if testing.Short() {
 		t.Skip("checks a run of ~1300 steps")
 	}
@@ -132,7 +132,7 @@ func TestStormIsCorrect(t *testing.T) {
 // chargedAtMostOnce (judged without pay's effects); with them, the first
 // retry under a fresh key is already a mismatch at its pay.
 func TestStormChargesTwiceWithoutKeys(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	if testing.Short() {
 		t.Skip("checks a run of ~1700 steps")
 	}

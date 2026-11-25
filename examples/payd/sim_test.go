@@ -29,7 +29,7 @@ var dups = faulty.Set("rpc.payd.request", 0.3).Set("rpc.payd.delay", 0.3)
 // answers every key it charged with its charge; and the faults happened.
 func TestFaithful(t *testing.T) {
 	t.Parallel() // its explorations record into their own runs
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "payd.binding.yaml")
 	for _, iso := range []qenv.Isolation{qenv.ReadCommitted, qenv.SnapshotIsolation, qenv.Serializable} {
 		t.Run(iso.String(), func(t *testing.T) {
 			system(Config{Isolation: iso, Check: true}).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 2}).
@@ -48,7 +48,7 @@ func TestFaithful(t *testing.T) {
 // lost; payd charges it once in each.
 func TestOneFault(t *testing.T) {
 	t.Parallel() // its explorations record into their own runs
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "payd.binding.yaml")
 	system(Config{Workload: One}).Exhaust(t, qtest.Bound{Faults: 1}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
 }
@@ -61,7 +61,7 @@ func twoTabs() qtest.System { return system(Config{}).WithRates(qenv.NoFaults) }
 // it) reaches the model through the change feed: a charge changes.
 func TestChargeEdited(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "payd.binding.yaml")
 	if testing.Short() {
 		t.Skip("one run, but a violation's report costs a quint run of its own")
 	}

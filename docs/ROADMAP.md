@@ -665,12 +665,16 @@ item is its own decision before it starts; the red-nightly rule applies.
   each with what releases it (`TestCompiledModels` keeps it current).
   `gotogether doctor` lists the module's bindings by their compiled models:
   none (with the compile), current or stale by their hashes (without quint;
-  `compile -check` compares meaning). Left: 30 bindings over 1 MB (counters
-  8 MB, edgepublish 22 MB, the grist apps 2-7 MB; IR, about twenty-fold
-  compressible): a compact artifact or a larger budget is the maintainer's
-  call; and connect's tests not yet moved to a spec's compiled model (Q1's
-  first slices), the checker's own callers and Q2's run-time models, each
-  listed (`qtest.Model` and simulate run from the binding's model since
+  `compile -check` compares meaning). Fifth (2026-11-25, DESIGN §113): the
+  artifact is kept gzipped (`<stem>.model.json.gz`, the same
+  `gotogether.model/1` document, deterministic bytes), the 1 MB budget on
+  the compressed size, and the 31 bindings that were over it keep theirs
+  too (edgepublish's 0.78 MB the largest; 54 models, 7.3 MB), 108 more
+  tests on `RequireModel` (242 in all, with the TestMutants that run
+  them). Left: connect's tests not yet moved to a spec's compiled model (Q1's first slices), the checker's own
+  callers (the CLI's validate, gristtest.StoredLogs), `quint run` of the
+  grist apps' rules modules, payd's real runs outside the evaluator's
+  fragment and Q2's run-time models, each listed (`qtest.Model` and simulate run from the binding's model since
   Q1's next slice: lease's design binding keeps one, 23 models).
 - **Q1: the evaluator's whole fragment (M). First slices built** (DESIGN
   §110): the refusals inventoried (none of the repository's 67 agreeing

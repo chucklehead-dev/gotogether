@@ -22,7 +22,7 @@ const binding = "../binding.yaml"
 // simulation's scheduler.
 func woven(t *testing.T) {
 	t.Helper()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	if !sim.Woven() {
 		t.Skip("needs the build woven: go run github.com/DataDog/orchestrion go test ./sim/")
 	}

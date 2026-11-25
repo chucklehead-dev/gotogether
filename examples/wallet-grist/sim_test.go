@@ -71,7 +71,7 @@ var contended = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 4, Com
 // the faults happened. examples/wallet's TestFaithful.
 func TestFaithful(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	for _, iso := range []qenv.Isolation{qenv.Serializable, qenv.ReadCommitted} {
 		t.Run(iso.String(), func(t *testing.T) {
 			cfg := contended
@@ -89,7 +89,7 @@ func TestFaithful(t *testing.T) {
 // show as a balance no order explains.
 func TestFaithfulAtClients(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	cfg := contended
 	cfg.Isolation = qenv.ReadCommitted
 	system(calls, cfg, qtest.Linearize()).
@@ -103,7 +103,7 @@ func TestFaithfulAtClients(t *testing.T) {
 // break), at the store and at the clients.
 func TestDuplicateRequests(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	rates := qenv.NoFaults.Set("rpc.wallet.delay", 0.3).Set("rpc.wallet.request", 0.3)
 	cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 4, Isolation: qenv.ReadCommitted, Gen: gen,
 		Send: []string{"transfer", "deposit", "read"}}
@@ -122,7 +122,7 @@ var invalid = gristsim.Config{Tenants: []string{"t1"}, Clients: 2, Ops: 4, Gen: 
 // deposit of nothing: the faithful bank refuses each, and conforms.
 func TestInvalidRequests(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	system(commits, invalid).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
 }
@@ -150,7 +150,7 @@ var skew = gristsim.Config{Tenants: []string{"t1"}, Clients: 2, Ops: 1, Isolatio
 // mutant (its transfer Unconditioned), caught at the same shapes.
 func TestRaces(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	for name, cfg := range map[string]gristsim.Config{"race": race, "skew": skew} {
 		t.Run(name, func(t *testing.T) {
 			system(commits, cfg).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 6}).
@@ -178,7 +178,7 @@ var transfers = gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 3, Sen
 // batch's end): every run rejects ledgerPostServed at its first post.
 func TestPostAfterTransfer(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	system(commits, transfers).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 2}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Takes("ledgerPostServed"))
 }
@@ -203,7 +203,7 @@ var deposits = gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 3, Gen:
 // same script (TestMutant).
 func TestPostedOnce(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	runs := qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}
 	crashed := runs
 	crashed.Chooser = crashAfterPost
@@ -223,7 +223,7 @@ func TestOneRequestExhaust(t *testing.T) {
 	if testing.Short() {
 		t.Skip("full mode: an exhaustive search")
 	}
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	one := gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 1, Gen: gen, Send: []string{"transfer"}}
 	system(commits, one).Exhaust(t, qtest.Bound{Faults: 1}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
@@ -248,7 +248,7 @@ var depositsAndReads = gristsim.Config{Tenants: []string{"t1"}, Clients: 2, Ops:
 // shape: every read is the log's balance at its position.
 func TestReplicaReadShape(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	system(commits, depositsAndReads).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}).
 		Expect(t, qtest.None(qtest.Mismatch("read")), qtest.Conforms())
 }
@@ -260,7 +260,7 @@ func TestSQLTier(t *testing.T) {
 	if testing.Short() {
 		t.Skip("full mode: the SQL tier repeats TestFaithful's mechanisms")
 	}
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	cfg := contended
 	cfg.Isolation, cfg.SQL = qenv.ReadCommitted, true
 	sys := system(commits, cfg).WithRates(faulty.Set("store.wallet.commit", 0.15))

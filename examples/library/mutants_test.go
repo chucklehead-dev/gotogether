@@ -20,7 +20,7 @@ func TestMutant(t *testing.T) {
 	if mutant == "" {
 		t.Skip("the app as it is: TestMutants runs this test built with each mutant's overlay")
 	}
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	if _, caught, ok := gristtest.DroppedRule(App); ok {
 		// a rule dropped (Mutants.App's generated mutant: drop-loan-limit):
 		// a fourth loan commits where the model's guard, loanLimitRefusal,

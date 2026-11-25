@@ -25,7 +25,7 @@ import (
 // (every borrow's receipt sent) and, linearized, at the clients, and every
 // answer a client got has its store-side step.
 func TestRealHTTP(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	// the mailer in process (its default double, grist.Local): one for the
 	// tier, recording its sends with the calling node's steps
 	tier := gristtest.NewTier(t, App, gristtest.TierConfig{Local: map[*grist.Dependency]grist.Handlers{Mailer: nil}})

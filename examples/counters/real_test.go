@@ -108,7 +108,7 @@ func retireAll(tier *gristtest.Tier, phase, n int) {
 // side (gristtest.Answered: a refusal the store did not record would pass
 // both bindings).
 func TestRealHTTP(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	tenants := []string{"t1", "t2"}
 	tier := realTier(t, gristtest.TierConfig{Tenants: tenants, DependencyLoseEvery: 2})
 	// clients runs four clients of 8 operations each on counters, names
@@ -322,7 +322,7 @@ func pendingPayment(t *testing.T, tier *gristtest.Tier) {
 // the real variant (the site's request judged against payoutBankPay:
 // the wrongAmount mutant, in this shape, rejects bankPayServed).
 func TestRealLostThenKilled(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	tier := lostThenKilled(t)
 	pendingPayment(t, tier)
 	paidOnce(t, tier, 1)

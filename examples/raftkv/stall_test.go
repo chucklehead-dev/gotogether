@@ -23,7 +23,7 @@ import (
 // the leader late by itself, violates the bound. The run's other checks
 // stand: electionSafety holds in all.
 func TestHostStallIsNoVerdict(t *testing.T) {
-	qtest.RequireQuint(t) // cluster.real.binding.yaml has no compiled model (ci/needs-quint.txt)
+	qtest.RequireModel(t, "cluster.real.binding.yaml")
 	cfg := Config{Record: Cluster, Scenario: partitioned, Duration: 6 * time.Second}
 	sim := system(cfg).WithRates(qenv.NoFaults).Judge(t, qenv.NewSeeded(1))
 	sim.Expect(t, qtest.Conforms(), qtest.Settles())
