@@ -639,7 +639,7 @@ Q3's tiers 2 to 5 then wait for P2 to P4.
 internal/qoracle; its mechanism is DESIGN §110. Against §4.4:
 
 1. **The manifest** (internal/qoracle/testdata/corpus.json, one entry a
-   line): CORPUS_SUMMARY. Each entry has its text's sha256, its
+   line): 863 entries, 39,990 lines: the repository's 183 .qnt files, 148 evaluation modules and 101 --invariant compiles from its bindings (6 bindings skipped: k8s YAMLs with a `spec:` key, and grist's generator goldens' shop.qnt, which quint refuses), quint's 77 examples and 73 test fixtures, and 281 inline programs extracted from its 51 unit-test files; 475 are compiled too. quint accepts 647, refuses 215 (their codes recorded), and one uses `apalache::` ("needs-quint"). One of quint's own examples crashes its compile (below). Each entry has its text's sha256, its
    constructs (a lexical scan: instances, exports, aliases, sum types,
    `match`, spread, `temporal`, `assume`, destructuring, `apalache::`,
    hex, ...), compile's main, init, step and invariants, and quint's
@@ -661,7 +661,7 @@ internal/qoracle; its mechanism is DESIGN §110. Against §4.4:
    Two departures from §4.2: ids become paths, not counters (local
    diffs), and declarations are compared by toposort layer, since
    quint orders a layer by its ids as strings.
-3. **The harness against itself**: SELF_RESULT.
+3. **The harness against itself** (2026-11-25, this machine, the nightly's settings with a sample of 5): quint against quint with every id shifted on all 863 entries, parse, typecheck and compile: 861 agree, and the two that differ are quint's own id-dependence (below, testdata/shift-known.txt); every pinned verdict held; the 25 generated programs (5 well-typed, 20 ill) agree. 57 minutes wall, 104 CPU minutes on 4 cores, two quint processes at a time (quintcmd's admission). The plain stub (`GOTOGETHER_QFRONT_STUB=quint`) is the same comparison without the shift. Getting there took five changes to the form, each a quint behaviour the shift exposed (the order, the doubled errors, the end columns, the parser's id-made names, the empty rows), which is what the shifted stub is for.
 4. **The ill-typed generator** reaches every front-end code, quint
    judging (TestIllReachesEveryCode): QNT000 (syntax, type, effect),
    QNT006 to QNT009, QNT012 to QNT016, QNT098, QNT099, QNT101, QNT102,
@@ -685,6 +685,13 @@ and for 1-minimality over the reductions).
   the layer. *For the maintainer:* binding's `Vars` follow the
   typecheck's order; either binding orders them itself, or P1 must
   number nodes exactly as quint does.
+- **quint's verdict itself depends on its ids** on two corpus entries:
+  examples/language-features/importFrom.qnt is refused (QNT405 'basics',
+  QNT404 through an export) once a module is written before it, and
+  `assume _ = val foo = 1 { foo }` (a unit test's) gains a QNT000. A Go
+  front end that numbers nodes otherwise will meet both; they are listed
+  in internal/qoracle/testdata/shift-known.txt, which the nightly logs
+  rather than fails on, and fails on once one agrees.
 - A type error is reported once per module analysed before it: errors
   compare as the first, then the set (§3.4's set).
 - A node starting on a file's first line keeps that line's column shift
@@ -700,6 +707,15 @@ and for 1-minimality over the reductions).
   qeval decodes `Type.ID` without reading it. P5 can drop the field.
 - `val n2 = n; val r = { val n2 = n2 + 1; n2 }` typechecks and fails
   compile with QNT099.
+- The parser makes names from ids (`quintTupledLambdaParam<id>` for
+  `((a, b)) => e`, `quintDestructTemp<id>` for `val (a, b) = e`): P1 must
+  write them, and the form names them by the id's path.
+- A unit's fields are written `{row, [], empty}` or `{empty}`, by the
+  solver's order (binding/testdata/typed.qnt shifted).
+- `quint compile` of quint's own
+  examples/classic/distributed/TwoPhaseCommit/two_phase_commit_modules.qnt
+  (main two_phase_commit) fails with "Internal error while flattening"
+  and writes nothing: its manifest verdict is `tool-failure`.
 
 **For P5, not built here:** `CompiledModel.Differs` comparing forms
 (canon.Of and canon.Equal are ready), and `GOTOGETHER_FRONTEND=shadow`

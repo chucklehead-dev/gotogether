@@ -7242,9 +7242,14 @@ generated programs. Its first "front end" is quint again.
   `x_@<binder's path>` when the suffix is an id of a lambda or let
   binding x; an instance's copy keeps its original's lambda id, absent
   from the IR, and becomes `x_#k`, numbered within its declaration. A
-  suffix that is the id of a node binding no x is the user's and stays.
-  Type, row, effect and entity variables are renamed per entry of
-  `types` and `effects`, the unit every reader reads.
+  suffix that is the id of a node binding no x, or on a name nothing
+  binds locally (`__gtg_inv_1`), is the user's and stays. The names
+  quint's parser makes from an id (`quintTupledLambdaParam<id>`,
+  `quintDestructTemp<id>`, `__undefinedParam<id>`) take the id's path in
+  every output. Type, row, effect and entity variables are renamed per
+  entry of `types` and `effects`, the unit every reader reads, and a row
+  of no fields over another is that other (quint writes a unit's fields
+  either way, by its solver's order).
 - **What no form can name is dropped.** A type node's id inside `types`
   is from the modules' id space or from a builtin signature's, which
   quint parses with ids of its own: they collide, and no reader uses
