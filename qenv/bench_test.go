@@ -68,6 +68,40 @@ func BenchmarkServiceCall(b *testing.B) {
 	}
 }
 
+// BenchmarkQueuePublish is one message published, received and
+// acknowledged through a Queue, without faults: the publish's effect
+// recorded nowhere (Unrecorded) and through the simulation's recorder
+// (Recorded).
+func BenchmarkQueuePublish(b *testing.B) {
+	for _, recorded := range []bool{false, true} {
+		name := "Unrecorded"
+		if recorded {
+			name = "Recorded"
+		}
+		b.Run(name, func(b *testing.B) {
+			var c qenv.Chooser = qenv.Nominal{}
+			if recorded {
+				c = qenv.WithContext(c, qobs.WithRecorder(context.Background(), qobs.NewRecorder(&qobs.MemorySink{})))
+			}
+			s := qenv.New(c)
+			defer s.Close()
+			s.MaxSteps = 100*b.N + 1000
+			q := qenv.NewQueue(s, "mail", nil)
+			s.Spawn("client", func(ctx context.Context) {
+				for i := range b.N {
+					q.Publish(ctx, i)
+					q.Receive(ctx).Ack(ctx)
+				}
+			})
+			b.ReportAllocs()
+			b.ResetTimer()
+			if err := s.Run(time.Hour); err != nil {
+				b.Fatal(err)
+			}
+		})
+	}
+}
+
 // BenchmarkNemesisSteps is the scheduler's cost per step with crashable
 // processes, whose crash nemeses are considered at every step: a
 // fault choice per family, at Seeded's rates (none fires: the rate is

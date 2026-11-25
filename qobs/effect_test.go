@@ -69,3 +69,33 @@ func TestEffectsNotObservedOutsideASimulation(t *testing.T) {
 		t.Errorf("%+v: observed without a simulation or ObserveEffects", s)
 	}
 }
+
+// EffectFunc records where Effect does, building the record only then:
+// under a scope on the call's recorder (over WithRecorder(nil) too), else
+// on the context's recorder, and with neither builds nothing.
+func TestEffectFunc(t *testing.T) {
+	t.Parallel()
+	sink := &MemorySink{}
+	r := NewRecorder(sink, WithID("r"))
+	built := 0
+	build := func() (string, []any) { built++; return "mail.send", []any{"to", "a"} }
+
+	none := WithRecorder(context.Background(), nil) // shadows any global one
+	EffectFunc(none, build)
+	if built != 0 || len(sink.Steps()) != 0 {
+		t.Fatalf("with no recorder: built %d, recorded %v", built, sink.Steps())
+	}
+	c := r.Invoke(none, "pay")
+	EffectFunc(c.Scope(none), build)
+	EffectFunc(WithRecorder(context.Background(), r), build)
+	steps := sink.Steps()
+	if built != 2 || len(steps) != 3 {
+		t.Fatalf("built %d, recorded %v", built, steps)
+	}
+	if e := steps[1]; e.Record.Effect != "mail.send" || e.Call != steps[0].Seq || e.Args["to"] != "a" {
+		t.Errorf("the scoped effect %+v", e)
+	}
+	if e := steps[2]; e.Record.Effect != "mail.send" || e.Call != 0 {
+		t.Errorf("the context's effect %+v", e)
+	}
+}
