@@ -46,6 +46,13 @@ Gotchas for agents (and humans) before changing qgosim, qweave, qenv/weave, the 
   object must be one of its tasks (call `Close` from a task, not from the
   test goroutine). Woven calls look up the goroutine (about 1 µs), so
   weave test builds only.
+- A lock invariant (`qenv.Guard`) is checked in `unlockKey`, the one
+  function every simulated exclusive release reaches (Orchestrion's and
+  qweave's `woven.MutexUnlock`/`RWUnlock`, both runtimes). A new unlock
+  path must go through it, and a new seam must call `Sim.refuse` so an
+  invariant cannot call it (a passing guarded run makes the unguarded
+  run's choices: `TestLockInvariantKeepsChoices`). gosim's own sync never
+  reaches qenv, so Guard refuses under a Platform.
 - gosim (`qgosim`, `examples/gosim`) translates everything the simulated
   package imports: keep Hegel and other native code out of it. Hegel
   adapters live in qhegel (`Chooser`, `FindTrigger`), and the Glomers one in `maelstrom/hegelnet`, never

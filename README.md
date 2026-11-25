@@ -911,6 +911,12 @@ types. It also weaves what Orchestrion misses: method values
 (`return mu.RUnlock`) and calls promoted through an embedded lock.
 `gotogether lint -weave DIR` lists what Orchestrion would miss.
 [examples/edgepublish](examples/edgepublish) runs its publisher this way.
+A woven lock can carry an invariant, as a Gobra mutex does:
+`qenv.Guard(s.Context(), &acct.mu, "ledgerMatchesBalance", acct.consistent)`
+checks it at every simulated `Unlock`, the lock still held, so a
+critical section that leaves its state broken fails its run at that
+release, naming the Unlock and the task (not under gosim, where Guard
+refuses).
 
 A whole program, standard library and network included, can run in
 [gosim](https://github.com/jellevandenhooff/gosim) with its choices made by

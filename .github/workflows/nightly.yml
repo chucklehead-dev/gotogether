@@ -100,7 +100,7 @@ jobs:
           cache-dependency-path: grist/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ../ci/install-quint.sh
       - name: full grist suite with PostgreSQL
@@ -127,7 +127,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ci/install-quint.sh
       - name: explorations at fresh seeds
@@ -174,7 +174,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ci/install-quint.sh
       - name: 10^5 steps partitioned
@@ -333,7 +333,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ci/install-quint.sh
       - name: fuzz for half an hour
@@ -372,7 +372,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ci/install-quint.sh
       - name: generated expressions, judged by the evaluator and both backends
@@ -624,7 +624,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ci/install-quint.sh
       - name: the tests, every judgement checked by both
@@ -683,7 +683,7 @@ jobs:
           cache-dependency-path: examples/webjobs/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ../../ci/install-quint.sh
       - name: Admit Playwright and its real journey before live workloads
@@ -744,7 +744,7 @@ jobs:
           cache-dependency-path: examples/raftkv/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ../../ci/install-quint.sh
       - name: Install toxiproxy-server

@@ -53,6 +53,7 @@ a run replays from its choices and Hegel's shrinking removes faults.
 | `qenv: stuck`, naming tasks (`ErrStuck`) | a task waits with nothing to wake it | the lost wake-up is the bug, or mark a daemon |
 | `K do not settle` (`qenv: not settled after ...`) | work never finished | a livelock (`None(qtest.Settles())` states it), a longer settle, or a fix |
 | `steps were recorded from goroutines ... started with go` | escaped the simulation | `qenv.Go` |
+| `qenv: lock invariant <name> ... broken at Unlock (<file:line>) by task <t>` | a critical section left the state its lock guards broken at the release (`qenv.Guard`) | fix the code between Lock and that Unlock; [references/weaving.md](references/weaving.md#lock-invariants) |
 | `ran twice made two runs, first different at ...` | nondeterminism outside the Chooser | `lint -sim`, sorted iteration |
 | `scripted faults never happened` | a Script's fault had no choice of its kind | the fault's kind and the run's phase |
 | `reproduce: GOTOGETHER_RUN=...` | the failing run alone | rerun it; `-v` |

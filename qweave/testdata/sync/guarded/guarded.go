@@ -68,3 +68,42 @@ func RunLocalGroup(fn func()) {
 	wg.Go(fn)
 	wg.Wait()
 }
+
+// Ledger keeps a balance and its entries under a lock whose Lock hands
+// back the release as a method value (qweave weaves it into a call of the
+// simulated Unlock; Orchestrion leaves it the real one). Its lock
+// invariant, that the entries sum to the balance, is checked there.
+type Ledger struct {
+	mu      sync.RWMutex
+	Balance int
+	Entries []int
+}
+
+// Lock takes the write lock and returns the method value that releases it.
+func (l *Ledger) Lock() func() {
+	l.mu.Lock()
+	return l.mu.Unlock
+}
+
+// Guard attaches the ledger's invariant to its lock in ctx's simulation.
+func (l *Ledger) Guard(ctx context.Context) {
+	qenv.Guard(ctx, &l.mu, "entriesSumToBalance", func() bool {
+		sum := 0
+		for _, n := range l.Entries {
+			sum += n
+		}
+		return sum == l.Balance
+	})
+}
+
+// Deposit adds n to the balance, sleeps inside the critical section, then
+// writes its entry, unless forget leaves it out.
+func (l *Ledger) Deposit(ctx context.Context, n int, forget bool) {
+	unlock := l.Lock()
+	l.Balance += n
+	qenv.Sleep(ctx, time.Millisecond)
+	if !forget {
+		l.Entries = append(l.Entries, n)
+	}
+	unlock()
+}

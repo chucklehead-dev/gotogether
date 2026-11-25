@@ -125,8 +125,10 @@ type Sim struct {
 	stallsSet *Stalls // Stalls when the first process was made: a change after panics
 	allFaults bool    // GOTOGETHER_ALL_FAULTS: every process partitionable from every other
 	onCrash   []func(*Process)
-	onLife    []func(*Process) // after a process's termination, crash or restart (Router)
-	keyed     map[any]any      // keyed locks and wait groups (keyed.go)
+	onLife    []func(*Process)          // after a process's termination, crash or restart (Router)
+	keyed     map[any]any               // keyed locks and wait groups (keyed.go)
+	guards    *lockGuards               // lock invariants (lockguard.go), in base too
+	guarding  atomic.Pointer[guardCall] // the lock invariant being evaluated: seams refuse
 	faultsOff bool
 	settling  bool
 	ran       int               // the id of the task that ran last (a settle's turn)
@@ -257,6 +259,8 @@ func New(c Chooser) *Sim {
 		s.names = &hooks.FaultNames{}
 		s.base = hooks.WithFaultNames(s.base, s.names)
 	}
+	s.guards = &lockGuards{sim: s}
+	s.base = qrun.With(s.base, guardsKey, s.guards) // its own, over an enclosing simulation's
 	s.net.sim = s
 	if env.AllFaults {
 		s.Clocks, s.Stalls, s.allFaults = allFaultsClocks, allFaultsStalls, true
@@ -314,6 +318,7 @@ func (s *Sim) Choose(kind string, n int) int {
 
 // draw asks the Chooser.
 func (s *Sim) draw(kind string, n int) int {
+	s.refuse("a choice", kind)
 	previousKind, previousN, previousDepth := s.optKind, s.optCount, s.optDepth
 	s.optKind, s.optCount, s.optDepth = kind, n, previousDepth+1
 	defer func() { s.optKind, s.optCount, s.optDepth = previousKind, previousN, previousDepth }()
@@ -474,6 +479,7 @@ func (p *Process) Spawn(name string, fn func(ctx context.Context)) {
 }
 
 func (s *Sim) spawn(parent context.Context, name string, p *Process, fn func(ctx context.Context)) {
+	s.refuse("Go", name)
 	s.nextID++
 	t := &task{sim: s, id: s.nextID, name: name, proc: p, wake: make(chan struct{}), back: make(chan struct{})}
 	if p != nil {
@@ -538,6 +544,7 @@ func Unwinding(r any) bool {
 // simulation is unaffected.
 func Yield(ctx context.Context) {
 	if t := taskOf(ctx); t != nil {
+		t.sim.refuse("Yield", "")
 		t.park()
 	}
 }
@@ -705,6 +712,7 @@ func waitUntil(ctx context.Context, ready func() bool, deadline time.Time) bool 
 	if t == nil {
 		return pollReal(ctx, ready, deadline)
 	}
+	t.sim.refuse("Wait", "")
 	if ready() {
 		return true
 	}
@@ -775,6 +783,7 @@ func (g *Signal) wait(ctx context.Context, d time.Duration, idle bool) bool {
 		}
 		return g.waitReal(ctx, deadline)
 	}
+	t.sim.refuse("Signal.Wait", "")
 	var deadline time.Time
 	if d != 0 {
 		deadline = t.sim.Now().Add(max(d, 0))
@@ -825,6 +834,7 @@ func (g *Signal) Notify() {
 	}
 	for _, w := range g.waiters {
 		if t := w.t; t.waiting && t.gen == w.gen && !t.done && !t.killed {
+			t.sim.refuse("Notify", "")
 			t.notified = true
 			t.sim.enqueue(t)
 		}
@@ -855,6 +865,7 @@ func Sleep(ctx context.Context, d time.Duration) {
 		}
 		return
 	}
+	t.sim.refuse("Sleep", "")
 	d = t.proc.drifted(d)
 	if t.sim.nat != nil {
 		t.sleepNative(d)
@@ -1914,6 +1925,7 @@ func (s *Sim) Close() {
 		return
 	}
 	s.closed = true
+	defer s.guards.close()
 	defer forget(s)
 	defer disown(s.creator, s)
 	defer live.Add(-1)

@@ -11,3 +11,6 @@ func BreakQueue(q *Queue) { q.forget = true }
 // TermContexts is how many contexts Terminating gave p's incarnation
 // that the signal would cancel.
 func TermContexts(p *Process) int { return len(p.termCancels) }
+
+// Steps is the scheduling step s is at: a lock invariant's error names it.
+func Steps(s *Sim) int { return s.steps }

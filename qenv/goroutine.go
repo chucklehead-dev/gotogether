@@ -79,6 +79,7 @@ func init() {
 		// no goroutine lookup
 		if ctx != nil {
 			if t, ok := ctx.Value(ctxKey{}).(*task); ok {
+				t.sim.refuse("recording a step", "")
 				return hooks.Site{Clock: t.sim, Discard: t.killed, GoroutineID: id}
 			}
 		}
@@ -86,6 +87,7 @@ func init() {
 			id = goid()
 		}
 		if o, ok := ownerOf(id); ok {
+			o.s.refuse("recording a step", "")
 			// true time: a process's clock may be skewed, a step's time is the run's
 			return hooks.Site{Clock: o.s, Discard: o.t != nil && o.t.killed, GoroutineID: id}
 		}
