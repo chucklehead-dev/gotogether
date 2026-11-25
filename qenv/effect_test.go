@@ -80,3 +80,36 @@ func TestEffectFields(t *testing.T) {
 		t.Errorf("nil: %v", got)
 	}
 }
+
+// A recorder only a task's context carries (one qenv.Go was given, the
+// simulation's own has none) is found through the task's goroutine, by a
+// step and a double's send with context.Background(): the simulation
+// counts it among the runs a goroutine's lookup may find a recorder in,
+// which a lookup skips when there are none.
+func TestRecorderOfATaskFoundThroughItsGoroutine(t *testing.T) {
+	t.Parallel()
+	sink := &qobs.MemorySink{}
+	rec := qobs.NewRecorder(sink)
+	s := qenv.New(qenv.Nominal{})
+	defer s.Close()
+	svc := qenv.NewService(s, "provider", nil, func(context.Context, capture) (string, error) { return "ok", nil })
+	s.Spawn("driver", func(ctx context.Context) {
+		qenv.Go(qobs.WithRecorder(ctx, rec), "shop", func(context.Context) {
+			bg := context.Background()
+			if _, err := svc.Call(bg, capture{Key: "k1", Amount: 10}, time.Second); err != nil {
+				t.Errorf("call: %v", err)
+			}
+			qobs.Record(bg, "mark", nil)
+		})
+	})
+	if err := s.Run(5 * time.Second); err != nil {
+		t.Fatal(err)
+	}
+	trs, _ := qtrace.Reconstruct(sink.Steps())
+	if len(trs) != 1 || len(trs[0].Steps) != 1 {
+		t.Fatalf("traces %v", trs)
+	}
+	if mark := trs[0].Steps[0]; mark.Action != "mark" || len(mark.Effects) != 1 || mark.Effects[0].Kind != "rpc.provider.request" {
+		t.Errorf("mark %+v, its effects %v", mark, mark.Effects)
+	}
+}

@@ -7,6 +7,8 @@ import (
 	"runtime/debug"
 	"sync"
 	"time"
+
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 )
 
 // The native runtime: the same Sim, its processes and doubles, on plain
@@ -165,6 +167,12 @@ func (s *Sim) spawnNative(t *task, fn func(ctx context.Context)) {
 		own(id, s, t)
 		live.Add(1)
 		defer func() { disown(id, s); live.Add(-1) }()
+		// as live: its goroutine resolves to its context until it exits,
+		// which may be after Close (a Platform's)
+		if hooks.RecorderIn(t.ctx) {
+			hooks.AddRecorderRuns(1)
+			defer hooks.AddRecorderRuns(-1)
+		}
 		if !s.nat.coop {
 			s.nat.mu.Lock()
 		}

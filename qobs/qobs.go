@@ -285,6 +285,13 @@ func InstallGlobal(r *Recorder) (restore func(), err error) {
 
 var recorderKey = qrun.NewKey[*Recorder]("recorder")
 
+func init() {
+	hooks.SetRecorderIn(func(ctx context.Context) bool {
+		_, ok := qrun.InContext(ctx, recorderKey)
+		return ok
+	})
+}
+
 // WithRecorder returns a context whose steps Record sends to r rather than
 // to the global recorder. Runs in parallel (seeds of an exploration,
 // simulations of a trigger search) each record into their own: a qenv
@@ -310,6 +317,12 @@ func from(ctx context.Context) (*Recorder, int64) {
 			return r, 0
 		}
 		return global.Load(), 0 // an explicit nil shadows the goroutine's run
+	}
+	if !hooks.MayResolveRecorder() {
+		// no run a goroutine's lookup could find carries a recorder: the
+		// lookup would find none (a double's effect in a simulation
+		// recorded nowhere pays nothing to learn it)
+		return global.Load(), 0
 	}
 	run, id, ok := hooks.Resolve(0)
 	if ok {

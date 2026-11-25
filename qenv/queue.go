@@ -178,7 +178,7 @@ func (q *Queue) Publish(ctx context.Context, body any) {
 	Yield(ctx)
 	// the publisher's effect, recorded once at entry: a publish a
 	// partition holds up waits below, sent all the same
-	effect(ctx, "queue."+q.Name+".publish", body)
+	effect(ctx, "queue", q.Name, "publish", body)
 	Wait(ctx, func() bool { return q.reaches(ctx) })
 	q.next++
 	q.Published++

@@ -475,6 +475,39 @@ func SetFallbackResolver(f func(int64) (context.Context, int64, bool)) {
 	fallbackResolver.Store(&f)
 }
 
+// Process-wide: the run contexts a goroutine's lookup (Resolve) may find a
+// step recorder in, counted by qenv (a live simulation whose creator's or
+// tasks' contexts carry one) and qrun (every explicit start), and qobs's
+// test of a context for one.
+var (
+	recorderRuns atomic.Int64
+	recorderIn   atomic.Pointer[func(context.Context) bool]
+)
+
+// AddRecorderRuns counts n more (or, negative, fewer) run contexts that a
+// goroutine's lookup may find a recorder in.
+func AddRecorderRuns(n int64) { recorderRuns.Add(n) }
+
+// MayResolveRecorder reports whether a goroutine's lookup may find a
+// recorder: false when no live simulation's contexts carry one and no
+// explicit start is in place, so that a step or an effect through a
+// context without one costs no goroutine lookup (runtime.Stack's header,
+// microseconds) to find none.
+func MayResolveRecorder() bool { return recorderRuns.Load() != 0 }
+
+// SetRecorderIn installs qobs's test of whether ctx carries a recorder
+// (qobs.WithRecorder's, nil included).
+func SetRecorderIn(f func(context.Context) bool) { recorderIn.Store(&f) }
+
+// RecorderIn reports whether ctx carries a recorder; true, to be safe,
+// before qobs installs its test.
+func RecorderIn(ctx context.Context) bool {
+	if f := recorderIn.Load(); f != nil {
+		return (*f)(ctx)
+	}
+	return true
+}
+
 // Resolve finds the calling goroutine's run, preferring the simulation resolver
 // over explicit starts. id is an identity already read during this operation;
 // zero is lazy. The returned identity can be reused even when no run is found.

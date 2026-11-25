@@ -129,14 +129,23 @@ type Step struct {
 	// It has no outcome and no observations, and the binding checks no
 	// expect after it.
 	Ambiguous bool
+	// EffectsObserved says the step was recorded where effects are
+	// recorded (a simulation, a recorder that observes them), so that none
+	// made (Made) means none, not unknown.
+	EffectsObserved bool
+	// fromRecord: Invoked is the invocation record's time (Reconstruct),
+	// the recorder's own clock, which no other machine's compares with.
+	// (The step's flags are together, in one word: a sink that keeps
+	// steps by value, MemorySink, copies every byte of each.)
+	fromRecord bool
+	// carried: a watermark record a search's order carries
+	// (CarryWatermark), taken as it is; carriedWhole: some recorder of
+	// the actor stated none
+	carried, carriedWhole bool
 	// Made are the effect records (their seqs, on the step's recorder) its
 	// task made since its last record outside an invocation's scope
-	// (KeyEffects): the step's by attribution rule 2. EffectsObserved says
-	// the step was recorded where effects are recorded (a simulation, a
-	// recorder that observes them), so that none made means none, not
-	// unknown.
-	Made            []uint64
-	EffectsObserved bool
+	// (KeyEffects): the step's by attribution rule 2.
+	Made []uint64
 	// Effects are the effects attributed to the step, in the order made
 	// (Reconstruct): those made under its invocation's scope (rule 1) and
 	// those its task made before it (rule 2, Made). Empty on a record.
@@ -147,17 +156,10 @@ type Step struct {
 	Args  map[string]any
 	Obs   map[string]any
 	Order map[string]int64
-	// fromRecord: Invoked is the invocation record's time (Reconstruct),
-	// the recorder's own clock, which no other machine's compares with
-	fromRecord bool
 	// slack: the clocks' skew a search ordered the step with
 	// (LinearizeOptions.Skew), which the check of its order keeps
-	slack time.Duration
-	// carried: a watermark record a search's order carries
-	// (CarryWatermark), taken as it is; carriedWhole: some recorder of
-	// the actor stated none
-	carried, carriedWhole bool
-	Source                string // where it came from, for diagnostics (SpanSource's "span <id> trace <id>", "line N" of a step log read alone, file:N read by package input, ...)
+	slack  time.Duration
+	Source string // where it came from, for diagnostics (SpanSource's "span <id> trace <id>", "line N" of a step log read alone, file:N read by package input, ...)
 	// Ref is the step's link to its artifact (KeyRef, qobs.Ref): a
 	// driver's trace line, a screenshot ("bombadil/trace.jsonl:42
 	// screenshot=screenshots/42.webp"). Unlike Source, which says where
