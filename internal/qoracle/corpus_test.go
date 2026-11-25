@@ -186,19 +186,22 @@ func keepDir(t *testing.T) string {
 
 var unsafeName = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
-// stub is the "front end" the nightly compares quint with:
-// GOTOGETHER_QFRONT_STUB=quint is quint itself, shifted (the default)
-// quint with every id moved.
-func stub(t *testing.T) FrontEnd {
+// stub is the "front end" the nightly compares quint with, and the
+// oracle's side: GOTOGETHER_QFRONT_STUB=quint is quint itself, shifted
+// (the default) quint with every id moved, go Q2's Go front end at P1
+// (its parse, against quint's, both cut to the P1 tier).
+func stub(t *testing.T) (oracle, fe FrontEnd) {
 	switch s := os.Getenv("GOTOGETHER_QFRONT_STUB"); s {
 	case "", "shifted":
-		return Shifted{}
+		return Quint{}, Shifted{}
 	case "quint":
-		return Quint{}
+		return Quint{}, Quint{}
+	case "go":
+		return ParseTier{Quint{ParseOnly: true}}, GoParse{}
 	default:
-		t.Fatalf("GOTOGETHER_QFRONT_STUB=%s: want quint or shifted", s)
+		t.Fatalf("GOTOGETHER_QFRONT_STUB=%s: want quint, shifted or go", s)
 	}
-	return nil
+	return nil, nil
 }
 
 // TestCorpus is the nightly's: every entry of the manifest (those whose
@@ -241,7 +244,8 @@ func TestCorpus(t *testing.T) {
 			texts[k] = v
 		}
 	}
-	fe := stub(t)
+	oracle, fe := stub(t)
+	_, parseOnly := oracle.(ParseTier)
 	keep := keepDir(t)
 	known := shiftKnown(t)
 	var (
@@ -280,13 +284,14 @@ func TestCorpus(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			oa, ob, err := RunBoth(ctx, p, Quint{}, fe, tmp)
+			oa, ob, err := RunBoth(ctx, p, oracle, fe, tmp)
 			if err != nil {
 				t.Errorf("%s: %v", e.ID, err)
 				return
 			}
+			// a parse alone says no verdict: P1's comparison is its tier's
 			v, err := VerdictOf(oa)
-			if err == nil && !sameVerdict(v, e.Quint) {
+			if err == nil && !parseOnly && !sameVerdict(v, e.Quint) {
 				mu.Lock()
 				verdictOff++
 				mu.Unlock()
@@ -319,7 +324,7 @@ func TestCorpus(t *testing.T) {
 				b, _ := os.ReadFile(p.File)
 				src = string(b)
 			}
-			shrunk, tried := ShrinkDecls(ctx, p, src, d, Quint{}, fe, tmp)
+			shrunk, tried := ShrinkDecls(ctx, p, src, d, oracle, fe, tmp)
 			name := filepath.Join(keep, unsafeName.ReplaceAllString(e.ID, "_"))
 			os.WriteFile(name+".qnt", []byte(shrunk), 0o644)
 			os.WriteFile(name+".diff", []byte(d.String()+"\n"), 0o644)
