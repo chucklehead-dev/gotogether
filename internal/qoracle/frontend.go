@@ -48,6 +48,8 @@ type FrontEnd interface {
 type Quint struct {
 	// Bin is the quint binary ("" is "quint").
 	Bin string
+	// ParseOnly runs `quint parse` alone (GoParse's oracle, P1).
+	ParseOnly bool
 }
 
 // Name is "quint".
@@ -115,6 +117,9 @@ func (q Quint) run(ctx context.Context, p Program, root, file string) (*Output, 
 	}
 	// a failed parse writes no source map
 	out.SourceMap, _ = os.ReadFile(at("map.json"))
+	if q.ParseOnly {
+		return out, nil
+	}
 	if stderr, err = run("", "typecheck", "--out", at("typecheck.json"), file); err != nil {
 		return nil, err
 	}

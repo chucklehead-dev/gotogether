@@ -265,6 +265,7 @@ func TestRealCluster(t *testing.T) {
 		}
 	}
 	bin := buildNode(t, dir)
+	host := watchHost(t, dir)
 	c := &realCluster{t: t, bin: bin, dir: dir, addrs: freeAddrs(t, len(Nodes)), procs: make([]*exec.Cmd, len(Nodes)),
 		pipes: make([]*os.File, len(Nodes)), incs: make([]int, len(Nodes))}
 	c.net = HTTPNet{Addrs: c.addrs}
@@ -357,6 +358,8 @@ func TestRealCluster(t *testing.T) {
 	for i := range Nodes {
 		c.kill(i)
 	}
+	hr := host.Stop()
+	t.Logf("the host: %s", hr)
 
 	qtest.Validate(t, "raftkv.binding.yaml", readSteps(t, filepath.Join(dir, "steps", "clients.jsonl")),
 		qtest.Linearize(), qtest.ResolvePending(), qtest.LinearizeBudget(50000)).Expect(t, qtest.Conforms(), qtest.Settles(), qtest.Completes())
@@ -371,7 +374,7 @@ func TestRealCluster(t *testing.T) {
 		t.Fatalf("the nodes' logs hold %d boots, want %d (three starts and the restart)", boots, len(Nodes)+1)
 	}
 	settle := readSteps(t, filepath.Join(dir, "steps", "harness.jsonl"))
-	qtest.Validate(t, "cluster.binding.yaml", append(nodes, settle...)).Expect(t, qtest.Conforms(), qtest.Settles())
+	qtest.Validate(t, "cluster.binding.yaml", append(nodes, settle...), qtest.HostStalls(hr.Stalls...)).Expect(t, qtest.Conforms(), qtest.Settles())
 	// without the settle the cluster's liveness is not judged, and the
 	// claim fails: the settle is what makes eventually hasLeader count
 	if r := qtest.Validate(t, "cluster.binding.yaml", nodes); qtest.Settles().Holds(r) {

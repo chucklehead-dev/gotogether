@@ -29,7 +29,7 @@ func TestRealFaultsInSimulation(t *testing.T) {
 	} else {
 		vs := realRuns(t, prSeeds, func(seed int64) nemesisRun { return realConfig(seed, Faithful) })
 		qtest.Runs(kvOf(vs)...).Expect(t, qtest.Conforms())
-		qtest.Runs(clusterOf(vs)...).Expect(t, qtest.Conforms())
+		qtest.Runs(clusterOf(judged(t, vs))...).Expect(t, qtest.Conforms())
 		for _, v := range vs {
 			journals = append(journals, filepath.Join(v.Dir, "journal.jsonl"))
 		}

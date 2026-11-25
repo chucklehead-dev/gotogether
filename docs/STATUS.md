@@ -45,7 +45,8 @@ pins from the checked-in go.mod files, not from historical handoff paragraphs.
 | Area | Current boundary |
 |---|---|
 | Quint admission | Managed runtime work and compiled models require stable Quint 0.33.1 or later. CLI support and installer verification of evaluator bytes are distinct checks. |
-| Front-end oracle (Q3) | internal/qoracle compares two front ends' parse, typecheck and compile outputs by canonical form over a pinned corpus (quint's part fetched at the tag) and generated programs; the nightly `qfront-differential` runs quint against quint with every id shifted until Q2's P1. Its exit criterion 5 (a green week) is open; q2-front-end.md §4.5. |
+| Front-end oracle (Q3) | internal/qoracle compares two front ends' parse, typecheck and compile outputs by canonical form over a pinned corpus (quint's part fetched at the tag) and generated programs; the nightly `qfront-differential` runs quint against quint with every id shifted. Its exit criterion 5 (a green week) is open; q2-front-end.md §4.5. |
+| Go front end (Q2) | P1's parser is built: internal/qfront parses Quint into quint's parse IR and source map, numbering nodes as quint does; against quint (`GOTOGETHER_QFRONT_STUB=go`) 861 of the 863 corpus entries agree in P1's tier, the two others quint's toposort's (P2). Nothing reads it yet (P5); names, types, effects and flattening are P2 to P4. q2-front-end.md §5.1. |
 | Protocol composition | Universal claims over permitted causal orders are explicit in receipts, aggregate reasons and TUI; they remain separate from local conformance. |
 | Finite choices | Confirmed passing witnesses report both evaluators; Go-only negatives retain evaluator provenance. Strict Quint/shadow negative proofs are inconclusive without independent confirmation. |
 | Verdict caching | Exact-run Hegel caching remains; a selected invariant path or finite-choice search is not a rejected-prefix certificate. |
@@ -59,6 +60,16 @@ pins from the checked-in go.mod files, not from historical handoff paragraphs.
 | Priorities | J1–J6 are complete and J7c is met; J7a's survivor treatment and J7b's full-roster qualification continue. Landed since: golem's and Goo's asks N1, N3, N5, N7, K4, M1, M2, L1, L3, L5, and the CW track's CW1 (literate models, adopted by Goo), CW2 (the design matrix, adopted by golem for four models) and CW4 (counterexamples as data). CW5 and CW7 are decided (2026-11-14); CW5's static half is done but for Go to Quint. CW3's first slice (listed assumptions: `// @assume` lines, `//quint:exercises` and `//quint:monitors`, the assumptions table) is done, and CW12's P0 and P1 (I/O specifications under simulation). ROADMAP's current order names what is next. |
 
 ## Recent progress and lessons
+
+A real run's timing bound broken by its host is no verdict, not a FAIL
+(maintainer's decision, 2026-11-25, after CI's raftkv-real seed 5: a leader
+1.15s after a heal, a shared stall of every node's fsync). `qnemesis.WatchHost`
+measures the host from the harness (a 10ms ticker with Linux's scheduling
+delay and cgroup throttling, an fsync on the system's disk); `qtest.HostStalls`
+makes a late `within` response "no verdict (host stall)" only when the stalls
+in its window cover its lateness. raftkv's real tier leaves such runs out of
+its claims and says so (a CI warning), and fails when every run is. The bound
+is unchanged. HISTORY has the design and the local measurements.
 
 The core property suite reports native Hegel run errors, including health-check
 failures, through its private runner. Hegel 0.9.30 is now admitted against the
