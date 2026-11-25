@@ -55,7 +55,11 @@ func (s *sim) graph(ctx context.Context, bpath string, b *binding.Binding, check
 	// the instance, and every state it reaches must be in the graph
 	var sampledLine string
 	evalBug := false
-	if r.Complete {
+	if r.Complete && s.compiled != "" {
+		why := "quint's sampling of the instance, every state it reaches in the graph: needs quint, and the model is analysed by its compiled model " + s.compiled
+		s.rep.NotDone = append(s.rep.NotDone, "the cross-check: "+why)
+		sampledLine = "  not done the cross-check (" + why + "): the graph's verdicts are the Go evaluator's alone\n"
+	} else if r.Complete {
 		n, lack, err := crossCheck(ctx, b, overrides, opt.Quint, r, steps, samples, opt.Seed)
 		switch {
 		case err != nil:
@@ -74,6 +78,9 @@ func (s *sim) graph(ctx context.Context, bpath string, b *binding.Binding, check
 	bounds := fmt.Sprintf("at most %d states", r.Bound.States)
 	if r.Bound.Depth > 0 {
 		bounds += fmt.Sprintf(", depth %d", r.Bound.Depth)
+	}
+	if s.compiled != "" {
+		bounds += "; the compiled model " + s.compiled + ": no quint"
 	}
 	s.printf("simulate %s: %s(%s), its state graph by the Go evaluator (%s)\n", bpath, b.Module, strings.Join(constantList(b, overrides), ", "), bounds)
 	s.printf("  graph   %s, %.1fs\n", r.Extent(), r.Elapsed.Seconds())
@@ -249,7 +256,17 @@ func (s *sim) graph(ctx context.Context, bpath string, b *binding.Binding, check
 			}
 			left = append(left, c)
 		}
-		if len(left) > 0 {
+		if len(left) > 0 && s.compiled != "" {
+			s.printf("  sampling %s the Go evaluator did not find with its own sampler (%d traces of %d steps): not part of the graph's verdicts\n",
+				nOf(len(left), "possible"), samples, steps)
+			ie, step, err := checker.instanceEval(ctx, overrides, possiblePreds(left), "possible")
+			if err != nil {
+				return err
+			}
+			if err := goPossibles(ctx, ie, step, checker.Model, left, steps, samples, opt.Seed); err != nil {
+				return err
+			}
+		} else if len(left) > 0 {
 			// the one quint process -graph runs: say so, the header
 			// having promised the evaluator's graph
 			s.printf("  sampling %s the Go evaluator did not find with quint (%d traces of %d steps): not part of the graph's verdicts\n",
@@ -346,6 +363,10 @@ func graphBound(r *GraphResult) Bound {
 // steps have other successors is not replayed: quint's draw among them
 // would not reproduce it.
 func (s *sim) replay(ctx context.Context, b *binding.Binding, overrides []string, quint string) error {
+	if s.compiled != "" {
+		s.notReplayed()
+		return nil
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}

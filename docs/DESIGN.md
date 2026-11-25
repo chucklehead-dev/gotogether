@@ -7327,16 +7327,69 @@ GenerateRun (qtest's FollowTraces, qhegel's VaryTraces) follows.
   TestCompiledMBTModelsAreCurrent keeps connect/testdata's artifacts a
   compile now (and fails with the imports' definitions not kept).
 
-**Left in Q1.** `qtest.Model` and `simulate` from a compiled binding
-model: the graph and the possibles' search are the evaluator's already,
-but read a PossibleModule quint compiles for the claims' predicates; the
-binding's artifact would carry it (every boolean val is a candidate
-invariant there, Q0's second slice), the cross-check against quint's
-samples and the witness replays be reported as not done, and the sampled
-(non-graph) invariants use Simulate. connect.Test's runs (`then`, `reps`,
-`expect`, `fail` as a trace's steps). Integers past 64 bits. A nightly
-job comparing Go's and quint's traces on every example's model, as
-TestAgreesWithQuint does for quint's alone.
+**The model alone without quint (2026-11-25).** `qtest.Model` and
+`gotogether simulate` (sampling, `-graph`, `-matrix`, the possibles) run
+from the binding's compiled model, by the same switch as its runs
+(`GOTOGETHER_COMPILED`, now one rule: `validate.CompiledChoice`, which
+qtest, `model.New` and `model.Simulate` read; `SimulateOptions.Compiled`
+names an artifact).
+- **The artifact.** The graph, the possibles' search and the liveness
+  search were the evaluator's already, but each asked validate for a
+  module of its own (`Binding.PossibleModule`: the evaluation module with
+  a val per predicate), which quint compiled. Every predicate a model
+  analysis reads is known when the binding is compiled: the invariants
+  and eventual vals (the module's already, every boolean val a candidate,
+  Q0's second slice), and the simulate section's terminal and possibles'
+  `when`, which the module now carries as vals (`analysisPredicates`;
+  qtest's scenarios are steps, and need none). So the format stays
+  `gotogether.model/1`: an artifact compiled before is refused as stale
+  (this gotogether writes the module otherwise), naming `gotogether
+  compile -binding` as the fix, as any change of the module is. A
+  compiled checker answers a module request by its own module
+  (`compiledState.analysis`): the request's predicates mapped to the
+  artifact's vals, one it lacks refused with the fix (name it in the
+  binding and compile again, or quint).
+- **The instance.** An analysis's instance overrides constants (the
+  simulate section's, a variant's, `-const`, `ModelOptions.Constants`).
+  A constant the binding gives as a literal is a parameter of the
+  compiled module (Q0's third slice), so another literal is a value
+  (`evalshare.Eval.Consts`): lease's design variants run from one
+  artifact. A constant the binding gives as an expression (hello's
+  `1.to(3)`) is inlined: another value is refused, naming the fix (a
+  literal in the binding), as is a parameter given no literal.
+- **What quint did, not done.** A complete graph's cross-check against
+  quint's samples and the witnesses' replays by quint test are reported
+  not done (`Report.NotDone`, a line of the text, a note of the JSON
+  document; a verdict's `Replayed` "not done: ..."), never as passed:
+  the verdicts are the evaluator's alone (§64), and a Refutes claim holds
+  by its witness saying its replay was not done. `-verify` (Apalache) is
+  refused.
+- **Sampling.** Without `-graph`, each invariant is judged in Samples
+  traces of Steps steps of the Go sampler (`qeval.Model.Simulate`, trace i
+  drawn from the seed and i), the first false state ending a trace, as
+  quint run --invariant; the possibles the search did not find are looked
+  for in the sampler's traces (a predicate in a state, steps in turn,
+  their arguments too, which quint's actionTaken cannot show), with or
+  without `-graph`. A trace the evaluator cannot draw is no verdict
+  (unchecked, exit 2), never a pass.
+- **Tests:** validate/model's TestCompiledSimulateAgreesWithQuint (the
+  same verdicts as quint's on graph, terminal, lasso, live, vending
+  sampled and graphed, a literal overridden, predicates found, impossible
+  and in a cut graph; not done reported where quint's were done) and
+  TestCompiledMatrixAgreesWithQuint, run with PATH empty after quint's;
+  TestCompiledAnalysisRefusals (an artifact without the predicates, a
+  predicate it lacks, an inlined constant overridden, a parameter given
+  no literal, -verify); TestCompiledChoiceInSimulate (the switch); qtest's
+  TestModelClaimsFromCompiledModel (every claim kind, passing and failing
+  as with quint) and TestModelCompiledRefused. The examples' Model and
+  simulate tests (hello, crossdb, migrate-payments, requeue, lease's
+  design matrix) are on RequireModel and run in CI with quint off PATH;
+  hello's model mutant, written at run time, stays quint's (Q2).
+
+**Left in Q1.** connect.Test's runs (`then`, `reps`, `expect`, `fail`
+as a trace's steps). Integers past 64 bits. A nightly job comparing Go's
+and quint's traces on every example's model, as TestAgreesWithQuint does
+for quint's alone.
 
 ## 111. The front end's oracle: quint's outputs in canonical form
 

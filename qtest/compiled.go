@@ -2,7 +2,6 @@ package qtest
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
@@ -27,40 +26,18 @@ import (
 // an evaluation module this gotogether writes otherwise): recompile it
 // (gotogether compile -binding B), and keep it current in CI with
 // gotogether compile -check where quint is installed.
-const compiledEnv = "GOTOGETHER_COMPILED"
+const compiledEnv = validate.CompiledEnv
 
 // compiledFor is the compiled model the binding's checks use, if any: its
 // path and true, per GOTOGETHER_COMPILED. A test fails where "1" asks for
 // one the binding lacks.
 func compiledFor(t testing.TB, bindingPath string, o validate.Options) (string, bool) {
 	t.Helper()
-	path := validate.CompiledFor(bindingPath)
-	_, statErr := os.Stat(path)
-	switch mode := os.Getenv(compiledEnv); mode {
-	case "0":
-		return "", false
-	case "1":
-		if statErr != nil {
-			t.Fatalf("gotogether: %s=1 checks every run by the binding's compiled model, and %s has none at %s (%v): compile it (gotogether compile -binding %s) where quint is installed",
-				compiledEnv, bindingPath, path, statErr, bindingPath)
-		}
-		return path, true
-	case "":
-		if statErr != nil {
-			return "", false
-		}
-		quint := o.Quint
-		if quint == "" {
-			quint = "quint"
-		}
-		if _, err := exec.LookPath(quint); err == nil {
-			return "", false
-		}
-		return path, true
-	default:
-		t.Fatalf("gotogether: %s=%q: want 1 (always the compiled model), 0 (never) or unset (where quint is not installed)", compiledEnv, mode)
-		return "", false
+	path, err := validate.CompiledChoice(bindingPath, o.Quint)
+	if err != nil {
+		t.Fatalf("gotogether: %v", err)
 	}
+	return path, path != ""
 }
 
 // compiledCheckers are the compiled checkers built in this process, by

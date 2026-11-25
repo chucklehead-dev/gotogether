@@ -12,6 +12,9 @@ package model
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
+
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/validate"
 	"github.com/chucklehead-dev/gotogether/validate/internal/evalshare"
@@ -25,9 +28,20 @@ type Analyzer struct {
 }
 
 // New is an Analyzer of the binding file at bindingPath, with its own
-// checker (validate.NewChecker's options); Close it.
+// checker (validate.NewChecker's options), or, as GOTOGETHER_COMPILED says
+// (validate.CompiledChoice: where quint is not installed), one of the
+// binding's compiled model, which needs no quint; Close it.
 func New(ctx context.Context, bindingPath string, opt validate.Options) (*Analyzer, error) {
-	c, err := validate.NewChecker(ctx, bindingPath, opt)
+	path, err := validate.CompiledChoice(bindingPath, opt.Quint)
+	if err != nil {
+		return nil, err
+	}
+	var c *validate.Checker
+	if path != "" {
+		c, err = validate.NewCompiledChecker(bindingPath, path, opt)
+	} else {
+		c, err = validate.NewChecker(ctx, bindingPath, opt)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -109,4 +123,19 @@ func analysisEvaluator(ctx context.Context, original *evalshare.Eval) *evalshare
 
 func isAnalysisCancellation(err error) bool {
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+// unvalued are the model's constants e's module takes as parameters and
+// its instance gives no value (one the binding computes from a run's
+// steps), sorted: an analysis of the model alone has none to give them.
+// A compiled model's literal constants are parameters with their values
+// (evalshare.Eval.Consts).
+func unvalued(e *evalshare.Eval) []string {
+	var out []string
+	for _, k := range slices.Sorted(maps.Keys(e.Module.Consts)) {
+		if _, ok := e.Consts[e.Module.Consts[k]]; !ok {
+			out = append(out, k)
+		}
+	}
+	return out
 }

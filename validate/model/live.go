@@ -93,7 +93,7 @@ type HotLasso struct {
 // names, which is step's own), fair as unfair and stops say.
 func (c *modelChecker) liveness(ctx context.Context, ce *cexWriter, evs []string, branch []string, unfair, stops []string) ([]EventualVerdict, error) {
 	g, e := ce.g, ce.e
-	consts := map[string]qeval.Value{}
+	consts := e.Consts
 	names := map[string]int{}
 	fam := qeval.Families{Of: make([]int, len(g.Labels))}
 	for i, a := range branch {

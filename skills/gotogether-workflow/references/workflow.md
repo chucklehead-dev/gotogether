@@ -299,7 +299,11 @@ deliberately and say why in the commit and the README.
   with no quint (`GOTOGETHER_COMPILED=1`) and a pipeline with none
   (`validate -compiled`): gotogether-start's references/ci.md. connect's model-based tests
   run without quint too, from `gotogether compile -spec` (gotogether-mbt's
-  driver.md, "Without quint"); `qtest.Model` and `simulate` still need it.
+  driver.md, "Without quint"), and so do `qtest.Model` and `simulate`
+  (sampling, `-graph`, `-matrix`) from the binding's compiled model: start
+  such a test with `qtest.RequireModel(t, binding)` too. Without quint the
+  graph is not cross-checked against quint's samples and a witness is not
+  replayed by quint test, each said "not done"; `-verify` needs quint.
 - **Strict mode.** Set `GOTOGETHER_STRICT=1` (or `true`; another value
   but `0` or `false` fails, naming it) in every job that installs
   what its tests need: each toolkit skip then fails with its message

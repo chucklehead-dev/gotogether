@@ -60,6 +60,7 @@ Before merging:
 | a `holds` invariant violated | a design bug, or the property is wrong | the shortest counterexample: `-graph -out cex.qnt` |
 | an `allows` invariant never violated | a vacuous check of the code | the model or the property |
 | a deadlock | a state the step cannot leave | fix it, or declare `simulate.terminal` |
+| `not done the cross-check ...`, `not done: quint test would replay it` | the model analysed by its compiled model, no quint: the Go evaluator's verdicts alone | where quint is installed, the same run cross-checks and replays |
 | `Rejects` | the code did what the model forbids | `why:`, then the binding (mapping, outcome, restart) |
 | `Mismatch` | the code computed another state | the `expect` or the `obs.*` value |
 | `Violates` | the design allows the bad run | fix the design, or the property |

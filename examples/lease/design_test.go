@@ -16,7 +16,7 @@ import (
 // the document says so too (gotogether simulate -matrix -graph
 // -write-matrix design/lease.md -binding design/lease.binding.yaml).
 func TestDesignMatrixIsCurrent(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "design/lease.binding.yaml")
 	m, err := model.Matrix(t.Context(), "design/lease.binding.yaml", model.SimulateOptions{Graph: true})
 	if err != nil {
 		t.Fatal(err)

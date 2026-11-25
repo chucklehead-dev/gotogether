@@ -461,13 +461,13 @@ func (c *modelChecker) Graph(ctx context.Context, cfg GraphSearch) (result *Grap
 	if !ok {
 		return nil, fmt.Errorf("graph: %s has no step action: the graph is step's transitions", c.Binding.Module)
 	}
-	if len(e.Module.Consts) > 0 {
+	if left := unvalued(e); len(left) > 0 {
 		return nil, fmt.Errorf("graph: the binding computes constants from a run's steps (%s): give them values (the simulate section's constants, or -const)",
-			strings.Join(slices.Sorted(maps.Keys(e.Module.Consts)), ", "))
+			strings.Join(left, ", "))
 	}
 	// the time is the search's and the checks', not quint's compile
 	started := time.Now()
-	consts := map[string]qeval.Value{}
+	consts := e.Consts
 	// an edge's label is its branch's action and what it did (the step's
 	// own choices are the action's arguments, or used by none: bank's
 	// step picks a transfer's accounts for a deposit too)
@@ -716,7 +716,7 @@ type cexWriter struct {
 func (w *cexWriter) replayStep(prev qeval.State, t qeval.Transition, k int) (call string, sampled bool) {
 	key := w.e.Model.Key(t.State)
 	reaches := func(name string, args []qeval.Value) (ok, sampled bool) {
-		succs, err := w.e.Model.Successors(map[string]qeval.Value{}, prev, name, args...)
+		succs, err := w.e.Model.Successors(w.e.Consts, prev, name, args...)
 		if err != nil {
 			return false, false
 		}
