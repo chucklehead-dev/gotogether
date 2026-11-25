@@ -70,7 +70,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ci/install-quint.sh
       - name: Admit Playwright and its real request-log journey
@@ -279,7 +279,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ci/install-quint.sh
       - name: vet and test each published module in the workspace
@@ -360,7 +360,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ci/install-quint.sh
       - name: the consumer on the published modules at this commit, the core at their pins
@@ -405,7 +405,7 @@ jobs:
       - uses: actions/setup-node@v4
         if: matrix.module == 'qenv/simvalkey'
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint for the Valkey contract model
         if: matrix.module == 'qenv/simvalkey'
         run: ../../ci/install-quint.sh
@@ -452,7 +452,7 @@ jobs:
           cache-dependency-path: examples/edgepublish/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ../../ci/install-quint.sh
       - name: vet
@@ -508,7 +508,7 @@ jobs:
           cache-dependency-path: qnav/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ../ci/install-quint.sh
       - name: vet
@@ -533,7 +533,7 @@ jobs:
           cache-dependency-path: qnav/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ../ci/install-quint.sh
       - name: Select Ubuntu's primary archive for tape tools
@@ -574,7 +574,7 @@ jobs:
           cache-dependency-path: examples/gosim/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ../../ci/install-quint.sh
       - name: vet
@@ -598,7 +598,7 @@ jobs:
           cache-dependency-path: examples/quorumkv/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ../../ci/install-quint.sh
       - name: gofmt, vet
@@ -626,7 +626,7 @@ jobs:
           cache-dependency-path: examples/raftkv/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ../../ci/install-quint.sh
       - name: gofmt, vet, lint -sim
@@ -657,7 +657,7 @@ jobs:
           cache-dependency-path: examples/raftkv/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ../../ci/install-quint.sh
       - name: Install toxiproxy-server
@@ -690,7 +690,7 @@ jobs:
           cache-dependency-path: examples/wallet/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ../../ci/install-quint.sh
       - name: gofmt, vet, lint -sim
@@ -734,7 +734,7 @@ jobs:
           cache-dependency-path: grist/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ../ci/install-quint.sh
       - name: gofmt, vet, lint -sim
@@ -768,7 +768,7 @@ jobs:
           cache-dependency-path: examples/payd/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ../../ci/install-quint.sh
       - name: gofmt, vet, lint -sim
@@ -792,7 +792,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -825,7 +825,7 @@ jobs:
           cache-dependency-path: examples/fleetrollout/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint and kwok
         run: |
           ../../ci/install-quint.sh
@@ -859,7 +859,7 @@ jobs:
           cache-dependency-path: examples/crossdb/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - uses: azure/setup-helm@v4
       - name: Install quint and kind
         run: |
@@ -890,7 +890,7 @@ jobs:
           cache-dependency-path: examples/grpcledger/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ../../ci/install-quint.sh
       - name: gofmt, vet, simulation lint
@@ -1021,7 +1021,7 @@ jobs:
           cache-dependency-path: examples/streams/go.sum
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
       - name: Install quint
         run: ../../ci/install-quint.sh
       - name: gofmt, vet, simulation lint
