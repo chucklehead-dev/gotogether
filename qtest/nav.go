@@ -15,6 +15,7 @@ import (
 	"github.com/chucklehead-dev/gotogether/validate/navproto"
 	"github.com/chucklehead-dev/gotogether/validate/receipt"
 
+	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/overlay"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -524,9 +525,7 @@ func (e *engine) navNode(b *navBase, req navproto.Request) (*navproto.Node, erro
 		nc.before = r.Steps
 		node.Notes = append(node.Notes, fmt.Sprintf("the run made %d choices: none at %d", len(r.Choices), spec.at))
 	}
-	for _, s := range nc.before {
-		node.Steps = append(node.Steps, s.String())
-	}
+	node.Steps, node.StepEffects, node.Unattributed = stepLines(b.cc.Binding, nc.before)
 	node.Model = actorStates(b.cc, nc.before)
 	judge(t, b.cc, b.inst, e.c.searchOptions(), []*Run{r}, func(*Run) string { return "the node's run " + node.ID })
 	for _, actor := range r.Report.Actors {
@@ -550,7 +549,7 @@ func (e *engine) navNode(b *navBase, req navproto.Request) (*navproto.Node, erro
 		}
 	}
 	switch {
-	case len(r.Steps) == 0:
+	case r.noStep():
 		// no step to fail at: what its doubles saw is the lead (a client
 		// refused before its server listened), not a node that reads pass
 		node.Receipt.Status = receipt.NotChecked
@@ -594,12 +593,24 @@ func (e *engine) failingChoice(b *navBase) (int, error) {
 	if r.Report.OK() {
 		return 0, fmt.Errorf("%s passes: there is no failing step to open (GOTOGETHER_NAV=start opens its first choice)", e.x.nameOf(r0))
 	}
-	pos := len(r0.Steps) // a run with no step: its last choice, where the node says what its doubles saw
+	// pos counts records as a choice's Step does (qobs.Recorder.Count):
+	// effect records are no progress, so a step's position is the records
+	// before it but those
+	counted := func(steps []qtrace.Step) int {
+		n := 0
+		for _, s := range steps {
+			if s.Effect == "" {
+				n++
+			}
+		}
+		return n
+	}
+	pos := counted(r0.Steps) // a run with no step: its last choice, where the node says what its doubles saw
 	for _, a := range r.Report.Actors {
 		if f := a.Failure; f != nil && f.Step != nil {
 			for i, s := range r0.Steps {
 				if s.Recorder == f.Step.Recorder && s.Seq == f.Step.Seq {
-					pos = min(pos, i)
+					pos = min(pos, counted(r0.Steps[:i]))
 				}
 			}
 		}
@@ -611,6 +622,58 @@ func (e *engine) failingChoice(b *navBase) (int, error) {
 		}
 	}
 	return k, nil
+}
+
+// stepLines are the steps of steps as a node lists them, each one's
+// effects, and the effects made by no step, by qtrace's attribution
+// (Reconstruct): an effect record is listed under the step it is
+// attributed to, never as a step of its own.
+func stepLines(b *binding.Binding, steps []qtrace.Step) (lines []string, effects [][]string, unattributed []string) {
+	type place struct {
+		rec string
+		seq uint64
+	}
+	attributed := map[place][]qtrace.Effect{}
+	traces, _ := b.Reconstruct(steps)
+	for _, tr := range traces {
+		for _, s := range tr.Steps {
+			if len(s.Effects) > 0 {
+				attributed[place{s.Recorder, s.Seq}] = s.Effects
+			}
+		}
+		for _, e := range tr.Unattributed {
+			unattributed = append(unattributed, effectLine(e))
+		}
+	}
+	lines = []string{}
+	some := false
+	for _, s := range steps {
+		if s.Effect != "" {
+			continue
+		}
+		lines = append(lines, s.String())
+		var es []string
+		if !s.Invocation { // a call's effects are its completion's
+			for _, e := range attributed[place{s.Recorder, s.Seq}] {
+				es = append(es, effectLine(e))
+			}
+		}
+		some = some || len(es) > 0
+		effects = append(effects, es)
+	}
+	if !some {
+		effects = nil
+	}
+	return lines, effects, unattributed
+}
+
+// effectLine is an effect as a node lists it: Effect.String, and late if
+// it was made after its call completed.
+func effectLine(e qtrace.Effect) string {
+	if e.Late {
+		return e.String() + " (late)"
+	}
+	return e.String()
 }
 
 // actorStates are each actor's model state after steps, by the Go

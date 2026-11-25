@@ -23,7 +23,7 @@ func (r *Run) Brief() string {
 	if r == nil || r.Report == nil || r.Report.OK() {
 		return ""
 	}
-	if len(r.Steps) == 0 {
+	if r.noStep() {
 		return r.noSteps()
 	}
 	return briefOf(r.Report)

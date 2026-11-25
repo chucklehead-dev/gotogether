@@ -49,6 +49,29 @@ func TestCaseKeysLost(t *testing.T) {
 	}
 }
 
+// A case with an effect made under a call after the call completed (a
+// late effect, the completed step's) reuses no prefix's verdict: the
+// prefix judged that step without it. Effects made before the completion
+// keep prefixes reusable.
+func TestCaseKeysLateEffects(t *testing.T) {
+	c, err := validate.NewChecker(t.Context(), "../validate/testdata/snapshot.yaml", validate.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cc := newCaseChecker(c)
+	invoked := qtrace.Step{Action: "deposit", Recorder: "r", Seq: 1, Record: qtrace.Record{Invocation: true}, Args: map[string]any{"amount": int64(5)}}
+	sent := qtrace.Step{Action: "effect", Recorder: "r", Seq: 2, Call: 1, Record: qtrace.Record{Effect: "rpc.bank.request"}, Args: map[string]any{"value": int64(5)}}
+	done := qtrace.Step{Action: "deposit", Recorder: "r", Seq: 3, Call: 1, Args: map[string]any{"amount": int64(5)}, Obs: map[string]any{"balance": int64(5)}}
+	late := sent
+	late.Seq = 4
+	if k := cc.key([]qtrace.Step{invoked, sent, done}); !k.prefixable {
+		t.Error("an effect made before its call completed: no prefix reused")
+	}
+	if k := cc.key([]qtrace.Step{invoked, sent, done, late}); k.prefixable {
+		t.Error("a late effect: prefixes reused, though it changes its completed step's effects")
+	}
+}
+
 // A case of an actor the binding's actors: leave out reuses no prefix's
 // verdict: the checker judges no trace of it, so its constants are no
 // instance's (the case checker reconstructed every actor, and planned

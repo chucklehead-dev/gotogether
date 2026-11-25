@@ -61,3 +61,13 @@ func (s *Shop) release(id int) { s.stock++ }
 
 // Helper is reached from no site.
 func Helper() {}
+
+// Restock records its step as a call (qobs.Invoke, then Call.Done), as
+// checkout's pay does to scope its effects.
+func (s *Shop) Restock(ctx context.Context, n int) {
+	call := qobs.Invoke(ctx, "restock", "n", n)
+	s.add(n)
+	call.Done(nil)
+}
+
+func (s *Shop) add(n int) { s.stock += n }

@@ -320,15 +320,24 @@ func checkAll(t testing.TB, c *validate.Checker, runs [][]qtrace.Step) []*valida
 
 // Render lists steps one per line, for failure messages, marking where the
 // process (incarnation) changes: where a binding's restart action goes.
+// An effect record (a double's send) is no step: it is listed unnumbered,
+// as an effect, and its recorder's process marks no restart.
 func Render(steps []qtrace.Step) string {
 	var b strings.Builder
 	procs := ids{}
-	for i, s := range steps {
+	n, last := 0, ""
+	for _, s := range steps {
+		if s.Effect != "" {
+			e := qtrace.Effect{Kind: s.Effect, Fields: s.Args, Seq: s.Seq}
+			fmt.Fprintf(&b, "     effect %s\n", e.String())
+			continue
+		}
 		p := procs.of(s.Process)
-		if i > 0 && s.Process != steps[i-1].Process {
+		if n > 0 && s.Process != last {
 			fmt.Fprintf(&b, "  -- process %d (restart)\n", p)
 		}
-		fmt.Fprintf(&b, "  %d. %s\n", i+1, s.String())
+		n, last = n+1, s.Process
+		fmt.Fprintf(&b, "  %d. %s\n", n, s.String())
 	}
 	return b.String()
 }

@@ -213,9 +213,23 @@ func (cc *caseChecker) constants(steps []qtrace.Step) (string, bool) {
 	if tr := traces[0]; cc.Checker.Binding.SnapshotFirst(tr) {
 		return "", false
 	}
+	// an effect made under a call after the call completed (Late) is that
+	// earlier step's: an extension of a prefix can change the effects of a
+	// step the prefix's verdict judged
+	type call struct {
+		rec string
+		seq uint64
+	}
+	completed := map[call]bool{}
 	for _, s := range steps {
 		if len(s.Order) > 0 {
 			return "", false
+		}
+		switch {
+		case s.Effect != "" && s.Call != 0 && completed[call{s.Recorder, s.Call}]:
+			return "", false
+		case s.Effect == "" && s.Call != 0:
+			completed[call{s.Recorder, s.Call}] = true
 		}
 	}
 	p, err := cc.Checker.Binding.Plan(cc.Checker.Model, traces[0])
