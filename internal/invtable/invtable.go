@@ -24,6 +24,11 @@
 // and the connect drivers that run it, found from what that code already
 // names (actions.go), with no annotation of its own.
 //
+// A third has a row per assumption the model lists, its `// @assume`
+// lines (ROADMAP CW3): what the model leaves out, the code that goes past
+// it on purpose (//quint:exercises) and the checks that watch it in
+// production (//quint:monitors) (assumptions.go).
+//
 // Go source is read with go/parser alone: the table needs positions and
 // comments, not types, so it stays in the core with no x/tools (as
 // `gotogether types` does).
@@ -99,6 +104,11 @@ type Model struct {
 	// left are the properties a selection (Restrict, Only, Exclude) left
 	// out, by key
 	left map[string]bool
+	// Assumptions are what the model says it leaves out (Assume), in the
+	// source's order
+	Assumptions []*Assumption
+	// predicates are the assumptions stated by a val, by the val's key
+	predicates map[string]*Assumption
 }
 
 type tcDecl struct {
@@ -350,6 +360,9 @@ func (m *Model) resolve(name string) (*Property, string) {
 	}
 	key, ok := vis[short]
 	if !ok {
+		if a, _ := m.resolveAssumption(name); a != nil {
+			return nil, fmt.Sprintf("%s is an assumption of model %s (what it leaves out), not a property: target it with //quint:exercises %s or //quint:monitors %s", name, m.Main, name, name)
+		}
 		if qualified {
 			return nil, fmt.Sprintf("module %s has no definition %s", mod, short)
 		}
@@ -358,7 +371,9 @@ func (m *Model) resolve(name string) (*Property, string) {
 	if p := m.byKey[key]; p != nil {
 		return p, ""
 	}
-	switch {
+	switch a := m.predicates[key]; {
+	case a != nil:
+		return nil, fmt.Sprintf("%s states assumption %s of model %s, which is no property: target the assumption with //quint:exercises %s or //quint:monitors %s (or select %s with -props to table it as a property)", name, a.Name, m.Main, a.Name, a.Name, name)
 	case m.left[key]:
 		return nil, fmt.Sprintf("%s is a val of model %s that this table leaves out (the binding does not check it, or -props, -invariant or -exclude left it out): add it to the selection, or name one the table has", name, m.Main)
 	case qualified && mod != m.Main:
@@ -526,7 +541,7 @@ func ScanFor(patterns []string, actions bool) (anns []Annotation, problems []str
 // directive is c's kind and argument text when c is one of the two
 // directives.
 func directive(c *ast.Comment) (Kind, string, bool) {
-	for _, k := range []Kind{Enforces, Checks} {
+	for _, k := range []Kind{Enforces, Checks, Exercises, Monitors} {
 		if rest, ok := strings.CutPrefix(c.Text, "//quint:"+string(k)); ok && (rest == "" || rest[0] == ' ' || rest[0] == '\t') {
 			return k, rest, true
 		}
@@ -718,6 +733,8 @@ type Table struct {
 	Model   *Model
 	Rows    []Row
 	Actions []ActionRow
+	// Assumptions are a row per listed assumption, in the source's order
+	Assumptions []AssumptionRow
 	// Others count the names qualified by a module the spec does not
 	// have, by that module: another model's annotations, left out
 	Others map[string]int
@@ -750,11 +767,15 @@ func (m *Model) Table(anns []Annotation) (*Table, []string) {
 	// modules: an unknown action recorded there is another model's too
 	other, ours := map[string]string{}, map[string]bool{}
 	for _, a := range anns {
-		if a.Kind != Enforces && a.Kind != Checks {
+		if a.Kind != Enforces && a.Kind != Checks && !assumptionKind(a.Kind) {
 			continue
 		}
 		for _, n := range a.Names {
-			if _, why := m.resolve(n); why == otherModel {
+			_, why := m.resolve(n)
+			if assumptionKind(a.Kind) {
+				_, why = m.resolveAssumption(n)
+			}
+			if why == otherModel {
 				if _, ok := other[a.Site.Path]; !ok {
 					mod, _, _ := strings.Cut(strings.Replace(n, "::", ".", 1), ".")
 					other[a.Site.Path] = mod
@@ -764,8 +785,19 @@ func (m *Model) Table(anns []Annotation) (*Table, []string) {
 			}
 		}
 	}
+	assumptions := map[*Assumption]*AssumptionRow{}
+	for _, as := range m.Assumptions {
+		t.Assumptions = append(t.Assumptions, AssumptionRow{Assumption: as})
+	}
+	for i := range t.Assumptions {
+		assumptions[t.Assumptions[i].Assumption] = &t.Assumptions[i]
+	}
 	var errs []string
 	for _, a := range anns {
+		if assumptionKind(a.Kind) {
+			errs = append(errs, m.placeAssumption(a, assumptions, t.Others)...)
+			continue
+		}
 		if a.Kind == Records || a.Kind == Drives {
 			mod := ""
 			if a.Kind == Records && !ours[a.Site.Path] {
@@ -783,6 +815,10 @@ func (m *Model) Table(anns []Annotation) (*Table, []string) {
 			}
 			if p == nil {
 				msg := fmt.Sprintf("%s:%d: //quint:%s names %s: %s: ", a.Site.Path, a.Line, a.Kind, n, why)
+				if strings.Contains(why, "of model "+m.Main+" (what it leaves out)") || strings.Contains(why, "which is no property: target the assumption") {
+					errs = append(errs, strings.TrimSuffix(msg, ": "))
+					continue
+				}
 				if s := nearest.Name(n, m.names()); s != "" {
 					msg += fmt.Sprintf("did you mean %s? ", s)
 				}
@@ -815,6 +851,10 @@ func (m *Model) Table(anns []Annotation) (*Table, []string) {
 		slices.SortFunc(t.Actions[i].Recorded, bySite)
 		slices.SortFunc(t.Actions[i].Driven, bySite)
 	}
+	for i := range t.Assumptions {
+		slices.SortFunc(t.Assumptions[i].Exercised, bySite)
+		slices.SortFunc(t.Assumptions[i].Monitored, bySite)
+	}
 	return t, errs
 }
 
@@ -826,7 +866,8 @@ func appendSite(s []Site, x Site) []Site {
 }
 
 // Missing are the rows that have nothing of kind (enforced, checked,
-// recorded, driven), by name, in the table's order.
+// recorded, driven; exercised, monitored, targeted: either), by name, in
+// the table's order.
 func (t *Table) Missing(kind string) []string {
 	var out []string
 	for _, r := range t.Rows {
@@ -839,17 +880,29 @@ func (t *Table) Missing(kind string) []string {
 			out = append(out, r.Action.Name)
 		}
 	}
+	for _, r := range t.Assumptions {
+		if assumptionMissing(r, kind) {
+			out = append(out, r.Assumption.Name)
+		}
+	}
 	return out
 }
 
 // Warnings are the properties nothing enforces and those no test
 // checks, each with the directive to add, then the actions nothing
-// records and those nothing drives: of the kinds named (enforced,
-// checked, recorded, driven; none: all four). The command prints them
+// records and those nothing drives, then the assumptions nothing targets
+// (or exercises, or monitors): of the kinds named (enforced, checked,
+// recorded, driven, exercised, monitored, targeted; none: all but
+// exercised and monitored, which targeted covers). The command prints them
 // for the kinds -require names, as failures.
 func (t *Table) Warnings(kinds ...string) []string {
 	var out []string
-	want := func(k string) bool { return len(kinds) == 0 || slices.Contains(kinds, k) }
+	want := func(k string) bool {
+		if len(kinds) == 0 {
+			return k != "exercised" && k != "monitored"
+		}
+		return slices.Contains(kinds, k)
+	}
 	for _, r := range t.Rows {
 		if len(r.Enforced) == 0 && want("enforced") {
 			out = append(out, fmt.Sprintf("property %s: nothing enforces it: put //quint:enforces %s on the code that does", r.Property.Name, r.Property.Name))
@@ -858,7 +911,7 @@ func (t *Table) Warnings(kinds ...string) []string {
 			out = append(out, fmt.Sprintf("property %s: no test checks it: put //quint:checks %s on the test that does", r.Property.Name, r.Property.Name))
 		}
 	}
-	return append(out, t.actionWarnings(want)...)
+	return append(append(out, t.actionWarnings(want)...), t.assumptionWarnings(want)...)
 }
 
 // Markdown is the table, its paths relative to dir (the document's
@@ -904,6 +957,10 @@ func (t *Table) qualified() bool {
 	for _, r := range t.Actions {
 		add(r.Recorded)
 		add(r.Driven)
+	}
+	for _, r := range t.Assumptions {
+		add(r.Exercised)
+		add(r.Monitored)
 	}
 	return len(pkgs) > 1
 }
