@@ -51,7 +51,7 @@ func sweepSystem(m shop.Mutation) qtest.System {
 // values, every pair of fault kinds together and each kind alone, at
 // every isolation level.
 func TestFaithfulSweep(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	if testing.Short() {
 		t.Skip("sweeps hundreds of runs")
 	}
@@ -71,7 +71,7 @@ func TestFaithfulSweep(t *testing.T) {
 // its pay first (TestNoIdempotencyKeyKilledByEffects): the invariants are
 // the question here.
 func TestNoIdempotencyKeySweep(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	if testing.Short() {
 		t.Skip("sweeps hundreds of runs")
 	}
@@ -96,7 +96,7 @@ func TestNoIdempotencyKeySweep(t *testing.T) {
 // three seeds each. A replay or filtered subtest only exercises its selection;
 // a coverage miss is a failed regression threshold, not an impossibility claim.
 func TestFaultOrders(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	if testing.Short() {
 		t.Skip("sweeps fault-order attempts")
 	}

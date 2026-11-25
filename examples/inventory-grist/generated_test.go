@@ -20,7 +20,7 @@ func TestGenerated(t *testing.T) {
 }
 
 func TestModels(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	qtest.Model(t, commits).Expect(t, qtest.Possible(gristtest.Scenario("cancel intent after placement", Place.With(Order{Order: "a"}), RequestCancel.With(Order{Order: "a"}))))
 	qtest.Model(t, "inventory/inventory.binding.yaml").Expect(t, qtest.Possible(gristtest.Scenario("capacity is finite",
 		inventory.Reserve.With(Order{Order: "a"}), inventory.Reserve.With(Order{Order: "b"}), inventory.Reserve.With(Order{Order: "c"}).Refused(inventory.ErrFull))))

@@ -123,7 +123,7 @@ references it (`flattener`). `qeval.Load` (internal/qeval/ir.go) reads:
 - `main` and `errors`. A non-empty `errors` refuses the IR.
 
 `effects` is not read. It is 59 KB of hello's 120 KB IR
-(examples/hello/hello.model.json), and no Go package reads an `effects`
+(examples/hello/hello.model.json.gz), and no Go package reads an `effects`
 key. The table's definition copies, `depth`, `hidden`, the types' variable
 lists and `warnings` are not read by qeval either. Q2 aims first at this
 **consumed subset**.
@@ -394,9 +394,8 @@ catches a wrong resolution even when it evaluates the same on the
 corpus. (3) already exists: the `qeval-differential` and
 `evaluator-shadow` nightlies and `TestAgreesWithQuint`. Pointed at
 Go-compiled IR, it catches what (2) would accept and the evaluator would
-see. Declaration order is part of (2): binding's `Vars` follow the order
-of the typecheck output, so a different toposort would show up in
-scaffold output.
+see. Declaration order is not part of it: binding sorts its `Vars` by
+name (§4.5), so a different toposort does not show in scaffold output.
 
 ### 3.4 Error parity
 
@@ -682,11 +681,11 @@ and for 1-minimality over the reductions).
 - The toposort sorts a layer with JavaScript's default sort, comparing
   ids as strings: shifting ids reorders independent declarations, and
   modules. Bar (2)'s "declaration order is part of it" holds only up to
-  the layer. *For the maintainer:* binding's `Vars` follow the
-  typecheck's order; either binding orders them itself, or P1 must
-  number nodes exactly as quint does. (Decided below: binding orders
-  them by name, and P1 makes an id-free choice wherever quint's output
-  follows its ids.)
+  the layer. *Decided:* binding orders its `Vars` itself, by name
+  (as qeval and typegen already did), so checkpoints and lint lists no
+  longer follow the typecheck's order, and P1 need not number nodes as
+  quint does for them; P1 makes an id-free choice wherever quint's
+  output follows its ids (below).
 - **quint's verdict itself depends on its ids** on two corpus entries:
   examples/language-features/importFrom.qnt is refused (QNT405 'basics',
   QNT404 through an export) once a module is written before it, and

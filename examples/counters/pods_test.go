@@ -222,7 +222,7 @@ func duplicates(steps []qtrace.Step) []string {
 // <app>-<pid> named them in containers) gets Reconstruct's duplicate
 // error and no verdict (TestMutant).
 func TestRealTwoPods(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	start := time.Now()
 	steps := twoPods(t)
 	t.Logf("two pods ran in %v, %d steps", time.Since(start), len(steps))

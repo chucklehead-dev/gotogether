@@ -368,12 +368,13 @@ compiled model: `gotogether compile -binding b.yaml -o model.json` where
 quint is, then `gotogether validate -binding b.yaml -compiled model.json
 runs/*.jsonl`, the Go evaluator alone judging, a run it cannot decide no
 verdict, a stale artifact refused (DESIGN §64). The same file kept beside the
-binding (`gotogether compile -binding b.yaml` writes `b.model.json`) lets
+binding (`gotogether compile -binding b.yaml` writes `b.model.json.gz`, the same
+document gzipped: DESIGN §113) lets
 the binding's tests run where quint is not installed (`GOTOGETHER_COMPILED`,
 `qtest.RequireModel`), with `gotogether compile -binding b.yaml -check` in a
 CI job that has quint keeping it current; `gotogether doctor` lists the
-bindings that have none. Sixteen of the examples keep theirs
-(`ci/compiled-examples.sh`; `ci/needs-quint.txt` says why the rest do not). A spec's compiled model for
+bindings that have none. Every example binding keeps its own
+(`ci/compiled-examples.sh`; `ci/needs-quint.txt` says which tests still need quint, and why). A spec's compiled model for
 connect (`gotogether compile -spec model/m.qnt -main M` writes
 `model/m.M.mbt.json`) lets `connect.Run` and a bound driver's `Run` generate
 their traces with the Go evaluator's random simulation where quint is not

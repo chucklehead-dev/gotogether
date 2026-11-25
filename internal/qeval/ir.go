@@ -100,7 +100,8 @@ type Model struct {
 	// Vars are the state variables' names, sorted
 	Vars []string
 	// Consts are the constants' names (an instance's are pass-through
-	// constants of the module that imports the model)
+	// constants of the module that imports the model), sorted like Vars:
+	// the IR's order within a toposort layer follows quint's ids
 	Consts []string
 	// replaying: a choice some of whose values disable the action is
 	// Unsupported (AsReplayed)
@@ -184,6 +185,7 @@ func Load(data []byte) (*Model, error) {
 		}
 	}
 	slices.Sort(m.Vars)
+	slices.Sort(m.Consts)
 	for id, raw := range ir.Table {
 		var t struct {
 			ID   int64  `json:"id"`

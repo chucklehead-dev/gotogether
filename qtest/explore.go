@@ -785,16 +785,20 @@ func cachedCheck(cc *validate.Checker, inst string, cached *int) validate.BatchC
 			}
 		}
 	}
+	blind := newEffectBlind(cc)
 	return func(ctx context.Context, runs [][]qtrace.Step) ([]*validate.Report, []error) {
 		reps, errs := make([]*validate.Report, len(runs)), make([]error, len(runs))
 		keys := make([]string, len(runs))
+		views := make([][]qtrace.Step, len(runs)) // the steps a verdict is rebased on (effectBlind)
 		var todo [][]qtrace.Step
 		first := map[string]int{} // key -> index in todo
 		at := map[int]int{}       // run -> index in todo
 		for i, steps := range runs {
-			keys[i] = verdictKey(inst, cc.Key(steps))
+			var key []qtrace.Step
+			key, views[i] = blind.view(steps)
+			keys[i] = verdictKey(inst, cc.Key(key))
 			if v, ok := verdicts.get(keys[i]); ok {
-				reps[i] = v.anchors.rebase(v.rep, steps)
+				reps[i] = v.anchors.rebase(v.rep, views[i])
 				*cached++
 				continue
 			}
@@ -821,8 +825,11 @@ func cachedCheck(cc *validate.Checker, inst string, cached *int) validate.BatchC
 			if !ok {
 				continue
 			}
-			if reps[i], errs[i] = rebase(treps[j], todo[j], runs[i]), terrs[j]; errs[i] == nil && choiceWitnessesRebasable(treps[j], todo[j]) {
-				verdicts.put(keys[i], verdict{detached(treps[j]), anchorsOf(treps[j], todo[j])})
+			_, from := blind.view(todo[j])
+			// rebasable is decided here, on the steps the entry is not
+			// kept with: its anchors name the witnesses' positions
+			if reps[i], errs[i] = rebase(treps[j], from, views[i]), terrs[j]; errs[i] == nil && choiceWitnessesRebasable(treps[j], from) {
+				verdicts.put(keys[i], verdict{detached(treps[j]), anchorsOf(treps[j], from)})
 			}
 		}
 		return reps, errs
@@ -879,9 +886,9 @@ type verdictCache struct {
 	m  map[string]verdict
 }
 
-// A verdict is a report and where in the steps it was reached on its
-// report's steps are, for the runs of the same key it is given to
-// (anchors.rebase).
+// A verdict is a report and where its report's steps are in the steps it
+// was reached on (effectBlind's view of them), for the runs of the same
+// key it is given to (anchors.rebase).
 type verdict struct {
 	rep     *validate.Report
 	anchors anchors
@@ -1060,7 +1067,9 @@ func (a anchors) rebase(rep *validate.Report, to []qtrace.Step) *validate.Report
 			return f
 		}
 		c, s, t := *f, *f.Step, &to[i]
-		s.Ref, s.Source, s.Recorder, s.Thread = t.Ref, t.Source, t.Recorder, t.Thread
+		// its seq too: runs of one key may differ in the effect records
+		// between their steps (effectBlind)
+		s.Ref, s.Source, s.Recorder, s.Thread, s.Seq = t.Ref, t.Source, t.Recorder, t.Thread, t.Seq
 		if s.Process = t.Process; s.Process == "" {
 			s.Process = t.Recorder // as Reconstruct fills it
 		}

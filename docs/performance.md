@@ -544,6 +544,10 @@ Thread, in parallel, and without encoding), qtrace's `MarshalLine`,
 `ReadJSONL` and `Reconstruct` (1k to 100k steps, with and without a
 domain clock), hooks' `GoroutineID`, qenv's `NemesisSteps`,
 `RecordInSim` and `OwnerLookupParallel`, choice's `SeededFaultDefault`.
+Added with the chunked MemorySink (2026-11-25): qenv's
+`RecordedServiceCall` (a call and a step in a recorded run, as an
+exploration's) and qobs's `MemorySinkRun` (a fresh sink of 10 to 10,000
+steps).
 
 **In the nightly** (79a03cb): the `benchmarks` job runs `ci/bench.sh
 run` on every root-module package with a benchmark (a new one joins on
@@ -552,7 +556,13 @@ once each and run interleaved on one runner, 6 times: numbers from
 another night's machine would differ by more than a regression.
 `ci/bench.sh check` fails on a change benchstat finds significant (p <
 0.05) past 25% in sec/op (a shared runner's time moves 10-20% between
-runs) or 10% in B/op or allocs/op (which do not move). The runs and the
+runs) or 10% in B/op or allocs/op (which do not move). B/op held still at
+the default 1s only once MemorySink kept its steps in chunks: a single
+slice's growth was paid at the b.N where it fell, so a benchmark that
+records into one (RecordInSim, otelio's RecordMemory) moved ±7-12%
+between runs, near the threshold; chunked, they move ±0-1%, and the
+nightly keeps its benchtime. (ServiceCall's ±4-6%, which records
+nothing, comes from elsewhere, under half the threshold.) The runs and the
 table are the job's artifact. A regression kept is the next night's
 base: fix it, or say why in its commit. Per-push CI runs no benchmark
 (internal/ciconfig's `TestBenchmarksNightlyOnly`).
@@ -573,6 +583,52 @@ Proposed, and not yet in CI:
   starts many more processes than before is a regression a CPU budget
   twice as high lets through.
 
+
+## MemorySink in chunks (2026-11-25)
+
+#266 grew `qtrace.Step` from 344 to 392 bytes, past the 352-byte size
+class into the 416-byte one, and `MemorySink` kept steps by value in one
+slice, whose growth (append's factor of 1.25 for long slices) copies
+about four steps' bytes for every step recorded. Its residual, measured at
+fixed counts, was a constant +278 B/op (+10%) on every benchmark that
+records into a MemorySink. The sink now keeps the steps in chunks: the
+first grows by append to 256 steps (a short run allocates as it did),
+each later one is made whole, a quarter of the steps so far within [256,
+4096], so no step is copied as the run grows; `Steps` concatenates them
+into one copy per call, as it always copied. No API or format changed.
+
+Measured against #266's parent (8987db67) and main (9672f055), the four
+builds interleaved, 6 runs each, on one 4-core runner; "ablated" is this
+change with every step appended to the first chunk (one slice, as
+before). B/op at `-benchtime 50000x`, then the default 1s's spread:
+
+| Benchmark | base | main | chunked | ablated | spread at 1s (main → chunked) |
+| --- | ---: | ---: | ---: | ---: | --- |
+| qenv RecordInSim/Context | 2.645Ki | 2.916Ki | 1.151Ki (−56%) | 2.916Ki | ±8% → ±0% |
+| qenv RecordInSim/Background | 2.676Ki | 2.947Ki | 1.183Ki (−56%) | 2.947Ki | ±7% → ±1% |
+| qenv RecordedServiceCall | 3.782Ki | 7.052Ki | 3.475Ki (−8%) | 7.050Ki | ±8% → ±0% |
+| qenv ServiceCall (no recorder) | 1.207Ki | 1.203Ki | 1.204Ki | 1.205Ki | ±4% → ±6% |
+| otelio RecordMemory | 2.645Ki | 2.916Ki | 1.151Ki (−56%) | 2.916Ki | ±10% → ±0% |
+| qobs MemorySinkRun/10 (per run) | 21.77Ki | 24.17Ki | 24.21Ki (+11%) | 24.21Ki | ±0% |
+| qobs MemorySinkRun/100 | 202.9Ki | 222.1Ki | 222.2Ki (+10%) | 222.2Ki | ±0% |
+| qobs MemorySinkRun/1000 | 2.120Mi | 2.358Mi | 1.624Mi (−23%) | 2.358Mi | ±0% |
+| qobs MemorySinkRun/10000 | 26.77Mi | 29.62Mi | 15.83Mi (−41%) | 29.62Mi | ±0% |
+| qobs Record/* (no MemorySink) | 1.027Ki | 1.090Ki | 1.090Ki (+6%) | 1.090Ki | ±0% |
+
+A benchmark that records b.N steps into one sink is a run of b.N steps,
+so the chunked sink's B/op there is mostly the step's own (the recorder's
+allocations), no longer the slice's growth. Runs under 256 steps stay in
+the first chunk and keep #266's +10% (the size class), with 32 bytes more
+per sink (its header); qobs's `Record` benchmarks write no MemorySink and
+keep the +6% of the larger step. RecordedServiceCall's allocs (24 at base,
+33 at main, 32-33 chunked) are #268's effect records, not the sink.
+
+sec/op did not regress: chunked against main, RecordInSim/Context −54%
+(1s) and −61% (50000x), Background −14% (1s, p=0.065) and −25%,
+RecordedServiceCall −9% (1s, p=0.13) and −20%, RecordMemory −39% and −47%,
+MemorySinkRun/10000 −51% and −49%, ServiceCall and the rest unchanged
+(p > 0.1). Against base, RecordedServiceCall at 50000x is +11% (p=0.041;
+main's +39%), the effect records' cost.
 
 ## Recording identity consolidation (2026-11-04)
 

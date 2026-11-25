@@ -2540,6 +2540,7 @@ var Targets = map[string]string{…}
 
 == github.com/chucklehead-dev/gotogether/validate
 const CompiledEnv = "GOTOGETHER_COMPILED"
+const CompiledExt = ".model.json.gz"
 const CompiledFormat = "gotogether.model/1"
 const DefaultChoiceLimit = 20000
 const DefaultHiddenDepth = 4

@@ -15,6 +15,7 @@ import (
 // (simulate.terminal): without it they are deadlocks. Every named action
 // the model's step branches to is reachable in this instance.
 func TestGraphProvesInvariants(t *testing.T) {
+	qtest.RequireModel(t, binding)
 	qtest.Model(t, binding).Expect(t, qtest.Proves("consistency"), qtest.Proves("commitIsDecided"), qtest.NoDeadlocks(), qtest.AllStepActionsReachable())
 }
 

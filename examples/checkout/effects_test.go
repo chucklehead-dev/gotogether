@@ -41,7 +41,7 @@ func failing(x *qtest.Exploration) (n int) {
 // The faithful shop conforms under the same binding at every level
 // (TestFaithfulConformsAtEveryLevel).
 func TestCaptureUnits(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, noEffects)
 	t.Parallel()
 	seeds := 40
 	if testing.Short() {
@@ -75,7 +75,7 @@ func TestCaptureUnits(t *testing.T) {
 // seeds with and without pay's effects compared, it is killed in strictly
 // more runs (the README's table has the counts).
 func TestNoIdempotencyKeyKilledByEffects(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, noEffects)
 	t.Parallel()
 	seeds := 100
 	if testing.Short() {

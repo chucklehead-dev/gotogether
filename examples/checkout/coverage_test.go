@@ -17,7 +17,7 @@ import (
 // github.com/chucklehead-dev/gotogether/examples/checkout go test -run
 // TestCodeCoverage ./examples/checkout/
 func TestCodeCoverage(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	if len(qcover.Blocks()) == 0 {
 		qtest.Optional(t, "not woven for coverage: run with qweave -cover")
 	}

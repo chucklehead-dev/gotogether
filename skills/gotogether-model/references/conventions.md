@@ -142,7 +142,7 @@ quint run model.qnt --main design --invariant prop --max-steps 30 --max-samples 
 gotogether simulate -binding m.binding.yaml                 # every invariant, holds or allows, once the binding exists
 gotogether simulate -binding m.binding.yaml -verify 8       # the same, every trace of up to 8 steps (Apalache: Java)
 gotogether simulate -binding m.binding.yaml -graph          # the same, every reachable state (Go evaluator): deadlocks, actions never enabled, eventual vals as fair cycles
-GOTOGETHER_COMPILED=1 gotogether simulate -binding m.binding.yaml -graph   # the same with no quint, from gotogether compile's m.model.json: cross-check and replays not done
+GOTOGETHER_COMPILED=1 gotogether simulate -binding m.binding.yaml -graph   # the same with no quint, from gotogether compile's m.model.json.gz: cross-check and replays not done
 quint run model.qnt --main design --mbt --max-steps 5 --n-traces 1 --out-itf /tmp/t.itf.json
 # look at mbt::actionTaken and mbt::nondetPicks in /tmp/t.itf.json: every action
 # named, every parameter picked under its own name

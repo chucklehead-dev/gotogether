@@ -96,7 +96,7 @@ var contended = gristsim.Config{Tenants: []string{"t1"}, Alphabet: []string{"a",
 // verdicts are cached across the two).
 func TestFaithful(t *testing.T) {
 	t.Parallel() // its explorations record into their own runs
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	for _, iso := range []qenv.Isolation{qenv.Serializable, qenv.ReadCommitted} {
 		t.Run(iso.String(), func(t *testing.T) {
 			cfg := contended
@@ -118,7 +118,7 @@ func TestFaithfulRetiring(t *testing.T) {
 	if testing.Short() {
 		t.Skip("full mode: TestPayoutAtMostOnce judges the payout per push")
 	}
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	cfg := contended
 	cfg.Send = nil // every command and query
 	system(retiring, cfg).Explore(t, qtest.ExploreConfig{Seeds: 20}).
@@ -133,7 +133,7 @@ func TestFaithfulRetiring(t *testing.T) {
 // it with chance 0.2%).
 func TestFaithfulAtClaim1(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	system(commits, gristsim.Config{Isolation: qenv.ReadCommitted, Tenants: []string{"t1"}, Send: []string{"create-counter"}}).
 		WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 40, ShortSeeds: 6}).
 		Expect(t, qtest.None(qtest.Rejects("createCounter")), qtest.Conforms())
@@ -149,7 +149,7 @@ func TestFaithfulAtClaim1(t *testing.T) {
 // markers 18 of 20 (4 seeds miss either with chance under 0.1%).
 func TestDuplicateRequests(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	rates := qenv.NoFaults.Set("rpc.counters.delay", 0.3).Set("rpc.counters.request", 0.3)
 	cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 4, Alphabet: []string{"a", "b"},
 		Send: []string{"create-counter", "increment-counter", "show-counter"}}
@@ -168,7 +168,7 @@ func TestFaithfulAtClients(t *testing.T) {
 	if testing.Short() {
 		t.Skip("full mode: TestDuplicateRequests and TestSQLTier judge the clients' side per push")
 	}
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	cfg := contended
 	system(calls, cfg, qtest.Linearize()).
 		Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 4}).
@@ -204,7 +204,7 @@ func okThenFailed(seed uint64) qenv.Chooser {
 // rejects exactly those runs. Exhaust within one fault reaches it too.
 func TestWelcomeDuplicate(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 3, Send: []string{"create-counter"}}
 	runs := qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}
 	crashed := runs
@@ -310,7 +310,7 @@ func scripted(faults ...qenv.Scripted) func(seed uint64) qenv.Chooser {
 // replay under faults, and conform.
 func TestPayoutAmount(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	bank := qenv.NoFaults.Set("rpc.bank.request", 0.3).Set("rpc.bank.delay", 0.3).Set("rpc.bank.response", 0.3)
 	system(retiring, retirements).WithRates(bank).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("rpc.bank.request").Faulted(),
@@ -351,7 +351,7 @@ func TestPayoutAmount(t *testing.T) {
 // alone, at 2 seeds; the rest in full mode.
 func TestPayoutAtMostOnce(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	// A required create/retire phase reaches the payout in every seed; the
 	// random workload alone can contain no successful retirement. Keep faults
 	// configured during preparation so the crash still lands at the payout.
@@ -405,7 +405,7 @@ var twoNodes = func() gristsim.Config {
 // duplicate replayed).
 func TestPayoutTwoNodes(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	// the branch is no fault kind (qtest.Reaches names those): grist logs
 	// it to the run's log, counted here
 	var left atomic.Int64
@@ -442,7 +442,7 @@ func TestPayoutTwoNodes(t *testing.T) {
 // anyoneRetires mutant, full mode) 6 of 6 runs reject retireCounter.
 func TestRetireByCreatorOnly(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	x := system(retiring, contested).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 2})
 	x.Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
 	refused := 0

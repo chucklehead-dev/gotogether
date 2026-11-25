@@ -72,7 +72,7 @@ var contended = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 5, Com
 // longer lost a mailer's answer.
 func TestFaithful(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	system(commits, contended).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 8}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("store.library.commit").Faulted(),
 			qtest.Reaches("rpc.mailer.response").Faulted(), qtest.Takes("mailerSend").Outcome("unknown"), qtest.Takes("mailerSendReplayed"),
@@ -84,7 +84,7 @@ func TestFaithful(t *testing.T) {
 // explains.
 func TestFaithfulAtClients(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	system(calls, contended, qtest.Linearize()).Explore(t, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 3}).
 		Expect(t, qtest.Conforms())
 }
@@ -102,7 +102,7 @@ var scarce = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 4, Send: 
 // no copy free, and some borrow is refused so.
 func TestScarce(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	system(commits, scarce).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}).
 		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("borrow")), qtest.Takes("borrow").Outcome("unavailable"))
 }
@@ -126,7 +126,7 @@ var greedy = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 3, Isolat
 // the loan-limit rule.
 func TestGreedy(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	system(commits, greedy).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}).
 		Expect(t, qtest.Conforms(), qtest.None(qtest.Rejects("borrow")), qtest.Takes("borrow").Outcome("limit"))
 }
@@ -146,6 +146,7 @@ var atTheLimit = gristtest.Scenario("a member at the limit",
 // would fail here, with the search's extent).
 func TestAtTheLimitPossible(t *testing.T) {
 	t.Parallel()
+	qtest.RequireModel(t, commits)
 	qtest.Model(t, commits).Expect(t, qtest.Possible(atTheLimit))
 }
 
@@ -160,6 +161,7 @@ var aReturn = gristtest.Scenario("a member returns a book",
 // TestAReturnPossible: the model on its own can follow it.
 func TestAReturnPossible(t *testing.T) {
 	t.Parallel()
+	qtest.RequireModel(t, commits)
 	qtest.Model(t, commits).Expect(t, qtest.Possible(aReturn))
 }
 
@@ -175,7 +177,7 @@ var limit = gristsim.Config{Tenants: []string{"t1"}, Clients: 1, Ops: 1, Send: [
 // conforms.
 func TestAtTheLimit(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	system(commits, limit).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 3, ShortSeeds: 1}).
 		Expect(t, qtest.Conforms(), qtest.All(atTheLimit))
 }
@@ -206,7 +208,7 @@ var lending = gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 3, Send:
 // sent).
 func TestReceiptOnce(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	system(commits, lending).Explore(t, qtest.ExploreConfig{Seeds: 6, ShortSeeds: 3, Chooser: crashAfterMail}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("grist.receipts.effect").Faulted())
 }

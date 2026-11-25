@@ -27,7 +27,7 @@ var crashy = qenv.Rates{Default: 0.2, Kinds: map[string]float64{"nemesis": 0.05}
 // decisions, and lost responses: every run is a behaviour of the Choreo
 // model, its invariants hold, and runs both commit and abort.
 func TestFaithfulConforms(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	x := system(twophase.Config{}).WithRates(crashy).Explore(t, qtest.ExploreConfig{Seeds: 60, ShortSeeds: 20})
 	x.Expect(t, qtest.Conforms())
 	t.Log(x.Evidence())
@@ -40,7 +40,7 @@ func TestFaithfulConforms(t *testing.T) {
 // only if it crashes between deciding and telling everyone; without
 // faults both conform.
 func TestMutants(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	none := qenv.Rates{Default: 1e-9}
 	cases := []struct {
 		name  string
@@ -67,7 +67,7 @@ func TestMutants(t *testing.T) {
 // Hegel shrinks the impatient participant's failure to the faults it
 // needs: the decision late enough that a prepared participant gives up.
 func TestHegelShrinksImpatience(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	if testing.Short() {
 		t.Skip("shrinks against the model")
 	}

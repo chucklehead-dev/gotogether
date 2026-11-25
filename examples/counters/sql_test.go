@@ -20,7 +20,7 @@ import (
 // every level, in grist/sqlstore).
 func TestSQLTier(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	levels := []qenv.Isolation{qenv.Serializable, qenv.ReadCommitted}
 	if testing.Short() {
 		levels = levels[1:]
@@ -55,7 +55,7 @@ func TestSQLDuplicateRequests(t *testing.T) {
 	if testing.Short() {
 		t.Skip("full mode: TestDuplicateRequests checks the markers per push")
 	}
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	rates := qenv.NoFaults.Set("rpc.counters.delay", 0.3).Set("rpc.counters.request", 0.3)
 	cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 4, Alphabet: []string{"a", "b"}, SQL: true,
 		Send: []string{"create-counter", "increment-counter", "show-counter"}}
@@ -77,7 +77,7 @@ func TestSQLFaithfulAtClaim1(t *testing.T) {
 	if testing.Short() {
 		t.Skip("full mode: TestFaithfulAtClaim1 is claim 1's contrast per push")
 	}
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	system(commits, gristsim.Config{Isolation: qenv.ReadCommitted, Tenants: []string{"t1"}, Send: []string{"create-counter"}, SQL: true}).
 		WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 40, ShortSeeds: 6}).
 		Expect(t, qtest.None(qtest.Rejects("createCounter")), qtest.Conforms())
