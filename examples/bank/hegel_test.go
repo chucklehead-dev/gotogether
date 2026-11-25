@@ -57,7 +57,7 @@ func runMachine(m Mutation) func(hegel.TestCase, *qhegel.Case) {
 // model, with the balances it reports, and keep noOverdraft. The runs are
 // checked after the test, in parallel (After).
 func TestHegelRunsConformToModel(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "bank.binding.yaml")
 	qhegel.Test(t, cfg(qhegel.After), runMachine(Faithful), hegel.WithTestCases(40), hegel.WithDatabase(""))
 }
 
@@ -70,7 +70,7 @@ func TestHegelRunsConformToModel(t *testing.T) {
 // Hegel stops at the first violation, so a seed that finds it early
 // costs no more.
 func TestHegelCatchesSelfTransfer(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "bank.binding.yaml")
 	if testing.Short() {
 		t.Skip("shrinking against the model runs quint ~100 times")
 	}

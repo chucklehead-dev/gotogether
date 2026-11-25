@@ -49,7 +49,7 @@ func realSteps(t *testing.T, cfg grpcledger.RealConfig) []qtrace.Step {
 // The real server's spans conform through refused connections and lost
 // responses: every retry of a transfer is a replay.
 func TestRealSpansConform(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "ledger.binding.yaml")
 	steps := realSteps(t, grpcledger.RealConfig{Seed: 1, Refuse: 0.1, LoseResponse: 0.2})
 	qtest.Validate(t, binding, steps).Expect(t, qtest.Conforms())
 }
@@ -60,7 +60,7 @@ func TestRealSpansConform(t *testing.T) {
 // same bug shows as a step the model cannot take or, when the commits
 // interleave otherwise, as a balance the model does not have.
 func TestRealMutants(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "ledger.binding.yaml")
 	for _, c := range []struct {
 		m    ledger.Mutation
 		lose float64

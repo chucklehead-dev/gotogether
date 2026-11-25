@@ -66,7 +66,7 @@ func record(t *testing.T, m Mutation) (*qtest.Run, *maelstrom.Sim) {
 // Under loss, reordering and a partition, every node ends up with every
 // value; reads only ever return broadcast values.
 func TestBroadcastConverges(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "broadcast.binding.yaml")
 	run, s := record(t, Faithful)
 	run.Expect(t, qtest.Conforms())
 	t.Logf("%d steps; %d messages delivered, %d lost (%.1f messages per broadcast)", len(run.Steps), s.Delivered, s.Lost,
@@ -77,7 +77,7 @@ func TestBroadcastConverges(t *testing.T) {
 // invented), but after the network heals some node never learns what it
 // missed. The verdict is "conforms, convergedWhenSettled FAIL", at settle.
 func TestNoRetryDoesNotConverge(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "broadcast.binding.yaml")
 	run, _ := record(t, NoRetry)
 	run.Expect(t, qtest.Violates("convergedWhenSettled"))
 	t.Logf("as expected:\n%s", run.Report.Summary())
@@ -86,7 +86,7 @@ func TestNoRetryDoesNotConverge(t *testing.T) {
 // A read that misses gossiped values returns a state the model's node does
 // not have.
 func TestReadOwnOnlyRejected(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "broadcast.binding.yaml")
 	run, _ := record(t, ReadOwnOnly)
 	run.Expect(t, qtest.Mismatch("read"))
 }
@@ -112,7 +112,7 @@ func scenario(tc hegel.TestCase, mut Mutation, steps int) {
 // Hegel explores schedules: deliveries in any order, losses, partitions,
 // timers. Rounds of runs are checked in bulk against the model.
 func TestHegelSchedulesConverge(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "broadcast.binding.yaml")
 	qhegel.Test(t, qhegel.Config{Binding: "broadcast.binding.yaml", Mode: qhegel.Batched, Opts: []qtest.Option{qtest.Global()}, Rounds: 2},
 		func(ht hegel.TestCase, _ *qhegel.Case) { scenario(ht, Faithful, 30) },
 		hegel.WithTestCases(25), hegel.WithDatabase(""))
@@ -125,7 +125,7 @@ func TestHegelSchedulesConverge(t *testing.T) {
 // may draw 120, a miss about once in 10,000. The search stops at the
 // first violation, so the extra cases cost only a search that is missing.
 func TestHegelShrinksNoRetry(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "broadcast.binding.yaml")
 	if testing.Short() {
 		t.Skip("shrinking against the model")
 	}

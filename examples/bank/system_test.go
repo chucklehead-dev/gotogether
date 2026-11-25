@@ -44,7 +44,7 @@ func tellers(m Mutation) qtest.System {
 // self-transfer is no transition of the model, a lost deposit leaves a
 // balance the model does not have.
 func TestTellersAsASystem(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "bank.binding.yaml")
 	x := qtest.ExploreConfig{Seeds: 20}
 	tellers(Faithful).Explore(t, x).Expect(t, qtest.Conforms())
 	tellers(SelfTransfer).Explore(t, x).Expect(t, qtest.Some(qtest.Rejects("transfer")))

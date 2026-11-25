@@ -644,10 +644,22 @@ item is its own decision before it starts; the red-nightly rule applies.
   blocking 5 of the examples (checkout, streams, crossdb, fleetrollout,
   jobqueue); golem's suites ran whole on compiled models. Third: a constant
   the binding gives as a literal is a parameter of the compiled model, so a
-  test's override (bank's `ACCOUNTS`) needs no quint. Left: the other
-  examples' models and their tests on `RequireModel`, doctor
-  listing bindings without one, and Q1's fragment (`qtest.Model`, simulate and
-  connect still need quint).
+  test's override (bank's `ACCOUNTS`) needs no quint. Fourth (2026-11-25):
+  every example binding whose compiled model is under 1 MB keeps it (22
+  models, 11.4 MB: bank, crossdb, fleetrollout, glomers' four, grpcledger,
+  hello, kvstore, lease, migrate-payments and its draft, quorumkv, raftkv,
+  requeue's two, retrystorm, streams, wallet, webjobs), 125 of their tests
+  on `RequireModel`; `ci/compiled-examples.sh` finds the models and the
+  tests (CI's `examples-compiled`: `compile -check` where quint is, then the
+  tests with quint off PATH), and `ci/needs-quint.txt` says what is left,
+  each with what releases it (`TestCompiledModels` keeps it current).
+  `gotogether doctor` lists the module's bindings by their compiled models:
+  none (with the compile), current or stale by their hashes (without quint;
+  `compile -check` compares meaning). Left: 30 bindings over 1 MB (counters
+  8 MB, edgepublish 22 MB, the grist apps 2-7 MB; IR, about twenty-fold
+  compressible): a compact artifact or a larger budget is the maintainer's
+  call; and the tests of Q1's fragment (`qtest.Model`, simulate, connect's
+  traces), the checker's own callers and Q2's run-time models, each listed.
 - **Q1: the evaluator's whole fragment (M).** qeval's refusals
   (`qeval.Unsupported`) closed, and `quint run`'s random simulation in Go.
   Seeds cannot match quint's generator, so parity is by meaning: every trace

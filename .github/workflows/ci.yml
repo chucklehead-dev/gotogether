@@ -986,14 +986,33 @@ jobs:
           run: gotogether validate -binding hello.binding.yaml -compiled hello.model.json mruns/*.jsonl
       - name: and fails the mutant's
         run: test "${{ steps.mutant.outcome }}" = failure && test "${{ steps.mutant.outputs.result }}" = FAIL
-      - name: hello's tests with no quint, every check by its compiled model (ROADMAP Q0)
-        working-directory: examples/hello
-        run: |
-          if command -v quint; then echo "quint is installed: these tests must need none"; exit 1; fi
-          # the trace tests by name: GOTOGETHER_STRICT fails a skip, and the
-          # model's own tests (TestRetryPossible, TestModelProves) need quint,
-          # the mutation test qweave; none of these may skip
-          GOTOGETHER_COMPILED=1 go test -short -count=1 -run '^(TestFaithfulConforms|TestExhaustive|TestMutants)$' .
+      # hello's tests with no quint are examples-compiled's, with every
+      # other example's
+
+  examples-compiled:
+    # every example's compiled model (examples/**/*.model.json) current by
+    # meaning where quint is, then every example test on qtest.RequireModel
+    # run with quint off PATH, each check by its compiled model alone
+    # (ROADMAP Q0). Both are found, not listed (ci/compiled-examples.sh);
+    # what still needs quint is ci/needs-quint.txt, with why
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.4 # internal/quintcmd: stockNodeHash; validate/model: nativeManagedNodeVersion
+      - name: Install quint
+        run: ci/install-quint.sh
+      - name: each compiled model is current for its binding (compile -check)
+        run: ci/compiled-examples.sh check
+      - name: the examples' RequireModel tests with quint off PATH (GOTOGETHER_COMPILED=1)
+        # none may skip (GOTOGETHER_STRICT); the script fails if quint is
+        # still found
+        run: CPU_TIMES="$RUNNER_TEMP/cpu.txt" ci/compiled-examples.sh test && sort -k2,2nr "$RUNNER_TEMP/cpu.txt"
 
   image:
     needs: preflight

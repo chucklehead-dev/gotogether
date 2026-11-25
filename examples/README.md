@@ -150,7 +150,14 @@ leave one out:
 - an executable `run-demo.sh` following the conventions above (the
   shebang, `set -u` and pipefail, the `cd`, `MUTANT=` in its header, an
   exit 2 for what it cannot run);
-- a mutant: a README that names one, and a demo that plants it.
+- a mutant: a README that names one, and a demo that plants it;
+- for each binding, its compiled model beside it (`gotogether compile
+  -binding B` writes `<stem>.model.json`), its tests that only judge runs
+  on `qtest.RequireModel(t, B)`, or a line in `ci/needs-quint.txt` saying
+  what still needs quint and what would release it (a model over 1 MB, a
+  test of the model itself: `qtest.Model`, simulate, connect's traces).
+  CI's `examples-compiled` checks each model current where quint is and
+  runs the RequireModel tests where it is not (`ci/compiled-examples.sh`).
 
 Exempt, each for its reason (the test lists them): `sktrace`, a library
 other examples use, with no system to model; `gosim` has no `model/`

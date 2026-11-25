@@ -66,7 +66,7 @@ func TestMutants(t *testing.T) {
 			// the mutant's server as a program, driven by the client from
 			// here: one small build per mutant, every check in this process
 			// (its recorded run is TestRecordedMutants')
-			qtest.RequireQuint(t)
+			qtest.RequireModel(t, "webjobs.binding.yaml")
 			bin := filepath.Join(t.TempDir(), "webjobs")
 			if out, err := exec.Command("go", "build", "-overlay", planted.Overlay(t, m), "-o", bin, "./cmd/webjobs").CombinedOutput(); err != nil {
 				t.Fatalf("mutant %s: go build: %v\n%s", m, err, out)
@@ -89,7 +89,7 @@ func TestMutant(t *testing.T) {
 	if !ok {
 		t.Fatalf("mutant %s: no claim in mutants (the invariant that catches it)", mutant)
 	}
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "webjobs.binding.yaml")
 	if pageless[mutant] {
 		clientRun(t, 1).Expect(t, qtest.Violates(inv))
 		return

@@ -42,7 +42,7 @@ func TestStormModelHasLasso(t *testing.T) {
 // every action and fault kind was exercised: a duplicate or late apply
 // of the same spec changes nothing.
 func TestFaithfulConforms(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "requeue.binding.yaml")
 	system(false).WithRates(lossy).Explore(t, qtest.ExploreConfig{Seeds: 30}).
 		Expect(t, qtest.Finishes(), qtest.Exercised())
 }
@@ -79,7 +79,8 @@ func TestMutant(t *testing.T) {
 		// requeue replaces the resource: the faithful model has no create
 		// but the first, and rejects the second. With no faults the
 		// storm is the same in every run.
-		qtest.RequireQuint(t)
+		qtest.RequireModel(t, "requeue.binding.yaml")
+		qtest.RequireModel(t, "requeue.storm.binding.yaml")
 		system(false).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 3}).
 			Expect(t, qtest.Some(qtest.Not(qtest.TransitionsConform())), qtest.Some(qtest.Rejects("create")))
 		// The storm's model allows the replacement: captured transitions
@@ -95,7 +96,7 @@ func TestMutant(t *testing.T) {
 		// settle.
 		// With faults a lost response's timeout can delay its second try
 		// until the resource is ready: some runs still reconcile.
-		qtest.RequireQuint(t)
+		qtest.RequireModel(t, "requeue.binding.yaml")
 		reconciled := qtest.Violates(validate.EventuallyName("reconciled"))
 		system(false).WithRates(qenv.NoFaults).Explore(t, qtest.ExploreConfig{Seeds: 3}).
 			Expect(t, qtest.All(reconciled), qtest.Settles())

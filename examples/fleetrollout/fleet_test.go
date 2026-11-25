@@ -29,7 +29,7 @@ func explore(t *testing.T, cfg fleetrollout.Config, runs qtest.ExploreConfig) *q
 // through lost requests and responses, status lag and its own crashes.
 func TestFaithfulConforms(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "fleet.binding.yaml")
 	explore(t, fleetrollout.Config{}, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 3}).Expect(t, qtest.Conforms(), qtest.NotVacuous())
 }
 
@@ -38,7 +38,7 @@ func TestFaithfulConforms(t *testing.T) {
 // runs; -short runs 3).
 func TestIgnoreObservedGenerationOverBudget(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "fleet.binding.yaml")
 	explore(t, fleetrollout.Config{Mutation: rollout.IgnoreObservedGeneration, NoCrashes: true}, qtest.ExploreConfig{Seeds: 20, ShortSeeds: 3}).
 		Expect(t, qtest.Some(qtest.Violates("withinBudget")))
 }
@@ -49,7 +49,7 @@ func TestIgnoreObservedGenerationOverBudget(t *testing.T) {
 // runs 2, 2 and 26 seeds.
 func TestInMemoryProgress(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "fleet.binding.yaml")
 	noKubeFaults := qenv.Rates{Default: 0.05, Kinds: map[string]float64{"kube": 0}}
 	system(fleetrollout.Config{Mutation: rollout.InMemoryProgress, NoCrashes: true}).WithRates(noKubeFaults).
 		Explore(t, qtest.ExploreConfig{Seeds: 15, ShortSeeds: 2}).Expect(t, qtest.Conforms())
@@ -66,7 +66,7 @@ func TestInMemoryProgress(t *testing.T) {
 
 // Hegel shrinks the restart bug to the faults it needs: a crash.
 func TestHegelShrinksInMemoryProgress(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "fleet.binding.yaml")
 	if testing.Short() {
 		t.Skip("shrinking against the model")
 	}

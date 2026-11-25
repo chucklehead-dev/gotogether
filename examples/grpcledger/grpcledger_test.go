@@ -34,7 +34,7 @@ var crashy = qenv.Rates{Default: 0.05, Kinds: map[string]float64{"nemesis": 0.02
 // duplicated requests, lost responses and server crashes: every retry is
 // answered once.
 func TestFaithfulConforms(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "ledger.binding.yaml")
 	x := system(grpcledger.Config{}).WithRates(crashy).Explore(t, qtest.ExploreConfig{Seeds: 60, ShortSeeds: 12})
 	x.Expect(t, qtest.Conforms())
 	t.Log(x.Evidence())
@@ -49,7 +49,7 @@ var reapplied = qtest.AnyOf(qtest.Rejects("transfer"), qtest.Rejects("refuse"))
 
 // Which check catches which bug, and whether faults are needed to see it.
 func TestMutants(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "ledger.binding.yaml")
 	cases := []struct {
 		m     ledger.Mutation
 		rates qenv.Rates
@@ -83,7 +83,7 @@ func TestMutants(t *testing.T) {
 // and its response (qenv.Service's window), as a real server can die
 // there. A refused connection is harmless: nothing was sent.
 func TestNoDedupeSweep(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "ledger.binding.yaml")
 	if testing.Short() {
 		t.Skip("sweeps hundreds of runs")
 	}
@@ -108,7 +108,7 @@ func TestNoDedupeSweep(t *testing.T) {
 // Hegel makes every choice and shrinks the double-applied transfer to the
 // fault it needs; the shrunk run's choices replay it without Hegel.
 func TestShrinkDoubleApply(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "ledger.binding.yaml")
 	if testing.Short() {
 		t.Skip("shrinks against the model")
 	}
@@ -122,7 +122,7 @@ func TestShrinkDoubleApply(t *testing.T) {
 // expose the missing dedupe (the client retries a transfer that was
 // applied), and the faithful ledger still conforms.
 func TestCrashWindow(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "ledger.binding.yaml")
 	net := []string{"grpc.ledger.conn", "rpc.ledger.request", "rpc.ledger.delay", "rpc.ledger.response"}
 	crashes := qtest.ExploreConfig{Seeds: 30}
 	run := func(m ledger.Mutation) qtest.System {

@@ -50,7 +50,8 @@ const (
 )
 
 func TestUniqueUnderPartitionAndRestart(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, spec)
+	qtest.RequireModel(t, scheme)
 	for _, b := range []string{spec, scheme} {
 		check(t, b, Faithful).Expect(t, qtest.Conforms())
 	}
@@ -62,7 +63,8 @@ func TestUniqueUnderPartitionAndRestart(t *testing.T) {
 // drops part of (node, incarnation, counter), is invisible to it. That
 // part is TestIDEncodingInjective's.
 func TestMutants(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, spec)
+	qtest.RequireModel(t, scheme)
 	for _, c := range []struct {
 		m            Mutation
 		spec, scheme bool // caught by
@@ -128,7 +130,7 @@ func (m *machine) RuleRestart(tc hegel.TestCase) {
 }
 
 func TestHegelSchedules(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, spec)
 	qhegel.Test(t, qhegel.Config{Binding: spec, Mode: qhegel.Batched, Opts: []qtest.Option{qtest.Global()}, AllowEmpty: true, Rounds: 2},
 		func(ht hegel.TestCase, _ *qhegel.Case) {
 			s := sim(Faithful, uint64(hegel.Draw(ht, hegel.Integers(0, 1<<30))))

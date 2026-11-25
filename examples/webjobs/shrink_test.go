@@ -53,7 +53,7 @@ func TestShrink(t *testing.T) {
 	if qtest.Mutant() != "" {
 		t.Skip("already a mutant's binary")
 	}
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "webjobs.binding.yaml")
 	for m, most := range shrinks {
 		t.Run(m, func(t *testing.T) {
 			if testing.Short() {
@@ -107,7 +107,7 @@ func TestShrinkRecorded(t *testing.T) {
 	if testing.Short() {
 		t.Skip("a recorded journey shrunk: full mode")
 	}
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "webjobs.binding.yaml")
 	for _, m := range []string{"doubleJob", "cancelIgnored"} {
 		t.Run(m, func(t *testing.T) {
 			t.Parallel()

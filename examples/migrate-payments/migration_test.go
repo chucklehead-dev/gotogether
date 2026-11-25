@@ -122,14 +122,14 @@ func TestDraftForbidsPartialCapture(t *testing.T) {
 // suite states nothing the model forbids. (They miss the legacy bug: no
 // test refunds a charge twice.)
 func TestLegacyTestsConform(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, bindingFile)
 	qtest.Runs(legacyRuns(t)...).Expect(t, qtest.All(qtest.Conforms()))
 }
 
 // Stage 4, the draft: TestPartialCapture's run is a capture the draft
 // cannot take. Decided: the model's mistake (R3).
 func TestDraftRejectsPartialCaptureTest(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, draftBinding)
 	run := recorded(t, TestPartialCapture)
 	qtest.Validate(t, draftBinding, withoutReads(run.Steps)).Expect(t, qtest.Rejects("capture"))
 }
@@ -138,7 +138,7 @@ func TestDraftRejectsPartialCaptureTest(t *testing.T) {
 // refunds of ch_3 (700, then 500, of 1000 captured) break R5. The legacy
 // code ran it; the tests above pass on it.
 func TestProductionLogViolatesR5(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, bindingFile)
 	qtest.Validate(t, bindingFile, logSteps(t, productionLog)).Expect(t, qtest.Violates("refundsWithinCapture").At("refund"))
 }
 
@@ -147,7 +147,7 @@ func TestProductionLogViolatesR5(t *testing.T) {
 // Decided: an undocumented requirement (R2), with the log and the code
 // as its sources.
 func TestDraftRejectsTheLogsReplay(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, draftBinding)
 	qtest.Validate(t, draftBinding, withoutReads(logSteps(t, productionLog))).Expect(t, qtest.Rejects("authorize"))
 }
 
@@ -156,7 +156,7 @@ func TestDraftRejectsTheLogsReplay(t *testing.T) {
 // Decided: judge the newer, whole logs; a snapshot record at each log's
 // head would let the old ones be judged.
 func TestRotatedLogLostItsPrefix(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, bindingFile)
 	qtest.Validate(t, bindingFile, logSteps(t, rotatedLog)).Expect(t, qtest.HasIssue("lost-prefix"))
 }
 
@@ -165,7 +165,7 @@ func TestRotatedLogLostItsPrefix(t *testing.T) {
 // file left two operations unmatched: lookups (then modelled, R7) and
 // the merchant notifications (outside the context).
 func TestStagingSpans(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, bindingFile)
 	tds := readSpans(t, stagingSpans)
 	steps, un := converted(t, rulesFile, tds)
 	if len(un) != 0 {
@@ -219,6 +219,6 @@ func TestDraftLacksRecordedLookup(t *testing.T) {
 // Stage 6, after the fix: the production log's requests, replayed on the
 // code as it is, conform. The second refund of ch_3 is now refused.
 func TestProductionDayReplayedConforms(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, bindingFile)
 	recorded(t, replay(logSteps(t, productionLog))).Expect(t, qtest.Conforms())
 }
