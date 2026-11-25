@@ -52,8 +52,8 @@ published to a registry yet).
 ## Validating without quint or Node
 
 ```sh
-gotogether compile -binding stock.binding.yaml -o stock.model.json   # where quint is
-gotogether validate -binding stock.binding.yaml -compiled stock.model.json runs/*.jsonl
+gotogether compile -binding stock.binding.yaml -o stock.model.json.gz   # where quint is
+gotogether validate -binding stock.binding.yaml -compiled stock.model.json.gz runs/*.jsonl
 ```
 
 The Go evaluator alone judges (each result says so; no pass sampled by
@@ -66,11 +66,11 @@ quint). Read the verdicts so:
 | `needs quint` refusing `-linearize`, an ITF input or `-manifest` | those are quint's to confirm or replay | drop `-compiled` for them |
 | `... is not here: ... unchecked` | a model source is absent, so the artifact's hash is trusted | ship the sources to check them |
 
-`gotogether doctor -compiled stock.model.json` says whether it is stale.
+`gotogether doctor -compiled stock.model.json.gz` says whether it is stale.
 
 ## Tests without quint
 
-A binding's compiled model kept beside it (`stock.model.json` for
+A binding's compiled model kept beside it (`stock.model.json.gz` for
 `stock.binding.yaml`, the default of `gotogether compile -binding
 stock.binding.yaml`) judges the binding's qtest and qhegel runs where quint
 is not installed: Record, Validate, Explore, Exhaust, Mutants, an invariant
@@ -100,5 +100,5 @@ binding's, the sources', the evaluation module's), as the tests do; only
 quint (`qtest.Model`, simulate, connect's traces) keeps `RequireQuint`: run
 those in a job with quint, the rest by name (`-run`) in the job without it.
 This repository's examples do so: `ci/compiled-examples.sh check|test` finds
-every `*.model.json` and every `RequireModel` test, and `ci/needs-quint.txt`
+every `*.model.json.gz` and every `RequireModel` test, and `ci/needs-quint.txt`
 says why each other binding or test still needs quint.

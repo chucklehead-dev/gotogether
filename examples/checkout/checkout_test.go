@@ -41,7 +41,7 @@ var levels = []qenv.Isolation{qenv.Serializable, qenv.SnapshotIsolation, qenv.Re
 // without the claim that they exercise every option (the rarest delays
 // take more seeds).
 func TestFaithfulConformsAtEveryLevel(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	t.Parallel()
 	claims := []qtest.Claim{qtest.Conforms(), qtest.NotVacuous()}
 	if !testing.Short() {
@@ -67,7 +67,7 @@ func TestFaithfulConformsAtEveryLevel(t *testing.T) {
 // at most 5%; the two caught in about one run in fifty need hundreds, and
 // a mutant that conforms claims no catch: they are left to the full run.
 func TestMutants(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	t.Parallel()
 	shipOrCancel := qtest.AnyOf(qtest.Rejects("ship"), qtest.Rejects("cancel"))
 	cases := []struct {
@@ -130,7 +130,7 @@ func TestMutants(t *testing.T) {
 // find only at ten times the crash rate, is among them: the search needs
 // no rate.
 func TestExhaustiveOneFault(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	if testing.Short() {
 		t.Skip("thousands of runs")
 	}
@@ -143,7 +143,7 @@ func TestExhaustiveOneFault(t *testing.T) {
 // the interleaving and faults it needs. The shrunk run's choices replay it
 // outside Hegel, step for step: a regression test needs no Hegel.
 func TestHegelShrinksWriteSkew(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	if testing.Short() {
 		t.Skip("shrinking against the model")
 	}
@@ -165,7 +165,7 @@ func TestHegelShrinksWriteSkew(t *testing.T) {
 
 // Hegel explores the faithful shop under snapshot isolation, in batches.
 func TestHegelFaithful(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	qhegel.Test(t, qhegel.Config{Binding: binding, Mode: qhegel.Batched}, func(ht hegel.TestCase, rec *qhegel.Case) {
 		if _, err := checkout.Run(rec.Env(qhegel.Choices(ht)), checkout.Config{Isolation: qenv.SnapshotIsolation}); err != nil {
 			ht.Errorf("%v", err)
@@ -182,7 +182,7 @@ func TestHegelFaithful(t *testing.T) {
 // claim, not a catch: -short leaves it to the full tests, and the faithful
 // shop conforms at every level there without the cuts.
 func TestFaithfulConformsUnderPartitions(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	if testing.Short() {
 		t.Skip("conforms under partitions: the full tests run it")
 	}

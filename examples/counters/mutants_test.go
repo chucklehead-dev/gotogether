@@ -36,7 +36,7 @@ func TestMutant(t *testing.T) {
 	if mutant == "" {
 		t.Skip("the app as it is: TestMutants runs this test built with each mutant's overlay")
 	}
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	switch mutant {
 	case "blind":
 		// Claim 1: the race is found in the unsafe variant. Two clients

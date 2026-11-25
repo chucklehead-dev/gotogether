@@ -19,7 +19,7 @@ func TestMutant(t *testing.T) {
 	if mutant == "" {
 		t.Skip("the app as it is: TestMutants runs this test built with each mutant's overlay")
 	}
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	cfg := qtest.ExploreConfig{Seeds: 8, ShortSeeds: 4}
 	switch mutant {
 	case "freshKey":

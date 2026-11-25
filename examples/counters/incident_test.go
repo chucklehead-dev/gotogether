@@ -217,7 +217,7 @@ func TestRepeatedPaymentWitnessUsesCanonicalHistory(t *testing.T) {
 // independently proves the repeated payout completed after the rewind.
 func TestRewindFailsClosed(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	runs := qtest.ExploreConfig{Seeds: 3, ShortSeeds: 2}
 	runs.Chooser = func(seed uint64) qenv.Chooser {
 		base := qenv.NewSeeded(seed)

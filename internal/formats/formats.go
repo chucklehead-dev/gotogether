@@ -74,9 +74,11 @@ var (
 		Older: "run the tests again to write it anew"}
 	// Model is a compiled model (gotogether compile; validate
 	// -compiled): the Go evaluator's IR of a binding's model, compiled by
-	// quint.
-	Model = Format{Thing: "model", Major: 1, What: "compiled model (gotogether compile; validate -compiled)",
-		Older: "compile it again (gotogether compile -binding B -o model.json)"}
+	// quint. The format is the JSON document; a gzip container around it
+	// (<stem>.model.json.gz, the convention: DESIGN §113) is how it is
+	// kept, not another major: every reader reads both, by the gzip magic.
+	Model = Format{Thing: "model", Major: 1, What: "compiled model (gotogether compile; validate -compiled), JSON, kept gzipped (<stem>.model.json.gz)",
+		Older: "compile it again (gotogether compile -binding B)"}
 	// MBT is a model compiled for connect's traces (gotogether compile
 	// -spec; connect.CompiledFor): the Go evaluator's IR of a spec's main
 	// module, every definition kept, compiled by quint, so that connect

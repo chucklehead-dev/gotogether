@@ -13,7 +13,7 @@ import (
 // github.com/chucklehead-dev/gotogether/examples/checkout/shop go test -run
 // TestMutationOfTheShop ./examples/checkout/
 func TestMutationOfTheShop(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	rep := system(checkout.Config{Isolation: qenv.SnapshotIsolation}).WithRates(crashy).Mutate(t, qtest.ExploreConfig{Seeds: 20})
 	t.Log(rep)
 }

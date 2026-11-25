@@ -119,14 +119,14 @@ func runFail(fn func()) {
 	<-done
 }
 
-// CompiledFor is the convention's path: the stem beside the binding.
+// CompiledFor is the convention's path: the stem beside the binding, gzipped.
 func TestCompiledFor(t *testing.T) {
 	t.Parallel()
 	for in, want := range map[string]string{
-		"stock.binding.yaml":        "stock.model.json",
-		"dir/stock.binding.yml":     filepath.Join("dir", "stock.model.json"),
-		"dir/account.yaml":          filepath.Join("dir", "account.model.json"),
-		"payments.day.binding.yaml": "payments.day.model.json",
+		"stock.binding.yaml":        "stock.model.json.gz",
+		"dir/stock.binding.yml":     filepath.Join("dir", "stock.model.json.gz"),
+		"dir/account.yaml":          filepath.Join("dir", "account.model.json.gz"),
+		"payments.day.binding.yaml": "payments.day.model.json.gz",
 	} {
 		if got := validate.CompiledFor(in); got != want {
 			t.Errorf("CompiledFor(%q) = %q, want %q", in, got, want)

@@ -23,7 +23,7 @@ import (
 // judged per push on the other tiers).
 func TestHTTPTier(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	cfg := contended
 	cfg.HTTP = true
 	// answers lost at three times the default rate: a lost answer and its
@@ -51,7 +51,7 @@ func TestHTTPDuplicateRequests(t *testing.T) {
 	if testing.Short() {
 		t.Skip("full mode: TestDuplicateRequests checks the markers per push")
 	}
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	rates := qenv.NoFaults.Set("rpc.counters.delay", 0.3).Set("rpc.counters.request", 0.3)
 	cfg := gristsim.Config{Tenants: []string{"t1"}, Clients: 3, Ops: 4, Alphabet: []string{"a", "b"}, HTTP: true,
 		Send: []string{"create-counter", "increment-counter", "show-counter"}}

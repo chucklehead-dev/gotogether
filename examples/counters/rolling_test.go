@@ -334,7 +334,7 @@ func TestRealRollingRestart(t *testing.T) {
 	if qtest.Mutant() != "" {
 		t.Skip("a mutant's binary: its drain is the mutant's (TestMutant)")
 	}
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	start := time.Now()
 	steps, settled := rollingRestart(t, 1)
 	t.Logf("three pods restarted in turn in %v, %d steps, %d drains settled after their lag reached 0, %d calls refused a try",

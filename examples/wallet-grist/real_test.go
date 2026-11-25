@@ -27,7 +27,7 @@ import (
 // judged; and every answer a client got has its store-side step, with the
 // same outcome.
 func TestRealHTTP(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	// the ledger in process (its default double, grist.Local): one for the
 	// tier, recording its posts with the calling node's steps
 	tier := gristtest.NewTier(t, App, gristtest.TierConfig{Local: map[*grist.Dependency]grist.Handlers{Ledger: nil}})

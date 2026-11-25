@@ -123,7 +123,7 @@ references it (`flattener`). `qeval.Load` (internal/qeval/ir.go) reads:
 - `main` and `errors`. A non-empty `errors` refuses the IR.
 
 `effects` is not read. It is 59 KB of hello's 120 KB IR
-(examples/hello/hello.model.json), and no Go package reads an `effects`
+(examples/hello/hello.model.json.gz), and no Go package reads an `effects`
 key. The table's definition copies, `depth`, `hidden`, the types' variable
 lists and `warnings` are not read by qeval either. Q2 aims first at this
 **consumed subset**.

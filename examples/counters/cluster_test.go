@@ -81,7 +81,7 @@ var lagging = qenv.NoFaults.Set("route.counters.lag", 0.5)
 // NoClientErrors too.
 func TestRollingRestart(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, terminating)
 	n := qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}
 	system(retiring, rolling).WithRates(lagging).Explore(t, n).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("route.counters.lag").Faulted(), qtest.Takes("bankPay").Outcome("ok"))

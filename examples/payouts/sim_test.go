@@ -92,7 +92,7 @@ func lostBankReplyConfig() qtest.ExploreConfig {
 
 func TestLostBankReply(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	e := lostBankReply(commits).Explore(t, lostBankReplyConfig())
 	e.Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("rpc.bank.response").Faulted().InAtLeast(1))
 	if n := retried(e); n != len(e.Runs) {
@@ -116,7 +116,7 @@ func TestLostBankReply(t *testing.T) {
 // the bank's commit of its key, every bank commit a call's).
 func TestFaithful(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	cfg := qtest.ExploreConfig{Seeds: 20, ShortSeeds: 4}
 	e := system(commits, pair).Explore(t, cfg)
 	e.Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.Reaches("rpc.bank.response").Faulted(), qtest.Reaches("nemesis.crash").Faulted(),

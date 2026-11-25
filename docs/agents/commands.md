@@ -176,7 +176,7 @@ AGENTS.md has the general requirements.
   binding may exit 0 without checking anything; partial solver output is not a
   completed verdict. Library callers opt in with `model.SimulateOptions.Progress`.
   `GOTOGETHER_COMPILED`: a binding's compiled model beside it
-  (`gotogether compile -binding B` writes `<stem>.model.json`) judges its
+  (`gotogether compile -binding B` writes `<stem>.model.json.gz`) judges its
   qtest and qhegel runs with no quint, the Go evaluator alone. Unset: where
   quint is not on PATH and the file exists; `1`: always, and a binding
   without one fails the test (a job without quint); `0`: never. Keep it
@@ -195,7 +195,7 @@ AGENTS.md has the general requirements.
   current by validate's TestCompiledMBTModelsAreCurrent): the Go
   evaluator's simulation, no quint; `connect.RequireTraces(t, cfg)`.
   The examples' compiled models: `ci/compiled-examples.sh check` (with
-  quint: every `examples/**/*.model.json` current, `compile -check`; `check
+  quint: every `examples/**/*.model.json.gz` current, `compile -check`; `check
   MODEL...` for some), `ci/compiled-examples.sh test` (quint taken off PATH,
   `GOTOGETHER_COMPILED=1`: every example test calling `RequireModel`, by
   name, `-short`; about 110 CPU s), `list`. A model is recompiled with

@@ -13,6 +13,7 @@ import (
 // commands of init, a bounded proof the claim says so, without changing
 // the generated binding or copying its model tree.
 func TestModelProvesWithinDepth(t *testing.T) {
+	qtest.RequireModel(t, commits)
 	qtest.Model(t, "counters.binding.yaml").WithOptions(qtest.ModelOptions{Depth: 3}).
 		Expect(t, qtest.Proves("uniqueNames"), qtest.Proves("averageAsOfTrigger"))
 }

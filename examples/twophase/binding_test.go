@@ -28,7 +28,7 @@ func steps(names ...[2]string) *qobs.MemorySink {
 // A choreo model is checked like any other: its transitions are named
 // actions of the node that takes them.
 func TestChoreoBinding(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, binding)
 	ok := steps([2]string{"prepare", "p1"}, [2]string{"prepare", "p2"}, [2]string{"prepare", "p3"},
 		[2]string{"decideCommit", ""}, [2]string{"commitAsInstructed", "p2"})
 	qtest.Validate(t, binding, ok.Steps()).Expect(t, qtest.Conforms())

@@ -152,10 +152,11 @@ leave one out:
   exit 2 for what it cannot run);
 - a mutant: a README that names one, and a demo that plants it;
 - for each binding, its compiled model beside it (`gotogether compile
-  -binding B` writes `<stem>.model.json`), its tests that only judge runs
+  -binding B` writes `<stem>.model.json.gz`), its tests that only judge runs
   on `qtest.RequireModel(t, B)`, or a line in `ci/needs-quint.txt` saying
-  what still needs quint and what would release it (a model over 1 MB, a
-  test of the model itself: `qtest.Model`, simulate, connect's traces).
+  what still needs quint and what would release it (a model over 1 MB
+  gzipped, connect's traces, a checker built by hand, a model written at
+  run time).
   CI's `examples-compiled` checks each model current where quint is and
   runs the RequireModel tests where it is not (`ci/compiled-examples.sh`).
 

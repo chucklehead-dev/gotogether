@@ -950,7 +950,7 @@ jobs:
         with:
           name: hello-compiled
           path: |
-            examples/hello/hello.model.json
+            examples/hello/hello.model.json.gz
             examples/hello/runs/
             examples/hello/mruns/
 
@@ -973,7 +973,7 @@ jobs:
           compiled: "true"
           run: |
             if command -v quint; then echo "quint is installed: -compiled must need none"; exit 1; fi
-            gotogether validate -binding hello.binding.yaml -compiled hello.model.json runs/*.jsonl
+            gotogether validate -binding hello.binding.yaml -compiled hello.model.json.gz runs/*.jsonl
       - name: the compiled model passes the runs quint passed
         run: test "${{ steps.compiled.outputs.result }}" = PASS
       - id: mutant
@@ -983,14 +983,14 @@ jobs:
           working-directory: examples/hello
           compiled: "true"
           doctor: "false"
-          run: gotogether validate -binding hello.binding.yaml -compiled hello.model.json mruns/*.jsonl
+          run: gotogether validate -binding hello.binding.yaml -compiled hello.model.json.gz mruns/*.jsonl
       - name: and fails the mutant's
         run: test "${{ steps.mutant.outcome }}" = failure && test "${{ steps.mutant.outputs.result }}" = FAIL
       # hello's tests with no quint are examples-compiled's, with every
       # other example's
 
   examples-compiled:
-    # every example's compiled model (examples/**/*.model.json) current by
+    # every example's compiled model (examples/**/*.model.json.gz) current by
     # meaning where quint is, then every example test on qtest.RequireModel
     # run with quint off PATH, each check by its compiled model alone
     # (ROADMAP Q0). Both are found, not listed (ci/compiled-examples.sh);

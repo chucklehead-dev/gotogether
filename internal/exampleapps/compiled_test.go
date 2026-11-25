@@ -2,7 +2,9 @@ package exampleapps
 
 import (
 	"bufio"
+	"compress/gzip"
 	"encoding/json"
+	"io"
 	"io/fs"
 	"maps"
 	"os"
@@ -20,9 +22,10 @@ import (
 // RequireModel tests; this file says the rest.
 const needsQuint = "ci/needs-quint.txt"
 
-// maxModel is the most a checked-in compiled model may take: a larger
-// one is listed in needsQuint as size, for the maintainer to decide
-// (a model is mostly quint's IR, which compresses about twenty-fold).
+// maxModel is the most a checked-in compiled model may take, as kept:
+// its gzip container's bytes (validate.CompiledExt; the JSON inside is
+// mostly quint's IR, about twenty times larger). A larger one is listed
+// in needsQuint as size, for the maintainer to decide.
 const maxModel = 1 << 20
 
 // A quintNeed is a line of needsQuint.
@@ -84,12 +87,27 @@ func isBinding(path string) bool {
 
 // compiledFor is validate.CompiledFor, which this package cannot import
 // (it reads the repository's files only): stock.binding.yaml's model is
-// stock.model.json, account.yaml's account.model.json.
+// stock.model.json.gz, account.yaml's account.model.json.gz.
 func compiledFor(binding string) string {
 	dir, name := filepath.Split(binding)
 	name = strings.TrimSuffix(strings.TrimSuffix(name, ".yaml"), ".yml")
 	name = strings.TrimSuffix(name, ".binding")
-	return filepath.Join(dir, name+".model.json")
+	return filepath.Join(dir, name+".model.json.gz")
+}
+
+// readModel is the JSON document of a checked-in compiled model, its
+// gzip container opened.
+func readModel(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	zr, err := gzip.NewReader(f)
+	if err != nil {
+		return nil, err
+	}
+	return io.ReadAll(zr)
 }
 
 // walkExamples calls f for every file under examples/ outside
@@ -185,8 +203,10 @@ func TestCompiledModels(t *testing.T) {
 	var bindings, models []string
 	walkExamples(t, func(rel string) {
 		switch {
-		case strings.HasSuffix(rel, ".model.json"):
+		case strings.HasSuffix(rel, ".model.json.gz"):
 			models = append(models, rel)
+		case strings.HasSuffix(rel, ".model.json"):
+			t.Errorf("%s is a compiled model kept plain: the examples keep theirs gzipped beside the binding (validate.CompiledFor, .model.json.gz); remove it and compile it there (gotogether compile -binding B)", rel)
 		case (strings.HasSuffix(rel, ".yaml") || strings.HasSuffix(rel, ".yml")) && isBinding(filepath.Join(root, rel)):
 			bindings = append(bindings, rel)
 		}
@@ -224,12 +244,12 @@ func TestCompiledModels(t *testing.T) {
 			t.Fatal(err)
 		}
 		if fi.Size() > maxModel {
-			t.Errorf("%s is %.1f MB, over the %d MB a checked-in compiled model may take: remove it and list its binding in %s as size", m, float64(fi.Size())/1e6, maxModel>>20, needsQuint)
+			t.Errorf("%s is %.2f MB compressed, over the %d MB a checked-in compiled model may take: remove it and list its binding in %s as size", m, float64(fi.Size())/1e6, maxModel>>20, needsQuint)
 		}
 		var art struct {
 			Binding struct{ Path string } `json:"binding"`
 		}
-		b, err := os.ReadFile(filepath.Join(root, m))
+		b, err := readModel(filepath.Join(root, m))
 		if err == nil {
 			err = json.Unmarshal(b, &art)
 		}

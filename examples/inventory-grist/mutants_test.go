@@ -151,7 +151,7 @@ func TestMutant(t *testing.T) {
 	if mutant == "" {
 		t.Skip("TestMutants builds the planted bugs")
 	}
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	switch mutant {
 	case "missingRelease":
 		cfg := decisionConfig(true)
@@ -256,7 +256,7 @@ func TestInventoryMutants(t *testing.T) {
 
 // The exact same retry fault on the faithful app allocates one unit.
 func TestLostReservationReply(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, commits)
 	cfg := config()
 	cfg.Phases = nil
 	cfg.Send = []string{"place"}
