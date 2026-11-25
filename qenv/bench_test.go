@@ -136,3 +136,34 @@ func BenchmarkOwnerLookupParallel(b *testing.B) {
 		}
 	})
 }
+
+// BenchmarkRecordedServiceCall is BenchmarkServiceCall in a recorded run,
+// as an exploration's: the simulation's context carries a recorder into a
+// MemorySink, the call's request is recorded as an effect, and the
+// client records a step after each call, which names it.
+func BenchmarkRecordedServiceCall(b *testing.B) {
+	sink := &qobs.MemorySink{}
+	rec := qobs.NewRecorder(sink)
+	s := qenv.New(qenv.WithContext(qenv.Nominal{}, qobs.WithRecorder(context.Background(), rec)))
+	defer s.Close()
+	s.MaxSteps = 100*b.N + 1000
+	svc := qenv.NewService(s, "echo", nil, func(ctx context.Context, req int) (int, error) { return req, nil })
+	s.Spawn("client", func(ctx context.Context) {
+		for i := range b.N {
+			if _, err := svc.Call(ctx, i, time.Second); err != nil {
+				b.Error(err)
+				return
+			}
+			qobs.Record(ctx, "call", nil, "i", i)
+		}
+	})
+	b.ReportAllocs()
+	b.ResetTimer()
+	if err := s.Run(time.Hour); err != nil {
+		b.Fatal(err)
+	}
+	b.StopTimer()
+	if n := len(sink.Steps()); n < b.N {
+		b.Fatalf("%d records for %d calls", n, b.N)
+	}
+}

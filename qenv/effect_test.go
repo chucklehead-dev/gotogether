@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/hooks"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtrace"
@@ -86,8 +87,13 @@ func TestEffectFields(t *testing.T) {
 // step and a double's send with context.Background(): the simulation
 // counts it among the runs a goroutine's lookup may find a recorder in,
 // which a lookup skips when there are none.
+//
+// It guards that fast path, so it runs alone (no t.Parallel) and from no
+// count: any other run in the process (a parallel test's simulation, an
+// explicit start) would keep the lookup on, and the test would pass
+// with spawn's count removed.
 func TestRecorderOfATaskFoundThroughItsGoroutine(t *testing.T) {
-	t.Parallel()
+	noRecorderRuns(t)
 	sink := &qobs.MemorySink{}
 	rec := qobs.NewRecorder(sink)
 	s := qenv.New(qenv.Nominal{})
@@ -111,5 +117,24 @@ func TestRecorderOfATaskFoundThroughItsGoroutine(t *testing.T) {
 	}
 	if mark := trs[0].Steps[0]; mark.Action != "mark" || len(mark.Effects) != 1 || mark.Effects[0].Kind != "rpc.provider.request" {
 		t.Errorf("mark %+v, its effects %v", mark, mark.Effects)
+	}
+}
+
+// noRecorderRuns waits for the process to count no run a goroutine's
+// lookup may find a recorder in (hooks.MayResolveRecorder), as a test of
+// the lookup's fast path needs: only its own counts may turn the lookup
+// on. Such a test is not parallel, so what is left is an earlier test's
+// native goroutines still unwinding; a count that stays is a leak (a
+// simulation never closed, a start never ended), which would also make
+// every lookup in the process pay.
+func noRecorderRuns(t *testing.T) {
+	t.Helper()
+	settled := time.Now().Add(5 * time.Second)
+	for hooks.MayResolveRecorder() && time.Now().Before(settled) {
+		time.Sleep(time.Millisecond) //qenv:ok waiting, outside any simulation, for another test's runs to end
+	}
+	if hooks.MayResolveRecorder() {
+		t.Fatal("a run a goroutine's lookup may find a recorder in is still counted 5s into a test that runs alone: " +
+			"an earlier test leaked one (a Sim without Close, a qrun.Start not ended); close it")
 	}
 }

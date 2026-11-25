@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/chucklehead-dev/gotogether/qenv"
+	"github.com/chucklehead-dev/gotogether/qobs"
 )
 
 // The native runtime's seams, waits, crashes and Close, pinned on both of
@@ -332,5 +333,43 @@ func TestNativeYieldTakesTurns(t *testing.T) {
 	}
 	if len(order) != 40 || switches < 10 {
 		t.Fatalf("%d turns, %d switches between the tasks: %s", len(order), switches, fmt.Sprint(order))
+	}
+}
+
+// A native task on a Platform whose recorder only its own context
+// carries, and whose goroutine records with context.Background() while
+// it unwinds after Close, finds its recorder through that goroutine: the
+// goroutine counts itself among the runs a lookup may find a recorder in
+// (spawnNative) for as long as it lives, past the simulation's count,
+// which Close takes back. The step goes to Interrupted (work a crash or
+// the run's end cut off), not nowhere. The test guards the lookup's fast
+// path, so it runs alone (no t.Parallel) and from no count: another run
+// in the process would keep the lookup on, and hide a goroutine that did
+// not count.
+func TestNativeUnwindingTaskFindsItsRecorderAfterClose(t *testing.T) {
+	if raceBuild() {
+		t.Skip("a cooperative Platform runs one goroutine at a time; real goroutines under -race do not")
+	}
+	noRecorderRuns(t)
+	sink := &qobs.MemorySink{}
+	rec := qobs.NewRecorder(sink)
+	synctest.Test(t, func(t *testing.T) {
+		s := qenv.NewNative(qenv.Nominal{}, coopPlatform{})
+		s.Spawn("driver", func(ctx context.Context) {
+			qenv.Go(qobs.WithRecorder(ctx, rec), "shop", func(ctx context.Context) {
+				defer qobs.Record(context.Background(), "unwound", nil) // as //quint:action records on return
+				qenv.Sleep(ctx, time.Hour)
+			})
+		})
+		if err := s.Run(10 * time.Millisecond); err != nil {
+			t.Fatal(err)
+		}
+		s.Close()
+		// a Platform's Close does not wait: the task unwinds once the
+		// bubble's clock passes its hour, the simulation's count gone
+		time.Sleep(2 * time.Hour) //qenv:ok the bubble's fake clock
+	})
+	if steps, cut := sink.Steps(), rec.Interrupted(); len(steps) != 0 || len(cut) != 1 || cut[0].Action != "unwound" {
+		t.Fatalf("steps %v, interrupted %v: want the unwinding task's one step interrupted, found through its goroutine", steps, cut)
 	}
 }
