@@ -1619,6 +1619,7 @@ func Random(seed int64, mix Mix, interval, dur time.Duration) Schedule
 func ReadJournal(r io.Reader) (*Journal, error)
 func StepsIn(patterns ...string) func() int
 func Unmade(sc *qenv.Script) error
+func WatchHost(w HostWatch) (*HostMonitor, error)
 type Container struct
     field Name string
     field Docker string
@@ -1654,6 +1655,21 @@ type Fault struct
     field Arg time.Duration
     field Toxicity float64
     method (Fault) String() string
+type HostMonitor struct
+    method (*HostMonitor) Stop() HostReport
+type HostReport struct
+    field Stalls []qtrace.Stall
+    field Threshold time.Duration
+    field Ticks int
+    field Syncs int
+    field MaxTick time.Duration
+    field MaxSync time.Duration
+    method (HostReport) String() string
+type HostWatch struct
+    field Every time.Duration
+    field Threshold time.Duration
+    field Dir string
+    field SyncEvery time.Duration
 type Journal struct
     field Entries []Entry
     method (*Journal) Dropped() []Entry
@@ -1946,6 +1962,7 @@ func FaultScript(tr *itf.Trace, faults FaultMap, opt connect.ReplayOptions) (*qe
 func Finishes() Expectation
 func Global() Option
 func HasIssue(kind string) Expectation
+func HostStalls(stalls ...qtrace.Stall) Option
 func Invariants(names ...string) Option
 func IsEvidence(path string) (bool, error)
 func Killed(sel StepSelector) StepClaim
@@ -2183,6 +2200,7 @@ type Run struct
     field Unscripted []qenv.Scripted
     field Code *qcover.Counts
     field Err error
+    field HostStalls []qtrace.Stall
     field Unsettled string
     field Report *validate.Report
     field StepLog string
@@ -2193,6 +2211,7 @@ type Run struct
     method (*Run) ID() string
     method (*Run) Manifest() (*validate.Manifest, error)
     method (*Run) OK() bool
+    method (*Run) Stalled() bool
 type RunClaim interface
     Holds(r *Run) bool
     String() string
@@ -2342,6 +2361,7 @@ func ReadJSONL(r io.Reader) ([]Step, error)
 func Reconstruct(steps []Step) ([]*Trace, []Issue)
 func SameRecord(a, b *Step) bool
 func SpanSource(spanID, traceID string) string
+func StalledWithin(stalls []Stall, from, to time.Time) (time.Duration, []Stall)
 func UncorruptedFields(steps []Step) []string
 func WriteJSONL(w io.Writer, steps []Step) error
 type ClockAssumption struct
@@ -2421,6 +2441,13 @@ type Record struct
     field LostBefore time.Time
     field CompleteThrough time.Time
     field Effect string
+type Stall struct
+    field Start time.Time
+    field End time.Time
+    field Kind string
+    field Detail string
+    method (Stall) Duration() time.Duration
+    method (Stall) String() string
 type Step struct
     field Action string
     field Seq uint64
@@ -2528,6 +2555,7 @@ const ManifestFormat = "gotogether.run/3"
 const NotEvaluated Verdict = "n/a"
 const Pass Verdict = "pass"
 const ReportFormat = "gotogether.report/2"
+const Stalled Cause = "stalled"
 const Uncollected Cause = "uncollected"
 const WitnessPrefix = "gotogetherNot_"
 func AntecedentWitnesses(b *binding.Binding, m *binding.Model, invariants []string) (defs string, witnessOf map[string]string)
@@ -3098,11 +3126,13 @@ type Report struct
     field Actors []*Result
     field Unsettled string
     method (*Report) Absent() []Absence
+    method (*Report) ExcuseStalls(stalls []qtrace.Stall) *Report
     method (*Report) Finished() Finish
     method (*Report) HistorySVG(recorded, judged []qtrace.Step) []byte
     method (*Report) OK() bool
     method (*Report) Reason() string
     method (*Report) Receipt() receipt.Summary
+    method (*Report) Stalled() bool
     method (*Report) Summary() string
     method (*Report) VerboseSummary() string
     method (*Report) Verdict() RunVerdict

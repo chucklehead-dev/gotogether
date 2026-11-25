@@ -32,6 +32,11 @@ const (
 	// (a settle, a watermark, the run's steps going on past it) and lost
 	// nothing: the system did not take the step.
 	Defect Cause = "defect"
+	// Stalled: a bounded response came late, and the host that ran the
+	// system stalled long enough in its window to make it late by itself
+	// (Report.ExcuseStalls): no verdict. The fix is a run on a host that
+	// does not stall.
+	Stalled Cause = "stalled"
 )
 
 // label is how a report prints the cause, with what it makes of the

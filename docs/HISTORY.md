@@ -9693,3 +9693,47 @@ STATUS's CI row until J7c was met (a manual full nightly on `7428afdc`,
 2026-11-14, 68 of 68 green), kept as it stood:
 
 Nightly remains red. The retained November 9 run on `b90c3d8b` passed 55 jobs, including benchmarks, browser admission, evaluator shadows, Grist and fresh-seed workloads. Its scheduler mutation campaign completed 1,749 mutations across seven passing baselines, with 99 survivors against the unchanged limit of 22; verification was canceled near its two-hour job limit. That producer predates execution-status metadata, so operational kills cannot be separated into assertion and resource failures. Later router controls and the native search-policy change are not qualified by that run. Trace mutations pass at their existing limit; the original 500-seed wallet campaign passes after exact-prefix recovery. Full verification and a green current-source nightly remain blockers.
+
+## Host stalls are no verdict for a real run's bound (2026-11-25)
+
+CI's raftkv-real failed once (seed 5 of `TestRealFaultsInSimulation`): the
+faithful cluster's first leader came 1.15s after a heal, past
+`cluster.real.binding.yaml`'s 500ms. Two nodes campaigned for one term 3ms
+apart, 1.14s after the heal: a stall of every node's fsync, which a 1s stall
+of the log's commit reproduces and the simulation of the same faults never
+shows (30 of 30 seeds within 300ms). The maintainer decided the harness should
+measure stalls and give no verdict when one could explain a violation, rather
+than widen the bound.
+
+- `qnemesis.WatchHost` probes the host from the harness, outside the nodes:
+  a 10ms ticker on a locked thread (on Linux reading that thread's
+  schedstat run_delay and cgroup v2's throttled_usec at every tick) and an
+  8-byte write and fsync every 20ms in the run's directory, on the nodes'
+  disk. A delay over the threshold is a `qtrace.Stall`.
+- `qtest.HostStalls` (validate's `Report.ExcuseStalls` on a copy, after the
+  cached verdict) makes a late `within` response "no verdict (host stall)",
+  with an Absent cause `stalled`, only when the stalls between its trigger
+  and the response cover its lateness: a stall elsewhere or a shorter one
+  excuses nothing, nor is a response that never came or any other check
+  excused. Overlap alone would have let a 100ms stall excuse SlowElection's
+  600ms-late leader.
+- raftkv's threshold is 100ms: a fifth of the 500ms bound, over half the
+  180ms headroom the slowest faithful election measured (320ms) leaves under
+  it, and above the probes' noise. Its real-tier claims leave a stalled run
+  out and say so (`judged`: logged, `inconclusive.txt`, a CI warning and the
+  artifact kept); a set of runs every one stalled fails ("every one of N runs
+  has no verdict (host stall)"), as a claim over no runs does: a job that
+  judged nothing is red. A stalled run of `Some` claims (the mutants') counts
+  as unjudged, as before.
+
+Measured locally (four cores shared with other quint jobs, `-race`): two
+full real tiers and one of `TestRealNemesis` and `TestRealCluster`, 30
+runs, every faithful one conforming as before (SlowElection caught 2 of 3
+and 3 of 3, NoRequestID 3 of 3 twice). Runs without a stall had
+their ticker at most 78ms late and their fsync at most 93ms. 8 of 30 runs
+recorded stalls over 100ms: ticker gaps of 103 to 234ms (the thread's wait
+for a CPU 0 to 81ms of it: most of the delay was the test process's own,
+its Go scheduler or GC under the validations' load, not the run queue) and
+fsyncs of 102 to 268ms. None excused anything: no faithful run broke a
+bound, and the one SlowElection run with stalls (211 and 234ms) was still
+judged a violation: its leader was later than they could explain.
