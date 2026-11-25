@@ -137,6 +137,10 @@ type Sim struct {
 	panicked  any
 	stack     []byte
 	closed    bool
+	// recorders: its creator's or a task's context carries a step
+	// recorder, counted while it is live (hooks.AddRecorderRuns), so that
+	// a lookup through a goroutine finds one only where one may be found
+	recorders bool
 	nat       *native              // the native runtime (native.go), if it runs on one
 	hangOn    bool                 // Hang's watchdog runs (watch)
 	awaited   atomic.Pointer[task] // the task the scheduler last woke, for the watchdog
@@ -267,6 +271,7 @@ func New(c Chooser) *Sim {
 	}
 	own(s.creator, s, nil)
 	live.Add(1)
+	s.countRecorders(s.base)
 	if o, ok := choice.As[simObserver](c); ok {
 		o.ObserveSim(s)
 	}
@@ -441,6 +446,16 @@ func taskOf(ctx context.Context) *task {
 	return nil
 }
 
+// countRecorders counts the simulation among the runs a goroutine's lookup
+// may find a recorder in, once, if ctx (its base, or a task's) carries
+// one.
+func (s *Sim) countRecorders(ctx context.Context) {
+	if !s.recorders && hooks.RecorderIn(ctx) {
+		s.recorders = true
+		hooks.AddRecorderRuns(1)
+	}
+}
+
 // From returns the simulation ctx runs in, or nil outside one.
 func From(ctx context.Context) *Sim {
 	if t := taskOf(ctx); t != nil {
@@ -489,6 +504,9 @@ func (s *Sim) spawn(parent context.Context, name string, p *Process, fn func(ctx
 	s.checking = append(s.checking, t) // (whether Check is on yet or not: it may be set later)
 	ctx := qrun.With(context.WithValue(parent, ctxKey{}, t), runkeys.Task, any(t))
 	t.ctx = ctx
+	if parent != s.base { // (base's was counted at New)
+		s.countRecorders(ctx)
+	}
 	if s.nat != nil {
 		s.spawnNative(t, fn)
 		return
@@ -1929,6 +1947,9 @@ func (s *Sim) Close() {
 	defer forget(s)
 	defer disown(s.creator, s)
 	defer live.Add(-1)
+	if s.recorders {
+		defer hooks.AddRecorderRuns(-1)
+	}
 	if s.nat != nil {
 		s.closeNative()
 		return

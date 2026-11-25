@@ -2435,8 +2435,8 @@ type Step struct
     field Call uint64
     embed Record
     field Ambiguous bool
-    field Made []uint64
     field EffectsObserved bool
+    field Made []uint64
     field Effects []Effect
     field Args map[string]any
     field Obs map[string]any

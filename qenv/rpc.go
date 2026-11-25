@@ -182,7 +182,7 @@ func (svc *Service[Req, Resp]) Call(ctx context.Context, req Req, timeout time.D
 	// sent: the caller's effect, one per Call, whatever the network makes
 	// of it (a lost request, a duplicate, a late delivery)
 	if svc.Effect == nil {
-		effect(ctx, "rpc."+svc.Name+".request", req)
+		effect(ctx, "rpc", svc.Name, "request", req)
 	} else if kind, fields := svc.Effect(req); kind != "" {
 		qobs.Effect(ctx, kind, fields...)
 	}

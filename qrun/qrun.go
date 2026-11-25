@@ -105,6 +105,7 @@ func Start(ctx context.Context) (end func()) {
 	}
 	started.m[id] = append(started.m[id], ctx)
 	started.n.Add(1)
+	hooks.AddRecorderRuns(1) // whether ctx carries a recorder or not: qrun cannot tell
 	started.Unlock()
 	return sync.OnceFunc(func() {
 		started.Lock()
@@ -122,5 +123,6 @@ func Start(ctx context.Context) (end func()) {
 			started.m[id] = st
 		}
 		started.n.Add(-1)
+		hooks.AddRecorderRuns(-1)
 	})
 }
