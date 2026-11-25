@@ -236,7 +236,10 @@ unsupported candidate returns an error rather than pruning it or falling back.
 resolution and ITF inputs remain refused. A stale artifact (another binding, a changed
 source, an evaluation module this gotogether writes otherwise, a later
 format, quint before 0.33.1) is refused with the fix, `gotogether
-compile`. `gotogether doctor -compiled stock.model.json` checks it ahead.
+compile`. `gotogether doctor -compiled stock.model.json` checks it ahead;
+plain `gotogether doctor` lists every binding of the module with its
+compiled model (none, current or stale by hashes; `compile -check` compares
+meaning, where quint is).
 A source of the model absent where it runs is not checked, and the
 report says so.
 

@@ -83,7 +83,7 @@ func clockHistory(t *testing.T, stale bool) []qtrace.Step {
 }
 
 func TestTwoRecorderClockAssumptions(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "kv.binding.yaml")
 	steps := clockHistory(t, false)
 	defaultRun := qtest.Validate(t, "kv.binding.yaml", steps, qtest.Linearize())
 	defaultRun.Expect(t, qtest.Mismatch("read"))

@@ -67,7 +67,7 @@ func TestClickWithNoOutcome(t *testing.T) {
 		t.Skip("a pending click's claim, per push in qdriver/bombadil's TestOnlyItsOwnAnswerCompletesACall and TestProbes' cancel never answered: full mode")
 	}
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "webjobs.binding.yaml")
 	cut := false
 	dir := edited(t, func(n int, l string) *string {
 		if cut {
@@ -112,7 +112,7 @@ func TestTornTrace(t *testing.T) {
 		t.Skip("a torn trace's claim, per push in qdriver/bombadil's TestTornTail: full mode")
 	}
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "webjobs.binding.yaml")
 	b, err := os.ReadFile(filepath.Join("testdata", "runs", "faithful", TraceFile))
 	if err != nil {
 		t.Fatal(err)
@@ -174,7 +174,7 @@ func TestTimesKept(t *testing.T) {
 		t.Skip("webjobs as it is")
 	}
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "webjobs.binding.yaml")
 	// readyEarly's run as written violates readyIsCommitted
 	// (TestRecordedMutants); re-recorded, it conforms
 	t.Run("readyEarly", func(t *testing.T) {
@@ -211,7 +211,7 @@ func TestRecordedMutants(t *testing.T) {
 		t.Skip("the mutants' recorded runs, regression tests of the adapter and model: full mode")
 	}
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "webjobs.binding.yaml")
 	for m, inv := range mutants {
 		if pageless[m] {
 			continue
@@ -241,7 +241,7 @@ func TestObservationMutants(t *testing.T) {
 		t.Skip("a check of the whole journey per mutant: full mode")
 	}
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "webjobs.binding.yaml")
 	steps, err := Steps(filepath.Join("testdata", "runs", "faithful"))
 	if err != nil {
 		t.Fatal(err)

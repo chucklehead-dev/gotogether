@@ -16,7 +16,7 @@ import (
 // (24 steps): lost produce requests, retried behind the next record of
 // their partition. The shrunk run replays outside Hegel, step for step.
 func TestHegelShrinksReorder(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "streams.binding.yaml")
 	if testing.Short() {
 		t.Skip("shrinking against the model")
 	}
@@ -36,7 +36,7 @@ func TestHegelShrinksReorder(t *testing.T) {
 // happen at all, pairwise: every pair of kinds together and each alone,
 // at every size. The faithful pipeline conforms on every row.
 func TestFaithfulSweep(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "streams.binding.yaml")
 	if testing.Short() {
 		t.Skip("sweeps hundreds of runs")
 	}
@@ -57,6 +57,6 @@ func TestFaithfulSweep(t *testing.T) {
 // go test -fuzz FuzzFaithful explores schedules and faults guided by
 // coverage, the model judging every run.
 func FuzzFaithful(f *testing.F) {
-	qtest.RequireQuint(f)
+	qtest.RequireModel(f, "streams.binding.yaml")
 	system(streams.Config{}).WithRates(faulty).Fuzz(f)
 }

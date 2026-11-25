@@ -1,0 +1,87 @@
+# What still needs quint among the examples (ROADMAP Q0), one line each:
+#   <binding> | <released by> | <why>             a binding with no compiled model
+#   <package dir> <Test> | <released by> | <why>  a test, in a module that keeps
+#                                                 one, left on RequireQuint or Model
+# The rest is found, not listed: ci/compiled-examples.sh checks every
+# examples/**/*.model.json current (compile -check, where quint is) and runs
+# every example test calling qtest.RequireModel with quint off PATH.
+# internal/exampleapps' TestCompiledModels fails when this file and the
+# examples disagree: a binding with neither a model nor a line, a line for a
+# binding that has one or a test moved to RequireModel, a model over 1 MB.
+#
+# Released by:
+#   size         its compiled model is over the 1 MB a checked-in one may take
+#                (mostly quint's IR, which compresses about twenty-fold): the
+#                maintainer's decision, a compact artifact or a larger budget
+#   Q1 connect   connect generates its traces with quint run (Q1: quint run's
+#                simulation in Go)
+#   Q1 simulate  gotogether simulate's matrix and possibles run quint (Q1)
+#   Q1 Model     qtest.Model: the model's own checks (Possible, Proves, Live,
+#                Refutes) run quint (Q1)
+#   Q2           the test writes a model or a binding at run time, which only
+#                a Go front end compiles (Q2)
+#   checker      the test builds quint's checker itself (validate.NewChecker,
+#                the CLI's check and replay): validate.NewCompiledChecker, or
+#                Q2, would release it
+#   real         a real tier's test (RAFTKV_REAL, toxiproxy): not run here;
+#                its checks are the same RequireModel's once tried
+
+# bindings without a compiled model
+examples/checkout/checkout.binding.yaml | size | its compiled model is 1.3 MB
+examples/counters/counters.binding.yaml | size | its compiled model is 8.1 MB
+examples/counters/counters.calls.binding.yaml | size | its compiled model is 7.4 MB
+examples/counters/counters.exactly.binding.yaml | size | its compiled model is 7.9 MB
+examples/counters/counters.once.binding.yaml | size | its compiled model is 7.8 MB
+examples/counters/counters.real.binding.yaml | size | its compiled model is 8.1 MB
+examples/counters/counters.retiring.binding.yaml | size | its compiled model is 8.1 MB
+examples/counters/counters.terminating.binding.yaml | size | its compiled model is 7.8 MB
+examples/edgepublish/binding.yaml | size | its compiled model is 22.0 MB
+examples/inventory-grist/checkout.binding.yaml | size | its compiled model is 6.0 MB
+examples/inventory-grist/checkout.calls.binding.yaml | size | its compiled model is 5.4 MB
+examples/inventory-grist/fulfillment/fulfillment.binding.yaml | size | its compiled model is 2.3 MB
+examples/inventory-grist/fulfillment/fulfillment.calls.binding.yaml | size | its compiled model is 2.1 MB
+examples/inventory-grist/inventory/inventory.binding.yaml | size | its compiled model is 4.6 MB
+examples/inventory-grist/inventory/inventory.calls.binding.yaml | size | its compiled model is 4.2 MB
+examples/inventory-grist/protocol.binding.yaml | size | its compiled model is 1.2 MB
+examples/jobqueue/jobqueue.binding.yaml | size | its compiled model is 1.2 MB
+examples/library/library.binding.yaml | size | its compiled model is 7.0 MB
+examples/library/library.calls.binding.yaml | size | its compiled model is 6.5 MB
+examples/payd/payd.binding.yaml | size | its compiled model is 1.6 MB
+examples/payouts/bank/bank.binding.yaml | size | its compiled model is 2.4 MB
+examples/payouts/bank/bank.calls.binding.yaml | size | its compiled model is 2.3 MB
+examples/payouts/payouts.binding.yaml | size | its compiled model is 3.5 MB
+examples/payouts/payouts.calls.binding.yaml | size | its compiled model is 3.2 MB
+examples/raftkv/cluster.binding.yaml | size | its compiled model is 1.2 MB
+examples/raftkv/cluster.real.binding.yaml | size | its compiled model is 1.2 MB
+examples/twophase/twophase.binding.yaml | size | its compiled model is 7.4 MB
+examples/wallet-grist/wallet.binding.yaml | size | its compiled model is 5.1 MB
+examples/wallet-grist/wallet.calls.binding.yaml | size | its compiled model is 4.7 MB
+examples/wallet-grist/wallet.exactly.binding.yaml | size | its compiled model is 4.9 MB
+examples/lease/design/lease.binding.yaml | Q1 simulate | no code is checked against it: its one test, TestDesignMatrixIsCurrent, is simulate -matrix -graph
+
+# tests left on quint, in modules that keep a compiled model
+examples/bank TestHegelVariesModelTraces | Q1 connect | qhegel.Traces generates the model's traces with quint run
+examples/bank TestModelDrivenCatchesOnlyDivergence | Q1 connect | connect.GenerateRun's traces
+examples/bank TestModelDrivesBank | Q1 connect | connect drives the bank by the model's traces
+examples/bank TestSanitizedRunConforms | checker | it builds validate.NewChecker to judge a sanitized run beside qtest.Validate's constants
+examples/crossdb TestGraphEndsWhenIdsSpent | Q1 Model | qtest.Model's graph of the model
+examples/hello TestModelProves | Q1 Model | qtest.Model's Proves and NoDeadlocks, and a model mutant written at run time (Q2 as well)
+examples/hello TestRetryPossible | Q1 Model | qtest.Model's Possible
+examples/kvstore TestModelDrivesService | Q1 connect | connect drives the service by the model's traces
+examples/lease TestDesignMatrixIsCurrent | Q1 simulate | simulate -matrix -graph of design/lease.binding.yaml
+examples/migrate-payments TestDraftForbidsPartialCapture | Q1 simulate | the draft's possibles (model.Possible), on quint's checker
+examples/migrate-payments TestDraftLacksRecordedLookup | checker | it reads the actions of validate.NewChecker's model
+examples/migrate-payments TestProductionDayAtVolume | Q2 | it writes payments.day.binding.yaml, a binding with other constants, at run time
+examples/migrate-payments TestScenariosPossible | Q1 Model | qtest.Model's Possible
+examples/raftkv TestCatchUp | size | cluster.binding.yaml's model
+examples/raftkv TestClusterFaithful | size | cluster.binding.yaml's model
+examples/raftkv TestElectionAfterHeal | size | cluster.binding.yaml's model
+examples/raftkv TestUnpersistedVote | size | cluster.binding.yaml's model
+examples/raftkv TestRealCluster | real | RAFTKV_REAL's three node processes, judged by cluster.binding.yaml (size) too
+examples/raftkv TestRealFaultsInSimulation | real | RAFTKV_REAL's toxiproxy faults re-made in qenv, judged by cluster.real.binding.yaml (size)
+examples/requeue TestModelLive | Q1 Model | qtest.Model's Live
+examples/requeue TestStormModelHasLasso | Q1 Model | qtest.Model's Refutes
+examples/wallet TestLinearizeDelayedReadWithinBudget | checker | it builds validate.NewChecker (Eval go) to judge one fixture with a search budget
+examples/webjobs TestLive | real | a live Bombadil run against the server (not under -short)
+examples/webjobs TestPlaywright | real | a real browser (not under -short)
+examples/webjobs TestRecorded | checker | its replays go through the CLI's check and replay (validate/cli), quint's checker

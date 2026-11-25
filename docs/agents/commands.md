@@ -168,6 +168,15 @@ AGENTS.md has the general requirements.
   without one fails the test (a job without quint); `0`: never. Keep it
   current with `gotogether compile -binding B -check` where quint is.
   `qtest.RequireModel(t, binding)` skips only without both.
+  The examples' compiled models: `ci/compiled-examples.sh check` (with
+  quint: every `examples/**/*.model.json` current, `compile -check`; `check
+  MODEL...` for some), `ci/compiled-examples.sh test` (quint taken off PATH,
+  `GOTOGETHER_COMPILED=1`: every example test calling `RequireModel`, by
+  name, `-short`; about 110 CPU s), `list`. A model is recompiled with
+  `gotogether compile -binding B` where quint is; one over 1 MB is not
+  checked in, and its binding goes in `ci/needs-quint.txt` (`size`), as
+  does a test left on quint in a module that keeps a model, with what
+  releases it (`TestCompiledModels`, internal/exampleapps, checks the list).
   `GOTOGETHER_RUN='TestX#2:seed=n'` (or `:schedule=...`,
   `:corpus=<file>`, `:choices=<file>` for a steered run) runs one run of one exploration alone, the test's
   explorations numbered in order; each failing run's report prints it.

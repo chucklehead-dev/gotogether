@@ -58,7 +58,7 @@ func TestClient(t *testing.T) {
 		t.Skip("webjobs as it is; a mutant's client run is TestMutant's")
 	}
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "webjobs.binding.yaml")
 	clientRun(t, 1).Expect(t, qtest.Finishes())
 }
 
@@ -84,7 +84,7 @@ func TestRecordedActions(t *testing.T) {
 		t.Skip("a recorded journey's actions played again (about 6s of them): full mode")
 	}
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "webjobs.binding.yaml")
 	f, err := os.Open(filepath.Join("testdata", "runs", "faithful", TraceFile))
 	if err != nil {
 		t.Fatal(err)

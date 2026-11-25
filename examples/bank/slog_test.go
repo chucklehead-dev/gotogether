@@ -15,7 +15,7 @@ import (
 // bank's binding like any other. A log line reporting a wrong balance is a
 // mismatch, as a recorded one would be.
 func TestSlogStepsConform(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "bank.binding.yaml")
 	run := func(final int) *qobs.MemorySink {
 		mem := &qobs.MemorySink{}
 		ctx := qobs.WithRecorder(context.Background(), qobs.NewRecorder(mem))

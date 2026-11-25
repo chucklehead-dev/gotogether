@@ -74,6 +74,7 @@ func doctor(out io.Writer, args []string) (int, error) {
 	for _, c := range compiled {
 		ps = append(ps, compiledPiece(c))
 	}
+	models := modelPieces(*dir, bindings, compiled)
 	for _, p := range ps {
 		v := p.version
 		if p.note != "" {
@@ -81,6 +82,13 @@ func doctor(out io.Writer, args []string) (int, error) {
 		}
 		fmt.Fprintf(out, "%-44s %s\n", p.name, v)
 	}
+	if len(models) > 0 {
+		fmt.Fprintln(out, "\ncompiled models (gotogether compile; qtest judges a binding's runs by its own where quint is not installed):")
+		for _, p := range models {
+			fmt.Fprintf(out, "  %-42s %s\n", p.name, p.version+" ("+p.note+")")
+		}
+	}
+	ps = append(ps, models...)
 	fmt.Fprintln(out, "\nformats this gotogether reads:")
 	for _, f := range formats.All() {
 		fmt.Fprintf(out, "  %-28s %s\n", f.Name(), f.What)
@@ -453,4 +461,90 @@ func compiledPiece(path string) piece {
 		p.skew = err.Error()
 	}
 	return p
+}
+
+// modelPieces are the bindings of the module in dir (found by
+// findBindings), and those named with -binding, each with its compiled
+// model beside it (validate.CompiledFor): none, with the command that
+// writes one; current; or stale, a skew with the fix. Without quint the
+// check is the one qtest and validate -compiled make (the binding's, the
+// sources' and the evaluation module's hashes); gotogether compile -check
+// compares a compile now by meaning, where quint is installed. A binding
+// whose model was named with -compiled is reported there instead.
+func modelPieces(dir string, named, compiled []string) []piece {
+	seen := map[string]bool{}
+	for _, c := range compiled {
+		if a, err := filepath.Abs(c); err == nil {
+			seen[a] = true
+		}
+	}
+	var ps []piece
+	for _, b := range append(findBindings(dir), named...) {
+		cp := validate.CompiledFor(b)
+		a, err := filepath.Abs(cp)
+		if err != nil || seen[a] {
+			continue
+		}
+		seen[a] = true
+		p := piece{name: b}
+		if _, err := os.Stat(cp); err != nil {
+			p.version, p.note = "none", "its tests need quint: gotogether compile -binding "+b+", where quint is, and check it in"
+			ps = append(ps, p)
+			continue
+		}
+		p.version = "current"
+		p.note = cp + "; by hashes: gotogether compile -binding " + b + " -check compares its meaning, where quint is"
+		if _, err := validate.NewCompiledChecker(b, cp, validate.Options{}); err != nil {
+			p.version, p.note, p.skew = "stale", cp, err.Error()
+		}
+		ps = append(ps, p)
+	}
+	return ps
+}
+
+// findBindings are the binding files of the module in dir: YAML files with
+// a top-level spec and module key, outside testdata, hidden directories,
+// node_modules and nested modules (a directory with a go.mod of its own),
+// as go's ./... leaves them, sorted.
+func findBindings(dir string) []string {
+	var out []string
+	filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if path != dir && (name == "testdata" || name == "node_modules" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")) {
+				return filepath.SkipDir
+			}
+			if path != dir {
+				if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+					return filepath.SkipDir
+				}
+			}
+			return nil
+		}
+		if ext := filepath.Ext(path); (ext == ".yaml" || ext == ".yml") && isBinding(path) {
+			out = append(out, path)
+		}
+		return nil
+	})
+	slices.Sort(out)
+	return out
+}
+
+// isBinding reports whether the YAML file at path has a binding's
+// top-level spec and module keys, read by line (cheap; binding.Load
+// reads it properly where it is reported).
+func isBinding(path string) bool {
+	b, err := os.ReadFile(path)
+	if err != nil || len(b) > 1<<20 {
+		return false
+	}
+	var spec, module bool
+	for _, l := range strings.Split(string(b), "\n") {
+		spec = spec || strings.HasPrefix(l, "spec:")
+		module = module || strings.HasPrefix(l, "module:")
+	}
+	return spec && module
 }

@@ -43,14 +43,14 @@ func payday(b *Bank) {
 // and a model-level ITF of the run are left in the test's directory
 // ($GOTOGETHER_KEEP keeps them).
 func TestRecordedRunConforms(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "bank.binding.yaml")
 	qtest.Record(t, "bank.binding.yaml", func(*qobs.Recorder) { payday(New(accounts)) }, qtest.Global()).Expect(t, qtest.Conforms())
 }
 
 // The same scenario on the LostDeposit mutant: the third deposit to each
 // account reports a balance the model does not have.
 func TestRecordedRunCatchesLostDeposit(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "bank.binding.yaml")
 	run := qtest.Record(t, "bank.binding.yaml", func(*qobs.Recorder) { payday(New(accounts, WithMutation(LostDeposit))) }, qtest.Global())
 	run.Expect(t, qtest.Mismatch("deposit"))
 	t.Logf("as expected:\n%s", run.Report.Summary())
@@ -63,7 +63,7 @@ func TestRecordedRunCatchesLostDeposit(t *testing.T) {
 //
 //	gotogether validate -binding bank.binding.yaml -convert bank.convert.yaml spans.jsonl
 func TestOTelSpansConvertedAndChecked(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "bank.binding.yaml")
 	rules, err := convert.Load("bank.convert.yaml")
 	if err != nil {
 		t.Fatal(err)
