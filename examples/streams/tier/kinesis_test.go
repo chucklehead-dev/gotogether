@@ -40,7 +40,7 @@ func runKinesis(t *testing.T, m pipeline.Mutation) ([]qtrace.Step, *tier.Result)
 // The faithful pipeline on Kinesis, checked by the same model and binding
 // as on Kafka and in simulation.
 func TestKinesisConforms(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "../streams.binding.yaml")
 	steps, res := runKinesis(t, pipeline.Faithful)
 	if !res.Complete {
 		t.Fatalf("the projection is incomplete after the timeout")
@@ -60,7 +60,7 @@ func TestKinesisConforms(t *testing.T) {
 
 // The bugs a fault-free run shows, on Kinesis too.
 func TestKinesisMutants(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "../streams.binding.yaml")
 	for _, m := range []pipeline.Mutation{pipeline.CommitFirst, pipeline.OffByOne} {
 		t.Run(fmt.Sprint(m), func(t *testing.T) {
 			steps, _ := runKinesis(t, m)

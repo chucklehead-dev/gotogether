@@ -29,7 +29,7 @@ var faulty = qenv.DefaultRates.Set("rpc", 0.1)
 // answers, and after the settle every applied request is posted (10
 // seeds, 4 under -short).
 func TestFaithful(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "wallet.binding.yaml")
 	system(Config{}, qtest.Linearize()).Explore(t, qtest.ExploreConfig{Seeds: 10, ShortSeeds: 4}).
 		Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.All(qtest.Completes()))
 }
@@ -38,7 +38,7 @@ func TestFaithful(t *testing.T) {
 // is all it takes, so a search of every run within one fault finds it,
 // and proves the faithful bank applies every request once there.
 func TestNoDedupeWithinOneFault(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "wallet.binding.yaml")
 	one := Config{Workload: [][]Op{{{Kind: "transfer", Src: "b", Dest: "c", Amount: 30}}}}
 	system(one).Exhaust(t, qtest.Bound{Faults: 1}).Expect(t, qtest.Conforms())
 	one.Mutation = NoDedupe
@@ -51,7 +51,7 @@ func TestNoDedupeWithinOneFault(t *testing.T) {
 // bank locks the account at every level. 20 seeds each, 6 under -short
 // (the lost update shows in most runs).
 func TestReadThenWrite(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "wallet.binding.yaml")
 	n := qtest.ExploreConfig{Seeds: 20, ShortSeeds: 6}
 	rc := Config{Mutation: ReadThenWrite, Isolation: qenv.ReadCommitted, Workload: Contended}
 	system(rc).Explore(t, n).Expect(t, qtest.Some(qtest.Rejects("observe")))
@@ -76,7 +76,7 @@ var quiet = qenv.DefaultRates.Set("rpc", 0).Set("nemesis", 0).Set("queue", 0).Se
 // is for a narrow window, as quorumkv's BlindRepair). 10 seeds each, 2
 // under -short: each linearized run is costly, and the window is that wide.
 func TestWriteSkew(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "wallet.binding.yaml")
 	n := qtest.ExploreConfig{Seeds: 10, ShortSeeds: 2}
 	skew := Config{Mutation: WriteSkew, Workload: Skew}
 	system(skew, qtest.Linearize()).WithRates(quiet).Explore(t, n).Expect(t, qtest.Some(qtest.Mismatch("transfer")))
@@ -138,7 +138,7 @@ func TestWriteSkewHistory(t *testing.T) {
 // partitions between every pair of processes, as a nightly run turns them
 // on), the faithful wallet still conforms and posts everything.
 func TestAllFaults(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "wallet.binding.yaml")
 	if testing.Short() {
 		t.Skip("explores 10 runs under every fault family, each linearized")
 	}
@@ -153,7 +153,7 @@ func TestAllFaults(t *testing.T) {
 // and answered); only the eventual check, after the settle, sees the post
 // never came.
 func TestNoOutbox(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "wallet.binding.yaml")
 	one := Config{Mutation: NoOutbox, Workload: [][]Op{{{Kind: "transfer", Src: "b", Dest: "c", Amount: 30}}}}
 	system(one).Exhaust(t, qtest.Bound{Faults: 1}).
 		Expect(t, qtest.Some(qtest.Violates(validate.EventuallyName("allPosted"))), qtest.None(qtest.Mismatch("transfer")))
@@ -164,7 +164,7 @@ func TestNoOutbox(t *testing.T) {
 // answered false and moves nothing; a bank that applies them makes and
 // destroys money (in every run: 10 seeds, 3 under -short).
 func TestInvalidRequests(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "wallet.binding.yaml")
 	n := qtest.ExploreConfig{Seeds: 10, ShortSeeds: 3}
 	system(Config{Workload: Invalid}).Explore(t, n).Expect(t, qtest.Conforms())
 	system(Config{Mutation: NoValidation, Workload: Invalid}).Explore(t, n).
@@ -178,7 +178,7 @@ func TestInvalidRequests(t *testing.T) {
 // The first faithful version of this bank did it. Under -short, 10 seeds
 // each (6 of them apply it twice).
 func TestUnlockedRecord(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "wallet.binding.yaml")
 	n := qtest.ExploreConfig{Seeds: 20, ShortSeeds: 10}
 	dups := qenv.DefaultRates.Set("rpc.wallet.request", 0.5)
 	rc := Config{Isolation: qenv.ReadCommitted, Workload: Contended}
@@ -197,7 +197,7 @@ func TestUnlockedRecord(t *testing.T) {
 // costs more than Linearize, 15 s to 9 s for five runs: each partition's
 // search pays quint's fixed cost; it is for histories of many keys.)
 func TestReplicaRead(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "wallet.binding.yaml")
 	if testing.Short() {
 		t.Skip("explores 5 runs linearized per account")
 	}
@@ -214,7 +214,7 @@ func TestReplicaRead(t *testing.T) {
 // say whether it did, and ResolvePending finds the resolution they need;
 // without it the runs that applied one look wrong.
 func TestPendingTransfers(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "wallet.binding.yaml")
 	if testing.Short() {
 		t.Skip("explores 24 runs whose pending calls are resolved by search")
 	}
@@ -233,7 +233,7 @@ func TestPendingTransfers(t *testing.T) {
 // balances contradict in some run. A bank that does not dedupe a retried
 // request applies it twice, which no placement of anything explains.
 func TestPendingTransfersLinearized(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "wallet.binding.yaml")
 	if testing.Short() {
 		t.Skip("explores runs linearized with their pending calls placed")
 	}

@@ -257,6 +257,16 @@ demand (`gotogether validate -invariants exactlyOnce`,
 `Checker.WithInvariants`). "Conforms, exactlyOnce FAIL at step i" then
 says when a real run hit the design's limit.
 
+The model's own limits are the other half: what it leaves out (a queue
+with no cap where the real one has 10k, one signing key where keys
+rotate). Name each on a line of its own, `// @assume unboundedQueue:
+the queue never fills; the real one caps at 10k` (or `= underCap:` with
+the val that states it), and aim code at it: `//quint:exercises` on the
+test or double that goes past it, `//quint:monitors` on the production
+check. `gotogether invariants` tables them and `-require targeted` fails
+one nothing targets (gotogether-workflow's invariants.md). A model right
+about everything it says still misses the bug in what it never said.
+
 ## 9. Abstraction and cost
 
 - **Opaque ids.** Opaque ids from the implementation (`g20260924T…`) can

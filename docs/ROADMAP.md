@@ -27,7 +27,7 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 |---|---|---|
 | Done | J1–J6: wrong verdicts, admission, claim scope and directed coverage | Regression controls are in the repository. The original reviewer independently re-checked J1/J2 on `aa8380b4`: cached/direct checks agree, reversed own appends are rejected, and the brute-force comparison found no mismatch. |
 | Now | J7a: direct survivor treatment | The frozen `4710e99b` campaign completed 1,749 mutations with 94 survivors at limit 22. Explain the 27 actual SIGKILLs first, using separately labeled diagnostic replays. Then address each remaining case with a public behavioral control or recorded equivalence argument. Arguments do not silently raise or bypass the count gate. Park further evidence machinery while direct treatment is outstanding, apart from fixes forced by a failing campaign. |
-| Next | J7b: native proof runtime and roster visibility | Measured ([performance.md](performance.md#inventorys-cold-withincapacity-proof-and-the-verifier-roster-j7b-2026-11-10)): inventory's cold withinCapacity time is all Apalache/Z3, about tenfold per depth from `used`'s map-fold encoding; the original did not finish depth 7 in 33 minutes. An equal map-free `used` (proved equal to depth 7) proves depth 8 in about 7 minutes. `simulate -timeout` now shares the unchanged job allowance: fair first shares, retries with what is left, then `unfinished` (no verdict, red); failures no longer stop the roster. Two local full rosters (`-timeout 100m`) reported all 51 bindings: 31 passes, 12 declared skips, 8 unfinished (counters ×3, inventory, cut at 6m30s on a loaded machine, library ×2, wallet-grist ×2), needing at least 64 minutes between them. Wallet-grist's two proofs ([performance.md](performance.md#wallet-grists-nooverdraft-proof-j7b-2026-11-11)): its balances as single folds over the log, proved equal to depth 7, finish depth 8 alone in 47 minutes (calls) and 3 h 28 min (store), where depth 6 did not finish in hours. The library's ([performance.md](performance.md#the-librarys-proofs-j7b-2026-11-14)): each read model's count one fold over the log (proved equal to depth 5), depth 8 alone in 5 minutes (calls) and 15 (store), where they took 78 and 100; their jobs' limits are now 18 and 33 minutes. Counters ×3 ([performance.md](performance.md#counters-proofs-j7b-2026-11-15)), measured as inventory's was: one batch the three share, its cost spread over the step's transitions (half in the eight that draw a trigger) and `averageAsOfTrigger`'s check, no single derived quantity; its rules' selections and tag matches as single folds (proved equal to depth 10) take depth 8 alone from 36m47s to 28m20s, so the group's limit is 138 minutes (was 183). Remaining: a counters proof that fits a shared share needs a model change (fewer trigger draws, a cheaper `averageAsOfTrigger`), the maintainer's call; full-roster qualification on the nightly. |
+| Next | J7b: native proof runtime and roster visibility | Measured ([performance.md](performance.md#inventorys-cold-withincapacity-proof-and-the-verifier-roster-j7b-2026-11-10)): inventory's cold withinCapacity time is all Apalache/Z3, about tenfold per depth from `used`'s map-fold encoding; the original did not finish depth 7 in 33 minutes. An equal map-free `used` (proved equal to depth 7) proves depth 8 in about 7 minutes. `simulate -timeout` now shares the unchanged job allowance: fair first shares, retries with what is left, then `unfinished` (no verdict, red); failures no longer stop the roster. Two local full rosters (`-timeout 100m`) reported all 51 bindings: 31 passes, 12 declared skips, 8 unfinished (counters ×3, inventory, cut at 6m30s on a loaded machine, library ×2, wallet-grist ×2), needing at least 64 minutes between them. Wallet-grist's two proofs ([performance.md](performance.md#wallet-grists-nooverdraft-proof-j7b-2026-11-11)): its balances as single folds over the log, proved equal to depth 7, finish depth 8 alone in 47 minutes (calls) and 3 h 28 min (store), where depth 6 did not finish in hours. The library's ([performance.md](performance.md#the-librarys-proofs-j7b-2026-11-14)): each read model's count one fold over the log (proved equal to depth 5), depth 8 alone in 5 minutes (calls) and 15 (store), where they took 78 and 100; their jobs' limits are now 18 and 33 minutes. Counters ×3 ([performance.md](performance.md#counters-proofs-j7b-2026-11-15)), measured as inventory's was: one batch the three share, its cost spread over the step's transitions (half in the eight that draw a trigger) and `averageAsOfTrigger`'s check, no single derived quantity; its rules' selections and tag matches as single folds (proved equal to depth 10) take depth 8 alone from 36m47s to 28m20s, so the group's limit is 138 minutes (was 183). Decided (maintainer, 2026-11-25): counters' model stays as it is (fewer trigger draws or a cheaper `averageAsOfTrigger` would weaken what it checks); its group keeps its own 138-minute limit rather than a shared share. Remaining: full-roster qualification on the nightly. |
 | Done | J7c: one green full nightly on current source | Met 2026-11-14 by the maintainer's authorization of a manual full nightly in place of a scheduled one: run 43523234654 on 7428afdc, 68 of 68 jobs green (verify 28 of 120 min; verify-alone counters 28 of 183, wallet-calls 39 of 81, library-calls 47 of 127, library 99 of 160, wallet 168 of 322), after #200–#202 fixed the example flakes that kept the 11-13 runs red. Per-PR green and isolated campaign completion would not have satisfied it. |
 | Then | J8: differential gates | Write the completion criterion first: evaluator pairs, case counts/bounds, agreement conditions and treatment of unsupported or inconclusive results. |
 | Then | J9–J11: API consolidation before tags | Resolve Grist concepts in core public types, Doc mirrors, status types and manifest/bundle/evidence vocabulary. No arbitrary API line cap. |
@@ -38,10 +38,10 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Proposed queue | L1–L8: golem's first use ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6833092588)) | L1 (#191), L3 (#195), L5 (#194) and L6's docs landed after J7c; the rest as projects ask. |
 | Proposed queue | M1–M6: golem's graph search and Valkey ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6835911012)) | M1 (a bounded result: `-memory`, `-process-memory`, `peakResident`) and M2 done; next M3 (symmetry). |
 | Proposed queue | N1–N7: golem's driver asks ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6843138891)) | N1 (`Config.Require`, its witnesses), N3 (`Step.Eval`), N5 (actionmap `-roundtrips`) and N7 (`connect.Differential`) done. Next N2 (`connect.Compose`). Open in N1: a witness continued past its target (documented for now: require the state after the step under test). |
-| Proposed queue | CW1–CW11: a contract from design to operation ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6885259328), [#220](https://github.com/chucklehead-dev/gotogether/issues/220#issuecomment-6884857732)) | CW1 (literate models; Goo adopted it), CW2 (the design matrix with per-variant search, `dead`, `-variant` and memory released per variant; golem adopted it for four models) and CW4 done. CW5's runtime half done (`connect.Bind` with `Returns` and `Observes`), and its static half (a binding checked against the model's actions, picks and types before any trace; Go types generated from the model's, `gotogether types [-check]`; the walkthrough's tables and the alignment lint, `gotogether invariants [-write|-check] [-require enforced,checked,recorded,driven]`: properties from `//quint:enforces` and `//quint:checks`, actions from the code that records and drives them); left in CW5: Go to Quint (if ever), golem's `expDriver` the first outside case, a world that is not one `T` an open question. Then CW3; CW11 (asynchronous drivers) its own design. Left in CW1: `lint -model doc.md`, stable IDs; in CW2: possibles per variant, iterative deepening. |
+| Proposed queue | CW1–CW11: a contract from design to operation ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6885259328), [#220](https://github.com/chucklehead-dev/gotogether/issues/220#issuecomment-6884857732)) | CW1 (literate models; Goo adopted it), CW2 (the design matrix with per-variant search, `dead`, `-variant` and memory released per variant; golem adopted it for four models) and CW4 done. CW5's runtime half done (`connect.Bind` with `Returns` and `Observes`), and its static half (a binding checked against the model's actions, picks and types before any trace; Go types generated from the model's, `gotogether types [-check]`; the walkthrough's tables and the alignment lint, `gotogether invariants [-write|-check] [-require enforced,checked,recorded,driven]`: properties from `//quint:enforces` and `//quint:checks`, actions from the code that records and drives them); left in CW5: Go to Quint (if ever), golem's `expDriver` the first outside case, a world that is not one `T` an open question. CW3's first slice done (listed assumptions: `// @assume` lines in the model, `//quint:exercises` and `//quint:monitors`, the assumptions table, `-require targeted`); left in CW3: the doc lint, a predicate checked on traces. CW11 (asynchronous drivers) its own design. Left in CW1: `lint -model doc.md`, stable IDs; in CW2: possibles per variant, iterative deepening. |
 | Proposed queue | O1–O2: external drivers ([#220](https://github.com/chucklehead-dev/gotogether/issues/220)) | O1 done (a `settled` record in `gotogether.requests/1`, written by the Playwright adapter's `settled()`): it retires Goo's drain bridge. Next O2, the compact external-driver example. |
 | Proposed queue | LI1–LI4: [lock invariants, after Gobra](#lock-invariants-li-after-gobra) | LI1 (`qenv.Guard`, checked at every simulated Unlock) and LI2 (`//quint:guards`, woven by qweave at the field's Unlocks) done. LI3 (gosim) and LI4 (the doubles' row locks) as projects ask. |
-| Proposed queue | Q0–Q11: a Go Quint | A design item, each its own decision. Q0 first (no quint for consumers, small); Q2's front end only once Q3's corpus and ill-typed generator exist. Upstream first. |
+| Proposed queue | Q0–Q11: a Go Quint | A design item, each its own decision. Q0 first (no quint for consumers, small); Q2's front end only once Q3's corpus and ill-typed generator exist. No upstream contact for now (maintainer, 2026-11-25): gotogether proceeds on its own. |
 | Dropped | J12 and J23 | Go 1.26 compatibility and pin batching are withdrawn. Go 1.27.3 and immediate required sibling pin alignment remain deliberate policies. |
 
 **Red-nightly rule (maintainer decision):** while the nightly is red, feature
@@ -419,6 +419,30 @@ Items, each its own decision before it starts:
   were right about what they said, and nothing said what they left out. A
   doc lint flags a prose claim in a design document that cites no property
   (golem's ADR sentence that was false).
+  First slice done, in `gotogether invariants` (internal/invtable), as
+  the invariants and actions tables are: a model lists an assumption on a
+  line of its own, a plain `//` comment quint reads unchanged
+  (`// @assume unboundedQueue: the queue never fills; the real one caps
+  at 10k`; not `///`, which quint joins to the next definition's doc and
+  refuses at a module's end), a literate model's blocks alike; its name
+  its own (one the main module sees is refused, so a directive cannot
+  mean a property), optionally stated by a boolean val (`// @assume
+  unboundedQueue = underCap: ...`), which then leaves the default
+  properties. `//quint:exercises a` (a test, a double's fault, a sweep
+  row, a generator aimed past it) and `//quint:monitors a` (CW10's
+  production check: the annotation and the row now) are placed as
+  `//quint:enforces` is; a third table between
+  `<!-- gotogether:assumptions -->` markers; `-require
+  exercised,monitored,targeted`; a name that is no assumption, a property
+  directive naming one (or its val), and a malformed, repeated or
+  clashing `@assume`, each an error at its line with the fix. Left: the
+  doc lint, which needs a notion of a claim that is not a heuristic (a
+  sentence classifier cannot be checked against brute force); the
+  cheapest sound form is a region the author marks as claims, each
+  sentence there required to cite a property or an assumption by name
+  (a maintainer's choice of form first). Also left: a run's trace
+  checked against an assumption's val (N7's varied differential aimed at
+  it, CW10's monitor), which the val's name already points at.
 - **CW4: results for scripts (docs, S).** `simulate -json` (and
   `lint -json`, `validate -json`) already carry every verdict, the graph's
   extent and `completeDepth`, with exit codes 0, 1 and 2 (incomplete):
@@ -580,6 +604,13 @@ Items, each its own decision before it starts:
   for the implementation's next point, as golem's `settle` does by hand
   today: connect's steps are synchronous calls. Its own design, golem's
   driver its first case; it is not `Bind`'s ([#144](https://github.com/chucklehead-dev/gotogether/issues/144)).
+- **CW12: I/O specifications (proposed, after Gobra).** A step's outbound
+  effects (calls, publishes, writes) stated per action in the model and
+  compared with what the doubles recorded during the step: a wrong
+  payload, a missing, duplicated, extra, reordered or late send caught at
+  its step, not at a settle. Design, phases and the maintainer's answers
+  (2026-11-25): [io-specs.md](io-specs.md). Nothing built; P0 and P1 next,
+  after CW3's first slice.
 
 Kept on purpose, both projects say: the model as an independent text,
 Apalache for proofs, necessity runs, native source and arithmetic oracles
@@ -613,12 +644,24 @@ item is its own decision before it starts; the red-nightly rule applies.
   blocking 5 of the examples (checkout, streams, crossdb, fleetrollout,
   jobqueue); golem's suites ran whole on compiled models. Third: a constant
   the binding gives as a literal is a parameter of the compiled model, so a
-  test's override (bank's `ACCOUNTS`) needs no quint. Left: the other
-  examples' models and their tests on `RequireModel`, doctor
-  listing bindings without one, and Q1's fragment (`qtest.Model`, simulate and
-  connect still need quint).
+  test's override (bank's `ACCOUNTS`) needs no quint. Fourth (2026-11-25):
+  every example binding whose compiled model is under 1 MB keeps it (22
+  models, 11.4 MB: bank, crossdb, fleetrollout, glomers' four, grpcledger,
+  hello, kvstore, lease, migrate-payments and its draft, quorumkv, raftkv,
+  requeue's two, retrystorm, streams, wallet, webjobs), 125 of their tests
+  on `RequireModel`; `ci/compiled-examples.sh` finds the models and the
+  tests (CI's `examples-compiled`: `compile -check` where quint is, then the
+  tests with quint off PATH), and `ci/needs-quint.txt` says what is left,
+  each with what releases it (`TestCompiledModels` keeps it current).
+  `gotogether doctor` lists the module's bindings by their compiled models:
+  none (with the compile), current or stale by their hashes (without quint;
+  `compile -check` compares meaning). Left: 30 bindings over 1 MB (counters
+  8 MB, edgepublish 22 MB, the grist apps 2-7 MB; IR, about twenty-fold
+  compressible): a compact artifact or a larger budget is the maintainer's
+  call; and the tests of Q1's fragment (`qtest.Model`, simulate; connect's
+  traces from a spec's compiled model since Q1's first slices), the checker's own callers and Q2's run-time models, each listed.
 - **Q1: the evaluator's whole fragment (M). First slices built** (DESIGN
-  §109): the refusals inventoried (none of the repository's 67 agreeing
+  §110): the refusals inventoried (none of the repository's 67 agreeing
   models hits one but rr's order-dependent fold, on purpose), the builtins
   quint's simulator runs closed (`setOfMaps`, `allListsUpTo`,
   `getOnlyElement`, `q::debug`), `quint run`'s random simulation in Go
@@ -640,6 +683,24 @@ item is its own decision before it starts; the red-nightly rule applies.
   for quint's error positions), name resolution, imports, instances and
   `export` flattened to the IR `quint compile` writes, then the type and
   effect checker with quint's QNT codes. Most of the risk is here.
+  Design and plan: [q2-front-end.md](q2-front-end.md). It recommends a
+  hand-written parser and a port of quint's phases one for one, writing
+  quint's JSON. The bar is IR equal after canonical renumbering (ids and
+  the names derived from them) over the subset qeval and binding read,
+  with qeval's agreement as the backstop, and QNT codes at quint's
+  positions. Phases P1 (parser, M), P2 (names and flattening, L), P3
+  (types, L), P4 (effects and modes, M), P5 (wiring, M) and P6 (quint off
+  consumer paths, S) come after Q3's exit criteria. `CompiledModel.Differs`
+  compares IR bytes today and must compare canonical forms first.
+  Decided (2026-11-25):
+  - the bar above;
+  - quint's fixtures and examples fetched at `QUINT_VERSION`, not
+    vendored;
+  - destructuring, `temporal` (checked and passed through) and `assume`
+    accepted from the start, only `apalache::` refused at first;
+  - no `effects` written: the Rust evaluator reads none;
+  - internal for now;
+  - `go` the default only after a nightly shadow period.
 - **Q3: the oracle (M, with Q1 and Q2).** A differential job like
   `qeval-differential`: a corpus (quint's examples and fixtures, every
   example's model, qeval's generator grown to ill-typed programs) compiled
@@ -648,8 +709,9 @@ item is its own decision before it starts; the red-nightly rule applies.
   verdict both ways. `ci/mutate-core.sh` on the port: a survivor is a program
   the corpus lacks. Bumping `QUINT_VERSION` re-runs it.
 - **Stays external:** Apalache (`verify`, `simulate -prove`); the bounded
-  graph covers small models in Go. Upstream first: Informal Systems may want
-  the library, or prefer the Rust evaluator to grow a front end.
+  graph covers small models in Go. Upstream: not contacted for now (the
+  maintainer, 2026-11-25). gotogether proceeds on its own, and Q3 and Q2
+  are not gated on Informal Systems; the maintainer may reconsider.
 
 **What it removes.** Today the core reaches quint through processes: replay
 modules rendered as Quint text (internal/replay, `RenderModule`, the relative

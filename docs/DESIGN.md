@@ -5345,7 +5345,7 @@ adjusting it is a field per format):
 | `gotogether.run/3` | validate's run manifest | the current only |
 | `gotogether.evidence/3` | qtest's evidence | the current only |
 | `gotogether.model/1` | a compiled model (gotogether compile, §64) | the current only |
-| `gotogether.mbt/1` | a spec compiled for connect's traces (gotogether compile -spec, §109) | the current only |
+| `gotogether.mbt/1` | a spec compiled for connect's traces (gotogether compile -spec, §110) | the current only |
 | `gotogether.report/2` | validate's and simulate's `-json` (validate.Document, §68) | the current only |
 | `gotogether.nav/2` | navproto's Session and Node's `protocol` | the current only; unnamed protocols are refused |
 
@@ -7172,7 +7172,50 @@ files, not a combined model verdict or another report format. qnav's current-sta
 invariants and history receipts are different scopes; they do not display these
 simulation reports.
 
-## 109. The evaluator's fragment and quint run in Go (Q1)
+## 109. Listed assumptions are model lines, targeted from the code
+
+ROADMAP CW3: a model names what it leaves out, and the code says what is
+aimed at each omission. The slice lives in `gotogether invariants`
+(internal/invtable), beside the properties' and actions' tables, because
+adopters already keep those tables in their design documents and CI.
+
+- **A plain comment line, in the model.** `// @assume NAME: statement`,
+  optionally `// @assume NAME = val: statement`, one line in a module's
+  source. A comment keeps the model quint's unchanged: no definition is
+  added, nothing typechecks differently, a literate model's quint blocks
+  carry it as any comment (problems are rewritten to the document's line
+  through the tangled file's line map). `///` is refused: quint joins a
+  doc comment to the next definition's doc across blank lines and plain
+  comments, so a standalone one would change a property's meaning
+  column, and quint refuses one at a module's end. One line because the
+  roadmap's unit is "a reviewed line"; a continuation rule would swallow
+  the comment that follows. The predicate is named, never implied by
+  adjacency: a line placed above an invariant by accident would
+  otherwise take that invariant out of the properties table silently.
+- **A namespace of its own, kept apart.** An assumption's name may not be
+  a name the main module sees, so `//quint:enforces x` and
+  `//quint:exercises x` can never mean the same thing; each directive
+  that names the other kind (an assumption in `enforces`, a property in
+  `exercises`, the val that states an assumption in `enforces`) is an
+  error naming the right directive. A val that states an assumption is
+  no property of the default table (it is the region where the model
+  matches the system, not a promise the code keeps); `-props` or a
+  binding that names it keeps it, explicitly.
+- **Two directives, by intent.** `//quint:exercises` marks code that goes
+  past the assumption on purpose (a test, a double's fault, a sweep row,
+  a Hegel generator), the target N7's varied differential will aim at;
+  `//quint:monitors` marks the production check (CW10's seam). Both are
+  placed as `//quint:enforces` is and read by go/parser alone. `-require`
+  gains `exercised`, `monitored` and `targeted` (either), so CI can fail
+  an omission nothing looks at.
+- **No doc lint yet.** A lint of "prose claims that cite no property"
+  needs a definition of a claim. A sentence classifier is a heuristic no
+  brute force can check, and a noisy lint trains people to ignore it.
+  The sound form is a region the author marks as claims, where every
+  sentence must cite a property or an assumption by name; its form (the
+  marker, what a sentence is) is the maintainer's to choose.
+
+## 110. The evaluator's fragment and quint run in Go (Q1)
 
 Q0 judged runs with no quint; a consumer still needed quint (and Node) for
 connect's traces, `simulate` and `qtest.Model`. Q1's first slices close

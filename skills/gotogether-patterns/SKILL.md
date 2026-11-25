@@ -23,7 +23,8 @@ names the mistake and the fix.
 5. Condition an eventual property on a recorded settle (`eventually:`).
 6. A bounded mechanism model, with the lemma it needs tested by Hegel.
 7. Outcomes, refusals and restarts are part of the model.
-8. Separate what the design promises from what it checks (`allows`).
+8. Separate what the design promises from what it checks (`allows`);
+   list what the model leaves out (`// @assume unboundedQueue: ...`).
 9. Keep long replays cheap: ids abstracted, invariants linear, a log of
    independent entities partitioned (`partition:`).
 
@@ -36,7 +37,7 @@ names the mistake and the fix.
 - [ ] Each eventual property is conditioned on a settle, and recorded. (5)
 - [ ] A journey that must finish ends in a ghost flag claimed by `Finishes()`. (5)
 - [ ] Outcomes, refusals and restarts are modelled. (7)
-- [ ] Promised and unpromised properties are separated. (8)
+- [ ] Promised and unpromised properties are separated; each simplification is an `@assume` line. (8)
 - [ ] There is a mutant per property, showing it can fail.
 
 ## Results

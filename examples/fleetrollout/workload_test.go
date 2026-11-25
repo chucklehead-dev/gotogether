@@ -29,7 +29,7 @@ func production(t *testing.T) *sktrace.Trace {
 // 33 of seeds 1 to 60). -short runs 2 and 6 seeds.
 func TestRolloutUnderProductionWorkload(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "fleet.binding.yaml")
 	tr := production(t)
 	x := explore(t, fleetrollout.Config{Workload: tr}, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 2})
 	x.Expect(t, qtest.Conforms())
@@ -55,7 +55,7 @@ func TestRolloutUnderProductionWorkload(t *testing.T) {
 // still caught (19 of 20 runs). -short runs 2 and 2 seeds.
 func TestRolloutWithMeasuredPodTimes(t *testing.T) {
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "fleet.binding.yaml")
 	tr, err := sktrace.ReadFile("../sktrace/testdata/cronjob.sktrace")
 	if err != nil {
 		t.Fatal(err)

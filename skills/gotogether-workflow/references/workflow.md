@@ -292,10 +292,13 @@ deliberately and say why in the commit and the README.
   (`chucklehead-dev/gotogether/.github/actions/gotogether@<commit>`, with
   `run:` your command) pins and caches them, or `ci/install-quint.sh`.
   Tests that need quint start with `qtest.RequireQuint(t)`, so they skip
-  without it. The tiers (per push, nightly, per release) and a pipeline
-  with no quint (`gotogether compile`, `validate -compiled`):
-  gotogether-start's references/ci.md. connect's model-based tests run
-  without quint too, from `gotogether compile -spec` (gotogether-mbt's
+  without it; tests that only judge runs start with
+  `qtest.RequireModel(t, binding)` instead, and run without quint from the
+  binding's compiled model (`gotogether compile`; `gotogether doctor` lists
+  bindings with none). The tiers (per push, nightly, per release), a job
+  with no quint (`GOTOGETHER_COMPILED=1`) and a pipeline with none
+  (`validate -compiled`): gotogether-start's references/ci.md. connect's model-based tests
+  run without quint too, from `gotogether compile -spec` (gotogether-mbt's
   driver.md, "Without quint"); `qtest.Model` and `simulate` still need it.
 - **Strict mode.** Set `GOTOGETHER_STRICT=1` (or `true`; another value
   but `0` or `false` fails, naming it) in every job that installs

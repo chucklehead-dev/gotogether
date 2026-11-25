@@ -28,7 +28,7 @@ var faulty = qenv.DefaultRates.Set("rpc", 0.1)
 // key's history is a register's, every call answers, the system settles
 // and every replica converges.
 func TestFaithful(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "quorumkv.binding.yaml")
 	system(Config{}).Explore(t, qtest.ExploreConfig{Seeds: 10}).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.All(qtest.Completes()))
 }
 
@@ -37,7 +37,7 @@ func TestFaithful(t *testing.T) {
 // the two says so. Plain Settle would restart nothing either, but faults
 // would stop: SettleCore keeps them going outside the core.
 func TestQuorumWithOneDown(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "quorumkv.binding.yaml")
 	core := Config{Core: []string{"r1", "r2"}}
 	system(core).Explore(t, qtest.ExploreConfig{Seeds: 5}).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()), qtest.All(qtest.Completes()))
 	core.Mutation = W3
@@ -48,7 +48,7 @@ func TestQuorumWithOneDown(t *testing.T) {
 // says what it did, and Completes fails of the run. The faithful client
 // retries until a quorum acknowledges (TestFaithful: every call completes).
 func TestLeakedPut(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "quorumkv.binding.yaml")
 	system(Config{Mutation: Leak}).Explore(t, qtest.ExploreConfig{Seeds: 10}).Expect(t, qtest.Some(qtest.Pending("write")))
 }
 
@@ -56,7 +56,7 @@ func TestLeakedPut(t *testing.T) {
 // every read conforms (a quorum read masks it), and only the probe after
 // the settle shows the replicas never converged.
 func TestNoHandoff(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "quorumkv.binding.yaml")
 	// each client ends on a write: a read after it would write back to the
 	// replica the write missed, and repair what the mutant broke; in
 	// about one run in ten (2 of 20), which 70 seeds miss about once in
@@ -94,7 +94,7 @@ func contended(cfg Config) qtest.System {
 // found none in 10 runs, PCT 1 in 10 (4 in 20 since: 35 seeds miss it
 // about once in a thousand).
 func TestBlindRepair(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "quorumkv.binding.yaml")
 	if testing.Short() {
 		t.Skip("explores 35 runs of a contended key, each linearized")
 	}
@@ -107,7 +107,7 @@ func TestBlindRepair(t *testing.T) {
 // later write: readers see it, then the other, then it again. The first
 // faithful version of this store did it.
 func TestRepick(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "quorumkv.binding.yaml")
 	if testing.Short() {
 		t.Skip("explores 20 runs of a contended key, each linearized")
 	}

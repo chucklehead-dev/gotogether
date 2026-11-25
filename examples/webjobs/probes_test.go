@@ -112,7 +112,7 @@ func TestProbes(t *testing.T) {
 		t.Skip("webjobs as it is")
 	}
 	t.Parallel()
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "webjobs.binding.yaml")
 	s1 := req{1, "submit", "k1", 202, "j1", "accepted"}
 	c2 := req{2, "cancel", "j1", -1, "", ""}
 

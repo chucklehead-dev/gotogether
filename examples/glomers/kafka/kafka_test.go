@@ -55,21 +55,21 @@ func record(t *testing.T, m Mutation) *qtest.Run {
 }
 
 func TestLogKeepsEverySend(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "kafka.binding.yaml")
 	record(t, Faithful).Expect(t, qtest.Conforms())
 }
 
 // Blind appends conform step by step (lin-kv allows a write), but an
 // acknowledged message is overwritten: sentAtItsOffset fails.
 func TestBlindAppendLosesSends(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "kafka.binding.yaml")
 	record(t, BlindAppend).Expect(t, qtest.Violates("sentAtItsOffset"))
 }
 
 // A poll that skips a message returns something the model's log does not
 // have at those offsets.
 func TestPollSkipsRejected(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "kafka.binding.yaml")
 	record(t, PollSkips).Expect(t, qtest.Mismatch("pollOk"))
 }
 
@@ -122,7 +122,7 @@ func (m *machine) RuleList(tc hegel.TestCase) {
 }
 
 func TestHegelSchedules(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "kafka.binding.yaml")
 	qhegel.Test(t, qhegel.Config{Binding: "kafka.binding.yaml", Mode: qhegel.Batched, Opts: []qtest.Option{qtest.Global()}, AllowEmpty: true, Rounds: 2},
 		func(ht hegel.TestCase, _ *qhegel.Case) {
 			s := cluster(Faithful)

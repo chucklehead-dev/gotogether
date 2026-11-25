@@ -29,7 +29,7 @@ type MBTOptions struct {
 }
 
 // CompileMBT compiles c's spec (its c.Main, else the file's module) for
-// connect where quint is not installed (connect.MBTModel, DESIGN §109):
+// connect where quint is not installed (connect.MBTModel, DESIGN §110):
 // quint's IR of the main module with every definition its scope names
 // kept (quint's flattening drops what init and step do not use, which
 // would leave Config.Require and Step.Eval without the vals they name),

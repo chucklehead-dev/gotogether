@@ -243,10 +243,13 @@ testing, where Quint traces drive the implementation). It adds:
   check it, and the design document's table of every property with
   file:line links, and of every action with the code that records it
   (`//quint:action`, a literal `qobs.Record`) and the driver that runs it
-  (a `connect.Bind` entry, a `connect.Switch` key), kept current by
-  `-check` in CI; a name that is no property or action fails, and
-  `-require enforced,checked,recorded,driven` fails a property or action
-  nothing covers
+  (a `connect.Bind` entry, a `connect.Switch` key), and of what the model
+  says it leaves out (`// @assume unboundedQueue: ...` lines of the model)
+  with the code aimed past each (`//quint:exercises`) and the production
+  checks that watch it (`//quint:monitors`), kept current by `-check` in
+  CI; a name that is no property, action or assumption fails, and
+  `-require enforced,checked,recorded,driven,targeted` fails one nothing
+  covers
   ([reference](skills/gotogether-workflow/references/invariants.md));
 - **model behavior comparison** (`gotogether model-diff`): compare two finite
   instances on explicit observed variables, with added/removed sequence witnesses,
@@ -367,7 +370,9 @@ verdict, a stale artifact refused (DESIGN §64). The same file kept beside the
 binding (`gotogether compile -binding b.yaml` writes `b.model.json`) lets
 the binding's tests run where quint is not installed (`GOTOGETHER_COMPILED`,
 `qtest.RequireModel`), with `gotogether compile -binding b.yaml -check` in a
-CI job that has quint keeping it current. A spec's compiled model for
+CI job that has quint keeping it current; `gotogether doctor` lists the
+bindings that have none. Sixteen of the examples keep theirs
+(`ci/compiled-examples.sh`; `ci/needs-quint.txt` says why the rest do not). A spec's compiled model for
 connect (`gotogether compile -spec model/m.qnt -main M` writes
 `model/m.M.mbt.json`) lets `connect.Run` and a bound driver's `Run` generate
 their traces with the Go evaluator's random simulation where quint is not

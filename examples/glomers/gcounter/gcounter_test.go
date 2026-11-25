@@ -69,21 +69,21 @@ func record(t *testing.T, m Mutation) *qtest.Run {
 // Every add is counted once everywhere once the network is quiet, through
 // loss, reordering and a partition.
 func TestCounterCountsEveryAdd(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "gcounter.binding.yaml")
 	record(t, Faithful).Expect(t, qtest.Conforms())
 }
 
 // Merging by overwriting: a late, older vector takes counts back, and the
 // next read returns less than the node (in the model) knows.
 func TestOverwriteRejected(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "gcounter.binding.yaml")
 	record(t, Overwrite).Expect(t, qtest.Rejects("read"))
 }
 
 // Gossiping only after a change: every step is allowed, but a lost
 // vector is never resent, and a node is behind once quiet.
 func TestGossipOnChangeDoesNotConverge(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "gcounter.binding.yaml")
 	record(t, GossipOnChange).Expect(t, qtest.Violates("countsEveryAdd"))
 }
 
@@ -102,7 +102,7 @@ func (m *machine) RuleRead(tc hegel.TestCase) {
 // Hegel schedules adds, reads, deliveries, losses, partitions and timers;
 // rounds are checked in bulk.
 func TestHegelSchedules(t *testing.T) {
-	qtest.RequireQuint(t)
+	qtest.RequireModel(t, "gcounter.binding.yaml")
 	qhegel.Test(t, qhegel.Config{Binding: "gcounter.binding.yaml", Mode: qhegel.Batched, Opts: []qtest.Option{qtest.Global()}, Rounds: 2},
 		func(ht hegel.TestCase, _ *qhegel.Case) {
 			s := cluster(Faithful)

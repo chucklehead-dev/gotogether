@@ -1,6 +1,6 @@
 // Package mbtmodel is a spec's main module compiled for connect's traces
 // (gotogether.mbt/1; gotogether compile -spec, validate.CompileMBT): the
-// artifact connect reads where quint is not installed (DESIGN §109). Its
+// artifact connect reads where quint is not installed (DESIGN §110). Its
 // own package, below connect and validate, so the CLI writes and checks it
 // without importing connect (and testing).
 package mbtmodel
