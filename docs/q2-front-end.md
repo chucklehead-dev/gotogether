@@ -684,14 +684,93 @@ and for 1-minimality over the reductions).
   modules. Bar (2)'s "declaration order is part of it" holds only up to
   the layer. *For the maintainer:* binding's `Vars` follow the
   typecheck's order; either binding orders them itself, or P1 must
-  number nodes exactly as quint does.
+  number nodes exactly as quint does. (Decided below: binding orders
+  them by name, and P1 makes an id-free choice wherever quint's output
+  follows its ids.)
 - **quint's verdict itself depends on its ids** on two corpus entries:
   examples/language-features/importFrom.qnt is refused (QNT405 'basics',
   QNT404 through an export) once a module is written before it, and
   `assume _ = val foo = 1 { foo }` (a unit test's) gains a QNT000. A Go
   front end that numbers nodes otherwise will meet both; they are listed
-  in internal/qoracle/testdata/shift-known.txt, which the nightly logs
-  rather than fails on, and fails on once one agrees.
+  in internal/qoracle/testdata/shift-known.txt as `verdict-flip`, which
+  the nightly logs rather than fails on, and fails on once one agrees.
+  An upstream issue is drafted (docs/upstream/quint-id-verdict-flip.md).
+- **QNT099's order is the ids' hash order.** `toposort`
+  (quint/src/static/toposort.ts) returns its cycles as
+  `Set(edges.keys())`, the call graph's immutable Map after Kahn's
+  layers are taken out (`partition` and `map` keep its order), and
+  `parsePhase4toposort` (quint/src/parsing/quintParserFrontend.ts) writes
+  one QNT099 per id in that order. immutable 4.3.9 keeps a Map of up to
+  8 entries in insertion order and a larger one as a hashed trie whose
+  order is the hash of the key, a bigint hashed as its decimal string
+  (immutable.js's `hash`): with a module's call graph over 8 entries, the
+  cycle `cf`/`cg` reports `cf` first at ids 22 and 29 and `cg` first at
+  29 and 36 (the nightly of 2026-11-25, seeds 20782002 and 20782014).
+  QNT098's listing of an import cycle's modules, and its reference (the
+  first), come from the same `cycles`. Class `cycle-order`: the set of
+  cyclic declarations, as (code, place), and each import cycle's modules
+  as a set must match; which QNT099 comes first, and where a QNT098
+  points, may differ. P1 reports a cycle in source order.
+- **Two modules of one name (QNT102) are both written**, in file order:
+  `sortModules` (quintParserFrontend.ts) returns the modules unsorted
+  once it finds a duplicate (with QNT101), the collector's `enterModule`
+  (quint/src/names/collector.ts:72-78) reports QNT102 at the second, and
+  its `exitModule` (:80-82) lets the last module walked win. With a
+  duplicate that walk is the file's order, never the module toposort's
+  (which `sortModules` skips): which copy is kept and where QNT102 points
+  did not change under the shift on any program run (the four seeds'
+  every mutation, the fixed programs), so rule 1 applies and P1 matches
+  them exactly: QNT102 present, the verdict refused, the later copy kept.
+  What the ids did change is the layer order inside each copy (the first
+  finding above), and the nightly's disagreement on seeds 20782003 and
+  20782015 was the form's: it keyed a module whose name repeats by a
+  digest of its content in quint's declaration order, so the shifted
+  stub's copy took another key. The digest now reads a module's
+  declarations as a multiset (canon's `signature`), as the form compares
+  them by layer; a copy with other content still keys apart. Should a
+  shift ever change which copy wins, the oracle fails there, and its
+  later errors become a class then.
+- **After a type error, which nodes have types is the ids' order.**
+  `TypeInferrer.inferTypes` (quint/src/types/inferrer.ts) walks a
+  module's declarations as the toposort left them, and each of
+  `ConstraintGeneratorVisitor`'s exits but a literal's, a var's and a
+  const's returns once its `errors` are not empty
+  (quint/src/types/constraintGenerator.ts): a declaration walked after
+  the first error gets no type, and which ones those are is a layer's
+  id order. `val bad = 1 + true` among `val a`, `b`, `c`: unshifted, `b`
+  and `c` are untyped; shifted, typed (the nightly's seeds 20782003 and
+  20782015, every QNT000 type-error mutation). Class
+  `types-after-error`: the same errors, no node both type typed
+  otherwise. P1 walks a layer in source order, then name.
+- **Twin declarations** (`var x: int` twice, QNT101) are both written,
+  each layer's in id order. The form told twins alike in name, kind and
+  content apart by quint's order (`x~var~<digest>~2`), so their source
+  spans crossed once the ids shifted (seed 20782014's
+  duplicate-definition): it now numbers them by their places in the
+  source map (canon's `keysOf`), where a front end has to put them
+  anyway: quint's output is the same under the shift, so rule 1.
+
+**The rule for quint's id-dependent behaviour** (the maintainer's
+decision, 2026-11-25, a formal-methods architect's proposal):
+1. Wherever quint's output stays the same under its own id shift, P1
+   matches it. The shifted stub decides this empirically, and canon
+   compares (the form itself is fixed where it read quint's order: the
+   duplicate modules' and twins' keys above).
+2. Wherever quint's output changes under its own shift, there is no
+   quint behaviour to match. gotogether specifies an id-free choice
+   (source order, then name), and the oracle accepts the class the shift
+   produces, recorded in testdata/shift-known.txt by class name, against
+   any front end (`CompareKnown`; `Compare` is the form's alone):
+   `layer-order` (absorbed by the form's layers), `cycle-order`,
+   `types-after-error`, each `*`, for every program. A disagreement
+   outside its class (another error set, a module or type that differs)
+   fails.
+3. A verdict that flips under the shift is an upstream bug: Q2
+   implements the unshifted verdict, an issue is drafted in
+   docs/upstream/, and the entry is a `verdict-flip` line of
+   shift-known.txt.
+
+Binding is to sort its `Vars` by name (binding/model.go, DESIGN §111), which answers the question above.
 - A type error is reported once per module analysed before it: errors
   compare as the first, then the set (§3.4's set).
 - A node starting on a file's first line keeps that line's column shift

@@ -182,6 +182,9 @@ type canonicalizer struct {
 	modOrder []int
 	modLayer map[string]int
 	dropped  map[string]int
+	// at is each id's place in the source (its span's file, line and
+	// column, as a sortable key), from the source map when there is one
+	at map[string]string
 }
 
 // idText is v as an id's key: a number's text or a form's string.
@@ -196,11 +199,15 @@ func idText(v any) (string, bool) {
 }
 
 func (c *canonicalizer) run(top, sm map[string]any) any {
+	if sm == nil {
+		sm, _ = top["sourceMap"].(map[string]any)
+	}
+	c.at = c.places(sm)
 	mods, _ := top["modules"].([]any)
 	modKeys := keysOf(mods, func(_ int, m map[string]any) string {
 		s, _ := m["name"].(string)
 		return s
-	}, "module")
+	}, "module", c.place)
 	// the walk follows the canonical order, never quint's within a layer:
 	// an id two declarations share takes the path of the first in it
 	c.layer = layers(top)
@@ -220,7 +227,7 @@ func (c *canonicalizer) run(top, sm map[string]any) any {
 		c.scope = ""
 		c.assign(mm["id"], modKeys[i])
 		decls, _ := mm["declarations"].([]any)
-		dkeys := declKeys(decls)
+		dkeys := c.declKeys(decls)
 		for _, j := range c.declOrder(decls, dkeys) {
 			d := decls[j]
 			dm, ok := d.(map[string]any)
@@ -315,8 +322,10 @@ func orEmpty(s []any) []any {
 // The key must not depend on the elements' order, which within a layer is
 // quint's ids': an element with no name is keyed by its kind and content
 // (signature), a repeated name by its kind and then its content, and only
-// elements alike in all of these by ~2, ~3.
-func keysOf(xs []any, name func(int, map[string]any) string, kind string) []string {
+// elements alike in all of these by ~2, ~3, in the order of their places
+// in the source (place) where they have them: two `var x: int` differ
+// only there, and quint orders them by their ids.
+func keysOf(xs []any, name func(int, map[string]any) string, kind string, place func(map[string]any) string) []string {
 	keys := make([]string, len(xs))
 	maps := make([]map[string]any, len(xs))
 	count := map[string]int{}
@@ -339,8 +348,18 @@ func keysOf(xs []any, name func(int, map[string]any) string, kind string) []stri
 			keys[i] = k + "~" + kk + "~" + signature(maps[i])
 		}
 	}
+	order := make([]int, len(xs))
+	at := make([]string, len(xs))
+	for i := range xs {
+		order[i] = i
+		if maps[i] != nil {
+			at[i] = place(maps[i])
+		}
+	}
+	slices.SortStableFunc(order, func(i, j int) int { return strings.Compare(at[i], at[j]) })
 	seen := map[string]int{}
-	for i, k := range keys {
+	for _, i := range order {
+		k := keys[i]
 		seen[k]++
 		if n := seen[k]; n > 1 {
 			keys[i] = fmt.Sprintf("%s~%d", k, n)
@@ -349,8 +368,56 @@ func keysOf(xs []any, name func(int, map[string]any) string, kind string) []stri
 	return keys
 }
 
+// places is each id's place in the source, from a source map: quint's
+// (`map`, its files by number) or a form's (`spans`, by name).
+func (c *canonicalizer) places(sm map[string]any) map[string]string {
+	out := map[string]string{}
+	files := map[string]string{}
+	if idx, ok := sm["sourceIndex"].(map[string]any); ok {
+		for k, v := range idx {
+			if s, ok := v.(string); ok {
+				files[k] = c.rel(s)
+			}
+		}
+	}
+	m, _ := sm["map"].(map[string]any)
+	if m == nil {
+		m, _ = sm["spans"].(map[string]any)
+	}
+	for id, e := range m {
+		l, ok := e.([]any)
+		if !ok || len(l) != 3 {
+			continue
+		}
+		f := fmt.Sprint(l[0])
+		if n, ok := files[f]; ok {
+			f = n
+		}
+		start, _ := l[1].(map[string]any)
+		num := func(k string) int64 {
+			n, _ := start[k].(json.Number)
+			i, _ := n.Int64()
+			return i
+		}
+		out[id] = fmt.Sprintf("%s\x00%012d:%012d", f, num("line"), num("col"))
+	}
+	return out
+}
+
+// place is a node's place in the source ("" where the source map has none).
+func (c *canonicalizer) place(m map[string]any) string {
+	id, _ := idText(m["id"])
+	return c.at[id]
+}
+
 // signature is a short digest of n's content without its ids, the names
 // quint makes from ids reduced to their prefixes.
+//
+// A module's declarations are digested as a multiset: quint orders a
+// layer of them by their ids (§111's order), which the form compares by
+// layer and key, so their order is no content. Two modules of one name
+// (QNT102, which quint writes both of) were keyed by it: shifted ids
+// reordered a layer and renamed the module.
 func signature(n any) string {
 	var strip func(v any) any
 	strip = func(v any) any {
@@ -358,7 +425,11 @@ func signature(n any) string {
 		case map[string]any:
 			out := map[string]any{}
 			for k, e := range x {
-				if k != "id" && k != "reference" {
+				switch k {
+				case "id", "reference", "$layer":
+				case "declarations":
+					out[k] = unordered(strip(e))
+				default:
 					out[k] = strip(e)
 				}
 			}
@@ -383,7 +454,26 @@ func signature(n any) string {
 	return hex.EncodeToString(h[:4])
 }
 
-func declKeys(decls []any) []string {
+// unordered is a list's elements sorted by their encoding: the list as a
+// multiset.
+func unordered(v any) any {
+	xs, ok := v.([]any)
+	if !ok {
+		return v
+	}
+	enc := make([]string, len(xs))
+	for i, x := range xs {
+		enc[i] = fullJSON(x)
+	}
+	slices.Sort(enc)
+	out := make([]any, len(enc))
+	for i, e := range enc {
+		out[i] = e
+	}
+	return out
+}
+
+func (c *canonicalizer) declKeys(decls []any) []string {
 	return keysOf(decls, func(_ int, d map[string]any) string {
 		if s, ok := d["name"].(string); ok && s != "" {
 			// a name quint made from an id (a destructuring's temporary)
@@ -407,7 +497,7 @@ func declKeys(decls []any) []string {
 		}
 		k, _ := d["kind"].(string)
 		return k + ":" + strings.Join(parts, ",")
-	}, "decl")
+	}, "decl", c.place)
 }
 
 func (c *canonicalizer) assign(v any, path string) {
@@ -651,7 +741,7 @@ var (
 
 func (c *canonicalizer) module(m map[string]any, key string) any {
 	decls, _ := m["declarations"].([]any)
-	dkeys := declKeys(decls)
+	dkeys := c.declKeys(decls)
 	type ordered struct {
 		layer int
 		key   string
