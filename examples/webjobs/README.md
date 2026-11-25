@@ -337,6 +337,33 @@ it with `npm i -g @antithesishq/bombadil@0.7.9`; Bombadil finds Chrome as
 `local-network` permission Bombadil grants by default:
 `BOMBADIL_ARGS="--chrome-grant-permissions local-network-access"`.
 
+### The browser
+
+Bombadil captures each state with the page paused in the debugger
+(`Runtime.evaluate("debugger;0")`), evaluates its extractors on the
+paused frame, then resumes: about 30 captures a second. The page's
+timers and fetch callbacks run only between captures, so the
+binding's `within 500ms after unseenReady: readySeen` bounds the page
+and the driver together. In Chrome 158 (Chrome for Testing
+158.0.8127.36, full and headless shell alike) the renderer's cost of
+evaluating on a paused frame grows over a session: a capture now and
+then takes 60ms near the 480th, 350ms near the 880th, 0.6-1.2s near
+the 1300th (a 45s run's last seconds), the page's main thread busy
+throughout, its heap collected in the same capture. A job that commits
+just before one is shown up to a second late, as the nightly's misses
+of 2026-11-14 (791ms) and 11-23 (701ms, ubuntu's Chrome 157) were,
+late in the run. A bare CDP loop (pause, one `Debugger.evaluateOnCallFrame`,
+resume) reproduces it without Bombadil or webjobs; without the pause
+(`Runtime.evaluate` alone) it does not, nor does Chrome for Testing
+153 (3000 captures, none over 6ms). The nightly therefore runs Bombadil
+on Chrome for Testing's headless shell 153.0.8010.12 (`CHROME=`): its
+45s runs' captures take about 60ms at most, and the page shows a
+commit within 150ms (within 240ms with every core busy, where Bombadil
+captures half as often). A live run on a newer Chrome can fail the bound
+for the browser's sake: a miss with a long gap between two of
+Bombadil's states (its trace's timestamps) at the commit is the
+browser's, not the page's.
+
 The mutants are overlays, as in [examples/payd](../payd): a directory of
 `testdata/mutants/` whose files replace webjobs' of the same name, found
 there by the core's harness (`qtest.Mutants{Package: "webjobs"}`) and

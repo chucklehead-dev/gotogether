@@ -22,7 +22,9 @@ AGENTS.md has the general requirements.
   runs the real server with a Go client and checks the recorded Bombadil
   runs (testdata/runs), faithful and per mutant overlay; `go test ./...` adds the live runs, which need
   `bombadil` (`npm i -g @antithesishq/bombadil@0.7.9`) and a Chrome on
-  PATH (`CHROME=` names one; an older Chromium needs
+  PATH (`CHROME=` names one; the nightly pins Chrome for Testing 153, whose
+  debugger pauses do not grow over a run: webjobs' README, "The browser";
+  an older Chromium needs
   `BOMBADIL_ARGS="--chrome-grant-permissions local-network-access"`).
   `WEBJOBS_RECORD=1 go test -run 'TestLive$|TestMutants$' .` records 6s
   runs into testdata/runs; `WEBJOBS_TIME_LIMIT=10s` shortens a live run;
