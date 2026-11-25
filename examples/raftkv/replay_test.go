@@ -3,6 +3,7 @@ package raftkv
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,15 +53,10 @@ func replayJournal(t *testing.T, path string) {
 		t.Fatal(err)
 	}
 	sc := j.Script()
-	for _, u := range j.Unreproducible() {
+	for _, u := range replayNotes(j) {
 		t.Logf("%s: not as it happened: %s", path, u)
 	}
-	// a cut lasts until its scripted heal: LongestCut is the real one's
-	// length, and the simulation's heals come at their first chance after
-	// the faults before them, not at the real times, so give it room (at
-	// LongestCut alone qenv healed one link of two isolates first, and the
-	// scripted heal of it never happened)
-	cfg := Config{Record: Cluster, Load: true, Partitions: true, Stalls: qenv.Stalls{Pause: 300 * time.Millisecond}, CutLength: 10 * j.LongestCut()}
+	cfg := replayConfig(j)
 	sys := system(cfg)
 	sys.Run = func(c qenv.Chooser) error { return Run(c, cfg) }
 	r := sys.Judge(t, sc)
@@ -86,4 +82,52 @@ func replayJournal(t *testing.T, path string) {
 		}
 	}
 	t.Logf("%s: re-made %d of %d faults: %v", path, len(made), len(sc.Faults), made)
+}
+
+// replayConfig is the simulated cluster a journal's faults are re-made
+// in: the clients' load, the partition nemesis, a pause of the real
+// one's length (realConfig's For, 300ms) and a cut lasting until its
+// scripted heal. LongestCut is the real cut's length, and the
+// simulation's heals come at their first chance after the faults before
+// them, not at the real times, so it is given room (at LongestCut alone
+// qenv healed one link of two isolates first, and the scripted heal of it
+// never happened).
+func replayConfig(j *qnemesis.Journal) Config {
+	return Config{Record: Cluster, Load: true, Partitions: true, Stalls: qenv.Stalls{Pause: 300 * time.Millisecond}, CutLength: 10 * j.LongestCut()}
+}
+
+// replayNotes is what j's script cannot make as it happened in the
+// simulation replayConfig deploys, its pauses and cuts compared with that
+// simulation's own. Unreproducible without a simulation compares them
+// with qenv's defaults, no pause at all: CI's seed 5 hint said its 301ms
+// pause was off, of a replay that makes it 300ms long.
+func replayNotes(j *qnemesis.Journal) []string {
+	s := qenv.New(qenv.Nominal{})
+	defer s.Close()
+	Deploy(s, replayConfig(j))
+	return j.Unreproducible(s)
+}
+
+// CI's seed 5 journal (testdata/ci-seed5.journal.jsonl: a 301ms pause of
+// n1, a crash of n2, n1 cut off for 301ms) re-made in the simulation, on
+// every run and without the real tier: every fault made, the cluster's
+// history conforming (a leader within 300ms of the heal), and nothing
+// said to be made otherwise than it happened (the hint once said the
+// pause was not made).
+func TestReplayCISeed5(t *testing.T) {
+	qtest.RequireQuint(t)
+	const path = "testdata/ci-seed5.journal.jsonl"
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j, err := qnemesis.ReadJournal(f)
+	f.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if notes := replayNotes(j); len(notes) > 0 {
+		t.Errorf("the replay of %s makes every fault as it happened, yet:\n%s", path, strings.Join(notes, "\n"))
+	}
+	replayJournal(t, path)
 }

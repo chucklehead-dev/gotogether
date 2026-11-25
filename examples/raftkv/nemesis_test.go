@@ -507,8 +507,14 @@ func logReplay(t *testing.T, v realVerdicts) {
 	}
 	sc := v.Journal.Script()
 	t.Logf("%s: its faults in the simulation: RAFTKV_REAL_JOURNAL=%s go test -run TestRealFaultsInSimulation -v . (script %v, CutLength %v)",
-		v.Dir, filepath.Join(v.Dir, "journal.jsonl"), sc.Faults, v.Journal.LongestCut())
-	for _, u := range v.Journal.Unreproducible() {
+		v.Dir, filepath.Join(v.Dir, "journal.jsonl"), sc.Faults, replayConfig(v.Journal).CutLength)
+	if es := v.Journal.Entries; len(es) > 0 {
+		// the cuts of every node after the schedule are the harness's, not
+		// the nemesis's: a failure after them (CI's seed 5, a leader 1.1s
+		// after the first cut's heal) is not re-made by the journal
+		t.Logf("  the journal's faults end at %s: the cuts after them (nemesisRun.Cuts) are not in it", es[len(es)-1].Time.Format(time.RFC3339Nano))
+	}
+	for _, u := range replayNotes(v.Journal) {
 		t.Logf("  not as it happened: %s", u)
 	}
 }
