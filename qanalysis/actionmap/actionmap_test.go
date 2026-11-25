@@ -12,22 +12,27 @@ import (
 
 const fix = "example.com/actionmapfixture/shop"
 
-// Sites by annotation and by qobs.Record in a closure; reachability
-// through calls and the closure.
+// Sites by annotation, by qobs.Record in a closure and by qobs.Invoke (a
+// call: Restock's, as checkout's pay records); reachability through calls
+// and the closure.
 func TestStatic(t *testing.T) {
 	m, err := actionmap.Static("../testdata/actionmap", "./...")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := m.Actions(); !reflect.DeepEqual(got, []string{"cancel", "place"}) {
+	if got := m.Actions(); !reflect.DeepEqual(got, []string{"cancel", "place", "restock"}) {
 		t.Fatalf("actions %v", got)
 	}
 	if got := m.Sites["cancel"]; !reflect.DeepEqual(got, []string{fix + ".(Shop).Cancel"}) {
 		t.Errorf("cancel's sites %v; want Cancel, the closure's declaration", got)
 	}
+	if got := m.Sites["restock"]; !reflect.DeepEqual(got, []string{fix + ".(Shop).Restock"}) {
+		t.Errorf("restock's sites %v; want Restock, which invokes it", got)
+	}
 	for action, want := range map[string][]string{
-		"place":  {".(Shop).Place", ".(Shop).reserve", ".(Shop).validate", ".(Shop).log"},
-		"cancel": {".(Shop).Cancel", ".(Shop).release"},
+		"place":   {".(Shop).Place", ".(Shop).reserve", ".(Shop).validate", ".(Shop).log"},
+		"cancel":  {".(Shop).Cancel", ".(Shop).release"},
+		"restock": {".(Shop).Restock", ".(Shop).add"},
 	} {
 		for _, f := range want {
 			if !m.Reach[action][fix+f] {
@@ -64,6 +69,7 @@ func TestCompare(t *testing.T) {
 			Unreachable: []string{fix + ".(Shop).log", fix + ".Helper"}},
 		{Action: "place", Sites: []string{fix + ".(Shop).Place"},
 			NotRun: []string{fix + ".(Shop).validate"}, ByOthers: []string{fix + ".(Shop).log"}},
+		{Action: "restock", Sites: []string{fix + ".(Shop).Restock"}},
 	}
 	if !reflect.DeepEqual(gaps, want) {
 		t.Errorf("gaps\n%#v\nwant\n%#v", gaps, want)

@@ -15,7 +15,8 @@ import (
 const ck = "github.com/chucklehead-dev/gotogether/examples/checkout"
 
 // Every action checkout records has a site: Record calls in OnCommit
-// closures are found, by the declaration that holds them.
+// closures are found, by the declaration that holds them, and pay's
+// Invoke (a call, scoping its capture's effects).
 func TestCheckoutStatic(t *testing.T) {
 	m, err := actionmap.Static("../../examples/checkout", "./...")
 	if err != nil {
@@ -23,7 +24,7 @@ func TestCheckoutStatic(t *testing.T) {
 	}
 	want := map[string]string{
 		"place": ck + "/shop.(Shop).PlaceOrder", "cancel": ck + "/shop.(Shop).Cancel",
-		"markPaid": ck + "/shop.(Shop).pay", "ship": ck + "/shop.(Shop).RunShipping",
+		"markPaid": ck + "/shop.(Shop).pay", "pay": ck + "/shop.(Shop).pay", "ship": ck + "/shop.(Shop).RunShipping",
 		"charge": ck + "/shop.(Provider).Handle", "refund": ck + "/shop.(Provider).Handle",
 		"settle": ck + ".RunOn",
 	}
@@ -41,8 +42,9 @@ func TestCheckoutStatic(t *testing.T) {
 
 // Woven for coverage, checkout's steps read against the static map: the
 // code that leads to a step lives in its site's callers (the payment
-// consumer loop before markPaid), which reachability from the site
-// cannot see, and setup (Deploy) is the first step's.
+// consumer loop before pay, the first step it records), which
+// reachability from the site cannot see, and setup (Deploy) is the first
+// step's.
 func TestCheckoutCompare(t *testing.T) {
 	if testing.Short() {
 		t.Skip("weaves checkout and explores it")
@@ -79,8 +81,8 @@ func TestCheckoutCompare(t *testing.T) {
 			t.Errorf("%s: steps with no site", g.Action)
 		}
 	}
-	if !slices.Contains(by["markPaid"].Unreachable, ck+"/shop.(Shop).RunPayments") {
-		t.Errorf("markPaid: the consumer loop before pay should be run by its steps and unreachable from pay: %+v", by["markPaid"])
+	if !slices.Contains(by["pay"].Unreachable, ck+"/shop.(Shop).RunPayments") {
+		t.Errorf("pay: the consumer loop before it should be run by its steps and unreachable from its site: %+v", by["pay"])
 	}
 	if !slices.Contains(by["place"].Unreachable, ck+".Deploy") {
 		t.Errorf("place: setup should be run by the first step: %+v", by["place"])

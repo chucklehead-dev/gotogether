@@ -3679,6 +3679,8 @@ type Node struct
     field Choice *Choice `json:"choice,omitempty"`
     field Branches []Branch `json:"branches"`
     field Steps []string `json:"steps"`
+    field StepEffects [][]string `json:"stepEffects,omitempty"`
+    field Unattributed []string `json:"unattributed,omitempty"`
     field Tasks []string `json:"tasks,omitempty"`
     field Elapsed string `json:"elapsed,omitempty"`
     field Model []ActorState `json:"model,omitempty"`

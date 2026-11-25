@@ -382,12 +382,26 @@ func (m *Model) runScreen(c *entry) screen {
 	steps := n.Steps
 	out = append(out, "", st.section.Render(fmt.Sprintf("steps so far (%d)", len(steps))))
 	const shown = 8
+	first := 0
 	if len(steps) > shown {
 		out = append(out, st.faint.Render(fmt.Sprintf("  … %d before", len(steps)-shown)))
-		steps = steps[len(steps)-shown:]
+		first = len(steps) - shown
 	}
-	for _, s := range steps {
-		out = append(out, "  "+s)
+	// each step's effects under it (qtrace's attribution, as the node
+	// says it), labelled as effects and not counted as steps
+	for i := first; i < len(steps); i++ {
+		out = append(out, "  "+steps[i])
+		if i < len(n.StepEffects) {
+			for _, e := range n.StepEffects[i] {
+				out = append(out, st.faint.Render("    ↳ effect "+e))
+			}
+		}
+	}
+	if len(n.Unattributed) > 0 {
+		out = append(out, st.faint.Render(fmt.Sprintf("  effects made by no step so far (%d)", len(n.Unattributed))))
+		for _, e := range n.Unattributed {
+			out = append(out, st.faint.Render("    ↳ effect "+e))
+		}
 	}
 	if len(n.Diagnostics) > 0 {
 		out = append(out, "", st.section.Render("whole-run diagnostics · independent of cursor"))
