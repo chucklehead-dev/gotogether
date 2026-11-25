@@ -16,13 +16,15 @@ import (
 // is the network's, one effect; a retry is the code's, another). A step's
 // effects are compared with the model's where a binding says so (I/O
 // specifications); otherwise they are evidence.
-// It is generic, and names its kind in parts, so that a send no run
-// records builds nothing: no kind's string, no v boxed, no fields.
+// It records wherever qobs.Effect would: under an open call's scope
+// (Call.Scope) on that call's recorder, whatever the simulation's, else
+// on the recorder Record would use. It is generic, and names its kind in
+// parts, so that a send no run records builds nothing: no kind's string,
+// no v boxed, no fields (qobs.EffectFunc calls build only for a recorder).
 func effect[T any](ctx context.Context, double, name, send string, v T) {
-	if qobs.From(ctx) == nil {
-		return // no run records here: nothing to build
-	}
-	qobs.Effect(ctx, double+"."+name+"."+send, EffectFields(v)...)
+	qobs.EffectFunc(ctx, func() (string, []any) {
+		return double + "." + name + "." + send, EffectFields(v)
+	})
 }
 
 // EffectFields are v's fields as a double's effect record carries them

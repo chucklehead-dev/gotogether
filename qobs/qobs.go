@@ -554,13 +554,39 @@ func (c *Call) Scope(ctx context.Context) context.Context {
 //
 //	qobs.Effect(ctx, "mail.send", "to", addr, "template", "receipt")
 func Effect(ctx context.Context, kind string, kv ...any) {
+	if r, c, id := effectTarget(ctx); r != nil {
+		r.effect(ctx, kind, expand(kv), c, id)
+	}
+}
+
+// EffectFunc records an effect as Effect does, its kind and fields built
+// by build, which is called only if a recorder takes the effect: a double
+// whose sends no run records builds nothing (no kind's string, no fields
+// boxed). The recorder is found once, as Effect finds it: the open call's
+// in ctx (Call.Scope), else the recorder Record would use. A no-op with
+// no recorder.
+//
+//	qobs.EffectFunc(ctx, func() (string, []any) {
+//		return "mail." + name + ".send", []any{"to", addr}
+//	})
+func EffectFunc(ctx context.Context, build func() (kind string, kv []any)) {
+	if r, c, id := effectTarget(ctx); r != nil {
+		kind, kv := build()
+		r.effect(ctx, kind, expand(kv), c, id)
+	}
+}
+
+// effectTarget is where an effect made through ctx is recorded: the call
+// open in ctx (Call.Scope: rule 1), on its own recorder, whatever ctx's
+// recorder is (WithRecorder(nil) included); else the recorder Record would
+// use (from), with no call (rule 2), and the goroutine identity from read
+// finding it, so that recording it reads none again.
+func effectTarget(ctx context.Context) (*Recorder, *Call, int64) {
 	if c, ok := ctx.Value(callKey{}).(*Call); ok && c != nil {
-		c.r.effect(ctx, kind, expand(kv), c, 0)
-		return
+		return c.r, c, 0
 	}
-	if r, id := from(ctx); r != nil {
-		r.effect(ctx, kind, expand(kv), nil, id)
-	}
+	r, id := from(ctx)
+	return r, nil, id
 }
 
 // Effect records an effect (the package's Effect) on r.

@@ -7509,7 +7509,23 @@ began are no step's. Reconstruct attaches each record in seq order
 step a service records). Effect records are in the verdict key (Keyer):
 two runs whose effects differ are two verdicts.
 
-**Where effects are recorded** (§8.1, 6: always, for evidence too).
+**Where effects are recorded** (§8.1, 6: always, for evidence too). A
+double records wherever qobs.Effect would: an open call's scope (on that
+call's recorder, whatever the simulation's context carries), else From's
+recorder. The doubles of the core decide it through `qobs.EffectFunc`,
+which finds the recorder once and builds the record only for one (a send
+no run records allocates nothing); `qenv`'s own once asked `qobs.From`
+alone, and a call invoked on a recorder the simulation did not carry
+lost its Service request and Queue publish while its scope's
+`qobs.Effect` recorded (qenv's TestDoublesRecordWhereEffectDoes: every
+double's send against qobs.Effect beside it, under a recorder, a scope, a
+scope over `WithRecorder(nil)`, and neither). Rule 1 applies under the
+scope, rule 2 only outside one; a send after Done is Late, a pending
+call keeps its sends, and a frozen task's unwinding sends are dropped. A
+double in a published module of its own (qenv/simgrpc, qenv/kubesim,
+qenv/simvalkey) that records effects should do so through
+`qobs.EffectFunc` (or `qobs.Effect`), never by asking `qobs.From`: none
+records effects yet.
 `qenv.Service.Call` records `rpc.<name>.request` with the request's
 exported fields (`qenv.EffectFields`), after the call is sent and before
 the network decides its fate (one effect for a lost or duplicated
