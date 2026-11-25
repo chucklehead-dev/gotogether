@@ -12,7 +12,10 @@ import (
 // threshold: a tick held 300ms is a sched stall about that long, ending
 // when the tick ran; an fsync held 300ms a disk stall over the fsync. The
 // stalls are measured in the harness, apart from any system. Stop removes
-// the disk probe's file, and a second Stop returns the same report.
+// the disk probe's file, and a second Stop returns the same report. The
+// threshold sits just under the tolerance below hold: a real stall of the
+// runner (a 141ms fsync on a loaded -race job) is no stall here, and every
+// one recorded is a held probe's.
 func TestWatchHostMeasuresStalls(t *testing.T) {
 	t.Parallel()
 	const hold = 300 * time.Millisecond
@@ -30,7 +33,7 @@ func TestWatchHostMeasuresStalls(t *testing.T) {
 		return f.Sync()
 	}
 	dir := t.TempDir()
-	m, err := watchHost(HostWatch{Dir: dir}, sleep, sync)
+	m, err := watchHost(HostWatch{Dir: dir, Threshold: hold - 50*time.Millisecond}, sleep, sync)
 	if err != nil {
 		t.Fatal(err)
 	}

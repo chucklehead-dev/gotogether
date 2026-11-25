@@ -909,29 +909,6 @@ func normalize(v any) any {
 	return fmt.Sprint(v)
 }
 
-// MemorySink keeps steps in memory: for tests, and for validating a run
-// in-process without any OTel pipeline.
-type MemorySink struct {
-	mu    sync.Mutex
-	steps []qtrace.Step
-}
-
-func (m *MemorySink) Record(_ context.Context, s *qtrace.Step) {
-	m.mu.Lock()
-	m.steps = append(m.steps, *s)
-	m.mu.Unlock()
-}
-
-// Steps returns a copy of what was recorded.
-func (m *MemorySink) Steps() []qtrace.Step {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return append([]qtrace.Step(nil), m.steps...)
-}
-
-// Reset forgets everything recorded.
-func (m *MemorySink) Reset() { m.mu.Lock(); m.steps = nil; m.mu.Unlock() }
-
 // Tee records to several sinks.
 type Tee []Sink
 
