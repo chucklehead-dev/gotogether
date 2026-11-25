@@ -11,10 +11,22 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/chucklehead-dev/gotogether/connect"
+	"github.com/chucklehead-dev/gotogether/internal/mbtmodel"
 	"github.com/chucklehead-dev/gotogether/internal/qeval"
 	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 )
+
+// An MBTModel is a spec's main module compiled for connect
+// (connect.MBTModel, the same type): CompileMBT writes it.
+type MBTModel = mbtmodel.Model
+
+// MBTOptions say which module of which spec CompileMBT compiles, as
+// connect.Config names them: Spec, Main (default the file's module), Init
+// and Step (default init and step), and the quint that compiles it
+// (default quint).
+type MBTOptions struct {
+	Spec, Main, Init, Step, Quint string
+}
 
 // CompileMBT compiles c's spec (its c.Main, else the file's module) for
 // connect where quint is not installed (connect.MBTModel, DESIGN §109):
@@ -24,7 +36,7 @@ import (
 // and the spec's and its imports' hashes, paths relative to out's
 // directory (where the artifact is written: connect.CompiledFor by
 // convention). It needs quint (c.Quint, else quint).
-func CompileMBT(ctx context.Context, c connect.Config, out string) (*connect.MBTModel, error) {
+func CompileMBT(ctx context.Context, c MBTOptions, out string) (*MBTModel, error) {
 	quint := c.Quint
 	if quint == "" {
 		quint = "quint"
@@ -86,19 +98,19 @@ func CompileMBT(ctx context.Context, c connect.Config, out string) (*connect.MBT
 	if err != nil {
 		return nil, err
 	}
-	var sources []connect.MBTSource
+	var sources []mbtmodel.Source
 	for _, s := range append([]File{*f}, imports...) {
 		rel, err := filepath.Rel(dir, s.Path)
 		if err != nil {
 			return nil, err
 		}
-		sources = append(sources, connect.MBTSource{Path: filepath.ToSlash(rel), SHA256: s.SHA256})
+		sources = append(sources, mbtmodel.Source{Path: filepath.ToSlash(rel), SHA256: s.SHA256})
 	}
 	rel, err := filepath.Rel(dir, spec)
 	if err != nil {
 		return nil, err
 	}
-	return &connect.MBTModel{Format: connect.MBTFormat, Quint: qv, Gotogether: coreVersion(), Spec: filepath.ToSlash(rel), Main: c.Main,
+	return &mbtmodel.Model{Format: mbtmodel.Format, Quint: qv, Gotogether: coreVersion(), Spec: filepath.ToSlash(rel), Main: c.Main,
 		Sources: sources, IR: json.RawMessage(bytes.TrimSpace(ir))}, nil
 }
 
@@ -111,7 +123,7 @@ var quintNameNotFound = regexp.MustCompile(`QNT404\] Name '([^']+)' not found`)
 
 // compileKeeping is quint compile's JSON IR of c's main module, keeping
 // the definitions keep names (as --invariant: any definition is kept so).
-func compileKeeping(ctx context.Context, quint, spec string, c connect.Config, keep []string, tmp string) ([]byte, error) {
+func compileKeeping(ctx context.Context, quint, spec string, c MBTOptions, keep []string, tmp string) ([]byte, error) {
 	args := []string{"compile", "--target", "json", "--verbosity", "0"}
 	if c.Main != "" {
 		args = append(args, "--main", c.Main)
@@ -119,8 +131,8 @@ func compileKeeping(ctx context.Context, quint, spec string, c connect.Config, k
 	if c.Init != "" {
 		args = append(args, "--init", c.Init)
 	}
-	if c.StepName != "" {
-		args = append(args, "--step", c.StepName)
+	if c.Step != "" {
+		args = append(args, "--step", c.Step)
 	}
 	if len(keep) > 0 {
 		args = append(args, "--invariant", strings.Join(keep, ","))

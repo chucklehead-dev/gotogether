@@ -14,7 +14,7 @@ import (
 // An instance module keeps the vals and defs quint's flattening drops.
 func TestCompiledMBTModelsAreCurrent(t *testing.T) {
 	skip.Quint(t)
-	for _, c := range []connect.Config{
+	for _, c := range []MBTOptions{
 		{Spec: "../connect/testdata/bank.qnt"},
 		{Spec: "../connect/testdata/instance.qnt", Main: "design"},
 	} {

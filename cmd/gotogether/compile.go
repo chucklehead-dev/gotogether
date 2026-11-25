@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/chucklehead-dev/gotogether/connect"
+	"github.com/chucklehead-dev/gotogether/internal/mbtmodel"
 	"github.com/chucklehead-dev/gotogether/validate"
 )
 
@@ -74,9 +74,9 @@ func compileTo(out io.Writer, args []string) error {
 // connect.CompiledFor), or, with check, compared with the file there.
 func compileMBT(out io.Writer, spec, main, o, quint string, check bool) error {
 	if o == "" {
-		o = connect.CompiledFor(spec, main)
+		o = mbtmodel.CompiledFor(spec, main)
 	}
-	cm, err := validate.CompileMBT(context.Background(), connect.Config{Spec: spec, Main: main, Quint: quint}, o)
+	cm, err := validate.CompileMBT(context.Background(), validate.MBTOptions{Spec: spec, Main: main, Quint: quint}, o)
 	if err != nil {
 		return err
 	}
@@ -85,7 +85,7 @@ func compileMBT(out io.Writer, spec, main, o, quint string, check bool) error {
 		again += " -main " + main
 	}
 	if check {
-		have, _, err := connect.LoadMBT(o)
+		have, _, err := mbtmodel.Load(o)
 		if errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("compile -check: %s has no compiled model at %s: compile it (%s -o %s) and check it in", spec, o, again, o)
 		}

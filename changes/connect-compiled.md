@@ -8,7 +8,7 @@
   check read the artifact. `connect.Test`, a `Config.Args` but
   `--invariant`, and what the evaluator cannot simulate fail with the fix.
   New: `connect.MBTModel`, `MBTSource`, `MBTFormat`, `LoadMBT`,
-  `RequireTraces`, `validate.CompileMBT`.
+  `RequireTraces`, `validate.CompileMBT` and `MBTOptions`.
 - connect's witness traces (`Config.Require`) name the action taken as
   `quint run --mbt` does: the branch the last `any {}` took ("" for an
   anonymous one), the step's own name where no `any {}` chose. They named
