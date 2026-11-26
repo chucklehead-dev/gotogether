@@ -43,8 +43,15 @@ qhegel.Shrink(t, sys, hegel.WithTestCases(50)).Expect(t, qtest.Violates("charged
   steps. For random faults, a kind never faulted is listed as "never
   faulted" when a claim fails; `x.Evidence().Faults` and its `Unreached`
   say which kinds the runs reached.
-- **Batching:** every seeded run is checked in one quint batch. On a
-  miss, the report names the seed, its faults and its step log.
+- **Batching:** the seeded runs are checked in quint batches. On a
+  miss, the report names the seed, its faults and its step log. Runs
+  whose records outgrow a batch (a nightly's `GOTOGETHER_SEEDS=500` of
+  a system whose doubles record thousands of sends a run) are judged a
+  batch at a time while they are made, and each passing run's `Steps`
+  and `Recorded` are let go of once judged (nil): memory is a batch's,
+  not the seeds'. Reports, choices, coverage and every claim stay; a
+  failing run keeps its records. A test that reads every run's records
+  after the exploration gives the System `qtest.KeepRecords()`.
 - **Parallel seeds:** seeds run in parallel (`ExploreConfig.Parallel`,
   default GOMAXPROCS), each with its own recorder in the chooser's
   context (`qenv.WithContext`). So:

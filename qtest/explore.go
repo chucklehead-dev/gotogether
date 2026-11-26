@@ -68,6 +68,13 @@ type Exploration struct {
 	given     bool              // its runs were made one by one and gathered (Runs): no seeds, no choices
 	mixed     bool              // given runs checked against different instances
 	navigated bool              // GOTOGETHER_NAV navigated its run instead: no claims to judge
+	// restore makes a run whose records were released again (engine.restore)
+	restore func(context.Context, *Run) error
+	// witnessed are the antecedents witnessed in runs before their
+	// records were released (witnessReleased), and witnessErr why they
+	// could not be looked for
+	witnessed  map[string]bool
+	witnessErr error
 }
 
 // faultCoverage is the runs' fault coverage (qenv.CoverageOf): for each fault
@@ -287,6 +294,9 @@ func empty(runs []*Run) bool {
 // step: the doubles record every send of a system whose steps are not
 // recorded yet.
 func (r *Run) noStep() bool {
+	if r.released { // judged and passing: it had steps
+		return false
+	}
 	return !slices.ContainsFunc(r.Steps, func(s qtrace.Step) bool { return s.Effect == "" })
 }
 
@@ -588,8 +598,11 @@ func (x *Exploration) nameOf(r *Run) string {
 }
 
 // finish checks the runs, made from origins, against the model: a run
-// that failed to run (rather than to conform) fails t, naming it.
-func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark int, origins []origin) {
+// that failed to run (rather than to conform) fails t, naming it. The
+// runs judged in batches while they ran (judgeBatches) are judged
+// already; finish judges the rest, as one batch.
+func (x *Exploration) finish(t testing.TB, e *engine, mark int, origins []origin) {
+	c := e.c
 	t.Helper()
 	if x.faultOrder != nil {
 		x.faultOrderOrigins = append([]origin(nil), origins...)
@@ -651,6 +664,9 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 		x.writeEvidence(t, x.failedEvidence(origins))
 		t.FailNow()
 	}
+	if e.batch.err != "" { // a batch's check failed: said once the runs' own errors are
+		t.Fatal(e.batch.err)
+	}
 	if empty(x.Runs) && x.mutant {
 		return
 	}
@@ -664,9 +680,31 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 			"Record each model step where it takes effect (qobs.Record with the run's context, //quint:action, a double), "+
 			"or, for a build that may not be woven, give the System qtest.SkipIfEmpty()", len(x.Runs))
 	}
-	o := c.Options
+	e.judgeBatch(x.Runs[e.batch.from:], e.batch.batches > 0)
+	if e.batch.err != "" {
+		t.Fatal(e.batch.err)
+	}
+	// the report, for tools that read it (gotogether evidence, cover,
+	// actionmap): under GOTOGETHER_EVIDENCE, else in a kept exploration's
+	// own directory; each test's are cleared at its first exploration
+	// (nextExploration), so a rerun with fewer explorations leaves none
+	// stale
+	if evidenceDir(x.test) != "" || os.Getenv("GOTOGETHER_KEEP") != "" {
+		x.writeEvidence(t, x.Evidence())
+	}
+}
+
+// prepare makes the checker the runs are judged with, once: the
+// instance's, with its modules in the exploration's directory.
+func (e *engine) prepare() {
+	if e.batch.cc != nil {
+		return
+	}
+	t, x := e.t, e.x
+	t.Helper()
+	o := e.c.Options
 	o.Dir, o.NoITF = filepath.Join(x.dir, "quint"), true
-	cc, inst, constants := instanceChecker(t, bindingPath, o, c)
+	cc, inst, constants := instanceChecker(t, e.binding, o, e.c)
 	x.constants, x.checker = constants, cc
 	setValidationInstance(x.profile, cc, constants)
 	x.model = cc.Binding.SpecPath() + ":" + cc.Binding.Module
@@ -676,7 +714,22 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 			x.actions[a] = true
 		}
 	}
-	for _, r := range x.Runs {
+	e.batch.cc, e.batch.inst = cc, inst
+}
+
+// judgeBatch judges runs, made and not judged yet, against the model,
+// and then, if release, lets go of the passing ones' records
+// (releaseRecords). A check that fails is kept in e.batch.err, which
+// finish says once the runs' own errors are said.
+func (e *engine) judgeBatch(runs []*Run, release bool) {
+	t, x, c := e.t, e.x, e.c
+	t.Helper()
+	e.prepare()
+	if len(runs) == 0 { // every run judged in a batch already
+		return
+	}
+	cc := e.batch.cc
+	for _, r := range runs {
 		if r.assessment != nil {
 			r.assessment.Run = x.ref() + ":" + r.ID()
 		}
@@ -686,7 +739,7 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 		// kept: every run's step log, not only the runs a report describes
 		dir := filepath.Join(x.dir, "runs")
 		if os.MkdirAll(dir, 0o755) == nil {
-			for _, r := range x.Runs {
+			for _, r := range runs {
 				if r != nil && len(r.Recorded) > 0 {
 					writeSteps(filepath.Join(dir, strings.NewReplacer(" ", "", "/", "_").Replace(x.nameOf(r))+".steps.jsonl"), r.Recorded)
 				}
@@ -696,14 +749,14 @@ func (x *Exploration) finish(t testing.TB, bindingPath string, c settings, mark 
 	// judged as validate.Checker.JudgeBatch does: each run's search (the
 	// steps judged are the order it found), the orders checked through the
 	// verdict cache, the Go evaluator's orders confirmed where a run fails
-	x.Cached = judge(t, cc, inst, c.searchOptions(), x.Runs, func(r *Run) string { return x.nameOf(r) })
-	// the report, for tools that read it (gotogether evidence, cover,
-	// actionmap): under GOTOGETHER_EVIDENCE, else in a kept exploration's
-	// own directory; each test's are cleared at its first exploration
-	// (nextExploration), so a rerun with fewer explorations leaves none
-	// stale
-	if evidenceDir(x.test) != "" || os.Getenv("GOTOGETHER_KEEP") != "" {
-		x.writeEvidence(t, x.Evidence())
+	cached, err := judgeRuns(t.Context(), cc, e.batch.inst, c.searchOptions(), runs, func(r *Run) string { return x.nameOf(r) })
+	x.Cached += cached
+	if err != nil {
+		e.batch.err, e.batch.off = err.Error(), true
+		return
+	}
+	if release && !e.batch.keep {
+		e.releaseRecords(runs)
 	}
 }
 
@@ -733,20 +786,32 @@ func instanceChecker(t testing.TB, bindingPath string, o validate.Options, c set
 // failed, fails t, named by name.
 func judge(t testing.TB, cc *validate.Checker, inst string, opt validate.SearchOptions, runs []*Run, name func(*Run) string) (cached int) {
 	t.Helper()
+	cached, err := judgeRuns(t.Context(), cc, inst, opt, runs, name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cached
+}
+
+// judgeRuns is judge's work: its error names the first run quint could
+// not check, or whose search failed, by name.
+func judgeRuns(ctx context.Context, cc *validate.Checker, inst string, opt validate.SearchOptions, runs []*Run, name func(*Run) string) (cached int, err error) {
 	steps := make([][]qtrace.Step, len(runs))
 	for i, r := range runs {
 		steps[i] = r.Steps
 	}
-	js, errs := cc.JudgeBatch(t.Context(), steps, opt, cachedCheck(cc, inst, &cached))
+	js, errs := cc.JudgeBatch(ctx, steps, opt, cachedCheck(cc, inst, &cached))
 	for i, r := range runs { // in order: an error names the first run it hit
 		if errs[i] != nil {
-			t.Fatalf("gotogether: %s: %v", name(r), errs[i])
+			return cached, fmt.Errorf("gotogether: %s: %v", name(r), errs[i])
 		}
+	}
+	for i, r := range runs {
 		r.Steps, r.Report = js[i].Steps, js[i].Report
 		r.adjust(cc)
 		noteDuplicates(r)
 	}
-	return cached
+	return cached, nil
 }
 
 // noteDuplicates says, on a failing run's report, which requests its
@@ -904,8 +969,11 @@ func detached(rep *validate.Report) *validate.Report {
 	if rep == nil {
 		return nil
 	}
+	// every step copied, with or without effects: a step's pointer into
+	// the run's steps would keep all of them, its effect records with
+	// them, as long as the report
 	step := func(s *qtrace.Step) *qtrace.Step {
-		if s == nil || s.Effects == nil {
+		if s == nil {
 			return s
 		}
 		c := *s
@@ -913,7 +981,7 @@ func detached(rep *validate.Report) *validate.Report {
 		return &c
 	}
 	failure := func(f *validate.Failure) *validate.Failure {
-		if f == nil || f.Step == nil || f.Step.Effects == nil {
+		if f == nil || f.Step == nil {
 			return f
 		}
 		c := *f
@@ -1872,6 +1940,10 @@ func describeAll(es []Expectation) string {
 // describe prints a run for a message; save, for a claim that failed,
 // also saves it to the corpus.
 func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
+	var restored error
+	if r.released && x.restore != nil { // a passing run shown: its records made again
+		restored = x.restore(t.Context(), r)
+	}
 	if save || x.alone != nil || os.Getenv("GOTOGETHER_KEEP") != "" { // a report whose paths are kept
 		x.recheck(t, r)
 	}
@@ -1886,6 +1958,9 @@ func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 	}
 	if r.noStep() {
 		fmt.Fprintf(&b, "  %s\n", r.noSteps())
+	}
+	if restored != nil {
+		fmt.Fprintf(&b, "  its records were let go of once it was judged (a batch of the exploration's), and could not be made again: %v; reproduce it below\n", restored)
 	}
 	if len(r.Unscripted) > 0 {
 		fmt.Fprintf(&b, "  scripted faults that never happened: %v\n", r.Unscripted)
@@ -1920,10 +1995,10 @@ func (x *Exploration) describe(t testing.TB, r *Run, save bool) string {
 	if recorded == nil {
 		recorded = r.Steps
 	}
-	if dir != "" && writeSteps(base+".steps.jsonl", recorded) {
+	if dir != "" && !r.released && writeSteps(base+".steps.jsonl", recorded) {
 		fmt.Fprintf(&b, "  step log: %s\n", base+".steps.jsonl")
 	}
-	if dir != "" && r.searched && writeSteps(base+".judged.steps.jsonl", r.Steps) {
+	if dir != "" && !r.released && r.searched && writeSteps(base+".judged.steps.jsonl", r.Steps) {
 		fmt.Fprintf(&b, "  the order judged (the search's): %s\n", base+".judged.steps.jsonl")
 		if r.Report != nil && os.WriteFile(base+".history.svg", r.Report.HistorySVG(recorded, r.Steps), 0o644) == nil {
 			fmt.Fprintf(&b, "  the history drawn (the order judged numbered, the failing step red): %s\n", base+".history.svg")
@@ -2000,7 +2075,7 @@ func indent(s, pfx string) string {
 // exploration (another test's directory may be gone), so a failure's
 // report points at a module that is there. The verdict is the same.
 func (x *Exploration) recheck(t testing.TB, r *Run) {
-	if x.checker == nil || x.dir == "" || r.Report == nil {
+	if x.checker == nil || x.dir == "" || r.Report == nil || r.released {
 		return
 	}
 	foreign := false

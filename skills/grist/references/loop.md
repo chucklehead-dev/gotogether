@@ -177,7 +177,8 @@ that the application's eventual model or implementation is correct.
    alone (no site, no `Admits`, no served obligation); judge the peer's
    side with `sys.WithBinding("bank/bank.binding.yaml")` and relate the
    two with `gristtest.Linked(t, App, bank.App, run.Recorded)` for each
-   run of an exploration; `qtest.Mutants{Generated:
+   run of an exploration (give the System `qtest.KeepRecords()`: a large
+   exploration lets go of passing runs' records once judged); `qtest.Mutants{Generated:
    gristtest.PeerMutants(App)}` adds `freshKey` (each try under a new
    id: the peer's invariant and `Links` catch it, the caller's model
    cannot). examples/payouts is the pair. What is

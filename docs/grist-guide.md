@@ -410,7 +410,9 @@ var BankPay = grist.NewPeerCall(Bank, bank.Pay) // Keyed, the command's refusals
   the peer's judges its commits. `gristtest.Linked(t, App, bank.App,
   run.Recorded)` relates them by key: every answer the caller saw is the
   peer's commit of its key and command in the same tenant, and every
-  commit whose id names the caller is one of its calls.
+  commit whose id names the caller is one of its calls (over an
+  exploration's runs, give the System `qtest.KeepRecords()`: one whose
+  runs' records outgrow a batch lets go of the passing runs' once judged).
   examples/payouts is the pair. For a graph of services, list every
   reachable App in `Peers`, including peers of peers. A shared peer runs
   once; each App's model judges the same run's records, and `Linked`

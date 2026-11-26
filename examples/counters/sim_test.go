@@ -65,13 +65,16 @@ const (
 )
 
 // system is the app under cfg, judged by binding, with faulty rates.
+// Its explorations keep every run's records (KeepRecords): the tests
+// read the passing runs' steps after them (callsPerKey, rewound, the
+// refusals counted), which an exploration judged in batches lets go of.
 func system(binding string, cfg gristsim.Config, opts ...qtest.Option) qtest.System {
 	if cfg.Doubles == nil {
 		cfg.Doubles = doubles
 	}
 	cfg.Setup = setup
 	s := gristsim.System(binding, App, cfg).WithRates(faulty)
-	s.Opts = opts
+	s.Opts = append([]qtest.Option{qtest.KeepRecords()}, opts...)
 	return s
 }
 

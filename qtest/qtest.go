@@ -81,6 +81,10 @@ type settings struct {
 	resolvePending bool
 	// mutant is System.Mutant
 	mutant string
+	// keepRecords is KeepRecords'; judgeRecords a test's batching
+	// budget (judgeEvery; 0: judgeRecords)
+	keepRecords  bool
+	judgeRecords int
 	// stepMutations are StepMutations', for MutateSteps
 	stepMutations []qtrace.MutationOption
 	// hostStalls are HostStalls'
@@ -117,6 +121,7 @@ var (
 	optArtifacts       = optionID{"Artifacts"}
 	optStepMutations   = optionID{"StepMutations"}
 	optHostStalls      = optionID{"HostStalls"}
+	optKeepRecords     = optionID{"KeepRecords"}
 )
 
 // option is an option that records its identity, so a workflow that
@@ -187,6 +192,23 @@ func RecorderOptions(opts ...qobs.Option) Option {
 // Under GOTOGETHER_STRICT=1 the skip fails (Optional): a job that weaves
 // must not pass by recording nothing.
 func SkipIfEmpty() Option { return option(optSkipIfEmpty, func(c *settings) { c.SkipIfEmpty = true }) }
+
+// KeepRecords keeps every run's records in an exploration (Explore,
+// Exhaust, Sweep, Mutate, FollowTraces, FaultOrders): its runs' Steps
+// and Recorded, which a caller reads after it. Without it, an
+// exploration whose runs' records outgrow a batch judges them a batch at
+// a time as they are made, and lets go of each passing run's records
+// once it is judged, so its memory is bounded by a batch, not by its
+// seeds; a failing run keeps its own. One whose runs fit in a batch
+// keeps all of them either way. A workflow that judges runs one at a
+// time (Record, Validate, a System's cases, Judge) keeps its run's
+// records already: there it changes nothing, and a System's Opts may
+// carry it for its explorations.
+func KeepRecords() Option { return option(optKeepRecords, func(c *settings) { c.keepRecords = true }) }
+
+// judgeEvery sets the batching budget of an exploration's judgment
+// (judgeRecords), for a test of the batches.
+func judgeEvery(records int) Option { return func(c *settings) { c.judgeRecords = records } }
 
 // Global makes Record install its recorder as the global one
 // (qobs.InstallGlobal) while the scenario runs, for the steps of
@@ -295,9 +317,22 @@ type Run struct {
 	origin      origin                  // where the run came from, in its exploration
 	// searched: a search ordered Steps (Recorded is what the run recorded)
 	searched bool
+	// released: the run passed, judged in a batch of an exploration
+	// whose runs' records outgrew one (judgeRecords), and its records
+	// were let go of: Steps and Recorded are nil, its report's steps
+	// carry no effects (releaseRecords). feats are its features, for
+	// steering.
+	released bool
+	feats    []feature
 	// Steps are the steps judged: as recorded, or the order a search
 	// (Linearize, ResolvePending) found, re-sequenced onto a recorder per
 	// actor. Recorded are the steps as the run recorded them.
+	//
+	// An exploration whose runs' records outgrow a batch judges them a
+	// batch at a time, and lets go of a passing run's Steps and Recorded
+	// once it is judged (both nil): its report, choices and coverage
+	// stay, and a claim that shows the run makes it again. A failing run
+	// keeps them. KeepRecords keeps every run's.
 	Steps, Recorded []qtrace.Step
 	Choices         []qenv.Choice // every choice of the run: qenv.Replay(Choices) repeats it
 	// Nemeses are the nemeses the run's nemesis choices offered, by name

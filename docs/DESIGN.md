@@ -7661,6 +7661,79 @@ every send roughly triples the records, within the runs' noise in CPU.
 checkout's `go test -short` costs 64 CPU seconds, 51 on main (its line in
 ci/test-times.txt is 110): the difference is the two new tests.
 
+**Memory: an exploration judged in batches.** Recording every send made
+a run's records many: raftkv's TestLinearizeScale run makes about 7,000
+(steps, invocations and effect records, each with the message it sent),
+and an exploration held every run's until it judged them all at the end,
+with each run's search, plan and report beside them at the judging. At a
+nightly's 500 seeds the test was killed in a 14 GB cgroup after 55 s; it
+had peaked at 9.7 GB before the doubles recorded effects. The verdict
+cache was the first holder (it kept every distinct run whole: §112's
+keys hashed, its reports detached); the exploration is the second.
+
+qtest's engine (`runPlanned`, qtest/batch.go) now judges the runs as it
+makes them, a batch at a time, once those made and not judged hold
+`judgeRecords` records (2^17: raftkv's runs, about 19 a batch). It stops
+launching runs, waits for those running, and judges the runs in index
+order up to the first whose records reach the budget, so the batches
+are the same every time (a run's records are), whichever run ended
+first; then it lets go of each passing run's records (`releaseRecords`)
+and goes on. An exploration whose runs never fill a batch is judged once
+by finish, as before, and keeps every record; so is a batch filled only
+by a source's last run (a single run, however large, is never let go of
+before its exploration ends). The verdict cache is shared across batches
+as across explorations, and a batch's check error is said by finish
+after the runs' own errors, as it was. A run that fails to run, or a
+test that has failed, stops the batches: finish fails the exploration
+before judging, as before.
+
+What reads a run after it is judged, and what it keeps:
+
+| Reader | Reads | A released run |
+|---|---|---|
+| claims (Some, All, None, Reaches, Takes, Exercised, scenarios), Evidence, summary, model coverage, judges, sample and PCT bounds, mutants' verdicts | reports (their calls, failures, invariants, pending), choices, coverage, phases | keeps its report, its steps copied without their effects (`detached`, which now copies every step: a pointer into the run's steps kept all of them, effect records too, as long as the report), and its choices (sized to their length, kinds and names interned) |
+| the determinism check | the first run's choices and raw steps | runs before the first batch is judged |
+| `GOTOGETHER_KEEP`'s step logs, a run's assessment name | raw records | written per batch, before it is released |
+| steering (`features`) | raw records | its features computed first and kept |
+| vacuity (`NotVacuous`, Evidence's `Vacuous`) | passing runs' steps, checked by a witness checker | looked for in each batch before it is released (`witnessReleased`), for the antecedents no earlier batch witnessed; the rest at the end as before |
+| a failing run's report (describe, recheck, corpus, reproduce, nav, shrink) | records, choices | a failing run is never released |
+| a passing run a failing claim shows (None(Conforms()), a None(Takes)) | its step log, its judged order | made again from its choices (`restore`: a replay, judged again through the cache) |
+| callers of `Exploration.Runs[i].Steps`/`Recorded` | raw records | nil: `qtest.KeepRecords()` keeps every run's (counters', payouts' and fleetrollout's workload test pass it, reading every run's steps) |
+
+TestExploreBatchesBoundTheHeap explores 64 runs of half a megabyte of
+effect records each, in batches of eight runs: the live heap at a run's
+start stays within two batches' and the failing runs' records (7.7 MB,
+the seven failing runs' 3.5 of it), where with KeepRecords it grows a
+run's worth with every run (34 MB at the last). It fails with batching
+ablated or the release ablated (34.5 MB), with the reports kept
+undetached (23.5 MB), and with `detached` copying only the steps with
+effects (23.5 MB); the steering, vacuity and restore tests fail with
+features, witnesses or restore ablated. With the budget forced to 512
+records, so that every exploration of more than a run or two is judged
+in batches, the -short suites of hello, twophase, checkout, raftkv,
+counters, payouts and fleetrollout pass, and qtest's but TestSteer,
+which counts the passing runs' restart steps (a reader of records:
+KeepRecords' case; at the real budget it is one batch).
+
+Measured on examples/raftkv's TestLinearizeScale (4 cores, a 14 GB
+memory cgroup, seeds from 20782001; main is 5318d92):
+
+| | peak (cgroup) | wall | CPU (user + sys) |
+|---|---|---|---|
+| main, 100 seeds | 6.40 GB | 4:09 | 905 + 40 s |
+| batched, 100 seeds | 4.28 GB | 4:11 | 891 + 39 s |
+| main, 500 seeds | killed at 14 GB after 1:11 | | |
+| batched, 500 seeds (26 batches) | 8.45 GB | 22:05 | 4,679 + 171 s |
+
+What is left of a released run is mostly its choices (about 41,000 a
+raftkv run, 3.3 MB at 80 bytes each, of a live heap of 458 MB after 114
+runs), which its replay, coverage and claims read: the residual that
+still grows with the seeds, and most of the difference between 100
+seeds' 4.3 GB and 500's 8.4 GB (the rest a batch's judging, whose
+garbage the collector lets grow to twice the live heap). A packed
+choice log for released runs (kind and name indices, 16 bytes a choice)
+would take it to a fifth, behind an accessor for `Run.Choices`; not done.
+
 **Left for P2 and later** (io-specs.md §7). Commit writes as effects
 (`qenv.Store`, qsql's changes) and a binding opting into internal effects
 (§8.1, 2); `connect.Bind`'s `Emits` and its static check; qweave's
