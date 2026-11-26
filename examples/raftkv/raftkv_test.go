@@ -83,10 +83,11 @@ func TestPendingTransfers(t *testing.T) {
 	x := qtest.ExploreConfig{Seeds: 12, Corpus: "testdata/corpus"}
 	both := []qtest.Option{qtest.Linearize(), qtest.ResolvePending()}
 	// each placement of the pending calls (or none) multiplies the orders:
-	// seed 20753119's four needed more than 5000 (its run conforms within
-	// 20000, in about a minute). Only where every run must conform: a
-	// mutant's failing run searches its whole budget, and one of them
-	// failing is enough
+	// seed 20753119's four needed more than 5000 (2602 since prefixes that
+	// placed a call to no effect give way to those that left it out), seed
+	// 20783303's five 20128 (5741 since: its corpus entry). Only where
+	// every run must conform: a mutant's failing run searches its whole
+	// budget, and one of them failing is enough
 	faithful := system(cfg, both...)
 	faithful.Opts = append(faithful.Opts, qtest.LinearizeBudget(20000))
 	faithful.WithRates(lossy).Explore(t, x).Expect(t, qtest.Conforms(), qtest.Some(qtest.Pending("transfer")))

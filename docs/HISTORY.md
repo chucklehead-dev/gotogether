@@ -9737,3 +9737,31 @@ its Go scheduler or GC under the validations' load, not the run queue) and
 fsyncs of 102 to 268ms. None excused anything: no faithful run broke a
 bound, and the one SlowElection run with stalls (211 and 234ms) was still
 judged a violation: its leader was later than they could explain.
+
+## Pending calls placed to no effect give way (2026-11-26)
+
+The nightly's fresh seeds (raftkv, 500) left TestPendingTransfers' seed
+20783303 without a verdict: five pending calls (a cas, a read, a write and
+two transfers) and 22 steps, no conforming order in 20000. The run is
+linearizable (an order exists, one pending transfer taking effect;
+`LinearizeBudget(80000)` found it after 20128 of the complete search's
+candidates), so the budget, not the code, was short. The complete search
+merged two prefixes only when they placed the same steps and pending calls
+and reached one state; a pending read placed anywhere, or a pending write
+that a later write overwrote, kept a second copy of every prefix it was in.
+qtrace now keeps, of two prefixes of the same steps and state, the one that
+placed only some of the other's pending calls (it may leave the rest out or
+place them later; its constraints are the other's, less theirs), across
+levels. The seed conforms in 5741 candidates, 20753119's in 2602 (6581
+before). TestLinearizePendingDominanceAgainstBruteForce compares it with
+brute force on histories that make it fire (it fails without it: no proof
+merges a prefix into a shorter one), TestLinearizePendingDominatesOnlyFewerCalls
+fails when any prefix of the steps and state stands for another, and
+dropping the steps from the key fails both brute-force comparisons. The
+existing comparison's oracle with a ghost (every pending write must land)
+now carries it in its states, as OrderCheck requires.
+
+Measured locally (four cores): TestPendingTransfers at its 12 seeds 98 user
+seconds before, 80 after with the new corpus entry; at the nightly's seeds
+20783281..20783320 (its three explorations, the corpus included) 860 CPU
+seconds, against 1056 for the old search with the budget raised to 80000.
