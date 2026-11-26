@@ -7724,6 +7724,10 @@ memory cgroup, seeds from 20782001; main is 5318d92):
 | batched, 100 seeds | 4.28 GB | 4:11 | 891 + 39 s |
 | main, 500 seeds | killed at 14 GB after 1:11 | | |
 | batched, 500 seeds (26 batches) | 8.45 GB | 22:05 | 4,679 + 171 s |
+| batched, the whole package at 500 seeds (its 15 tests, the real tier's skipped) | 9.22 GB | 1:44:17 | 17,396 + 814 s |
+
+The whole package passes; TestPendingTransfers (50 min) and
+TestRollingUpgrade (23 min) take most of it besides TestLinearizeScale.
 
 What is left of a released run is mostly its choices (about 41,000 a
 raftkv run, 3.3 MB at 80 bytes each, of a live heap of 458 MB after 114
