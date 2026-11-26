@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -33,6 +32,8 @@ type engine struct {
 	woven    bool // the code is woven with qweave -cover
 	x        *Exploration
 	known    []knownCheck
+	plans    []planned // every run's, in x.Runs' order
+	batch    batching
 }
 
 // A knownCheck is names the user gave (Rates keys, Bound.Without kinds)
@@ -99,10 +100,19 @@ func (e *engine) run(sources ...source) {
 		return
 	}
 	mark, _ := hooks.Escaped(0)
-	var plans []planned
 	var planned atomic.Int64
 	prog := startProgress(x.ref(), func() int { return int(planned.Load()) })
 	defer prog.end()
+	e.batch = batching{budget: e.c.judgeRecords, keep: e.c.keepRecords, prog: prog}
+	if e.batch.budget == 0 {
+		e.batch.budget = judgeRecords
+	}
+	for _, s := range sources {
+		if _, ok := s.(*steerSource); ok {
+			e.batch.steers = true
+		}
+	}
+	x.restore = e.restore
 	stopped := false
 	for _, s := range sources {
 		for !stopped {
@@ -110,44 +120,69 @@ func (e *engine) run(sources ...source) {
 			if len(batch) == 0 {
 				break
 			}
-			runs := make([]*Run, len(batch))
 			planned.Add(int64(len(batch)))
-			var wg sync.WaitGroup
-			sem := make(chan struct{}, e.parallel)
-			for i, p := range batch {
-				wg.Add(1)
-				sem <- struct{}{}
-				go func() { //qenv:ok runs side by side, each its own simulation
-					defer func() { <-sem; wg.Done() }()
-					r := e.one(p.chooser())
-					r.origin = p.origin
-					if p.after != nil {
-						p.after(r)
-					}
-					runs[i] = r
-					prog.done.Add(1)
-				}()
-			}
-			wg.Wait()
-			x.Runs, plans = append(x.Runs, runs...), append(plans, batch...)
-			stopped = slices.Contains(runs, nil)
+			stopped = e.runPlanned(batch, prog)
 		}
 	}
-	if len(x.Runs) > 0 && x.Runs[0] != nil && plans[0].again != nil {
-		first, again := x.Runs[0], plans[0].again
-		checkDeterminism(t, first, func() *Run { return e.one(again(first)) }, x.name(first.origin.seed))
-	}
+	e.checkDeterminism()
 	if ran(x.Runs) { // a run that did not run declared nothing: finish says why, rather than a name be called a misspelling
 		for _, k := range e.known {
 			unknownKinds(t, k.what, k.names, x.Runs)
 		}
 	}
 	prog.judging.Store(true)
-	origins := make([]origin, len(plans))
-	for i, p := range plans {
+	origins := make([]origin, len(e.plans))
+	for i, p := range e.plans {
 		origins[i] = p.origin
 	}
-	x.finish(t, e.binding, e.c, mark, origins)
+	x.finish(t, e, mark, origins)
+}
+
+// runPlanned runs batch, e.parallel at a time, into x.Runs by index, so
+// their order is the same every time, and judges the runs made in
+// batches while it runs them (judgeBatches): an exploration whose runs'
+// records outgrow the batching budget is judged, and its passing runs'
+// records released, a batch at a time. It reports whether a run is nil
+// (the scenario failed t from its goroutine), which ends every source.
+func (e *engine) runPlanned(batch []planned, prog *progress) (stopped bool) {
+	x := e.x
+	base := len(x.Runs)
+	x.Runs = append(x.Runs, make([]*Run, len(batch))...)
+	e.plans = append(e.plans, batch...)
+	done := make(chan int)
+	next, inflight := 0, 0
+	for next < len(batch) || inflight > 0 {
+		// the runs made and not judged hold the budget, and every run
+		// launched is made: judge them, then make more. Runs that reach
+		// the budget only with this batch's last are judged before the
+		// next source's are made, or by finish: a single run, however
+		// large, is never let go of before its exploration ends.
+		if inflight == 0 && e.batch.full() {
+			e.judgeBatches(base + next)
+		}
+		// launch while there is room, and while the runs made and not
+		// judged hold less than the budget
+		for next < len(batch) && inflight < e.parallel && !e.batch.full() {
+			go func(i int, p planned) { //qenv:ok runs side by side, each its own simulation
+				defer func() { done <- i }() // also when the scenario fails t (runtime.Goexit): its run stays nil
+				r := e.one(p.chooser())
+				r.origin = p.origin
+				if p.after != nil {
+					p.after(r)
+				}
+				x.Runs[base+i] = r
+				prog.done.Add(1)
+			}(next, batch[next])
+			next, inflight = next+1, inflight+1
+		}
+		if inflight == 0 {
+			continue
+		}
+		i := <-done
+		inflight--
+		e.batch.made(x, x.Runs[base+i])
+	}
+	return slices.Contains(x.Runs[base:], nil)
 }
 
 // ran reports whether every run ran to its end: only then do the runs'

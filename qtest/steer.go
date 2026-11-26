@@ -28,6 +28,9 @@ type feature struct {
 // new. (Counting them as AFL does, a second reach its own feature, bred
 // no more of the journal's rare restart, observed or not: not done.)
 func features(r *Run) []feature {
+	if r.released { // its records let go of, its features kept (releaseRecords)
+		return r.feats
+	}
 	var fs []feature
 	seen := map[string]bool{}
 	add := func(name string, at int) {

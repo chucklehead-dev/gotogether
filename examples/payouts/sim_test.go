@@ -32,9 +32,13 @@ var pair = gristsim.Config{Tenants: []string{"t1"}, Clients: 2, Ops: 4, CommitFa
 	Alphabet: []string{"a", "b", "z"}, Ints: []int{0, 1, 2}, Peers: []*grist.App{bank.App}}
 
 // system is the pair judged by binding at faulty rates (a
-// gristsim.System: the mutant this binary was built with, if any).
+// gristsim.System: the mutant this binary was built with, if any),
+// keeping every run's records (KeepRecords): Linked, Links and retried
+// read each run's, passing or not.
 func system(binding string, cfg gristsim.Config) qtest.System {
-	return gristsim.System(binding, App, cfg).WithRates(faulty)
+	s := gristsim.System(binding, App, cfg).WithRates(faulty)
+	s.Opts = append(s.Opts, qtest.KeepRecords())
+	return s
 }
 
 // linked is how many of e's runs Links finds a problem in, each logged.

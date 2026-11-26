@@ -1966,6 +1966,7 @@ func HasIssue(kind string) Expectation
 func HostStalls(stalls ...qtrace.Stall) Option
 func Invariants(names ...string) Option
 func IsEvidence(path string) (bool, error)
+func KeepRecords() Option
 func Killed(sel StepSelector) StepClaim
 func Linearize() Option
 func LinearizeBudget(n int) Option

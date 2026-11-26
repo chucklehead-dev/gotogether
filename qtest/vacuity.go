@@ -81,34 +81,57 @@ func (x *Exploration) vacuityVerdict() claimVerdict {
 	return claimVerdict{ok: true}
 }
 
-func (x *Exploration) findVacuous() (result vacuityResult) {
-	ch := x.checker
-	if ch == nil || ch.Model == nil {
+func (x *Exploration) findVacuous() vacuityResult {
+	if x.checker == nil || x.checker.Model == nil {
 		return vacuityResult{err: fmt.Errorf("the exploration has no model to evaluate antecedents with")}
 	}
-	if err := ch.VerifySource(); err != nil {
-		return vacuityResult{err: err}
+	// the runs whose records were released were looked at before (witnessReleased)
+	witnessed := maps.Clone(x.witnessed)
+	if witnessed == nil {
+		witnessed = map[string]bool{}
 	}
-	defer func() {
-		if err := ch.VerifySource(); err != nil {
-			result.found, result.err = nil, err
-		}
-	}()
-	ante := map[string]string{}
-	for _, inv := range ch.Binding.Invariants {
-		if a, ok := ch.Binding.Antecedents[inv]; ok {
-			ante[inv] = a
-		} else if a, ok := ch.Model.Antecedents[inv]; ok {
-			ante[inv] = a
-		}
+	ante, invs, err := x.lookForWitnesses(slices.DeleteFunc(slices.Clone(x.Runs), func(r *Run) bool { return r.released }), witnessed)
+	if err == nil {
+		err = x.witnessErr
 	}
-	if len(ante) == 0 {
+	switch {
+	case err != nil:
+		return vacuityResult{antecedent: len(invs), err: err} // no verdict, rather than a wrong one
+	case len(ante) == 0:
 		return vacuityResult{}
 	}
-	invs := slices.Sorted(maps.Keys(ante))
-	// the runs where each invariant passed
-	passed := map[string][]int{}
-	for i, r := range x.Runs {
+	passed := passedIn(x.Runs)
+	var out []Vacuity
+	for _, inv := range invs {
+		if !witnessed[inv] && passed[inv] > 0 {
+			out = append(out, Vacuity{Invariant: inv, Antecedent: ante[inv], Runs: passed[inv]})
+		}
+	}
+	return vacuityResult{found: out, antecedent: len(invs)}
+}
+
+// witnessReleased looks for the antecedents' witnesses in runs whose
+// records are about to be released (releaseRecords), the passing runs
+// of a batch, for those no earlier batch witnessed: Vacuous reads them
+// from x.witnessed, not from runs it can no longer check. An exploration
+// whose invariants have no antecedent checks nothing.
+func (x *Exploration) witnessReleased(runs []*Run) {
+	if x.witnessErr != nil || x.checker == nil || x.checker.Model == nil {
+		return
+	}
+	if x.witnessed == nil {
+		x.witnessed = map[string]bool{}
+	}
+	passing := slices.DeleteFunc(slices.Clone(runs), func(r *Run) bool { return r.Err != nil || r.Report == nil || !r.Report.OK() })
+	if _, _, err := x.lookForWitnesses(passing, x.witnessed); err != nil {
+		x.witnessErr = err
+	}
+}
+
+// passedIn counts, for each invariant, the runs where it passed.
+func passedIn(runs []*Run) map[string]int {
+	passed := map[string]int{}
+	for _, r := range runs {
 		ok := map[string]bool{}
 		for _, a := range r.Report.Actors {
 			for _, ir := range a.Invariants {
@@ -118,8 +141,53 @@ func (x *Exploration) findVacuous() (result vacuityResult) {
 			}
 		}
 		for name := range ok {
-			passed[name] = append(passed[name], i)
+			passed[name]++
 		}
+	}
+	return passed
+}
+
+// lookForWitnesses checks runs, in chunks, for a witness of each
+// antecedent witnessed does not have yet, in the runs where its
+// invariant passed, adding those it finds; it stops when every one has
+// one. It returns the invariants' antecedents, by invariant, and their
+// names in order.
+func (x *Exploration) lookForWitnesses(runs []*Run, witnessed map[string]bool) (ante map[string]string, invs []string, err error) {
+	ch := x.checker
+	if err := ch.VerifySource(); err != nil {
+		return nil, nil, err
+	}
+	defer func() {
+		if verr := ch.VerifySource(); verr != nil {
+			err = verr
+		}
+	}()
+	ante = map[string]string{}
+	for _, inv := range ch.Binding.Invariants {
+		if a, ok := ch.Binding.Antecedents[inv]; ok {
+			ante[inv] = a
+		} else if a, ok := ch.Model.Antecedents[inv]; ok {
+			ante[inv] = a
+		}
+	}
+	if len(ante) == 0 {
+		return ante, nil, nil
+	}
+	invs = slices.Sorted(maps.Keys(ante))
+	// the runs where an invariant not witnessed yet passed
+	var order []int
+	for i, r := range runs {
+		for _, a := range r.Report.Actors {
+			if slices.ContainsFunc(a.Invariants, func(ir validate.InvariantResult) bool {
+				return ir.Verdict == validate.Pass && ante[ir.Name] != "" && !witnessed[ir.Name]
+			}) {
+				order = append(order, i)
+				break
+			}
+		}
+	}
+	if len(order) == 0 {
+		return ante, invs, nil
 	}
 	// a checker whose invariants are the antecedents' negations: one that
 	// fails in a run is witnessed there
@@ -131,7 +199,7 @@ func (x *Exploration) findVacuous() (result vacuityResult) {
 		// judged by the Go evaluator, no quint
 		c, err := ch.WithWitnesses(witnessNames...)
 		if err != nil {
-			return vacuityResult{antecedent: len(invs), err: err}
+			return ante, invs, err
 		}
 		wc = c
 	} else {
@@ -146,30 +214,30 @@ func (x *Exploration) findVacuous() (result vacuityResult) {
 		wc.Options.NoITF = true
 		dir, err := os.MkdirTemp("", "gotogether-vacuity-")
 		if err != nil {
-			return vacuityResult{antecedent: len(invs), err: err}
+			return ante, invs, err
 		}
 		defer os.RemoveAll(dir)
 		defer wc.Close()
 		wc.Options.Dir = dir
 	}
-	witnessed := map[string]bool{}
-	todo := map[int]bool{}
-	for _, inv := range invs {
-		for _, i := range passed[inv] {
-			todo[i] = true
+	all := func() bool {
+		for _, inv := range invs {
+			if !witnessed[inv] {
+				return false
+			}
 		}
+		return true
 	}
-	order := slices.Sorted(maps.Keys(todo))
-	for s := 0; s < len(order) && len(witnessed) < len(invs); s += witnessChunk {
+	for s := 0; s < len(order) && !all(); s += witnessChunk {
 		chunk := order[s:min(s+witnessChunk, len(order))]
-		runs := make([][]qtrace.Step, len(chunk))
+		steps := make([][]qtrace.Step, len(chunk))
 		for j, i := range chunk {
-			runs[j] = x.Runs[i].Steps
+			steps[j] = runs[i].Steps
 		}
-		reps, errs := wc.CheckBatch(context.Background(), runs, 0)
+		reps, errs := wc.CheckBatch(context.Background(), steps, 0)
 		for j := range chunk {
 			if errs[j] != nil {
-				return vacuityResult{antecedent: len(invs), err: errs[j]} // no verdict, rather than a wrong one
+				return ante, invs, errs[j]
 			}
 			for _, a := range reps[j].Actors {
 				for _, ir := range a.Invariants {
@@ -180,13 +248,7 @@ func (x *Exploration) findVacuous() (result vacuityResult) {
 			}
 		}
 	}
-	var out []Vacuity
-	for _, inv := range invs {
-		if !witnessed[inv] && len(passed[inv]) > 0 {
-			out = append(out, Vacuity{Invariant: inv, Antecedent: ante[inv], Runs: len(passed[inv])})
-		}
-	}
-	return vacuityResult{found: out, antecedent: len(invs)}
+	return ante, invs, nil
 }
 
 // NotVacuous is the claim that no invariant held vacuously: each one's

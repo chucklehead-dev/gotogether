@@ -31,7 +31,9 @@ func TestRolloutUnderProductionWorkload(t *testing.T) {
 	t.Parallel()
 	qtest.RequireModel(t, "fleet.binding.yaml")
 	tr := production(t)
-	x := explore(t, fleetrollout.Config{Workload: tr}, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 2})
+	sys := system(fleetrollout.Config{Workload: tr})
+	sys.Opts = append(sys.Opts, qtest.KeepRecords()) // every run's scale steps, counted below
+	x := sys.Explore(t, qtest.ExploreConfig{Seeds: 30, ShortSeeds: 2})
 	x.Expect(t, qtest.Conforms())
 	scales := 0
 	for _, r := range x.Runs {
