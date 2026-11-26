@@ -1038,6 +1038,29 @@ func TestLinearizePendingDominatesOnlyFewerCalls(t *testing.T) {
 	t.Logf("the order: %v", order)
 }
 
+// A lone pending read, placed, leaves the state as the prefix without it:
+// the complete search keeps that prefix alone, and its proof of no order
+// says so (a merge into the shorter prefix), with the only pending call
+// the first node after the steps.
+func TestLinearizePendingReadGivesWay(t *testing.T) {
+	steps := []Step{op("a", 1, "write", 1, 0, 1), op("b", 1, "read", 2, 5, 6)} // no write of 2
+	p := op("p", 1, "read", 1, 0, 0)
+	p.Time, p.Invoked, p.Invocation = p.Invoked, time.Time{}, true
+	_, ok, _, cut, proof := linearizePending(steps, []Step{p}, nil, 1000, registerStates, false, RealTimeSlack)
+	if ok || cut || proof == nil {
+		t.Fatalf("ok %v, cut %v, proof %v: no order reads 2", ok, cut, proof != nil)
+	}
+	shorter := 0
+	for _, m := range proof.Merged {
+		if len(m[0]) < len(m[1]) {
+			shorter++
+		}
+	}
+	if shorter == 0 {
+		t.Errorf("no prefix that placed the pending read gave way to the one without it: merges %d", len(proof.Merged))
+	}
+}
+
 // recordedBefore is the brute force's own "a was recorded before b": by
 // seq on one recorder, else by time beyond the slack.
 func recordedBefore(a, b Step) bool {
