@@ -34,7 +34,7 @@ func register(orders [][]Step) []int {
 		for j, s := range o {
 			if s.Action == "write" {
 				v = s.Args["v"].(int64)
-			} else if s.Obs["v"] != v {
+			} else if !s.Ambiguous && s.Obs["v"] != v { // a pending read, placed, observed nothing
 				out[i] = j
 				break
 			}
@@ -733,7 +733,9 @@ func TestLinearizeProofAgainstBruteForce(t *testing.T) {
 // registerFinal is register with an eventual property: a complete order
 // (every recorded step in it, assumed steps aside) must leave the
 // register at final (-1: any), failing at its last step otherwise, as a
-// settle's eventual val does.
+// settle's eventual val does. With need, its states carry the ghost (which
+// of need were written), as a model's would: a state key keeps everything
+// a future judgment reads.
 func registerFinal(n int, final int64, need ...int64) func(orders [][]Step) ([]int, []string) {
 	return func(orders [][]Step) ([]int, []string) {
 		fs, st := registerStates(orders)
@@ -752,6 +754,9 @@ func registerFinal(n int, final int64, need ...int64) func(orders [][]Step) ([]i
 					v = s.Args["v"].(int64)
 					wrote[v] = true
 				}
+			}
+			for _, w := range need {
+				st[i] += fmt.Sprintf("|%d:%v", w, wrote[w])
 			}
 			if c != n {
 				continue
@@ -905,6 +910,155 @@ func TestLinearizePendingAgainstBruteForce(t *testing.T) {
 		t.Errorf("%d linearizable, %d not, %d needing a pending call's effect: the property compared too little", yes, no, effects)
 	}
 	t.Logf("%d linearizable (%d with a pending call's effect), %d not", yes, effects, no)
+}
+
+// A pending call placed where the state is the one without it reached
+// (a read, a write a later one overwrote) is dominated: the prefix that
+// left it out, with the same steps and state, may leave it out for good
+// or place it later, so the complete search keeps that one alone. Against
+// brute force, on register histories whose pending writes repeat the
+// recorded writes' values and whose late reads need a pending write placed
+// after another (the prefix that placed it early is no witness), with
+// pending reads: the verdicts agree, the proofs check out (their merges of
+// prefixes with fewer pending calls included), and some proofs rest on
+// such merges.
+func TestLinearizePendingDominanceAgainstBruteForce(t *testing.T) {
+	rng := rand.New(rand.NewPCG(9, 10))
+	yes, no, dominated := 0, 0, 0
+	for trial := range 400 {
+		var steps []Step
+		next := map[string]int{}
+		values := []int64{0, 1, 2}
+		for range 2 + rng.IntN(3) {
+			c := string(rune('a' + rng.IntN(2)))
+			from := next[c] + rng.IntN(3)
+			to := from + 1 + rng.IntN(4)
+			next[c] = to + 1
+			v := values[rng.IntN(len(values))]
+			if rng.IntN(2) == 0 {
+				steps = append(steps, op(c, 0, "write", v, from, to))
+			} else {
+				steps = append(steps, op(c, 0, "read", v, from, to))
+			}
+		}
+		var pending []Step
+		for k := range 1 + rng.IntN(3) {
+			action, v := "write", values[rng.IntN(len(values))]
+			if rng.IntN(3) == 0 {
+				action = "read"
+			}
+			p := op(fmt.Sprint("p", k), 1, action, v, rng.IntN(6), 0)
+			p.Time, p.Invoked, p.Invocation = p.Invoked, time.Time{}, true
+			pending = append(pending, p)
+		}
+		// a late read of a value only a pending write may have written last
+		c := string(rune('a' + rng.IntN(2)))
+		from := next[c] + rng.IntN(3)
+		steps = append(steps, op(c, 0, "read", values[rng.IntN(len(values))], from, from+1+rng.IntN(3)))
+		seqs := map[string]uint64{}
+		for i := range steps {
+			seqs[steps[i].Recorder]++
+			steps[i].Seq = seqs[steps[i].Recorder]
+		}
+		var settles []Step
+		if rng.IntN(2) == 0 {
+			settles = []Step{{Action: "settled", Record: Record{Settled: true}, Recorder: "s", Seq: 1, Time: time.Unix(0, 0).Add(time.Duration(5+rng.IntN(10)) * 10 * time.Millisecond)}}
+		}
+		check := registerFinal(len(steps), -1)
+		if rng.IntN(2) == 0 {
+			check = registerFinal(len(steps), values[rng.IntN(len(values))])
+		}
+		want := brutePending(steps, pending, settles, check, false)
+		_, ok, _, cut, proof := linearizePending(steps, pending, settles, 1000000, check, false, RealTimeSlack)
+		if cut || ok != want {
+			t.Fatalf("trial %d: LinearizePending ok %v (cut %v), brute force %v, for\n%v\npending %v\nsettles %v", trial, ok, cut, want, steps, pending, settles)
+		}
+		if _, cok, _, ccut := linearizeWith(steps, pending, settles, 1000000, check, false, &Proof{}, false, RealTimeSlack); ccut || cok != want {
+			t.Fatalf("trial %d: the complete search alone: ok %v (cut %v), brute force %v", trial, cok, ccut, want)
+		}
+		if ok {
+			yes++
+			continue
+		}
+		no++
+		var orders [][]Step
+		orders = append(orders, proof.Rejected...)
+		for _, m := range proof.Merged {
+			orders = append(orders, m[0], m[1])
+		}
+		fs, st := check(orders)
+		for i := range proof.Rejected {
+			if fs[i] < 0 {
+				t.Fatalf("trial %d: the proof's rejected %v conforms", trial, orders[i])
+			}
+		}
+		for j, m := range proof.Merged {
+			a, b := len(proof.Rejected)+2*j, len(proof.Rejected)+2*j+1
+			if fs[a] >= 0 || fs[b] >= 0 || st[a] != st[b] {
+				t.Fatalf("trial %d: the proof's merge %v / %v", trial, orders[a], orders[b])
+			}
+			if len(m[0]) < len(m[1]) {
+				dominated++
+			}
+		}
+	}
+	if yes == 0 || no == 0 || dominated == 0 {
+		t.Errorf("%d linearizable, %d not, %d merges of a prefix with fewer pending calls: the property compared too little", yes, no, dominated)
+	}
+	t.Logf("%d linearizable, %d not; the proofs merged %d prefixes into one with fewer pending calls", yes, no, dominated)
+}
+
+// A prefix dominates one of the same steps and state only if it placed
+// fewer of the same pending calls, not merely fewer: one that placed
+// another may not place this one's later. Here the write of 1 before the
+// read must be the pending one a settle bounds, the one after the second
+// write the one invoked after the settle; the prefix that wrote the first
+// 1 with the later call reached the same steps and state first, and has
+// no 1 left to write after the second write.
+func TestLinearizePendingDominatesOnlyFewerCalls(t *testing.T) {
+	steps := []Step{op("a", 1, "write", 2, 0, 2), op("b", 1, "read", 1, 4, 8), op("c", 1, "write", 2, 9, 10), op("d", 1, "read", 1, 11, 12)}
+	pending := func(rec string, v int64, u int) Step {
+		p := op(rec, 1, "write", v, u, 0)
+		p.Time, p.Invoked, p.Invocation = p.Invoked, time.Time{}, true
+		return p
+	}
+	calls := []Step{pending("p0", 1, 6), pending("p1", 1, 0)} // p0 after the settle, p1 before it
+	settles := []Step{{Action: "settled", Record: Record{Settled: true}, Recorder: "s", Seq: 1, Time: time.Unix(0, 0).Add(50 * time.Millisecond)}}
+	if !brutePending(steps, calls, settles, registerStates, false) {
+		t.Fatal("the brute force finds no order: the history does not test the search")
+	}
+	got, ok, _, cut, _ := linearizePending(steps, calls, settles, 10000, registerStates, false, RealTimeSlack)
+	if !ok || cut {
+		t.Fatalf("ok %v, cut %v: the prefix that placed the other pending call stood for the one the order needs", ok, cut)
+	}
+	var order []string
+	for _, s := range got {
+		order = append(order, fmt.Sprint(s.Action, s.Args["v"], s.Obs["v"], s.Ambiguous))
+	}
+	t.Logf("the order: %v", order)
+}
+
+// A lone pending read, placed, leaves the state as the prefix without it:
+// the complete search keeps that prefix alone, and its proof of no order
+// says so (a merge into the shorter prefix), with the only pending call
+// the first node after the steps.
+func TestLinearizePendingReadGivesWay(t *testing.T) {
+	steps := []Step{op("a", 1, "write", 1, 0, 1), op("b", 1, "read", 2, 5, 6)} // no write of 2
+	p := op("p", 1, "read", 1, 0, 0)
+	p.Time, p.Invoked, p.Invocation = p.Invoked, time.Time{}, true
+	_, ok, _, cut, proof := linearizePending(steps, []Step{p}, nil, 1000, registerStates, false, RealTimeSlack)
+	if ok || cut || proof == nil {
+		t.Fatalf("ok %v, cut %v, proof %v: no order reads 2", ok, cut, proof != nil)
+	}
+	shorter := 0
+	for _, m := range proof.Merged {
+		if len(m[0]) < len(m[1]) {
+			shorter++
+		}
+	}
+	if shorter == 0 {
+		t.Errorf("no prefix that placed the pending read gave way to the one without it: merges %d", len(proof.Merged))
+	}
 }
 
 // recordedBefore is the brute force's own "a was recorded before b": by

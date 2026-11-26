@@ -109,7 +109,11 @@ const reorderWindow = 8
 // call in it is an assumed step (Ambiguous, no observation, in the
 // process of the step before it), and one left out took no effect. The
 // guided search orders the steps alone; the complete search places the
-// pending calls too. check is told which orders are complete by their
+// pending calls too, and of two prefixes of the same steps and state keeps
+// one that placed only some of the other's pending calls: it may leave
+// the rest out for good, or place them later (a pending read, a pending
+// write a later one overwrote, placed, multiplied the prefixes for
+// nothing). check is told which orders are complete by their
 // steps that are not assumed: as many as steps.
 func Linearize(steps []Step, opt LinearizeOptions, check OrderCheck) (l *Linearization, err error) {
 	defer func() {
@@ -293,10 +297,11 @@ func linearizeStates(steps []Step, budget int, check func(orders [][]Step) (fail
 
 // A Proof is what a complete search's "no order" rests on: every
 // candidate it dropped as rejected, and every pair of accepted prefixes
-// it merged as one state (the second dropped). An oracle other than the
-// one that judged the search (quint, for the Go evaluator's) confirms the
-// verdict by rejecting each of Rejected and giving each of Merged's pairs
-// one state: a candidate wrongly accepted needs no confirmation, since
+// it merged as one state (the second dropped: of the same steps, it
+// placed the first's pending calls, and maybe more). An oracle other than
+// the one that judged the search (quint, for the Go evaluator's) confirms
+// the verdict by rejecting each of Rejected and giving each of Merged's
+// pairs one state: a candidate wrongly accepted needs no confirmation, since
 // its extensions were judged in turn.
 type Proof struct {
 	Rejected [][]Step
@@ -664,14 +669,27 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 	// the guided search found none: search every order the constraints
 	// allow, prefix by prefix, before calling it a bug
 	// two accepted prefixes of the same steps and state have the same
-	// futures: the complete search keeps one
-	same := func(o []int) string {
+	// futures: the complete search keeps one. So too when one placed
+	// pending calls the other did not, and none the other did not: the
+	// other may leave those out for good or place them later, and its
+	// constraints are the first's, less theirs. same is the steps and
+	// state, and the pending calls placed
+	same := func(o []int) (string, []bool) {
 		st := stateOf[key(o)]
 		if st == "" {
-			return ""
+			return "", nil
 		}
-		placed := slices.Sorted(slices.Values(o))
-		return key(placed) + "|" + st
+		var placed []int
+		calls := make([]bool, len(pending))
+		for _, k := range o {
+			if k < n {
+				placed = append(placed, k)
+			} else {
+				calls[k-n] = true
+			}
+		}
+		slices.Sort(placed)
+		return key(placed) + "|" + st, calls
 	}
 	nodes := slices.Clone(at)
 	for i := range pending {
@@ -713,10 +731,17 @@ func linearizeWith(steps, pending, settles []Step, budget int, check func(orders
 // extended still: a pending call after it may make a settle's eventual
 // val hold.
 func prefixes(n int, nodes []int, mustPrecede func(a, b int) bool, budget int, render func([]int) []Step,
-	judge func(orders [][]int) []int, same func([]int) string, complete func([]int) bool, proof *Proof) (best []Step, ok bool, tried int, cut bool) {
+	judge func(orders [][]int) []int, same func([]int) (string, []bool), complete func([]int) bool, proof *Proof) (best []Step, ok bool, tried int, cut bool) {
 	total := len(nodes)
 	level := [][]int{nil}
 	recorded := map[string]bool{} // rejected prefixes in the proof (candidates the memo rejects share them)
+	// the prefixes kept, by their steps and state, with the pending calls
+	// each placed: across levels, since one that placed fewer is shorter
+	type held struct {
+		calls []bool
+		o     []int
+	}
+	kept := map[string][]held{}
 	k := 0
 	for ; k < total && tried < budget; k++ {
 		var cands [][]int
@@ -752,7 +777,6 @@ func prefixes(n int, nodes []int, mustPrecede func(a, b int) bool, budget int, r
 		fs := judge(cands)
 		tried += len(cands)
 		var next [][]int
-		kept := map[string][]int{}
 		for i, f := range fs {
 			if f >= 0 {
 				if p := cands[i][:min(f+1, len(cands[i]))]; proof != nil && !recorded[fmt.Sprint(p)] {
@@ -767,14 +791,14 @@ func prefixes(n int, nodes []int, mustPrecede func(a, b int) bool, budget int, r
 			if complete(cands[i]) {
 				return render(cands[i]), true, tried, false
 			}
-			if s := same(cands[i]); s != "" {
-				if first, ok := kept[s]; ok {
+			if s, calls := same(cands[i]); s != "" {
+				if j := slices.IndexFunc(kept[s], func(h held) bool { return within(h.calls, calls) }); j >= 0 {
 					if proof != nil {
-						proof.Merged = append(proof.Merged, [2][]Step{render(first), render(cands[i])})
+						proof.Merged = append(proof.Merged, [2][]Step{render(kept[s][j].o), render(cands[i])})
 					}
-					continue // another prefix of these steps reached this state
+					continue // another prefix of these steps, with these pending calls or fewer, reached this state
 				}
-				kept[s] = cands[i]
+				kept[s] = append(kept[s], held{calls, cands[i]})
 			}
 			next = append(next, cands[i])
 		}
@@ -787,4 +811,14 @@ func prefixes(n int, nodes []int, mustPrecede func(a, b int) bool, budget int, r
 		return nil, false, tried, cut // every order tried
 	}
 	return nil, false, tried, true
+}
+
+// within reports whether every call a placed, b placed too.
+func within(a, b []bool) bool {
+	for i, x := range a {
+		if x && !b[i] {
+			return false
+		}
+	}
+	return true
 }
