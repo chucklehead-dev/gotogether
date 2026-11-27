@@ -8,6 +8,9 @@ Annotate the code instead, and generate the table; a second table, of
 the model's actions, says which code records each step and which driver
 runs it, from the code that already does so; a third lists what the
 model says it leaves out (its assumptions) and the code aimed at each.
+The same command lints a design document's claims: each sentence its
+author marks `Claim:` must cite the property or assumption it rests on
+(below, "Claims a document makes").
 
 ## The annotations
 
@@ -196,6 +199,40 @@ the source's order:
 The "stated by" column is there when an assumption names a val. Printed
 (no document), the table follows the others when the model lists any.
 
+## Claims a document makes
+
+A design document's prose states guarantees no property states (golem's
+ADR had one, and it was false). Mark each guarantee as a claim and cite
+what makes it true:
+
+```markdown
+Claim: a transfer never spends a balance twice (prop: noDoubleSpend),
+as long as one caller holds the account (assume: oneCaller).
+
+- **Claim:** a refund lands exactly once (prop: exactlyOnce).
+```
+
+A paragraph, list item or quoted line whose text begins `Claim:` (or
+`**Claim:**`) is a claim through the end of its paragraph or item, so
+its citation may be on a wrapped line. `(prop: a, b)` cites boolean vals
+(or temporals) the main module sees, bare or `module.name`, whatever the
+table's selection; `(assume: name)` cites an `@assume` line. Fenced code,
+`Claim:` mid-line and unmarked prose are never read: nothing guesses what
+a sentence asserts, so mark the sentences you mean.
+
+```sh
+gotogether invariants -spec model/bank.qnt -claims docs/design.md -require cited ./...
+gotogether invariants -binding bank.binding.yaml -check docs/walkthrough.md -claims docs/design.md,docs/adr/0003.md ./...
+```
+
+A claim citing nothing, and a citation naming nothing the model has (or
+the other kind: a property in `assume:`, an assumption or the val that
+states one in `prop:`), fail at the claim's line. A cited property
+nothing enforces or no test checks, or a cited assumption nothing
+targets, is a note; `-require cited` makes it a `FAIL`. Alone, `-claims`
+prints no table and `-require` takes `cited` only; beside `-check` it
+lints as well, one CI line for both.
+
 ## The command
 
 ```sh
@@ -292,6 +329,10 @@ above it moves (the default, `line`, links each `file:line`):
 | `f.go:9: //quint:exercises names noOverflw: model M has no assumption noOverflw: did you mean noOverflow? ...` | a directive naming no assumption | fix the name, or declare it in the model |
 | `f.go:9: //quint:enforces names oneCaller: oneCaller is an assumption of model M (what it leaves out), not a property ...` | a property directive naming an assumption (or `... states assumption a`: its val) | `//quint:exercises` or `//quint:monitors` |
 | `FAIL assumption a: nothing targets it: put //quint:exercises a ...` (exit 1) | `-require targeted`, and nothing aimed at it | a test or double past it, or a production check |
+| `doc.md:12: claim "..." cites no property or assumption: cite the property that makes it true, (prop: name), ...` (exit 1) | a marked claim that cites nothing | cite what makes it true, add it to the model, or drop `Claim:` |
+| `doc.md:12: claim "..." cites property withinCapp: model M has no property withinCapp: did you mean withinCap? ...` (also `cites assumption`, `... not a property: cite it as (assume: x)`) | a citation the model does not have, or of the other kind | the name it suggests, the kind it names, or the model |
+| `FAIL doc.md:12: claim "..." cites property p, which nothing enforces: put //quint:enforces p ...` (a `note:` without `-require cited`) | the claim rests on a property, or an assumption, the code does not back | the directive it names |
+| `ok   doc.md: 3 claims, citing 2 properties and 1 assumption of model M`, `FAIL doc.md: N problems in its claims, ...` | each document's verdict | fix each line above it |
 | `FAIL doc.md: stale: row p changed, row q added: run gotogether invariants ...` (exit 1) | the code moved, or the annotations changed | run the command it names, commit the document |
 | `FAIL doc.md: missing: doc.md has no table of model M: add <!-- gotogether:invariants M --> ...` | the document has no markers of this model, nor unnamed ones | add the pair where the table goes |
 | exit 2 | a bad invocation, a Go file that does not parse, a model quint refuses | the message says which |

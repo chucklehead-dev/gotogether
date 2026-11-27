@@ -28,7 +28,12 @@ import (
 // drivers that run it (connect.Bind entries, connect.Switch keys), and
 // the table of what the model says it leaves out (its `// @assume` lines,
 // ROADMAP CW3), the code that exercises each (//quint:exercises) and the
-// checks that monitor it (//quint:monitors). It prints them, writes each
+// checks that monitor it (//quint:monitors). With -claims it lints
+// design documents' marked claims (ROADMAP CW3's doc lint): a `Claim:`
+// paragraph or list item must cite a property, (prop: name), or an
+// assumption, (assume: name), the model has; -require cited fails a
+// cited property nothing enforces or checks, and a cited assumption
+// nothing targets. It prints the tables, writes each
 // into a design document between its markers, where the document has
 // them (-write), or compares the document's with them (-check, writing
 // nothing: exit 1 when stale, naming the rows that changed). An
@@ -53,7 +58,8 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 	lit := fset.Bool("literate", true, "treat a .md spec as a literate model, and a document that is one as its model's source (its .qnt written again); false: a .md spec is refused (name the .qnt your own tangler writes) and the document is plain Markdown")
 	write := fset.String("write", "", "write the tables into this Markdown document: the properties' between its "+invtable.Begin+" and "+invtable.End+" lines, the actions' between "+invtable.ActionsBegin+" and "+invtable.ActionsEnd+", the assumptions' between "+invtable.AssumptionsBegin+" and "+invtable.AssumptionsEnd+", each where the document has its markers; named ones (<!-- gotogether:invariants NAME -->) hold one model's of several, and only -name's are written")
 	check := fset.String("check", "", "compare the tables with this Markdown document's, writing nothing: exit 1 when they differ, naming the rows (for CI)")
-	require := fset.String("require", "", "fail (exit 1), instead of warning, when a property is not enforced (a //quint:enforces) or checked (a //quint:checks in a test), an action not recorded (a //quint:action or a literal qobs.Record) or driven (a connect.Bind entry or connect.Switch key), or a listed assumption (// @assume in the model) not exercised (a //quint:exercises), monitored (a //quint:monitors) or targeted (either): a comma-separated list of enforced, checked, recorded, driven, exercised, monitored, targeted")
+	claims := fset.String("claims", "", "lint these Markdown design documents' claims (comma-separated), instead of printing the tables (with -write or -check, as well as): a paragraph, list item or quoted line beginning Claim: (or **Claim:**) must cite a property of the model, (prop: name, ...), or an assumption it lists, (assume: name), and each it cites must be the model's; fenced code is no prose")
+	require := fset.String("require", "", "fail (exit 1), instead of warning, when a property is not enforced (a //quint:enforces) or checked (a //quint:checks in a test), an action not recorded (a //quint:action or a literal qobs.Record) or driven (a connect.Bind entry or connect.Switch key), a listed assumption (// @assume in the model) not exercised (a //quint:exercises), monitored (a //quint:monitors) or targeted (either), or a property a -claims claim cites not enforced and checked, an assumption it cites not targeted (cited): a comma-separated list of enforced, checked, recorded, driven, exercised, monitored, targeted, cited")
 	quint := fset.String("quint", "quint", "quint binary")
 	if err := fset.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -67,11 +73,23 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 	for r := range strings.SplitSeq(*require, ",") {
 		switch r = strings.TrimSpace(r); r {
 		case "":
-		case "enforced", "checked", "recorded", "driven", "exercised", "monitored", "targeted":
+		case "enforced", "checked", "recorded", "driven", "exercised", "monitored", "targeted", "cited":
 			required = append(required, r)
 		default:
-			return 2, fmt.Errorf("invariants: -require %s: give a comma-separated list of enforced and checked (each property), recorded and driven (each action), exercised, monitored and targeted (each assumption)", *require)
+			return 2, fmt.Errorf("invariants: -require %s: give a comma-separated list of enforced and checked (each property), recorded and driven (each action), exercised, monitored and targeted (each assumption), cited (each property or assumption a -claims claim cites)", *require)
 		}
+	}
+	claimDocs := list(*claims)
+	if slices.Contains(required, "cited") && len(claimDocs) == 0 {
+		return 2, fmt.Errorf("invariants: -require cited is of the claims a design document marks: name the documents with -claims doc.md")
+	}
+	claimSrc := map[string][]byte{}
+	for _, d := range claimDocs {
+		src, err := os.ReadFile(d)
+		if err != nil {
+			return 2, fmt.Errorf("invariants: -claims %s: %v (name the Markdown documents whose claims to lint)", d, err)
+		}
+		claimSrc[d] = src
 	}
 	if *links != "line" && *links != "name" {
 		return 2, fmt.Errorf("invariants: -links %s: give line (file:line links) or name (package and function, linked to the file)", *links)
@@ -87,6 +105,16 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 		return 2, fmt.Errorf("invariants: -write writes the table and -check compares it, writing nothing: give one")
 	}
 	doc := cmp.Or(*write, *check)
+	// claims alone lint the documents and print no table: only cited may
+	// be required, the tables' kinds need a table in play
+	claimsOnly := len(claimDocs) > 0 && doc == ""
+	if claimsOnly {
+		for _, r := range required {
+			if r != "cited" {
+				return 2, fmt.Errorf("invariants: -require %s is of the tables, and -claims alone prints none: require only cited of the claims, or give -check doc.md with the document's tables", r)
+			}
+		}
+	}
 	if doc != "" {
 		if _, err := os.Stat(doc); err != nil {
 			return 2, fmt.Errorf("invariants: the document %s: %v (name the Markdown document the table goes in)", doc, err)
@@ -164,8 +192,11 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 	// the actions table is in play when printed, or when the document
 	// has its markers: otherwise no code implementing actions is read,
 	// and none can fail the run (another model's drivers, unqualifiable)
+	if claimsOnly {
+		tables = nil
+	}
 	actionsInPlay := slices.ContainsFunc(tables, func(t docTable) bool { return t.name == "actions" })
-	if !actionsInPlay {
+	if !actionsInPlay && !claimsOnly {
 		for _, r := range required {
 			if r == "recorded" || r == "driven" {
 				ab, ae := literate.Markers("actions", *name)
@@ -273,6 +304,39 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 				fmt.Fprintln(errw, "note: "+missingNote(k, missing))
 			}
 		}
+	}
+	// the claims: an error each that cites nothing or what the model
+	// lacks; each citation nothing backs a FAIL under -require cited,
+	// else a note
+	for _, d := range claimDocs {
+		cc := table.CheckClaims(invtable.Claims(claimSrc[d], d))
+		for _, e := range cc.Errors {
+			fmt.Fprintln(errw, e)
+		}
+		for _, u := range cc.Unbacked {
+			if slices.Contains(required, "cited") {
+				fmt.Fprintln(errw, "FAIL "+u)
+			} else {
+				fmt.Fprintln(errw, "note: "+u+" (cited is not required)")
+			}
+		}
+		switch {
+		case len(cc.Errors) > 0:
+			fmt.Fprintf(out, "FAIL %s: %s in its claims, each citing nothing or what model %s lacks (fix each as it says)\n", d, plural(len(cc.Errors), "problem"), m.Main)
+			code = 1
+		case len(cc.Unbacked) > 0 && slices.Contains(required, "cited"):
+			fmt.Fprintf(out, "FAIL %s: %s the code does not back (-require cited; fix each as it says)\n", d, plural(len(cc.Unbacked), "citation"))
+		case cc.Claims == 0:
+			fmt.Fprintf(out, "ok   %s: no claims marked (begin one with Claim: and cite (prop: name))\n", d)
+		default:
+			fmt.Fprintf(out, "ok   %s: %s, citing %s and %s of model %s\n", d, plural(cc.Claims, "claim"), properties(cc.Props), plural(cc.Assumes, "assumption"), m.Main)
+		}
+		if len(cc.Unbacked) > 0 && slices.Contains(required, "cited") {
+			code = 1
+		}
+	}
+	if claimsOnly {
+		return code, nil
 	}
 	if len(required) > 0 {
 		if failed := table.Warnings(required...); len(failed) > 0 {

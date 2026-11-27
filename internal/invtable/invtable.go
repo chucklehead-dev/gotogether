@@ -29,6 +29,11 @@
 // it on purpose (//quint:exercises) and the checks that watch it in
 // production (//quint:monitors) (assumptions.go).
 //
+// A design document's marked claims (`Claim: ...`) are checked against
+// the same model and rows: each cites a property, (prop: name), or an
+// assumption, (assume: name), the model has, and what it cites is backed
+// by the code (claims.go).
+//
 // Go source is read with go/parser alone: the table needs positions and
 // comments, not types, so it stays in the core with no x/tools (as
 // `gotogether types` does).

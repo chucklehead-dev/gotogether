@@ -249,7 +249,10 @@ testing, where Quint traces drive the implementation). It adds:
   checks that watch it (`//quint:monitors`), kept current by `-check` in
   CI; a name that is no property, action or assumption fails, and
   `-require enforced,checked,recorded,driven,targeted` fails one nothing
-  covers
+  covers; `-claims docs/design.md` lints the document's marked claims
+  (`Claim: ... (prop: noDoubleSpend)`, `(assume: oneCaller)`), each
+  required to cite the model, and `-require cited` that the code backs
+  what it cites
   ([reference](skills/gotogether-workflow/references/invariants.md));
 - **model behavior comparison** (`gotogether model-diff`): compare two finite
   instances on explicit observed variables, with added/removed sequence witnesses,
