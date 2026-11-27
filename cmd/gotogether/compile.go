@@ -23,7 +23,7 @@ func compileTo(out io.Writer, args []string) error {
 	b := fset.String("binding", "", "the binding whose model to compile")
 	spec := fset.String("spec", "", "instead of -binding: the spec whose main module to compile for connect's traces (gotogether.mbt/1: connect.Run, Bind's Run and GenerateRun with no quint, the Go evaluator simulating it)")
 	main := fset.String("main", "", "with -spec: the main module, as connect.Config.Main (default: the file's)")
-	o := fset.String("o", "", "the compiled model's file (gotogether.model/1 JSON, gzipped where the name ends in .gz; default: beside the binding, <stem>.model.json.gz; with -spec, gotogether.mbt/1 beside the spec, <stem>.mbt.json or <stem>.<main>.mbt.json)")
+	o := fset.String("o", "", "the compiled model's file (gotogether.model/1 JSON, gzipped where the name ends in .gz; default: beside the binding, <stem>.model.json.gz; with -spec, gotogether.mbt/1 beside the spec, <stem>.mbt.json.gz or <stem>.<main>.mbt.json.gz)")
 	check := fset.Bool("check", false, "write nothing: compile again and fail if the file at -o differs in meaning")
 	quint := fset.String("quint", "quint", "quint binary")
 	fset.Parse(args)

@@ -191,10 +191,11 @@ AGENTS.md has the general requirements.
   witnesses' replays reported not done (`Report.NotDone`), `-verify`
   refused. connect's
   traces follow the same switch with a spec's compiled model
-  (`gotogether compile -spec S [-main M]` writes `<stem>[.<main>].mbt.json`
+  (`gotogether compile -spec S [-main M]` writes `<stem>[.<main>].mbt.json.gz`
   beside it; connect/testdata's bank and instance models have one, kept
   current by validate's TestCompiledMBTModelsAreCurrent): the Go
-  evaluator's simulation, no quint; `connect.RequireTraces(t, cfg)`.
+  evaluator's simulation, no quint; a test's guard is `connect.RequireTraces(t, cfg)`,
+  never a check for quint, which skips where the compiled model would run.
   The examples' compiled models: `ci/compiled-examples.sh check` (with
   quint: every `examples/**/*.model.json.gz` current, `compile -check`; `check
   MODEL...` for some), `ci/compiled-examples.sh test` (quint taken off PATH,

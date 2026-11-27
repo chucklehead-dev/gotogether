@@ -111,8 +111,12 @@ func readModel(path string) ([]byte, error) {
 }
 
 // walkExamples calls f for every file under examples/ outside
-// node_modules, gosim's translations and hidden directories, with its
-// path relative to the repository.
+// node_modules, gosim's translations, hidden directories and directories
+// starting with "_", with its path relative to the repository. The go
+// command ignores "_" directories as ./... does, and cmd/gotogether's
+// scaffold and init tests make their temporary projects there
+// (examples/_scaffolded*) while this test may be walking: one listed then
+// failed moduleOf as "in no module".
 func walkExamples(t *testing.T, f func(rel string)) {
 	base := filepath.Join(root, "examples")
 	err := filepath.WalkDir(base, func(p string, d fs.DirEntry, err error) error {
@@ -120,7 +124,7 @@ func walkExamples(t *testing.T, f func(rel string)) {
 			return err
 		}
 		if d.IsDir() {
-			if n := d.Name(); p != base && (n == "node_modules" || strings.HasPrefix(n, ".")) {
+			if n := d.Name(); p != base && (n == "node_modules" || strings.HasPrefix(n, ".") || strings.HasPrefix(n, "_")) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -184,7 +188,9 @@ func testCalls(t *testing.T, dir string) map[string][2]bool {
 // with its reason, and none listed has moved to RequireModel. A model
 // added, removed or grown, or a test moved, without the list changing,
 // fails here (ci/compiled-examples.sh checks the models current and runs
-// the RequireModel tests without quint).
+// the RequireModel tests without quint). A spec's compiled model for
+// connect is kept gzipped too (a plain .mbt.json is not found), within
+// maxModel.
 func TestCompiledModels(t *testing.T) {
 	needs := readNeeds(t)
 	byPath := map[string]*quintNeed{}
@@ -207,6 +213,12 @@ func TestCompiledModels(t *testing.T) {
 			models = append(models, rel)
 		case strings.HasSuffix(rel, ".model.json"):
 			t.Errorf("%s is a compiled model kept plain: the examples keep theirs gzipped beside the binding (validate.CompiledFor, .model.json.gz); remove it and compile it there (gotogether compile -binding B)", rel)
+		case strings.HasSuffix(rel, ".mbt.json"):
+			t.Errorf("%s is a compiled model for connect kept plain, which connect does not find: the examples keep theirs gzipped beside the spec (connect.CompiledFor, .mbt.json.gz); remove it and compile it there (gotogether compile -spec S [-main M])", rel)
+		case strings.HasSuffix(rel, ".mbt.json.gz"):
+			if fi, err := os.Stat(filepath.Join(root, rel)); err == nil && fi.Size() > maxModel {
+				t.Errorf("%s is %.2f MB compressed, over the %d MB a checked-in compiled model may take: keep the spec's connect tests on quint (ci/needs-quint.txt)", rel, float64(fi.Size())/1e6, maxModel>>20)
+			}
 		case (strings.HasSuffix(rel, ".yaml") || strings.HasSuffix(rel, ".yml")) && isBinding(filepath.Join(root, rel)):
 			bindings = append(bindings, rel)
 		}

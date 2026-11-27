@@ -197,7 +197,7 @@ func TestCompileSpecForConnect(t *testing.T) {
 	if err := compileTo(&out, []string{"-spec", spec, "-main", "design"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "instance.design.mbt.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, "instance.design.mbt.json.gz")); err != nil {
 		t.Fatalf("no compiled model beside the spec: %v\n%s", err, out.String())
 	}
 	out.Reset()

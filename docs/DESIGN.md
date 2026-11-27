@@ -5371,7 +5371,7 @@ adjusting it is a field per format):
 | `gotogether.run/3` | validate's run manifest | the current only |
 | `gotogether.evidence/3` | qtest's evidence | the current only |
 | `gotogether.model/1` | a compiled model (gotogether compile, §64), kept gzipped (`<stem>.model.json.gz`, §113) | the current only; plain or gzipped |
-| `gotogether.mbt/1` | a spec compiled for connect's traces (gotogether compile -spec, §110) | the current only |
+| `gotogether.mbt/1` | a spec compiled for connect's traces (gotogether compile -spec, §110), kept gzipped (`<stem>[.<main>].mbt.json.gz`, §113) | the current only; plain or gzipped |
 | `gotogether.report/2` | validate's and simulate's `-json` (validate.Document, §68) | the current only |
 | `gotogether.nav/2` | navproto's Session and Node's `protocol` | the current only; unnamed protocols are refused |
 
@@ -7320,7 +7320,7 @@ wrong pick's label.
 
 **connect without quint.** `gotogether compile -spec S [-main M]`
 (validate.CompileMBT) writes `gotogether.mbt/1` beside the spec
-(connect.CompiledFor: `<stem>.mbt.json`, `<stem>.<main>.mbt.json` for
+(connect.CompiledFor: `<stem>.mbt.json.gz`, `<stem>.<main>.mbt.json.gz` for
 another module than the file's): quint's IR of the main module with every
 definition its scope names kept, the definitions of whole-module imports
 and instances included (quint's flattening keeps only what init and step
@@ -7834,8 +7834,59 @@ their compile: `json.Marshal` writes a RawMessage's `<`, `>` and `&` as
 edgepublish's artifact (`LoadCompiled`) took 123 ms gzipped and 103 ms
 plain (best of 15, on a loaded 4-core machine), the gunzip about 20-40
 ms of it, once per process (qtest builds each checker once).
-`gotogether.mbt/1` (connect's, §110) is unchanged: its artifacts are few
-and small.
+**connect's artifacts too.** `gotogether.mbt/1` (connect's, §110) was
+left plain as few and small; golem's were 4.1-7.6 MB each, one line of
+JSON, and were not committed, so their tests stayed on quint. It is kept
+the same way now: `connect.CompiledFor` names `<stem>.mbt.json.gz` (or
+`<stem>.<main>.mbt.json.gz`; `connect.CompiledExt`), `MBTModel.Write`
+gzips a path ending in `.gz` with the same header (one helper,
+internal/gzdoc, for both formats), and `LoadMBT` reads either form and
+refuses a broken container with the fix. connect/testdata's bank model
+went from 105,630 bytes to 4,998, the instance's from 34,009 to 2,063;
+edgepublish's `currentDesign` compiled for connect is 18,095,459 bytes
+plain and 621,418 gzipped. As for bindings, a plain artifact beside a
+spec is not found by the convention, and every place that would have used
+it names it with the compile: `GOTOGETHER_COMPILED=1`, a run with no quint
+(its error from quint's absence), `RequireTraces`' skip, connect's log
+where quint runs, and `gotogether doctor`.
+
+**A stale artifact is said, not used.** With quint installed and the
+variable unset, connect runs quint whatever lies beside the spec, which is
+right, and was silent, so the developer who could recompile never saw that
+CI's runs without quint fail on it. The run now checks the artifact as a
+run without quint would (`LoadMBT`'s hashes, the spec and main it names),
+once a process, and logs a refusal once, with the compile
+(`passing over the spec's compiled model`). The path taken does not depend
+on it; `GOTOGETHER_COMPILED=0` checks nothing.
+
+**doctor lists them by spec.** A binding names its spec, so doctor finds
+bindings and asks for their models; nothing names the specs connect runs
+but the tests. doctor reads them from the module's tests that import
+connect (a literal `Config{Spec: ..., Main: ...}`, the same literal's
+`Main`), and lists each by its artifact: `none` with the `gotogether
+compile -spec` that writes one, `current`, or `stale` (a skew). Every
+`.mbt.json.gz` (and plain `.mbt.json`) found that no test names is listed
+as connect would read it: an `orphan` (its spec gone), `misplaced` (not
+where `CompiledFor` looks for its spec and main), `plain`, or current and
+stale as above. A spec named through a variable is missed by the reading;
+its artifact is still listed.
+
+**Why an artifact is large.** Of edgepublish's 18.1 MB, the main
+module's own declarations are 0.15 MB (0.8%); quint's lookup table is
+6.8 MB (37%), types 7.1 MB (39%), effects 4.0 MB (22%). The table holds
+the whole definition at every reference to it: 6,401 entries name 1,818
+definitions, 1.9 MB once each. Effects are never read by the Go evaluator.
+Without effects the document is 14.0 MB (517 KB at gzip -9, 630 KB
+with them), and with the table naming each definition once 9.2 MB
+(327 KB). Two instances of one
+module are near-identical files: edgepublish's `currentDesign` and
+`fixedDesign` share every type and effect by id and 6,172 of 6,401 table
+entries. One gzip stream of both is no smaller than two (1,261,154 bytes
+against 1,260,464: deflate's window is 32 KB), but the second as a delta
+over the first is 55,692 bytes gzipped: an artifact per spec holding every
+main would keep two such mains in about 690 KB rather than 1.26 MB. Neither
+redesign is made here: the format stays quint's IR as it is, which the
+gzip already brings within the budget.
 
 
 ## 114. Claims a design document marks, each citing the model
