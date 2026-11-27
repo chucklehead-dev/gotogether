@@ -3794,6 +3794,32 @@ run (the journal's Stop restart of no fault), and a pause or resume of a
 process not running says whether it was killed or exited by itself, and
 how: the fault is not made, and nothing of it journaled.
 
+**A host stall is no verdict, and the seed runs again.** A real run's
+bounds are wall-clock time, and a shared host can stall every node at
+once (CI's runners' fsync). The harness measures the host
+(`qnemesis.WatchHost`), and `qtest.HostStalls` makes a late bounded
+response "no verdict (host stall)" only when the stalls in its window
+cover its lateness (the maintainer's decision, 2026-11-25). qtest
+counts such a run as unjudged, never a pass: `Conforms()` over runs
+fails on one ("1 of 3 runs have no verdict"). The tier's first answer
+left stalled runs out of its claims, said; it was applied to one claim
+and missed another (`TestRealNoRequestID`'s cluster Conforms, PR #284),
+and where applied it judged fewer seeds than the test names, which a
+mutant's `Some` (its miss rate measured per seed) cannot afford. Now a
+seed whose run has a history with no verdict runs again, at most twice
+(`untilJudged`), and each history is judged by its first run with a
+verdict. That is no loosening: a run passed over had nothing FAIL in
+that history (`Run.Stalled`), so no verdict is dropped and a later run's
+FAIL counts as its pass would; a history's verdict is kept whatever the
+other history's (a clients' catch beside a stalled cluster history); a
+run with a verdict is never run again (no rerolling a failure); and a
+seed with none after three runs fails the claims, as qtest's no-verdict
+does. Every stalled run is said (`inconclusive.txt`, a CI warning). No
+claim was added to qtest: "every run with a verdict conforms, and at
+least k have one" would let a host that stalls often shrink what is
+judged in silence, where running the seed again keeps the claim over
+the seeds the test names.
+
 Three reviews: of the plan, of qnemesis and the real tier (a kill
 between effect and record giving a false FAIL, the nemesis's steps
 counted as the system's, a pause recorded before the group stopped,

@@ -443,9 +443,11 @@ func realConfig(seed int64, m Mutation) nemesisRun {
 
 // realRuns runs the real cluster under the nemesis at seeds (seedsOf),
 // cfgOf making each run's shape, each in a directory of its own (under
-// RAFTKV_REAL_DIR if set, kept), and returns their verdicts; a faithful
-// run that does not conform has its replay hint logged.
-func realRuns(t *testing.T, seeds []int64, cfgOf func(seed int64) nemesisRun) []realVerdicts {
+// RAFTKV_REAL_DIR if set, kept), and returns each seed's runs: a seed
+// whose run has no verdict for a host stall alone is run again
+// (untilJudged); a faithful run that does not conform has its replay
+// hint logged.
+func realRuns(t *testing.T, seeds []int64, cfgOf func(seed int64) nemesisRun) []seedRuns {
 	t.Helper()
 	if os.Getenv("RAFTKV_REAL") != "1" {
 		t.Skip("RAFTKV_REAL=1 runs the real tier: three raftkv-node processes on localhost, toxiproxy-server on PATH")
@@ -454,26 +456,130 @@ func realRuns(t *testing.T, seeds []int64, cfgOf func(seed int64) nemesisRun) []
 	dir := realDir(t)
 	url := toxiproxyServer(t)
 	bin := buildNode(t, dir)
-	var out []realVerdicts
+	var out []seedRuns
 	for _, seed := range seeds {
-		start := time.Now()
 		cfg := cfgOf(seed)
-		v := runUnderNemesis(t, bin, url, filepath.Join(dir, fmt.Sprintf("seed%d", seed)), cfg)
-		t.Logf("seed %d (%v): the clients' history ok %v (NoRequestID's failure %v), the cluster's ok %v, settled %v", seed,
-			time.Since(start).Round(100*time.Millisecond), v.KV.OK(), noRequestIDCaught.Holds(v.KV), v.Cluster.OK(), qtest.Settles().Holds(v.Cluster))
-		t.Logf("  the host: %s", v.Host)
-		if v.Cluster.Stalled() {
-			t.Logf("  the cluster's: no verdict (host stall): a bound broken while the host stalled long enough to break it")
-		}
-		if !v.Cluster.OK() {
-			t.Logf("  the cluster's: %s", strings.TrimSpace(v.Cluster.Report.Summary()))
-		}
-		if cfg.Mutation == Faithful && (!v.KV.OK() || !v.Cluster.OK()) {
-			logReplay(t, v)
-		}
-		out = append(out, v)
+		out = append(out, untilJudged(t, dir, fmt.Sprintf("seed%d", seed), func(name string) realVerdicts {
+			start := time.Now()
+			v := runUnderNemesis(t, bin, url, filepath.Join(dir, name), cfg)
+			t.Logf("%s (%v): the clients' history ok %v (NoRequestID's failure %v), the cluster's ok %v, settled %v", name,
+				time.Since(start).Round(100*time.Millisecond), v.KV.OK(), noRequestIDCaught.Holds(v.KV), v.Cluster.OK(), qtest.Settles().Holds(v.Cluster))
+			t.Logf("  the host: %s", v.Host)
+			if !v.Cluster.OK() && !v.Cluster.Stalled() {
+				t.Logf("  the cluster's: %s", strings.TrimSpace(v.Cluster.Report.Summary()))
+			}
+			if cfg.Mutation == Faithful && (!v.KV.OK() && !v.KV.Stalled() || !v.Cluster.OK() && !v.Cluster.Stalled()) {
+				logReplay(t, v)
+			}
+			return v
+		}))
 	}
 	return out
+}
+
+// stallRetries is how many times a seed is run again while a history of
+// its runs has no verdict for a host stall alone (qtest.Run.Stalled: a
+// bound broken while the harness measured a stall that could have broken
+// it): "run it again on a quiet host", automated. CI's hosted runners
+// stall their disk's fsync for over 100ms several times a run, and one
+// run in three once had a stall excuse a late leader (PR #284's seed 10:
+// 14ms late, the host stalled 512ms of the 514ms before it). A stall long
+// enough to excuse a bound is the rare case: two more runs make three in
+// a row, which says the host cannot judge the tier, and the claims fail
+// on it.
+const stallRetries = 2
+
+// seedRuns are one seed's real runs, in order: the first, then each run
+// again after one that had a history with no verdict (host stall).
+type seedRuns struct {
+	Attempts []realVerdicts
+}
+
+// kv is the run whose clients' history judges the seed, cluster the one
+// whose cluster history does: for each history, the first run with a
+// verdict for it, else the last (no verdict, which the claims fail on).
+// A run passed over had no verdict for that history (Stalled: nothing in
+// it FAILs), so no verdict is dropped, a pass or a FAIL: a later run's
+// FAIL counts as its pass would. Each history is a claim of its own, so
+// a run's other history keeps its verdict (a NoRequestID run whose
+// clients' history caught the mutant while its cluster's stalled keeps
+// the catch).
+func (s seedRuns) kv() realVerdicts { return s.first(func(v realVerdicts) *qtest.Run { return v.KV }) }
+
+func (s seedRuns) cluster() realVerdicts {
+	return s.first(func(v realVerdicts) *qtest.Run { return v.Cluster })
+}
+
+func (s seedRuns) first(of func(realVerdicts) *qtest.Run) realVerdicts {
+	for _, v := range s.Attempts {
+		if !of(v).Stalled() {
+			return v
+		}
+	}
+	return s.Attempts[len(s.Attempts)-1]
+}
+
+// stalled reports whether a history of the seed has no verdict yet for a
+// host stall alone.
+func (s seedRuns) stalled() bool { return s.kv().KV.Stalled() || s.cluster().Cluster.Stalled() }
+
+// untilJudged runs a seed (run, given the run's directory name: name,
+// then name.again1, ...) until each of its histories has a verdict, at
+// most 1+stallRetries times. Each run without one is said: logged, and a
+// line in inconclusive.txt in dir, which CI turns into a warning (and
+// keeps the runs as an artifact). Leaving such a seed out of the claims
+// instead (judged, before) left a claim over fewer seeds than its test
+// names, and the mutants' claims (Some, measured per seed) lost a seed's
+// chance: TestRealNoRequestID's cluster Conforms failed on the stalled
+// run it kept. A run again is the seed's schedule again on another
+// moment of the host, which is what the stall's message asks for.
+func untilJudged(t *testing.T, dir, name string, run func(name string) realVerdicts) seedRuns {
+	t.Helper()
+	var s seedRuns
+	for k := 0; k <= stallRetries; k++ {
+		n := name
+		if k > 0 {
+			n = fmt.Sprintf("%s.again%d", name, k)
+		}
+		s.Attempts = append(s.Attempts, run(n))
+		if !s.stalled() {
+			break
+		}
+		v := s.Attempts[len(s.Attempts)-1]
+		var which []string // the seed's histories still without a verdict
+		for _, h := range []struct {
+			name string
+			r    *qtest.Run
+		}{{"the clients'", s.kv().KV}, {"the cluster's", s.cluster().Cluster}} {
+			if h.r.Stalled() {
+				which = append(which, h.name)
+			}
+		}
+		line := fmt.Sprintf("%s: no verdict (host stall) of %s history: %s", n, strings.Join(which, " and "), v.Host)
+		if k < stallRetries {
+			line += "; run again"
+		} else {
+			line += fmt.Sprintf("; %d runs, none with a verdict: the claims fail on it", k+1)
+		}
+		t.Logf("inconclusive: %s", line)
+		inconclusive(t, dir, line)
+	}
+	return s
+}
+
+// inconclusive adds line to dir's inconclusive.txt.
+func inconclusive(t *testing.T, dir, line string) {
+	t.Helper()
+	f, err := os.OpenFile(filepath.Join(dir, "inconclusive.txt"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err == nil {
+		_, err = f.WriteString(line + "\n")
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+	}
+	if err != nil {
+		t.Error(err)
+	}
 }
 
 // realDir is where a test's real runs write: a new temporary directory,
@@ -519,50 +625,20 @@ func seedsOf(t *testing.T, runs string, def []int64) []int64 {
 	return def
 }
 
-// judged are vs's runs with a verdict: a run whose cluster history has
-// none for a host stall alone (qtest.Run.Stalled: a bound broken while
-// the harness measured a stall that could have broken it) is
-// inconclusive, neither a pass nor a FAIL, and is left out of the claims
-// and said: logged, and a line in inconclusive.txt beside the runs, which
-// CI turns into a warning. A run with any other failure stays in. If
-// every run is inconclusive, all are returned, and the claims fail (qtest:
-// "every one of N runs has no verdict (host stall)"): a job that judged
-// nothing is red, as a claim over no runs is.
-func judged(t *testing.T, vs []realVerdicts) []realVerdicts {
-	t.Helper()
-	var out []realVerdicts
-	var lines []string
-	for _, v := range vs {
-		if v.Cluster.Stalled() {
-			line := fmt.Sprintf("%s: no verdict (host stall): %s", v.Dir, v.Host)
-			t.Logf("inconclusive, left out of the claims: %s", line)
-			lines = append(lines, line)
-			continue
-		}
-		out = append(out, v)
-	}
-	if len(lines) > 0 {
-		f := filepath.Join(filepath.Dir(vs[0].Dir), "inconclusive.txt")
-		if err := os.WriteFile(f, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
-			t.Error(err)
-		}
-	}
-	if len(out) == 0 {
-		return vs
+// kvOf are the seeds' clients' histories, each judged by its first run
+// with a verdict (seedRuns.kv).
+func kvOf(ss []seedRuns) (out []*qtest.Run) {
+	for _, s := range ss {
+		out = append(out, s.kv().KV)
 	}
 	return out
 }
 
-func kvOf(vs []realVerdicts) (out []*qtest.Run) {
-	for _, v := range vs {
-		out = append(out, v.KV)
-	}
-	return out
-}
-
-func clusterOf(vs []realVerdicts) (out []*qtest.Run) {
-	for _, v := range vs {
-		out = append(out, v.Cluster)
+// clusterOf are the seeds' cluster histories, each judged by its first
+// run with a verdict (seedRuns.cluster).
+func clusterOf(ss []seedRuns) (out []*qtest.Run) {
+	for _, s := range ss {
+		out = append(out, s.cluster().Cluster)
 	}
 	return out
 }
@@ -616,12 +692,13 @@ var prSeeds = []int64{5, 9, 10}
 // crashes is a violation of electionSafety: the nodes declare no lost
 // tails (nemesisRun.Recorders), so a crash leaves the steps after it
 // judged. A run whose bound broke while the host stalled long enough to
-// break it has no verdict, and is said and left out (judged).
+// break it has no verdict: its seed is run again, said (untilJudged),
+// and a seed with none in three runs fails the claims.
 func TestRealNemesis(t *testing.T) {
-	vs := realRuns(t, seedsOf(t, "RAFTKV_REAL_RUNS", prSeeds), func(seed int64) nemesisRun { return realConfig(seed, Faithful) })
-	qtest.Runs(kvOf(vs)...).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
-	qtest.Runs(clusterOf(judged(t, vs))...).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
-	secondLeader(t, vs[0]).Expect(t, qtest.Violates("electionSafety"))
+	ss := realRuns(t, seedsOf(t, "RAFTKV_REAL_RUNS", prSeeds), func(seed int64) nemesisRun { return realConfig(seed, Faithful) })
+	qtest.Runs(kvOf(ss)...).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
+	qtest.Runs(clusterOf(ss)...).Expect(t, qtest.Conforms(), qtest.All(qtest.Settles()))
+	secondLeader(t, ss[0].cluster()).Expect(t, qtest.Violates("electionSafety"))
 }
 
 // secondLeader is v's cluster history with a node's lead of a term
@@ -667,11 +744,14 @@ func secondLeader(t *testing.T, v realVerdicts) *qtest.Run {
 // 3 of 3 runs, 9 in 2 of 3, 10 in 3 of 3 (and 18 of 18 runs of seeds
 // 4-10 without the cuts and -race): at each seed's worst measured miss
 // rate (1 in 3) the three miss together 3.7% of the time. The nightly
-// runs RAFTKV_REAL_MUTANT_RUNS fresh seeds.
+// runs RAFTKV_REAL_MUTANT_RUNS fresh seeds. A seed whose cluster history
+// has no verdict (host stall) is run again (untilJudged): its Conforms
+// once failed on such a run (PR #284), and a clients' history that caught
+// the mutant keeps its catch.
 func TestRealNoRequestID(t *testing.T) {
-	vs := realRuns(t, seedsOf(t, "RAFTKV_REAL_MUTANT_RUNS", prSeeds), func(seed int64) nemesisRun { return realConfig(seed, NoRequestID) })
-	qtest.Runs(kvOf(vs)...).Expect(t, qtest.Some(noRequestIDCaught))
-	qtest.Runs(clusterOf(vs)...).Expect(t, qtest.Conforms())
+	ss := realRuns(t, seedsOf(t, "RAFTKV_REAL_MUTANT_RUNS", prSeeds), func(seed int64) nemesisRun { return realConfig(seed, NoRequestID) })
+	qtest.Runs(kvOf(ss)...).Expect(t, qtest.Some(noRequestIDCaught))
+	qtest.Runs(clusterOf(ss)...).Expect(t, qtest.Conforms())
 }
 
 // An election timeout ten times as long (SlowElection, the node's) still
@@ -687,9 +767,12 @@ func TestRealNoRequestID(t *testing.T) {
 // 6). With six, measured with -race: 14 of 15 runs caught it, per seed
 // 5: 5 of 5, 9: 5 of 5, 10: 4 of 5; the three missed together in none
 // of five tries, which needs 5 and 9 to miss, never seen in ten runs.
+// A seed with no verdict (host stall) is run again (untilJudged), so
+// each seed is a chance, as measured: a stalled run is no witness, and
+// None(...) has no verdict of it.
 func TestRealSlowElection(t *testing.T) {
-	vs := realRuns(t, seedsOf(t, "RAFTKV_REAL_MUTANT_RUNS", prSeeds), func(seed int64) nemesisRun { return realConfig(seed, SlowElection) })
-	qtest.Runs(clusterOf(vs)...).Expect(t, qtest.Some(qtest.Violates("within 500ms after healed: leaderOrSplit")),
+	ss := realRuns(t, seedsOf(t, "RAFTKV_REAL_MUTANT_RUNS", prSeeds), func(seed int64) nemesisRun { return realConfig(seed, SlowElection) })
+	qtest.Runs(clusterOf(ss)...).Expect(t, qtest.Some(qtest.Violates("within 500ms after healed: leaderOrSplit")),
 		qtest.None(qtest.Violates("electionSafety")))
-	qtest.Runs(kvOf(vs)...).Expect(t, qtest.Conforms())
+	qtest.Runs(kvOf(ss)...).Expect(t, qtest.Conforms())
 }

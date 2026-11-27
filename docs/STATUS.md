@@ -67,9 +67,10 @@ A real run's timing bound broken by its host is no verdict, not a FAIL
 measures the host from the harness (a 10ms ticker with Linux's scheduling
 delay and cgroup throttling, an fsync on the system's disk); `qtest.HostStalls`
 makes a late `within` response "no verdict (host stall)" only when the stalls
-in its window cover its lateness. raftkv's real tier leaves such runs out of
-its claims and says so (a CI warning), and fails when every run is. The bound
-is unchanged. HISTORY has the design and the local measurements.
+in its window cover its lateness. raftkv's real tier runs such a seed again,
+at most twice, judging each history by its first run with a verdict and saying
+every stalled run (a CI warning); a seed with none after three runs fails its
+claims. The bound is unchanged. HISTORY has the design and the local measurements.
 
 The core property suite reports native Hegel run errors, including health-check
 failures, through its private runner. Hegel 0.9.30 is now admitted against the
