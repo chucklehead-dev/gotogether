@@ -7603,6 +7603,15 @@ effects are recorded, or `effects: "-"`): none known is not none made.
 Lint checks the def exists, takes only the action's parameters, the
 kinds map something, and `match` is a mode.
 
+A step of an action with no effects def (none in the model, no
+`effects:` of its own) that made an effect of a mapped kind fails too
+(§115's rule, which validate adopted with connect, 2026-11-27): the
+model states none, so none is its specification. `Plan` gives it an
+Undeclared check (`EffectCheck.Undeclared`) and the conjunct `([] ==
+<the effects made>)`; the verdict is `Mismatch(action)`, the report's
+effects block naming the def the action would take and both fixes. An
+action opted out (`effects: "-"`) compares none, as before.
+
 **The verdict** (§8.1, 3). An effects mismatch is the expect's failure:
 `Mismatch("pay")`, so existing claims work unchanged. The report
 (validate's Failure.Effects, the document's `effects`) names the step and
@@ -7921,12 +7930,12 @@ Left: a claim's citation checked against what the property says (a
 claim that cites a true but unrelated property passes); review, as for
 a property's doc comment, is that check.
 
-## 115. Effects in connect-driven runs (CW12, designed)
+## 115. Effects in connect-driven runs (CW12, built)
 
 §112 compares a step's effects with the model's `<action>Effects` def in
-validate, on recorded runs only. connect has no effect handling, and
-`qobs.Effect` with no recorder is a no-op, so a model-based test cannot
-use the def at all. golem (#144, its third report) stated an attempt's
+validate, on recorded runs only. connect had no effect handling, and
+`qobs.Effect` with no recorder is a no-op, so a model-based test could
+not use the def at all. golem (#144, its third report) stated an attempt's
 send in its model (`type Effect = Send({ call, deployment, model })`,
 `def attemptEffects(c, d)`), had its fake providers note each request and
 compared them by hand in a `Bind(...).Check` through `connect.Eval`. That
@@ -7934,7 +7943,20 @@ check caught a planted failover that kept the first deployment's model in
 the body, which 310 s of the package's other tests, its state comparison
 included, passed. This section makes that check connect's own: a
 Binding's steps are compared with the same defs, through the same mapping,
-reported in the same shape. Designed, not built.
+reported in the same shape. Designed first, then built after the
+maintainer decided its three open questions (2026-11-27, below).
+
+**The maintainer's decisions.** (1) validate adopts the stricter rule
+too: with an effects mapping, a step of an action that has no effects def
+(and is not opted out with `"-"`) but made an effect of a mapped kind
+fails, one judging rule in both. (2) No `qrun.Start` on the replay
+goroutine for now: effects are recorded through the trace's context only;
+a `context.Background()` send on the driver's goroutine, or on an
+unrelated goroutine, is not recorded (a missing send fails loudly, an
+extra one passes). `qrun.Start` stays an open ROADMAP item (CW12). (3)
+The mismatch moves to an internal package, internal/effectsdiff, which
+validate and connect export under aliases (`validate.EffectsMismatch`,
+`connect.EffectsMismatch`), as qenv exports `choice.Rates`.
 
 **What a step's effects are: the ones recorded while it ran.** A connect
 trace is synchronous: the driver's `Step` returns before the next begins,
@@ -7945,49 +7967,57 @@ its handlers run on their own goroutines, each paused before a pick and
 released by a later step (CW11), so a send made under the scope of the
 step that started the call happens during the step that released it.
 Rule 2 (the task's next step) has no next step to name, because connect
-records no steps. Per trace, when the binding compares effects, connect
-makes one recorder over a memory sink (`qobs.ObserveEffects`, so that
-none made is none) and puts it where the code finds it:
+records no steps. Per trace, when the binding compares effects, the
+bound driver makes one recorder over a sink of its own
+(`qobs.ObserveEffects`, so that none made is none, keeping only the
+effect records) and puts it in the trace's context (decision 2: nowhere
+else). That context is what a method's `context.Context` parameter
+receives, what a handler reads from `s.Context()` (a new `Step` method:
+the trace's test context, carrying the recorder when effects are
+compared; `context.Background()` outside Run and Test), and what
+`BindContext`'s constructor is given (a `Bind` variant, so that what the
+constructor sends is init's effects, compared with `initEffects`).
+Goroutines given that context, an HTTP request built from it, and a qenv
+simulation made under it (`qenv.New(qenv.WithContext(c, ctx))`, its
+tasks' sends and its doubles') record into it whatever goroutine sends.
 
-- in the trace's context, which a method's `context.Context` parameter
-  receives and a handler reads from `s.Context()` (a new `Step` method:
-  the trace's test context carrying the recorder). Goroutines given that
-  context, an HTTP request built from it, and `qenv.Go` tasks record into
-  it whatever goroutine sends;
-- as the replay goroutine's run (`qrun.Start`, as `qtest.Record` does), so
-  that code calling `qobs.Effect(context.Background(), ...)` on the driver's
-  goroutine, and a simulation `qenv.New` makes there (the constructor's,
-  at init), find it too. A qenv double's send then records as §112's do,
-  under a scope or through the simulation's run, and the window
-  attributes it.
-
-The step's effects are the effect records with seqs between its start and
+The step's effects are the effect records taken between its start and
 its end, in seq order; the records' rule-1 and rule-2 fields are ignored.
 An effect recorded after step k returned and before step k+1 began is no
-step's: it fails step k+1 (or the trace, after its last step), naming step
-k and the fix: the driver must wait for the work its step started before
-returning, as golem's `settle` does. An effect a goroutine makes through
-neither path (a `go` statement given `context.Background()`, a server's
+step's: it fails step k+1 (or the trace, after its last step: Replay
+asks the driver once the last step is done), naming step k and the fix:
+the driver must wait for the work its step started before returning, as
+golem's `settle` does. An effect a goroutine makes through no such
+context (a `go` statement given `context.Background()`, a server's
 handler whose request context is not the client's) is not recorded: a
 missing send then fails loudly, an extra one passes. That is the boundary
-to document. golem's providers are such servers, so the send is recorded
-at the client's transport, where the request's context is the step's.
-Code under test that records steps itself (`qobs.Record`, `Invoke`) writes
-them to the same recorder; connect reads only the effect records.
+documented (the mbt skill's driver reference), and a test shows it (a
+`context.Background()` send reads as a missing one). A goroutine whose
+send lands while a later step runs is that step's, as far as the window
+can tell: the driver's wait is what makes the attribution right. golem's
+providers are such servers, so the send is recorded at the client's
+transport, where the request's context is the step's. Code under test
+that records steps itself (`qobs.Record`, `Invoke`) writes them to the
+same recorder; connect reads only the effect records.
 
 **The mapping: binding's, given in Go.** The kinds, `from`, `where`,
-`fields`, `same` and the match modes are §112's, and they must mean the
-same thing in both places, so the value is the type the YAML decodes into
+`fields`, `same` and the match modes are §112's, and they mean the same
+thing in both places, so the value is the type the YAML decodes into
 (`binding.Effects`), given to the Binding. It is not a second schema in
 Go, and not a YAML read by connect: a connect test has no binding file,
 and its templates read the recorded fields as validate's do. The
 normalization (rendering each mapped effect by its constructor's
-templates, then exact, retried or set) moves out of `Plan` into one
-exported method of `binding.Effects` that returns the `EffectCheck`
-validate already builds. Validate's plan and connect call it, and so
-share its semantics by construction. Per action, as the YAML's `effects:`
-and `match:` keys: the def defaults to `<action>Effects` when the model
-has it, `"-"` compares none, and the match defaults to exact.
+templates, then exact, retried or set) moved out of `Plan` into
+`binding.Effects.Check(def, call, match, made)`, which returns the
+`EffectCheck` validate builds; validate's plan and connect both call it
+(the plan through its own renderer, whose templates also have the
+trace's and model's functions: `set`, `count`, `toQuint`; `Check` has
+those that need neither, `toSet`, `toList`, `toMap`, `add`, `atLeast`).
+`def ""` checks an action with no def: `EffectCheck.Undeclared` reports
+that it made something mapped. Per action, as the YAML's `effects:` and
+`match:` keys, `EffectsOf(action, def, match)`: the def defaults to
+`<action>Effects` when the model has it, `"-"` compares none, and the
+match defaults to exact.
 
 ```go
 b := connect.Bind(newGateway).
@@ -8003,101 +8033,136 @@ b.Run(t, connect.Config{Spec: "model/attempts.qnt"})
 The method's first parameter, a context, is the trace's. golem's upstream
 transport records `qobs.Effect(req.Context(), "upstream.request", "call",
 id, "deployment", d, "model", body.Model)`, and its providers' notes and
-its hand-written `Check` go.
+its hand-written `Check` go (golem's migration: the mbt skill's driver
+reference).
 
-**The expected effects: `Step.Eval` in the trace's post-state.** The def's
+**The expected effects: the def in the trace's post-state.** The def's
 arguments are the step's picks by the def's parameter names (the action's
 parameters, as `--mbt` records them). Its value is the Go evaluator's in
-`After`, the state the trace itself reached. That is simpler than
-validate's, which must choose among the evaluator's successors the one
-quint reported. The two paths are one: on quint's, the defs are among
-those `defs()` hands the compile (the Returns' defs are compiled for the
-same way); on the compiled path (`gotogether.mbt/1`) every def of the main
-module is there. The made effects, rendered as Quint text, are read back
-with `itf.ParseQuint` and printed as the evaluator prints values, so that
-they compare with the def's value text for text, as validate's do, through
-`binding.FirstDifference`. A def outside the evaluator's fragment fails
-the step, naming it (`qeval.Unsupported`). It never passes unjudged.
+`After`, the state the trace itself reached (`Step.Eval`'s, before its
+ITF conversion), simpler than validate's, which must choose among the
+evaluator's successors the one quint reported. The two paths are one: on
+quint's, the defs are among those the bound driver hands the compile
+(every action's `<action>Effects` and `initEffects` asked for at once:
+quint names every missing one in one error, so a binding learns which
+defaults the model lacks in a single compile, where a compile per name
+would have cost seconds each); on the compiled path (`gotogether.mbt/1`)
+every def of the main module is there. The made effects, rendered as
+Quint text, are read back with `itf.ParseQuint` and printed as the
+evaluator prints values, so that they compare with the def's value text
+for text, as validate's do, through `binding.FirstDifference` (under match
+set, both sides deduplicated and sorted first, as the conjunct compares
+sets). A def outside the evaluator's fragment fails the step with
+`Step.Eval`'s error, naming it. It never passes unjudged.
 
 **Which steps are compared.** The comparison is opt-in: without `Effects`
 nothing changes, no recorder is made and no context is replaced. With it,
 every action whose def resolves is compared, init too (`initEffects`, a
-def of no parameters, for a constructor that connects or sends). One rule
-is stricter than validate's: a step of an action with no def (none in the
-model, or `"-"` not given) that made an effect of a mapped kind fails,
-naming the action and the fix (state `def commitEffects = []`, or
-`EffectsOf("commit", "-", "")`). golem's check rejected a send during
+def of no parameters, for a constructor that connects or sends). An
+action with no def (none in the model, and no `"-"`) that made an effect
+of a mapped kind fails, naming the action and the fix (state what it
+sends in the model, `def commitEffects(...)`, `[]` for nothing; or
+`EffectsOf("commit", "-", "")`): golem's check rejected a send during
 `commit` or `end`, and "no other action sends anything" is part of the
-specification. validate compares no step whose action has no def, so an
-extra send there passes it. Effects of unmapped kinds are listed, never
-compared (`EffectCheck.NotCompared`), as in validate.
+specification. validate now judges the same (decision 1): `Plan` gives
+such a step an Undeclared check and one more conjunct, `([] == [<the
+effects made>])`, which quint's replay fails; the Go evaluator fails it
+without the evaluation module (whose expect for the action takes no
+effects) by the check alone (`EffectCheck.Undeclared`, in `holds` and the
+hidden closure). The verdict is the expect's, `Mismatch(action)`, and the
+report's effects block says the action made effects the model states none
+of. Effects of unmapped kinds are listed, never compared
+(`EffectCheck.NotCompared`), in both.
 
 **Order and report.** The comparison runs after the method returns (or
-panics, before the panic is re-raised as the step's error), before its
-error, its Returns or Observes check, the state comparison and `Check`.
-A `StepError` of kind `"effects"` carries the mismatch, and the step's own
-error, when it has one, follows it in the message. golem's duplicate send
-after a 503 failed only at the driver's handshake ("the gateway ended the
-call where the model attempts"); with the effects first it reads as the
-second request it was. The mismatch is §112's shape: `validate.EffectsMismatch`
-moves to an internal package that both use, and validate and connect each
-export it under an alias (qenv.Rates' pattern). The field is
-`StepError.Effects`, and the fix line names the Binding's `Effects` in
-place of a binding file:
+panics, before the panic is re-raised), before its error, its Returns or
+Observes check, the state comparison and `Check`. A `StepError` of kind
+`"effects"` carries the mismatch (`StepError.Effects`), and the step's own
+error, when it has one, is the StepError's `Err` and follows the mismatch
+in the message ("and the step failed: ..."). Effects made between steps,
+or a def the evaluator cannot compute, are kind `"effects"` with no
+mismatch, `Err` saying which. golem's duplicate send after a 503 failed
+only at the driver's handshake ("the gateway ended the call where the
+model attempts"); with the effects first it reads as the second request
+it was. The mismatch is §112's shape, `effectsdiff.Mismatch`, which gained
+`Undeclared` (in the report's JSON, `undeclared`), `Headline` and the
+exported `Render`, and two fields that are no report data (`json:"-"`):
+`Mapping` (where the effects' fields come from: `effects.kinds in
+<binding>`, or the Binding's Effects) and `Drop` (how to compare none:
+`effects: "-" for commit in <binding>`, or `EffectsOf`):
 
 ```text
-trace 50 step 4 attempt(c="c1", d="d2"): its effects are not the model's attemptEffects("c1", "d2")
-  effects:  not the model's attemptEffects("c1", "d2") (match retried):
-    made     [Send({ call: "c1", deployment: "d2", model: "d1" })]   (upstream.request at seq 7)
-    expected [Send({ call: "c1", deployment: "d2", model: "d2" })]
-    first difference: effect 1, field model: "d1", expected "d2"
+trace 0 step 4 attempt(c="c2", d="d2"): its effects are not the model's attemptEffects("c2", "d2")
+  effects:  not the model's attemptEffects("c2", "d2") (match exact):
+    made     [Send({ call: "c2", deployment: "d2", model: "m1" })]   (upstream.request at seq 4)
+    expected [Send({ call: "c2", deployment: "d2", model: "m2" })]
+    first difference: effect 1, field model: "m1", expected "m2"
     Fix the code's effect, or attemptEffects if the model is wrong; the effects' fields come from the Binding's Effects.
 ```
 
 **Checked before any trace.** `Run` and `Test` check the binding against
-the model (bindcheck.go), and the effects with it: each def exists and
-takes only its action's parameters; its result is a list or set of a sum
-type; each mapped name is one of that type's constructors, and its
-`fields` are exactly that constructor's record fields (the model's type
-table makes this static, where validate's lint checks templates only);
-`EffectsOf` names a bound action (or init) and a mode. A mapping with no
-def to compare against is an error, not a no-op.
+the model (bindcheck.go), and the effects with it: each def exists (an
+`EffectsOf` def the model lacks is refused; a missing default only leaves
+its action undeclared) and takes only its action's parameters; its result
+is a list or set of a sum type; each mapped name is one of that type's
+constructors, and its `fields` are exactly that constructor's record
+fields (none for a nullary one: the model's type table makes this static,
+where validate's lint checks templates only); each kind has a `From`;
+`EffectsOf` names a bound action (or init), a mode, and no mode beside
+`"-"`; `EffectsOf` without `Effects` is refused. A mapping with no def to
+compare against is an error, not a no-op.
 
-**Tests that would prove it** (connect, against a small sender model in
-connect/testdata, on quint's path and on its compiled model, with the same
-verdicts on both):
+**Tests** (connect/effects_test.go and effects_qenv_test.go, against
+testdata/sender.qnt, a gateway that attempts calls on deployments, on
+quint's path and on its compiled model, testdata/sender.mbt.json.gz, with
+the same verdicts on both):
 
-| Planted in the implementation | Expected |
+| Planted in the implementation | Got |
 |---|---|
 | none | conforms |
-| a field wrong (golem's failover model) | `"effects"`, effect 1, that field |
+| a field wrong (golem's failover model) | `"effects"`, effect 1, field model |
 | a duplicate send (exact) | effect 2: made, expected nothing; under retried with one key: conforms; with a fresh key: the Tries line |
 | a missing send | effect 1: nothing, expected the send |
-| a send in another action (commit) | the stricter rule's error, naming commitEffects |
-| a duplicate send that also fails the step | the effects mismatch first, the step's error after it |
-| a goroutine that sends after its step returned | step k+1 fails, naming step k |
-| a qenv Service called in a method under the step's context | its request is the step's effect |
+| no hello from the constructor (`BindContext`) | step 0 init, `initEffects`: effect 1: nothing, expected Hello |
+| a send in another action (commit) | the Undeclared report, naming commitEffects and `EffectsOf("commit", "-", "")`; opted out, conforms |
+| a duplicate send that also fails the step | the effects mismatch first, the step's error after it (`errors.Is` finds it) |
+| a goroutine that sends after its step returned (a `Check` waits for it) | step k+1 fails, naming step k, its effect and the fix |
+| a send with `context.Background()` (decision 2's gap) | a missing send, effect 1 |
+| a qenv Service called in a method, its simulation under the step's context | its request (`rpc.upstream.request`) is the step's effect: a wrong model in it fails at that field |
+| match set over a def of two hellos | conforms; exact: effect 2 missing |
 
-Each mutant passes with `Effects` removed (the ablation), and the static
-check's refusals (an unknown constructor, a def's foreign parameter, fields
-not the constructor's, `EffectsOf` of an unbound action) each have a test.
-qhegel's `VaryTraces`, replaying through a Binding's driver, inherits all
-of it with no change of its own.
+Each mutant passes with `Effects` removed (the ablation), but the one
+whose step fails on its own, which then fails as a `"step"`. The static
+check's refusals (an unknown constructor, fields not the constructor's, a
+def's foreign parameter, a def of no effects, a def the model lacks,
+`EffectsOf` of an unbound action, no mode, `EffectsOf` without `Effects`,
+a mapping with no def, a kind with no `From`) each have a test, and so
+does `b.Run` end to end on both paths. Ablated in turn, the window's
+between-steps check (the late mutant passes), the sets' normalization
+(match set fails) and validate's evaluator-side rule (qtest's
+TestEffectsUndeclaredCompiled, judged by the compiled model alone, fails)
+each turn a test red. validate's rule is qtest's TestEffectsUndeclared
+(a capture sent by `place`, which pay.qnt states no effects for:
+`Mismatch("place")`; a void beside it, unmapped, changes nothing; a void
+alone conforms; `place: { effects: "-" }` and the ablated binding
+conform). qhegel's `VaryTraces`, replaying through a Binding's driver,
+inherits all of it with no change of its own.
 
-**Left out.** Switch-built drivers: `s.Context()` would let them record,
-but nothing would compare without a Binding (a `Config` hook, if a
-project asks). Pending calls (§112's rule) do not arise in a synchronous
-replay, and owed effects across processes are P3's. Internal effects (P2) follow validate's opt-in when
-they land. A recording transport for real HTTP clients (§112's
-`qobshttp`, P3) would replace golem's hand-written transport.
+**Its effect on the examples.** Only checkout's two bindings and qtest's
+pay fixtures map effect kinds. checkout's captures are all made under
+`pay`'s scope, so no other action's step carries one: its -short suite
+passes unchanged (TestCaptureUnits, TestNoIdempotencyKeyKilledByEffects
+and the faithful explorations at every level included), and no binding
+needed a def or a `"-"`.
 
-**Open, for the maintainer.** (1) Whether validate adopts the stricter
-rule (a mapped effect in a step whose action has no def fails), so that one
-judging rule holds in both. It would change verdicts where an action
-without a def sends a mapped kind; checkout's other actions send no
-capture, but each example's runs would have to show it. (2) Whether
-`qrun.Start` on the replay goroutine is worth its reach: it makes
-`context.Background()` sends and the constructor's simulations count, but
-a replay is then a run for every qrun reader (strict recording, coverage),
-where today it is none. The alternative is the context only, with the
-constructor given the trace's context (a `Bind` variant taking one).
+**Left out.** `qrun.Start` on the replay goroutine (decision 2, open in
+ROADMAP CW12): it would make `context.Background()` sends and a
+simulation the plain `Bind` constructor makes count, but a replay would
+then be a run for every qrun reader (strict recording, coverage), where
+today it is none. Switch-built drivers: `s.Context()` lets them reach the
+trace's context, but nothing compares without a Binding (a `Config` hook,
+if a project asks). Pending calls (§112's rule) do not arise in a
+synchronous replay, and owed effects across processes are P3's. Internal
+effects (P2) follow validate's opt-in when they land. A recording
+transport for real HTTP clients (§112's `qobshttp`, P3) would replace
+golem's hand-written transport.

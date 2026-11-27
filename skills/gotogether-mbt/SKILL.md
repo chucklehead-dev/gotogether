@@ -11,7 +11,7 @@ compared with the model's. The Go counterpart of quint-connect.
 
 ## Choose your path
 
-- The skeleton, decoding model values (Go types generated from the model's: `gotogether types`), the TDD loop, `CheckStep`, `Step.Eval`, concurrency gates, fault scripts and the limits: [references/driver.md](references/driver.md).
+- The skeleton, decoding model values (Go types generated from the model's: `gotogether types`), the TDD loop, `CheckStep`, `Step.Eval`, a step's effects (`Binding.Effects`), concurrency gates, fault scripts and the limits: [references/driver.md](references/driver.md).
 - Inputs the model forbids: let Hegel drive (the gotogether-hegel skill).
 - The model itself fails to typecheck or names nothing: the gotogether-model skill.
 
@@ -62,8 +62,8 @@ compared with the model's. The Go counterpart of quint-connect.
 | a fault left in `Script.Remaining()` | the program could not follow its trace | where it stopped short |
 | `never reached the required x in N traces, and no witness trace reached it` | no state had the val true: the run proved nothing there | raise `MaxSteps`, or check it is reachable (`gotogether simulate`) |
 | `the witness trace of required x` on a divergence | the shortest path to the required state failed | fix the code at that state; the trace is the whole reproduction |
-| `required x: no witness trace (...)` | the evaluator found no path within its bounds | the samples still count; raise `MaxSteps` |
-| `required x: reached in k of N traces` | how often the run reached it | a small k: raise the samples before trusting a pass |
+| `required x: no witness trace (...)`, or `reached in k of N traces` | no path within the evaluator's bounds (the samples still count), or how often the run reached it | raise `MaxSteps`; a small k: raise the samples before trusting a pass |
+| `its effects are not the model's xEffects(...)`, `x made effects, and the model states none`, or `... made after step k ... returned` | a step's sends (`Binding.Effects`) differ from its def's, an action with no def sent, or a send outlived its step | the first difference's field, the def, or wait for the step's work (driver.md, effects); a send through `context.Background()` is not recorded |
 | `Eval("x") at step N (a): ...` | the def is misspelt, takes other arguments, is undefined there, or is outside the Go evaluator | the fix the message names (driver.md, `Step.Eval`) |
 | `connect.Bind: action x: ... takes N parameters ... but M picks are named` | the binding names too few or too many picks | one pick per parameter, in order (a leading `context.Context` is not named) |
 | `connect.Bind: action x: ... returns T besides an error, and nothing checks it` | a result the run would drop | `.Returns("x", "def", picks...)` against the model's def, `.Observes("x", picks...)` when it is a choice the model picks, or bind a func that drops it |

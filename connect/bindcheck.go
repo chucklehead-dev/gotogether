@@ -44,12 +44,18 @@ func (b *Binding[T]) defs() []string {
 			out = append(out, a.returns)
 		}
 	}
+	for _, d := range b.effectsDefs() {
+		if !slices.Contains(out, d) {
+			out = append(out, d)
+		}
+	}
 	return out
 }
 
 func (b *Binding[T]) checkModel(m *qeval.Model, c Config) (mismatches, unbound, notes []string) {
 	mismatches, unbound, notes = checkBinding(b.order, b.actions, m, c)
-	return append(mismatches, checkState(b.stateType, m, c)...), unbound, notes
+	mismatches = append(mismatches, checkState(b.stateType, m, c)...)
+	return append(mismatches, b.checkEffects(m, c)...), unbound, notes
 }
 
 func (d *boundDriver[T]) defs() []string { return d.b.defs() }

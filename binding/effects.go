@@ -98,6 +98,11 @@ func (b *Binding) effectsDef(m *Model, action string) (def, match string) {
 	return "", ""
 }
 
+// comparesEffects reports whether the binding maps any effect kind:
+// then every step's effects of those kinds are judged, an action's
+// against its def or, with none, against none (EffectCheck.Undeclared).
+func (b *Binding) comparesEffects() bool { return b.Effects != nil && len(b.Effects.Kinds) > 0 }
+
 // lintEffects checks the effects section and every action's effects def
 // against the model.
 func (b *Binding) lintEffects(m *Model, add func(code, symbol, fix, message string)) {
@@ -150,12 +155,14 @@ func (b *Binding) lintEffects(m *Model, add func(code, symbol, fix, message stri
 
 // constructor is the constructor e is recorded as, or "" for an effect
 // the binding does not map.
-func (b *Binding) constructor(e *qtrace.Effect) string {
-	if b.Effects == nil {
+func (b *Binding) constructor(e *qtrace.Effect) string { return b.Effects.constructor(e) }
+
+func (fx *Effects) constructor(e *qtrace.Effect) string {
+	if fx == nil {
 		return ""
 	}
-	for _, ctor := range slices.Sorted(maps.Keys(b.Effects.Kinds)) {
-		k := b.Effects.Kinds[ctor]
+	for _, ctor := range slices.Sorted(maps.Keys(fx.Kinds)) {
+		k := fx.Kinds[ctor]
 		if k.From != e.Kind {
 			continue
 		}
@@ -173,28 +180,48 @@ func (b *Binding) constructor(e *qtrace.Effect) string {
 	return ""
 }
 
-// effectCheck is step s's EffectCheck against def, its args the call's
-// (by the def's parameters' names), each effect rendered by rd.
-func (b *Binding) effectCheck(rd *renderer, m *Model, def, match string, s *qtrace.Step, args map[string]string) (*EffectCheck, []string, error) {
-	var defArgs []string
-	for _, p := range m.Defs[def] {
-		defArgs = append(defArgs, args[p])
+// Undeclared reports whether c is a step's effects of mapped kinds where
+// its action has no effects def (Def is empty; Call names the def it
+// would take): the model states none, so they fail it, in validate and
+// in connect alike (DESIGN §115). An action opted out (effects: "-") is
+// never checked.
+func (c *EffectCheck) Undeclared() bool { return c != nil && c.Def == "" && len(c.Made) > 0 }
+
+// Check is the comparison of made (a step's effects, in their order)
+// with the model's def, applied as call (attemptEffects("c1", "d2")),
+// under match (exact, retried or set; "" is exact): each effect of a
+// mapped kind rendered by its constructor's templates over its recorded
+// fields, the list normalized by match, the rest NotCompared. It is
+// validate's plan's and connect's Binding's one normalization, so the
+// two cannot judge one step's effects apart. def "" checks an action
+// with no effects def: the result is Undeclared if anything mapped was
+// made. Templates here have the functions that need no trace (toSet,
+// toList, toMap, add, atLeast); a plan's also have its trace's (set,
+// max, count, procs) and model's (toQuint).
+func (fx *Effects) Check(def, call, match string, made []qtrace.Effect) (*EffectCheck, error) {
+	return fx.check(newRenderer(pureFuncs()), def, call, match, made)
+}
+
+// check is Check with rd's functions.
+func (fx *Effects) check(rd *renderer, def, call, match string, made []qtrace.Effect) (*EffectCheck, error) {
+	if match == "" {
+		match = MatchExact
 	}
-	ec := &EffectCheck{Def: def, Match: match, Call: def + "(" + strings.Join(defArgs, ", ") + ")"}
-	type made struct {
+	ec := &EffectCheck{Def: def, Match: match, Call: call}
+	type one struct {
 		v    string
 		same []string
 		from qtrace.Effect
 	}
-	var all []made
-	for i := range s.Effects {
-		e := &s.Effects[i]
-		ctor := b.constructor(e)
+	var all []one
+	for i := range made {
+		e := &made[i]
+		ctor := fx.constructor(e)
 		if ctor == "" {
 			ec.NotCompared = append(ec.NotCompared, *e)
 			continue
 		}
-		k := b.Effects.Kinds[ctor]
+		k := fx.Kinds[ctor]
 		data := map[string]any{}
 		for f, v := range e.Fields {
 			data[f] = fieldValue(v)
@@ -206,10 +233,10 @@ func (b *Binding) effectCheck(rd *renderer, m *Model, def, match string, s *qtra
 				r, err := rd.render(k.Fields[f], data)
 				if err != nil {
 					if missing, ok := missingField(err); ok {
-						return nil, nil, fmt.Errorf("effect %s (seq %d) as %s: field %s reads %q, which the effect does not have (it has: %s): fix effects.kinds.%s.fields.%s",
+						return nil, fmt.Errorf("effect %s (seq %d) as %s: field %s reads %q, which the effect does not have (it has: %s): fix effects.kinds.%s.fields.%s",
 							e.Kind, e.Seq, ctor, f, missing, strings.Join(slices.Sorted(maps.Keys(e.Fields)), ", "), ctor, f)
 					}
-					return nil, nil, fmt.Errorf("effect %s (seq %d) as %s: field %s: %w", e.Kind, e.Seq, ctor, f, err)
+					return nil, fmt.Errorf("effect %s (seq %d) as %s: field %s: %w", e.Kind, e.Seq, ctor, f, err)
 				}
 				parts = append(parts, f+": "+r)
 			}
@@ -219,7 +246,7 @@ func (b *Binding) effectCheck(rd *renderer, m *Model, def, match string, s *qtra
 		for _, f := range k.Same {
 			same = append(same, fmt.Sprint(e.Fields[f]))
 		}
-		all = append(all, made{v, same, *e})
+		all = append(all, one{v, same, *e})
 	}
 	switch match {
 	case MatchRetried:
@@ -229,7 +256,7 @@ func (b *Binding) effectCheck(rd *renderer, m *Model, def, match string, s *qtra
 				if slices.Equal(prev.same, x.same) {
 					continue // a retry of the same request: one effect
 				}
-				k := b.Effects.Kinds[b.constructor(&x.from)]
+				k := fx.Kinds[fx.constructor(&x.from)]
 				for j, f := range k.Same {
 					if prev.same[j] != x.same[j] {
 						ec.Tries = append(ec.Tries, fmt.Sprintf("effect %s was tried again under another %s: %q (seq %d), then %q (seq %d)", x.v, f, prev.same[j], prev.from.Seq, x.same[j], x.from.Seq))
@@ -267,7 +294,18 @@ func (b *Binding) effectCheck(rd *renderer, m *Model, def, match string, s *qtra
 	} else {
 		ec.Literal = "[" + strings.Join(ec.Made, ", ") + "]"
 	}
-	return ec, defArgs, nil
+	return ec, nil
+}
+
+// effectCheck is step s's EffectCheck against def, its args the call's
+// (by the def's parameters' names), each effect rendered by rd.
+func (b *Binding) effectCheck(rd *renderer, m *Model, def, match string, s *qtrace.Step, args map[string]string) (*EffectCheck, []string, error) {
+	var defArgs []string
+	for _, p := range m.Defs[def] {
+		defArgs = append(defArgs, args[p])
+	}
+	ec, err := b.Effects.check(rd, def, def+"("+strings.Join(defArgs, ", ")+")", match, s.Effects)
+	return ec, defArgs, err
 }
 
 // effectsConjunct is the expect's conjunct comparing def applied to

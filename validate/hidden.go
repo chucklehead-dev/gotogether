@@ -335,8 +335,9 @@ func (h *hiddenSearch) run(keep []string) (hiddenOutcome, error) {
 				args = append(args, v)
 			}
 		}
-		var xs []qeval.Value // the expect's arguments, once
-		if call.Expect != "" {
+		var xs []qeval.Value                    // the expect's arguments, once
+		undeclared := call.Effects.Undeclared() // effects its action does not state: no state takes the step
+		if call.Expect != "" && !undeclared {
 			if call.ExpectArgs == nil {
 				return hiddenOutcome{}, &qeval.Unsupported{Op: "expect", Why: call.Action + "'s expect is not text and fields"}
 			}
@@ -362,6 +363,9 @@ func (h *hiddenSearch) run(keep []string) (hiddenOutcome, error) {
 			for _, s2 := range succ {
 				enabled = true
 				if !h.e.checkpointMatches(&call, s, s2) {
+					continue
+				}
+				if undeclared {
 					continue
 				}
 				if call.Expect != "" && hooks.TamperEval.Load() != 5 {

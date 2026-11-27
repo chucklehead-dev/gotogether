@@ -51,8 +51,14 @@ func compileRequired(ctx context.Context, c Config) (*required, error) {
 }
 
 // notFound is quint's refusal of a name compileModel was asked to keep:
-// no definition in the main module's scope has it.
-type notFound struct{ name string }
+// no definition in the main module's scope has it. quint names every
+// such name at once: others are the rest, so that a run asking for
+// several defs the model may lack (a Binding's <action>Effects) learns
+// it in one compile.
+type notFound struct {
+	name   string
+	others []string
+}
 
 func (e *notFound) Error() string { return fmt.Sprintf("quint finds no definition %s", e.name) }
 
@@ -73,7 +79,7 @@ func compileModel(ctx context.Context, c Config, keep []string) (*qeval.Model, e
 		// is none of the model's
 		for _, n := range keep {
 			if _, ok := c.compiled.m.Decl(n); !ok {
-				return nil, &notFound{n}
+				return nil, &notFound{name: n}
 			}
 		}
 		return c.compiled.m, nil
@@ -106,8 +112,18 @@ func compileModel(ctx context.Context, c Config, keep []string) (*qeval.Model, e
 	err = cmd.Run()
 	out.Close()
 	if err != nil {
-		if m := quintNotFound.FindStringSubmatch(stderr.String()); m != nil && slices.Contains(keep, m[1]) {
-			return nil, &notFound{m[1]}
+		var nf *notFound
+		for _, m := range quintNotFound.FindAllStringSubmatch(stderr.String(), -1) {
+			switch {
+			case !slices.Contains(keep, m[1]):
+			case nf == nil:
+				nf = &notFound{name: m[1]}
+			case m[1] != nf.name && !slices.Contains(nf.others, m[1]):
+				nf.others = append(nf.others, m[1])
+			}
+		}
+		if nf != nil {
+			return nil, nf
 		}
 		return nil, &QuintError{Args: args, Output: stderr.String(), Err: err}
 	}

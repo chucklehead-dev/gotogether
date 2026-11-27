@@ -92,7 +92,11 @@ func (e *evaluator) modelWith(names []string) (*qeval.Model, error) {
 			if e.missing == nil {
 				e.missing = map[string]bool{}
 			}
-			e.missing[nf.name] = true
+			for _, n := range append([]string{nf.name}, nf.others...) {
+				if slices.Contains(want, n) {
+					e.missing[n] = true
+				}
+			}
 			continue
 		}
 		if err != nil {
@@ -116,28 +120,43 @@ func (e *evaluator) modelWith(names []string) (*qeval.Model, error) {
 // cannot compute are errors naming the step and the fix; prefer the
 // typed Eval[T] / MustEval[T].
 func (s *Step) Eval(name string, args ...any) (itf.Value, error) {
+	v, _, err := s.evalValue(name, args...)
+	if err != nil {
+		return itf.Value{}, err
+	}
+	out, err := qeval.ToITF(v)
+	if err != nil {
+		return itf.Value{}, fmt.Errorf("connect: Eval(%q) at step %d (%s): %s's value %s has no ITF form (%v): name a definition whose value is data", name, s.Index, s.Action, name, qeval.String(v), err)
+	}
+	return out, nil
+}
+
+// evalValue is Eval's value as the evaluator has it, with the model it
+// was computed on: an effects def's elements print as the evaluator
+// prints values, for a comparison text for text (effects.go).
+func (s *Step) evalValue(name string, args ...any) (qeval.Value, *qeval.Model, error) {
 	fail := func(format string, a ...any) error {
 		return fmt.Errorf("connect: Eval(%q) at step %d (%s): %s", name, s.Index, s.Action, fmt.Sprintf(format, a...))
 	}
 	if s.eval == nil {
-		return itf.Value{}, fail("this step has no model to evaluate in: Replay compiles none; replay through connect.Run or connect.Test, which compile the model once for Eval")
+		return nil, nil, fail("this step has no model to evaluate in: Replay compiles none; replay through connect.Run or connect.Test, which compile the model once for Eval")
 	}
 	m, err := s.eval.model(name)
 	if err != nil {
-		return itf.Value{}, fail("%v", err)
+		return nil, nil, fail("%v", err)
 	}
 	spec := s.eval.c.Spec
 	d, ok := m.Decl(name)
 	switch {
 	case ok && d.Kind == "var":
-		return itf.Value{}, fail("%s is a variable of %s, not a definition: read it with s.Get(%q)", name, spec, name)
+		return nil, nil, fail("%s is a variable of %s, not a definition: read it with s.Get(%q)", name, spec, name)
 	case !ok || d.Kind != "def":
-		return itf.Value{}, fail("%s is no definition of %s: name a val or a def of the model", name, spec)
+		return nil, nil, fail("%s is no definition of %s: name a val or a def of the model", name, spec)
 	}
 	switch d.Qualifier {
 	case "val", "def", "pureval", "puredef":
 	default:
-		return itf.Value{}, fail("%s is %s %s of %s, not a value: name a val or a def of the model", name, article(d.Qualifier), d.Qualifier, spec)
+		return nil, nil, fail("%s is %s %s of %s, not a value: name a val or a def of the model", name, article(d.Qualifier), d.Qualifier, spec)
 	}
 	var params []string
 	if d.Expr != nil && d.Expr.Kind == "lambda" {
@@ -150,7 +169,7 @@ func (s *Step) Eval(name string, args ...any) (itf.Value, error) {
 		if len(params) > 0 {
 			takes = fmt.Sprintf("%d argument%s (%s)", len(params), plural(len(params)), strings.Join(params, ", "))
 		}
-		return itf.Value{}, fail("%s takes %s, not %d: pass one Go value per parameter", name, takes, len(args))
+		return nil, nil, fail("%s takes %s, not %d: pass one Go value per parameter", name, takes, len(args))
 	}
 	vals := make([]qeval.Value, len(args))
 	for i, a := range args {
@@ -159,31 +178,27 @@ func (s *Step) Eval(name string, args ...any) (itf.Value, error) {
 			vals[i], err = qeval.FromITF(x)
 		}
 		if err != nil {
-			return itf.Value{}, fail("argument %s (%T): %v: pass a value itf.Encode takes, as the parameter's Quint type", params[i], a, err)
+			return nil, nil, fail("argument %s (%T): %v: pass a value itf.Encode takes, as the parameter's Quint type", params[i], a, err)
 		}
 	}
 	if s.state == nil || s.stateOf != m {
 		st, err := qeval.StateOf(m, itf.State{Vars: s.After})
 		if err != nil {
-			return itf.Value{}, fail("the step's state is not %s's: %v: set Config.Main to the module the traces come from", spec, err)
+			return nil, nil, fail("the step's state is not %s's: %v: set Config.Main to the module the traces come from", spec, err)
 		}
 		s.state, s.stateOf = st, m
 	}
 	v, err := m.Eval(nil, s.state, name, vals...)
 	if u, ok := errors.AsType[*qeval.Unsupported](err); ok {
-		return itf.Value{}, fail("%s is outside the Go evaluator's fragment (%s: %s): compute this one in the driver", name, u.Op, u.Why)
+		return nil, nil, fail("%s is outside the Go evaluator's fragment (%s: %s): compute this one in the driver", name, u.Op, u.Why)
 	}
 	if ee, ok := errors.AsType[*qeval.EvalError](err); ok {
-		return itf.Value{}, fail("%s is undefined in this state (%s, the model's own error, as quint would report it): call it only where the model defines it", name, strings.TrimPrefix(ee.Error(), "qeval: "))
+		return nil, nil, fail("%s is undefined in this state (%s, the model's own error, as quint would report it): call it only where the model defines it", name, strings.TrimPrefix(ee.Error(), "qeval: "))
 	}
 	if err != nil {
-		return itf.Value{}, fail("%v", err)
+		return nil, nil, fail("%v", err)
 	}
-	out, err := qeval.ToITF(v)
-	if err != nil {
-		return itf.Value{}, fail("%s's value %s has no ITF form (%v): name a definition whose value is data", name, qeval.String(v), err)
-	}
-	return out, nil
+	return v, m, nil
 }
 
 // Eval is Step.Eval decoded into T (see itf.Decode).

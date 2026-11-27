@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/itf"
 )
 
@@ -32,7 +33,7 @@ import (
 // run, and is not changed after: Driver makes each trace's driver from
 // it.
 type Binding[T any] struct {
-	init    func(testing.TB) T
+	init    func(context.Context, testing.TB) T
 	actions map[string]*boundAction
 	order   []string // the actions' names, in the order bound
 	project func(T) any
@@ -40,6 +41,10 @@ type Binding[T any] struct {
 	// state before any trace unless it is an interface (bindcheck.go)
 	stateType reflect.Type
 	checks    []func(T, *Step) error
+	// effects maps the recorded effects onto the model's constructors
+	// (Effects); effectsOf is each action's def and mode (EffectsOf)
+	effects   *binding.Effects
+	effectsOf map[string]effectsOf
 }
 
 // boundAction is one action's method and the picks that are its
@@ -73,6 +78,18 @@ var (
 func Bind[T any](newT func(tb testing.TB) T) *Binding[T] {
 	if newT == nil {
 		panic("connect.Bind: nil constructor: give the function that makes the implementation at init")
+	}
+	return &Binding[T]{init: func(_ context.Context, tb testing.TB) T { return newT(tb) }, actions: map[string]*boundAction{}}
+}
+
+// BindContext is Bind with a constructor that is given the trace's
+// context too: the one its methods receive, which carries the trace's
+// effects recorder when the Binding compares effects (Effects), so that
+// what the constructor sends (a connection's hello) is init's effects,
+// compared with the model's initEffects.
+func BindContext[T any](newT func(ctx context.Context, tb testing.TB) T) *Binding[T] {
+	if newT == nil {
+		panic("connect.BindContext: nil constructor: give the function that makes the implementation at init")
 	}
 	return &Binding[T]{init: newT, actions: map[string]*boundAction{}}
 }
@@ -242,7 +259,11 @@ func (b *Binding[T]) Check(check func(impl T, s *Step) error) *Binding[T] {
 func (b *Binding[T]) Driver(tb testing.TB) Driver {
 	tb.Helper()
 	b.refuseUnchecked(tb)
-	d := &boundDriver[T]{b: b, tb: tb}
+	d := &boundDriver[T]{b: b, tb: tb, ctx: tb.Context()}
+	if b.effects != nil {
+		d.fx = newEffectWindow(d.ctx)
+		d.ctx = d.fx.ctx
+	}
 	switch {
 	case b.project != nil && len(b.checks) > 0:
 		return boundStateChecker[T]{d}
@@ -292,49 +313,121 @@ type boundDriver[T any] struct {
 	tb   testing.TB
 	impl T
 	made bool
+	// ctx is the trace's context, given to methods, handlers
+	// (Step.Context) and BindContext's constructor: the test's, carrying
+	// fx's recorder when the binding compares effects
+	ctx context.Context
+	fx  *effectWindow
 }
 
 func (d *boundDriver[T]) Step(s *Step) error {
-	if s.Action == "init" {
-		d.impl, d.made = d.b.init(d.tb), true
+	s.ctx = d.ctx
+	if d.fx != nil {
+		// effects recorded since the last step returned are no step's
+		if err := d.fx.stray(s); err != nil {
+			return err
+		}
+	}
+	run, post, err := d.prepare(s)
+	if err != nil {
+		return err // nothing of the implementation ran: no effects to judge
+	}
+	if d.fx == nil {
+		if err := run(); err != nil {
+			return err
+		}
+		return post()
+	}
+	// the effects are judged once the step returns, or panics, before
+	// its error, its results' check, the state's and Check's: a duplicate
+	// send then reads as the request it is, not as what it led to
+	var p any
+	panicked := false
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				p, panicked = r, true
+			}
+		}()
+		err = run()
+	}()
+	if f := d.judgeEffects(s); f != nil {
+		if panicked {
+			f.step = panicError(p)
+		} else {
+			f.step = err
+		}
+		return f
+	}
+	if panicked {
+		panic(p) // Replay's, as without effects
+	}
+	if err != nil {
+		return err
+	}
+	return post()
+}
+
+// endTrace fails the trace when effects were recorded after its last
+// step returned (Replay calls it after the last step).
+func (d *boundDriver[T]) endTrace() error {
+	if d.fx == nil {
 		return nil
+	}
+	return d.fx.stray(nil)
+}
+
+// prepare is s's step, ready to run: run the constructor, the handler
+// or the method (its picks decoded here), post its results' check. An
+// error here is the step's before anything of the implementation ran.
+func (d *boundDriver[T]) prepare(s *Step) (run, post func() error, err error) {
+	none := func() error { return nil }
+	if s.Action == "init" {
+		return func() error { d.impl, d.made = d.b.init(d.ctx, d.tb), true; return nil }, none, nil
 	}
 	a, ok := d.b.actions[s.Action]
 	if !ok {
-		return &UnimplementedError{Action: s.Action, Picks: s.pickNames()}
+		return nil, nil, &UnimplementedError{Action: s.Action, Picks: s.pickNames()}
 	}
 	if !d.made {
-		return fmt.Errorf("connect.Bind: step %d (%s) before init: the trace starts without the model's init", s.Index, s.Action)
+		return nil, nil, fmt.Errorf("connect.Bind: step %d (%s) before init: the trace starts without the model's init", s.Index, s.Action)
 	}
 	if a.handler != nil {
-		return a.handler(d.impl, s)
+		return func() error { return a.handler(d.impl, s) }, none, nil
 	}
 	in := []reflect.Value{reflect.ValueOf(&d.impl).Elem()}
 	if a.ctx {
-		in = append(in, reflect.ValueOf(d.tb.Context()))
+		in = append(in, reflect.ValueOf(d.ctx))
 	}
 	for i, p := range a.params {
 		v, err := pickValue(s, p, a.types[i])
 		if err != nil {
-			return fmt.Errorf("connect.Bind: action %s, parameter %d (pick %s): %w", a.name, i+1, p, err)
+			return nil, nil, fmt.Errorf("connect.Bind: action %s, parameter %d (pick %s): %w", a.name, i+1, p, err)
 		}
 		in = append(in, v)
 	}
-	out := a.fn.Call(in)
-	if a.errOut {
-		if err, _ := out[len(out)-1].Interface().(error); err != nil {
-			return err
+	var out []reflect.Value
+	run = func() error {
+		out = a.fn.Call(in)
+		if a.errOut {
+			if err, _ := out[len(out)-1].Interface().(error); err != nil {
+				return err
+			}
 		}
+		return nil
 	}
-	if a.returns != "" {
-		return checkReturn(s, a, out[0])
-	}
-	for i, p := range a.observes {
-		if err := checkObserved(s, a, p, out[i]); err != nil {
-			return err
+	post = func() error {
+		if a.returns != "" {
+			return checkReturn(s, a, out[0])
 		}
+		for i, p := range a.observes {
+			if err := checkObserved(s, a, p, out[i]); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
-	return nil
+	return run, post, nil
 }
 
 // checkObserved compares an action's result, a choice the implementation
