@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/chucklehead-dev/gotogether/internal/formats"
+	"github.com/chucklehead-dev/gotogether/internal/gzdoc"
 	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 )
 
@@ -52,26 +53,53 @@ type Source struct {
 	SHA256 string `json:"sha256"`
 }
 
+// Ext is the name's end of a compiled model kept by convention
+// (CompiledFor): its gotogether.mbt/1 JSON in a gzip container, as a
+// binding's is kept (DESIGN §113). Write compresses a path ending in .gz,
+// and Load reads either form, by the gzip magic.
+const Ext = ".mbt.json.gz"
+
 // CompiledFor is where a spec's compiled model is kept by convention:
-// beside the spec, its name's stem with .mbt.json (model/bank.qnt's is
-// model/bank.mbt.json), or with the main module's name between them when
-// main is not the file's own (model/bank.bankDesign.mbt.json).
+// beside the spec, its name's stem with Ext (model/bank.qnt's is
+// model/bank.mbt.json.gz), or with the main module's name between them
+// when main is not the file's own (model/bank.bankDesign.mbt.json.gz).
 func CompiledFor(spec, main string) string {
 	dir, name := filepath.Split(spec)
 	stem := strings.TrimSuffix(name, ".qnt")
 	if main != "" && main != stem {
 		stem += "." + main
 	}
-	return filepath.Join(dir, stem+".mbt.json")
+	return filepath.Join(dir, stem+Ext)
 }
 
-// Write writes the compiled model to path, as JSON.
+// PlainBeside is the plain artifact an earlier gotogether kept where
+// path (CompiledFor's) is expected, "" when there is none: the convention
+// does not find it, and a run that would have used it says so.
+func PlainBeside(path string) string {
+	plain, ok := strings.CutSuffix(path, ".gz")
+	if !ok {
+		return ""
+	}
+	if _, err := os.Stat(plain); err != nil {
+		return ""
+	}
+	return plain
+}
+
+// Write writes the compiled model to path, as JSON, gzipped where path
+// ends in .gz (gzdoc.Compress: the same bytes for the same model).
 func (cm *Model) Write(path string) error {
 	data, err := json.Marshal(cm)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(data, '\n'), 0o644)
+	data = append(data, '\n')
+	if strings.HasSuffix(path, ".gz") {
+		if data, err = gzdoc.Compress(data); err != nil {
+			return err
+		}
+	}
+	return os.WriteFile(path, data, 0o644)
 }
 
 // Differs lists what differs in meaning between cm and other: the spec,
@@ -101,18 +129,15 @@ func jsonEqual(a, b any) bool {
 	return string(x) == string(y)
 }
 
-// Load reads a compiled model for connect, refusing another format, a
-// quint outside the admission policy and a stale artifact: a source
-// present beside it whose sha256 is not the artifact's (an absent one is
-// not checked: notes says so).
+// Load reads a compiled model for connect, plain or gzipped (Ext),
+// refusing a broken container, another format, a quint outside the
+// admission policy and a stale artifact: a source present beside it whose
+// sha256 is not the artifact's (an absent one is not checked: notes says
+// so).
 func Load(path string) (cm *Model, notes []string, err error) {
-	data, err := os.ReadFile(path)
+	cm, err = Peek(path)
 	if err != nil {
 		return nil, nil, err
-	}
-	cm = &Model{}
-	if err := json.Unmarshal(data, cm); err != nil {
-		return nil, nil, fmt.Errorf("compiled model %s: %w: compile it again (gotogether compile -spec S)", path, err)
 	}
 	if _, err := formats.MBT.Check(cm.Format); err != nil {
 		return nil, nil, fmt.Errorf("compiled model %s: %w", path, err)
@@ -141,6 +166,24 @@ func Load(path string) (cm *Model, notes []string, err error) {
 		}
 	}
 	return cm, notes, nil
+}
+
+// Peek reads the compiled model at path, plain or gzipped, as its file
+// holds it, checking nothing but that it is one JSON document: what Load
+// checks, and what gotogether doctor reads of an artifact Load refuses.
+func Peek(path string) (*Model, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if data, err = gzdoc.Decompress(data); err != nil {
+		return nil, fmt.Errorf("compiled model %s: its gzip container: %w: compile it again (gotogether compile -spec S [-main M] -o %s)", path, err, path)
+	}
+	cm := &Model{}
+	if err := json.Unmarshal(data, cm); err != nil {
+		return nil, fmt.Errorf("compiled model %s: %w: compile it again (gotogether compile -spec S [-main M] -o %s)", path, err, path)
+	}
+	return cm, nil
 }
 
 // MainFlag is the -main flag of gotogether compile -spec for main.

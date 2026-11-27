@@ -44,7 +44,7 @@ func doctor(out io.Writer, args []string) (int, error) {
 	strict := fset.Bool("strict", false, "exit 1 when a skew is found (CI)")
 	var bindings, compiled repeated
 	fset.Var(&bindings, "binding", "a binding file whose format to check (repeatable)")
-	fset.Var(&compiled, "compiled", "a compiled model (gotogether compile's) to check against its binding and sources: stale or not (repeatable)")
+	fset.Var(&compiled, "compiled", "a compiled model (gotogether compile's) to check against its binding and sources, or a spec's for connect (.mbt.json.gz) against its spec: stale or not (repeatable)")
 	fset.Parse(args)
 	var ps []piece
 	cli := buildOf(debug.ReadBuildInfo())
@@ -71,10 +71,15 @@ func doctor(out io.Writer, args []string) (int, error) {
 	for _, b := range bindings {
 		ps = append(ps, bindingPiece(b))
 	}
+	var bindingModels []string
 	for _, c := range compiled {
-		ps = append(ps, compiledPiece(c))
+		if !isMBTName(c) {
+			ps = append(ps, compiledPiece(c))
+			bindingModels = append(bindingModels, c)
+		}
 	}
-	models := modelPieces(*dir, bindings, compiled)
+	models := modelPieces(*dir, bindings, bindingModels)
+	mbts := mbtPieces(*dir, compiled)
 	for _, p := range ps {
 		v := p.version
 		if p.note != "" {
@@ -88,7 +93,14 @@ func doctor(out io.Writer, args []string) (int, error) {
 			fmt.Fprintf(out, "  %-42s %s\n", p.name, p.version+" ("+p.note+")")
 		}
 	}
+	if len(mbts) > 0 {
+		fmt.Fprintln(out, "\ncompiled models for connect (gotogether compile -spec; connect generates a spec's traces from its own where quint is not installed):")
+		for _, p := range mbts {
+			fmt.Fprintf(out, "  %-42s %s\n", p.name, p.version+" ("+p.note+")")
+		}
+	}
 	ps = append(ps, models...)
+	ps = append(ps, mbts...)
 	fmt.Fprintln(out, "\nformats this gotogether reads:")
 	for _, f := range formats.All() {
 		fmt.Fprintf(out, "  %-28s %s\n", f.Name(), f.What)
@@ -508,6 +520,19 @@ func modelPieces(dir string, named, compiled []string) []piece {
 // as go's ./... leaves them, sorted.
 func findBindings(dir string) []string {
 	var out []string
+	walkModule(dir, func(path string) {
+		if ext := filepath.Ext(path); (ext == ".yaml" || ext == ".yml") && isBinding(path) {
+			out = append(out, path)
+		}
+	})
+	slices.Sort(out)
+	return out
+}
+
+// walkModule calls f with every file of the module in dir, outside
+// testdata, hidden directories, node_modules and nested modules (a
+// directory with a go.mod of its own), as go's ./... leaves them.
+func walkModule(dir string, f func(path string)) {
 	filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -524,13 +549,9 @@ func findBindings(dir string) []string {
 			}
 			return nil
 		}
-		if ext := filepath.Ext(path); (ext == ".yaml" || ext == ".yml") && isBinding(path) {
-			out = append(out, path)
-		}
+		f(path)
 		return nil
 	})
-	slices.Sort(out)
-	return out
 }
 
 // isBinding reports whether the YAML file at path has a binding's

@@ -169,14 +169,33 @@ Where quint and Node are not installed (a consumer's CI), compile the
 spec once where they are, check the file in, and connect runs from it:
 
 ```sh
-gotogether compile -spec model/bank.qnt -main bankDesign   # writes model/bank.bankDesign.mbt.json
+gotogether compile -spec model/bank.qnt -main bankDesign   # writes model/bank.bankDesign.mbt.json.gz
 gotogether compile -spec model/bank.qnt -main bankDesign -check   # CI, where quint is: fails when stale
 GOTOGETHER_COMPILED=1 go test ./...                         # CI, without quint
 ```
 
+```go
+func TestBankDesign(t *testing.T) {
+	cfg := connect.Config{Spec: "model/bank.qnt", Main: "bankDesign"}
+	connect.RequireTraces(t, cfg) // not exec.LookPath("quint"): that skips, never reaching the compiled model
+	connect.Run(t, cfg, newDriver)
+}
+```
+
+- Guard the test with `connect.RequireTraces(t, cfg)`: it skips only where
+  neither quint nor a compiled model can generate the traces. A guard of
+  its own on quint (`exec.LookPath("quint")`, `skip.Quint`) skips where
+  the compiled model would have run.
 - `GOTOGETHER_COMPILED` unset uses the compiled model only where quint is
   not on PATH; `1` always (failing where the spec has none); `0` never.
-  `connect.RequireTraces(t, cfg)` skips a test where neither can run.
+  Where quint runs with it unset, a stale artifact beside the spec is
+  passed over and named once in the test's log (`passing over the spec's
+  compiled model`), with the compile that refreshes it.
+- The artifact is `gotogether.mbt/1` gzipped (`<stem>[.<main>].mbt.json.gz`,
+  the same bytes for the same model): a plain `.mbt.json` an earlier
+  gotogether kept is not found; compile again and remove it.
+  `gotogether doctor` lists every spec a connect test names by its
+  artifact: none, current, stale, and orphans.
 - The traces are the Go evaluator's random simulation of the model, with
   `quint run --mbt`'s semantics (`mbt::actionTaken` is the branch the last
   `any {}` took; every pick of `step` in the record). Seeds are not quint's:
