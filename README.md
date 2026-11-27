@@ -379,9 +379,12 @@ CI job that has quint keeping it current; `gotogether doctor` lists the
 bindings that have none. Every example binding keeps its own
 (`ci/compiled-examples.sh`; `ci/needs-quint.txt` says which tests still need quint, and why). A spec's compiled model for
 connect (`gotogether compile -spec model/m.qnt -main M` writes
-`model/m.M.mbt.json`) lets `connect.Run` and a bound driver's `Run` generate
-their traces with the Go evaluator's random simulation where quint is not
-installed (the same `GOTOGETHER_COMPILED`; `connect.RequireTraces`).
+`model/m.M.mbt.json.gz`, gzipped as a binding's is) lets `connect.Run` and a
+bound driver's `Run` generate their traces with the Go evaluator's random
+simulation where quint is not installed (the same `GOTOGETHER_COMPILED`).
+Guard such a test with `connect.RequireTraces(t, cfg)`, which skips only
+where neither quint nor the compiled model can run, not with a check for
+quint; `gotogether doctor` lists the specs whose connect tests have none.
 
 Every file format is named and versioned (`gotogether.steps/1`,
 `gotogether.binding/2`, ...); pre-release, only the current major is
