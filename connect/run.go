@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/mbtmodel"
 	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/itf"
 )
@@ -67,6 +68,9 @@ type Config struct {
 	// compiled is the spec's compiled model the run uses instead of quint
 	// (compiled.go), set by resolve per GOTOGETHER_COMPILED
 	compiled *compiled
+	// ignored is the spec's compiled model a run with quint passes over
+	// and why (compiled.go), logged once; nil where there is nothing to say
+	ignored *ignoredModel
 }
 
 // FromEnv fills unset fields from the environment, quint-connect's
@@ -146,12 +150,15 @@ func (c Config) resolve(ctx context.Context) (Config, error) {
 		return c, err
 	}
 	if c.compiled == nil {
-		if c.compiled, err = compiledMode(c, spec); err != nil {
+		if c.compiled, c.ignored, err = compiledMode(c, spec); err != nil {
 			return c, err
 		}
 	}
 	if c.compiled == nil {
 		if err := quintcmd.Require(ctx, c.Quint, filepath.Dir(spec)); err != nil {
+			if plain := mbtmodel.PlainBeside(CompiledFor(c.Spec, c.Main)); plain != "" {
+				return c, fmt.Errorf("%w (%s is a plain compiled model an earlier gotogether kept, which connect no longer finds: compile it again, gotogether compile -spec %s%s, and remove it)", err, plain, c.Spec, mainFlag(c.Main))
+			}
 			return c, err
 		}
 	}
@@ -403,6 +410,7 @@ func replayPrepared(t *testing.T, c Config, files []string, newDriver func(testi
 		}
 	} else {
 		t.Logf("connect: %s %s: generated %d traces, seed %s", what, c.Spec, len(files), c.Seed)
+		c.ignored.log(t)
 	}
 	if pre == nil {
 		pre = prepare(t, c)

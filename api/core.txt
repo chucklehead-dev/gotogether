@@ -259,6 +259,7 @@ type Within struct
     method (Within) Name() string
 
 == github.com/chucklehead-dev/gotogether/connect
+const CompiledExt = mbtmodel.Ext
 const MBTFormat = mbtmodel.Format
 func Bind[T any](newT func(tb testing.TB) T) *Binding[T]
 func CompiledFor(spec, main string) string

@@ -82,8 +82,9 @@ var (
 	// MBT is a model compiled for connect's traces (gotogether compile
 	// -spec; connect.CompiledFor): the Go evaluator's IR of a spec's main
 	// module, every definition kept, compiled by quint, so that connect
-	// generates and replays traces where quint is not installed.
-	MBT = Format{Thing: "mbt", Major: 1, What: "a model compiled for connect's traces (gotogether compile -spec; connect without quint)",
+	// generates and replays traces where quint is not installed. Kept
+	// gzipped (<stem>[.<main>].mbt.json.gz) as Model is, not another major.
+	MBT = Format{Thing: "mbt", Major: 1, What: "a model compiled for connect's traces (gotogether compile -spec; connect without quint), JSON, kept gzipped (<stem>.mbt.json.gz)",
 		Older: "compile it again (gotogether compile -spec S [-main M])"}
 	// Report is a command's machine-readable report (validate -json,
 	// simulate -json; validate.Document), read by alert routing, CI and
