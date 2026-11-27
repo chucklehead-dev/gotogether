@@ -140,7 +140,7 @@ func (m *Model) Assume(src []byte, path string) (problems []string) {
 		m.Assumptions = append(m.Assumptions, a)
 	}
 	if len(m.predicates) > 0 {
-		m.keep(slices.DeleteFunc(slices.Clone(m.Properties), func(p *Property) bool { return m.predicates[p.key()] != nil }))
+		m.keep(slices.DeleteFunc(slices.Clone(m.Properties), func(p *Property) bool { return m.predicates[p.key()] != nil }), "it states an assumption")
 	}
 	return problems
 }
@@ -249,16 +249,16 @@ func assumptionMissing(r AssumptionRow, kind string) bool {
 func (t *Table) assumptionWarnings(want func(string) bool) []string {
 	var out []string
 	for _, r := range t.Assumptions {
-		n := r.Assumption.Name
+		n, d := r.Assumption.Name, t.Directive(r.Assumption.Name)
 		if want("targeted") && assumptionMissing(r, "targeted") {
-			out = append(out, fmt.Sprintf("assumption %s: nothing targets it: put //quint:exercises %s on a test or double that goes past it, or //quint:monitors %s on the production check that watches it", n, n, n))
+			out = append(out, fmt.Sprintf("assumption %s: nothing targets it: put //quint:exercises %s on a test or double that goes past it, or //quint:monitors %s on the production check that watches it", n, d, d))
 			continue
 		}
 		if want("exercised") && assumptionMissing(r, "exercised") {
-			out = append(out, fmt.Sprintf("assumption %s: nothing exercises it: put //quint:exercises %s on a test, a double's fault or a generator that goes past it", n, n))
+			out = append(out, fmt.Sprintf("assumption %s: nothing exercises it: put //quint:exercises %s on a test, a double's fault or a generator that goes past it", n, d))
 		}
 		if want("monitored") && assumptionMissing(r, "monitored") {
-			out = append(out, fmt.Sprintf("assumption %s: nothing monitors it: put //quint:monitors %s on the production check that watches it", n, n))
+			out = append(out, fmt.Sprintf("assumption %s: nothing monitors it: put //quint:monitors %s on the production check that watches it", n, d))
 		}
 	}
 	return out

@@ -7208,6 +7208,28 @@ adopters already keep those tables in their design documents and CI.
   placed as `//quint:enforces` is and read by go/parser alone. `-require`
   gains `exercised`, `monitored` and `targeted` (either), so CI can fail
   an omission nothing looks at.
+- **Fixes in the code's own form.** A fix that suggests a directive
+  (`-require`'s failures, a claim's unbacked citations) qualifies the
+  name by the main module when the scanned code qualifies any annotation
+  name: a tree that does holds, or prepares for, several models, and an
+  unqualified name there is an error in every other model's run (golem's
+  fixes suggested bare names beside 26 other models' qualified ones).
+  Code that names everything bare is told bare names.
+- **A monitor named by what it reports.** A production check is known by
+  its metric or alert, not its function (golem's `metrics.Register`
+  registers every gauge, and the alert lives in a runbook no directive
+  can reach). `//quint:monitors name label:VALUE` gives it, the
+  `key:value` form of a `//quint:action` argument (binding's
+  `directiveArgs`, which qweave shares: spaces split arguments outside
+  quotes, a quoted value is unquoted), so a label with spaces is
+  `label:"Checkpoint tampered"`. A bare word after the names could not
+  be told from another name (`golem.control.spend.stale` reads as module
+  golem's), which would be counted as another model's annotation and
+  dropped without a word; `label:` cannot be a name, which has no single
+  colon. Without a label, a monitor on a statement is shown by the
+  identifier the statement assigns (`spendStale := ...`), its cell
+  `` `spendStale` in `metrics.Register` ``. Only monitors take one: what
+  a test exercises is its name already.
 - **No doc lint yet.** A lint of "prose claims that cite no property"
   needs a definition of a claim. A sentence classifier is a heuristic no
   brute force can check, and a noisy lint trains people to ignore it.
@@ -7865,6 +7887,47 @@ noise that trains people to ignore it).
   a claim names. Given alone, `-claims` prints no table (a doc lint's
   output is its verdicts), and `-require` then takes `cited` only; beside
   `-write` or `-check` it lints as well, one CI line for both.
+
+After golem's and Goo's first use (#144, #220):
+
+- **A claim about the model alone: `Claim (model):`.** Goo's model
+  statements are checked by Go tests, but the runtime they describe is
+  JavaScript: "nothing enforces it" was true, and `-require cited` would
+  have asked for a dummy Go wrapper. A claim's scope is the author's to
+  state, so it is a marker (`Claim (model):`, `**Claim (model):**`), not
+  a flag over the document: one document holds both kinds. Its citations
+  are checked against the model as any claim's (a model-only claim must
+  still cite, and what it cites must exist), and its gaps are notes under
+  `-require cited` too, each saying it is a model-only claim. Another
+  parenthesis (`Claim (code):`) is an error naming the two markers, not
+  prose: an author who wrote one meant a claim.
+- **Several models, one document.** A citation qualified by a module
+  the spec does not have is another model's, noted and left out, the rule
+  the annotations already follow (§109's "a namespace of its own" relies
+  on it). Each model's run decides per claim: one citing an unqualified
+  name, or this model's module, is checked here; one all of whose
+  citations name other modules is left to their runs, counted in the
+  summary with their modules. "A claim fails only if no run accepted it"
+  then needs no state across runs: the run of the model a claim cites
+  checks it, and fails it as any run would. A CI loop gives every model's
+  run the same documents (golem's invariants.sh loops over its models
+  already). What no run checks is a citation qualified by a module no
+  model has (a typo in another model's name): every run's summary names
+  that module among those it left the claim to, as an annotation
+  qualified by such a module is noted in every run. A cross-run check
+  (a list of the document's models, or a run over all of them) would
+  close that, at the cost of a second notion of "the models"; left until
+  a document needs it. An unqualified name the model lacks still fails:
+  in a document of several models, qualify the other model's names.
+- **The fix says what fixes this case.** A citation naming what the
+  model lacks ends "or, if the document no longer makes this claim, drop
+  Claim:": golem's superseded ADR claim cited a retired assumption, and
+  the message suggested declaring it in the model again. A citation of
+  the other kind (a property in `assume:`) names the right kind instead.
+  A cited val a selection leaves out names the selection that did (the
+  binding's, `-exclude`'s, `-props'`, `-invariant`'s): golem's run had
+  no binding and was told the binding did not check its scenario val. A
+  claim's error lines start `FAIL`, as its unbacked citations' do.
 
 Left: a claim's citation checked against what the property says (a
 claim that cites a true but unrelated property passes); review, as for

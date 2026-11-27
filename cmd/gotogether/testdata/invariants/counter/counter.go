@@ -39,7 +39,7 @@ func (c *Counter) Reset(ctx context.Context) {
 }
 
 // Busy reports more than one caller inside the counter at once: the
-// production check of the model's oneCaller assumption.
+// production check of the model's oneCaller assumption, by its metric.
 //
-//quint:monitors oneCaller
+//quint:monitors oneCaller label:counter.busy
 func Busy(inside int) bool { return inside > 1 }

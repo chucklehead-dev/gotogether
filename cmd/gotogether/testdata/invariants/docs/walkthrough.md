@@ -37,7 +37,7 @@ same command):
 | assumption | statement | stated by | exercised by | monitored by |
 |---|---|---|---|---|
 | `noOverflow` | n + 1 never overflows; Go's int wraps past math.MaxInt | `belowMaxInt` | `TestIncPastMaxInt` [../counter/counter_test.go:46](../counter/counter_test.go#L46) | — |
-| `oneCaller` | one caller at a time; the real Counter has no lock | — | — | `Busy` [../counter/counter.go:45](../counter/counter.go#L45) |
+| `oneCaller` | one caller at a time; the real Counter has no lock | — | — | `counter.busy` in `Busy` [../counter/counter.go:45](../counter/counter.go#L45) |
 | `capFixed` | the cap never changes; the real Cap is a field anyone may set | — | — | — |
 <!-- /gotogether:assumptions -->
 

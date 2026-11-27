@@ -120,8 +120,27 @@ func TestResolve(t *testing.T) {
 	if !slices.Equal(m.names(), []string{"bounded", "positive"}) {
 		t.Errorf("restricted: %v", m.names())
 	}
-	if _, why := m.resolve("own"); !strings.Contains(why, "own is a val of model m that this table leaves out (the binding does not check it, or -props, -invariant or -exclude left it out)") {
+	if _, why := m.resolve("own"); why != "own is a val of model m that this table leaves out (the binding does not check it): add it to the selection, or name one the table has" {
 		t.Errorf("own after Restrict: %q", why)
+	}
+	// each selection names itself, and a later one keeps an earlier
+	// one's reason for what that one left out
+	if err := m.Exclude([]string{"bounded"}); err != nil {
+		t.Fatal(err)
+	}
+	for name, by := range map[string]string{"own": "the binding does not check it", "bounded": "-exclude names it"} {
+		if _, why := m.resolve(name); !strings.Contains(why, "this table leaves out ("+by+")") {
+			t.Errorf("%s after Restrict and Exclude: %q", name, why)
+		}
+	}
+	for flag, by := range map[string]string{"-props": "-props does not name it", "-invariant": "-invariant's conjuncts do not include it"} {
+		o := read(t, "m")
+		if err := o.Only(flag, []string{"positive"}); err != nil {
+			t.Fatal(err)
+		}
+		if _, why := o.resolve("own"); !strings.Contains(why, "this table leaves out ("+by+")") {
+			t.Errorf("own after %s: %q", flag, why)
+		}
 	}
 	if err := read(t, "m").Restrict([]string{"bounded", "count", "gone"}); err == nil || err.Error() != "the binding checks count, gone, which are no boolean val of module m: fix the binding (its properties: bounded, positive, settles, own)" {
 		t.Errorf("Restrict: %v", err)
@@ -295,12 +314,20 @@ func TestTable(t *testing.T) {
 	if got := table.Markdown("docs"); !strings.Contains(got, "[../a.go:3](../a.go#L3)") {
 		t.Errorf("relative to docs:\n%s", got)
 	}
+	// a.go qualifies base.bounded: the fixes qualify their names, by the
+	// main module, as the code does (so another model's run is not broken
+	// by the name they suggest)
 	if w := table.Warnings("checked"); !slices.Equal(w, []string{
-		"property bounded: no test checks it: put //quint:checks bounded on the test that does",
-		"property settles: no test checks it: put //quint:checks settles on the test that does",
-		"property own: no test checks it: put //quint:checks own on the test that does",
+		"property bounded: no test checks it: put //quint:checks m.bounded on the test that does",
+		"property settles: no test checks it: put //quint:checks m.settles on the test that does",
+		"property own: no test checks it: put //quint:checks m.own on the test that does",
 	}) {
 		t.Errorf("checked warnings %q", w)
+	}
+	// code that names its properties bare is told the bare name
+	bare, _ := m.Table([]Annotation{{Kind: Enforces, Line: 9, Site: Site{Path: "b.go", Line: 10, Func: "Z"}, Names: []string{"bounded"}}})
+	if w := bare.Warnings("checked"); len(w) != 4 || w[0] != "property bounded: no test checks it: put //quint:checks bounded on the test that does" {
+		t.Errorf("bare checked warnings %q", w)
 	}
 	if w := table.Warnings(); len(w) != 6 {
 		t.Errorf("all warnings %q", w)

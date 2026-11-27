@@ -80,7 +80,9 @@ does not have (other models'), left out of the table of model attempts:
 publication (2)`. An unqualified name that is no property stays an
 error, and so does one qualified by a module of the spec that lacks the
 val. So one package can carry two models' annotations, each run scanning
-`./...`.
+`./...`. Once the code qualifies any annotation name, the fixes the
+command prints (`put //quint:enforces exposure.limitsHonoured ...`)
+qualify theirs by the main module too.
 
 ## Actions and the code that implements them
 
@@ -178,7 +180,26 @@ func (q *Queue) reportDepth() { /* ... */ }
 
 `//quint:exercises` is a test, a double's fault, a sweep row or a
 generator that goes past the assumption on purpose; `//quint:monitors`
-is the production check that watches it. Names resolve as properties
+is the production check that watches it. A monitor is known by the
+metric or alert it reports, which its function (a `Register` of every
+gauge) does not say: give it as `label:VALUE`, quoted when it has spaces
+(the `key:value` form of `//quint:action`'s arguments), and the table
+shows it before the function. Without a label, a monitor on a statement
+is shown by the identifier the statement assigns:
+
+```go
+func Register(r *Registry) {
+	//quint:monitors exposure.knownSpendCurrent label:golem.control.spend.stale
+	r.Gauge("golem.control.spend.stale")
+	//quint:monitors exposure.rowsWithinAllowance
+	behind := r.Gauge("golem.control.ingestion_behind") // shown as `behind` in `Register`
+	_ = behind
+}
+```
+
+Only `//quint:monitors` takes a label; a bare word after the names is
+another name (`golem.control.spend.stale` would read as module golem's,
+another model's, and be left out). Names resolve as properties
 do (bare, or qualified by the declaring module, the main module or one
 that sees it; another model's module is noted and left out). A
 directive naming no assumption, `//quint:exercises` naming a property,
@@ -227,11 +248,39 @@ gotogether invariants -binding bank.binding.yaml -check docs/walkthrough.md -cla
 
 A claim citing nothing, and a citation naming nothing the model has (or
 the other kind: a property in `assume:`, an assumption or the val that
-states one in `prop:`), fail at the claim's line. A cited property
-nothing enforces or no test checks, or a cited assumption nothing
-targets, is a note; `-require cited` makes it a `FAIL`. Alone, `-claims`
-prints no table and `-require` takes `cited` only; beside `-check` it
-lints as well, one CI line for both.
+states one in `prop:`), are `FAIL` lines at the claim's line; a name the
+model lacks ends "or, if the document no longer makes this claim, drop
+Claim:" (a superseded claim). A cited property nothing enforces or no
+test checks, or a cited assumption nothing targets, is a note;
+`-require cited` makes it a `FAIL`. A cited val the selection leaves out
+(`-binding`, `-props`, `-invariant`, `-exclude`) names the selection that
+did. Alone, `-claims` prints no table and `-require` takes `cited` only;
+beside `-check` it lints as well, one CI line for both.
+
+**A claim about the model alone.** Mark it `Claim (model):` (or
+`**Claim (model):**`) when the code that would back it is not this
+code (a runtime in another language, a statement of the design): it
+still cites, and its citations are checked against the model, but
+`-require cited` leaves its gaps notes, `(a model-only claim: ...)`,
+instead of asking for an annotation on code that does not exist. The
+summary counts them, `ok   doc.md: 3 claims (1 model-only), citing ...`.
+
+**A document of several models.** Qualify each citation of another
+model by its module, `(prop: publication.revocationBounded)`. A run
+notes the citations qualified by modules its spec lacks and leaves them
+out; a claim citing only them is left to their runs (`...; 1 claim
+cites only other models (publication), left to their runs`). Give every
+model's run the same documents, so each claim is checked by the run of
+the model it cites:
+
+```sh
+for m in publication exposure; do
+  gotogether invariants -spec model/$m.qnt -claims docs/adr/0031.md -require cited ./... || exit 1
+done
+```
+
+A module no model has (a misspelled model's name) is in every run's
+"left to" list and fails none: read the summaries.
 
 ## The command
 
@@ -328,11 +377,16 @@ above it moves (the default, `line`, links each `file:line`):
 | `model.qnt:12: @assume withinCap has the name of model M's definition ...`, `/// @assume is a doc comment ...` (exit 1, no table written) | an `@assume` line declaring no assumption the table can show | the fix it names: rename, write it with `//`, give `name: statement` |
 | `f.go:9: //quint:exercises names noOverflw: model M has no assumption noOverflw: did you mean noOverflow? ...` | a directive naming no assumption | fix the name, or declare it in the model |
 | `f.go:9: //quint:enforces names oneCaller: oneCaller is an assumption of model M (what it leaves out), not a property ...` | a property directive naming an assumption (or `... states assumption a`: its val) | `//quint:exercises` or `//quint:monitors` |
-| `FAIL assumption a: nothing targets it: put //quint:exercises a ...` (exit 1) | `-require targeted`, and nothing aimed at it | a test or double past it, or a production check |
-| `doc.md:12: claim "..." cites no property or assumption: cite the property that makes it true, (prop: name), ...` (exit 1) | a marked claim that cites nothing | cite what makes it true, add it to the model, or drop `Claim:` |
-| `doc.md:12: claim "..." cites property withinCapp: model M has no property withinCapp: did you mean withinCap? ...` (also `cites assumption`, `... not a property: cite it as (assume: x)`) | a citation the model does not have, or of the other kind | the name it suggests, the kind it names, or the model |
-| `FAIL doc.md:12: claim "..." cites property p, which nothing enforces: put //quint:enforces p ...` (a `note:` without `-require cited`) | the claim rests on a property, or an assumption, the code does not back | the directive it names |
-| `ok   doc.md: 3 claims, citing 2 properties and 1 assumption of model M`, `FAIL doc.md: N problems in its claims, ...` | each document's verdict | fix each line above it |
+| `FAIL assumption a: nothing targets it: put //quint:exercises a ...` (exit 1; `M.a` when the code qualifies its annotations) | `-require targeted`, and nothing aimed at it | a test or double past it, or a production check |
+| `f.go:9: //quint:exercises gives label:x, and only //quint:monitors takes a label ...` (also two labels, an empty one, an open quote) | a label where none is taken, or malformed | drop it, or fix it as it says |
+| `FAIL doc.md:12: claim "..." cites no property or assumption: cite the property that makes it true, (prop: name), ...` (exit 1) | a marked claim that cites nothing | cite what makes it true, add it to the model, or drop `Claim:` |
+| `FAIL doc.md:12: claim "..." cites property withinCapp: model M has no property withinCapp: did you mean withinCap? ...; or, if the document no longer makes this claim, drop Claim:` (also `cites assumption`, `... not a property: cite it as (assume: x)`) | a citation the model does not have, or of the other kind | the name it suggests, the kind it names, the model, or the marker if the claim is gone |
+| `FAIL doc.md:12: claim "...": Claim (code): is no marker: ...` | a parenthesis other than `(model)` | `Claim:` or `Claim (model):` |
+| `FAIL doc.md:12: claim "..." cites property p, which nothing enforces: put //quint:enforces M.p ...` (a `note:` without `-require cited`) | the claim rests on a property, or an assumption, the code does not back (the name qualified when the code qualifies its annotations) | the directive it names |
+| `... cites property p, which this table leaves out (-exclude names it), so no code can be shown to back it: ...` | the selection named left the val out | add it to the selection, or mark the claim `Claim (model):` |
+| `note: ... (a model-only claim: -require cited does not ask the code to back it)` | a `Claim (model):` the code does not back, by design | nothing, or annotate the code if it does |
+| `note: doc.md: 3 citations of other models (qualified by modules this spec does not have), left out of the claims of model M: publication (3)` | another model's citations in the document | nothing: run that model on the document too |
+| `ok   doc.md: 3 claims (1 model-only), citing 2 properties and 1 assumption of model M; 1 claim cites only other models (publication), left to their runs`, `FAIL doc.md: N problems in its claims, ...` | each document's verdict | fix each line above it; a module in "left to" that no model has is a misspelling |
 | `FAIL doc.md: stale: row p changed, row q added: run gotogether invariants ...` (exit 1) | the code moved, or the annotations changed | run the command it names, commit the document |
 | `FAIL doc.md: missing: doc.md has no table of model M: add <!-- gotogether:invariants M --> ...` | the document has no markers of this model, nor unnamed ones | add the pair where the table goes |
 | exit 2 | a bad invocation, a Go file that does not parse, a model quint refuses | the message says which |
