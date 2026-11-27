@@ -45,7 +45,11 @@ func (m *Model) Only(flag string, names []string) error {
 			ps = append(ps, p)
 		}
 	}
-	m.keep(ps)
+	why := flag + " does not name it"
+	if flag == "-invariant" {
+		why = "-invariant's conjuncts do not include it"
+	}
+	m.keep(ps, why)
 	return nil
 }
 
@@ -72,7 +76,7 @@ func (m *Model) Exclude(names []string) error {
 			ps = append(ps, p)
 		}
 	}
-	m.keep(ps)
+	m.keep(ps, "-exclude names it")
 	return nil
 }
 

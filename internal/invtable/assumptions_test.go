@@ -1,6 +1,8 @@
 package invtable
 
 import (
+	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -158,15 +160,20 @@ func TestAssumptionsTable(t *testing.T) {
 	if got := table.Missing("exercised"); !slices.Equal(got, []string{"oneWriter", "tight"}) {
 		t.Errorf("missing exercised: %v", got)
 	}
-	if w := table.Warnings("targeted"); !slices.Equal(w, []string{"assumption tight: nothing targets it: put //quint:exercises tight on a test or double that goes past it, or //quint:monitors tight on the production check that watches it"}) {
+	// the code qualifies names (base.small, another model's other.thing):
+	// so do the fixes
+	if w := table.Warnings("targeted"); !slices.Equal(w, []string{"assumption tight: nothing targets it: put //quint:exercises m.tight on a test or double that goes past it, or //quint:monitors m.tight on the production check that watches it"}) {
 		t.Errorf("targeted warnings %q", w)
 	}
 	if w := table.Warnings("exercised", "monitored"); !slices.Equal(w, []string{
-		"assumption oneWriter: nothing exercises it: put //quint:exercises oneWriter on a test, a double's fault or a generator that goes past it",
-		"assumption tight: nothing exercises it: put //quint:exercises tight on a test, a double's fault or a generator that goes past it",
-		"assumption tight: nothing monitors it: put //quint:monitors tight on the production check that watches it",
+		"assumption oneWriter: nothing exercises it: put //quint:exercises m.oneWriter on a test, a double's fault or a generator that goes past it",
+		"assumption tight: nothing exercises it: put //quint:exercises m.tight on a test, a double's fault or a generator that goes past it",
+		"assumption tight: nothing monitors it: put //quint:monitors m.tight on the production check that watches it",
 	}) {
 		t.Errorf("exercised, monitored warnings %q", w)
+	}
+	if bare, _ := m.Table(anns[1:2]); !slices.Equal(bare.Warnings("targeted"), []string{"assumption tight: nothing targets it: put //quint:exercises tight on a test or double that goes past it, or //quint:monitors tight on the production check that watches it"}) {
+		t.Errorf("bare targeted warnings %q", bare.Warnings("targeted"))
 	}
 	// prose alone: no predicate column
 	m.Assumptions[0].Predicate = ""
@@ -202,5 +209,79 @@ func fill() {}
 	}
 	if !slices.Equal(got, []string{"monitors unboundedQueue Watch", "exercises unboundedQueue+oneKey Watch"}) {
 		t.Errorf("annotations %q", got)
+	}
+}
+
+// A monitor is shown by what it watches with: its directive's
+// label:VALUE (quoted when it has spaces), else the identifier the
+// statement it annotates assigns; other directives take no label, and a
+// malformed one is a problem with the fix. label::x is a name (module
+// label's x), not a label.
+func TestMonitorLabels(t *testing.T) {
+	dir := writeTree(t, map[string]string{
+		"a/a.go": `package a
+
+//quint:monitors oneKey label:golem.control.spend.stale
+func Watch() {
+	//quint:monitors unboundedQueue
+	spendStale := gauge()
+	//quint:monitors unboundedQueue
+	m.behind = gauge()
+	//quint:monitors oneKey, unboundedQueue label:"Checkpoint tampered"
+	gauge()
+	//quint:monitors unboundedQueue
+	var lag = gauge()
+	//quint:monitors label::x
+	_ = gauge()
+	//quint:exercises unboundedQueue
+	x := gauge()
+	//quint:exercises oneKey label:x
+	gauge()
+	//quint:monitors oneKey label:a label:b
+	gauge()
+	//quint:monitors oneKey label:"open
+	gauge()
+	//quint:monitors oneKey label:
+	gauge()
+}
+`,
+	})
+	anns, problems, err := Scan([]string{dir + "/a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, a := range anns {
+		got = append(got, fmt.Sprintf("%s %s %d %q", a.Kind, strings.Join(a.Names, "+"), a.Site.Line, a.Site.Label))
+	}
+	want := []string{
+		`monitors oneKey 4 "golem.control.spend.stale"`,
+		`monitors unboundedQueue 6 "spendStale"`,
+		`monitors unboundedQueue 8 "behind"`,
+		`monitors oneKey+unboundedQueue 10 "Checkpoint tampered"`,
+		`monitors unboundedQueue 12 "lag"`,
+		`monitors label::x 14 ""`,
+		`exercises unboundedQueue 16 ""`,
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("annotations\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	var gotP []string
+	for _, p := range problems {
+		gotP = append(gotP, strings.TrimPrefix(filepath.ToSlash(p), filepath.ToSlash(dir)+"/"))
+	}
+	wantP := []string{
+		"a/a.go:17: //quint:exercises gives label:x, and only //quint:monitors takes a label (the metric or alert that watches an assumption): drop it",
+		"a/a.go:19: //quint:monitors gives two labels, label:a and label:b: give the one the check is known by (a site that reports two is two directives)",
+		`a/a.go:21: //quint:monitors has a quote it does not close: close it (//quint:monitors name label:"the alert's name")`,
+		"a/a.go:23: //quint:monitors gives an empty label: name the metric or alert after label: (label:golem.control.spend.stale), or drop it",
+	}
+	if !slices.Equal(gotP, wantP) {
+		t.Errorf("problems\n%s\nwant\n%s", strings.Join(gotP, "\n"), strings.Join(wantP, "\n"))
+	}
+	// the cell: the label before the function, a pipe escaped
+	tb := &Table{}
+	if got := tb.siteCell([]Site{{Path: "a.go", Line: 4, Func: "Watch", Label: "spend|stale"}, {Path: "a.go", Line: 8, Func: "Watch"}}, ""); got != "`spend\\|stale` in `Watch` [a.go:4](a.go#L4)<br>`Watch` [a.go:8](a.go#L8)" {
+		t.Errorf("cell %q", got)
 	}
 }

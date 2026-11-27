@@ -31,11 +31,11 @@ func TestInvariantsAssumptions(t *testing.T) {
 	}
 	spec, doc, code := fixture+"/model/counter.qnt", fixture+"/docs/walkthrough.md", fixture+"/counter"
 	n, out, errw := run("-spec", spec, "-check", doc, "-require", "targeted", code)
-	if n != 1 || !strings.Contains(out, "ok   "+doc+": current") || !strings.HasSuffix(errw, "FAIL assumption capFixed: nothing targets it: put //quint:exercises capFixed on a test or double that goes past it, or //quint:monitors capFixed on the production check that watches it\n") {
+	if n != 1 || !strings.Contains(out, "ok   "+doc+": current") || !strings.HasSuffix(errw, "FAIL assumption capFixed: nothing targets it: put //quint:exercises counter.capFixed on a test or double that goes past it, or //quint:monitors counter.capFixed on the production check that watches it\n") {
 		t.Errorf("-require targeted: %d\n%s%s", n, out, errw)
 	}
 	n, _, errw = run("-spec", spec, "-check", doc, "-require", "exercised", code)
-	if n != 1 || strings.Contains(errw, "targeted is not required") || !strings.Contains(errw, "FAIL assumption oneCaller: nothing exercises it: put //quint:exercises oneCaller on a test, a double's fault or a generator that goes past it\nFAIL assumption capFixed: nothing exercises it:") {
+	if n != 1 || strings.Contains(errw, "targeted is not required") || !strings.Contains(errw, "FAIL assumption oneCaller: nothing exercises it: put //quint:exercises counter.oneCaller on a test, a double's fault or a generator that goes past it\nFAIL assumption capFixed: nothing exercises it:") {
 		t.Errorf("-require exercised: %d\n%s", n, errw)
 	}
 	if n, out, _ := run("-spec", spec, code); n != 0 || !strings.Contains(out, "\n| assumption | statement | stated by | exercised by | monitored by |\n") || !strings.Contains(out, "| `noOverflow` | n + 1 never overflows; Go's int wraps past math.MaxInt | `belowMaxInt` | `TestIncPastMaxInt` [") || strings.Contains(out, "\n| `belowMaxInt` |") {
@@ -45,7 +45,7 @@ func TestInvariantsAssumptions(t *testing.T) {
 	dir := copyFixture(t)
 	spec, doc, code = filepath.Join(dir, "model", "counter.qnt"), filepath.Join(dir, "docs", "walkthrough.md"), filepath.Join(dir, "counter")
 	edit(t, filepath.Join(code, "counter_test.go"), "//quint:exercises noOverflow\n", "//quint:exercises noOverflw\n")
-	edit(t, filepath.Join(code, "counter.go"), "//quint:monitors oneCaller\n", "//quint:monitors withinCap\n//quint:enforces oneCaller belowMaxInt\n")
+	edit(t, filepath.Join(code, "counter.go"), "//quint:monitors oneCaller label:counter.busy\n", "//quint:monitors withinCap\n//quint:enforces oneCaller belowMaxInt\n")
 	n, out, errw = run("-spec", spec, "-check", doc, code)
 	want := filepath.Join(code, "counter.go") + ":44: //quint:monitors names withinCap: withinCap is a property of model counter, not an assumption: //quint:enforces and //quint:checks name properties, //quint:exercises and //quint:monitors what the model leaves out (its // @assume lines): name the assumption it goes past (noOverflow, oneCaller, capFixed), or use //quint:enforces or //quint:checks\n" +
 		filepath.Join(code, "counter.go") + ":45: //quint:enforces names oneCaller: oneCaller is an assumption of model counter (what it leaves out), not a property: target it with //quint:exercises oneCaller or //quint:monitors oneCaller\n" +
