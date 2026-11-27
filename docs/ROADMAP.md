@@ -716,7 +716,13 @@ item is its own decision before it starts; the red-nightly rule applies.
   bits, and a nightly comparing Go's traces with quint's on every
   example's model. Seeds cannot match quint's generator, so parity is by
   meaning: every trace Go makes replays in quint, every trace quint makes
-  replays in Go, and small models' reachable sets agree.
+  replays in Go, and small models' reachable sets agree. Connect's
+  artifacts are kept gzipped and listed by doctor (DESIGN §113); open: their
+  size (edgepublish's main 18.1 MB plain, 621 KB gzipped), mostly quint's
+  lookup table repeating a definition at every reference and effects the
+  evaluator never reads, and an artifact per spec sharing what its mains'
+  IR shares (two instances' second main a 56 KB delta); a format change,
+  for the maintainer.
 - **Q2: the front end (L).** Parser (from Quint's ANTLR grammar or by hand,
   for quint's error positions), name resolution, imports, instances and
   `export` flattened to the IR `quint compile` writes, then the type and

@@ -21,7 +21,7 @@ func noQuint(t *testing.T) {
 }
 
 // connect.Run with no quint: the traces are the Go evaluator's, from
-// testdata/bank.mbt.json (gotogether compile -spec testdata/bank.qnt),
+// testdata/bank.mbt.json.gz (gotogether compile -spec testdata/bank.qnt),
 // replayed as quint's are, with the state compared, the model's
 // balanceOf evaluated after every step, Config.Require's vals counted and
 // steered to, and a bound driver checked against the model and run.
@@ -136,7 +136,7 @@ func TestCompiledRefusals(t *testing.T) {
 	check(err, "gotogether compile -spec testdata/terminal_samples.qnt")
 	// a copy whose source changed
 	stale := t.TempDir()
-	for _, f := range []string{"bank.qnt", "bank.mbt.json"} {
+	for _, f := range []string{"bank.qnt", "bank.mbt.json.gz"} {
 		data, err := os.ReadFile(filepath.Join("testdata", f))
 		if err != nil {
 			t.Fatal(err)

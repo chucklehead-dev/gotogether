@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/internal/mbtmodel"
@@ -29,6 +31,12 @@ import (
 //     compiled model at CompiledFor; quint, where it is, as before;
 //   - "1": always, and the run fails where the spec has none;
 //   - "0": never.
+//
+// Unset, a stale or unreadable compiled model beside the spec is passed
+// over where quint runs, as it must be, and the run's log says so once a
+// process, with the compile that refreshes it: a developer with quint
+// would otherwise never see that the runs without quint (CI's) fail on
+// it.
 //
 // Seeds cannot match quint's generator: the traces are other samples of
 // the same model, valid by meaning (qeval's parity tests: each replays in
@@ -55,16 +63,25 @@ type MBTModel = mbtmodel.Model
 // An MBTSource is one source of a compiled model: its path and sha256.
 type MBTSource = mbtmodel.Source
 
+// CompiledExt is the name's end of a compiled model kept by convention
+// (CompiledFor): its gotogether.mbt/1 JSON in a gzip container, as a
+// binding's is kept (validate.CompiledExt). LoadMBT reads the plain and
+// the gzipped form alike; MBTModel.Write gzips a path ending in .gz, with
+// the same bytes for the same model.
+const CompiledExt = mbtmodel.Ext
+
 // CompiledFor is where a spec's compiled model is kept by convention:
-// beside the spec, its name's stem with .mbt.json (model/bank.qnt's is
-// model/bank.mbt.json), or with the main module's name between them when
-// main is not the file's own (model/bank.bankDesign.mbt.json).
+// beside the spec, its name's stem with CompiledExt (model/bank.qnt's is
+// model/bank.mbt.json.gz), or with the main module's name between them
+// when main is not the file's own (model/bank.bankDesign.mbt.json.gz).
+// A plain .mbt.json an earlier gotogether kept there is not found: compile
+// it again.
 func CompiledFor(spec, main string) string { return mbtmodel.CompiledFor(spec, main) }
 
-// LoadMBT reads a compiled model for connect, refusing another format, a
-// quint outside the admission policy and a stale artifact: a source
-// present beside it whose sha256 is not the artifact's (an absent one is
-// not checked: notes says so).
+// LoadMBT reads a compiled model for connect, plain or gzipped, refusing
+// a broken container, another format, a quint outside the admission
+// policy and a stale artifact: a source present beside it whose sha256 is
+// not the artifact's (an absent one is not checked: notes says so).
 func LoadMBT(path string) (cm *MBTModel, notes []string, err error) { return mbtmodel.Load(path) }
 
 func mainFlag(main string) string { return mbtmodel.MainFlag(main) }
@@ -79,28 +96,41 @@ type compiled struct {
 
 // compiledMode is c's compiled model per GOTOGETHER_COMPILED: nil where
 // connect runs quint, an error where "1" asks for one the spec lacks or
-// the one it has is refused.
-func compiledMode(c Config, spec string) (*compiled, error) {
+// the one it has is refused. Where quint runs with the variable unset,
+// ignored says what is wrong with the artifact beside the spec, if
+// anything, for the run's log: which path runs does not depend on it.
+func compiledMode(c Config, spec string) (cm *compiled, ignored *ignoredModel, err error) {
 	path := CompiledFor(spec, c.Main)
 	_, statErr := os.Stat(path)
 	switch mode := os.Getenv(compiledEnv); mode {
 	case "0":
-		return nil, nil
+		return nil, nil, nil
 	case "1":
 		if statErr != nil {
-			return nil, fmt.Errorf("connect: %s=1 generates traces from the spec's compiled model, and %s has none at %s (%v): compile it (gotogether compile -spec %s%s) where quint is installed",
-				compiledEnv, c.Spec, path, statErr, c.Spec, mainFlag(c.Main))
+			plain := ""
+			if p := mbtmodel.PlainBeside(path); p != "" {
+				plain = fmt.Sprintf(" (%s is the plain form an earlier gotogether kept there: compile it again and remove it)", p)
+			}
+			return nil, nil, fmt.Errorf("connect: %s=1 generates traces from the spec's compiled model, and %s has none at %s (%v): compile it (gotogether compile -spec %s%s) where quint is installed%s",
+				compiledEnv, c.Spec, path, statErr, c.Spec, mainFlag(c.Main), plain)
 		}
 	case "":
-		if statErr != nil {
-			return nil, nil
-		}
 		if _, err := exec.LookPath(c.Quint); err == nil {
-			return nil, nil
+			return nil, ignoredFor(path, spec, c), nil
+		}
+		if statErr != nil {
+			return nil, nil, nil
 		}
 	default:
-		return nil, fmt.Errorf("connect: %s=%q: want 1 (always the compiled model), 0 (never) or unset (where quint is not installed)", compiledEnv, mode)
+		return nil, nil, fmt.Errorf("connect: %s=%q: want 1 (always the compiled model), 0 (never) or unset (where quint is not installed)", compiledEnv, mode)
 	}
+	cm, err = loadCompiled(path, spec, c)
+	return cm, nil, err
+}
+
+// loadCompiled is the compiled model at path, checked to be of spec's
+// c.Main, with the Go evaluator's model of its IR.
+func loadCompiled(path, spec string, c Config) (*compiled, error) {
 	cm, notes, err := LoadMBT(path)
 	if err != nil {
 		return nil, fmt.Errorf("connect: %w", err)
@@ -116,10 +146,65 @@ func compiledMode(c Config, spec string) (*compiled, error) {
 	return &compiled{path: path, m: m, notes: notes}, nil
 }
 
+// An ignoredModel is a compiled model a run with quint passes over and
+// why ("" when it is current): checked once a process, logged once.
+type ignoredModel struct {
+	once   sync.Once
+	why    string
+	logged atomic.Bool
+}
+
+// ignoredModels are the artifacts runs with quint have checked, by path:
+// process-wide, so that each is read and logged once a test binary.
+var ignoredModels sync.Map // process-wide: path -> *ignoredModel
+
+// ignoredFor is what a run with quint says of spec's (absolute) compiled
+// model at path (CompiledFor's), nil where there is none: a refused one (stale, of
+// another spec, unreadable) or a plain one an earlier gotogether kept,
+// each with the fix. The check is the one a run without quint makes.
+func ignoredFor(path, spec string, c Config) *ignoredModel {
+	plain := mbtmodel.PlainBeside(path)
+	if _, err := os.Stat(path); err != nil && plain == "" {
+		return nil
+	}
+	v, _ := ignoredModels.LoadOrStore(path, &ignoredModel{})
+	im := v.(*ignoredModel)
+	im.once.Do(func() {
+		var why []string
+		if plain != "" {
+			why = append(why, fmt.Sprintf("%s is a plain compiled model an earlier gotogether kept, which connect no longer finds (it reads %s): compile it again (gotogether compile -spec %s%s) and remove it",
+				plain, filepath.Base(path), c.Spec, mainFlag(c.Main)))
+		}
+		if _, err := os.Stat(path); err == nil {
+			if _, err := loadCompiled(path, spec, c); err != nil {
+				why = append(why, strings.TrimPrefix(err.Error(), "connect: "))
+			}
+		}
+		if len(why) > 0 {
+			im.why = strings.Join(why, "; ")
+		}
+	})
+	return im
+}
+
+// log writes why the compiled model is passed over to t's log, the first
+// time a run of this process meets it.
+func (im *ignoredModel) log(t testing.TB) {
+	t.Helper()
+	if im == nil || im.why == "" || !im.logged.CompareAndSwap(false, true) {
+		return
+	}
+	t.Logf("connect: quint generates the traces here (%s unset), passing over the spec's compiled model, which a run without quint would use and refuse: %s", compiledEnv, im.why)
+}
+
 // RequireTraces skips the test unless c's traces can be generated here:
 // quint is installed, or the spec has a compiled model connect uses
-// instead (GOTOGETHER_COMPILED). Use it where a test runs connect.Run or
-// a bound driver's Run.
+// instead (GOTOGETHER_COMPILED). It is the guard of a connect test that
+// runs from its compiled model where quint is missing: use it where a test
+// runs connect.Run or a bound driver's Run, in place of an
+// exec.LookPath("quint") that skips, which never reaches the compiled
+// model. Where quint runs, it logs a stale model beside the spec, as Run
+// does.
 func RequireTraces(t testing.TB, c Config) {
 	t.Helper()
 	c, err := c.FromEnv()
@@ -133,12 +218,18 @@ func RequireTraces(t testing.TB, c Config) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cm, err := compiledMode(c, spec); err != nil || cm != nil {
+	cm, ignored, err := compiledMode(c, spec)
+	if err != nil || cm != nil {
 		return // a refused model fails the run, with its fix
 	}
+	ignored.log(t)
 	if _, err := exec.LookPath(c.Quint); err != nil {
-		t.Skipf("quint not installed (npm i -g @informalsystems/quint), and %s has no compiled model at %s (gotogether compile -spec %s%s)",
-			c.Spec, CompiledFor(c.Spec, c.Main), c.Spec, mainFlag(c.Main))
+		plain := ""
+		if p := mbtmodel.PlainBeside(CompiledFor(c.Spec, c.Main)); p != "" {
+			plain = fmt.Sprintf("; %s is a plain one an earlier gotogether kept, which connect no longer finds: compile it again and remove it", p)
+		}
+		t.Skipf("quint not installed (npm i -g @informalsystems/quint), and %s has no compiled model at %s (gotogether compile -spec %s%s)%s",
+			c.Spec, CompiledFor(c.Spec, c.Main), c.Spec, mainFlag(c.Main), plain)
 	}
 }
 

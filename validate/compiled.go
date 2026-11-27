@@ -2,14 +2,12 @@ package validate
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"maps"
 	"os"
 	"os/exec"
@@ -20,6 +18,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/formats"
+	"github.com/chucklehead-dev/gotogether/internal/gzdoc"
 	"github.com/chucklehead-dev/gotogether/internal/qeval"
 	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/itf"
@@ -222,47 +221,18 @@ func (cm *CompiledModel) Write(path string) error {
 // reads either, by the gzip magic, so `-o model.json` writes it plain.
 const CompiledExt = ".model.json.gz"
 
-// gzipCompiled is data in a gzip stream that depends on data alone: the
-// header names no file, no modification time and no OS (gzip's
-// "unknown"), at the best compression, so a compile twice writes the
-// same bytes with one Go toolchain (compile -check compares meaning, not
-// bytes, so another toolchain's deflate is no staleness).
-func gzipCompiled(data []byte) ([]byte, error) {
-	var buf bytes.Buffer
-	zw, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
-	if err != nil {
-		return nil, err
-	}
-	zw.Header = gzip.Header{OS: 255}
-	if _, err := zw.Write(data); err != nil {
-		return nil, err
-	}
-	if err := zw.Close(); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
+// gzipCompiled is data in a gzip stream that depends on data alone
+// (gzdoc.Compress: no file, time or OS in the header), so a compile twice
+// writes the same bytes with one Go toolchain (compile -check compares
+// meaning, not bytes, so another toolchain's deflate is no staleness).
+func gzipCompiled(data []byte) ([]byte, error) { return gzdoc.Compress(data) }
 
 // gzipMagic begins every gzip stream; no JSON document begins so.
-var gzipMagic = []byte{0x1f, 0x8b} // read-only
+var gzipMagic = gzdoc.Magic // read-only
 
 // gunzipCompiled is the JSON document of a compiled model's file bytes:
 // data itself when plain, its decompression when gzip's.
-func gunzipCompiled(data []byte) ([]byte, error) {
-	if !bytes.HasPrefix(data, gzipMagic) {
-		return data, nil
-	}
-	zr, err := gzip.NewReader(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-	zr.Multistream(false)
-	out, err := io.ReadAll(zr)
-	if err != nil {
-		return nil, err
-	}
-	return out, zr.Close()
-}
+func gunzipCompiled(data []byte) ([]byte, error) { return gzdoc.Decompress(data) }
 
 // CompiledFor is where bindingPath's compiled model is kept by
 // convention: beside the binding, its name's stem (the name without .yaml
