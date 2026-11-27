@@ -266,6 +266,10 @@ test or double that goes past it, `//quint:monitors` on the production
 check. `gotogether invariants` tables them and `-require targeted` fails
 one nothing targets (gotogether-workflow's invariants.md). A model right
 about everything it says still misses the bug in what it never said.
+The design document's prose is a third place: mark each guarantee it
+states `Claim:` and cite the property or assumption it rests on,
+`(prop: noDoubleSpend)`, `(assume: oneCaller)`; `gotogether invariants
+-claims doc.md` fails a claim that cites nothing the model has.
 
 ## 9. Abstraction and cost
 

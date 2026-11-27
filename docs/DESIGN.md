@@ -7811,3 +7811,61 @@ ms of it, once per process (qtest builds each checker once).
 `gotogether.mbt/1` (connect's, §110) is unchanged: its artifacts are few
 and small.
 
+
+## 114. Claims a design document marks, each citing the model
+
+ROADMAP CW3's doc lint, the half §109 left for the maintainer: golem's
+ADR stated a guarantee in prose that no property stated, and it was
+false. The maintainer chose explicit claims over a heuristic: the lint
+reads what the author marks as a claim and nothing else, so it can be
+exact (no sentence classifier, which no brute force could check, and no
+noise that trains people to ignore it).
+
+- **The marker: `Claim:` at the start of a block.** A paragraph, a list
+  item (`- `, `1. `) or a quoted line (`> `) whose text begins with
+  `Claim:` (or `**Claim:**`, which GitHub renders as a bold label) is a
+  claim, through the end of its paragraph or item: a blank line, a
+  heading, another list item, a table row, a fence or the next claim
+  ends it, so a wrapped sentence's citation may sit on its last line.
+  The marker is a word a reader sees, not an HTML comment, because the
+  claim is for the reader too: "Claim:" says the sentence is a promise
+  the model makes. A start-of-block word is unambiguous to parse, where
+  a region between markers would need a definition of a sentence (§109's
+  alternative), and a document's existing prose needs no edit until its
+  author marks it. Fenced code and indented code are no prose: an
+  example of the syntax, or a literate model's quint blocks, opens
+  nothing. `Claim:` mid-line, and `Claims:`, are prose.
+- **The citation: `(prop: name, ...)` and `(assume: name)`.** Parentheses
+  render as text on GitHub (a `[cite]` would read as a broken link
+  reference), and the kind is written, not inferred: §109 kept
+  assumptions' names apart from properties' so that a directive cannot
+  mean the other, and a citation keeps the distinction, a property's
+  name in `assume:` being an error naming `prop:` (and the reverse, and
+  the val that states an assumption, which is no property). A property
+  is any boolean val or temporal the main module sees, bare or qualified
+  (`counterBase.nonNegative`, `counterBase::nonNegative`), whatever the
+  table's selection: a claim is about the model, not a binding's subset.
+  An assumption is an `@assume` line's name, so a claim that rests on
+  what the model leaves out says so ("as long as one caller holds the
+  account (assume: oneCaller)"), the first slice's listed assumptions
+  being citable from the start.
+- **Three failures, by the tables' rule.** A claim citing nothing, and a
+  citation naming nothing the model has (with "did you mean", the
+  model's properties and assumptions, and the fix), fail (exit 1)
+  always. A cited property nothing enforces or no test checks, or a
+  cited assumption nothing targets, is the tables' kind of gap, read
+  from the same rows (internal/invtable's `Table`, not re-derived): a
+  note, and a `FAIL` under `-require cited`, as `-require enforced`
+  makes a bare row one. A cited val a binding's selection left out has
+  no row to back it, so under `cited` it fails naming the selection.
+- **In `gotogether invariants`, as `-claims doc.md[,...]`.** The lint
+  needs exactly what the command already reads: the model's properties
+  and assumptions (typecheck and its `@assume` lines) and the code's
+  directives. `gotogether lint` reads bindings and traces, none of which
+  a claim names. Given alone, `-claims` prints no table (a doc lint's
+  output is its verdicts), and `-require` then takes `cited` only; beside
+  `-write` or `-check` it lints as well, one CI line for both.
+
+Left: a claim's citation checked against what the property says (a
+claim that cites a true but unrelated property passes); review, as for
+a property's doc comment, is that check.
