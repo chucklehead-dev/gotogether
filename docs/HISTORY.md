@@ -9853,3 +9853,16 @@ for the toolkit, each with its fix:
   new class, which would widen what the oracle accepts for every program
   (the maintainer's decision). An entry listed there that agrees again
   fails, so the line is taken out once quint orders the errors by source.
+- After #287 merged: connect/testdata/sender.mbt.json.gz compiled again
+  (its modules identical but for ids), and pay.qnt's, sender.qnt's and the
+  new pay-hidden/pay-placeopt bindings' corpus entries surveyed at 0.35.0
+  (`GOTOGETHER_UPDATE_CORPUS=entries`), with the verdicts main's 0.33.1
+  survey gave. A `gotogether simulate` that exited 2 on 0.35 ("quint's
+  output names no count of witness") was readWitnesses' "witnessed", fixed
+  above: quint exits 0 with an unreached witness (a `[warning]` when the
+  model declares an observation of its own; `--observation` exits 1), and
+  the possible is a verdict, not reached. quint's own evaluator fetch goes
+  through GitHub's API (rate-limited, 403 on shared runners); every CI job,
+  the Action and the image install it with ci/install-quint.sh instead,
+  from the release URL against its sha256, where quint finds it
+  (`$QUINT_HOME/rust-evaluator-v0.8.0`).

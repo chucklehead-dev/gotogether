@@ -13,7 +13,10 @@ import (
 func TestReadWitnessesAcrossQuintVersions(t *testing.T) {
 	for name, out := range map[string]string{
 		"0.33.1": "[ok] No violation found (10ms).\nWitnesses:\n__gtg_possible_10 was witnessed in 4 trace(s) out of 5 explored (80.00%)\n__gtg_possible_1 was witnessed in 2 trace(s) out of 5 explored (40.00%)\n__gtg_possible_2 was witnessed in 0 trace(s) out of 5 explored (0.00%)\n",
-		"0.35.0": "Warning: --witnesses is deprecated. Declare observation definitions in the spec, or use --observation to stop at the first trace that reaches one.\n[ok] No violation found (22ms).\nObservations:\n__gtg_possible_10 was observed in 4 trace(s) out of 5 explored (80.00%)\n__gtg_possible_1 was observed in 2 trace(s) out of 5 explored (40.00%)\n__gtg_possible_2 was observed in 0 trace(s) out of 5 explored (0.00%)\n",
+		// 0.35's run of a model with an observation of its own that no trace
+		// reaches: a warning, exit 0, the possibles' counts beside it
+		"0.35.0-observation-unreached": "Warning: --witnesses is deprecated. Declare observation definitions in the spec, or use --observation to stop at the first trace that reaches one.\n[warning] No violation found, but no trace reached neverObs, __gtg_possible_2 (15ms at 333 traces/second).\nObservations:\nneverObs was observed in 0 trace(s) out of 5 explored (0.00%)\n__gtg_possible_10 was observed in 4 trace(s) out of 5 explored (80.00%)\n__gtg_possible_1 was observed in 2 trace(s) out of 5 explored (40.00%)\n__gtg_possible_2 was observed in 0 trace(s) out of 5 explored (0.00%)\n",
+		"0.35.0":                       "Warning: --witnesses is deprecated. Declare observation definitions in the spec, or use --observation to stop at the first trace that reaches one.\n[ok] No violation found (22ms).\nObservations:\n__gtg_possible_10 was observed in 4 trace(s) out of 5 explored (80.00%)\n__gtg_possible_1 was observed in 2 trace(s) out of 5 explored (40.00%)\n__gtg_possible_2 was observed in 0 trace(s) out of 5 explored (0.00%)\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			one, two := &possibleCheck{val: "__gtg_possible_1"}, &possibleCheck{val: "__gtg_possible_2"}
