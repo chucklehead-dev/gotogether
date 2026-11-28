@@ -21,8 +21,8 @@ const versionTimeout = 10 * time.Second
 // Cache only the reviewed stock CLI: its version comes from version.js and is
 // independent of the model directory. Unknown wrappers and future CLI builds
 // are probed each time; their delegated programs/files cannot be inferred.
-const stockCLIHash = "952a50a28932282528b5c9b86ac5542405d85da4f80876aabe8cb8c7d5a6d0e8"
-const stockVersionHash = "7f0f6f155fff532790de8d01662b397b493f0b31eb6c072b29bcdf72ec031589"
+const stockCLIHash = "4e8e20625162401e2934d8c7e8789a53c057fb578a8f0f47d2883a5e44b4d009"
+const stockVersionHash = "a516d978a79f871d14f768282671683855fe9bc138f5f59406c4c522cb3b91d9"
 
 // Node v22.23.4 Linux/amd64, from the admitted npm node@22 toolchain. This is
 // eligibility for an optimization, not a runtime requirement for other Nodes.
@@ -82,7 +82,7 @@ func (c *Cmd) checkVersion() error {
 	}
 	if err != nil {
 		if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("quint admission: %s --version: %w; install Quint with npm install -g @informalsystems/quint@%s", c.Path, err, MinimumVersion)
+			return fmt.Errorf("quint admission: %s --version: %w; install Quint with npm install -g @informalsystems/quint@%s", c.Path, err, PinnedVersion)
 		}
 		var exit *exec.ExitError
 		if errors.As(err, &exit) && len(exit.Stderr) > 0 {
@@ -92,9 +92,9 @@ func (c *Cmd) checkVersion() error {
 	}
 	version := strings.TrimSpace(string(out))
 	if !Supported(version) {
-		return fmt.Errorf("quint admission: unsupported Quint version %q from %s; install stable Quint %s or later (npm install -g @informalsystems/quint@%s and run ci/install-quint.sh for the paired Rust evaluator)", version, c.Path, MinimumVersion, MinimumVersion)
+		return fmt.Errorf("quint admission: unsupported Quint version %q from %s; install stable Quint %s or later (npm install -g @informalsystems/quint@%s and run ci/install-quint.sh for the paired Rust evaluator)", version, c.Path, MinimumVersion, PinnedVersion)
 	}
-	if key != "" && version == MinimumVersion && key == stockIdentity(c.raw()) {
+	if key != "" && version == PinnedVersion && key == stockIdentity(c.raw()) {
 		versions.Store(key)
 	}
 	return nil
@@ -165,7 +165,7 @@ func stockIdentity(c *exec.Cmd) string {
 		Name, Version string
 		Bin           map[string]string
 	}
-	if json.Unmarshal(metadata, &pkg) != nil || pkg.Name != "@informalsystems/quint" || pkg.Version != MinimumVersion || pkg.Bin["quint"] != "dist/src/cli.js" {
+	if json.Unmarshal(metadata, &pkg) != nil || pkg.Name != "@informalsystems/quint" || pkg.Version != PinnedVersion || pkg.Bin["quint"] != "dist/src/cli.js" {
 		return ""
 	}
 	// /usr/bin/env node resolves PATH in the child's directory, not the parent

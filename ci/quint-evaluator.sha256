@@ -1,11 +1,11 @@
-# Rust evaluator v0.7.1. Archive digests are GitHub release asset digests:
-# https://github.com/quint-co/quint/releases/tag/evaluator/v0.7.1
+# Rust evaluator v0.8.0. Archive digests are GitHub release asset digests:
+# https://github.com/quint-co/quint/releases/tag/evaluator/v0.8.0
 # Bare target names identify the binary extracted from that verified archive.
-ce0502bdef65dc26c242a9e56379a9bb26de6f3db38f0e3989339d46a542f5eb  quint_evaluator-x86_64-unknown-linux-gnu.tar.gz
-1764f11e8c1a9f644af5c934e9a71645b313f82f8db1284965866a2f417da9aa  quint_evaluator-x86_64-unknown-linux-gnu
-706819d56eb2153a12b7d3c07b5060917cf5f4431bf5069f998f9ff1e97c4388  quint_evaluator-aarch64-unknown-linux-gnu.tar.gz
-d63d72c13e7664665e6397d6859668651ad7bdbaaa0fe3c408313ca74a8fe741  quint_evaluator-aarch64-unknown-linux-gnu
-b4c2a706cad360151d08b5ce1577e23859a47b4e16ad11e53dbe8de7e5c450ca  quint_evaluator-x86_64-apple-darwin.tar.gz
-c9e16a06d1f6140664d82150931225d9333b91696a269ba1951866a55d9554fd  quint_evaluator-x86_64-apple-darwin
-62a7b5226bbc73c738cce94a265b1f87d062e3d1b30a16f7210132f00d8b95b2  quint_evaluator-aarch64-apple-darwin.tar.gz
-c918492321c1f1db0be02477e4520c4c29ecb42afeaaaefed87b36f16fc21dd8  quint_evaluator-aarch64-apple-darwin
+774020b648a887f511d040fd564a8223c62a996b80f8dc50ea24d8630235be51  quint_evaluator-x86_64-unknown-linux-gnu.tar.gz
+e9ddf0b63e9275b8684fb5b3a12f1f3e960851610260853ece9ffdea6c0857c0  quint_evaluator-x86_64-unknown-linux-gnu
+bba4edec6fc51a0491cc54add445b7204819cbcb013bd32222f5e97c00f126ef  quint_evaluator-aarch64-unknown-linux-gnu.tar.gz
+5482f85645f6cd9dfc19cdba8e2fe2592ff7f6a246074e96d3c770ab68cc91c7  quint_evaluator-aarch64-unknown-linux-gnu
+7d0bf5d2955ec1644025c9ff0fa97f4b50c158bf3167c55d0a882a3dee51efbb  quint_evaluator-x86_64-apple-darwin.tar.gz
+84eb4e3fa0d0b5794b81b62f4ccf6de23ed9dd9b29432c35559935b4bce63843  quint_evaluator-x86_64-apple-darwin
+cc016a73031f8717f7c7b9f2a54eb21b15d58b2a1f1ee7f1750a225e00a76672  quint_evaluator-aarch64-apple-darwin.tar.gz
+c11e59471b5759354943f675824f03522649fd798a9357677d8a31bf5d5c8cde  quint_evaluator-aarch64-apple-darwin

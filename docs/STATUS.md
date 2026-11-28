@@ -95,7 +95,9 @@ the fresh final report must retain conclusive model evidence; bounded hidden
 search cannot become a violation. These evidence guards remain active with
 Hegel 0.9.30 and its libhegel 0.50 engine.
 
-The current tool patch refresh pairs Quint 0.33.1 with evaluator 0.7.1, preserving
+The current Quint pair is 0.35.0 with evaluator 0.8.0 (docs/go-toolchain.md says
+what 0.34 and 0.35 changed for the toolkit). The previous refresh paired Quint
+0.33.1 with evaluator 0.7.1, preserving
 short sampled runs and valid constructor-substring names. Evaluator cache reuse
 requires byte identity and startup; publication is staged. Kubernetes staged
 modules are aligned at 0.37.2 with consumer semantic controls. All 16 live

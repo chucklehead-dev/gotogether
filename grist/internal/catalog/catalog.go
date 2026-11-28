@@ -467,10 +467,12 @@ func shapeFields(t reflect.Type, result bool) ([]Field, error) {
 
 // QuintTaken are the names a generated parameter may not take: Quint's
 // keywords and built-in operators (a parameter named `of` or `size` does
-// not parse: QNT101), and the generated modules' own names. Read-only.
+// not parse: QNT101), and the generated modules' own names. Every token
+// of quint's lexer is here, those its grammar also reads as names (from,
+// as, and 0.34's invariant and observation) too. Read-only.
 var QuintTaken = func() map[string]bool {
 	m := map[string]bool{}
-	for _, n := range strings.Fields(`module import export from as const var val def pure action run temporal nondet
+	for _, n := range strings.Fields(`module import export from as const var val def pure action run temporal nondet invariant observation
 		type assume if else match all any and or not iff implies true false Bool Int Nat Set Map List Tup Rec
 		int str bool
 		exists forall in union contains fold intersect exclude subseteq map applyTo filter powerset flatten

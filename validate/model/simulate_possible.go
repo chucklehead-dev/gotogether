@@ -276,14 +276,22 @@ func backendArgs(argv []string) []string {
 }
 
 // readWitnesses reads each predicate's count of the traces it held in
-// from a `quint run --witnesses` output: found if any.
+// from a `quint run --witnesses` output: found if any. Quint 0.33 writes
+// "P was witnessed in n trace(s)", 0.34 and later (where --witnesses
+// counts its predicates as observations) "P was observed in n trace(s)".
 func readWitnesses(out string, preds []*possibleCheck) error {
 	for _, c := range preds {
 		var n, of int
 		found := false
 		for line := range strings.SplitSeq(out, "\n") {
-			if _, err := fmt.Sscanf(strings.TrimSpace(line), c.val+" was witnessed in %d trace(s) out of %d", &n, &of); err == nil {
-				found = true
+			line = strings.TrimSpace(line)
+			for _, verb := range []string{"witnessed", "observed"} {
+				if _, err := fmt.Sscanf(line, c.val+" was "+verb+" in %d trace(s) out of %d", &n, &of); err == nil {
+					found = true
+					break
+				}
+			}
+			if found {
 				break
 			}
 		}

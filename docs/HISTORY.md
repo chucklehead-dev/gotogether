@@ -9765,3 +9765,36 @@ Measured locally (four cores): TestPendingTransfers at its 12 seeds 98 user
 seconds before, 80 after with the new corpus entry; at the nightly's seeds
 20783281..20783320 (its three explorations, the corpus included) 860 CPU
 seconds, against 1056 for the old search with the budget raised to 80000.
+
+### Quint 0.35.0 (2026-11-28)
+
+Quint 0.33.1/evaluator 0.7.1 to 0.35.0/0.8.0, taken to evaluate
+`quint verify --backend veil` (no Veil integration here; Veil downloads and
+builds itself on first use, about 5 GB, and CI installs none). What changed
+for the toolkit, each with its fix:
+
+- `--witnesses` is deprecated: quint prints a warning and reports each
+  predicate as `P was observed in n trace(s)` under `Observations:`.
+  simulate's possibles read only "witnessed" and failed on every predicate;
+  readWitnesses reads both (TestReadWitnessesAcrossQuintVersions, which
+  fails without it).
+- `invariant` and `observation` are lexer tokens. quint still takes them as
+  parameter names (TestReservedRefusedByQuint now parses both), so
+  quintnames exempts them as it does `from` and `as`; grist's QuintTaken,
+  conservative, renames them.
+- `quint test` fails when `--match` selects nothing (#2056). grist's
+  TestGeneratedRuleRefusalOrigin spliced its runs into the file's last
+  module (originCalls) while naming `--main origin`: under 0.33.1 it ran
+  none of them and passed. The runs now go into module origin, and the
+  test requires all five to pass.
+- The Rust backend's integers are unbounded (#1995): the fold control that
+  reproduced its overflow now expects the mathematical sum on 0.34 and
+  later, the overflow before. The Go evaluator (64 bits) still refuses the
+  fold. Its ITF integers are `#bigint`; itf's bignumber.js reading stays
+  for 0.33.1's traces.
+- `quint compile` writes an `invariants` field: all 54 examples' compiled
+  models and connect's two were compiled again (otherwise identical in
+  meaning; connect's keep-list IR ids shift by 11).
+- The qoracle manifest was re-surveyed at v0.35.0's tag (944 entries, 49
+  new: Veil fixtures among them); no file entry of quint's examples changed
+  its verdict.

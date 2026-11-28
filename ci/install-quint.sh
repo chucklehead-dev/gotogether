@@ -2,7 +2,7 @@
 # Installs the requested npm CLI and its admitted Rust evaluator pair. Releases
 # are fetched directly, avoiding GitHub's shared unauthenticated API quota.
 #
-#   QUINT_VERSION=0.33.1 ci/install-quint.sh
+#   QUINT_VERSION=0.35.0 ci/install-quint.sh
 set -euo pipefail
 
 : "${QUINT_VERSION:?}"
@@ -16,7 +16,7 @@ printf 'quint CLI %s\n' "$cli_version"
 
 bm="$(npm root -g)/@informalsystems/quint/dist/src/rust/binaryManager.js"
 ev="$(node -p 'require(process.argv[1]).QUINT_EVALUATOR_VERSION' "$bm")"
-if [[ "$ev" != v0.7.1 ]]; then
+if [[ "$ev" != v0.8.0 ]]; then
   echo "install-quint: evaluator $ev is not admitted; update the paired evaluator checksums before installing it" >&2
   exit 1
 fi

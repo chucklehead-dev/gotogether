@@ -137,8 +137,8 @@ Already in place and to be documented: `qtest.Model` claims (`Proves`,
   repository's 165 models has a source finding.
 - **L4: Quint's environment.** doctor names `QUINT_BACKEND=typescript` when
   the evaluator is missing or cannot be fetched; a `quint test` gotogether
-  runs that matches nothing is an error, not a pass (quint's own CLI: an
-  upstream issue, drafted in [upstream/quint-test-no-match.md](upstream/quint-test-no-match.md)).
+  runs that matches nothing is an error, not a pass (quint's own CLI:
+  fixed in quint 0.34.0, [upstream/quint-test-no-match.md](upstream/quint-test-no-match.md)).
 - **L5: an `init` with a nondet choice.** Done: `Binding.InitChoiceNote`,
   reported by `gotogether lint` and logged once per binding by qtest and
   qhegel (each run's check then searches the initial states and confirms with

@@ -29,10 +29,11 @@ var Builtins = []string{
 	"assign", "of", "eq", "neq", "ite", "cross", "difference", "matchVariant", "variant",
 }
 
-// Keywords are quint 0.33's keywords that are no built-in: a parameter
+// Keywords are quint 0.35's keywords that are no built-in: a parameter
 // of one of these names does not parse (QNT000, or QNT008 for the
 // operators' keywords). `from` and `as` are keywords only after an
-// import, and `init` and `step` are ordinary names. Read-only.
+// import, `invariant` and `observation` (0.34's definitions) only at a
+// definition's start, and `init` and `step` are ordinary names. Read-only.
 var Keywords = []string{
 	"module", "const", "var", "assume", "val", "pure", "type", "def", "action", "run", "temporal", "nondet",
 	"int", "str", "bool", "all", "any", "if", "else", "match", "import", "export", "true", "false",

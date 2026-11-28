@@ -115,7 +115,7 @@ AGENTS.md has the general requirements.
   Complete finite sets come from separately rendered pure relation oracles;
   native action execution contributes sampled membership checks only.
   The front end's oracle (internal/qoracle, Q3; docs/q2-front-end.md §4.5):
-  `QUINT_VERSION=0.33.1 ci/fetch-quint-src.sh DIR` fetches quint's sources
+  `QUINT_VERSION=0.35.0 ci/fetch-quint-src.sh DIR` fetches quint's sources
   at the tag (`QUINT_SRC=DIR` for the tests); `GOTOGETHER_QFRONT_CORPUS=1`
   runs the pinned corpus through the harness (quint against its stub,
   `GOTOGETHER_QFRONT_STUB=shifted` unset, or `quint`, or `go`: Q2's

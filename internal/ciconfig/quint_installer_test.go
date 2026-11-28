@@ -117,7 +117,7 @@ func TestQuintInstallerFailureDoesNotPublishExecutable(t *testing.T) {
 }
 
 func TestQuintInstallerRejectsMismatchedPair(t *testing.T) {
-	for _, env := range [][]string{{"FAKE_CLI_VERSION=0.33.0"}, {"FAKE_EVALUATOR_VERSION=v0.7.0"}} {
+	for _, env := range [][]string{{"FAKE_CLI_VERSION=0.33.0"}, {"FAKE_EVALUATOR_VERSION=v0.7.1"}} {
 		f := newQuintInstallerFixture(t)
 		if out, err := f.run(env); err == nil {
 			t.Fatalf("unadmitted pair passed: %v\n%s", env, out)
@@ -142,7 +142,7 @@ func newQuintInstallerFixture(t *testing.T) *quintInstallerFixture {
 	f.archive = filepath.Join(f.dir, "release.tar.gz")
 	f.fetchLog = filepath.Join(f.dir, "fetch.log")
 	f.npm = filepath.Join(f.dir, "npm root's files")
-	f.cacheDir = filepath.Join(f.dir, "cache", "rust-evaluator-v0.7.1")
+	f.cacheDir = filepath.Join(f.dir, "cache", "rust-evaluator-v0.8.0")
 	f.binary = filepath.Join(f.cacheDir, "quint_evaluator")
 	if err := os.MkdirAll(f.bin, 0o700); err != nil {
 		t.Fatal(err)
@@ -153,9 +153,9 @@ func newQuintInstallerFixture(t *testing.T) *quintInstallerFixture {
 	}
 	f.write(f.script, script, 0o700)
 	f.tool("npm", `if [ "$1" = root ]; then printf '%s\n' "$FAKE_NPM_ROOT"; fi`)
-	f.tool("quint", `printf '%s\n' "${FAKE_CLI_VERSION:-0.33.1}"`)
+	f.tool("quint", `printf '%s\n' "${FAKE_CLI_VERSION:-0.35.0}"`)
 	f.tool("node", `[ "$3" = "$FAKE_NPM_ROOT/@informalsystems/quint/dist/src/rust/binaryManager.js" ] || exit 11
-printf '%s\n' "${FAKE_EVALUATOR_VERSION:-v0.7.1}"`)
+printf '%s\n' "${FAKE_EVALUATOR_VERSION:-v0.8.0}"`)
 	f.tool("uname", `case "$1" in -s) echo Linux;; -m) echo x86_64;; *) echo 'Linux x86_64';; esac`)
 	f.tool("curl", `printf '%s\n' "$@" > "$FAKE_FETCH_LOG"
 while [ "$#" -gt 0 ]; do
@@ -222,7 +222,7 @@ func (f *quintInstallerFixture) cache(binary []byte) {
 func (f *quintInstallerFixture) run(env []string) (string, error) {
 	cmd := exec.CommandContext(f.t.Context(), "bash", f.script)
 	cmd.Env = append(os.Environ(), "PATH="+f.bin+string(os.PathListSeparator)+os.Getenv("PATH"),
-		"QUINT_VERSION=0.33.1", "QUINT_HOME="+filepath.Join(f.dir, "cache"),
+		"QUINT_VERSION=0.35.0", "QUINT_HOME="+filepath.Join(f.dir, "cache"),
 		"FAKE_NPM_ROOT="+f.npm, "FAKE_ARCHIVE="+f.archive, "FAKE_FETCH_LOG="+f.fetchLog)
 	cmd.Env = append(cmd.Env, env...)
 	out, err := cmd.CombinedOutput()
