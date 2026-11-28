@@ -20,7 +20,9 @@ steps so far (1)
 
 model (default)
   applied = Set(1)
+  bySlot = Map(1 -> 1)
   count = 1
+  slot = Map(1 -> 1)
 
 tasks
   client: waiting until 100ms
@@ -42,8 +44,7 @@ effective run profile TestMutant#1:
     unconfirmed actions use at least a one-in-five confirmation rate
   simulation defaults: self-checks false; all fault families false
 
-simulation limits TestMutant#1:seed=1: 1 call
-  1 deterministic call: horizon 1m0s; observed step range 0–16; cap 100000; watchdog 30s
+── lines 1–38 of 40 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -123,7 +124,9 @@ steps so far (1)
 
 model (default)
   applied = Set(1)
+  bySlot = Map(1 -> 1)
   count = 1
+  slot = Map(1 -> 1)
 
 tasks
   client: waiting until 100ms
@@ -145,8 +148,7 @@ effective run profile TestMutant#1:
     unconfirmed actions use at least a one-in-five confirmation rate
   simulation defaults: self-checks false; all fault families false
 
-simulation limits TestMutant#1:seed=1: 1 call
-  1 deterministic call: horizon 1m0s; observed step range 0–16; cap 100000; watchdog 30s
+── lines 1–38 of 40 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -173,7 +175,9 @@ steps so far (1)
 
 model (default)  (* changed since the last node)
   applied = Set(1)
+  bySlot = Map(1 -> 1)
   count = 1
+  slot = Map(1 -> 1)
 
 tasks
   client: waiting until 100ms
@@ -223,7 +227,9 @@ steps so far (1)
 
 model (default)  (* changed since the last node)
   applied = Set(1)
+  bySlot = Map(1 -> 1)
   count = 1
+  slot = Map(1 -> 1)
 
 tasks
   client: waiting until 100ms
@@ -245,8 +251,7 @@ effective run profile TestMutant#1:
     unconfirmed actions use at least a one-in-five confirmation rate
   simulation defaults: self-checks false; all fault families false
 
-simulation limits TestMutant#1:seed=1: 1 call
-  1 deterministic call: horizon 1m0s; observed step range 0–16; cap 100000; watchdog 30s
+── lines 1–38 of 40 (pgup/pgdn scroll)
 
 not saved: the exploration has no corpus (ExploreConfig.Corpus)
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
