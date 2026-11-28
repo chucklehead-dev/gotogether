@@ -57,7 +57,7 @@ its own, recorded at each node after its hard state is persisted.
 | `TestRealNemesis`, `TestRealNoRequestID`, `TestRealSlowElection` (`RAFTKV_REAL=1`, toxiproxy) | none; `NoRequestID`; `SlowElection` | the real cluster under qnemesis (crashes, pauses, isolates, lost client responses, every node cut off), seeded schedules | every faithful run conforms and settles, both histories; some `NoRequestID` run fails as in the simulation; some `SlowElection` run elects past 500ms after a heal ([below](#under-a-nemesis)) |
 | `TestRealCluster` (`RAFTKV_REAL=1`) | none | three `raftkv-node` processes on localhost; the leader killed (`kill -9`) and restarted on its log while clients write | the cluster catches the node up (every `/status` agrees); the clients' history conforms linearized, settles and completes; the nodes' logs with the harness's settle conform to the cluster's model and settle (`eventually hasLeader` judged); without the settle they do not settle. `TestRealNodeExitsWithParent`: a node whose parent is killed exits |
 | `TestReplayCISeed5` | none | CI's seed 5 journal (`testdata/ci-seed5.journal.jsonl`: a 301ms pause of n1, a crash of n2, n1 cut off for 301ms) re-made in the simulation, without the real tier | every fault made, the cluster's history conforms, and nothing is said to be made otherwise than it happened (the replay hint once said the pause was off, comparing it with no simulation) |
-| `TestHostStallIsNoVerdict` | none | the cluster's history after every node is cut off and healed, every node then frozen 1.2s (a host stall, as CI's seed 5 had), judged by `cluster.real.binding.yaml` | with the stall the harness measured over the window, no verdict (host stall), `electionSafety` holding; without it (stall detection off), with the stall before the heal, or one too short to make the leader late, the run violates `within 500ms after healed: leaderOrSplit`; the real tier's claims leave the inconclusive run out and keep the failing one |
+| `TestHostStallIsNoVerdict` | none | the cluster's history after every node is cut off and healed, every node then frozen 1.2s (a host stall, as CI's seed 5 had), judged by `cluster.real.binding.yaml` | with the stall the harness measured over the window, no verdict (host stall), `electionSafety` holding; without it (stall detection off), with the stall before the heal, or one too short to make the leader late, the run violates `within 500ms after healed: leaderOrSplit`; a claim over the stalled run fails (no verdict is no pass, as CI's `TestRealNoRequestID` once failed); the real tier runs such a seed again, at most twice: a conforming run again holds the claim, a violating one fails it, three stalled runs fail it, and a history's verdict (a clients' FAIL) is kept whatever the other's |
 | `TestLinearizeScale` | none | four clients, fifty operations each, every history linearized whole | all 5 runs conform within a budget of 50000 orders, 20 to 60 s a history (most of it in planning each candidate: ROADMAP S2) |
 
 ## What the runs taught
@@ -187,10 +187,17 @@ neither a pass nor a FAIL. A stall outside that window, or shorter than
 the lateness (SlowElection's leaders come 300ms or more late), excuses
 nothing, nor does a stall excuse any other check. `TestHostStallIsNoVerdict`
 shows each, on the simulation's history with every node frozen 1.2s
-after the heal. The claims over the real runs leave an inconclusive run
-out and say so (`judged`: logged, and `inconclusive.txt` beside the runs,
-which CI prints as a warning and keeps as an artifact); if every run is
-inconclusive the claims fail, since the tier then judged nothing. Each
+after the heal. A seed whose run has no verdict is run again
+(`untilJudged`: "run it again on a quiet host", automated), at most
+twice, and each history is judged by its first run with a verdict, a
+pass or a FAIL: a run passed over had none (nothing in it FAILs), so no
+verdict is dropped, and a seed still without one after three runs fails
+the claims, since the host could not judge it. Every stalled run is said
+(logged, and a line of `inconclusive.txt` beside the runs, which CI
+prints as a warning and keeps as an artifact). Leaving stalled runs out
+of the claims, as the tier did first, judged fewer seeds than a test
+names, cost the mutants' claims a seed's chance, and was missed in
+`TestRealNoRequestID`, whose cluster claim failed on one. Each
 run's log says what the probes measured (`the host: 0 stalls over
 100ms (... ticks, the latest ...ms late; ... fsyncs, the longest ...)`).
 
@@ -222,7 +229,9 @@ waiting handler can answer), in the file when `Record` returns, so there
 is no such window and nothing to declare. The nodes' logs are
 `node-<name>.<inc>.jsonl`, which no glob of them matches with the
 nemesis's `nemesis.jsonl`. `RAFTKV_REAL_DIR` keeps a test's runs in a
-directory of its own, which must not hold an earlier run's.
+directory of its own, which must not hold an earlier run's: `seed<n>`
+for a seed's run, `seed<n>.again<k>` for its runs again (`run`,
+`run.again<k>` for `TestRealCluster`'s).
 
 A failed faithful run's log names its journal and the command that
 re-makes its faults in the simulation:

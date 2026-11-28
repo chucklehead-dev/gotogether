@@ -255,16 +255,31 @@ func TestRealCluster(t *testing.T) {
 		t.Skip("RAFTKV_REAL=1 runs the real tier: three raftkv-node processes on localhost")
 	}
 	qtest.RequireQuint(t)
-	dir := t.TempDir()
-	if keep := os.Getenv("RAFTKV_REAL_DIR"); keep != "" {
-		dir = keep
+	dir := realDir(t)
+	bin := buildNode(t, dir)
+	// a run whose cluster history has no verdict (host stall) is run
+	// again, as the nemesis's seeds are (untilJudged)
+	s := untilJudged(t, dir, "run", func(name string) realVerdicts { return realClusterRun(t, bin, filepath.Join(dir, name)) })
+	s.kv().KV.Expect(t, qtest.Conforms(), qtest.Settles(), qtest.Completes())
+	cl := s.cluster()
+	cl.Cluster.Expect(t, qtest.Conforms(), qtest.Settles())
+	// without the settle the cluster's liveness is not judged, and the
+	// claim fails: the settle is what makes eventually hasLeader count
+	if r := qtest.Validate(t, "cluster.binding.yaml", readSteps(t, filepath.Join(cl.Dir, "steps", "node-*.jsonl"))); qtest.Settles().Holds(r) {
+		t.Error("the nodes' logs without the harness's settle settle: Settles judges nothing")
 	}
+}
+
+// realClusterRun is one run of TestRealCluster in dir, its two histories
+// judged: the clients' linearized (raftkv.binding.yaml), the nodes' with
+// the harness's settle by the cluster's model given the host's stalls.
+func realClusterRun(t *testing.T, bin, dir string) realVerdicts {
+	t.Helper()
 	for _, d := range []string{"steps", "wal"} {
 		if err := os.MkdirAll(filepath.Join(dir, d), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	bin := buildNode(t, dir)
 	host := watchHost(t, dir)
 	c := &realCluster{t: t, bin: bin, dir: dir, addrs: freeAddrs(t, len(Nodes)), procs: make([]*exec.Cmd, len(Nodes)),
 		pipes: make([]*os.File, len(Nodes)), incs: make([]int, len(Nodes))}
@@ -359,10 +374,11 @@ func TestRealCluster(t *testing.T) {
 		c.kill(i)
 	}
 	hr := host.Stop()
-	t.Logf("the host: %s", hr)
+	t.Logf("%s: the host: %s", filepath.Base(dir), hr)
 
-	qtest.Validate(t, "raftkv.binding.yaml", readSteps(t, filepath.Join(dir, "steps", "clients.jsonl")),
-		qtest.Linearize(), qtest.ResolvePending(), qtest.LinearizeBudget(50000)).Expect(t, qtest.Conforms(), qtest.Settles(), qtest.Completes())
+	v := realVerdicts{Dir: dir, Host: hr}
+	v.KV = qtest.Validate(t, "raftkv.binding.yaml", readSteps(t, filepath.Join(dir, "steps", "clients.jsonl")),
+		qtest.Linearize(), qtest.ResolvePending(), qtest.LinearizeBudget(50000))
 	nodes := readSteps(t, filepath.Join(dir, "steps", "node-*.jsonl"))
 	boots := 0
 	for _, s := range nodes {
@@ -374,12 +390,8 @@ func TestRealCluster(t *testing.T) {
 		t.Fatalf("the nodes' logs hold %d boots, want %d (three starts and the restart)", boots, len(Nodes)+1)
 	}
 	settle := readSteps(t, filepath.Join(dir, "steps", "harness.jsonl"))
-	qtest.Validate(t, "cluster.binding.yaml", append(nodes, settle...), qtest.HostStalls(hr.Stalls...)).Expect(t, qtest.Conforms(), qtest.Settles())
-	// without the settle the cluster's liveness is not judged, and the
-	// claim fails: the settle is what makes eventually hasLeader count
-	if r := qtest.Validate(t, "cluster.binding.yaml", nodes); qtest.Settles().Holds(r) {
-		t.Error("the nodes' logs without the harness's settle settle: Settles judges nothing")
-	}
+	v.Cluster = qtest.Validate(t, "cluster.binding.yaml", append(nodes, settle...), qtest.HostStalls(hr.Stalls...))
+	return v
 }
 
 // A node started with -exit-with-parent exits when its parent dies: its

@@ -158,10 +158,14 @@ the stalls between its trigger and the response cover its lateness; a
 stall elsewhere, a shorter one, a response that never came and every
 other failure stand. Choose the threshold against the tightest bound (a
 stall that could use a meaningful share of it alone) and above the
-probes' jitter. A claim over runs counts a stalled run as unjudged, and
-fails if every run is: leave stalled runs out of the claims only by
-saying so (raftkv's `judged`: logged, and a CI warning), never as
-passes. A system that saturates the host's CPU or disk itself stalls the
+probes' jitter. A claim over runs counts a stalled run as unjudged
+(`Conforms()` fails on one: "1 of 3 runs have no verdict"), never as a
+pass. Run such a seed again, a bounded number of times, and judge each
+history by its first run with a verdict, saying each stalled run
+(raftkv's `untilJudged`: logged, `inconclusive.txt`, a CI warning); a
+seed with none after the bound fails the claims. Never re-run a run that
+has a verdict, and never leave a stalled seed out silently: a mutant's
+`Some` measured per seed loses that seed's chance. A system that saturates the host's CPU or disk itself stalls the
 probes too: read the stalls' details (the thread's wait for a CPU, the
 cgroup's throttling, the fsync's time).
 

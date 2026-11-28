@@ -444,9 +444,22 @@ Items, each its own decision before it starts:
   assumption of the model (or the other kind), each at its line with the
   fix; `-require cited` fails a cited property nothing enforces and
   checks, or a cited assumption nothing targets, from the same rows.
-  Unmarked prose is never read. Left: a run's trace checked against an
+  Unmarked prose is never read. After golem's and Goo's first use:
+  `Claim (model):` for a claim about the model alone (cited and checked,
+  its gaps notes under `-require cited`), other models' qualified
+  citations noted and left to their runs (one document, several models),
+  `FAIL` on every claim error, "drop Claim:" on a name the model lacks, a
+  left-out val naming the selection that left it out, fixes qualified as
+  the code's annotations are, and `//quint:monitors a label:VALUE` (the
+  metric or alert, shown in the table; a statement's assigned identifier
+  without one). Left: a run's trace checked against an
   assumption's val (N7's varied differential aimed at it, CW10's
-  monitor), which the val's name already points at.
+  monitor), which the val's name already points at; a check across runs
+  that every claim's module is some model's (a misspelled model's name is
+  noted in every run, failed by none: DESIGN §114); and `-literate`
+  reading `@assume` from a literate model's prose ("what the model
+  leaves out" list items, golem's item 6), so the quint block need not
+  repeat them.
 - **CW4: results for scripts (docs, S).** `simulate -json` (and
   `lint -json`, `validate -json`) already carry every verdict, the graph's
   extent and `completeDepth`, with exit codes 0, 1 and 2 (incomplete):

@@ -84,7 +84,7 @@ func TestInvariantsGolden(t *testing.T) {
 	want := "note: 1 property no test checks (checked is not required): atCap\n" +
 		"note: 1 action nothing drives (driven is not required): idle\n" +
 		"note: 1 assumption nothing targets (targeted is not required): capFixed\n" +
-		"FAIL property atCap: nothing enforces it: put //quint:enforces atCap on the code that does\n" +
+		"FAIL property atCap: nothing enforces it: put //quint:enforces counter.atCap on the code that does\n" + // the fixture qualifies its annotations: so does the fix
 		"FAIL action idle: nothing records it: put //quint:action action:idle on the function that does it, or record it with qobs.Record(ctx, \"idle\", ...)\n"
 	if code != 1 || errw.String() != want {
 		t.Errorf("-require enforced,recorded: exit %d\n%s\nwant exit 1 and\n%s", code, errw.String(), want)
@@ -169,7 +169,7 @@ func TestInvariantsBinding(t *testing.T) {
 	}
 	edit(t, filepath.Join(dir, "counter", "counter_test.go"), "//quint:checks withinCap\n", "//quint:checks withinCap atCap\n")
 	out.Reset()
-	if n, err := invariants(t.Context(), &out, &errw, []string{"-binding", b, filepath.Join(dir, "counter")}); n != 1 || err != nil || !strings.Contains(errw.String(), "counter_test.go:13: //quint:checks names atCap: atCap is a val of model counterBase that this table leaves out (the binding does not check it, or -props, -invariant or -exclude left it out): add it to the selection, or name one the table has (withinCap, nonNegative)\n") {
+	if n, err := invariants(t.Context(), &out, &errw, []string{"-binding", b, filepath.Join(dir, "counter")}); n != 1 || err != nil || !strings.Contains(errw.String(), "counter_test.go:13: //quint:checks names atCap: atCap is a val of model counterBase that this table leaves out (the binding does not check it): add it to the selection, or name one the table has (withinCap, nonNegative)\n") {
 		t.Errorf("a val the binding does not check: %d, %v\n%s%s", n, err, out.String(), errw.String())
 	}
 }

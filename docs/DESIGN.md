@@ -3794,6 +3794,32 @@ run (the journal's Stop restart of no fault), and a pause or resume of a
 process not running says whether it was killed or exited by itself, and
 how: the fault is not made, and nothing of it journaled.
 
+**A host stall is no verdict, and the seed runs again.** A real run's
+bounds are wall-clock time, and a shared host can stall every node at
+once (CI's runners' fsync). The harness measures the host
+(`qnemesis.WatchHost`), and `qtest.HostStalls` makes a late bounded
+response "no verdict (host stall)" only when the stalls in its window
+cover its lateness (the maintainer's decision, 2026-11-25). qtest
+counts such a run as unjudged, never a pass: `Conforms()` over runs
+fails on one ("1 of 3 runs have no verdict"). The tier's first answer
+left stalled runs out of its claims, said; it was applied to one claim
+and missed another (`TestRealNoRequestID`'s cluster Conforms, PR #284),
+and where applied it judged fewer seeds than the test names, which a
+mutant's `Some` (its miss rate measured per seed) cannot afford. Now a
+seed whose run has a history with no verdict runs again, at most twice
+(`untilJudged`), and each history is judged by its first run with a
+verdict. That is no loosening: a run passed over had nothing FAIL in
+that history (`Run.Stalled`), so no verdict is dropped and a later run's
+FAIL counts as its pass would; a history's verdict is kept whatever the
+other history's (a clients' catch beside a stalled cluster history); a
+run with a verdict is never run again (no rerolling a failure); and a
+seed with none after three runs fails the claims, as qtest's no-verdict
+does. Every stalled run is said (`inconclusive.txt`, a CI warning). No
+claim was added to qtest: "every run with a verdict conforms, and at
+least k have one" would let a host that stalls often shrink what is
+judged in silence, where running the seed again keeps the claim over
+the seeds the test names.
+
 Three reviews: of the plan, of qnemesis and the real tier (a kill
 between effect and record giving a false FAIL, the nemesis's steps
 counted as the system's, a pause recorded before the group stopped,
@@ -7208,6 +7234,28 @@ adopters already keep those tables in their design documents and CI.
   placed as `//quint:enforces` is and read by go/parser alone. `-require`
   gains `exercised`, `monitored` and `targeted` (either), so CI can fail
   an omission nothing looks at.
+- **Fixes in the code's own form.** A fix that suggests a directive
+  (`-require`'s failures, a claim's unbacked citations) qualifies the
+  name by the main module when the scanned code qualifies any annotation
+  name: a tree that does holds, or prepares for, several models, and an
+  unqualified name there is an error in every other model's run (golem's
+  fixes suggested bare names beside 26 other models' qualified ones).
+  Code that names everything bare is told bare names.
+- **A monitor named by what it reports.** A production check is known by
+  its metric or alert, not its function (golem's `metrics.Register`
+  registers every gauge, and the alert lives in a runbook no directive
+  can reach). `//quint:monitors name label:VALUE` gives it, the
+  `key:value` form of a `//quint:action` argument (binding's
+  `directiveArgs`, which qweave shares: spaces split arguments outside
+  quotes, a quoted value is unquoted), so a label with spaces is
+  `label:"Checkpoint tampered"`. A bare word after the names could not
+  be told from another name (`golem.control.spend.stale` reads as module
+  golem's), which would be counted as another model's annotation and
+  dropped without a word; `label:` cannot be a name, which has no single
+  colon. Without a label, a monitor on a statement is shown by the
+  identifier the statement assigns (`spendStale := ...`), its cell
+  `` `spendStale` in `metrics.Register` ``. Only monitors take one: what
+  a test exercises is its name already.
 - **No doc lint yet.** A lint of "prose claims that cite no property"
   needs a definition of a claim. A sentence classifier is a heuristic no
   brute force can check, and a noisy lint trains people to ignore it.
@@ -7925,6 +7973,47 @@ noise that trains people to ignore it).
   a claim names. Given alone, `-claims` prints no table (a doc lint's
   output is its verdicts), and `-require` then takes `cited` only; beside
   `-write` or `-check` it lints as well, one CI line for both.
+
+After golem's and Goo's first use (#144, #220):
+
+- **A claim about the model alone: `Claim (model):`.** Goo's model
+  statements are checked by Go tests, but the runtime they describe is
+  JavaScript: "nothing enforces it" was true, and `-require cited` would
+  have asked for a dummy Go wrapper. A claim's scope is the author's to
+  state, so it is a marker (`Claim (model):`, `**Claim (model):**`), not
+  a flag over the document: one document holds both kinds. Its citations
+  are checked against the model as any claim's (a model-only claim must
+  still cite, and what it cites must exist), and its gaps are notes under
+  `-require cited` too, each saying it is a model-only claim. Another
+  parenthesis (`Claim (code):`) is an error naming the two markers, not
+  prose: an author who wrote one meant a claim.
+- **Several models, one document.** A citation qualified by a module
+  the spec does not have is another model's, noted and left out, the rule
+  the annotations already follow (§109's "a namespace of its own" relies
+  on it). Each model's run decides per claim: one citing an unqualified
+  name, or this model's module, is checked here; one all of whose
+  citations name other modules is left to their runs, counted in the
+  summary with their modules. "A claim fails only if no run accepted it"
+  then needs no state across runs: the run of the model a claim cites
+  checks it, and fails it as any run would. A CI loop gives every model's
+  run the same documents (golem's invariants.sh loops over its models
+  already). What no run checks is a citation qualified by a module no
+  model has (a typo in another model's name): every run's summary names
+  that module among those it left the claim to, as an annotation
+  qualified by such a module is noted in every run. A cross-run check
+  (a list of the document's models, or a run over all of them) would
+  close that, at the cost of a second notion of "the models"; left until
+  a document needs it. An unqualified name the model lacks still fails:
+  in a document of several models, qualify the other model's names.
+- **The fix says what fixes this case.** A citation naming what the
+  model lacks ends "or, if the document no longer makes this claim, drop
+  Claim:": golem's superseded ADR claim cited a retired assumption, and
+  the message suggested declaring it in the model again. A citation of
+  the other kind (a property in `assume:`) names the right kind instead.
+  A cited val a selection leaves out names the selection that did (the
+  binding's, `-exclude`'s, `-props'`, `-invariant`'s): golem's run had
+  no binding and was told the binding did not check its scenario val. A
+  claim's error lines start `FAIL`, as its unbacked citations' do.
 
 Left: a claim's citation checked against what the property says (a
 claim that cites a true but unrelated property passes); review, as for
