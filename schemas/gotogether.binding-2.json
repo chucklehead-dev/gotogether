@@ -298,6 +298,37 @@
           },
           "type": "array"
         },
+        "inductive": {
+          "additionalProperties": false,
+          "description": "Inductive says how `gotogether simulate -inductive` and qtest.Inductive prove the holds invariants by induction with quint's Veil backend, for every value of the constants (DESIGN §115): the module proved and the lemmas each invariant needs.",
+          "properties": {
+            "lemmas": {
+              "additionalProperties": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "description": "Lemmas are, by holds invariant, the vals of Module conjoined with it as its inductive invariant (none: the invariant alone).",
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "module": {
+              "description": "Module is the module Veil proves, the binding's module or one that imports it (\"\": the binding's module, its constants unset).",
+              "type": "string"
+            },
+            "spec": {
+              "description": "Spec is the file of the proof module, relative to the binding (\"\": the binding's spec). Lemmas the model does not need for anything else go in a module of their own, <model>Proof, that imports the model.",
+              "type": "string"
+            }
+          },
+          "type": [
+            "object",
+            "null"
+          ]
+        },
         "possible": {
           "description": "Possible are what the model must be able to do (Possible): some trace reaches each. A model too strict to reach a scenario a conforming run would show fails `gotogether simulate` here, before any code is checked against it.",
           "items": {

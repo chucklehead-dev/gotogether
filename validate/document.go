@@ -227,7 +227,7 @@ type DocCheck struct {
 	// Bound states what this model check covers, independently of its display detail.
 	Bound   *DocBound `json:"bound,omitempty"`
 	Name    string    `json:"name"`
-	Kind    string    `json:"kind"` // "invariant", "eventually", "possible", "graph"
+	Kind    string    `json:"kind"` // "invariant", "eventually", "possible", "graph", "inductive"
 	Verdict string    `json:"verdict"`
 	Detail  string    `json:"detail,omitempty"`
 	// Counterexample is the path the check's verdict rests on, as data: a
@@ -239,6 +239,36 @@ type DocCheck struct {
 	// Source is where the check's definition is in the model, "file:line"
 	// (a literate model's document line), when the report knows.
 	Source string `json:"source,omitempty"`
+	// Inductive is a proof by induction's outcome, as data (Kind
+	// "inductive").
+	Inductive *DocInductive `json:"inductive,omitempty"`
+}
+
+// DocInductive is a holds invariant's proof by induction with quint's Veil
+// backend (simulate -inductive): Outcome is "proved" (for every value of
+// the constants), "counterexample" (to induction: no verdict), "refused"
+// (outside Veil's fragment, Reason), "undecided" or "not done" (no Veil,
+// Reason says how to install it).
+type DocInductive struct {
+	Outcome   string   `json:"outcome"`
+	Module    string   `json:"module"`
+	Invariant string   `json:"invariant"`
+	Lemmas    []string `json:"lemmas,omitempty"`
+	Reason    string   `json:"reason,omitempty"`
+	// Action, Broken, States and ITF are a counterexample's: the action
+	// ("" at the initializer), what it breaks, the states, the kept ITF.
+	Action string   `json:"action,omitempty"`
+	Broken string   `json:"broken,omitempty"`
+	States []string `json:"states,omitempty"`
+	ITF    string   `json:"itf,omitempty"`
+	// Added are the invariants Veil added from init and proved too.
+	Added []string `json:"added,omitempty"`
+	// Antecedent, Reached and Vacuous are a proved implication's vacuity
+	// checks: "reached" or "unreached" on the instance, and the warnings.
+	Antecedent string   `json:"antecedent,omitempty"`
+	Reached    string   `json:"reached,omitempty"`
+	Vacuous    []string `json:"vacuous,omitempty"`
+	ElapsedMs  int64    `json:"elapsedMs,omitempty"`
 }
 
 // DocCounterexample is a path in the model's state graph: Steps from the

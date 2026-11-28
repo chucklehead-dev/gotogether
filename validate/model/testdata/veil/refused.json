@@ -1,0 +1,1 @@
+{"stage":"verifying","errors":[],"status":"failure","invariants":[],"elapsedMs":2152,"inductionChecks":[],"message":"Veil could not check the spec:\n/home/u/.quint/veil/workspace-1f711585ad60c8a2/QuintVerify_95853af28723eb0e.lean:5:0: error: quint_module: the size of a set whose elements are not known is not supported","main":"refused"}

@@ -251,12 +251,35 @@ type Simulation struct {
 	// untested (golem's graph_holds, #144). Unset, nothing is checked; an
 	// empty list says no action is dead.
 	Dead []string `yaml:"dead"`
+	// Inductive says how `gotogether simulate -inductive` and
+	// qtest.Inductive prove the holds invariants by induction with quint's
+	// Veil backend, for every value of the constants (DESIGN §115): the
+	// module proved and the lemmas each invariant needs.
+	Inductive *Inductive `yaml:"inductive"`
 	// Variants are the design's alternatives, each the same model under
 	// constants of its own (a DESIGN switch, a mechanism turned off), with
 	// what each must hold and must be able to break: `gotogether simulate
 	// -matrix` checks every one and prints the table, properties by
 	// variants (ROADMAP CW2). Its lists replace the section's, where given.
 	Variants []Variant `yaml:"variants"`
+}
+
+// Inductive is a simulate section's proof by induction (Simulation.Inductive).
+// The inductive invariant of a holds invariant P is P and its lemmas, all
+// vals of Module: Veil proves that init establishes it and every action
+// of step preserves it, for every value of the constants (and every value
+// an assume of the module allows).
+type Inductive struct {
+	// Spec is the file of the proof module, relative to the binding ("":
+	// the binding's spec). Lemmas the model does not need for anything else
+	// go in a module of their own, <model>Proof, that imports the model.
+	Spec string `yaml:"spec"`
+	// Module is the module Veil proves, the binding's module or one that
+	// imports it ("": the binding's module, its constants unset).
+	Module string `yaml:"module"`
+	// Lemmas are, by holds invariant, the vals of Module conjoined with it
+	// as its inductive invariant (none: the invariant alone).
+	Lemmas map[string][]string `yaml:"lemmas"`
 }
 
 // A Variant is one alternative of a design (Simulation.Variants): its
@@ -421,6 +444,18 @@ func Load(path string) (*Binding, error) {
 				return nil, fmt.Errorf("%s: simulate.variants names %q twice: give each variant a name of its own", path, v.Name)
 			}
 			seen[v.Name] = true
+		}
+		if in := bd.Simulate.Inductive; in != nil {
+			for _, inv := range slices.Sorted(maps.Keys(in.Lemmas)) {
+				if !slices.Contains(bd.Simulate.Holds, inv) {
+					return nil, fmt.Errorf("%s: simulate.inductive.lemmas names %s, which is not in simulate.holds (%s): lemmas prove a holds invariant by induction; list it in holds, or remove its lemmas", path, inv, strings.Join(bd.Simulate.Holds, ", "))
+				}
+				for _, l := range in.Lemmas[inv] {
+					if !identifier.MatchString(l) {
+						return nil, fmt.Errorf("%s: simulate.inductive.lemmas.%s: %q is not a name: a lemma is a val of %s (write the expression as a val)", path, inv, l, bd.inductiveModule())
+					}
+				}
+			}
 		}
 	}
 	for i := range bd.Within {
@@ -621,6 +656,38 @@ func (b *Binding) SpecPath() string {
 		return literate.GeneratedPath(b.DocPath())
 	}
 	return b.DocPath()
+}
+
+// InductiveSpec is the absolute path of the file whose module Veil
+// proves (simulate.inductive.spec, else SpecPath), and InductiveModule
+// that module (simulate.inductive.module, else the binding's).
+func (b *Binding) InductiveSpec() string {
+	if b.Simulate != nil && b.Simulate.Inductive != nil && b.Simulate.Inductive.Spec != "" {
+		if filepath.IsAbs(b.Simulate.Inductive.Spec) {
+			return b.Simulate.Inductive.Spec
+		}
+		return filepath.Join(b.Dir, b.Simulate.Inductive.Spec)
+	}
+	return b.SpecPath()
+}
+
+// InductiveModule is the module Veil proves: see InductiveSpec.
+func (b *Binding) InductiveModule() string { return b.inductiveModule() }
+
+func (b *Binding) inductiveModule() string {
+	if b.Simulate != nil && b.Simulate.Inductive != nil && b.Simulate.Inductive.Module != "" {
+		return b.Simulate.Inductive.Module
+	}
+	return b.Module
+}
+
+// Lemmas are the lemmas simulate.inductive gives the holds invariant inv
+// (nil: none).
+func (b *Binding) Lemmas(inv string) []string {
+	if b.Simulate == nil || b.Simulate.Inductive == nil {
+		return nil
+	}
+	return slices.Clone(b.Simulate.Inductive.Lemmas[inv])
 }
 
 // DocPath is the absolute path of the spec as the binding names it: the

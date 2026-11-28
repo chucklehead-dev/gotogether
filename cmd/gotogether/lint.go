@@ -23,6 +23,9 @@ func lint(ctx context.Context, args []string) (int, error) {
 	weave := fs.String("weave", "", "Go source tree to inspect for unsupported weaving")
 	conversions := fs.String("convert", "", "span conversion rule files, comma-separated")
 	models := fs.String("model", "", "Quint model files checked without a binding (an assignment's precedence, reserved names, quint's typecheck), comma-separated")
+	veil := fs.Bool("veil", false, "with -model or -binding: note what quint's Veil backend (simulate -inductive) refuses or proves only for the instance, with the rewrite, "+
+		"and holds invariants a settle flag step never sets makes vacuous (notes: the exit is unchanged)")
+	veilErrors := fs.Bool("veil-errors", false, "as -veil, each finding an error (exit 1): for a model whose holds invariants are proved by induction")
 	quint := fs.String("quint", "quint", "Quint binary for model metadata compilation")
 	asJSON := false
 	fs.BoolFunc("json", "emit the structured lint report, including blocked checks and fixes; put first for request errors", func(value string) error {
@@ -55,7 +58,7 @@ func lint(ctx context.Context, args []string) (int, error) {
 	case fs.NArg() > 0:
 		report = lintRequestError("request.arguments", "unexpected positional arguments: "+strings.Join(fs.Args(), " "), "select input paths with -binding, -model, -src, -sim, -weave or -convert")
 	default:
-		report = lintcheck.Inspect(ctx, lintcheck.Options{Bindings: split(*bindings), Source: *source, Simulation: *simulation, Weave: *weave, Conversions: split(*conversions), Models: split(*models), Quint: *quint})
+		report = lintcheck.Inspect(ctx, lintcheck.Options{Bindings: split(*bindings), Source: *source, Simulation: *simulation, Weave: *weave, Conversions: split(*conversions), Models: split(*models), Quint: *quint, Veil: *veil, VeilErrors: *veilErrors})
 	}
 	if asJSON {
 		encoder := json.NewEncoder(os.Stdout)

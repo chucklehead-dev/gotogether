@@ -3,6 +3,8 @@ package qtest
 import (
 	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -111,7 +113,7 @@ func (o ModelOptions) constants() []string {
 }
 
 // A ModelClaim is what a test expects of a model on its own
-// (ModelCheck.Expect): Proves, Refutes, Live, NoDeadlocks,
+// (ModelCheck.Expect): Proves, Refutes, Live, NoDeadlocks, Inductive,
 // AllStepActionsReachable, Possible.
 type ModelClaim interface {
 	String() string
@@ -149,7 +151,7 @@ func (n *modelNeeds) eventual(name string) {
 func (m *ModelCheck) Expect(t testing.TB, claims ...ModelClaim) {
 	t.Helper()
 	if len(claims) == 0 {
-		t.Fatal("qtest.Model(...).Expect: no claims: state what the model on its own must show (Proves, Refutes, Live, NoDeadlocks, AllStepActionsReachable, Possible)")
+		t.Fatal("qtest.Model(...).Expect: no claims: state what the model on its own must show (Proves, Refutes, Live, NoDeadlocks, AllStepActionsReachable, Possible, Inductive)")
 	}
 	if err := m.options.validate(); err != nil {
 		t.Fatalf("qtest.Model(%s): %v", m.binding, err)
@@ -162,21 +164,50 @@ func (m *ModelCheck) Expect(t testing.TB, claims ...ModelClaim) {
 		t.Fatal(err)
 	}
 	n := &modelNeeds{b: b, invariants: []string{}, eventually: []string{}, possibles: []binding.Possible{}}
+	var inductive []model.InductiveRequest
+	others := 0
 	for _, c := range claims {
+		if ic, ok := c.(InductiveClaim); ok {
+			if err := ic.check(b); err != nil {
+				t.Fatalf("qtest.Model(%s): %s: %v", m.binding, c, err)
+			}
+			inductive = append(inductive, ic.request())
+			continue
+		}
+		others++
 		if err := c.needs(n); err != nil {
 			t.Fatalf("qtest.Model(%s): %s: %v", m.binding, c, err)
 		}
 	}
-	rep, err := model.Simulate(t.Context(), m.binding, model.SimulateOptions{
-		Invariants: n.invariants, Eventually: n.eventually, Possibles: n.possibles,
-		Graph: n.graph, Replay: n.graph, Constants: m.options.constants(),
-		States: m.options.States, Depth: m.options.Depth, Compiled: m.compiled,
-	})
-	if err != nil {
-		t.Fatalf("qtest.Model(%s): %v", m.binding, err)
+	rep := &model.Report{Binding: m.binding}
+	if others > 0 {
+		var err error
+		rep, err = model.Simulate(t.Context(), m.binding, model.SimulateOptions{
+			Invariants: n.invariants, Eventually: n.eventually, Possibles: n.possibles,
+			Graph: n.graph, Replay: n.graph, Constants: m.options.constants(),
+			States: m.options.States, Depth: m.options.Depth, Compiled: m.compiled,
+		})
+		if err != nil {
+			t.Fatalf("qtest.Model(%s): %v", m.binding, err)
+		}
+		if rep.Skipped != "" {
+			t.Fatalf("qtest.Model(%s): no claim has a verdict: the model is not simulated (%s)", m.binding, rep.Skipped)
+		}
 	}
-	if rep.Skipped != "" {
-		t.Fatalf("qtest.Model(%s): no claim has a verdict: the model is not simulated (%s)", m.binding, rep.Skipped)
+	if len(inductive) > 0 {
+		// Veil proves for every value of the constants: the instance's
+		// constants and bounds are the vacuity search's alone
+		irep, err := model.Simulate(t.Context(), m.binding, model.SimulateOptions{
+			Inductive: inductive, InductiveOut: inductiveKeep(t), Constants: m.options.constants(),
+			States: m.options.States, Depth: m.options.Depth,
+		})
+		if err != nil {
+			t.Fatalf("qtest.Model(%s): %v", m.binding, err)
+		}
+		rep.Inductive = irep.Inductive
+		for _, nd := range irep.NotDone {
+			t.Logf("gotogether: not done: %s", nd)
+		}
 	}
 	if rep.Compiled != "" {
 		t.Logf("gotogether: the model of %s analysed by its compiled model %s, the Go evaluator alone (no quint here, or %s=1)", m.binding, rep.Compiled, compiledEnv)
@@ -184,7 +215,15 @@ func (m *ModelCheck) Expect(t testing.TB, claims ...ModelClaim) {
 			t.Logf("gotogether: not done: %s", n)
 		}
 	}
+	var skipped []string
 	for _, c := range claims {
+		if ic, ok := c.(InductiveClaim); ok {
+			if why, skip := ic.skipped(rep); skip {
+				t.Logf("the model has no verdict on %s, and the test does not fail of it: %s", c, why)
+				skipped = append(skipped, c.String()+": "+why)
+				continue
+			}
+		}
 		switch v, why := c.judgeModel(rep); v {
 		case yes:
 			t.Logf("the model %s: %s", c, why)
@@ -193,6 +232,11 @@ func (m *ModelCheck) Expect(t testing.TB, claims ...ModelClaim) {
 		default:
 			t.Errorf("the model has no verdict on %s: %s", c, why)
 		}
+	}
+	if len(skipped) > 0 && !t.Failed() {
+		// refused by Veil, or no Veil here: never a failure (GOTOGETHER_STRICT
+		// does not make one: CI installs no Veil)
+		t.Skip("qtest.Model: " + strings.Join(skipped, "; "))
 	}
 }
 
@@ -560,4 +604,113 @@ func (p *possible) judgeModel(rep *model.Report) (tri, string) {
 		return v, lines[0]
 	}
 	return v, "\n  " + strings.Join(lines, "\n  ")
+}
+
+// An InductiveClaim is Inductive's, which With gives lemmas.
+type InductiveClaim struct {
+	inv    string
+	lemmas []string
+	given  bool
+}
+
+// Inductive claims the holds invariant inv is proved by induction with
+// quint's Veil backend, for every value of the constants (DESIGN §115):
+// inv and its lemmas (With, else the binding's simulate.inductive.lemmas)
+// are an inductive invariant of simulate.inductive.module (else the
+// binding's module), init establishing it and every action of step
+// preserving it. It is no replacement for Proves, which checks the
+// instance the code is checked against: claim both.
+//
+// A counterexample to induction has no verdict, which fails the test
+// (inv may still hold: a lemma is missing), with both states, the action
+// and the kept ITF ($GOTOGETHER_KEEP/<test>, else a temporary directory).
+// A model Veil refuses (outside its fragment, its reason given) and a
+// machine with no quint ≥ 0.35 or no Veil (`quint veil status`; how to
+// install it given) leave it not done: logged, and the test skipped if
+// nothing else failed, never failed. A proof that may be vacuous (a lemma
+// negating inv's antecedent, a settle flag step never sets, an antecedent
+// the instance never reaches) is logged as a warning.
+func Inductive(inv string) InductiveClaim { return InductiveClaim{inv: inv} }
+
+// With gives the claim its lemmas, vals of the proof module conjoined
+// with the invariant as its inductive invariant, in place of the
+// binding's; With() with none proves the invariant alone.
+func (c InductiveClaim) With(lemmas ...string) InductiveClaim {
+	c.lemmas, c.given = append([]string{}, lemmas...), true
+	return c
+}
+
+func (c InductiveClaim) String() string {
+	if len(c.lemmas) > 0 {
+		return fmt.Sprintf("proving %s by induction with %s", c.inv, strings.Join(c.lemmas, ", "))
+	}
+	return fmt.Sprintf("proving %s by induction", c.inv)
+}
+
+func (c InductiveClaim) check(b *binding.Binding) error {
+	if slices.Contains(b.Eventually, c.inv) {
+		return fmt.Errorf("%s is an eventual val: induction proves invariants (claim it with qtest.Live)", c.inv)
+	}
+	if err := knownName(b, c.inv, false); err != nil {
+		return err
+	}
+	if b.Simulate == nil || !slices.Contains(b.Simulate.Holds, c.inv) {
+		return fmt.Errorf("%s is not in the binding's simulate.holds: induction proves what the model guarantees; list it there", c.inv)
+	}
+	return nil
+}
+
+func (c InductiveClaim) request() model.InductiveRequest {
+	r := model.InductiveRequest{Name: c.inv}
+	if c.given {
+		r.Lemmas = slices.Clone(c.lemmas)
+	}
+	return r
+}
+
+// needs is never called: Expect proves inductive claims on their own.
+func (c InductiveClaim) needs(*modelNeeds) error { return nil }
+
+func (c InductiveClaim) verdict(rep *model.Report) *model.InductiveVerdict {
+	for i := range rep.Inductive {
+		if rep.Inductive[i].Name == c.inv {
+			return &rep.Inductive[i]
+		}
+	}
+	return nil
+}
+
+// skipped is why the claim is not done (refused, no Veil), if it is not.
+func (c InductiveClaim) skipped(rep *model.Report) (string, bool) {
+	v := c.verdict(rep)
+	switch {
+	case v == nil:
+		return "", false
+	case v.Outcome == model.InductiveRefused:
+		return "refused by Veil, not in its fragment: " + v.Reason + " (gotogether lint -veil names the idioms and their rewrites)", true
+	case v.Outcome == model.InductiveNotDone:
+		return "not done: " + v.Reason, true
+	}
+	return "", false
+}
+
+func (c InductiveClaim) judgeModel(rep *model.Report) (tri, string) {
+	v := c.verdict(rep)
+	if v == nil {
+		return unknown, "not proved"
+	}
+	text := strings.TrimSpace(model.InductiveText(*v))
+	if v.Outcome == model.InductiveProved {
+		return yes, text
+	}
+	return unknown, text
+}
+
+// inductiveKeep is where a test's counterexamples to induction are kept:
+// $GOTOGETHER_KEEP/<test>, else "" (a temporary directory, named).
+func inductiveKeep(t testing.TB) string {
+	if dir := os.Getenv("GOTOGETHER_KEEP"); dir != "" {
+		return filepath.Join(dir, strings.ReplaceAll(t.Name(), "/", "_"))
+	}
+	return ""
 }

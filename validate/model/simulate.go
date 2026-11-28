@@ -218,6 +218,14 @@ type SimulateOptions struct {
 	// Graph explores the model's state graph with the Go evaluator
 	// instead of sampling with quint.
 	Graph bool
+	// Inductive proves each of these holds invariants by induction with
+	// quint's Veil backend, for every value of the constants, instead of
+	// checking the instance (Report.Inductive; DESIGN §115). It needs
+	// quint ≥ VeilVersion with Veil installed, and is not done without.
+	Inductive []InductiveRequest
+	// InductiveOut is where a counterexample to induction's ITF is kept
+	// ("": a new temporary directory, kept and named in the report).
+	InductiveOut string
 	// States and Depth bound the Go evaluator's searches, the graph's and
 	// the possibles' (0: simulate.search, else DefaultSearchStates states
 	// and no depth bound; with Verify and no depth, the possibles' search
@@ -276,6 +284,9 @@ type Report struct {
 	// checked; Possibles each possible's.
 	Invariants, Eventually []Verdict
 	Possibles              []PossibleVerdict
+	// Inductive are the proofs by induction (SimulateOptions.Inductive),
+	// in the order asked.
+	Inductive []InductiveVerdict
 	// Deadlocks is the graph's verdict on the states the step cannot
 	// leave (with Graph): Held when none is a deadlock.
 	Deadlocks *Verdict
@@ -484,6 +495,16 @@ func simulate(ctx context.Context, bpath string, b *binding.Binding, checker *mo
 	if sec.Skip != "" {
 		s.rep.Skipped = sec.Skip
 		s.printf("simulate %s: skipped: %s\n", bpath, sec.Skip)
+		return s.rep, nil
+	}
+	if len(opt.Inductive) > 0 {
+		if opt.Graph || opt.Verify > 0 {
+			return nil, fmt.Errorf("simulate: -inductive proves invariants for every value of the constants, -graph and -verify check the instance: pick one")
+		}
+		prepared("completed")
+		if err := s.inductive(ctx, bpath, b, sec, opt); err != nil {
+			return nil, err
+		}
 		return s.rep, nil
 	}
 	capped := ""

@@ -1406,8 +1406,75 @@
           "detail": {
             "type": "string"
           },
+          "inductive": {
+            "additionalProperties": false,
+            "description": "Inductive is a proof by induction's outcome, as data (Kind \"inductive\").",
+            "properties": {
+              "action": {
+                "description": "Action, Broken, States and ITF are a counterexample's: the action (\"\" at the initializer), what it breaks, the states, the kept ITF.",
+                "type": "string"
+              },
+              "added": {
+                "description": "Added are the invariants Veil added from init and proved too.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "antecedent": {
+                "description": "Antecedent, Reached and Vacuous are a proved implication's vacuity checks: \"reached\" or \"unreached\" on the instance, and the warnings.",
+                "type": "string"
+              },
+              "broken": {
+                "type": "string"
+              },
+              "elapsedMs": {
+                "type": "integer"
+              },
+              "invariant": {
+                "type": "string"
+              },
+              "itf": {
+                "type": "string"
+              },
+              "lemmas": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "module": {
+                "type": "string"
+              },
+              "outcome": {
+                "type": "string"
+              },
+              "reached": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "states": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "vacuous": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
           "kind": {
-            "description": "\"invariant\", \"eventually\", \"possible\", \"graph\"",
+            "description": "\"invariant\", \"eventually\", \"possible\", \"graph\", \"inductive\"",
             "type": "string"
           },
           "name": {

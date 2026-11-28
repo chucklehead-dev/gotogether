@@ -66,7 +66,10 @@ type Binding struct
     method (*Binding) ChecksActor(actor string) bool
     method (*Binding) DocPath() string
     method (*Binding) EvalModule(m *Model, qntPath string) (*EvalModule, error)
+    method (*Binding) InductiveModule() string
+    method (*Binding) InductiveSpec() string
     method (*Binding) InitChoiceNote(m *Model) string
+    method (*Binding) Lemmas(inv string) []string
     method (*Binding) Lint(m *Model) []string
     method (*Binding) LintAnnotations(m *Model, anns []Annotation) (errs, warns []string)
     method (*Binding) LintChoiceFindings(m *Model) []LintFinding
@@ -149,6 +152,10 @@ type ITFMeta struct
     field Invariants []string `json:"invariants,omitempty"`
     field Actor string `json:"actor,omitempty"`
     field Processes []string `json:"processes,omitempty"`
+type Inductive struct
+    field Spec string `yaml:"spec"`
+    field Module string `yaml:"module"`
+    field Lemmas map[string][]string `yaml:"lemmas"`
 type LintFinding struct
     field Code string `json:"code"`
     field Severity string `json:"severity"`
@@ -233,6 +240,7 @@ type Simulation struct
     field Unfair []string `yaml:"unfair"`
     field Stops []string `yaml:"stops"`
     field Dead []string `yaml:"dead"`
+    field Inductive *Inductive `yaml:"inductive"`
     field Variants []Variant `yaml:"variants"`
 type StepPattern struct
     field Action string
@@ -566,6 +574,8 @@ type Options struct
     field Conversions []string
     field Models []string
     field Quint string
+    field Veil bool
+    field VeilErrors bool
 type Report struct
     field Format string `json:"format"`
     field Scope string `json:"scope"`
@@ -1965,6 +1975,7 @@ func Finishes() Expectation
 func Global() Option
 func HasIssue(kind string) Expectation
 func HostStalls(stalls ...qtrace.Stall) Option
+func Inductive(inv string) InductiveClaim
 func Invariants(names ...string) Option
 func IsEvidence(path string) (bool, error)
 func KeepRecords() Option
@@ -2139,6 +2150,9 @@ type FaultOrderSpec = evidence.FaultSpec
     field Name string `json:"name,omitempty"`
     field After int `json:"after,omitempty"`
     method (FaultSpec) String() string
+type InductiveClaim struct
+    method (InductiveClaim) String() string
+    method (InductiveClaim) With(lemmas ...string) InductiveClaim
 type Judges struct
     field Evaluator int `json:"evaluator"`
     field Confirmed int `json:"confirmed"`
@@ -2701,6 +2715,7 @@ type DocCheck struct
     field Detail string `json:"detail,omitempty"`
     field Counterexample *DocCounterexample `json:"counterexample,omitempty"`
     field Source string `json:"source,omitempty"`
+    field Inductive *DocInductive `json:"inductive,omitempty"`
 type DocComparison struct
     field Scope string `json:"scope"`
     field Basis string `json:"basis"`
@@ -2813,6 +2828,21 @@ type DocGraphBound struct
     field Depth int `json:"depth"`
     field MemoryBytes int64 `json:"memoryBytes"`
     field ProcessBytes int64 `json:"processBytes,omitempty"`
+type DocInductive struct
+    field Outcome string `json:"outcome"`
+    field Module string `json:"module"`
+    field Invariant string `json:"invariant"`
+    field Lemmas []string `json:"lemmas,omitempty"`
+    field Reason string `json:"reason,omitempty"`
+    field Action string `json:"action,omitempty"`
+    field Broken string `json:"broken,omitempty"`
+    field States []string `json:"states,omitempty"`
+    field ITF string `json:"itf,omitempty"`
+    field Added []string `json:"added,omitempty"`
+    field Antecedent string `json:"antecedent,omitempty"`
+    field Reached string `json:"reached,omitempty"`
+    field Vacuous []string `json:"vacuous,omitempty"`
+    field ElapsedMs int64 `json:"elapsedMs,omitempty"`
 type DocInput struct
     field Path string `json:"path"`
     field Format string `json:"format"`
@@ -3382,14 +3412,22 @@ type Result struct
 const ComparisonReplayAttempts = 8
 const DefaultGraphMemoryBytes int64 = 256 << 20
 const DefaultSearchStates = 100000
+const InductiveCounterexample = "counterexample"
+const InductiveNotDone = "not done"
+const InductiveProved = "proved"
+const InductiveRefused = "refused"
+const InductiveUndecided = "undecided"
+const VeilVersion = "0.35.0"
 func Compare(ctx context.Context, before, after *GraphResult, opt CompareOptions) (*Comparison, error)
 func ConfirmComparison(ctx context.Context, comparison *Comparison) error
 func ExportComparison(ctx context.Context, comparison *Comparison, dir string) error
 func For(c *validate.Checker) *Analyzer
+func InductiveText(v InductiveVerdict) string
 func Matrix(ctx context.Context, bindingPath string, opt SimulateOptions) (*MatrixReport, error)
 func New(ctx context.Context, bindingPath string, opt validate.Options) (*Analyzer, error)
 func Simulate(ctx context.Context, bindingPath string, opt SimulateOptions) (*Report, error)
 func SimulateMany(ctx context.Context, bindingPaths []string, opt SimulateOptions) iter.Seq2[*Report, error]
+func VeilStatus(ctx context.Context, quint, dir string) (string, error)
 type ActionCoverage struct
     field Action string
     field Transitions int
@@ -3544,6 +3582,26 @@ type HotLasso struct
     field Component int
     field Replay string
     field Sampled []int
+type InductiveRequest struct
+    field Name string
+    field Lemmas []string
+type InductiveVerdict struct
+    field Name string
+    field Lemmas []string
+    field Invariant string
+    field Module string
+    field Outcome string
+    field Reason string
+    field Action string
+    field Broken string
+    field States []string
+    field ITF string
+    field Added []string
+    field Antecedent string
+    field Reached string
+    field Witness string
+    field Vacuous []string
+    field Elapsed time.Duration
 type InvariantVerdict struct
     field Name string
     field Violated bool
@@ -3625,6 +3683,7 @@ type Report struct
     field Invariants []Verdict
     field Eventually []Verdict
     field Possibles []PossibleVerdict
+    field Inductive []InductiveVerdict
     field Deadlocks *Verdict
     field Dead *Verdict
     field EvaluatorBug string
@@ -3647,6 +3706,8 @@ type SimulateOptions struct
     field Possibles []binding.Possible
     field Verify int
     field Graph bool
+    field Inductive []InductiveRequest
+    field InductiveOut string
     field States int
     field Depth int
     field MemoryBytes int64

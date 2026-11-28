@@ -28,6 +28,12 @@ type Options struct {
 	// assignment's precedence, reserved names), then quint's typecheck.
 	Models []string
 	Quint  string
+	// Veil adds the Veil-fragment checks (model.veil.*, DESIGN §115) of
+	// each model and binding: the idioms quint's Veil backend refuses or
+	// cannot prove for every constant, and, for a binding, the holds
+	// invariants a settle flag step never sets makes vacuous. They are
+	// notes (Info) unless VeilErrors makes them errors.
+	Veil, VeilErrors bool
 }
 
 // Inspect performs selected nonwriting checks and retains every requested phase,
@@ -49,8 +55,13 @@ func Inspect(ctx context.Context, o Options) *Report {
 	type phases struct{ schema, load, spec, model, lint, choices int }
 	var bindings []phases
 	var conversions, models [][2]int
+	o.Veil = o.Veil || o.VeilErrors
+	var modelVeil, bindingVeil []int
 	for _, p := range o.Models {
 		models = append(models, [2]int{plan("model.source", p), plan("model.typecheck", p)})
+		if o.Veil {
+			modelVeil = append(modelVeil, plan("model.veil", p))
+		}
 	}
 	for _, p := range o.Conversions {
 		conversions = append(conversions, [2]int{plan("conversion.schema", p), plan("conversion.load", p)})
@@ -64,6 +75,9 @@ func Inspect(ctx context.Context, o Options) *Report {
 	}
 	for _, p := range o.Bindings {
 		bindings = append(bindings, phases{plan("binding.schema", p), plan("binding.load", p), plan("binding.spec", p), plan("binding.model", p), plan("binding.compatibility", p), plan("binding.choices", p)})
+		if o.Veil {
+			bindingVeil = append(bindingVeil, plan("binding.veil", p))
+		}
 	}
 	annotations, records, source := -1, -1, -1
 	if o.Source != "" {
@@ -90,6 +104,9 @@ func Inspect(ctx context.Context, o Options) *Report {
 		r.pass(x[0])
 		if len(fs) > 0 {
 			r.Checks[x[0]].Status = CheckFail
+		}
+		if o.Veil {
+			r.veil(ctx, modelVeil[i], o, p, "", nil)
 		}
 		ds, err := modelTypecheck(ctx, o.Quint, p)
 		switch {
@@ -148,6 +165,9 @@ func Inspect(ctx context.Context, o Options) *Report {
 					r.block(at, reason, false)
 				}
 			}
+			if o.Veil {
+				r.block(bindingVeil[i], reason, false)
+			}
 			allBound = false
 		}
 		if !r.schema(x.schema, p, schemas.Binding()) {
@@ -185,6 +205,13 @@ func Inspect(ctx context.Context, o Options) *Report {
 		for _, property := range slices.Sorted(maps.Keys(m.Diagnostics)) {
 			active := slices.Contains(b.Invariants, property) || slices.Contains(b.Eventually, property)
 			r.Evidence = append(r.Evidence, Evidence{Kind: "model.diagnostic", Target: p, Count: 1, Items: []EvidenceItem{{Path: b.DocPath(), Symbol: m.Module + "." + property, Value: m.Diagnostics[property], Active: &active}}})
+		}
+		if o.Veil {
+			var holds []string
+			if b.Simulate != nil {
+				holds = b.Simulate.Holds
+			}
+			r.veil(ctx, bindingVeil[i], o, b.InductiveSpec(), b.InductiveModule(), holds)
 		}
 		bound = append(bound, binding.Bound{Binding: b, Model: m})
 		r.Evidence = append(r.Evidence, Evidence{Kind: "binding", Target: p, Count: len(b.Actions)})
