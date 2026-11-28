@@ -107,8 +107,10 @@ type Model struct {
 	all     map[string]*Property
 	modules []string
 	// left are the properties a selection (Restrict, Only, Exclude) left
-	// out, by key
-	left map[string]bool
+	// out, by key, each with what left it out ("the binding does not
+	// check it", "-exclude names it"): a message names the selection in
+	// play, not every one there might be
+	left map[string]string
 	// Assumptions are what the model says it leaves out (Assume), in the
 	// source's order
 	Assumptions []*Assumption
@@ -321,20 +323,22 @@ func (m *Model) Restrict(names []string) error {
 			kept = append(kept, p)
 		}
 	}
-	m.keep(kept)
+	m.keep(kept, "the binding does not check it")
 	return nil
 }
 
 // keep makes ps, in their order, the table's properties, and the rest
-// of the model's boolean vals left out.
-func (m *Model) keep(ps []*Property) {
-	m.Properties, m.byKey, m.left = ps, map[string]*Property{}, map[string]bool{}
+// of the model's boolean vals left out: by why when this selection left
+// them out, by the earlier selection's reason when that one had.
+func (m *Model) keep(ps []*Property, why string) {
+	before := m.left
+	m.Properties, m.byKey, m.left = ps, map[string]*Property{}, map[string]string{}
 	for _, p := range ps {
 		m.byKey[p.key()] = p
 	}
 	for k := range m.all {
 		if _, ok := m.byKey[k]; !ok {
-			m.left[k] = true
+			m.left[k] = cmp.Or(before[k], why)
 		}
 	}
 }
@@ -380,8 +384,8 @@ func (m *Model) resolve(name string) (*Property, string) {
 	switch a := m.predicates[key]; {
 	case a != nil:
 		return nil, fmt.Sprintf("%s states assumption %s of model %s, which is no property: target the assumption with //quint:exercises %s or //quint:monitors %s (or select %s with -props to table it as a property)", name, a.Name, m.Main, a.Name, a.Name, name)
-	case m.left[key]:
-		return nil, fmt.Sprintf("%s is a val of model %s that this table leaves out (the binding does not check it, or -props, -invariant or -exclude left it out): add it to the selection, or name one the table has", name, m.Main)
+	case m.left[key] != "":
+		return nil, fmt.Sprintf("%s is a val of model %s that this table leaves out (%s): add it to the selection, or name one the table has", name, m.Main, m.left[key])
 	case qualified && mod != m.Main:
 		if _, seen := m.visible[m.Main][short]; !seen {
 			return nil, fmt.Sprintf("model %s does not see %s's %s (it imports it qualified, or not at all)", m.Main, mod, short)
@@ -455,6 +459,11 @@ type Site struct {
 	// Skipped is a connect driver's Skip: it accounts for the action
 	// (driven) without running it, and its cell says so
 	Skipped bool
+	// Label is a monitor's: its directive's label:VALUE (the metric or
+	// alert, `golem.control.spend.stale`), else the identifier the
+	// statement it annotates assigns (`spendStale`); its cell shows it
+	// before the function, which alone says nothing of which metric
+	Label string
 }
 
 // An Annotation is one //quint:enforces or //quint:checks directive, or
@@ -565,7 +574,11 @@ func annotationsOf(fset *token.FileSet, f *ast.File, test bool) (out []Annotatio
 			}
 			pos := fset.Position(c.Pos())
 			at := fmt.Sprintf("%s:%d", pos.Filename, pos.Line)
-			names := strings.FieldsFunc(rest, func(r rune) bool { return r == ' ' || r == '\t' || r == ',' })
+			names, label, bad := directiveNames(kind, rest)
+			if bad != "" {
+				problems = append(problems, fmt.Sprintf("%s: //quint:%s %s", at, kind, bad))
+				continue
+			}
 			if len(names) == 0 {
 				problems = append(problems, fmt.Sprintf("%s: //quint:%s names no property: name the properties after it (//quint:%s limitsHonoured)", at, kind, kind))
 				continue
@@ -584,6 +597,12 @@ func annotationsOf(fset *token.FileSet, f *ast.File, test bool) (out []Annotatio
 				continue
 			}
 			site.Path, site.Pkg = pos.Filename, f.Name.Name
+			if kind != Monitors {
+				site.Label = ""
+			}
+			if label != "" {
+				site.Label = label
+			}
 			if kind == Checks && fn.Body != nil && cg.Pos() > fn.Body.Lbrace {
 				site.Func += subtest(fn.Body, cg.Pos())
 			}
@@ -625,7 +644,7 @@ func siteOf(fset *token.FileSet, f *ast.File, cg *ast.CommentGroup) (site Site, 
 			if target == nil {
 				return Site{}, d, fmt.Sprintf("in %s annotates no statement: put it on the line above the statement that does it, or on %s's doc comment", funcName(d), funcName(d))
 			}
-			return Site{Line: line(target.Pos()), Func: funcName(d)}, d, ""
+			return Site{Line: line(target.Pos()), Func: funcName(d), Label: assigned(target)}, d, ""
 		case *ast.GenDecl:
 			if d.Doc == cg || (len(d.Specs) == 1 && specDoc(d.Specs[0]) == cg) {
 				return Site{Line: line(d.Pos()), Func: specName(d.Specs)}, nil, ""
@@ -638,6 +657,97 @@ func siteOf(fset *token.FileSet, f *ast.File, cg *ast.CommentGroup) (site Site, 
 		}
 	}
 	return Site{}, nil, "annotates nothing: put it on a declaration's doc comment, or on the line above a statement in a function"
+}
+
+// assigned is the identifier statement s assigns or declares first
+// (`spendStale := ...`, `m.spendStale = ...`, `var spendStale = ...`),
+// "" for any other statement: a monitor's site named by what it sets up
+// when its directive gives no label.
+func assigned(s ast.Stmt) string {
+	var lhs ast.Expr
+	switch s := s.(type) {
+	case *ast.AssignStmt:
+		lhs = s.Lhs[0]
+	case *ast.DeclStmt:
+		if g, ok := s.Decl.(*ast.GenDecl); ok && len(g.Specs) > 0 {
+			if v, ok := g.Specs[0].(*ast.ValueSpec); ok && len(v.Names) > 0 {
+				lhs = v.Names[0]
+			}
+		}
+	}
+	switch e := lhs.(type) {
+	case *ast.Ident:
+		if e.Name != "_" {
+			return e.Name
+		}
+	case *ast.SelectorExpr:
+		return e.Sel.Name
+	}
+	return ""
+}
+
+// directiveNames are a directive's names, separated by spaces or commas,
+// and //quint:monitors' label: an argument label:VALUE, its value quoted
+// when it has spaces or commas (label:"Checkpoint tampered"), as a
+// //quint:action directive's key:value arguments are (binding's
+// directiveArgs, the rule qweave shares). A name has no single colon
+// (module::name has two), so label: is never one. bad, when the text is
+// malformed, says why and what to write.
+func directiveNames(kind Kind, rest string) (names []string, label, bad string) {
+	var fields []string
+	var cur strings.Builder
+	inQuote := false
+	for i := 0; i < len(rest); i++ {
+		c := rest[i]
+		switch {
+		case inQuote:
+			if c == '\\' && i+1 < len(rest) {
+				cur.WriteByte(c)
+				i++
+				c = rest[i]
+			} else if c == '"' {
+				inQuote = false
+			}
+		case c == '"':
+			inQuote = true
+		case c == ' ' || c == '\t' || c == ',':
+			if cur.Len() > 0 {
+				fields = append(fields, cur.String())
+				cur.Reset()
+			}
+			continue
+		}
+		cur.WriteByte(c)
+	}
+	if inQuote {
+		return nil, "", fmt.Sprintf("has a quote it does not close: close it (//quint:%s name label:\"the alert's name\")", kind)
+	}
+	if cur.Len() > 0 {
+		fields = append(fields, cur.String())
+	}
+	for _, f := range fields {
+		v, ok := strings.CutPrefix(f, "label:")
+		if !ok || strings.HasPrefix(v, ":") {
+			names = append(names, f)
+			continue
+		}
+		if kind != Monitors {
+			return nil, "", fmt.Sprintf("gives %s, and only //quint:monitors takes a label (the metric or alert that watches an assumption): drop it", f)
+		}
+		if label != "" {
+			return nil, "", fmt.Sprintf("gives two labels, label:%s and %s: give the one the check is known by (a site that reports two is two directives)", label, f)
+		}
+		if len(v) >= 2 && v[0] == '"' {
+			if u, err := strconv.Unquote(v); err == nil {
+				v = u
+			}
+		}
+		if v == "" {
+			return nil, "", "gives an empty label: name the metric or alert after label: (label:golem.control.spend.stale), or drop it"
+		}
+		label = v
+	}
+	return names, label, ""
 }
 
 func specDoc(s ast.Spec) *ast.CommentGroup {
@@ -748,6 +858,24 @@ type Table struct {
 	// its file without a line (-links name): the table changes only when
 	// a site is added, removed or renamed, not when code above it moves
 	ByName bool
+	// qualify is set when the scan saw a property or assumption directive
+	// naming a qualified name (module.name, module::name): the code
+	// qualifies its annotations, as a tree holding several models must
+	// (an unqualified name is an error in every other model's run), so
+	// the fixes suggest names qualified by the main module (Directive)
+	qualify bool
+}
+
+// Directive is how a fix names property or assumption n in the directive
+// it suggests: as the main module sees it, qualified by the main module
+// when the scanned code qualifies its annotations (golem's fixes said
+// //quint:exercises stateDocumentKept beside 26 other models' qualified
+// names, and the unqualified name would have broken those models' runs).
+func (t *Table) Directive(n string) string {
+	if t.qualify {
+		return t.Model.Main + "." + n
+	}
+	return n
 }
 
 // Table puts each annotation in its property's row. errs are the
@@ -780,6 +908,9 @@ func (m *Model) Table(anns []Annotation) (*Table, []string) {
 			_, why := m.resolve(n)
 			if assumptionKind(a.Kind) {
 				_, why = m.resolveAssumption(n)
+			}
+			if strings.Contains(n, ".") || strings.Contains(n, "::") {
+				t.qualify = true
 			}
 			if why == otherModel {
 				if _, ok := other[a.Site.Path]; !ok {
@@ -911,10 +1042,10 @@ func (t *Table) Warnings(kinds ...string) []string {
 	}
 	for _, r := range t.Rows {
 		if len(r.Enforced) == 0 && want("enforced") {
-			out = append(out, fmt.Sprintf("property %s: nothing enforces it: put //quint:enforces %s on the code that does", r.Property.Name, r.Property.Name))
+			out = append(out, fmt.Sprintf("property %s: nothing enforces it: put //quint:enforces %s on the code that does", r.Property.Name, t.Directive(r.Property.Name)))
 		}
 		if len(r.Checked) == 0 && want("checked") {
-			out = append(out, fmt.Sprintf("property %s: no test checks it: put //quint:checks %s on the test that does", r.Property.Name, r.Property.Name))
+			out = append(out, fmt.Sprintf("property %s: no test checks it: put //quint:checks %s on the test that does", r.Property.Name, t.Directive(r.Property.Name)))
 		}
 	}
 	return append(append(out, t.actionWarnings(want)...), t.assumptionWarnings(want)...)
@@ -1002,6 +1133,9 @@ func (t *Table) siteCell(sites []Site, dir string) string {
 		}
 		if s.Skipped {
 			part = "skipped in " + part
+		}
+		if s.Label != "" {
+			part = fmt.Sprintf("`%s` in %s", strings.NewReplacer("`", "'", "|", `\|`).Replace(s.Label), part)
 		}
 		if !slices.Contains(parts, part) {
 			parts = append(parts, part)

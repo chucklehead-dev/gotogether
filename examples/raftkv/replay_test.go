@@ -27,11 +27,13 @@ func TestRealFaultsInSimulation(t *testing.T) {
 	if path := os.Getenv("RAFTKV_REAL_JOURNAL"); path != "" {
 		journals = []string{path}
 	} else {
-		vs := realRuns(t, prSeeds, func(seed int64) nemesisRun { return realConfig(seed, Faithful) })
-		qtest.Runs(kvOf(vs)...).Expect(t, qtest.Conforms())
-		qtest.Runs(clusterOf(judged(t, vs))...).Expect(t, qtest.Conforms())
-		for _, v := range vs {
-			journals = append(journals, filepath.Join(v.Dir, "journal.jsonl"))
+		ss := realRuns(t, prSeeds, func(seed int64) nemesisRun { return realConfig(seed, Faithful) })
+		qtest.Runs(kvOf(ss)...).Expect(t, qtest.Conforms())
+		qtest.Runs(clusterOf(ss)...).Expect(t, qtest.Conforms())
+		for _, s := range ss {
+			// the run that judged the seed's cluster history: the one the
+			// simulation's judgment is compared with
+			journals = append(journals, filepath.Join(s.cluster().Dir, "journal.jsonl"))
 		}
 	}
 	for _, path := range journals {

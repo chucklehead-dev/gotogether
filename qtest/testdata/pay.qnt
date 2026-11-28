@@ -35,6 +35,10 @@ module pay {
     paid.contains(order), paid' = paid.exclude(Set(order)), orders' = orders,
   }
 
+  // an audit nobody records (pay-hidden.yaml's hidden action): it
+  // changes nothing
+  action audit = all { orders' = orders, paid' = paid }
+
   action step = {
     nondet order = Set("o1", "o2").oneOf()
     nondet qty = 1.to(2).oneOf()

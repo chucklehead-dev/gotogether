@@ -111,8 +111,12 @@ func readModel(path string) ([]byte, error) {
 }
 
 // walkExamples calls f for every file under examples/ outside
-// node_modules, gosim's translations and hidden directories, with its
-// path relative to the repository.
+// node_modules, gosim's translations, hidden directories and directories
+// starting with "_", with its path relative to the repository. The go
+// command ignores "_" directories as ./... does, and cmd/gotogether's
+// scaffold and init tests make their temporary projects there
+// (examples/_scaffolded*) while this test may be walking: one listed then
+// failed moduleOf as "in no module".
 func walkExamples(t *testing.T, f func(rel string)) {
 	base := filepath.Join(root, "examples")
 	err := filepath.WalkDir(base, func(p string, d fs.DirEntry, err error) error {
@@ -120,7 +124,7 @@ func walkExamples(t *testing.T, f func(rel string)) {
 			return err
 		}
 		if d.IsDir() {
-			if n := d.Name(); p != base && (n == "node_modules" || strings.HasPrefix(n, ".")) {
+			if n := d.Name(); p != base && (n == "node_modules" || strings.HasPrefix(n, ".") || strings.HasPrefix(n, "_")) {
 				return filepath.SkipDir
 			}
 			return nil

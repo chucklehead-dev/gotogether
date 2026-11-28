@@ -57,6 +57,13 @@ def payEffects(order: str): List[Effect] = [Capture({ order: order, amount: orde
 - The code's retries are one effect only if they are the same request:
   match `retried` with the idempotency key as a `same:` field, so a fresh
   key per try is two effects where the model makes one.
+- An action the model gives no effects def sends nothing of a mapped
+  kind: a send there fails (in validate and connect alike). Where an
+  action's sends are not the model's business, opt it out (`effects:
+  "-"`, `EffectsOf(a, "-", "")`) rather than leaving it unstated.
+- The same defs judge model-driven tests: a `connect.Bind` given
+  `Effects` compares each step's sends with them (DESIGN §115; the mbt
+  skill's driver reference).
 - Keep today's site steps for effects that land later (the provider's
   `charge`): they are another process's steps, related by a key.
 

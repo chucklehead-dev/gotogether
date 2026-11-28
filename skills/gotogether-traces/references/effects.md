@@ -59,6 +59,7 @@ The action's def is `<action>Effects` unless `effects:` names another
 | `was tried again under another Key` | a retry with a fresh key | one key per request |
 | `was made after the step completed` | a goroutine still sending | an owed effect, judged at its site |
 | `the step recorded no effect scope` (exit 2) | nothing recorded effects for it | a scope, a simulation, `ObserveEffects`, or `effects: "-"` |
+| `place made effects, and the model states none (it has no placeEffects)` | an action with no effects def sent a mapped kind (connect judges the same) | state them (`def placeEffects`, `[]` for none) or opt out (`effects: "-"`) |
 
 `qtest.MutateSteps` mutates effect records too (`effect-drop`,
 `effect-dup`, `effect-swap`, `effect-corrupt`): a survivor of a kind the

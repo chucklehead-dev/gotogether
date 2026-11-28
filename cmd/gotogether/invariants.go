@@ -31,9 +31,11 @@ import (
 // checks that monitor it (//quint:monitors). With -claims it lints
 // design documents' marked claims (ROADMAP CW3's doc lint): a `Claim:`
 // paragraph or list item must cite a property, (prop: name), or an
-// assumption, (assume: name), the model has; -require cited fails a
-// cited property nothing enforces or checks, and a cited assumption
-// nothing targets. It prints the tables, writes each
+// assumption, (assume: name), the model has (one qualified by a module
+// the spec lacks is another model's, left to its run); -require cited
+// fails a cited property nothing enforces or checks, and a cited
+// assumption nothing targets, but of a claim about the model alone
+// (Claim (model):). It prints the tables, writes each
 // into a design document between its markers, where the document has
 // them (-write), or compares the document's with them (-check, writing
 // nothing: exit 1 when stale, naming the rows that changed). An
@@ -58,8 +60,8 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 	lit := fset.Bool("literate", true, "treat a .md spec as a literate model, and a document that is one as its model's source (its .qnt written again); false: a .md spec is refused (name the .qnt your own tangler writes) and the document is plain Markdown")
 	write := fset.String("write", "", "write the tables into this Markdown document: the properties' between its "+invtable.Begin+" and "+invtable.End+" lines, the actions' between "+invtable.ActionsBegin+" and "+invtable.ActionsEnd+", the assumptions' between "+invtable.AssumptionsBegin+" and "+invtable.AssumptionsEnd+", each where the document has its markers; named ones (<!-- gotogether:invariants NAME -->) hold one model's of several, and only -name's are written")
 	check := fset.String("check", "", "compare the tables with this Markdown document's, writing nothing: exit 1 when they differ, naming the rows (for CI)")
-	claims := fset.String("claims", "", "lint these Markdown design documents' claims (comma-separated), instead of printing the tables (with -write or -check, as well as): a paragraph, list item or quoted line beginning Claim: (or **Claim:**) must cite a property of the model, (prop: name, ...), or an assumption it lists, (assume: name), and each it cites must be the model's; fenced code is no prose")
-	require := fset.String("require", "", "fail (exit 1), instead of warning, when a property is not enforced (a //quint:enforces) or checked (a //quint:checks in a test), an action not recorded (a //quint:action or a literal qobs.Record) or driven (a connect.Bind entry or connect.Switch key), a listed assumption (// @assume in the model) not exercised (a //quint:exercises), monitored (a //quint:monitors) or targeted (either), or a property a -claims claim cites not enforced and checked, an assumption it cites not targeted (cited): a comma-separated list of enforced, checked, recorded, driven, exercised, monitored, targeted, cited")
+	claims := fset.String("claims", "", "lint these Markdown design documents' claims (comma-separated), instead of printing the tables (with -write or -check, as well as): a paragraph, list item or quoted line beginning Claim: (or **Claim:**) must cite a property of the model, (prop: name, ...), or an assumption it lists, (assume: name), and each it cites must be the model's (one qualified by a module the spec lacks is another model's, noted and left to its run); Claim (model): marks a claim about the model alone, which -require cited does not ask the code to back; fenced code is no prose")
+	require := fset.String("require", "", "fail (exit 1), instead of warning, when a property is not enforced (a //quint:enforces) or checked (a //quint:checks in a test), an action not recorded (a //quint:action or a literal qobs.Record) or driven (a connect.Bind entry or connect.Switch key), a listed assumption (// @assume in the model) not exercised (a //quint:exercises), monitored (a //quint:monitors) or targeted (either), or a property a -claims claim cites not enforced and checked, an assumption it cites not targeted (cited; a Claim (model): aside): a comma-separated list of enforced, checked, recorded, driven, exercised, monitored, targeted, cited")
 	quint := fset.String("quint", "quint", "quint binary")
 	if err := fset.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -305,13 +307,15 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 			}
 		}
 	}
-	// the claims: an error each that cites nothing or what the model
+	// the claims: a FAIL each that cites nothing or what the model
 	// lacks; each citation nothing backs a FAIL under -require cited,
-	// else a note
+	// else a note (always a note of a model-only claim); other models'
+	// citations noted and left out, a claim citing only them left to
+	// their runs
 	for _, d := range claimDocs {
 		cc := table.CheckClaims(invtable.Claims(claimSrc[d], d))
 		for _, e := range cc.Errors {
-			fmt.Fprintln(errw, e)
+			fmt.Fprintln(errw, "FAIL "+e)
 		}
 		for _, u := range cc.Unbacked {
 			if slices.Contains(required, "cited") {
@@ -319,6 +323,31 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 			} else {
 				fmt.Fprintln(errw, "note: "+u+" (cited is not required)")
 			}
+		}
+		for _, u := range cc.ModelNotes {
+			fmt.Fprintln(errw, "note: "+u+" (a model-only claim: -require cited does not ask the code to back it)")
+		}
+		others := ""
+		if len(cc.Others) > 0 {
+			var mods []string
+			n := 0
+			for _, mod := range slices.Sorted(maps.Keys(cc.Others)) {
+				mods = append(mods, fmt.Sprintf("%s (%d)", mod, cc.Others[mod]))
+				n += cc.Others[mod]
+			}
+			others = strings.Join(slices.Sorted(maps.Keys(cc.Others)), ", ")
+			fmt.Fprintf(errw, "note: %s: %s of other models (qualified by modules this spec does not have), left out of the claims of model %s: %s\n", d, plural(n, "citation"), m.Main, strings.Join(mods, ", "))
+		}
+		here := cc.Claims - cc.Elsewhere
+		summary := fmt.Sprintf("%s, citing %s and %s of model %s", plural(here, "claim"), properties(cc.Props), plural(cc.Assumes, "assumption"), m.Main)
+		if cc.ModelOnly > 0 {
+			summary = fmt.Sprintf("%s (%d model-only), citing %s and %s of model %s", plural(here, "claim"), cc.ModelOnly, properties(cc.Props), plural(cc.Assumes, "assumption"), m.Main)
+		}
+		if here == 0 {
+			summary = "no claims of model " + m.Main
+		}
+		if cc.Elsewhere > 0 {
+			summary += fmt.Sprintf("; %s only other models (%s), left to their runs", map[bool]string{true: "1 claim cites", false: fmt.Sprintf("%d claims cite", cc.Elsewhere)}[cc.Elsewhere == 1], others)
 		}
 		switch {
 		case len(cc.Errors) > 0:
@@ -329,7 +358,7 @@ func invariants(ctx context.Context, out, errw io.Writer, args []string) (int, e
 		case cc.Claims == 0:
 			fmt.Fprintf(out, "ok   %s: no claims marked (begin one with Claim: and cite (prop: name))\n", d)
 		default:
-			fmt.Fprintf(out, "ok   %s: %s, citing %s and %s of model %s\n", d, plural(cc.Claims, "claim"), properties(cc.Props), plural(cc.Assumes, "assumption"), m.Main)
+			fmt.Fprintf(out, "ok   %s: %s\n", d, summary)
 		}
 		if len(cc.Unbacked) > 0 && slices.Contains(required, "cited") {
 			code = 1

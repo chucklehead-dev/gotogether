@@ -808,7 +808,7 @@ jobs:
           echo "seeds $((GOTOGETHER_SEED_OFFSET + 1))..."
           RAFTKV_REAL=1 RAFTKV_REAL_RUNS=10 RAFTKV_REAL_MUTANT_RUNS=5 RAFTKV_REAL_DIR="$RUNNER_TEMP/real" \
             go test -race -count=1 -timeout 25m -run 'TestRealNemesis|TestRealNoRequestID|TestRealSlowElection' -v .
-      - name: inconclusive runs (a bound broken while the host stalled, no verdict, left out of the claims)
+      - name: inconclusive runs (a bound broken while the host stalled, no verdict, the seed run again at most twice)
         id: stalls
         if: always()
         run: |

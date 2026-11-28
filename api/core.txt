@@ -112,6 +112,7 @@ type EffectCheck struct
     field Literal string
     field Tries []string
     field NotCompared []qtrace.Effect
+    method (*EffectCheck) Undeclared() bool
 type EffectKind struct
     field From string `yaml:"from"`
     field Where map[string]string `yaml:"where"`
@@ -119,6 +120,7 @@ type EffectKind struct
     field Same []string `yaml:"same"`
 type Effects struct
     field Kinds map[string]EffectKind `yaml:"kinds"`
+    method (*Effects) Check(def, call, match string, made []qtrace.Effect) (*EffectCheck, error)
 type EvalModule struct
     field Name string
     field Text string
@@ -261,6 +263,7 @@ type Within struct
 == github.com/chucklehead-dev/gotogether/connect
 const CompiledExt = mbtmodel.Ext
 const MBTFormat = mbtmodel.Format
+func BindContext[T any](newT func(ctx context.Context, tb testing.TB) T) *Binding[T]
 func Bind[T any](newT func(tb testing.TB) T) *Binding[T]
 func CompiledFor(spec, main string) string
 func Eval[T any](s *Step, name string, args ...any) (T, error)
@@ -280,6 +283,8 @@ type Binding[T any] struct
     method (*Binding[T]) Action(name string, method any, params ...string) *Binding[T]
     method (*Binding[T]) Check(check func(impl T, s *Step) error) *Binding[T]
     method (*Binding[T]) Driver(tb testing.TB) Driver
+    method (*Binding[T]) Effects(fx binding.Effects) *Binding[T]
+    method (*Binding[T]) EffectsOf(action, def, match string) *Binding[T]
     method (*Binding[T]) Handle(name string, h func(impl T, s *Step) error) *Binding[T]
     method (*Binding[T]) Observes(name string, picks ...string) *Binding[T]
     method (*Binding[T]) Returns(name, def string, args ...string) *Binding[T]
@@ -314,6 +319,26 @@ type Driver interface
     Step(s *Step) error
 type DriverFunc func(s *Step) error
     method (DriverFunc) Step(s *Step) error
+type EffectsMismatch = effectsdiff.Mismatch
+    field Call string `json:"call"`
+    field Match string `json:"match"`
+    field Made []string `json:"made"`
+    field MadeAt []string `json:"madeAt,omitempty"`
+    field Expected []string `json:"expected,omitempty"`
+    field Index int `json:"index,omitempty"`
+    field Field string `json:"field,omitempty"`
+    field Got string `json:"got,omitempty"`
+    field Want string `json:"want,omitempty"`
+    field Tries []string `json:"tries,omitempty"`
+    field Late []string `json:"late,omitempty"`
+    field Unexplained string `json:"unexplained,omitempty"`
+    field Undeclared bool `json:"undeclared,omitempty"`
+    field Mapping string `json:"-"`
+    field Drop string `json:"-"`
+    method (*Mismatch) Action() string
+    method (*Mismatch) Brief() string
+    method (*Mismatch) Headline() string
+    method (*Mismatch) Render(pfx string) string
 type Handler func(s *Step) error
 type MBTModel = mbtmodel.Model
     field Format string `json:"format"`
@@ -353,6 +378,7 @@ type Step struct
     field Before map[string]itf.Value
     field After map[string]itf.Value
     field State itf.Value
+    method (*Step) Context() context.Context
     method (*Step) Eval(name string, args ...any) (itf.Value, error)
     method (*Step) Get(path ...string) itf.Value
     method (*Step) Has(name string) bool
@@ -367,6 +393,7 @@ type StepError struct
     field Kind string
     field Err error
     field Diff []string
+    field Effects *EffectsMismatch
     method (*StepError) Error() string
     method (*StepError) Unwrap() error
 type Switch map[string]Handler
@@ -2924,7 +2951,7 @@ type Edge struct
     field Action string `json:"action"`
     field Args []NamedValue `json:"args,omitempty"`
     field Picks []NamedValue `json:"picks,omitempty"`
-type EffectsMismatch struct
+type EffectsMismatch = effectsdiff.Mismatch
     field Call string `json:"call"`
     field Match string `json:"match"`
     field Made []string `json:"made"`
@@ -2937,7 +2964,13 @@ type EffectsMismatch struct
     field Tries []string `json:"tries,omitempty"`
     field Late []string `json:"late,omitempty"`
     field Unexplained string `json:"unexplained,omitempty"`
-    method (*EffectsMismatch) Brief() string
+    field Undeclared bool `json:"undeclared,omitempty"`
+    field Mapping string `json:"-"`
+    field Drop string `json:"-"`
+    method (*Mismatch) Action() string
+    method (*Mismatch) Brief() string
+    method (*Mismatch) Headline() string
+    method (*Mismatch) Render(pfx string) string
 type EvaluationSampling struct
     field Rate float64
     field Seed string

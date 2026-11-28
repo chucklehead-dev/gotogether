@@ -9766,6 +9766,39 @@ seconds before, 80 after with the new corpus entry; at the nightly's seeds
 20783281..20783320 (its three explorations, the corpus included) 860 CPU
 seconds, against 1056 for the old search with the budget raised to 80000.
 
+## A seed with no verdict (host stall) runs again (2026-11-27)
+
+CI's raftkv-real failed on PR #284, which touched nothing in raftkv:
+`TestRealNoRequestID`'s `qtest.Runs(clusterOf(vs)...).Expect(t,
+qtest.Conforms())` said "1 of 3 runs have no verdict (1 has no verdict
+(host stall))". Seed 10's leader came 14ms past the 500ms bound after a
+heal while the runner's disk stalled 512ms of the 514ms before it (an
+fsync of 603ms). #276 had made such a run no verdict and its faithful
+cluster claim left it out (`judged`), but only `TestRealNemesis` (and the
+journal replay) called `judged`: the mutants' claims kept the stalled run,
+and qtest, rightly, would not count it as a pass. Leaving runs out was
+also weaker where it applied: a claim over fewer seeds than the test
+names, and a mutant's `Some` (its miss rate measured per seed) without a
+seed's chance.
+
+Now every real-tier test (`TestRealNemesis`, `TestRealNoRequestID`,
+`TestRealSlowElection`, `TestRealFaultsInSimulation`, `TestRealCluster`)
+runs a seed whose run has a history with no verdict again, at most twice
+(`untilJudged`, `stallRetries`), in `seed<n>.again<k>`, and judges each
+history by its first run with a verdict. Nothing with a verdict is
+dropped (a run passed over had nothing FAIL in that history), a run with
+a verdict is never run again, a history's verdict is kept whatever the
+other's, and a seed still without one fails the claims. Every stalled run
+is a line of `inconclusive.txt` (a CI warning). No qtest claim was added:
+one over "the runs with a verdict, at least k of them" would let a
+stalling host shrink what is judged. `TestHostStallIsNoVerdict` checks the
+rule on its stalled, violating and conforming histories (the old claim
+failing as CI's did; a stalled-then-conforming seed holding, a
+stalled-then-violating one failing, three stalls failing, a clients' FAIL
+kept, a verdict not run again), and fails with the retries off, with the
+last run always taken, with every seed run three times, or with the
+cluster's stall not seen.
+
 ### Quint 0.35.0 (2026-11-28)
 
 Quint 0.33.1/evaluator 0.7.1 to 0.35.0/0.8.0, taken to evaluate

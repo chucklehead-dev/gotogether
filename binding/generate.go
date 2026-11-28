@@ -18,6 +18,24 @@ import (
 	"github.com/chucklehead-dev/gotogether/qtrace"
 )
 
+// pureFuncs are the template functions that need no trace and no model:
+// a plan's have them, and so does an effects check outside one
+// (Effects.Check).
+func pureFuncs() template.FuncMap {
+	return template.FuncMap{
+		"toSet":  func(v any) (string, error) { return jsonQuint(v, "Set") },
+		"toList": func(v any) (string, error) { return jsonQuint(v, "List") },
+		"toMap":  func(v any) (string, error) { return jsonQuint(v, "Map") },
+		"add":    func(a, b any) int64 { return toI(a) + toI(b) },
+		"atLeast": func(lo, v any) int64 {
+			if toI(v) < toI(lo) {
+				return toI(lo)
+			}
+			return toI(v)
+		},
+	}
+}
+
 // Call is one step of the replay.
 type Call struct {
 	// Checkpoint requires this snapshot to equal the complete pre-state; it cannot reset replay.
@@ -119,9 +137,6 @@ func (b *Binding) Planner(m *Model, whole *qtrace.Trace) *Planner {
 			sort.Strings(vs)
 			return "Set(" + strings.Join(vs, ", ") + ")"
 		},
-		"toSet":   func(v any) (string, error) { return jsonQuint(v, "Set") },
-		"toList":  func(v any) (string, error) { return jsonQuint(v, "List") },
-		"toMap":   func(v any) (string, error) { return jsonQuint(v, "Map") },
 		"toQuint": func(typ string, v any) (string, error) { return toQuint(m, typ, v) },
 		"max": func(arg string) int64 {
 			var mx int64
@@ -142,14 +157,8 @@ func (b *Binding) Planner(m *Model, whole *qtrace.Trace) *Planner {
 			return n
 		},
 		"procs": func() int { return len(whole.Processes) },
-		"add":   func(a, b any) int64 { return toI(a) + toI(b) },
-		"atLeast": func(lo, v any) int64 {
-			if toI(v) < toI(lo) {
-				return toI(lo)
-			}
-			return toI(v)
-		},
 	}
+	maps.Copy(funcs, pureFuncs())
 	p.rd = newRenderer(funcs)
 	for _, c := range slices.Sorted(maps.Keys(b.Constants)) {
 		v, err := p.rd.render(b.Constants[c], nil)
@@ -353,6 +362,26 @@ func (p *Planner) Plan(t *qtrace.Trace) (*Plan, error) {
 			}
 			if c.ExpectArgs != nil { // the evaluation module's expect takes the def's arguments and the effects made
 				c.ExpectArgs = append(append(c.ExpectArgs, defArgs...), ec.Literal)
+			}
+		} else if b.comparesEffects() && ab.Effects != "-" && !s.Ambiguous && m != nil && len(s.Effects) > 0 {
+			// an action whose effects the model does not state makes none
+			// of a mapped kind (DESIGN §115: connect's rule, and so
+			// validate's): an Undeclared check, its conjunct false
+			// ([] == what was made), which the Go evaluator decides
+			// without the evaluation module (whose expect for the action
+			// takes no effects)
+			ec, err := b.Effects.check(rd, "", s.Action+"Effects", MatchExact, s.Effects)
+			if err != nil {
+				return nil, fmt.Errorf("step %d (%s, seq %d%s): %w", i+1, s.Action, s.Seq, where(s), err)
+			}
+			if ec.Undeclared() {
+				c.Effects = ec
+				conj := "([] == " + ec.Literal + ")"
+				if c.Expect == "" {
+					c.Expect = conj
+				} else {
+					c.Expect = "(" + c.Expect + ") and " + conj
+				}
 			}
 		}
 		if snapshotStart {

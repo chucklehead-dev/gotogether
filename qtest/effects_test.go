@@ -2,13 +2,17 @@ package qtest
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/chucklehead-dev/gotogether/internal/skip"
 	"github.com/chucklehead-dev/gotogether/qenv"
 	"github.com/chucklehead-dev/gotogether/qobs"
 	"github.com/chucklehead-dev/gotogether/qtrace"
+	"github.com/chucklehead-dev/gotogether/validate"
 )
 
 // payReq is a provider request, as a double records it: its exported
@@ -94,6 +98,139 @@ func TestEffectsMismatch(t *testing.T) {
 			Validate(t, "testdata/pay-unchecked.yaml", c.steps).Expect(t, Conforms())
 		})
 	}
+}
+
+// placeSends is payLog with place's own sends before it (rule 2: its
+// task's effects before its step): a capture if capture, a void (which
+// the binding does not map) if void.
+func placeSends(capture, void bool) []qtrace.Step {
+	var pre []qtrace.Step
+	send := func(op string, amount int64) {
+		pre = append(pre, qtrace.Step{Action: "effect", Seq: uint64(len(pre) + 1), Record: qtrace.Record{Effect: "rpc.provider.request"},
+			Args: map[string]any{"Op": op, "Key": "cap:o1", "Order": "o1", "Amount": amount}})
+	}
+	if capture {
+		send("capture", 20)
+	}
+	if void {
+		send("void", 0)
+	}
+	steps := payLog(20, "cap:o1", true)
+	n := uint64(len(pre))
+	for i := range pre {
+		pre[i].Recorder, pre[i].Actor, pre[i].Process, pre[i].Time = "shop", "shop", "shop", steps[0].Time.Add(-time.Microsecond)
+		steps[0].Made = append(steps[0].Made, pre[i].Seq)
+	}
+	for i := range steps {
+		steps[i].Seq += n
+		if steps[i].Call != 0 {
+			steps[i].Call += n
+		}
+	}
+	return append(pre, steps...)
+}
+
+// An action whose effects the model does not state (place: no
+// placeEffects) makes none of a mapped kind: a capture sent by place is
+// Mismatch("place"), the report naming the action, the effect and both
+// fixes (DESIGN §115's rule, which validate adopted with connect). An
+// unmapped effect (a void) is not compared, the action opted out
+// (effects: "-") compares none, and ablated (no effects section) each
+// conforms.
+func TestEffectsUndeclared(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	run := Validate(t, "testdata/pay.yaml", placeSends(true, false))
+	run.Expect(t, Mismatch("place"))
+	text := run.Report.VerboseSummary()
+	for _, w := range []string{
+		"place made effects, and the model states none (it has no placeEffects)",
+		`made     [Capture({ amount: 20, order: "o1" })]   (rpc.provider.request at seq 1)`,
+		"Fix the code if place sends nothing, or state what it sends in the model (def placeEffects(...): List[Effect]; [] says it sends nothing); " +
+			`effects: "-" for place in `,
+	} {
+		if !strings.Contains(text, w) {
+			t.Errorf("the report lacks %q:\n%s", w, text)
+		}
+	}
+	if b := run.Brief(); !strings.Contains(b, `place made effects, and the model states none (it has no placeEffects): effect 1: Capture({ amount: 20, order: "o1" }), expected nothing`) {
+		t.Errorf("brief: %s", b)
+	}
+	Validate(t, "testdata/pay.yaml", placeSends(true, true)).Expect(t, Mismatch("place"))
+	Validate(t, "testdata/pay-placeopt.yaml", placeSends(true, false)).Expect(t, Conforms())
+	Validate(t, "testdata/pay-unchecked.yaml", placeSends(true, false)).Expect(t, Conforms())
+	// a void alone is unmapped: nothing of a mapped kind, no failure
+	Validate(t, "testdata/pay.yaml", placeSends(false, true)).Expect(t, Conforms())
+}
+
+// With the compiled model alone (GOTOGETHER_COMPILED=1), the Go
+// evaluator decides the rule itself: its evaluation module's place takes
+// no effects, so the plan's Undeclared check fails the step, judged by
+// the evaluator with no quint. Not parallel: it sets the environment.
+func TestEffectsUndeclaredCompiled(t *testing.T) {
+	b := compiledPay(t, "pay.yaml")
+	t.Setenv(compiledEnv, "1")
+	run := Validate(t, b, placeSends(true, false))
+	run.Expect(t, Mismatch("place"))
+	if got := judgedBy(t, run); got != "evaluator" {
+		t.Errorf("judged by %q, want the evaluator's alone", got)
+	}
+	Validate(t, b, placeSends(false, true)).Expect(t, Conforms())
+}
+
+// A binding with a hidden action (an unrecorded audit) is judged by the
+// Go evaluator's own search over the states the hidden actions reach
+// (quint cannot replay a step whose choices are unknown, and a compiled
+// model refuses such a binding as needing quint): there too place's
+// capture fails its step, the search's verdict, its report naming the
+// undeclared effects, and a void alone and the faithful log conform.
+// Without the search's own check (hidden.go) the step's conjunct has no
+// evaluation module expect, and the search errs.
+func TestEffectsUndeclaredHidden(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	run := Validate(t, "testdata/pay-hidden.yaml", placeSends(true, false))
+	run.Expect(t, Mismatch("place"))
+	text := run.Report.VerboseSummary()
+	for _, w := range []string{
+		"judged by the Go evaluator's search over hidden actions (audit",
+		"place is enabled, but its expect holds after it in no state the hidden actions reach",
+		"place made effects, and the model states none (it has no placeEffects)",
+		`made     [Capture({ amount: 20, order: "o1" })]   (rpc.provider.request at seq 1)`,
+	} {
+		if !strings.Contains(text, w) {
+			t.Errorf("the report lacks %q:\n%s", w, text)
+		}
+	}
+	Validate(t, "testdata/pay-hidden.yaml", placeSends(false, true)).Expect(t, Conforms())
+	Validate(t, "testdata/pay-hidden.yaml", payLog(20, "cap:o1", true)).Expect(t, Conforms())
+}
+
+// compiledPay copies pay.qnt and the binding into a directory of their
+// own and compiles the binding's model beside it, returning its path. It
+// needs quint, to compile.
+func compiledPay(t *testing.T, bindingFile string) string {
+	t.Helper()
+	skip.Quint(t)
+	dir := t.TempDir()
+	for _, f := range []string{"pay.qnt", bindingFile} {
+		data, err := os.ReadFile(filepath.Join("testdata", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, f), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b := filepath.Join(dir, bindingFile)
+	cm, err := validate.Compile(b, validate.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cm.Write(validate.CompiledFor(b)); err != nil {
+		t.Fatal(err)
+	}
+	return b
 }
 
 // A step recorded where effects are not (no scope, outside a simulation)
