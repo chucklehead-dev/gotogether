@@ -352,3 +352,26 @@ func TestChanges(t *testing.T) {
 		t.Errorf("changes %q", c)
 	}
 }
+
+// quint 0.34's named vals (qualifiers invariant and observation, as its
+// typecheck writes them) are properties like a boolean val.
+func TestNamedValsAreProperties(t *testing.T) {
+	const tc = `{"modules": [{"name": "n", "declarations": [
+	  {"kind": "var", "name": "x", "id": 1},
+	  {"kind": "def", "name": "positive", "qualifier": "invariant", "id": 2},
+	  {"kind": "def", "name": "reached", "qualifier": "observation", "id": 3},
+	  {"kind": "def", "name": "count", "qualifier": "val", "id": 4}
+	]}], "types": {"2": {"type": {"kind": "bool"}}, "3": {"type": {"kind": "bool"}}, "4": {"type": {"kind": "int"}}}}`
+	m, err := Read([]byte(tc), "n", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, p := range m.Properties {
+		names = append(names, p.Name)
+	}
+	slices.Sort(names)
+	if !slices.Equal(names, []string{"positive", "reached"}) {
+		t.Errorf("properties %v, want positive and reached", names)
+	}
+}

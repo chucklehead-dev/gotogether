@@ -11,6 +11,11 @@ import (
 // This version floor does not verify the Rust evaluator's executable bytes.
 const MinimumVersion = "0.33.1"
 
+// PinnedVersion is the CLI that CI tests and ci/install-quint.sh installs with
+// its paired Rust evaluator: install hints name it, and the stock-CLI identity
+// memo (and validate/model's proof reuse) is reviewed for its files only.
+const PinnedVersion = "0.35.0"
+
 // Supported admits complete stable semantic versions at or above the floor.
 // Prereleases require separate admission; valid build metadata is permitted.
 func Supported(version string) bool {

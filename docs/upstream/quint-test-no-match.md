@@ -21,6 +21,9 @@ module m {
   fails, is not mentioned.
 - `quint test --match nosuch m.qnt` prints the module's name and nothing
   else, and exits 0: no test ran, and the result is a pass.
+
+Fixed upstream in quint 0.34.0 (#2056): `quint test` exits with an error
+when no definition matches. Proposal 1 below is no longer to be filed.
 - `quint test --match bugStory m.qnt` runs it: `Error [QNT508]: Expect
   condition does not hold true`, exit 1.
 

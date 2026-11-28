@@ -102,3 +102,10 @@ simulate:
   # the design's known findings F1 and F3 (README): ambiguous writes let a
   # retry commit a payload twice and the seal miscount
   allows: [sealMatchesManifests, committedNoDuplicatePayload]
+  # committedNoDuplicatePayload's violation (F1: a retried ambiguous write
+  # committing a payload twice, 8 steps deep) is rare in quint's traces:
+  # about 1 in 3300 on quint 0.35's Rust backend and 0.33.1's alike, over
+  # unrelated seeds. 1000 traces found it on 0.33.1's seed 1 by luck (its
+  # neighbouring seeds' streams are correlated) and on 0.35's never; 20000
+  # found it in 21 of 21 seeds (seed 1 and 20 random), 10000 in 20 of 21.
+  samples: 20000

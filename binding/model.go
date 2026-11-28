@@ -580,7 +580,7 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 				if unchanging(d.RawExpr) {
 					frames[d.Name] = true
 				}
-			case d.Kind == "def" && (d.Qualifier == "val" || d.Qualifier == "def" || d.Qualifier == "puredef" || d.Qualifier == "pureval"):
+			case d.Kind == "def" && (d.Qualifier == "val" || d.Qualifier == "def" || d.Qualifier == "puredef" || d.Qualifier == "pureval" || stateVal(d.Qualifier)):
 				// operators, by their parameters' names: an action's effects
 				// def (I/O specifications) is called with the action's
 				// arguments of those names
@@ -592,7 +592,7 @@ func parseTypecheck(b []byte, module string) (*Model, error) {
 					m.Defs[d.Name] = ps
 				}
 				// candidate invariants: boolean vals (not operators, not sum-type constructors)
-				if (d.Qualifier == "val" || d.Qualifier == "def") && d.Expr != nil && d.Expr.Kind != "lambda" {
+				if (d.Qualifier == "val" || d.Qualifier == "def" || stateVal(d.Qualifier)) && d.Expr != nil && d.Expr.Kind != "lambda" {
 					if t, ok := tc.Types[string(d.ID)]; ok && renderType(t.Type) == "bool" {
 						m.Vals[d.Name] = true
 						if a, ok := antecedent(d.RawExpr); ok {
@@ -997,3 +997,8 @@ func checkpointScope(module string, decls map[string][]tcDecl, visible []tcDecl)
 	walk(module)
 	return slices.Sorted(maps.Keys(missing))
 }
+
+// stateVal reports whether qualifier is one of quint 0.34's named vals:
+// `invariant x = e` and `observation x = e` are vals that quint run and
+// verify also collect by name, so a binding names them as any val.
+func stateVal(qualifier string) bool { return qualifier == "invariant" || qualifier == "observation" }

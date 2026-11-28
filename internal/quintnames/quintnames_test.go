@@ -71,7 +71,13 @@ func TestBuiltinsAreQuints(t *testing.T) {
 
 // The table's keywords are quint's lexer's: its literal tokens that are
 // identifiers, true and false (its BOOL token's), but from and as, which
-// only an import's grammar reads.
+// only an import's grammar reads, and invariant and observation (quint
+// 0.34's definitions), which its grammar still takes as names: both are
+// parsed as parameters by TestReservedRefusedByQuint.
+// contextual are quint's lexer's tokens that its grammar also takes as
+// names, so a parameter keeps them.
+var contextual = []string{"from", "as", "invariant", "observation"}
+
 func TestKeywordsAreQuints(t *testing.T) {
 	dir := quintPackage(t)
 	src, err := os.ReadFile(filepath.Join(dir, "generated", "QuintLexer.js"))
@@ -85,7 +91,7 @@ func TestKeywordsAreQuints(t *testing.T) {
 	}
 	quints := []string{"true", "false"}
 	for _, m := range regexp.MustCompile(`"'([A-Za-z][A-Za-z0-9_]*)'"`).FindAllSubmatch(list[1], -1) {
-		if n := string(m[1]); n != "from" && n != "as" && !slices.Contains(Builtins, n) {
+		if n := string(m[1]); !slices.Contains(contextual, n) && !slices.Contains(Builtins, n) {
 			quints = append(quints, n)
 		}
 	}
@@ -135,7 +141,7 @@ func TestReservedRefusedByQuint(t *testing.T) {
 			t.Errorf("quint takes a parameter named %s, which the table says is a built-in:\n%s", n, out)
 		}
 	}
-	if out, err := parse("taken", []string{"init", "step", "from", "as", "item_", "x"}); err != nil {
+	if out, err := parse("taken", []string{"init", "step", "from", "as", "invariant", "observation", "item_", "x"}); err != nil {
 		t.Errorf("quint refuses a parameter the table takes: %v\n%s", err, out)
 	}
 	var wg sync.WaitGroup

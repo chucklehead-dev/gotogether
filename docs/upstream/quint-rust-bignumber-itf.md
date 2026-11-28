@@ -1,4 +1,5 @@
 <!-- Drafted 2026-10-28 (ROADMAP I11's note), not filed: the maintainer files it at github.com/informalsystems/quint. The toolkit works around it: itf.ParseWith reads such values by the model's types. -->
+<!-- Fixed upstream in quint 0.34.0 (its Rust backend's integers outside 64 bits, #1995): 0.35.0's `--out-itf` writes these integers as `#bigint`. Not to be filed; the workaround stays while 0.33.1 is admitted. -->
 
 ### Rust backend: integers of 16+ characters come out as bignumber.js records `{ s, e, c }` (console and `--out-itf`)
 

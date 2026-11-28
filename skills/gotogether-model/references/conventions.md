@@ -158,6 +158,11 @@ exactly once. `-system` takes property roles from the binding instead of flags.
 Use `-no-properties` only to deliberately check conformance
 without properties. Invalid selections leave no output file.
 
+Quint 0.34's `invariant x = e` and `observation x = e` definitions are
+Boolean vals to gotogether too: a binding names them as any val. Quint
+itself also checks a main module's `invariant`s, and counts its
+`observation`s, in a `quint run` given no `--invariant`.
+
 Backends: `--backend rust` (default, fast) or `--backend typescript`.
 gotogether reads `QUINT_BACKEND`.
 

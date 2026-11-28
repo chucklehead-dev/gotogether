@@ -6,7 +6,7 @@
 # each file the corpus reads against its sha256 in the manifest
 # (internal/qoracle/testdata/corpus.json).
 #
-#   QUINT_VERSION=0.33.1 ci/fetch-quint-src.sh DIR
+#   QUINT_VERSION=0.35.0 ci/fetch-quint-src.sh DIR
 #
 # DIR must not exist. QUINT_SRC_CLONE=path checks a local clone instead of
 # fetching (development): its HEAD must be the pinned commit and its tree

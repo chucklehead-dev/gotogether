@@ -9798,3 +9798,87 @@ stalled-then-violating one failing, three stalls failing, a clients' FAIL
 kept, a verdict not run again), and fails with the retries off, with the
 last run always taken, with every seed run three times, or with the
 cluster's stall not seen.
+
+### Quint 0.35.0 (2026-11-28)
+
+Quint 0.33.1/evaluator 0.7.1 to 0.35.0/0.8.0, taken to evaluate
+`quint verify --backend veil` (no Veil integration here; Veil downloads and
+builds itself on first use, about 5 GB, and CI installs none). What changed
+for the toolkit, each with its fix:
+
+- `--witnesses` is deprecated: quint prints a warning and reports each
+  predicate as `P was observed in n trace(s)` under `Observations:`.
+  simulate's possibles read only "witnessed" and failed on every predicate;
+  readWitnesses reads both (TestReadWitnessesAcrossQuintVersions, which
+  fails without it).
+- `invariant` and `observation` are lexer tokens. quint still takes them as
+  parameter names (TestReservedRefusedByQuint now parses both), so
+  quintnames exempts them as it does `from` and `as`; grist's QuintTaken,
+  conservative, renames them.
+- `quint test` fails when `--match` selects nothing (#2056). grist's
+  TestGeneratedRuleRefusalOrigin spliced its runs into the file's last
+  module (originCalls) while naming `--main origin`: under 0.33.1 it ran
+  none of them and passed. The runs now go into module origin, and the
+  test requires all five to pass.
+- The Rust backend's integers are unbounded (#1995): the fold control that
+  reproduced its overflow now expects the mathematical sum on 0.34 and
+  later, the overflow before. The Go evaluator (64 bits) still refuses the
+  fold. Its ITF integers are `#bigint`; itf's bignumber.js reading stays
+  for 0.33.1's traces.
+- `quint compile` writes an `invariants` field: all 54 examples' compiled
+  models and connect's two were compiled again (otherwise identical in
+  meaning; connect's keep-list IR ids shift by 11).
+- The qoracle manifest was re-surveyed at v0.35.0's tag (944 entries, 49
+  new: Veil fixtures among them); no file entry of quint's examples changed
+  its verdict.
+- A model declaring 0.34's `invariant x = e` or `observation x = e` had
+  those definitions refused by its binding ("invariant nonNegative: not a
+  val of vending"), by connect's Eval and by `gotogether invariants`: the
+  new qualifiers are vals now (TestNamedValsAreVals, TestEvalNamedVals,
+  TestNamedValsAreProperties, each failing without it).
+- The Go front end (internal/qfront, P1) parses neither definition: against
+  quint 0.35 (`GOTOGETHER_QFRONT_STUB=go`) 890 of the 944 corpus entries
+  agree, against 861 of 863 at 0.33.1; of the 54 others, 52 declare or
+  import an `invariant`/`observation` definition and two are the known
+  toposort cases (P2). No gate runs that comparison; Q2's grammar needs the
+  two qualifiers.
+- The nightly `qfront-differential` (quint against quint with ids
+  shifted): 941 of the 944 entries agree, two by their listed classes.
+  `quint-test:quint/test/types/inferrer.test.ts#31`, new in 0.35 (#2006's
+  arity error for an alias without arguments, `o: Option`), raises the
+  same two QNT000 errors from modules B and C in an order that follows the
+  ids, so the first error differs. It is listed per entry in
+  testdata/shift-known.txt (the per-entry convention, a verdict-flip line,
+  whose reason says the verdict itself is the same) rather than given a
+  new class, which would widen what the oracle accepts for every program
+  (the maintainer's decision). An entry listed there that agrees again
+  fails, so the line is taken out once quint orders the errors by source.
+- After #287 merged: connect/testdata/sender.mbt.json.gz compiled again
+  (its modules identical but for ids), and pay.qnt's, sender.qnt's and the
+  new pay-hidden/pay-placeopt bindings' corpus entries surveyed at 0.35.0
+  (`GOTOGETHER_UPDATE_CORPUS=entries`), with the verdicts main's 0.33.1
+  survey gave. A `gotogether simulate` that exited 2 on 0.35 ("quint's
+  output names no count of witness") was readWitnesses' "witnessed", fixed
+  above: quint exits 0 with an unreached witness (a `[warning]` when the
+  model declares an observation of its own; `--observation` exits 1), and
+  the possible is a verdict, not reached. quint's own evaluator fetch goes
+  through GitHub's API (rate-limited, 403 on shared runners); every CI job,
+  the Action and the image install it with ci/install-quint.sh instead,
+  from the release URL against its sha256, where quint finds it
+  (`$QUINT_HOME/rust-evaluator-v0.8.0`).
+- CI's simulate step failed edgepublish's `allows: committedNoDuplicatePayload`
+  on 0.35 (none of 1000 traces violated it). The violation is reachable
+  (`simulate -graph`: 8 steps) and rare: over unrelated seeds about 1 trace
+  in 3300 on 0.35's Rust backend and on 0.33.1's alike. Small consecutive
+  seeds draw correlated streams: 0.33.1's 1 to 20 all found it in 1000
+  traces, 0.35's none until 3500-4000, whatever the thread count. Its
+  binding now samples 20000 traces (21 of 21 seeds, against 20 of 21 at
+  10000; 21 CPU s against 12), the claim kept in `allows`; its compiled
+  model recompiled for the binding's hash. The other 52 bindings pass at
+  seed 1 and at two random seeds.
+- grist/gristtest's CPU budget: 144.7 CPU s on CI against its line of 70.
+  Locally 76.6 on 0.33.1 and 83.1 on 0.35.0 (+8%; its tests alone 81.6
+  against 87.6, spread over the composition tests' quint calls). No test
+  does new work there (TestGeneratedRuleRefusalOrigin, which now runs its
+  five quint tests, is package grist's: 112.9 to 149.2, within its 180):
+  the line is CI's figure.

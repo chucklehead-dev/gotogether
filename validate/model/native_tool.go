@@ -11,12 +11,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 )
 
 // Reuse is limited to this reviewed managed CLI layout. This identifies a local
 // tool closure, not an authenticated producer. External OS/shared libraries must
 // remain stable during the iterator. Arbitrary wrappers/proxies are ineligible.
-const nativeManagedCLIHash = "952a50a28932282528b5c9b86ac5542405d85da4f80876aabe8cb8c7d5a6d0e8"
+const nativeManagedCLIHash = "4e8e20625162401e2934d8c7e8789a53c057fb578a8f0f47d2883a5e44b4d009"
 const nativeManagedNodeHash = "94efd062ed066c1a0b332e18249859c905e920eeada5df55d24c99b919629a90"
 
 // nativeManagedNodeVersion is the Node release whose linux-x64 binary
@@ -61,7 +63,7 @@ func resolveNativeToolIdentity(ctx context.Context, quint string) (string, bool)
 		return "", false
 	}
 	var pkg struct{ Name, Version string }
-	if json.Unmarshal(metadata, &pkg) != nil || pkg.Name != "@informalsystems/quint" || pkg.Version != "0.33.1" {
+	if json.Unmarshal(metadata, &pkg) != nil || pkg.Name != "@informalsystems/quint" || pkg.Version != quintcmd.PinnedVersion {
 		return "", false
 	}
 	modules := filepath.Dir(filepath.Dir(pkgRoot))

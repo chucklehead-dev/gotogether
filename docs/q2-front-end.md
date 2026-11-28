@@ -493,7 +493,7 @@ its source and sha256:
   `*_gen.qnt`, `*_steps.qnt` and `*_rules.qnt` files of the grist
   examples and the generator's goldens). These are what the front end
   will compile most often.
-- **quint's repository at the tag `QUINT_VERSION` pins** (0.33.1, in
+- **quint's repository at the tag `QUINT_VERSION` pins** (0.35.0, in
   ci.yml and nightly.yml), fetched by a script beside
   ci/install-quint.sh and never vendored (decision 3). The tag's sources
   are:

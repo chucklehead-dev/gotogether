@@ -12,7 +12,7 @@ ARG GO_VERSION=1.27.3
 FROM golang:${GO_VERSION}-bookworm
 
 ARG NODE_VERSION=22.22.0
-ARG QUINT_VERSION=0.33.1
+ARG QUINT_VERSION=0.35.0
 
 # Node from nodejs.org's release (gzip: the image has no xz), checked against its SHASUMS256
 RUN set -eux; \

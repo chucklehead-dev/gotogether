@@ -33,7 +33,7 @@ func (m *Model) discoverDiagnostics(visible []tcDecl, tc tcOut) error {
 				return fmt.Errorf("diagnostic.duplicate %s.%s: give one diagnostic val", m.Module, name)
 			}
 			propertyType, known := tc.Types[string(d.ID)]
-			if !known || renderType(propertyType.Type) != "bool" || d.Qualifier != "val" {
+			if !known || renderType(propertyType.Type) != "bool" || d.Qualifier != "val" && !stateVal(d.Qualifier) {
 				return fmt.Errorf("diagnostic.property %s.%s: annotate a Boolean state val", m.Module, name)
 			}
 			projection, ok := defs[fields[2]]
