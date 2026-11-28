@@ -75,5 +75,6 @@ $ gotogether validate -binding jobqueue.binding.yaml -invariants exactlyOnce ste
 | `TestRestartConforms` | a restart loses a lease: the ack after it is stale, and the restart is inferred |
 | `TestIncidentWorkflow` | native failure identity across CLI JSON, capture inspection and relocated replay; unchanged checks pass a fresh repaired execution; errors and no verdict remain distinct |
 | `TestMutantsRejected` | both mutants, rejected at the step the bug makes |
+| `TestModelInductive` | `doneImpliesPerformed` proved by Veil for every `JOBS` and `WORKERS` (about 23 s), with `jobqueueProof`'s four lemmas, each needed; the ghost `enqueued` (jobs' keys) lets a restart rebuild `jobs` without `jobs.keys()`. Without quint 0.35 and Veil (CI) not done, skipped |
 | `TestHegelRunsConform` | Hegel interleaves enqueues, leases, work, time and restarts; every run conforms |
 | `TestHegelShrinksAckAnyLease` | Hegel shrinks the mutant to: enqueue, lease, restart, perform, ack accepted |
