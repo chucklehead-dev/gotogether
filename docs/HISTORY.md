@@ -9866,3 +9866,19 @@ for the toolkit, each with its fix:
   the Action and the image install it with ci/install-quint.sh instead,
   from the release URL against its sha256, where quint finds it
   (`$QUINT_HOME/rust-evaluator-v0.8.0`).
+- CI's simulate step failed edgepublish's `allows: committedNoDuplicatePayload`
+  on 0.35 (none of 1000 traces violated it). The violation is reachable
+  (`simulate -graph`: 8 steps) and rare: over unrelated seeds about 1 trace
+  in 3300 on 0.35's Rust backend and on 0.33.1's alike. Small consecutive
+  seeds draw correlated streams: 0.33.1's 1 to 20 all found it in 1000
+  traces, 0.35's none until 3500-4000, whatever the thread count. Its
+  binding now samples 20000 traces (21 of 21 seeds, against 20 of 21 at
+  10000; 21 CPU s against 12), the claim kept in `allows`; its compiled
+  model recompiled for the binding's hash. The other 52 bindings pass at
+  seed 1 and at two random seeds.
+- grist/gristtest's CPU budget: 144.7 CPU s on CI against its line of 70.
+  Locally 76.6 on 0.33.1 and 83.1 on 0.35.0 (+8%; its tests alone 81.6
+  against 87.6, spread over the composition tests' quint calls). No test
+  does new work there (TestGeneratedRuleRefusalOrigin, which now runs its
+  five quint tests, is package grist's: 112.9 to 149.2, within its 180):
+  the line is CI's figure.
