@@ -253,7 +253,7 @@ type Simulation struct {
 	Dead []string `yaml:"dead"`
 	// Inductive says how `gotogether simulate -inductive` and
 	// qtest.Inductive prove the holds invariants by induction with quint's
-	// Veil backend, for every value of the constants (DESIGN §115): the
+	// Veil backend, for every value of the constants (DESIGN §116): the
 	// module proved and the lemmas each invariant needs.
 	Inductive *Inductive `yaml:"inductive"`
 	// Variants are the design's alternatives, each the same model under

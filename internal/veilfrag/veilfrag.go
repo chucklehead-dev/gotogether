@@ -2,7 +2,7 @@
 // Veil backend (`quint verify --backend veil`) cannot prove, and for what
 // makes a proof of it vacuous: the model lint's notes (`gotogether lint
 // -veil`) and simulate -inductive's vacuity warnings share it (DESIGN
-// §115). Every rule reads the parsed IR, never the text: a rule that the
+// §116). Every rule reads the parsed IR, never the text: a rule that the
 // IR cannot decide is not here.
 package veilfrag
 

@@ -320,7 +320,7 @@ table for agents):
 | Does my code do what the model's traces do? | `connect.Run`: the model drives the code |
 | Does the code accept inputs the model forbids? | `qhegel.Test`, `FindViolation`: Hegel drives, the model judges |
 | Do runs of the real system conform? | `qobs`, `//quint:action`, `convert` (OTel spans), a binding, `gotogether validate` |
-| Does each step send what the model says it sends (a capture's amount, one key across retries, a notice)? | an effects def per action in the model (`def payEffects(order: str): List[Effect]`) and the binding's `effects:` kinds; qenv's doubles record every send, `qobs.Effect` and `Call.Scope` elsewhere; a difference is `Mismatch(action)` naming the first differing effect and field ([examples/checkout](examples/checkout)'s `pay`, DESIGN §112) |
+| Does each step send what the model says it sends (a capture's amount, one key across retries, a notice)? | an effects def per action in the model (`def payEffects(order: str): List[Effect]`) and the binding's `effects:` kinds; qenv's doubles record every send, `qobs.Effect` and `Call.Scope` elsewhere; a difference is `Mismatch(action)` naming the first differing effect and field ([examples/checkout](examples/checkout)'s `pay`, DESIGN §112); in a model-based test, `connect.Bind(...).Effects(...)` compares each step's sends with the same defs (DESIGN §115) |
 | Is it correct under crashes, lost responses, redelivery, isolation levels? | `qenv` and `qtest.System`: `Explore`, `Exhaust`, `Sweep`, `FaultOrders`, `Fuzz`, `qhegel.Shrink` |
 | Does the whole system survive the faults my model's traces have? | `System.FollowTraces`: each trace's fault actions become the simulation's faults (`qtest.FaultMap`), the rest of the run is the system's, checked by the model |
 | What did no run reach? What does the model not constrain? | `qweave -cover`, `qweave -mutate`, `System.Mutate`, `Exploration.Evidence`; over a suite, `gotogether evidence` |
@@ -506,6 +506,10 @@ func TestModelDrivesBank(t *testing.T) {
 A divergence fails with the step, its picks, the model's next state, the
 differing fields (`.Balances[bob]: model 16, implementation 17`), and
 `reproduce with QUINT_SEED=0x…`.
+Given `.Effects(binding.Effects{...})`, a Binding also compares what each
+step sends (`qobs.Effect` through the trace's context) with the model's
+`<action>Effects` def: a wrong field, an extra or a missing send fails the
+step before its own error (DESIGN §115).
 
 | quint-connect (Rust) | gotogether |
 |---|---|

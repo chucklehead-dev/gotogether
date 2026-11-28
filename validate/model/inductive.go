@@ -19,7 +19,7 @@ import (
 	"golang.org/x/mod/semver"
 )
 
-// Proof by induction with quint's Veil backend (DESIGN §115): `quint
+// Proof by induction with quint's Veil backend (DESIGN §116): `quint
 // verify --backend veil --inductive-invariant I` proves that init
 // establishes I and every action of step preserves it, for every value of
 // the constants. The inductive invariant of a holds invariant P is P and

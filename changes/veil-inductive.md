@@ -1,7 +1,7 @@
 - `gotogether simulate -inductive[=a,b]` proves a binding's `simulate.holds`
   invariants by induction with quint's Veil backend (`quint verify
   --backend veil --inductive-invariant`), for every value of the constants
-  (DESIGN §115). Outcomes are never conflated: proved; a counterexample to
+  (DESIGN §116). Outcomes are never conflated: proved; a counterexample to
   induction (no verdict: both states, the action, the ITF kept,
   `-inductive-out`); refused (outside Veil's fragment, Veil's reason; never a
   failure); undecided; not done (no quint >= 0.35 or no Veil, saying how to

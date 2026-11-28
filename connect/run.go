@@ -489,7 +489,7 @@ func replayPrepared(t *testing.T, c Config, files []string, newDriver func(testi
 // step and repro at the first divergence.
 func replayOne(t *testing.T, c Config, ev *evaluator, tr *itf.Trace, i int, newDriver func(testing.TB) Driver, repro string) {
 	t.Helper()
-	opt := ReplayOptions{Trace: i, StatePath: c.StatePath, NondetPath: c.NondetPath, eval: ev}
+	opt := ReplayOptions{Trace: i, StatePath: c.StatePath, NondetPath: c.NondetPath, eval: ev, ctx: t.Context()}
 	if c.Verbose > 0 {
 		opt.OnStep = func(s *Step) {
 			if c.Verbose > 1 {

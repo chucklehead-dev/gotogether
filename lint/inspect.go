@@ -28,7 +28,7 @@ type Options struct {
 	// assignment's precedence, reserved names), then quint's typecheck.
 	Models []string
 	Quint  string
-	// Veil adds the Veil-fragment checks (model.veil.*, DESIGN §115) of
+	// Veil adds the Veil-fragment checks (model.veil.*, DESIGN §116) of
 	// each model and binding: the idioms quint's Veil backend refuses or
 	// cannot prove for every constant, and, for a binding, the holds
 	// invariants a settle flag step never sets makes vacuous. They are

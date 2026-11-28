@@ -220,7 +220,7 @@ type SimulateOptions struct {
 	Graph bool
 	// Inductive proves each of these holds invariants by induction with
 	// quint's Veil backend, for every value of the constants, instead of
-	// checking the instance (Report.Inductive; DESIGN §115). It needs
+	// checking the instance (Report.Inductive; DESIGN §116). It needs
 	// quint ≥ VeilVersion with Veil installed, and is not done without.
 	Inductive []InductiveRequest
 	// InductiveOut is where a counterexample to induction's ITF is kept

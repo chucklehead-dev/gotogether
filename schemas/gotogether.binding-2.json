@@ -300,7 +300,7 @@
         },
         "inductive": {
           "additionalProperties": false,
-          "description": "Inductive says how `gotogether simulate -inductive` and qtest.Inductive prove the holds invariants by induction with quint's Veil backend, for every value of the constants (DESIGN §115): the module proved and the lemmas each invariant needs.",
+          "description": "Inductive says how `gotogether simulate -inductive` and qtest.Inductive prove the holds invariants by induction with quint's Veil backend, for every value of the constants (DESIGN §116): the module proved and the lemmas each invariant needs.",
           "properties": {
             "lemmas": {
               "additionalProperties": {

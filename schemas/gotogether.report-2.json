@@ -314,7 +314,7 @@
                   "description": "Effects, for a mismatch of a step's effects (I/O specifications), are the effects made and the model's, and where they first differ.",
                   "properties": {
                     "call": {
-                      "description": "Call is the def applied to the step's arguments (payEffects(\"o1\")), Match the binding's mode.",
+                      "description": "Call is the def applied to the step's arguments (payEffects(\"o1\")), Match the binding's mode. For an Undeclared mismatch, Call is the def the action would take (commitEffects).",
                       "type": "string"
                     },
                     "expected": {
@@ -362,6 +362,10 @@
                         "type": "string"
                       },
                       "type": "array"
+                    },
+                    "undeclared": {
+                      "description": "Undeclared: the step's action has no effects def (none in the model, and none opted out of), and the step made effects of a mapped kind: the model states none, so none is the specification.",
+                      "type": "boolean"
                     },
                     "unexplained": {
                       "description": "Unexplained says why Expected is unknown.",

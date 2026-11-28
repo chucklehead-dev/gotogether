@@ -614,7 +614,7 @@ type InductiveClaim struct {
 }
 
 // Inductive claims the holds invariant inv is proved by induction with
-// quint's Veil backend, for every value of the constants (DESIGN §115):
+// quint's Veil backend, for every value of the constants (DESIGN §116):
 // inv and its lemmas (With, else the binding's simulate.inductive.lemmas)
 // are an inductive invariant of simulate.inductive.module (else the
 // binding's module), init establishing it and every action of step
