@@ -9,6 +9,9 @@
 // differ from the model's (a lost update).
 module ledger {
   const INITIAL: int
+  // accounts open with no debt: Veil proves nonNegative for every INITIAL
+  // this allows (an assume of the main module; DESIGN §116)
+  assume initialNat = INITIAL >= 0
 
   pure val ACCOUNTS = Set("a", "b", "c")
 

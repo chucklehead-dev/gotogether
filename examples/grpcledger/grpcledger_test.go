@@ -135,3 +135,12 @@ func TestCrashWindow(t *testing.T) {
 	run(ledger.Faithful).Explore(t, crashes).Expect(t, qtest.Conforms())
 	run(ledger.NoDedupe).Explore(t, crashes).Expect(t, qtest.Some(reapplied))
 }
+
+// Veil proves both invariants by induction for every INITIAL the model's
+// assume allows (DESIGN §116), with no lemma: conservation's fold is over
+// the literal ACCOUNTS. Where quint 0.35 or Veil is not installed (CI) the
+// claims are not done and the test skips. Measured with quint 0.35.0 and
+// Veil (2026-11-28): proved in 12 s and 12 s.
+func TestModelInductive(t *testing.T) {
+	qtest.Model(t, "ledger.binding.yaml").Expect(t, qtest.Inductive("conservation").With(), qtest.Inductive("nonNegative").With())
+}
