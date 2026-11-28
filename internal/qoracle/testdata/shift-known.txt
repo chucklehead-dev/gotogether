@@ -1,4 +1,4 @@
-# Where quint 0.33.1's own output changes when every id is shifted (a
+# Where quint's own output changes when every id is shifted (a
 # module written first), there is no quint behaviour to match: gotogether's
 # front end makes an id-free choice (source order, then name), and the
 # oracle accepts the class here (docs/q2-front-end.md §4.5's rule). Each
@@ -11,3 +11,4 @@ cycle-order * # toposort.ts's `cycles: Set(edges.keys())`: an immutable Map over
 types-after-error * # constraintGenerator.ts's exits return once a type error is recorded, and inferrer.ts walks a layer in the ids' order: which declarations after the first error have types follows the ids
 verdict-flip quint:examples/language-features/importFrom.qnt # shifted, imports.qnt's `import E` and `export basics as ExportedBasics` fail: QNT405 Module 'basics' not found, QNT404 MyF::ExportedBasics::double (export resolution depends on the modules' order within a toposort layer, which is the ids')
 verdict-flip quint-test:quint/test/names/collector.test.ts#16 # `assume _ = val foo = 1 { foo }`: shifted, QNT000 Couldn't unify int and bool (the assumption named _ resolves by the ids' order)
+verdict-flip quint-test:quint/test/types/inferrer.test.ts#31 # quint 0.34's arity errors for `o: Option` in modules B and C (#2006): the same verdict and errors, in an order that follows quint's ids, so shifted the first error is C's
