@@ -9882,3 +9882,51 @@ for the toolkit, each with its fix:
   does new work there (TestGeneratedRuleRefusalOrigin, which now runs its
   five quint tests, is package grist's: 112.9 to 149.2, within its 180):
   the line is CI's figure.
+
+## V3: the examples' proofs by induction (2026-11-28)
+
+The evaluation's adaptations (2026-11-27, in scratch) redone in the
+repository, each re-proved with quint 0.35.0 and Veil (`quint veil
+install`), and each a `TestModelInductive` beside the model's tests (not
+done, skipped, on CI, which has no Veil; `ci/needs-quint.txt`'s new
+`veil` release). Times are Veil's, one proof at a time on four cores.
+
+| example | invariant | outcome | adaptation | lemmas | time |
+|---|---|---|---|---|---|
+| bank | noOverdraft | every constant | none | none | 8 s |
+| hello | exactlyOnce | every constant | stated pointwise: ghosts `slot`/`bySlot`, a bijection between `applied` and `1.to(count)` (the graph 8 states to 16) | none | 6 s |
+| jobqueue | doneImpliesPerformed | every constant | ghost `enqueued` (jobs' keys), restart's `jobs` over it | 4 | 23 s |
+| kvstore | versionsAreRevisions, versionsUnique | every constant | ghost `live` (store's keys), del's `store` over it | 1, 2 | 12 s each |
+| glomers broadcast | noInvention | every constant | ghost `ids` (inflight's keys); `size() > 0` as `!= Set()` | 3 | 18 s |
+| checkout | noOversell (new) | every STOCK ≥ 0 | `assume stockNat` (restated in checkoutProof) | 1 | 17 s |
+| grpcledger | conservation, nonNegative | every INITIAL ≥ 0 | `assume initialNat` | none | 12 s each |
+| retrystorm | bounded, capped | every RATIO, CAP ≥ 0 | assumes (restated in retryProof) | 1, none | 5 s each |
+| migrate-payments | captureWithinAuthorization, oneChargePerKey, voidedNothingCaptured | every constant | none | none, none, 1 | 31–33 s each |
+| wallet | noOverdraft | the instance only | joint as a val over `bal`, a move's balances over ACCOUNTS by its src and dest, the map literal built by put | none | 24 s |
+
+What differed from the evaluation:
+
+- jobqueue: the evaluation made `jobs` total (`Absent`), changing what
+  `jobs.keys()` means to every reader; a ghost key set leaves `jobs` as
+  it was, and Veil proves it with the same four lemmas over it.
+- kvstore: `live.exclude(Set(key)).mapBy(...)`, not `KEYS.filter(...)`,
+  which dropped a restored key outside KEYS on another key's delete; its
+  lemma is then `live == store.keys()` alone.
+- broadcast: without `seenOfNodes` the proof went through in six runs
+  and failed in two with a broadcast "with no post-state" (seen's setBy at
+  a key Veil did not know was one): the lemma stays.
+- checkout's holds invariant `stockNonNeg2` became `noOversell`, in
+  `invariants` too (simulate requires a holds invariant to be one).
+- Vacuous, left out with their meaning kept: checkout's
+  settledCorrectly (Veil: a counterexample to induction after place from
+  a settled state; with the lemma `not(settled)` proved, and both
+  vacuity warnings given), broadcast's convergedWhenSettled (a
+  counterexample after a delivery), crossdb's (refused: a size).
+
+Found on the way (ROADMAP V3, open): five proofs at once on four cores
+made `quint --version` exceed its 10 s timeout, reported "not done: no
+quint (context deadline exceeded)", which qtest skips; a counterexample to
+induction Veil cannot decode is a run error, not no verdict; an instance
+module's proof reads "for every value of the constants"; the
+lemma-negates-antecedent warning names the antecedent `settle` (for
+`settled`), with a doubled space.

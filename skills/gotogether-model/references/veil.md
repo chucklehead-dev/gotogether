@@ -15,7 +15,7 @@ simulate:
     spec: model/jobqueue.qnt      # default: the binding's spec
     module: jobqueueProof         # default: the binding's module
     lemmas:
-      doneImpliesPerformed: [performedOfEnqueued, workingEnqueued]
+      doneImpliesPerformed: [enqueuedKeys, workingEnqueued, finishedPerformed, performedNonNeg]
 ```
 
 ```sh
@@ -39,7 +39,9 @@ qtest.Inductive("p").With("lemma1"))`.
   shrink (`m.keys().exclude(Set(k)).mapBy(...)`) cannot be proved. Keep a
   ghost `Set[K]` of live keys beside the map, or make the map total over a
   constant domain (`JOBS.mapBy(_ => Absent)`) with a value meaning absent.
-  This is Veil's limitation, not a fault of the model.
+  This is Veil's limitation, not a fault of the model. A ghost key set
+  leaves the map, and so the binding, as it was (examples/jobqueue,
+  kvstore, glomers' broadcast: `live.exclude(Set(k)).mapBy(...)`).
 - **No match inside mapBy.** Compare with the constructors (`if
   (status.get(k) == Done) ...`), or match outside it.
 - **No map literal with variable keys.** `Map(src -> -1, dest -> 1)` may
