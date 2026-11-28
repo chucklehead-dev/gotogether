@@ -1,0 +1,25 @@
+# pay.yaml with an unrecorded audit (hidden: the Go evaluator searches
+# the states it may reach between recorded steps): a step there is judged
+# by the hidden search, place's undeclared capture included
+# (TestEffectsUndeclaredHidden).
+spec: pay.qnt
+module: pay
+actions:
+  place: {}
+  pay:
+    match: retried
+  refund:
+    match: set
+hidden: [audit]
+effects:
+  kinds:
+    Capture:
+      from: rpc.provider.request
+      where: { Op: capture }
+      fields: { order: '{{.Order}}', amount: '{{.Amount}}' }
+      same: [Key]
+    Notify:
+      from: queue.mail.publish
+      fields: { order: '{{.Order}}' }
+simulate:
+  skip: a fixture of effects

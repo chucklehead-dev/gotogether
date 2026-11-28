@@ -474,6 +474,11 @@ func (h *hiddenSearch) failure(o hiddenOutcome) *Failure {
 	default:
 		f.Kind, f.Quint = "state", fmt.Sprintf("%s is enabled, but its expect holds after it in no state the hidden actions reach", call.Action)
 	}
+	if f.Kind == "state" && call.Effects.Undeclared() {
+		// no state takes it: its effects, which its action does not
+		// state, say why, whatever state the search is in
+		f.Effects = h.c.effectsMismatch(func() *evaluator { return h.e }, h.plan, o.at, nil)
+	}
 	return f
 }
 

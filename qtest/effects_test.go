@@ -168,9 +168,52 @@ func TestEffectsUndeclared(t *testing.T) {
 // no effects, so the plan's Undeclared check fails the step, judged by
 // the evaluator with no quint. Not parallel: it sets the environment.
 func TestEffectsUndeclaredCompiled(t *testing.T) {
-	skip.Quint(t) // to compile
+	b := compiledPay(t, "pay.yaml")
+	t.Setenv(compiledEnv, "1")
+	run := Validate(t, b, placeSends(true, false))
+	run.Expect(t, Mismatch("place"))
+	if got := judgedBy(t, run); got != "evaluator" {
+		t.Errorf("judged by %q, want the evaluator's alone", got)
+	}
+	Validate(t, b, placeSends(false, true)).Expect(t, Conforms())
+}
+
+// A binding with a hidden action (an unrecorded audit) is judged by the
+// Go evaluator's own search over the states the hidden actions reach
+// (quint cannot replay a step whose choices are unknown, and a compiled
+// model refuses such a binding as needing quint): there too place's
+// capture fails its step, the search's verdict, its report naming the
+// undeclared effects, and a void alone and the faithful log conform.
+// Without the search's own check (hidden.go) the step's conjunct has no
+// evaluation module expect, and the search errs.
+func TestEffectsUndeclaredHidden(t *testing.T) {
+	t.Parallel()
+	RequireQuint(t)
+	run := Validate(t, "testdata/pay-hidden.yaml", placeSends(true, false))
+	run.Expect(t, Mismatch("place"))
+	text := run.Report.VerboseSummary()
+	for _, w := range []string{
+		"judged by the Go evaluator's search over hidden actions (audit",
+		"place is enabled, but its expect holds after it in no state the hidden actions reach",
+		"place made effects, and the model states none (it has no placeEffects)",
+		`made     [Capture({ amount: 20, order: "o1" })]   (rpc.provider.request at seq 1)`,
+	} {
+		if !strings.Contains(text, w) {
+			t.Errorf("the report lacks %q:\n%s", w, text)
+		}
+	}
+	Validate(t, "testdata/pay-hidden.yaml", placeSends(false, true)).Expect(t, Conforms())
+	Validate(t, "testdata/pay-hidden.yaml", payLog(20, "cap:o1", true)).Expect(t, Conforms())
+}
+
+// compiledPay copies pay.qnt and the binding into a directory of their
+// own and compiles the binding's model beside it, returning its path. It
+// needs quint, to compile.
+func compiledPay(t *testing.T, bindingFile string) string {
+	t.Helper()
+	skip.Quint(t)
 	dir := t.TempDir()
-	for _, f := range []string{"pay.qnt", "pay.yaml"} {
+	for _, f := range []string{"pay.qnt", bindingFile} {
 		data, err := os.ReadFile(filepath.Join("testdata", f))
 		if err != nil {
 			t.Fatal(err)
@@ -179,7 +222,7 @@ func TestEffectsUndeclaredCompiled(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	b := filepath.Join(dir, "pay.yaml")
+	b := filepath.Join(dir, bindingFile)
 	cm, err := validate.Compile(b, validate.Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -187,13 +230,7 @@ func TestEffectsUndeclaredCompiled(t *testing.T) {
 	if err := cm.Write(validate.CompiledFor(b)); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv(compiledEnv, "1")
-	run := Validate(t, b, placeSends(true, false))
-	run.Expect(t, Mismatch("place"))
-	if got := judgedBy(t, run); got != "evaluator" {
-		t.Errorf("judged by %q, want the evaluator's alone", got)
-	}
-	Validate(t, b, placeSends(false, true)).Expect(t, Conforms())
+	return b
 }
 
 // A step recorded where effects are not (no scope, outside a simulation)

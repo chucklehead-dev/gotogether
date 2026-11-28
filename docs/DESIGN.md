@@ -8139,9 +8139,15 @@ def's foreign parameter, a def of no effects, a def the model lacks,
 a mapping with no def, a kind with no `From`) each have a test, and so
 does `b.Run` end to end on both paths. Ablated in turn, the window's
 between-steps check (the late mutant passes), the sets' normalization
-(match set fails) and validate's evaluator-side rule (qtest's
+(match set fails), validate's evaluator-side rule (qtest's
 TestEffectsUndeclaredCompiled, judged by the compiled model alone, fails)
-each turn a test red. validate's rule is qtest's TestEffectsUndeclared
+and the hidden search's (TestEffectsUndeclaredHidden, testdata/pay-hidden.yaml:
+an unrecorded audit makes the Go evaluator's search judge every step, and
+without its check the search errs on the conjunct its evaluation module
+has no expect for; a compiled model refuses a hidden binding as needing
+quint, so this one runs with quint present, judged by the search) each
+turn a test red. A hidden search's undeclared failure carries the same
+effects block as a replay's. validate's rule is qtest's TestEffectsUndeclared
 (a capture sent by `place`, which pay.qnt states no effects for:
 `Mismatch("place")`; a void beside it, unmapped, changes nothing; a void
 alone conforms; `place: { effects: "-" }` and the ablated binding
