@@ -12,6 +12,7 @@ judges Hegel's runs (`qhegel`), and it replays recorded runs
 ## Choose your path
 
 - The nine conventions in full, cheap replays, Choreo models, the commands, the errors' table: [references/conventions.md](references/conventions.md).
+- Holds invariants proved for every value of the constants with Veil (`simulate -inductive`, `qtest.Inductive`, `lint -veil`), and how to write a model Veil proves: [references/veil.md](references/veil.md).
 - The model kept in its Markdown design document (`spec: design.md`, positions at its lines, `tangle -check`): [references/literate.md](references/literate.md).
 - What the model should allow (requirement vs solution, the environment, ghosts, settles): the gotogether-patterns skill.
 - The order of work (scenarios, safety, liveness, then code): the gotogether-workflow skill.
@@ -52,6 +53,7 @@ judges Hegel's runs (`qhegel`), and it replays recorded runs
 | `possible ...: FAIL` (the model forbids it) | too strict for a scenario | `gotogether nav -binding` to the guard |
 | a `holds` invariant violated in `simulate` | a design bug, or the property is wrong | the counterexample (`-graph -out cex.qnt`) |
 | an `allows` invariant never violated | its check of the code would be vacuous | the model is too strict, or the property moved |
+| `refused` or `no verdict ...: not inductive` from `simulate -inductive` | outside Veil's fragment, or a lemma missing | [references/veil.md](references/veil.md) |
 | `Cannot continue in "then"` (QNT513) in validation | a recorded step not enabled | the gotogether-traces skill |
 
 ## Run it, do not infer it

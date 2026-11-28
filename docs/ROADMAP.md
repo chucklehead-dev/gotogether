@@ -38,8 +38,9 @@ and the [maintainer's decisions and independent re-check](https://github.com/chu
 | Proposed queue | L1–L8: golem's first use ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6833092588)) | L1 (#191), L3 (#195), L5 (#194) and L6's docs landed after J7c; the rest as projects ask. |
 | Proposed queue | M1–M6: golem's graph search and Valkey ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6835911012)) | M1 (a bounded result: `-memory`, `-process-memory`, `peakResident`) and M2 done; next M3 (symmetry). |
 | Proposed queue | N1–N7: golem's driver asks ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6843138891)) | N1 (`Config.Require`, its witnesses), N3 (`Step.Eval`), N5 (actionmap `-roundtrips`) and N7 (`connect.Differential`) done. Next N2 (`connect.Compose`). Open in N1: a witness continued past its target (documented for now: require the state after the step under test). |
-| Proposed queue | CW1–CW12: a contract from design to operation ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6885259328), [#220](https://github.com/chucklehead-dev/gotogether/issues/220#issuecomment-6884857732)) | CW1 (literate models; Goo adopted it), CW2 (the design matrix with per-variant search, `dead`, `-variant` and memory released per variant; golem adopted it for four models) and CW4 done. CW5's runtime half done (`connect.Bind` with `Returns` and `Observes`), and its static half (a binding checked against the model's actions, picks and types before any trace; Go types generated from the model's, `gotogether types [-check]`; the walkthrough's tables and the alignment lint, `gotogether invariants [-write|-check] [-require enforced,checked,recorded,driven]`: properties from `//quint:enforces` and `//quint:checks`, actions from the code that records and drives them); left in CW5: Go to Quint (if ever), golem's `expDriver` the first outside case, a world that is not one `T` an open question. CW3's first slice done (listed assumptions: `// @assume` lines in the model, `//quint:exercises` and `//quint:monitors`, the assumptions table, `-require targeted`); and its doc lint (`gotogether invariants -claims doc.md [-require cited]`: marked `Claim:` lines must cite `(prop: name)` or `(assume: name)` of the model, DESIGN §114); left in CW3: a predicate checked on traces. CW11 (asynchronous drivers) its own design. CW12 (I/O specifications) P0 and P1 done (DESIGN §112); effects in connect-driven runs done (DESIGN §115: golem's ask; validate judges an undeclared action's sends too; `qrun.Start` on the replay goroutine left open); next its pending-call rule, then P2. Left in CW1: `lint -model doc.md`, stable IDs; in CW2: possibles per variant, iterative deepening. |
+| Proposed queue | CW1–CW12: a contract from design to operation ([#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-6885259328), [#220](https://github.com/chucklehead-dev/gotogether/issues/220#issuecomment-6884857732)) | CW1 (literate models; Goo adopted it), CW2 (the design matrix with per-variant search, `dead`, `-variant` and memory released per variant; golem adopted it for four models) and CW4 done. CW5's runtime half done (`connect.Bind` with `Returns` and `Observes`), and its static half (a binding checked against the model's actions, picks and types before any trace; Go types generated from the model's, `gotogether types [-check]`; the walkthrough's tables and the alignment lint, `gotogether invariants [-write|-check] [-require enforced,checked,recorded,driven]`: properties from `//quint:enforces` and `//quint:checks`, actions from the code that records and drives them); left in CW5: Go to Quint (if ever), golem's `expDriver` the first outside case, a world that is not one `T` an open question. CW3's first slice done (listed assumptions: `// @assume` lines in the model, `//quint:exercises` and `//quint:monitors`, the assumptions table, `-require targeted`); and its doc lint (`gotogether invariants -claims doc.md [-require cited]`: marked `Claim:` lines must cite `(prop: name)` or `(assume: name)` of the model, DESIGN §114); left in CW3: a predicate checked on traces. CW11 (asynchronous drivers) its own design. CW12 (I/O specifications) P0 and P1 done (DESIGN §112); effects in connect-driven runs done (DESIGN §116: golem's ask; validate judges an undeclared action's sends too; `qrun.Start` on the replay goroutine left open); next its pending-call rule, then P2. Left in CW1: `lint -model doc.md`, stable IDs; in CW2: possibles per variant, iterative deepening. |
 | Proposed queue | O1–O2: external drivers ([#220](https://github.com/chucklehead-dev/gotogether/issues/220)) | O1 done (a `settled` record in `gotogether.requests/1`, written by the Playwright adapter's `settled()`): it retires Goo's drain bridge. Next O2, the compact external-driver example. |
+| Proposed queue | V1–V3: [proofs by induction with Veil](#proofs-by-induction-with-veil-v) | V1 (`simulate -inductive`, `qtest.Inductive`, vacuity warnings; DESIGN §116) and V2 (`lint -veil`) built on branch veil-inductive. CI runs quint 0.35 (#288) without Veil: there the claim is not done. Next: V3, adapting examples; a nightly job with Veil is proposed in V1. |
 | Proposed queue | LI1–LI4: [lock invariants, after Gobra](#lock-invariants-li-after-gobra) | LI1 (`qenv.Guard`, checked at every simulated Unlock) and LI2 (`//quint:guards`, woven by qweave at the field's Unlocks) done. LI3 (gosim) and LI4 (the doubles' row locks) as projects ask. |
 | Proposed queue | Q0–Q11: a Go Quint | A design item, each its own decision. Q0 first (no quint for consumers, small); Q2's front end only once Q3's corpus and ill-typed generator exist: Q2's P1 (the parser) done, started before Q3's green week (the maintainer); next P2. No upstream contact for now (maintainer, 2026-11-25): gotogether proceeds on its own. |
 | Dropped | J12 and J23 | Go 1.26 compatibility and pin batching are withdrawn. Go 1.27.3 and immediate required sibling pin alignment remain deliberate policies. |
@@ -294,6 +295,34 @@ return, and the driver's own drained-then-settled bridge.
   control with its intended diagnosis, and a code-0 completion; raw page
   text interned. webjobs has most of it, spread over Bombadil and
   Playwright.
+
+## Proofs by induction with Veil (V)
+
+quint 0.35's Veil backend proves an inductive invariant for every value of
+the constants (DESIGN §116). Approved by the maintainer after the
+evaluation of 2026-11-27.
+
+- **V1, the claim.** `simulate -inductive[=a,b]` and
+  `qtest.Inductive(inv).With(lemmas...)`, the binding's
+  `simulate.inductive` (`spec`, `module`, `lemmas`). Built. CI runs quint
+  0.35 (#288) without Veil, so there the claim is not done and the
+  real-Veil test skips; the instance's antecedent search gives its verdict
+  under 0.35. Proposed: a nightly job that runs `quint veil install`
+  (cached, about 5 GB) and `go test -run TestInductiveRealVeil
+  ./validate/model/`, so the captured fixtures are checked against Veil
+  itself when quint or Veil changes; never per push.
+- **V2, the lint.** `lint -veil`/`-veil-errors`: the size of a set against
+  a small literal, key removal by mapBy, match in mapBy, variable-key map
+  literals, folds over constants or parameters, assumes outside main, a
+  holds invariant vacuous by a settle flag step never sets. Built. Open:
+  rules the IR cannot decide alone (a size against a variable, list folds
+  over state logs) stay Veil's refusals.
+- **V3, the examples.** Adapt the models the evaluation found close
+  (hello, wallet, jobqueue, kvstore, broadcast, retrystorm, grpcledger,
+  checkout's assumes) with `<model>Proof` modules and their bindings'
+  `simulate.inductive`, each adaptation keeping the model's meaning
+  (adaptations.diff of the evaluation is the starting point). Not started:
+  separate work.
 
 ## Lock invariants (LI, after Gobra)
 
@@ -638,7 +667,7 @@ Items, each its own decision before it starts:
   swap operators), P3 (owed effects across processes by key, the real
   tier's transport and spans), P4 (Choreo projection); grist after P3.
   Design, phases and the maintainer's answers: [io-specs.md](io-specs.md).
-  **Effects in connect-driven runs: built** (DESIGN §115, golem's ask in
+  **Effects in connect-driven runs: built** (DESIGN §116, golem's ask in
   [#144](https://github.com/chucklehead-dev/gotogether/issues/144#issuecomment-7228258468)):
   a Binding given `binding.Effects` (`Effects`, `EffectsOf`) compares each
   step's effects with `<action>Effects` (`initEffects` for `BindContext`'s

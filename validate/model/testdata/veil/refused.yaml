@@ -1,0 +1,5 @@
+spec: refused.qnt
+module: refused
+invariants: [exactlyOnce]
+simulate:
+  holds: [exactlyOnce]

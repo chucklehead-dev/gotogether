@@ -72,7 +72,10 @@ Each addition works on that same System, when its question comes up:
   `qtest.Bound` of faults and delays), `sys.Sweep`, `sys.Fuzz`; Hegel
   (`qhegel.Shrink`) shrinks a failure to the faults it needs.
 - **The model before the code:** `qtest.Model(t, binding).Expect(t,
-  qtest.Proves("exactlyOnce"))`, and `gotogether simulate`.
+  qtest.Proves("exactlyOnce"))`, and `gotogether simulate`; for every value
+  of the constants, by induction with quint's Veil backend:
+  `qtest.Inductive(inv).With(lemmas...)` and `gotogether simulate
+  -inductive` (`gotogether lint -veil` notes what Veil refuses).
 - **The real environment:** the same binding checks runs recorded outside
   the simulation (`qtest.Record`, `gotogether validate`).
 - **Another question:** the model's traces driving the code (`connect`),

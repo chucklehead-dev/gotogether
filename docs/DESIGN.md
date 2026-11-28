@@ -8261,3 +8261,94 @@ synchronous replay, and owed effects across processes are P3's. Internal
 effects (P2) follow validate's opt-in when they land. A recording
 transport for real HTTP clients (§112's `qobshttp`, P3) would replace
 golem's hand-written transport.
+
+## 116. Proof by induction with Veil, for every value of the constants
+
+quint 0.35's Veil backend (`quint verify --backend veil
+--inductive-invariant I`) checks, with Veil's SMT encoding in Lean, that
+init establishes I and every action of step preserves it, for every value
+of the constants (and every value the main module's `assume`s allow). The
+evaluation on gotogether's models (2026-11-27) found it proves a
+holds-invariant in 3 to 25 seconds when the model is in Veil's fragment,
+refuses quickly and with a reason when it is not, and prints a
+counterexample to induction (CTI) as two Quint states, with ITF under
+`--out-itf`. `simulate -inductive` and `qtest.Inductive` use exactly that,
+and nothing else of the backend.
+
+- **What a proof claims.** The inductive invariant of a holds invariant P
+  is P and its lemmas (`simulate.inductive.lemmas`, `Inductive(P).With`),
+  passed to Veil as one conjunction, so the implication I ⇒ P holds by
+  construction and Veil's third phase (`--invariants P`) is not needed. A
+  proof is a proof of P in every reachable state of every instance: more
+  than `Proves`' complete graph of one instance. It does not replace
+  `Proves`: the graph checks the instance the code is checked against,
+  whatever Veil can translate, finds the shortest real counterexample, and
+  needs no 5 GB install. A test claims both where both apply.
+- **The outcomes, never conflated.** *Proved*. *Counterexample to
+  induction*: no verdict, never a failure of P, since P may still hold (a
+  lemma is missing); both states, the action (or init's state alone) and
+  what it breaks (the inductive invariant, or a keys invariant Veil added
+  from init) are shown and the ITF kept (`-inductive-out`,
+  `$GOTOGETHER_KEEP/<test>`, else a named temporary directory). A CTI at
+  the initializer is a real state: the report says that if P itself fails
+  there the model violates it and `simulate -graph` shows it. *Refused*:
+  outside Veil's fragment, Veil's reason with the Lean file's path cut; no
+  verdict and never a failure, since the model is not wrong. *Undecided*:
+  the solver answered neither way. *Not done*: quint older than 0.35, or
+  `quint veil status` not ready; the reason says how to install (`npm i -g
+  @informalsystems/quint@0.35.0`, `quint veil install`: about 5 GB and 10
+  minutes). gotogether never installs Veil. In the CLI everything but
+  proved exits 2 (no verdict), never 1; in qtest a CTI or an undecided
+  check fails the test as every claim without a verdict does, while a
+  refusal or not done is logged and skips the test when nothing else
+  failed, so a machine without Veil (CI's) does not fail, and
+  GOTOGETHER_STRICT does not make it.
+- **Structured, not scraped.** The run reads quint's `--out` result
+  (`stage`, `status`, `message`, `inductionChecks`, `addedInvariants`)
+  and the `--out-itf` trace, never the console. A result that is not at
+  the verifying stage, or has errors, is an error naming the module and
+  where the lemmas go (an unknown lemma is quint's QNT404, not a refusal);
+  `ok` from a quint that exited 1 is an error, not a proof.
+- **Vacuity, where cheap.** A proof of an implication `A implies B` may
+  say nothing. Three checks, each a warning on a proof, none a failure:
+  a lemma that negates A (`not(A)`, `A == false`, or a conjunction with
+  either, compared on the IR); A conjoining a boolean state variable that
+  init and every action step reaches assign only `false` or itself (the
+  settle flag of checkout's settledCorrectly, which step never sets); and
+  whether the binding's instance reaches A at all, a possible searched by
+  the Go evaluator and sampled by quint: reached is said with its witness,
+  unreached in a complete graph is a warning. An inductive invariant
+  itself cannot be vacuous in the other sense: init must satisfy it.
+- **Where the proof lives.** `simulate.inductive.module` (default: the
+  binding's module, its constants unset: an instance module resolves to
+  its base) and `.spec` (default: the binding's spec). Lemmas the model
+  needs for nothing else go in a `<model>Proof` module that imports the
+  model (jobqueue's adaptation used four), so the model stays the
+  specification.
+- **The lint.** `lint -veil` notes, from `quint parse`'s IR and source
+  map (never the text), the idioms Veil refuses or cannot prove for every
+  constant, each with its rewrite: `X.size()` against a literal up to 3,
+  a key removed by `m.keys().exclude(..).mapBy(..)`, a `match` inside
+  mapBy, a map literal of two or more entries with a non-literal key, a
+  fold over a constant or a parameter (instance-only), an `assume` in a
+  module main imports that main does not restate, and, for a binding, a
+  holds invariant a settle flag step never sets makes vacuous. Notes do
+  not change the exit; `-veil-errors` makes them errors. Rules the IR
+  cannot decide (the size of a set against a variable, list folds'
+  capacities) are not linted: Veil's own refusal names them.
+- **Left out, deliberately** (the evaluation's verdict, the maintainer's
+  decision). Veil's bounded `--symbolic` checking: `-verify` (Apalache)
+  already checks bounded traces, and at 4 steps the solver answered
+  unknown on grpcledger and lease after 70 to 90 s and took nearly 5
+  minutes on webjobs. `--synthesize-invariant` (#updr): what it finds
+  counts only once certified, and it was not worth its cost on these
+  models. Veil's explicit model checker: the Go evaluator's graph is
+  already the instance's proof, and faster. Lean proofs by hand
+  (`--proofs`) are for a later decision.
+
+CI runs quint 0.35 but installs no Veil: there every proof is not done
+("Veil is not installed ... quint veil install"), the real-Veil test
+(`TestInductiveRealVeil`) skips, and the fake quint's tests carry every
+outcome, from outputs captured from real runs (the vacuity search of the
+instance runs on CI's real quint). ROADMAP V1 proposes a nightly job with
+Veil.

@@ -14,6 +14,7 @@ names the mistake and the fix.
 - Every pattern in full with its examples, settles, quorums, journeys that must finish: [references/patterns.md](references/patterns.md).
 - What a step sends (a capture, a publish): effects as site steps, or a step's effects def compared at its step: [references/effects.md](references/effects.md).
 - The conventions every checked model follows: the gotogether-model skill.
+- A holds invariant proved for every value of the constants (Veil, `simulate -inductive`): pointwise invariants, ghost key sets, lemmas in a `<model>Proof` module, settle-conditioned properties as eventual: the gotogether-model skill's references/veil.md.
 
 ## Steps: the patterns, in the order to check them
 

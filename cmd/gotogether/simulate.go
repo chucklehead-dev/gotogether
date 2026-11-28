@@ -125,6 +125,10 @@ func simulationRequest(args []string, mr *machineReports, log *simLog) (*simulat
 	out := fset.String("out", "", "with -graph: write a Quint module of the binding's instance with a run replaying each counterexample (quint test --match 'gtg_' replays them)")
 	unfair := fset.String("unfair", "", "with -graph: comma-separated actions the liveness search does not oblige (default: the binding's simulate.unfair)")
 	stops := fset.String("stops", "", "with -graph: comma-separated actions the liveness search takes in no cycle (default: the binding's simulate.stops)")
+	var inductive inductiveFlag
+	fset.Var(&inductive, "inductive", "prove the binding's simulate.holds invariants by induction with quint's Veil backend, for every value of the constants "+
+		"(-inductive=a,b: those alone; their lemmas are simulate.inductive's); needs quint >= "+model.VeilVersion+" with Veil installed (quint veil install), else not done")
+	inductiveOut := fset.String("inductive-out", "", "with -inductive: the directory a counterexample to induction's ITF is kept in (default: a new temporary directory, named in the report)")
 	quint := fset.String("quint", "quint", "quint binary")
 	matrix := fset.Bool("matrix", false, "check each of the binding's simulate.variants (the design's alternatives, each its constants and what it holds and allows) and print the table, properties by variants; -json prints gotogether.matrix/1")
 	variant := fset.String("variant", "", "with -matrix: run only this variant (one process per variant, run in parallel by a script)")
@@ -233,6 +237,21 @@ func simulationRequest(args []string, mr *machineReports, log *simLog) (*simulat
 	}
 	if *invs != "" {
 		opt.Invariants = splitList(*invs)
+	}
+	if inductive.set {
+		if *matrix {
+			return nil, fmt.Errorf("simulate: -inductive proves for every value of the constants, the same for every variant: run it without -matrix")
+		}
+		opt.Inductive = []model.InductiveRequest{{}} // every simulate.holds invariant
+		if len(inductive.names) > 0 {
+			opt.Inductive = nil
+			for _, n := range inductive.names {
+				opt.Inductive = append(opt.Inductive, model.InductiveRequest{Name: n})
+			}
+		}
+		opt.InductiveOut = *inductiveOut
+	} else if *inductiveOut != "" {
+		return nil, fmt.Errorf("simulate: -inductive-out requires -inductive")
 	}
 	if *unfair != "" {
 		opt.Unfair = splitList(*unfair)
@@ -366,4 +385,30 @@ func constantsText(c map[string]string) string {
 		parts = append(parts, k+" = "+c[k])
 	}
 	return strings.Join(parts, ", ")
+}
+
+// inductiveFlag is -inductive: alone, every simulate.holds invariant;
+// -inductive=a,b, those.
+type inductiveFlag struct {
+	set   bool
+	names []string
+}
+
+func (f *inductiveFlag) String() string   { return strings.Join(f.names, ",") }
+func (f *inductiveFlag) IsBoolFlag() bool { return true }
+func (f *inductiveFlag) Set(v string) error {
+	f.set = true
+	if v == "true" {
+		f.names = nil
+		return nil
+	}
+	if v == "false" {
+		f.set = false
+		return nil
+	}
+	f.names = splitList(v)
+	if len(f.names) == 0 {
+		return fmt.Errorf("-inductive=%q: name the holds invariants, a,b, or give -inductive alone for all of them", v)
+	}
+	return nil
 }

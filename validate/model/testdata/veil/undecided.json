@@ -1,0 +1,1 @@
+{"stage":"verifying","errors":[],"status":"failure","invariants":[],"elapsedMs":4100,"inductionChecks":[{"invariant":"q::inductiveInv","check":"initializer","status":"proven"},{"invariant":"q::inductiveInv","check":"shift","status":"unknown"}],"message":"Veil could not decide:\n  the inductive invariant after shift: unknown: incomplete quantifier instantiation","main":"induct"}

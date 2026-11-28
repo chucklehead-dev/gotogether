@@ -1,0 +1,8 @@
+spec: induct.qnt
+module: induct
+invariants: [xNonNegative, yNonNegative, xBounded, xPositive, settledCorrectly, xSmall]
+simulate:
+  holds: [xNonNegative, yNonNegative, xBounded, xPositive, settledCorrectly, xSmall]
+  inductive:
+    lemmas:
+      settledCorrectly: [neverSettled]

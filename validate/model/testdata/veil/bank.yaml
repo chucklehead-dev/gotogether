@@ -1,0 +1,6 @@
+# connect's bank, which Veil proves as it is.
+spec: ../../../../connect/testdata/bank.qnt
+module: bank
+invariants: [nonNegative]
+simulate:
+  holds: [nonNegative]

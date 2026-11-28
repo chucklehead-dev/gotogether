@@ -97,6 +97,16 @@ func (r *Report) Doc() *validate.Document {
 		}
 		d.Checks = append(d.Checks, validate.DocCheck{Name: p.Possible.Text(), Kind: "possible", Verdict: verdict, Detail: p.Verdict, Possible: possible})
 	}
+	for _, v := range r.Inductive {
+		verdict := "unchecked"
+		if v.Outcome == InductiveProved {
+			verdict = "holds"
+		}
+		d.Checks = append(d.Checks, sourcedCheck(validate.DocCheck{Name: v.Name, Kind: "inductive", Verdict: verdict, Detail: strings.TrimSpace(inductiveText(v)),
+			Inductive: &validate.DocInductive{Outcome: v.Outcome, Module: v.Module, Invariant: v.Invariant, Lemmas: slices.Clone(v.Lemmas), Reason: v.Reason,
+				Action: v.Action, Broken: v.Broken, States: slices.Clone(v.States), ITF: v.ITF, Added: slices.Clone(v.Added),
+				Antecedent: v.Antecedent, Reached: v.Reached, Vacuous: slices.Clone(v.Vacuous), ElapsedMs: v.Elapsed.Milliseconds()}}, r.Sources))
+	}
 	if d.Error == "" && r.Skipped == "" {
 		for _, check := range d.Checks {
 			if check.Verdict == "fail" {
