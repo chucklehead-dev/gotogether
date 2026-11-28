@@ -562,6 +562,9 @@ func (e *evaluator) holds(consts map[string]qeval.Value, s qeval.State, call *bi
 	if call.Expect == "" {
 		return true, nil
 	}
+	if call.Effects.Undeclared() {
+		return false, nil // effects its action does not state: its conjunct is false
+	}
 	if call.ExpectArgs == nil {
 		return false, &qeval.Unsupported{Op: "expect", Why: call.Action + "'s expect is not text and fields"}
 	}

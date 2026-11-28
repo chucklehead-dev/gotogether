@@ -335,8 +335,9 @@ func (h *hiddenSearch) run(keep []string) (hiddenOutcome, error) {
 				args = append(args, v)
 			}
 		}
-		var xs []qeval.Value // the expect's arguments, once
-		if call.Expect != "" {
+		var xs []qeval.Value                    // the expect's arguments, once
+		undeclared := call.Effects.Undeclared() // effects its action does not state: no state takes the step
+		if call.Expect != "" && !undeclared {
 			if call.ExpectArgs == nil {
 				return hiddenOutcome{}, &qeval.Unsupported{Op: "expect", Why: call.Action + "'s expect is not text and fields"}
 			}
@@ -362,6 +363,9 @@ func (h *hiddenSearch) run(keep []string) (hiddenOutcome, error) {
 			for _, s2 := range succ {
 				enabled = true
 				if !h.e.checkpointMatches(&call, s, s2) {
+					continue
+				}
+				if undeclared {
 					continue
 				}
 				if call.Expect != "" && hooks.TamperEval.Load() != 5 {
@@ -469,6 +473,11 @@ func (h *hiddenSearch) failure(o hiddenOutcome) *Failure {
 		f.Kind, f.Quint = "disabled", fmt.Sprintf("no state the hidden actions reach (at most %d since the step before) enables %s", h.depth, call.Action)
 	default:
 		f.Kind, f.Quint = "state", fmt.Sprintf("%s is enabled, but its expect holds after it in no state the hidden actions reach", call.Action)
+	}
+	if f.Kind == "state" && call.Effects.Undeclared() {
+		// no state takes it: its effects, which its action does not
+		// state, say why, whatever state the search is in
+		f.Effects = h.c.effectsMismatch(func() *evaluator { return h.e }, h.plan, o.at, nil)
 	}
 	return f
 }

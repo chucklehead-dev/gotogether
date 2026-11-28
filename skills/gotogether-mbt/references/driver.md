@@ -393,6 +393,43 @@ From golem's use (#144):
   With `Config.NondetPath` only `Returns` is checked: the actions and
   picks are read from a variable. examples/bank's `TestModelDrivesBank`
   is bound this way.
+- **Compare what each step sends (effects).** State an action's effects
+  in the model, a def over the post-state of the action's parameters
+  (`def attemptEffects(c: str, d: str): List[Effect] = [Send({ ... })]`,
+  `val initEffects` for the constructor), and give the Binding the
+  mapping a binding file's `effects:` section would hold:
+  `.Effects(binding.Effects{Kinds: map[string]binding.EffectKind{"Send":
+  {From: "upstream.request", Fields: map[string]string{"call":
+  "{{.call}}", ...}, Same: []string{"key"}}}})`, and
+  `.EffectsOf("attempt", "", binding.MatchRetried)` where the default
+  def or mode (exact) is not the one (`"-"` compares none). The code
+  records each send through the trace's context: `qobs.Effect(ctx,
+  "upstream.request", "call", id, ...)` with the method's context, a
+  handler's `s.Context()`, or `connect.BindContext`'s constructor's; a
+  qenv simulation made under it (`qenv.New(qenv.WithContext(c, ctx))`)
+  records its doubles' sends there too. A step's effects are those
+  recorded while it ran: a wrong field, an extra or a missing send fails
+  it as a `StepError` of kind `"effects"` ("its effects are not the
+  model's attemptEffects("c1", "d2")", the first difference and the
+  fix), before its own error, its Returns, the state and Check. An effect
+  recorded after a step returned fails the next step, naming the one
+  that started it: wait for the work a step starts before returning. A
+  step of an action with no def that sends a mapped kind fails ("commit
+  made effects, and the model states none"): state them, or opt out
+  with `EffectsOf("commit", "-", "")`. validate judges recorded runs by
+  the same rule. **The gap:** a send through `context.Background()`
+  (on the driver's goroutine or another, a server whose handler's
+  context is not the client's) is recorded nowhere, so a missing send
+  fails loudly and an extra one passes: record at the client (its
+  transport, where the request's context is the step's). The mapping,
+  the defs' types and each constructor's fields are checked before any
+  trace. Migrating a hand-written check (golem's #144 case: fake
+  providers noting each request, a `Bind(...).Check` comparing them with
+  `connect.Eval` of `attemptEffects`): record `qobs.Effect(req.Context(),
+  "upstream.request", ...)` in the client's transport, give the Binding
+  `Effects` and `EffectsOf("attempt", "", binding.MatchRetried)`, and drop
+  the providers' notes and the `Check`; a send during `commit` or `end`,
+  which the hand-written check rejected, is now the undeclared rule's.
 - **Reach the state that matters.** Name a boolean val true where the
   bug could show (a publication with a gap in the ledger) in
   `Config.Require`: the run replays the shortest path to it first, counts

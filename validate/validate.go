@@ -1022,7 +1022,11 @@ func (f *Failure) describeKind(b *strings.Builder, pfx string) {
 	case "disabled":
 		fmt.Fprintf(b, "%s%s is not a transition of the model from the state reached\n", pfx, f.At())
 	case "state":
-		if f.Effects.differs() {
+		if f.Effects != nil && f.Effects.Undeclared {
+			fmt.Fprintf(b, "%sat %s (%s) %s\n", pfx, f.At(), f.stepName(), f.Effects.Headline())
+			break
+		}
+		if f.Effects != nil {
 			fmt.Fprintf(b, "%sat %s (%s) the effects made are not the model's %s\n", pfx, f.At(), f.stepName(), f.Effects.Call)
 			break
 		}
@@ -1070,8 +1074,8 @@ func (f *Failure) describeRest(b *strings.Builder, pfx string, verbose bool) str
 		if t := f.ExpectTemplate; t != "" && t != f.Expect {
 			fmt.Fprintf(b, "%s  binding:  %s\n", pfx, t)
 		}
-		if f.Effects.differs() {
-			b.WriteString(f.Effects.render(pfx + "  "))
+		if f.Effects != nil {
+			b.WriteString(f.Effects.Render(pfx + "  "))
 		}
 	}
 	if f.Step == nil && f.Note != "" && f.Kind != "within" {

@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -192,7 +193,11 @@ func bindingSchema(t *testing.T) []byte {
 }
 
 func reportSchema(t *testing.T) []byte {
-	g := &generator{docs: docs(t, "../validate"), tag: "json",
+	// validate's types, and the effects mismatch it exports under an
+	// alias (EffectsMismatch, internal/effectsdiff's Mismatch)
+	vd := docs(t, "../validate")
+	maps.Copy(vd, docs(t, "../internal/effectsdiff"))
+	g := &generator{docs: vd, tag: "json",
 		structs: map[string]map[string]any{
 			"Document":                  {"required": []string{"format", "command", "verdict", "exit"}},
 			"DocStepActionReachability": {"required": []string{"status", "reason", "missing", "actions"}},

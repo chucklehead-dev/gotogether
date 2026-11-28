@@ -41,6 +41,8 @@
 package connect
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"reflect"
@@ -67,9 +69,23 @@ type Step struct {
 	// (Config.StatePath; the whole state when the path is empty).
 	State itf.Value
 
-	eval    *evaluator   // the run's model, for Eval; nil outside Run and Test
+	eval    *evaluator // the run's model, for Eval; nil outside Run and Test
+	ctx     context.Context
 	state   qeval.State  // After as the model's state, made by the first Eval
 	stateOf *qeval.Model // the model state was made for: Eval may compile another
+}
+
+// Context is the trace's context: its test's (connect.Run and
+// connect.Test give each trace a subtest), and, when a Binding compares
+// effects (Binding.Effects), carrying the trace's effects recorder, so
+// that a handler's sends through it (qobs.Effect, a qenv double, a
+// goroutine given it) are its step's effects. Outside Run and Test,
+// context.Background().
+func (s *Step) Context() context.Context {
+	if s.ctx != nil {
+		return s.ctx
+	}
+	return context.Background()
 }
 
 // Has reports whether a pick was made in this step.
@@ -253,16 +269,26 @@ type ReplayOptions struct {
 	// OnStep is called before each step is driven, e.g. to log it.
 	OnStep func(s *Step)
 
-	eval *evaluator // the run's model for Step.Eval: Run and Test set it
+	eval *evaluator      // the run's model for Step.Eval: Run and Test set it
+	ctx  context.Context // the trace's context (Step.Context): Run and Test set it
 }
 
 // StepError is a failed step of a replay.
 type StepError struct {
 	Trace int
 	Step  *Step
-	Kind  string // "step" (the handler failed), "state" (states diverge), "check", "trace" (malformed trace)
-	Err   error
-	Diff  []string // for Kind "state": the differing fields, model vs implementation
+	// Kind is "step" (the handler failed), "effects" (the step's effects
+	// are not its action's effects def's: Binding.Effects), "state"
+	// (states diverge), "check", "trace" (malformed trace).
+	Kind string
+	// Err is the failure; for Kind "effects" with Effects, the step's own
+	// error, which follows the mismatch, or nil.
+	Err  error
+	Diff []string // for Kind "state": the differing fields, model vs implementation
+	// Effects, for Kind "effects", are the effects the step made and the
+	// model's, and where they first differ; nil when the effects could
+	// not be judged, or were made between two steps (Err says which).
+	Effects *EffectsMismatch
 }
 
 func (e *StepError) Error() string {
@@ -278,6 +304,15 @@ func (e *StepError) Error() string {
 		}
 	case "trace":
 		fmt.Fprintf(&b, "trace %d state %d: %v", e.Trace, e.Step.Index, e.Err)
+	case "effects":
+		if e.Effects == nil {
+			fmt.Fprintf(&b, "trace %d step %d %s: its effects: %v", e.Trace, e.Step.Index, e.Step.summary(), e.Err)
+			break
+		}
+		fmt.Fprintf(&b, "trace %d step %d %s: %s\n%s", e.Trace, e.Step.Index, e.Step.summary(), e.Effects.Headline(), strings.TrimRight(e.Effects.Render("  "), "\n"))
+		if e.Err != nil {
+			fmt.Fprintf(&b, "\n  and the step failed: %v", e.Err)
+		}
 	default:
 		fmt.Fprintf(&b, "trace %d step %d %s: %v", e.Trace, e.Step.Index, e.Step.summary(), e.Err)
 	}
@@ -295,8 +330,10 @@ func Replay(tr *itf.Trace, d Driver, opt ReplayOptions) error {
 	sd, _ := d.(StateDriver)
 	sc, _ := d.(StepChecker)
 	var before map[string]itf.Value
+	var last *Step
 	for i, st := range tr.States {
-		s := &Step{Trace: opt.Trace, Index: i, Before: before, After: st.Vars, Picks: st.Picks, Action: st.Action, eval: opt.eval}
+		s := &Step{Trace: opt.Trace, Index: i, Before: before, After: st.Vars, Picks: st.Picks, Action: st.Action, eval: opt.eval, ctx: opt.ctx}
+		last = s
 		before = st.Vars
 		fail := func(kind string, err error, diff []string) error {
 			return &StepError{Trace: opt.Trace, Step: s, Kind: kind, Err: err, Diff: diff}
@@ -326,6 +363,9 @@ func Replay(tr *itf.Trace, d Driver, opt ReplayOptions) error {
 			opt.OnStep(s)
 		}
 		if err := call(d, s); err != nil {
+			if f, ok := errors.AsType[*effectsFailure](err); ok {
+				return &StepError{Trace: opt.Trace, Step: s, Kind: "effects", Err: f.cause(), Effects: f.mismatch}
+			}
 			return fail("step", err, nil)
 		}
 		if sd != nil {
@@ -343,8 +383,21 @@ func Replay(tr *itf.Trace, d Driver, opt ReplayOptions) error {
 			}
 		}
 	}
+	if te, ok := d.(traceEnder); ok {
+		if err := te.endTrace(); err != nil {
+			f, _ := errors.AsType[*effectsFailure](err)
+			if f == nil {
+				return &StepError{Trace: opt.Trace, Step: last, Kind: "step", Err: err}
+			}
+			return &StepError{Trace: opt.Trace, Step: last, Kind: "effects", Err: f.cause(), Effects: f.mismatch}
+		}
+	}
 	return nil
 }
+
+// A traceEnder has a last word after a trace's last step: a bound
+// driver's effects recorded after it returned (Binding.Effects).
+type traceEnder interface{ endTrace() error }
 
 func hasMBT(tr *itf.Trace) bool {
 	for _, v := range tr.Vars {
@@ -362,6 +415,14 @@ func hasMBT(tr *itf.Trace) bool {
 
 // call runs a handler, turning a panic (MustPick, a failed assertion) into an error.
 func call(d Driver, s *Step) error { return recovered(func() error { return d.Step(s) }) }
+
+// panicError is a recovered panic as recovered makes it an error.
+func panicError(r any) error {
+	if e, ok := r.(error); ok {
+		return fmt.Errorf("panic: %w", e)
+	}
+	return fmt.Errorf("panic: %v", r)
+}
 
 // recovered runs f, turning its panic (MustPick, MustEval, a failed
 // assertion) into an error: a handler's, and a CheckStep's.

@@ -1,0 +1,25 @@
+# pay.yaml with place's effects opted out (effects: "-"): whatever a
+# place sends is not compared. Without it, a place that sends a capture
+# fails (an action whose effects the model does not state makes none of
+# a mapped kind: TestEffectsUndeclared).
+spec: pay.qnt
+module: pay
+actions:
+  place:
+    effects: "-"
+  pay:
+    match: retried
+  refund:
+    match: set
+effects:
+  kinds:
+    Capture:
+      from: rpc.provider.request
+      where: { Op: capture }
+      fields: { order: '{{.Order}}', amount: '{{.Amount}}' }
+      same: [Key]
+    Notify:
+      from: queue.mail.publish
+      fields: { order: '{{.Order}}' }
+simulate:
+  skip: a fixture of effects
