@@ -106,7 +106,8 @@ taken to evaluate `quint verify --backend veil`, which downloads and builds Veil
 first use and is not installed by CI). Runtime admission still accepts stable
 0.33.1 or later. What 0.34 and 0.35 changed for the toolkit: `--witnesses` is
 deprecated and its counts read "observed" (simulate reads both), `invariant` and
-`observation` are definition keywords that remain valid names, `quint compile`
+`observation` are definition keywords that remain valid names (their
+definitions are vals to bindings, connect and `gotogether invariants`), `quint compile`
 writes an `invariants` field (compiled models recompiled), the Rust backend
 writes 64-bit-plus integers as `#bigint` (itf's bignumber.js reading stays for
 0.33.1's traces) and `quint test` fails when nothing matches.

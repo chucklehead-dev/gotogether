@@ -17,3 +17,8 @@
 - grist's generator renames a command's or event's field named
   `invariant` or `observation` (`invariant_`), as it does `from` and `as`:
   its `QuintTaken` holds every token of quint's lexer.
+- Quint 0.34's `invariant x = e` and `observation x = e` definitions are
+  vals to bindings (`invariants:`, `simulate:`'s holds and possibles,
+  diagnostics), connect's `Eval` and `Returns`, and `gotogether
+  invariants`' tables; before, a binding naming one failed with
+  "not a val".

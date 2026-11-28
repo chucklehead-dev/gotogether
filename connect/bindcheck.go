@@ -291,7 +291,7 @@ func checkReturns(a *boundAction, m *qeval.Model, c Config, bad func(string, ...
 	d, ok := m.Decl(a.returns)
 	if ok && d.Kind == "def" {
 		switch d.Qualifier {
-		case "val", "def", "pureval", "puredef":
+		case "val", "def", "pureval", "puredef", "invariant", "observation": // the last two: quint 0.34's named vals
 		default:
 			ok = false
 		}

@@ -209,7 +209,8 @@ func Read(tc []byte, main string, comments map[string]string) (*Model, error) {
 			m.Actions = append(m.Actions, &Property{Name: name, Module: d.ProtoName, Doc: FirstSentence(d.Doc), id: d.ID})
 			continue
 		}
-		if !ok || (d.Qualifier != "val" && d.Qualifier != "temporal") {
+		// invariant and observation: quint 0.34's vals collected by name
+		if !ok || (d.Qualifier != "val" && d.Qualifier != "temporal" && d.Qualifier != "invariant" && d.Qualifier != "observation") {
 			continue
 		}
 		if t, ok := out.Types[fmt.Sprint(d.ID)]; !ok || t.Type.Kind != "bool" {

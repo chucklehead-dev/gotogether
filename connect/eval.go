@@ -135,7 +135,7 @@ func (s *Step) Eval(name string, args ...any) (itf.Value, error) {
 		return itf.Value{}, fail("%s is no definition of %s: name a val or a def of the model", name, spec)
 	}
 	switch d.Qualifier {
-	case "val", "def", "pureval", "puredef":
+	case "val", "def", "pureval", "puredef", "invariant", "observation": // the last two: quint 0.34's named vals
 	default:
 		return itf.Value{}, fail("%s is %s %s of %s, not a value: name a val or a def of the model", name, article(d.Qualifier), d.Qualifier, spec)
 	}

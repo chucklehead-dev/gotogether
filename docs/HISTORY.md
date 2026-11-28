@@ -9798,3 +9798,14 @@ for the toolkit, each with its fix:
 - The qoracle manifest was re-surveyed at v0.35.0's tag (944 entries, 49
   new: Veil fixtures among them); no file entry of quint's examples changed
   its verdict.
+- A model declaring 0.34's `invariant x = e` or `observation x = e` had
+  those definitions refused by its binding ("invariant nonNegative: not a
+  val of vending"), by connect's Eval and by `gotogether invariants`: the
+  new qualifiers are vals now (TestNamedValsAreVals, TestEvalNamedVals,
+  TestNamedValsAreProperties, each failing without it).
+- The Go front end (internal/qfront, P1) parses neither definition: against
+  quint 0.35 (`GOTOGETHER_QFRONT_STUB=go`) 890 of the 944 corpus entries
+  agree, against 861 of 863 at 0.33.1; of the 54 others, 52 declare or
+  import an `invariant`/`observation` definition and two are the known
+  toposort cases (P2). No gate runs that comparison; Q2's grammar needs the
+  two qualifiers.
