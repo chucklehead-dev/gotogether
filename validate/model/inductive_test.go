@@ -282,9 +282,8 @@ func TestInductiveRealVeil(t *testing.T) {
 	if v := rep.Inductive[1]; v.Outcome != InductiveProved {
 		t.Errorf("with the lemma: %+v\n%s", v, rep.Text)
 	}
-	// the IR's two warnings; the instance's search runs where quint's run
-	// does (a quint-0.35 compatibility of the possibles' sampling aside)
-	if v := rep.Inductive[2]; v.Outcome != InductiveProved || len(v.Vacuous) < 2 {
+	// the IR's two warnings and the instance's complete graph's
+	if v := rep.Inductive[2]; v.Outcome != InductiveProved || v.Reached != "unreached" || len(v.Vacuous) != 3 {
 		t.Errorf("vacuous: %+v\n%s", v, rep.Text)
 	}
 	rep = inductive(t, "quint", "refused.yaml", InductiveRequest{Name: "exactlyOnce"})

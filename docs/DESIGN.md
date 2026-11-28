@@ -8346,6 +8346,9 @@ and nothing else of the backend.
   already the instance's proof, and faster. Lean proofs by hand
   (`--proofs`) are for a later decision.
 
-Depends on quint 0.35 for CI: until the repository's quint moves there,
-the real-Veil test (`TestInductiveRealVeil`) skips and the fake quint's
-tests carry every outcome, from outputs captured from real runs.
+CI runs quint 0.35 but installs no Veil: there every proof is not done
+("Veil is not installed ... quint veil install"), the real-Veil test
+(`TestInductiveRealVeil`) skips, and the fake quint's tests carry every
+outcome, from outputs captured from real runs (the vacuity search of the
+instance runs on CI's real quint). ROADMAP V1 proposes a nightly job with
+Veil.
