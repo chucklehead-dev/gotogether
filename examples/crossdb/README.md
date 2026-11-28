@@ -87,7 +87,11 @@ the ID. The faithful provider's answer:
   ends. The binding declares them (`simulate.terminal`: every id
   spent). The graph also shows `settledCorrectly` holding vacuously: the
   step never settles, so the property is judged on recorded runs, after
-  their settle.
+  their settle. For the same reason it is no candidate for a proof by
+  induction (`simulate -inductive`, DESIGN §116): `lint -veil` notes it
+  vacuous, and Veil refuses the model anyway (`liveDbsOf(r).size() ==
+  1`: the size of a set whose elements it does not know). Its meaning is
+  kept, not rewritten for a proof that would say nothing.
 
 - **A late create, after the delete.** A request can arrive after its
   caller gave up (`rpc.dbaas.delay`). If the user deletes the resource

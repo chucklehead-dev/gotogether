@@ -27,6 +27,7 @@ and the step logs they write there are checked against the same models.
 | `broadcast.TestBroadcastConverges` | nothing: converged when settled |
 | `broadcast.TestReadOwnOnlyRejected` | `ReadOwnOnly`: a state mismatch at a read |
 | `broadcast.TestNoRetryDoesNotConverge`, `TestHegelShrinksNoRetry` | `NoRetry`: convergedWhenSettled fails, shrunk to one lost gossip |
+| `broadcast.TestModelInductive` | nothing: `noInvention` proved by Veil for every `NODES` and `VALUES` (about 18 s), with `broadcastProof`'s three lemmas (the ghost `ids` is `inflight`'s keys). `convergedWhenSettled` is not claimed: step never settles, so as a holds invariant it holds by its antecedent (`lint -veil` notes it), Veil's induction gives a counterexample from a settled state, and the lemma `not(settled)` would prove it vacuously. Without quint 0.35 and Veil (CI) not done, skipped |
 | `gcounter.TestCounterCountsEveryAdd` | nothing |
 | `gcounter.TestOverwriteRejected` | `Overwrite`: a read the model cannot take |
 | `gcounter.TestGossipOnChangeDoesNotConverge` | `GossipOnChange`: countsEveryAdd fails |

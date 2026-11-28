@@ -10,6 +10,9 @@
 // steps of these actions in an order (or a number) the model forbids.
 module checkout {
   const STOCK: int
+  // the shop starts with no negative stock: Veil proves noOversell for
+  // every STOCK this allows (an assume of the main module; DESIGN §116)
+  assume stockNat = STOCK >= 0
 
   // What the shop sends the payment provider (I/O specifications: an
   // action's effects def says what its step must send).
@@ -118,6 +121,10 @@ module checkout {
 
   val chargedAtMostOnce = not(doubleCharge)
 
+  // the shop never sells stock it does not have: place takes only what is
+  // there, and a cancel returns what its order took
+  val noOversell = stock >= 0
+
   // Once quiet, every order has shipped or been cancelled, and the provider
   // kept exactly the money of the shipped ones.
   val settledCorrectly = settled implies orders.keys().forall(o =>
@@ -134,4 +141,13 @@ module checkout {
 
 module checkoutDesign {
   import checkout(STOCK = 2).*
+}
+
+// What makes noOversell inductive (simulate.inductive, qtest.Inductive):
+// a cancel returns a placed order's quantity, which is positive.
+module checkoutProof {
+  import checkout.*
+  // checkout's assume, restated: Veil reads only the main module's
+  assume stockNatProof = STOCK >= 0
+  val ordersPositive = orders.keys().forall(o => orders.get(o) > 0)
 }

@@ -76,3 +76,12 @@ func TestHegelCatchesUncapped(t *testing.T) {
 	}, hegel.WithTestCases(50))
 	v.Expect(t, qtest.Mismatch("request")) // the request that overfills the bucket: more tokens than the cap
 }
+
+// Veil proves the budget's bounds by induction for every RATIO and CAP the
+// model's assumes allow (DESIGN §116): bounded with model/retry.qnt's
+// retryProof lemma tokensAccounted, capped alone. Where quint 0.35 or Veil
+// is not installed (CI) the claims are not done and the test skips. Measured
+// with quint 0.35.0 and Veil (2026-11-28): proved in 5 s and 5 s.
+func TestModelInductive(t *testing.T) {
+	qtest.Model(t, "retrystorm.binding.yaml").Expect(t, qtest.Inductive("bounded").With("tokensAccounted"), qtest.Inductive("capped").With())
+}

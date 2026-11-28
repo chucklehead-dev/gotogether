@@ -31,6 +31,7 @@ times. The four policies compared are `immediate`, `backoff`, `budget`
 | `TestBudgetConforms` | model: recorded `Burst` scenario | faithful budget conforms, `bounded` and `capped` hold |
 | `TestBudgetCatchesUncapped` | model | `Uncapped`: mismatch at the request that overfills the bucket |
 | `TestBudgetCatchesDepositOnRetry` | model | `DepositOnRetry`: mismatch at the first admitted retry |
+| `TestModelInductive` | model alone, Veil's induction | `bounded` and `capped` proved for every `RATIO` and `CAP` the model's assumes allow (about 5 s each), `bounded` with `retryProof`'s `tokensAccounted`; without quint 0.35 and Veil (CI) not done, skipped |
 | `TestHegelBudgetConforms` / `TestHegelCatchesUncapped` | model, Hegel bursts | faithful conforms; `Uncapped` found and shrunk |
 | `TestPredictedRecovery` | CTMC | predicted recovery time per policy at 8, 9 and 9.5 requests/s |
 | `TestStormAfterSpike` | simulation (seeds 1–6) | which policies recover from +5 requests/s for a minute at 9 requests/s |

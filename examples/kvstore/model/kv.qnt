@@ -12,13 +12,18 @@ module kv {
 
   var store: str -> Entry
   var revision: int
+  // ghost: store's keys, so that a delete rebuilds store over a set of its
+  // own rather than over store.keys(), whose shrinking Veil's total maps
+  // cannot follow (DESIGN §116). No guard reads it
+  var live: Set[str]
 
-  action init = all { store' = Map(), revision' = 0 }
+  action init = all { store' = Map(), revision' = 0, live' = Set() }
 
   action write(key: str, value: str): bool = all {
     KEYS.contains(key),
     store' = store.put(key, { value: value, version: revision + 1 }),
     revision' = revision + 1,
+    live' = live.union(Set(key)),
   }
 
   // (write is the put operation: `put` and `set` are Quint built-ins.)
@@ -27,21 +32,21 @@ module kv {
   action cas(key: str, expected: int, value: str, o: Outcome): bool = all {
     KEYS.contains(key),
     if (store.keys().contains(key) and store.get(key).version == expected)
-      all { o == Ok, store' = store.put(key, { value: value, version: revision + 1 }), revision' = revision + 1 }
+      all { o == Ok, store' = store.put(key, { value: value, version: revision + 1 }), revision' = revision + 1, live' = live.union(Set(key)) }
     else
-      all { o == Conflict, store' = store, revision' = revision },
+      all { o == Conflict, store' = store, revision' = revision, live' = live },
   }
 
   action del(key: str, o: Outcome): bool = all {
     KEYS.contains(key),
     if (store.keys().contains(key))
-      all { o == Ok, store' = store.keys().exclude(Set(key)).mapBy(k => store.get(k)), revision' = revision + 1 }
+      all { o == Ok, store' = live.exclude(Set(key)).mapBy(k => store.get(k)), revision' = revision + 1, live' = live.exclude(Set(key)) }
     else
-      all { o == Missing, store' = store, revision' = revision },
+      all { o == Missing, store' = store, revision' = revision, live' = live },
   }
 
   // A read changes nothing; what it returned is checked by the binding.
-  action read(key: str): bool = all { KEYS.contains(key), store' = store, revision' = revision }
+  action read(key: str): bool = all { KEYS.contains(key), store' = store, revision' = revision, live' = live }
 
   // A rotated log's head (the binding's snapshot): the whole state, as
   // the store recorded it when it started the log. Values and versions
@@ -52,6 +57,7 @@ module kv {
     versions.keys().forall(k => versions.get(k) >= 1 and versions.get(k) <= rev),
     store' = values.keys().mapBy(k => { value: values.get(k), version: versions.get(k) }),
     revision' = rev,
+    live' = values.keys(),
   }
 
   action step = {
@@ -73,4 +79,13 @@ module kv {
 
 module kvDesign {
   import kv(KEYS = Set("a", "b"), VALUES = Set("x", "y", "z")).*
+}
+
+// What makes versionsAreRevisions and versionsUnique inductive
+// (simulate.inductive, qtest.Inductive): live is store's keys, and (for
+// versionsUnique) no version is past the revision, so that a write's,
+// revision + 1, is new.
+module kvProof {
+  import kv.*
+  val liveIsKeys = live == store.keys()
 }

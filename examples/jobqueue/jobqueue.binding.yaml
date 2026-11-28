@@ -31,3 +31,9 @@ invariants: [doneImpliesPerformed]
 simulate:
   constants: {JOBS: 'Set(1, 2)'}
   holds: [doneImpliesPerformed]
+  # Veil's proof for every JOBS and WORKERS (simulate -inductive,
+  # qtest.Inductive in jobqueue_test.go): the lemmas of the proof module
+  inductive:
+    module: jobqueueProof
+    lemmas:
+      doneImpliesPerformed: [enqueuedKeys, workingEnqueued, finishedPerformed, performedNonNeg]

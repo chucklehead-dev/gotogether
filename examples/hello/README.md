@@ -40,6 +40,19 @@ the environment's, chosen by the simulation, and every run is checked by
 the model rather than by assertions written for the cases someone
 thought of.
 
+`exactlyOnce` is not proved by induction (`simulate -inductive`, DESIGN
+§116): Veil refuses `count == applied.size()` ("the size of a set whose
+elements are not known is not supported"). `lint -veil` does not note it,
+since a size compared with a variable is not decided from the IR, so
+Veil's refusal is what reports it. The only rewrite that Veil proves
+records the order the requests arrived in (a ghost bijection between
+`applied` and `1.to(count)`). That makes the state graph grow
+factorially: 8 states become 16 at three requests, and at twelve the
+tutorial's complete 4096-state proof stops at 100000 states. This
+example keeps its model, and `TestModelProves`' complete graph proves it
+for the instance. Don't adapt a model for a proof when the rewrite costs
+the checks the model is there for.
+
 ## Run it
 
 ```sh

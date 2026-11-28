@@ -248,3 +248,14 @@ func TestPendingTransfersLinearized(t *testing.T) {
 	system(cfg, both...).WithRates(crashing).Explore(t, qtest.ExploreConfig{Seeds: 12}).
 		Expect(t, qtest.Some(qtest.Rejects("observe")))
 }
+
+// Veil proves noOverdraft by induction for the binding's instance only
+// (model/wallet.qnt's walletInstance: four accounts, a1 and a2 joint,
+// INITIAL 100), for every request, amount and order, which no state graph
+// enumerates. Not for every constant: joint's fold over JOINT is outside
+// Veil's fragment for an unknown set (lint -veil notes it). Where quint 0.35
+// or Veil is not installed (CI) the claim is not done and the test skips.
+// Measured with quint 0.35.0 and Veil (2026-11-28): proved in 24 s.
+func TestModelInductiveInstance(t *testing.T) {
+	qtest.Model(t, "wallet.binding.yaml").Expect(t, qtest.Inductive("noOverdraft"))
+}

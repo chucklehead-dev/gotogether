@@ -21,4 +21,6 @@ invariants: [conservation, nonNegative]
 # guarantees, which it allows to fail and the code must not.
 simulate:
   holds: [conservation, nonNegative]
+  # both proved by Veil for every INITIAL the model's assume allows, with
+  # no lemma (simulate -inductive, qtest.Inductive in grpcledger_test.go)
   verifySkip: Apalache did not finish 6 steps in 10 minutes (measured; sampling stands)

@@ -30,6 +30,9 @@
 #                fragment (Q1) would release it
 #   real         a real tier's test (RAFTKV_REAL, toxiproxy): not run here;
 #                its checks are the same RequireModel's once tried
+#   veil         a proof by induction (qtest.Inductive), quint's Veil backend
+#                in Lean: nothing of the Go evaluator would release it (not
+#                done, skipped, without quint 0.35 and Veil)
 
 # bindings without a compiled model: none (every example binding keeps one)
 
@@ -37,23 +40,32 @@
 examples/bank TestHegelVariesModelTraces | Q1 connect | qhegel.Traces generates the model's traces with quint run
 examples/bank TestModelDrivenCatchesOnlyDivergence | Q1 connect | connect.GenerateRun's traces
 examples/bank TestModelDrivesBank | Q1 connect | connect drives the bank by the model's traces
+examples/bank TestModelInductive | veil | Veil proves noOverdraft by induction for every constant
 examples/bank TestSanitizedRunConforms | checker | it builds validate.NewChecker to judge a sanitized run beside qtest.Validate's constants
+examples/checkout TestModelInductive | veil | Veil proves noOversell by induction for every STOCK
 examples/counters TestRulesAgree | quint run | quint run of testdata/rules.qnt's agreement invariants
+examples/glomers/broadcast TestModelInductive | veil | Veil proves noInvention by induction for every constant
+examples/grpcledger TestModelInductive | veil | Veil proves conservation and nonNegative by induction for every INITIAL
 examples/hello TestModelMutantRefuted | Q2 | qtest.Model of a model mutant written at run time, which only quint compiles
 examples/jobqueue TestIncidentWorkflow | checker | it runs the CLI's validate on a copied bundle, quint's checker (a bundle carrying the compiled model and validate -compiled would release it)
+examples/jobqueue TestModelInductive | veil | Veil proves doneImpliesPerformed by induction for every constant
 examples/kvstore TestModelDrivesService | Q1 connect | connect drives the service by the model's traces
+examples/kvstore TestModelInductive | veil | Veil proves versionsAreRevisions and versionsUnique by induction for every constant
 examples/library TestLoansAgree | quint run | quint run of testdata/loans.qnt's agreement invariants
 examples/library TestStoredVersionOneLog | checker | gristtest.StoredLogs judges the stored log by validate.NewChecker (grist's StoredLogsConfig choosing a compiled checker would release it)
 examples/migrate-payments TestDraftLacksRecordedLookup | checker | it reads the actions of validate.NewChecker's model
+examples/migrate-payments TestModelInductive | veil | Veil proves the three holds invariants by induction for every constant
 examples/migrate-payments TestProductionDayAtVolume | Q2 | it writes payments.day.binding.yaml, a binding with other constants, at run time
 examples/payd TestMutant | fragment | its real subtest's 16-charge run folds outside the evaluator's fragment (the simulated runs are judged by the compiled model)
 examples/payd TestReal | fragment | 30 keys' run (10 under -short, which the compiled model judges) folds over more charges than the evaluator orders
 examples/raftkv TestRealCluster | real | RAFTKV_REAL's three node processes, judged by cluster.binding.yaml
 examples/raftkv TestRealFaultsInSimulation | real | RAFTKV_REAL's toxiproxy faults re-made in qenv, judged by cluster.real.binding.yaml
+examples/retrystorm TestModelInductive | veil | Veil proves bounded and capped by induction for every RATIO and CAP
 examples/twophase TestGraphFindsEarlyDecision | Q2 | it writes a model mutant at run time, which only quint compiles
 examples/twophase TestModelDrivenMutants | Q1 connect | connect's traces drive the mutants (no gotogether.mbt/1 of twophase3 is kept)
 examples/twophase TestModelDrivesTransitions | Q1 connect | connect drives the transitions by the model's traces (no gotogether.mbt/1 of twophase3 is kept)
 examples/wallet TestLinearizeDelayedReadWithinBudget | checker | it builds validate.NewChecker (Eval go) to judge one fixture with a search budget
+examples/wallet TestModelInductiveInstance | veil | Veil proves noOverdraft by induction for the binding's instance
 examples/wallet-grist TestBalancesAgree | quint run | quint run of testdata/balances.qnt's agreement invariants
 examples/webjobs TestLive | real | a live Bombadil run against the server (not under -short)
 examples/webjobs TestPlaywright | real | a real browser (not under -short)

@@ -159,6 +159,7 @@ states.
 | `TestTwoRecorderClockAssumptions` | actual Store observations, authored two-recorder intervals and a stale-replica control | the default 1ms negative verdict states its assumption; a declared 5ms admits the faithful order while the control still fails |
 | `TestClockHistoryFixturesMatchStore` | native JSONL regenerated from actual calls | the shipped clock examples preserve the implementation's observed return values |
 | `TestClientHistoryLinearizes` | 4 clients record their own operations, with invocation times (`kv.LoadRecorded`) | in recording order the faithful store is rejected; `qtest.Linearize()` finds the order the intervals allow |
+| `TestModelInductive` | the model alone, Veil's induction | `versionsAreRevisions` and `versionsUnique` proved for every `KEYS` and `VALUES` (about 12 s each), with `kvProof`'s `liveIsKeys` (the ghost `live` is the store's keys, so a delete rebuilds the store without `store.keys()`); without quint 0.35 and Veil (CI) not done, skipped |
 | `TestRotatedLogConformsAlone` | 4 clients, the log rotated every 40 operations; the last file alone | judged from its head's snapshot it conforms; without the head, the lost prefix's error |
 | `TestModelDrivesService` | model traces drive the HTTP API (`connect.Run`) | store and revision match the model after every request |
 | `TestHegelDrivesService` | a Hegel state machine over HTTP; runs checked after the test | each property case owns and closes its server before the next case starts |
