@@ -514,3 +514,15 @@ func TestMutant(t *testing.T) {
 		t.Fatalf("mutant %s: say what catches it (a case of TestMutant)", mutant)
 	}
 }
+
+// Veil proves both invariants by induction for every KEYS and VALUES (DESIGN
+// §116), with model/kv.qnt's kvProof: the ghost live is store's keys (it
+// lets a delete rebuild store without store.keys()), and versionsUnique
+// needs versionsAreRevisions too. Where quint 0.35 or Veil is not installed
+// (CI) the claims are not done and the test skips. Measured with quint
+// 0.35.0 and Veil (2026-11-28): proved in 12 s and 12 s.
+func TestModelInductive(t *testing.T) {
+	qtest.Model(t, "kv.binding.yaml").Expect(t,
+		qtest.Inductive("versionsAreRevisions").With("liveIsKeys"),
+		qtest.Inductive("versionsUnique").With("liveIsKeys", "versionsAreRevisions"))
+}
