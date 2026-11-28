@@ -6,6 +6,10 @@
 module retry {
   const RATIO: int // milli-tokens per request
   const CAP: int   // the most milli-tokens kept
+  // neither is negative: Veil proves bounded and capped for every RATIO
+  // and CAP these allow (assumes of the main module; DESIGN §116)
+  assume ratioNat = RATIO >= 0
+  assume capNat = CAP >= 0
 
   pure val UNIT = 1000
 
@@ -47,6 +51,16 @@ module retry {
       .then(retry)
       .then(refuse)
       .expect(tokens == 0 and retries == 1)
+}
+
+// What makes bounded inductive (simulate.inductive, qtest.Inductive): the
+// tokens left are what the requests earned and the retries did not spend.
+module retryProof {
+  import retry.*
+  // retry's assumes, restated: Veil reads only the main module's
+  assume ratioNatProof = RATIO >= 0
+  assume capNatProof = CAP >= 0
+  val tokensAccounted = tokens >= 0 and UNIT * retries + tokens <= RATIO * requests
 }
 
 // The budget as deployed: a retry per 10 requests, at most 10 kept.

@@ -22,3 +22,9 @@ invariants: [bounded, capped]
 # guarantees, which it allows to fail and the code must not.
 simulate:
   holds: [bounded, capped]
+  # Veil's proof for every RATIO and CAP the assumes allow (simulate
+  # -inductive, qtest.Inductive in budget_test.go)
+  inductive:
+    module: retryProof
+    lemmas:
+      bounded: [tokensAccounted]
