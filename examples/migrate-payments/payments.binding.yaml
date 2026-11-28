@@ -45,6 +45,12 @@ invariants: [refundsWithinCapture, captureWithinAuthorization, oneChargePerKey, 
 simulate:
   constants: { IDS: 'Set("ch_1", "ch_2")', KEYS: 'Set("", "k1")', AMOUNTS: 'Set(0, 400, 600, 1000)' }
   holds: [captureWithinAuthorization, oneChargePerKey, voidedNothingCaptured]
+  # Veil's proofs for every IDS, KEYS and AMOUNTS (simulate -inductive,
+  # qtest.Inductive in migration_test.go)
+  inductive:
+    module: paymentsProof
+    lemmas:
+      voidedNothingCaptured: [authorizedNothingCaptured]
   # R5 is the code's to hold: the model takes its decision to refund
   allows: [refundsWithinCapture]
   # each requirement's happy path, and its refusals, as a whole lifecycle

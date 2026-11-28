@@ -225,3 +225,16 @@ func TestProductionDayReplayedConforms(t *testing.T) {
 	qtest.RequireModel(t, bindingFile)
 	recorded(t, replay(logSteps(t, productionLog))).Expect(t, qtest.Conforms())
 }
+
+// Veil proves R3, R2 and R8 by induction for every IDS, KEYS and AMOUNTS
+// (DESIGN §116): the first two alone, voidedNothingCaptured with
+// model/payments.qnt's paymentsProof lemma authorizedNothingCaptured (a
+// charge still authorized has nothing captured). Where quint 0.35 or Veil is
+// not installed (CI) the claims are not done and the test skips. Measured
+// with quint 0.35.0 and Veil (2026-11-28): proved in 31 s, 33 s and 33 s.
+func TestModelInductive(t *testing.T) {
+	qtest.Model(t, bindingFile).Expect(t,
+		qtest.Inductive("captureWithinAuthorization").With(),
+		qtest.Inductive("oneChargePerKey").With(),
+		qtest.Inductive("voidedNothingCaptured").With("authorizedNothingCaptured"))
+}

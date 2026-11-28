@@ -128,6 +128,7 @@ record for record, and violates R5.
 | `TestRequirementsHaveProvenance` | none | each `// req` of the model | two kinds of source each, or `assumed` (R8) |
 | `TestScenariosPossible` | none: the model alone | three lifecycles (`qtest.NamedScenario`), searched in the model (`qtest.Possible`) | possible, each with its witness |
 | `TestDraftForbidsPartialCapture` | none: the draft alone | its `simulate.possible` (`model.Analyzer.Possible`) | not found: the draft forbids a partial capture |
+| `TestModelInductive` | none: the model alone | Veil's induction (`qtest.Inductive`) | `captureWithinAuthorization`, `oneChargePerKey` and `voidedNothingCaptured` proved for every `IDS`, `KEYS` and `AMOUNTS` (about 31 to 33 s each), the last with `paymentsProof`'s `authorizedNothingCaptured`; without quint 0.35 and Veil (CI) not done, skipped |
 | `TestLegacyTestsConform` | none | the 12 legacy tests, recorded (`qtest.Record`) | `All(Conforms())` |
 | `TestDraftRejectsPartialCaptureTest` | none: the draft | `TestPartialCapture`'s run | `Rejects("capture")` |
 | `TestProductionLogViolatesR5` | the legacy code, as production ran it | the production log | `Violates("refundsWithinCapture").At("refund")` |

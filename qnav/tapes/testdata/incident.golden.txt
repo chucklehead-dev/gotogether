@@ -24,12 +24,12 @@ the run's next call, which the model rejects
         ack(worker = "w1", job = 1, o = Stale), restart
 
 state  (* changed by the last move)
+  enqueued = Set(1)
   finished = Map(("w1", 1) -> 1)
   jobs = Map(1 -> Pending)
   performed = Map(1 -> 1)
   working = Map(("w1", 1) -> 0)
-
-── lines 1–17 of 37 (pgup/pgdn scroll)
+── lines 1–17 of 38 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • e evidence • / filter • ? help • q quit
 
@@ -125,12 +125,12 @@ the run's next call, which the model rejects
         ack(worker = "w1", job = 1, o = Stale), restart
 
 state  (* changed by the last move)
+  enqueued = Set(1)
   finished = Map(("w1", 1) -> 1)
   jobs = Map(1 -> Pending)
   performed = Map(1 -> 1)
   working = Map(("w1", 1) -> 0)
-
-── lines 1–17 of 37 (pgup/pgdn scroll)
+── lines 1–17 of 38 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • e evidence • / filter • ? help • q quit
 
@@ -154,6 +154,7 @@ the run's next call, which the model rejects
         ack(worker = "w1", job = 1, o = Stale), restart
 
 state  (* changed by the last move)
+  enqueued = Set(1)
   finished = Map(("w1", 1) -> 1)
   jobs = Map(1 -> Pending)
   performed = Map(1 -> 1)
@@ -165,8 +166,7 @@ invariants
 disabled
   enqueue
     why: the model's enqueue is disabled:
-      in enqueue (job = 1, the one closest to enabled of the 1 values of JOBS, each disabling
-── lines 1–24 of 37 (pgup/pgdn scroll)
+── lines 1–24 of 38 (pgup/pgdn scroll)
 
 /ack
 enter take • ←/⌫ back • f fold • g failing step • s save • e evidence • / filter • ? help • q quit
@@ -188,6 +188,7 @@ branches (8)
   restart#4  picks job = 1, worker = "w4"
 
 state  (* changed by the last move)
+  enqueued = Set(1)
 * finished = Map(("w1", 1) -> 0)
   jobs = Map(1 -> Pending)
   performed = Map(1 -> 1)
@@ -203,8 +204,7 @@ disabled
         it): not(jobs.keys().contains(job)) is false
         where jobs.keys() = Set(1), jobs = Map(1 -> Pending), job = 1
   perform
-    why: the model's perform is disabled:
-── lines 1–18 of 33 (pgup/pgdn scroll)
+── lines 1–18 of 34 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • e evidence • / filter • ? help • q quit
 
@@ -289,6 +289,7 @@ branches (8)
   restart#4  picks job = 1, worker = "w4"
 
 state  (* changed by the last move)
+  enqueued = Set(1)
 * finished = Map(("w1", 1) -> 0)
   jobs = Map(1 -> Pending)
   performed = Map(1 -> 1)
@@ -304,8 +305,7 @@ disabled
         it): not(jobs.keys().contains(job)) is false
         where jobs.keys() = Set(1), jobs = Map(1 -> Pending), job = 1
   perform
-    why: the model's perform is disabled:
-── lines 1–18 of 33 (pgup/pgdn scroll)
+── lines 1–18 of 34 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • e evidence • / filter • ? help • q quit
 
@@ -337,11 +337,11 @@ the run's next call, which the model rejects
         ack(worker = "w1", job = 1, o = Stale), restart
 
 state  (* changed by the last move)
+  enqueued = Set(1)
   finished = Map(("w1", 1) -> 1)
   jobs = Map(1 -> Pending)
   performed = Map(1 -> 1)
   working = Map(("w1", 1) -> 0)
-
-── lines 1–17 of 37 (pgup/pgdn scroll)
+── lines 1–17 of 38 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • e evidence • / filter • ? help • q quit

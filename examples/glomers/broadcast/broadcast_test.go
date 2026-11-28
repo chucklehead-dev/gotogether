@@ -134,3 +134,19 @@ func TestHegelShrinksNoRetry(t *testing.T) {
 	}, hegel.WithTestCases(120), hegel.WithSeed(2))
 	v.Expect(t, qtest.Violates("convergedWhenSettled"))
 }
+
+// Veil proves noInvention by induction for every NODES and VALUES (DESIGN
+// §116), with model/broadcast.qnt's broadcastProof: seen is every node's,
+// the ghost ids is inflight's keys (it lets a delivery rebuild inflight
+// without its keys()), and a message in flight carries only broadcast
+// values. Without seenOfNodes the proof went through in some runs and in
+// others Veil reported a broadcast with no post-state. convergedWhenSettled
+// is not claimed: step never settles, so as a holds invariant it holds by
+// its antecedent (lint -veil says so); Veil finds a counterexample to
+// induction from a settled state, and the lemma not(settled) would prove it,
+// vacuously (Inductive warns). Where quint 0.35 or Veil is not installed
+// (CI) the claim is not done and the test skips. Measured with quint 0.35.0
+// and Veil (2026-11-28): proved in 18 s.
+func TestModelInductive(t *testing.T) {
+	qtest.Model(t, "broadcast.binding.yaml").Expect(t, qtest.Inductive("noInvention").With("seenOfNodes", "idsAreKeys", "inflightBroadcasted"))
+}

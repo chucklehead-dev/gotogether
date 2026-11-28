@@ -20,4 +20,12 @@ invariants: [noInvention, convergedWhenSettled]
 simulate:
   constants: {NODES: 'Set("n0", "n1", "n2")', VALUES: 'Set(1, 2, 3)'}
   holds: [noInvention, convergedWhenSettled]
+  # Veil's proof of noInvention for every NODES and VALUES (simulate
+  # -inductive, qtest.Inductive in broadcast_test.go): the lemmas of the
+  # proof module. convergedWhenSettled's proof is vacuous: step never
+  # settles, so it holds by its antecedent (lint -veil says so)
+  inductive:
+    module: broadcastProof
+    lemmas:
+      noInvention: [seenOfNodes, idsAreKeys, inflightBroadcasted]
   verifySteps: 6 # Apalache: 32 s at 6 steps, past 8 minutes at 8

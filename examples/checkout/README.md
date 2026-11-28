@@ -74,6 +74,7 @@ only in full. Each test states the verdict it expects with
 | `TestMutationOfTheShop` | qweave's mutant schemata over the shop | the survivors, each an unobserved effect or equivalent |
 | `TestCaptureUnits` | `CaptureUnits`, with and without pay's effects (testdata/noeffects.binding.yaml) | conforms without them in every run (the baseline); with them, `Mismatch("pay")` in every run that completes a payment |
 | `TestNoIdempotencyKeyKilledByEffects` | `NoIdempotencyKey` on the same seeds with and without pay's effects | killed in more runs with them (below) |
+| `TestModelInductive` | the model alone, Veil's induction | nothing: `noOversell` (stock never negative) proved for every `STOCK` the model's `assume stockNat` allows (about 17 s), with `checkoutProof`'s `ordersPositive`. `settledCorrectly` is not claimed: step never settles, so as a holds invariant it holds vacuously (`lint -veil` notes it); Veil's induction gives a counterexample after `place` from a settled state, and the lemma `not(settled)` proves it only vacuously (Inductive warns). The runs judge it after their settle. Without quint 0.35 and Veil (CI) not done, skipped |
 
 Pay's effects, measured on the same seeds with and without them (Serializable; DESIGN §112):
 

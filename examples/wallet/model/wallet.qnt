@@ -35,8 +35,8 @@ module wallet {
 
   // what a transfer from src may spend: its own balance, or its credit
   // line's
-  pure def joint(b: str -> int): int = JOINT.fold(0, (s, a) => s + b.get(a))
-  pure def funds(b: str -> int, src: str): int = if (JOINT.contains(src)) joint(b) else b.get(src)
+  val joint: int = JOINT.fold(0, (s, a) => s + bal.get(a))
+  def funds(src: str): int = if (JOINT.contains(src)) joint else bal.get(src)
 
   // a request answered as it was the first time, or refused
   action answer(id: int, ok: bool): bool = all {
@@ -44,22 +44,31 @@ module wallet {
     bal' = bal, moves' = moves, posted' = posted,
   }
 
+  // a request applied: its moves m, which move amount from src to dest
+  // (a transfer) or to dest alone (a deposit)
   action apply(id: int, m: str -> int): bool = all {
-    bal' = bal.keys().mapBy(a => if (m.keys().contains(a)) bal.get(a) + m.get(a) else bal.get(a)),
     result' = result.put(id, true),
     moves' = moves.put(id, m),
     posted' = posted,
   }
+  action move(id: int, src: str, dest: str, amount: int): bool = all {
+    bal' = ACCOUNTS.mapBy(a => if (a == src) bal.get(a) - amount else if (a == dest) bal.get(a) + amount else bal.get(a)),
+    apply(id, Map(src -> -amount).put(dest, amount)),
+  }
+  action credit(id: int, dest: str, amount: int): bool = all {
+    bal' = ACCOUNTS.mapBy(a => if (a == dest) bal.get(a) + amount else bal.get(a)),
+    apply(id, Map(dest -> amount)),
+  }
 
   action transfer(id: int, src: str, dest: str, amount: int): bool =
     if (result.keys().contains(id)) answer(id, false)
-    else if (ACCOUNTS.contains(src) and ACCOUNTS.contains(dest) and src != dest and amount > 0 and funds(bal, src) >= amount)
-      apply(id, Map(src -> -amount, dest -> amount))
+    else if (ACCOUNTS.contains(src) and ACCOUNTS.contains(dest) and src != dest and amount > 0 and funds(src) >= amount)
+      move(id, src, dest, amount)
     else answer(id, false)
 
   action deposit(id: int, account: str, amount: int): bool =
     if (result.keys().contains(id)) answer(id, false)
-    else if (ACCOUNTS.contains(account) and amount > 0) apply(id, Map(account -> amount))
+    else if (ACCOUNTS.contains(account) and amount > 0) credit(id, account, amount)
     else answer(id, false)
 
   // a read changes nothing; the binding checks the balance it returned
@@ -103,11 +112,20 @@ module wallet {
   // does in sum. The model keeps it by construction: in a run it fails only
   // if the run's steps drive the model there, which a refused transfer the
   // bank applied would show first as an outcome or a balance it cannot be.
-  val noOverdraft: bool = ACCOUNTS.forall(a => JOINT.contains(a) or bal.get(a) >= 0) and joint(bal) >= 0
+  val noOverdraft: bool = ACCOUNTS.forall(a => JOINT.contains(a) or bal.get(a) >= 0) and joint >= 0
 
   // every applied request was posted, and every post is one of its
   // request's moves: eventual properties, judged when the run settled
   val allPosted: bool = moves.keys().forall(i => posted.keys().contains(i))
   val postedApplied: bool = posted.keys().forall(i =>
     moves.keys().contains(i) and moves.get(i).keys().contains(posted.get(i)._1) and moves.get(i).get(posted.get(i)._1) == posted.get(i)._2)
+}
+
+// The binding's instance, which Veil proves noOverdraft of
+// (simulate.inductive): for every request, amount and order, but for
+// these constants only. joint's fold over JOINT is outside Veil's fragment
+// for every value of JOINT ("a set fold without known finite support"),
+// within it for a literal set.
+module walletInstance {
+  import wallet(ACCOUNTS = Set("a1", "a2", "b", "c"), JOINT = Set("a1", "a2"), INITIAL = 100).*
 }

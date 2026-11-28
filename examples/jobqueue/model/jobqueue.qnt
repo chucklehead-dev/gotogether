@@ -21,12 +21,16 @@ module jobqueue {
   var working: (str, int) -> int   // a worker leased the job and is performing it
   var finished: (str, int) -> int  // a worker performed the job and has not acked it yet
   var performed: int -> int        // how many times each job's side effect happened
+  // ghost: jobs' keys, the jobs enqueued, so that a restart rebuilds jobs
+  // over a set of its own rather than over jobs.keys(), which Veil's
+  // total maps cannot follow (DESIGN §116). No guard reads it
+  var enqueued: Set[int]
 
   pure def count(m: (str, int) -> int, k: (str, int)): int = if (m.keys().contains(k)) m.get(k) else 0
   pure def add(m: (str, int) -> int, k: (str, int)): (str, int) -> int = m.put(k, count(m, k) + 1)
   pure def take(m: (str, int) -> int, k: (str, int)): (str, int) -> int = m.put(k, count(m, k) - 1)
 
-  action init = all { jobs' = Map(), working' = Map(), finished' = Map(), performed' = Map() }
+  action init = all { jobs' = Map(), working' = Map(), finished' = Map(), performed' = Map(), enqueued' = Set() }
 
   action enqueue(job: int): bool = all {
     JOBS.contains(job),
@@ -35,6 +39,7 @@ module jobqueue {
     working' = working,
     finished' = finished,
     performed' = performed.put(job, 0),
+    enqueued' = enqueued.union(Set(job)),
   }
 
   action lease(worker: str, job: int): bool = all {
@@ -45,6 +50,7 @@ module jobqueue {
     working' = working.add((worker, job)),
     finished' = finished,
     performed' = performed,
+    enqueued' = enqueued,
   }
 
   // A worker performs a job it leased, whether or not its lease is still valid.
@@ -54,6 +60,7 @@ module jobqueue {
     working' = working.take((worker, job)),
     finished' = finished.add((worker, job)),
     performed' = performed.setBy(job, n => n + 1),
+    enqueued' = enqueued,
   }
 
   // A worker acks a job it performed. Only the current lease holder's ack
@@ -67,6 +74,7 @@ module jobqueue {
     working' = working,
     finished' = finished.take((worker, job)),
     performed' = performed,
+    enqueued' = enqueued,
   }
 
   action expire(job: int): bool = all {
@@ -76,15 +84,17 @@ module jobqueue {
     working' = working,
     finished' = finished,
     performed' = performed,
+    enqueued' = enqueued,
   }
 
   // The queue process restarts: in-memory leases are lost; the journal
   // keeps the jobs and which are done. Workers keep working.
   action restart = all {
-    jobs' = jobs.keys().mapBy(j => if (jobs.get(j) == Done) Done else Pending),
+    jobs' = enqueued.mapBy(j => if (jobs.get(j) == Done) Done else Pending),
     working' = working,
     finished' = finished,
     performed' = performed,
+    enqueued' = enqueued,
   }
 
   action step = {
@@ -110,4 +120,15 @@ module jobqueue {
 
 module jobqueueDesign {
   import jobqueue(JOBS = Set(1, 2, 3), WORKERS = Set("w1", "w2")).*
+}
+
+// What makes doneImpliesPerformed inductive (simulate.inductive,
+// qtest.Inductive): the jobs enqueued are jobs' keys and performed's; a job a worker is working on or finished is enqueued, and one it
+// finished was performed; no count is negative.
+module jobqueueProof {
+  import jobqueue.*
+  val enqueuedKeys = enqueued == jobs.keys() and enqueued == performed.keys()
+  val workingEnqueued = working.keys().forall(k => working.get(k) > 0 implies enqueued.contains(k._2))
+  val finishedPerformed = finished.keys().forall(k => finished.get(k) > 0 implies (enqueued.contains(k._2) and performed.get(k._2) >= 1))
+  val performedNonNeg = performed.keys().forall(j => performed.get(j) >= 0)
 }

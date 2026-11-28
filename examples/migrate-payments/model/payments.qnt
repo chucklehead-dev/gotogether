@@ -144,3 +144,11 @@ module payments {
   //   assumed: no test voids then captures, no log line shows it; for the owner to confirm.
   val voidedNothingCaptured = charges.keys().forall(c => charges.get(c).status != "voided" or charges.get(c).captured == 0)
 }
+
+// What makes voidedNothingCaptured inductive (simulate.inductive,
+// qtest.Inductive): a charge still authorized has nothing captured, so the
+// void of one leaves nothing captured.
+module paymentsProof {
+  import payments.*
+  val authorizedNothingCaptured = charges.keys().forall(c => charges.get(c).status == "authorized" implies charges.get(c).captured == 0)
+}

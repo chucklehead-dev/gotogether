@@ -196,3 +196,15 @@ func TestHegelShrinksAckAnyLease(t *testing.T) {
 	}, hegel.WithTestCases(60), hegel.WithSeed(5))
 	v.Expect(t, qtest.Rejects("ack")) // an ack of a lease the job no longer has, accepted
 }
+
+// Veil proves doneImpliesPerformed by induction for every JOBS and WORKERS
+// (DESIGN §116), with the four lemmas of model/jobqueue.qnt's jobqueueProof
+// (each needed: without any one Veil finds a counterexample to induction).
+// The model's ghost enqueued, jobs' keys, lets restart rebuild jobs without
+// jobs.keys(). Where quint 0.35 or Veil is not installed (CI) the claim is
+// not done and the test skips. Measured with quint 0.35.0 and Veil
+// (2026-11-28): proved in 23 s.
+func TestModelInductive(t *testing.T) {
+	qtest.Model(t, "jobqueue.binding.yaml").Expect(t, qtest.Inductive("doneImpliesPerformed").
+		With("enqueuedKeys", "workingEnqueued", "finishedPerformed", "performedNonNeg"))
+}

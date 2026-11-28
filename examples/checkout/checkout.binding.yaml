@@ -30,7 +30,7 @@ actions:
   cancel:
     expect: 'stock == {{.obs.stock}}'
   settle: {}
-invariants: [chargedAtMostOnce, settledCorrectly]
+invariants: [chargedAtMostOnce, settledCorrectly, noOversell]
 
 # The effects compared (I/O specifications): a capture request, as qenv's
 # Service records it at the send (its PayReq's fields). A void, the
@@ -46,5 +46,14 @@ effects:
 # The model on its own (gotogether simulate): which invariants the design
 # guarantees, which it allows to fail and the code must not.
 simulate:
-  holds: [settledCorrectly]
+  # noOversell is Veil's proof for every STOCK (simulate -inductive,
+  # qtest.Inductive in checkout_test.go), with the proof module's lemma.
+  # settledCorrectly is not proved by induction: step never settles, so
+  # it holds by its antecedent there (lint -veil says so); it is judged
+  # on the runs, after their settle
+  holds: [settledCorrectly, noOversell]
+  inductive:
+    module: checkoutProof
+    lemmas:
+      noOversell: [ordersPositive]
   allows: [chargedAtMostOnce]

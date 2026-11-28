@@ -43,4 +43,11 @@ invariants: [versionsAreRevisions, versionsUnique]
 simulate:
   constants: {KEYS: 'Set("a", "b")', VALUES: 'Set("x", "y")'}
   holds: [versionsAreRevisions, versionsUnique]
+  # Veil's proof for every KEYS and VALUES (simulate -inductive,
+  # qtest.Inductive in kvstore_test.go): the lemmas of the proof module
+  inductive:
+    module: kvProof
+    lemmas:
+      versionsAreRevisions: [liveIsKeys]
+      versionsUnique: [liveIsKeys, versionsAreRevisions]
   verifySteps: 7 # Apalache: 144 s at 7 steps, past 4 minutes at 8

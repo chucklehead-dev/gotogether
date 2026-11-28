@@ -50,3 +50,11 @@ func TestTellersAsASystem(t *testing.T) {
 	tellers(SelfTransfer).Explore(t, x).Expect(t, qtest.Some(qtest.Rejects("transfer")))
 	tellers(LostDeposit).Explore(t, x).Expect(t, qtest.Some(qtest.Mismatch("deposit")))
 }
+
+// Veil proves noOverdraft by induction for every ACCOUNTS and MAX_AMOUNT
+// (DESIGN §116), the model as it is, with no lemma. Where quint 0.35 or Veil
+// is not installed (CI) the claim is not done and the test skips. Measured
+// with quint 0.35.0 and Veil (2026-11-28): proved in 8 s.
+func TestModelInductive(t *testing.T) {
+	qtest.Model(t, "bank.binding.yaml").Expect(t, qtest.Inductive("noOverdraft"))
+}
