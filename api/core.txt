@@ -2870,6 +2870,8 @@ type DocInductive struct
     field Reached string `json:"reached,omitempty"`
     field Vacuous []string `json:"vacuous,omitempty"`
     field ElapsedMs int64 `json:"elapsedMs,omitempty"`
+    field Open []string `json:"open,omitempty"`
+    field Fixed []string `json:"fixed,omitempty"`
 type DocInput struct
     field Path string `json:"path"`
     field Format string `json:"format"`
@@ -3634,6 +3636,8 @@ type InductiveVerdict struct
     field Reached string
     field Witness string
     field Vacuous []string
+    field Open []string
+    field Fixed []string
     field Elapsed time.Duration
 type InvariantVerdict struct
     field Name string

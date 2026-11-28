@@ -316,7 +316,7 @@
               ]
             },
             "module": {
-              "description": "Module is the module Veil proves, the binding's module or one that imports it (\"\": the binding's module, its constants unset).",
+              "description": "Module is the module Veil proves, the binding's module or one that imports it (\"\": the binding's module, its constants unset). A proof covers every value of the constants Module leaves open; an instance module (`import M(N = 3).*`) is proved for its values alone, and the report says which.",
               "type": "string"
             },
             "spec": {

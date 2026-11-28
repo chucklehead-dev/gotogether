@@ -27,17 +27,18 @@ func Supported(version string) bool {
 }
 
 // Version inspects a CLI without requiring it to be supported. The probe uses
-// the same cancellation and process admission as other managed commands.
+// the same cancellation and process admission as other managed commands; its
+// timeout (ProbeTimeoutEnv) starts once it holds a slot, so a wait behind
+// running proofs is no timeout. A missing quint is NotFound's, one that did
+// not answer a *ProbeTimeoutError: callers tell absence from a slow machine.
 func Version(ctx context.Context, binary, dir string) (string, error) {
-	if ctx == nil {
-		ctx = context.Background()
+	c := Command(ctx, binary, dir, "--version")
+	release, err := acquire(c.ctx)
+	if err != nil {
+		return "", err
 	}
-	ctx, cancel := context.WithTimeout(ctx, versionTimeout)
-	defer cancel()
-	out, err := Command(ctx, binary, dir, "--version").Output()
-	if ctx.Err() != nil {
-		return strings.TrimSpace(string(out)), ctx.Err()
-	}
+	defer release()
+	out, err := c.probe()
 	return strings.TrimSpace(string(out)), err
 }
 

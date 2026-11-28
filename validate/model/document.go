@@ -105,7 +105,8 @@ func (r *Report) Doc() *validate.Document {
 		d.Checks = append(d.Checks, sourcedCheck(validate.DocCheck{Name: v.Name, Kind: "inductive", Verdict: verdict, Detail: strings.TrimSpace(inductiveText(v)),
 			Inductive: &validate.DocInductive{Outcome: v.Outcome, Module: v.Module, Invariant: v.Invariant, Lemmas: slices.Clone(v.Lemmas), Reason: v.Reason,
 				Action: v.Action, Broken: v.Broken, States: slices.Clone(v.States), ITF: v.ITF, Added: slices.Clone(v.Added),
-				Antecedent: v.Antecedent, Reached: v.Reached, Vacuous: slices.Clone(v.Vacuous), ElapsedMs: v.Elapsed.Milliseconds()}}, r.Sources))
+				Antecedent: v.Antecedent, Reached: v.Reached, Vacuous: slices.Clone(v.Vacuous), ElapsedMs: v.Elapsed.Milliseconds(),
+				Open: slices.Clone(v.Open), Fixed: slices.Clone(v.Fixed)}}, r.Sources))
 	}
 	if d.Error == "" && r.Skipped == "" {
 		for _, check := range d.Checks {

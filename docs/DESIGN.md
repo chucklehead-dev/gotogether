@@ -8279,8 +8279,18 @@ and nothing else of the backend.
   is P and its lemmas (`simulate.inductive.lemmas`, `Inductive(P).With`),
   passed to Veil as one conjunction, so the implication I ⇒ P holds by
   construction and Veil's third phase (`--invariants P`) is not needed. A
-  proof is a proof of P in every reachable state of every instance: more
-  than `Proves`' complete graph of one instance. It does not replace
+  proof is a proof of P in every reachable state for every value of the
+  constants the proof module leaves open (its own `const`s, and those of a
+  module it imports uninstantiated): of a module that leaves them all
+  open, of every instance, more than `Proves`' complete graph of one. An
+  instance module (`import M(N = 3).*`, wallet's `walletInstance`, needed
+  where a fold over a constant set is outside Veil's fragment) leaves none
+  open, and its proof is of its values only: the report reads them from
+  the IR's instance overrides and says "for this instance's constants only
+  (N = 3), not for every value of them"; a module that fixes some names
+  the open ones and the fixed (`InductiveVerdict.Open`, `.Fixed`, the
+  report's `open` and `fixed`), and one with no constants says so. "For
+  every value of the constants" is said only of constants left open. It does not replace
   `Proves`: the graph checks the instance the code is checked against,
   whatever Veil can translate, finds the shortest real counterexample, and
   needs no 5 GB install. A test claims both where both apply.
@@ -8289,7 +8299,12 @@ and nothing else of the backend.
   lemma is missing); both states, the action (or init's state alone) and
   what it breaks (the inductive invariant, or a keys invariant Veil added
   from init) are shown and the ITF kept (`-inductive-out`,
-  `$GOTOGETHER_KEEP/<test>`, else a named temporary directory). A CTI at
+  `$GOTOGETHER_KEEP/<test>`, else a named temporary directory). A
+  counterexample whose states Veil cannot decode (quint's "in a state Veil
+  could not show: the model has no post-state; ...", "the model's map
+  domain jobs has non-enumerable keys": a disproven check, status
+  `failure`) is a counterexample all the same, no verdict, Veil's reason
+  in place of the states; it was a run error. A CTI at
   the initializer is a real state: the report says that if P itself fails
   there the model violates it and `simulate -graph` shows it. *Refused*:
   outside Veil's fragment, Veil's reason with the Lean file's path cut; no
@@ -8297,7 +8312,14 @@ and nothing else of the backend.
   the solver answered neither way. *Not done*: quint older than 0.35, or
   `quint veil status` not ready; the reason says how to install (`npm i -g
   @informalsystems/quint@0.35.0`, `quint veil install`: about 5 GB and 10
-  minutes). gotogether never installs Veil. In the CLI everything but
+  minutes). gotogether never installs Veil. Not done is for a quint that
+  is not there (not on PATH, no such file): one that is there but does not
+  answer `quint --version` within its bound is an error naming the bound
+  and `GOTOGETHER_QUINT_PROBE_TIMEOUT` (30 s unset), never not done, which
+  qtest would skip. Five proofs at once on four cores once reported "not
+  done: no quint (context deadline exceeded)": the 10 s bound had counted
+  the probe's wait for an admission slot behind running proofs; it now
+  starts once the probe holds one. In the CLI everything but
   proved exits 2 (no verdict), never 1; in qtest a CTI or an undecided
   check fails the test as every claim without a verdict does, while a
   refusal or not done is logged and skips the test when nothing else
@@ -8312,7 +8334,9 @@ and nothing else of the backend.
 - **Vacuity, where cheap.** A proof of an implication `A implies B` may
   say nothing. Three checks, each a warning on a proof, none a failure:
   a lemma that negates A (`not(A)`, `A == false`, or a conjunction with
-  either, compared on the IR); A conjoining a boolean state variable that
+  either, compared on the IR, its text cut from the source by characters,
+  as quint's source map counts them: by bytes, a § earlier in checkout's
+  file made `settled` " settle"); A conjoining a boolean state variable that
   init and every action step reaches assign only `false` or itself (the
   settle flag of checkout's settledCorrectly, which step never sets); and
   whether the binding's instance reaches A at all, a possible searched by

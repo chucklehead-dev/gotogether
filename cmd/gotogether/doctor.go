@@ -14,7 +14,6 @@ import (
 	"runtime/debug"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/chucklehead-dev/gotogether/binding"
 	"github.com/chucklehead-dev/gotogether/internal/formats"
@@ -365,9 +364,10 @@ func quintPieces() []piece {
 		ev.version = "-"
 		return []piece{q, ev, node}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	version, versionErr := quintcmd.Version(ctx, bin, "")
+	// Version bounds its own probe (quintcmd.ProbeTimeoutEnv), from when it
+	// holds a slot: an outer timeout here counted the wait behind running
+	// quint processes too, and reported a slow quint as an unknown version
+	version, versionErr := quintcmd.Version(context.Background(), bin, "")
 	q.version = version
 	if versionErr != nil {
 		q.skew = fmt.Sprintf("cannot determine quint version: %v; install stable Quint %s or later: npm i -g @informalsystems/quint@%s", versionErr, quintcmd.MinimumVersion, quintcmd.PinnedVersion)

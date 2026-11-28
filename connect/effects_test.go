@@ -29,6 +29,7 @@ type gateway struct {
 	ended     map[string]bool
 	first     map[string]string // each call's first deployment
 	late      sync.WaitGroup    // the late mutant's goroutines
+	release   []chan struct{}   // each held until its step's effects are judged
 }
 
 type gatewayState struct {
@@ -75,7 +76,12 @@ func (g *gateway) attempt(ctx context.Context, c, d string) error {
 		return errEnded
 	case "late":
 		send(ctx, key)
-		g.late.Go(func() { send(ctx, key) }) // a retry the step did not wait for
+		// a retry the step did not wait for, held until the step's effects
+		// are judged (Check releases it): unheld, it raced the step's return
+		// and was sometimes the step's own second send
+		gate := make(chan struct{})
+		g.release = append(g.release, gate)
+		g.late.Go(func() { <-gate; send(ctx, key) })
 	case "background":
 		send(context.Background(), key) // the gap: no recorder, so no send
 	default:
@@ -108,7 +114,14 @@ func senderBinding(mutant string, effects bool, match string) *Binding[*gateway]
 		Action("attempt", (*gateway).attempt, "c", "d").
 		Action("commit", (*gateway).commit, "c").
 		State(func(g *gateway) gatewayState { return gatewayState{Attempted: g.attempted, Ended: g.ended} }).
-		Check(func(g *gateway, _ *Step) error { g.late.Wait(); return nil })
+		Check(func(g *gateway, _ *Step) error {
+			for _, gate := range g.release {
+				close(gate)
+			}
+			g.release = nil
+			g.late.Wait()
+			return nil
+		})
 	if effects {
 		b.Effects(senderEffects)
 		if match != "" {

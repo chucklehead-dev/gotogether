@@ -16,7 +16,81 @@ import (
 	"time"
 )
 
-const versionTimeout = 10 * time.Second
+// ProbeTimeoutEnv names the variable that bounds a `quint --version`
+// probe (a Go duration; DefaultProbeTimeout unset).
+const ProbeTimeoutEnv = "GOTOGETHER_QUINT_PROBE_TIMEOUT"
+
+// DefaultProbeTimeout bounds a probe when ProbeTimeoutEnv is unset. Node
+// answers in a second on an idle machine; with Veil's proofs on every
+// core it once took more than ten (DESIGN §116).
+const DefaultProbeTimeout = 30 * time.Second
+
+// probeTimeout is the probe's bound, from ProbeTimeoutEnv.
+func probeTimeout() (time.Duration, error) {
+	v := os.Getenv(ProbeTimeoutEnv)
+	if v == "" {
+		return DefaultProbeTimeout, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		return 0, fmt.Errorf("%s=%q: not a duration (30s, 2m): set a positive one, or unset it for %s", ProbeTimeoutEnv, v, DefaultProbeTimeout)
+	}
+	return d, nil
+}
+
+// A ProbeTimeoutError is a `quint --version` that did not answer within
+// its timeout: a quint that is there but slow (a loaded machine), never
+// a missing one (NotFound).
+type ProbeTimeoutError struct {
+	Binary  string
+	Timeout time.Duration
+}
+
+func (e *ProbeTimeoutError) Error() string {
+	set := "unset, the default"
+	if v := os.Getenv(ProbeTimeoutEnv); v != "" {
+		set = ProbeTimeoutEnv + "=" + v
+	}
+	return fmt.Sprintf("%s --version did not answer within %s (%s): a loaded machine; raise it (%s=2m), or run fewer quint processes at once", e.Binary, e.Timeout, set, ProbeTimeoutEnv)
+}
+
+// NotFound reports whether err is a quint that is not there (not on
+// PATH, no such file), as against one that failed or timed out.
+func NotFound(err error) bool {
+	return errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist)
+}
+
+// probe runs c's binary with --version, in c's directory and environment,
+// within the probe timeout. The caller holds an admission slot, so the
+// timeout counts the probe alone, never the wait for a slot. A timeout is
+// a *ProbeTimeoutError; c's own context's end is its error.
+func (c *Cmd) probe() ([]byte, error) {
+	timeout, err := probeTimeout()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(c.ctx, timeout)
+	defer cancel()
+	probe := exec.CommandContext(ctx, c.Path, "--version")
+	probe.Path, probe.Err = c.Path, c.Err // preserve exec's original path resolution
+	if len(c.Args) > 0 {
+		probe.Args[0] = c.Args[0]
+	}
+	probe.Dir, probe.Env, probe.WaitDelay = c.Dir, c.raw().Environ(), WaitDelay
+	group(probe)
+	out, err := probe.Output()
+	if err := c.ctx.Err(); err != nil {
+		return out, err
+	}
+	if ctx.Err() != nil {
+		name := c.Path
+		if len(c.Args) > 0 {
+			name = c.Args[0]
+		}
+		return out, &ProbeTimeoutError{Binary: name, Timeout: timeout}
+	}
+	return out, err
+}
 
 // Cache only the reviewed stock CLI: its version comes from version.js and is
 // independent of the model directory. Unknown wrappers and future CLI builds
@@ -67,21 +141,15 @@ func (c *Cmd) checkVersion() error {
 			return nil
 		}
 	}
-	ctx, cancel := context.WithTimeout(c.ctx, versionTimeout)
-	defer cancel()
-	probe := exec.CommandContext(ctx, c.Path, "--version")
-	probe.Path, probe.Err = c.Path, c.Err // preserve exec's original path resolution
-	if len(c.Args) > 0 {
-		probe.Args[0] = c.Args[0]
-	}
-	probe.Dir, probe.Env, probe.WaitDelay = c.Dir, c.raw().Environ(), WaitDelay
-	group(probe)
-	out, err := probe.Output()
-	if ctx.Err() != nil {
-		return fmt.Errorf("quint admission: version probe: %w", ctx.Err())
+	out, err := c.probe()
+	if ctxErr := c.ctx.Err(); ctxErr != nil {
+		return fmt.Errorf("quint admission: version probe: %w", ctxErr)
 	}
 	if err != nil {
-		if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) {
+		if _, timedOut := errors.AsType[*ProbeTimeoutError](err); timedOut {
+			return fmt.Errorf("quint admission: %w", err)
+		}
+		if NotFound(err) {
 			return fmt.Errorf("quint admission: %s --version: %w; install Quint with npm install -g @informalsystems/quint@%s", c.Path, err, PinnedVersion)
 		}
 		var exit *exec.ExitError

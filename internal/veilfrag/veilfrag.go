@@ -64,6 +64,8 @@ type Decl struct {
 	Expr       *Expr  `json:"expr"`
 	Assumption *Expr  `json:"assumption"`
 	ProtoName  string `json:"protoName"`
+	// Overrides are an instance's constants, each [{name}, value]
+	Overrides [][]json.RawMessage `json:"overrides"`
 }
 
 // Module is a parsed module.
@@ -87,7 +89,7 @@ type Parsed struct {
 	table   map[int64]entry
 	where   map[int64]place
 	files   map[int]string
-	sources map[string][]byte
+	sources map[string][]rune // by file, read once: Text's offsets are characters
 	// path is the file as the caller named it, abs its absolute path
 	path, abs string
 }
@@ -95,7 +97,7 @@ type Parsed struct {
 type place struct {
 	file         int
 	line, column int // 0-based, quint's
-	start, end   int // byte offsets, end inclusive
+	start, end   int // character offsets, end inclusive
 }
 
 // Parse reads the model file path with quint parse (quint: the binary,
@@ -137,7 +139,7 @@ func read(path, abs, out, sm string) (*Parsed, error) {
 	if err := json.Unmarshal(data, &ir); err != nil {
 		return nil, fmt.Errorf("quint parse %s: its IR: %w", path, err)
 	}
-	p := &Parsed{Modules: ir.Modules, table: map[int64]entry{}, where: map[int64]place{}, files: map[int]string{}, sources: map[string][]byte{}, path: path, abs: abs}
+	p := &Parsed{Modules: ir.Modules, table: map[int64]entry{}, where: map[int64]place{}, files: map[int]string{}, sources: map[string][]rune{}, path: path, abs: abs}
 	for k, e := range ir.Table {
 		if id, err := strconv.ParseInt(k, 10, 64); err == nil {
 			p.table[id] = e
@@ -207,7 +209,9 @@ func (p *Parsed) inFile(id int64) bool {
 	return filepath.Clean(p.files[w.file]) == filepath.Clean(p.abs)
 }
 
-// Text is node id's source text, "" if unknown.
+// Text is node id's source text, "" if unknown. quint's source map
+// counts characters (code points), not bytes: a byte offset cut checkout's
+// settled to " settle" after a comment's §.
 func (p *Parsed) Text(id int64) string {
 	w, ok := p.where[id]
 	if !ok {
@@ -216,13 +220,18 @@ func (p *Parsed) Text(id int64) string {
 	f := p.files[w.file]
 	src, ok := p.sources[f]
 	if !ok {
-		src, _ = os.ReadFile(f)
+		src = []rune(readFile(f))
 		p.sources[f] = src
 	}
 	if w.start < 0 || w.end >= len(src) || w.start > w.end {
 		return ""
 	}
 	return string(src[w.start : w.end+1])
+}
+
+func readFile(path string) string {
+	b, _ := os.ReadFile(path)
+	return string(b)
 }
 
 func (p *Parsed) finding(code string, id int64, symbol, msg, fix string) Finding {
@@ -265,6 +274,56 @@ func (p *Parsed) Def(m, name string) *Decl {
 		return nil
 	}
 	return find(m)
+}
+
+// Constants are what a proof of module main is for: the constants it
+// leaves open, every value of which it covers (its own, and those of a
+// module it imports without instantiating), and those an instance it
+// imports fixes, "NAME = value" each (the name alone when the value's
+// text is long), in declaration order. An instance module (`import
+// M(N = 3).*`) leaves none open: a proof of it is of those values only.
+func (p *Parsed) Constants(main string) (open, fixed []string) {
+	seen := map[string]bool{}
+	var visit func(mod string, overridden map[string]bool)
+	visit = func(mod string, overridden map[string]bool) {
+		if seen[mod] {
+			return
+		}
+		seen[mod] = true
+		mm := p.Module(mod)
+		if mm == nil {
+			return
+		}
+		for _, d := range mm.Declarations {
+			switch {
+			case d.Kind == "const" && !overridden[d.Name] && !slices.Contains(open, d.Name):
+				open = append(open, d.Name)
+			case d.Kind == "import" && d.ProtoName != "":
+				visit(d.ProtoName, overridden)
+			case d.Kind == "instance" && d.ProtoName != "":
+				over := map[string]bool{}
+				for _, o := range d.Overrides {
+					var name struct {
+						Name string `json:"name"`
+					}
+					var value Expr
+					if len(o) != 2 || json.Unmarshal(o[0], &name) != nil || json.Unmarshal(o[1], &value) != nil {
+						continue
+					}
+					over[name.Name] = true
+					text := strings.Join(strings.Fields(p.Text(value.ID)), " ")
+					if text == "" || len(text) > 60 {
+						fixed = append(fixed, name.Name)
+					} else {
+						fixed = append(fixed, name.Name+" = "+text)
+					}
+				}
+				visit(d.ProtoName, over)
+			}
+		}
+	}
+	visit(main, map[string]bool{})
+	return open, fixed
 }
 
 // walk calls f on e and every node below it, with the stack of nodes

@@ -1,0 +1,9 @@
+# instance.qnt's counter proved by induction (the scope of a proof).
+spec: instance.qnt
+module: counter
+constants: {MAX: '3', ACCOUNTS: 'Set("a", "b")'}
+invariants: [bounded]
+simulate:
+  holds: [bounded]
+  inductive:
+    module: counter

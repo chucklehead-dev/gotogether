@@ -195,8 +195,9 @@ func (m *ModelCheck) Expect(t testing.TB, claims ...ModelClaim) {
 		}
 	}
 	if len(inductive) > 0 {
-		// Veil proves for every value of the constants: the instance's
-		// constants and bounds are the vacuity search's alone
+		// Veil proves for every value of the constants the proof module
+		// leaves open: the binding's constants and bounds are the vacuity
+		// search's alone
 		irep, err := model.Simulate(t.Context(), m.binding, model.SimulateOptions{
 			Inductive: inductive, InductiveOut: inductiveKeep(t), Constants: m.options.constants(),
 			States: m.options.States, Depth: m.options.Depth,
@@ -614,7 +615,8 @@ type InductiveClaim struct {
 }
 
 // Inductive claims the holds invariant inv is proved by induction with
-// quint's Veil backend, for every value of the constants (DESIGN §116):
+// quint's Veil backend, for every value of the constants the proof module
+// leaves open (an instance module's fixed ones are its own; DESIGN §116):
 // inv and its lemmas (With, else the binding's simulate.inductive.lemmas)
 // are an inductive invariant of simulate.inductive.module (else the
 // binding's module), init establishing it and every action of step
@@ -623,11 +625,14 @@ type InductiveClaim struct {
 //
 // A counterexample to induction has no verdict, which fails the test
 // (inv may still hold: a lemma is missing), with both states, the action
-// and the kept ITF ($GOTOGETHER_KEEP/<test>, else a temporary directory).
-// A model Veil refuses (outside its fragment, its reason given) and a
-// machine with no quint ≥ 0.35 or no Veil (`quint veil status`; how to
-// install it given) leave it not done: logged, and the test skipped if
-// nothing else failed, never failed. A proof that may be vacuous (a lemma
+// and the kept ITF ($GOTOGETHER_KEEP/<test>, else a temporary directory),
+// or Veil's reason it could not decode the states. A model Veil refuses
+// (outside its fragment, its reason given) and a machine with no quint ≥
+// 0.35 or no Veil (`quint veil status`; how to install it given) leave it
+// not done: logged, and the test skipped if nothing else failed, never
+// failed. A quint that is there but does not answer `quint --version` in
+// time (a loaded machine; GOTOGETHER_QUINT_PROBE_TIMEOUT raises the bound)
+// fails the test: it is no missing quint. A proof that may be vacuous (a lemma
 // negating inv's antecedent, a settle flag step never sets, an antecedent
 // the instance never reaches) is logged as a warning.
 func Inductive(inv string) InductiveClaim { return InductiveClaim{inv: inv} }
