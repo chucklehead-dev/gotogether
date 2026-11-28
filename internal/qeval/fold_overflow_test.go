@@ -6,7 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
+	"golang.org/x/mod/semver"
 )
 
 // The same final mathematical sum can have an overflowing prefix in one set
@@ -100,7 +102,22 @@ func TestFoldOverflowNativeBackends(t *testing.T) {
 			}
 		}
 	}
-	if got := qs["rust"][0]; !strings.Contains(strings.ToLower(got.err), "overflow") {
-		t.Fatalf("nightly Rust overflow was not reproduced: %s", got.String())
+	// The first entry's prefix leaves 64 bits. Quint's Rust backend overflowed
+	// there before 0.34; since 0.34 (#1995) both backends have unbounded
+	// integers and agree on the sum. Go refuses it either way (above).
+	version, err := quintcmd.Version(t.Context(), "quint", "")
+	if err != nil {
+		t.Fatalf("quint --version: %v", err)
+	}
+	if semver.Compare("v"+version, "v0.34.0") < 0 {
+		if got := qs["rust"][0]; !strings.Contains(strings.ToLower(got.err), "overflow") {
+			t.Fatalf("nightly Rust overflow was not reproduced by quint %s: %s", version, got.String())
+		}
+	} else {
+		for _, backend := range backends {
+			if got := qs[backend][0].String(); got != "value 10" {
+				t.Fatalf("quint %s's %s backend summed past 64 bits to %s, want its unbounded integers' value 10", version, backend, got)
+			}
+		}
 	}
 }

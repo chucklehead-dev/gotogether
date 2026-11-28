@@ -138,8 +138,8 @@ Already in place and to be documented: `qtest.Model` claims (`Proves`,
   repository's 165 models has a source finding.
 - **L4: Quint's environment.** doctor names `QUINT_BACKEND=typescript` when
   the evaluator is missing or cannot be fetched; a `quint test` gotogether
-  runs that matches nothing is an error, not a pass (quint's own CLI: an
-  upstream issue, drafted in [upstream/quint-test-no-match.md](upstream/quint-test-no-match.md)).
+  runs that matches nothing is an error, not a pass (quint's own CLI:
+  fixed in quint 0.34.0, [upstream/quint-test-no-match.md](upstream/quint-test-no-match.md)).
 - **L5: an `init` with a nondet choice.** Done: `Binding.InitChoiceNote`,
   reported by `gotogether lint` and logged once per binding by qtest and
   qhegel (each run's check then searches the initial states and confirms with
@@ -794,8 +794,10 @@ item is its own decision before it starts; the red-nightly rule applies.
   green week (the maintainer): internal/qfront's lexer and hand-written
   parser, quint's parse IR and source map with quint's own ids; 861 of the
   863 corpus entries agree in P1's tier (the two others drop cyclic
-  definitions in quint's toposort, P2's). Left of P1: recovery after a
-  syntax error, a nightly step with the `go` stub, Quint.g4's alternatives
+  definitions in quint's toposort, P2's). Left of P1: quint 0.34's
+  `invariant` and `observation` definitions (IR qualifiers of those names;
+  at 0.35, 52 of the 944 entries declare or import one, so 890 agree),
+  recovery after a syntax error, a nightly step with the `go` stub, Quint.g4's alternatives
   counted against the corpus, and the after-P1 uses (lint's token scanner,
   validate's import scan). Next: P2.
 - **Q3: the oracle (M, with Q1 and Q2).** A differential job like

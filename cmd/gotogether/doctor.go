@@ -361,7 +361,7 @@ func quintPieces() []piece {
 	}
 	bin, err := exec.LookPath("quint")
 	if err != nil {
-		q.version, q.note = "not installed", "npm i -g @informalsystems/quint@"+quintcmd.MinimumVersion+"; tests that need it skip"
+		q.version, q.note = "not installed", "npm i -g @informalsystems/quint@"+quintcmd.PinnedVersion+"; tests that need it skip"
 		ev.version = "-"
 		return []piece{q, ev, node}
 	}
@@ -370,9 +370,9 @@ func quintPieces() []piece {
 	version, versionErr := quintcmd.Version(ctx, bin, "")
 	q.version = version
 	if versionErr != nil {
-		q.skew = fmt.Sprintf("cannot determine quint version: %v; install @informalsystems/quint@%s", versionErr, quintcmd.MinimumVersion)
+		q.skew = fmt.Sprintf("cannot determine quint version: %v; install stable Quint %s or later: npm i -g @informalsystems/quint@%s", versionErr, quintcmd.MinimumVersion, quintcmd.PinnedVersion)
 	} else if !quintcmd.Supported(q.version) {
-		q.skew = fmt.Sprintf("quint %q is unsupported; gotogether needs a stable version >= %s: npm i -g @informalsystems/quint@%s (or the Action's quint-version)", q.version, quintcmd.MinimumVersion, quintcmd.MinimumVersion)
+		q.skew = fmt.Sprintf("quint %q is unsupported; gotogether needs a stable version >= %s: npm i -g @informalsystems/quint@%s (or the Action's quint-version)", q.version, quintcmd.MinimumVersion, quintcmd.PinnedVersion)
 	}
 	want := evaluatorOf(bin)
 	if want == "" {

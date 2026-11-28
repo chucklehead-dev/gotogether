@@ -46,7 +46,7 @@ permissions:
   contents: read
 
 env:
-  QUINT_VERSION: 0.33.1
+  QUINT_VERSION: 0.35.0
   GOWORK: "off"
 
 jobs:

@@ -8,6 +8,7 @@ import (
 
 	"github.com/chucklehead-dev/gotogether/grist"
 	"github.com/chucklehead-dev/gotogether/grist/internal/gen"
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 )
 
 type originItem struct {
@@ -79,17 +80,31 @@ func TestGeneratedRuleRefusalOrigin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	source := strings.TrimSpace(string(b))
-	source = strings.TrimSuffix(source, "}") + `
- run noRefusalTest = assert(holdRuled([], { qty: 0, caller: "a" }).rule == "")
- run firstRefusalTest = assert(holdRuled([], { qty: 1, caller: "a" }).rule == "first")
- run secondRefusalTest = assert(holdRuled([], { qty: 2, caller: "a" }).rule == "second")
- run sharedRefusalTest = assert(holdRuled([], { qty: 1, caller: "a" }).outcome == "full" and holdRuled([], { qty: 2, caller: "a" }).outcome == "full")
- run decisionRefusalTest = assert(holdRuled([], { qty: -1, caller: "a" }).rule == "" and holdRuled([], { qty: -1, caller: "a" }).decided == "invalid" and holdRuled([], { qty: -1, caller: "a" }).outcome == "invalid")
- }
- `
+	// The runs go into module origin (the store's side, --main below), not
+	// the file's last module (originCalls): there quint 0.33 ran none of
+	// them and passed, and 0.34 fails on a --match that selects nothing.
+	source := string(b)
+	start := strings.Index(source, "module origin {")
+	end := strings.Index(source[max(start, 0):], "\n}\n")
+	if start < 0 || end < 0 {
+		t.Fatalf("model/origin.qnt has no module origin {...}:\n%s", source)
+	}
+	end += start
+	source = source[:end] + `
+  run noRefusalTest = assert(holdRuled([], { qty: 0, caller: "a" }).rule == "")
+  run firstRefusalTest = assert(holdRuled([], { qty: 1, caller: "a" }).rule == "first")
+  run secondRefusalTest = assert(holdRuled([], { qty: 2, caller: "a" }).rule == "second")
+  run sharedRefusalTest = assert(holdRuled([], { qty: 1, caller: "a" }).outcome == "full" and holdRuled([], { qty: 2, caller: "a" }).outcome == "full")
+  run decisionRefusalTest = assert(holdRuled([], { qty: -1, caller: "a" }).rule == "" and holdRuled([], { qty: -1, caller: "a" }).decided == "invalid" and holdRuled([], { qty: -1, caller: "a" }).outcome == "invalid")` + source[end:]
 	if err := os.WriteFile(model, []byte(source), 0644); err != nil {
 		t.Fatal(err)
 	}
-	quint(t, dir, "test", "model/origin.qnt", "--main", "origin", "--backend", "typescript", "--match", "RefusalTest$", "--max-samples", "1", "--seed", "1")
+	args := []string{"test", "model/origin.qnt", "--main", "origin", "--backend", "typescript", "--match", "RefusalTest$", "--max-samples", "1", "--seed", "1"}
+	out, err := quintcmd.Command(t.Context(), "quint", dir, args...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("quint %v: %v\n%s", args, err, out)
+	}
+	if !strings.Contains(string(out), "5 passing") {
+		t.Fatalf("quint %v ran other than the 5 refusal tests:\n%s", args, out)
+	}
 }

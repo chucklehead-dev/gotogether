@@ -154,7 +154,7 @@ func (s *Step) evalValue(name string, args ...any) (qeval.Value, *qeval.Model, e
 		return nil, nil, fail("%s is no definition of %s: name a val or a def of the model", name, spec)
 	}
 	switch d.Qualifier {
-	case "val", "def", "pureval", "puredef":
+	case "val", "def", "pureval", "puredef", "invariant", "observation": // the last two: quint 0.34's named vals
 	default:
 		return nil, nil, fail("%s is %s %s of %s, not a value: name a val or a def of the model", name, article(d.Qualifier), d.Qualifier, spec)
 	}
