@@ -189,3 +189,16 @@ func TestFaithfulConformsUnderPartitions(t *testing.T) {
 	t.Parallel()
 	explore(t, checkout.Config{Isolation: qenv.Serializable, Partitions: true}, crashy, qtest.ExploreConfig{Seeds: 40}).Expect(t, qtest.Conforms(), qtest.NotVacuous())
 }
+
+// Veil proves noOversell by induction for every STOCK the model's assume
+// allows (DESIGN §116), with model/checkout.qnt's checkoutProof lemma
+// ordersPositive. settledCorrectly is not claimed: step never settles, so as
+// a holds invariant it holds by its antecedent (lint -veil says so); Veil
+// finds a counterexample to induction after place from a settled state, and
+// the lemma not(settled) would prove it, vacuously (Inductive warns). The
+// runs judge it after their settle. Where quint 0.35 or Veil is not
+// installed (CI) the claim is not done and the test skips. Measured with
+// quint 0.35.0 and Veil (2026-11-28): proved in 17 s.
+func TestModelInductive(t *testing.T) {
+	qtest.Model(t, "checkout.binding.yaml").Expect(t, qtest.Inductive("noOversell").With("ordersPositive"))
+}
