@@ -9809,3 +9809,14 @@ for the toolkit, each with its fix:
   import an `invariant`/`observation` definition and two are the known
   toposort cases (P2). No gate runs that comparison; Q2's grammar needs the
   two qualifiers.
+- Open, for the nightly `qfront-differential` (quint against quint with
+  ids shifted): 941 of the 944 entries agree, two by their listed classes;
+  `quint-test:quint/test/types/inferrer.test.ts#31`, new in 0.35 (#2006's
+  arity error for an alias without arguments, `o: Option`), raises the
+  same two QNT000 errors from modules B and C in an order that follows the
+  ids, so the first error differs. No accepted class covers an order of
+  errors across a layer's modules: either the oracle gains one (it would
+  widen what it accepts) or the entry is listed; the maintainer's call.
+  `GOTOGETHER_QFRONT_CORPUS=1 GOTOGETHER_QFRONT_ENTRY="quint-test:quint/test/types/inferrer.test.ts#31"
+  go test -run '^TestCorpus$' ./internal/qoracle` reproduces it (with
+  QUINT_SRC from ci/fetch-quint-src.sh).
