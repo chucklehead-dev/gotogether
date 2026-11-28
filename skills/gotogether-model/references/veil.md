@@ -34,7 +34,10 @@ qtest.Inductive("p").With("lemma1"))`.
   `S.size() == 0` is `S == Set()`; `S.size() <= 1` is
   `S.forall(a => S.forall(b => a == b))`. A count equal to a set's size
   (`count == applied.size()`) becomes a ghost bijection between the set
-  and `1.to(count)`.
+  and `1.to(count)`, but that bijection records the order of arrival and
+  grows the state graph factorially. Where the instance's graph is the
+  model's proof (examples/hello's tutorial), keep the size and leave the
+  invariant to `Proves`.
 - **Ghost key sets, total maps.** Veil's maps are total: a map whose keys
   shrink (`m.keys().exclude(Set(k)).mapBy(...)`) cannot be proved. Keep a
   ghost `Set[K]` of live keys beside the map, or make the map total over a

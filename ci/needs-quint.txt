@@ -46,7 +46,6 @@ examples/checkout TestModelInductive | veil | Veil proves noOversell by inductio
 examples/counters TestRulesAgree | quint run | quint run of testdata/rules.qnt's agreement invariants
 examples/glomers/broadcast TestModelInductive | veil | Veil proves noInvention by induction for every constant
 examples/grpcledger TestModelInductive | veil | Veil proves conservation and nonNegative by induction for every INITIAL
-examples/hello TestModelInductive | veil | Veil proves exactlyOnce by induction for every REQUESTS
 examples/hello TestModelMutantRefuted | Q2 | qtest.Model of a model mutant written at run time, which only quint compiles
 examples/jobqueue TestIncidentWorkflow | checker | it runs the CLI's validate on a copied bundle, quint's checker (a bundle carrying the compiled model and validate -compiled would release it)
 examples/jobqueue TestModelInductive | veil | Veil proves doneImpliesPerformed by induction for every constant

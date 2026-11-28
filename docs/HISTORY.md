@@ -9894,7 +9894,7 @@ done, skipped, on CI, which has no Veil; `ci/needs-quint.txt`'s new
 | example | invariant | outcome | adaptation | lemmas | time |
 |---|---|---|---|---|---|
 | bank | noOverdraft | every constant | none | none | 8 s |
-| hello | exactlyOnce | every constant | stated pointwise: ghosts `slot`/`bySlot`, a bijection between `applied` and `1.to(count)` (the graph 8 states to 16) | none | 6 s |
+| hello | exactlyOnce | reverted: not adapted | stated pointwise, ghosts `slot`/`bySlot` (a bijection between `applied` and `1.to(count)`), proved in 6 s with no lemma, then reverted (below) | none | 6 s |
 | jobqueue | doneImpliesPerformed | every constant | ghost `enqueued` (jobs' keys), restart's `jobs` over it | 4 | 23 s |
 | kvstore | versionsAreRevisions, versionsUnique | every constant | ghost `live` (store's keys), del's `store` over it | 1, 2 | 12 s each |
 | glomers broadcast | noInvention | every constant | ghost `ids` (inflight's keys); `size() > 0` as `!= Set()` | 3 | 18 s |
@@ -9922,6 +9922,21 @@ What differed from the evaluation:
   a settled state; with the lemma `not(settled)` proved, and both
   vacuity warnings given), broadcast's convergedWhenSettled (a
   counterexample after a delivery), crossdb's (refused: a size).
+
+hello reverted: the bijection records the order the requests arrived in,
+so hello's graph grows factorially, 8 states to 16 at three requests. With
+`-const REQUESTS=1.to(12)` the prove-it tutorial's complete 4096-state
+proof truncated at 100000 states at depth 5, and CI's
+TestHelloTutorialReplay failed. hello is the first example and its
+tutorial's subject, so the proof is not worth it (the coordinator's
+decision). Its model, tests, compiled model and qnav's two hello goldens
+are main's again, and its README records why. The ghost key sets
+(jobqueue, kvstore, broadcast) mirror `keys()` and add no states: at
+equal depth `-graph` counts equal before and after (jobqueue 1020 and
+7820 at depths 6 and 8; kvstore 76 at depth 6 with two keys; broadcast
+3252 at depth 4 with two nodes). Under the memory budget the default
+graphs complete to the same depth (10, 56, 3), holding a few percent
+fewer states since each state is larger.
 
 Found on the way (ROADMAP V3, open): five proofs at once on four cores
 made `quint --version` exceed its 10 s timeout, reported "not done: no

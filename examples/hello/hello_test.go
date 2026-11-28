@@ -167,12 +167,3 @@ func modelMutant(t *testing.T) string {
 	}
 	return bpath
 }
-
-// Veil proves exactlyOnce by induction for every REQUESTS (DESIGN §116), not
-// only TestModelProves' 1.to(3): stated pointwise, with the model's ghost
-// bijection between applied and 1.to(count), it needs no lemma. Where quint
-// 0.35 or Veil is not installed (CI) the claim is not done and the test
-// skips. Measured with quint 0.35.0 and Veil (2026-11-28): proved in 6 s.
-func TestModelInductive(t *testing.T) {
-	qtest.Model(t, "hello.binding.yaml").Expect(t, qtest.Inductive("exactlyOnce"))
-}

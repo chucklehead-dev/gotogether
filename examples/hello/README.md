@@ -19,8 +19,7 @@ back; a model that says every request counts once. The whole system is
 | test | mutant | check | verdict |
 |---|---|---|---|
 | `TestRetryPossible` | none: the model alone | the scenario `a retry recognised` (`qtest.NamedScenario`: `apply` of request 1, its `replay`, then `done`) searched in the model on its own (`qtest.Model(...).Expect(t, qtest.Possible(...))`); the binding's `simulate.possible` says the same of any retry (`gotogether simulate`) | possible, with the witness `apply(id = 1), replay(id = 1), ...`; a model too strict to replay (a guard no run meets) fails here, "impossible", where every run would still conform |
-| `TestModelProves` | none: the model alone | `qtest.Proves("exactlyOnce")` and `qtest.NoDeadlocks()` over the model's whole state graph | proved for `REQUESTS = 1.to(3)` (16 states: the ghosts number the requests in the order they were applied); without quint by the compiled model, the cross-check against quint's samples not done |
-| `TestModelInductive` | none: the model alone | `qtest.Inductive("exactlyOnce")`: Veil's induction (`quint verify --backend veil`) | proved for every `REQUESTS`, with no lemma (about 6 s): `exactlyOnce` is stated pointwise, a ghost bijection (`slot`, `bySlot`) between `applied` and `1.to(count)`; without quint 0.35 and Veil (CI) not done, skipped |
+| `TestModelProves` | none: the model alone | `qtest.Proves("exactlyOnce")` and `qtest.NoDeadlocks()` over the model's whole state graph | proved for `REQUESTS = 1.to(3)` (8 states); without quint by the compiled model, the cross-check against quint's samples not done |
 | `TestModelMutantRefuted` | a model mutant whose replay counts again (written at run time: quint's) | `qtest.Refutes("exactlyOnce").InAtMost(2)` | refuted by `apply(id = 1), replay(id = 1)`, replayed by quint test |
 | `TestFaithfulConforms` | none | 30 seeds, one message fault in five | every run conforms, and some run follows the scenario (`Some(retried)`) |
 | `TestExhaustive` | none | every run within 2 delays and 2 faults (`System.Exhaust`) | all 4430 conform, the search complete |
@@ -40,6 +39,19 @@ and a duplicate delivers the request twice. That is why the faults are
 the environment's, chosen by the simulation, and every run is checked by
 the model rather than by assertions written for the cases someone
 thought of.
+
+`exactlyOnce` is not proved by induction (`simulate -inductive`, DESIGN
+§116): Veil refuses `count == applied.size()` ("the size of a set whose
+elements are not known is not supported"). `lint -veil` does not note it,
+since a size compared with a variable is not decided from the IR, so
+Veil's refusal is what reports it. The only rewrite that Veil proves
+records the order the requests arrived in (a ghost bijection between
+`applied` and `1.to(count)`). That makes the state graph grow
+factorially: 8 states become 16 at three requests, and at twelve the
+tutorial's complete 4096-state proof stops at 100000 states. This
+example keeps its model, and `TestModelProves`' complete graph proves it
+for the instance. Don't adapt a model for a proof when the rewrite costs
+the checks the model is there for.
 
 ## Run it
 

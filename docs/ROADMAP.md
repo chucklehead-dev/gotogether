@@ -323,8 +323,7 @@ evaluation of 2026-11-27.
   binding's `simulate.inductive`), and each proof a `TestModelInductive`
   beside the model's tests (not done, skipped, on CI):
   - proved for every value of the constants: bank `noOverdraft` and
-    grpcledger `conservation` as they were; hello `exactlyOnce` (stated
-    pointwise with a ghost bijection, no lemma); jobqueue
+    grpcledger `conservation` as they were; jobqueue
     `doneImpliesPerformed` (a ghost key set, four lemmas); kvstore
     `versionsAreRevisions`, `versionsUnique` (a ghost key set, one and two
     lemmas); glomers broadcast `noInvention` (a ghost key set, a size
@@ -336,6 +335,15 @@ evaluation of 2026-11-27.
     constants (`walletInstance`), every amount and order; `joint`'s fold
     over JOINT is outside Veil's fragment for an unknown set. A ghost sum
     would be read by `funds`, a guard: not done.
+  - not adapted, by cost: hello `exactlyOnce` (`count ==
+    applied.size()`, refused by Veil). The rewrite Veil proves, a ghost
+    bijection between `applied` and `1.to(count)`, records the order of
+    arrival: the graph grows factorially (8 states to 16 at three
+    requests; at twelve the prove-it tutorial's complete 4096-state graph
+    truncated at 100000), which TestHelloTutorialReplay caught. Reverted;
+    the instance's graph (`Proves`) stays its proof. A ghost key set
+    mirroring `keys()` adds no states (jobqueue, kvstore and broadcast:
+    equal `-graph` counts at equal depth before and after).
   - vacuous, left out of the proofs, their meaning kept: checkout's
     `settledCorrectly`, crossdb's and broadcast's `convergedWhenSettled`
     (step never settles; Veil gives a counterexample to induction from a

@@ -20,9 +20,7 @@ steps so far (1)
 
 model (default)
   applied = Set(1)
-  bySlot = Map(1 -> 1)
   count = 1
-  slot = Map(1 -> 1)
 
 tasks
   client: waiting until 100ms
@@ -32,7 +30,9 @@ tasks
 
 effective run profile TestMutant#1:
   mode navigation; chooser navigation; parallel 1
-── lines 1–26 of 41 (pgup/pgdn scroll)
+  mutant noDedupe
+  replay TestMutant#1:seed=1 node=0:1,1:1,2:2,4:1@5
+── lines 1–26 of 39 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -100,9 +100,7 @@ steps so far (1)
 
 model (default)
   applied = Set(1)
-  bySlot = Map(1 -> 1)
   count = 1
-  slot = Map(1 -> 1)
 
 tasks
   client: waiting until 100ms
@@ -112,7 +110,9 @@ tasks
 
 effective run profile TestMutant#1:
   mode navigation; chooser navigation; parallel 1
-── lines 1–26 of 41 (pgup/pgdn scroll)
+  mutant noDedupe
+  replay TestMutant#1:seed=1 node=0:1,1:1,2:2,4:1@5
+── lines 1–26 of 39 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -140,48 +140,7 @@ steps so far (1)
 
 model (default)
   applied = Set(1)
-  bySlot = Map(1 -> 1)
   count = 1
-  slot = Map(1 -> 1)
-
-tasks
-  client: waiting until 100ms
-  counter.handle: runnable
-  counter.handle: runnable
-  counter.main: runnable
-
-effective run profile TestMutant#1:
-  mode navigation; chooser navigation; parallel 1
-── lines 1–26 of 41 (pgup/pgdn scroll)
-
-enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
-
-========
-
-gotogether-nav  TestMutant#1:seed=1  node 0:1,1:1,2:2,4:1,5:1@6
-path: fail › 1 counter.handle
-verdict fail · rejects apply  (the run this node makes, nominal after it; after 6 choices, at 0s)
-
-next choice: fault.rpc.counter.response (2 options)
-› 0 nominal  → 0:1,1:1,2:2,4:1,5:1@7
-  1 lost  → 0:1,1:1,2:2,4:1,5:1,6:1@7
-whole-run judgment · independent of cursor
-what was checked: fail · collected history
-  reason: rejects apply
-  actor default: fail; reconstructed order
-    checks: conformance (1 fail); invariant (1 not checked)
-  limit: other executions were not checked
-
-steps so far (1)
-  apply(id=1)
-  effects made by no step so far (1)
-    ↳ effect rpc.counter.request(value=1) at seq 1
-
-model (default)  (* changed since the last node)
-  applied = Set(1)
-  bySlot = Map(1 -> 1)
-  count = 1
-  slot = Map(1 -> 1)
 
 tasks
   client: waiting until 100ms
@@ -192,7 +151,8 @@ tasks
 effective run profile TestMutant#1:
   mode navigation; chooser navigation; parallel 1
   mutant noDedupe
-── lines 1–27 of 41 (pgup/pgdn scroll)
+  replay TestMutant#1:seed=1 node=0:1,1:1,2:2,4:1@5
+── lines 1–26 of 39 (pgup/pgdn scroll)
 
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
 
@@ -219,9 +179,7 @@ steps so far (1)
 
 model (default)  (* changed since the last node)
   applied = Set(1)
-  bySlot = Map(1 -> 1)
   count = 1
-  slot = Map(1 -> 1)
 
 tasks
   client: waiting until 100ms
@@ -231,7 +189,49 @@ tasks
 
 effective run profile TestMutant#1:
   mode navigation; chooser navigation; parallel 1
-── lines 1–26 of 41 (pgup/pgdn scroll)
+  mutant noDedupe
+  replay TestMutant#1:seed=1 node=0:1,1:1,2:2,4:1,5:1@6
+  fixed choice prefix; nominal continuation; no seeded fault draws
+── lines 1–27 of 39 (pgup/pgdn scroll)
+
+enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
+
+========
+
+gotogether-nav  TestMutant#1:seed=1  node 0:1,1:1,2:2,4:1,5:1@6
+path: fail › 1 counter.handle
+verdict fail · rejects apply  (the run this node makes, nominal after it; after 6 choices, at 0s)
+
+next choice: fault.rpc.counter.response (2 options)
+› 0 nominal  → 0:1,1:1,2:2,4:1,5:1@7
+  1 lost  → 0:1,1:1,2:2,4:1,5:1,6:1@7
+whole-run judgment · independent of cursor
+what was checked: fail · collected history
+  reason: rejects apply
+  actor default: fail; reconstructed order
+    checks: conformance (1 fail); invariant (1 not checked)
+  limit: other executions were not checked
+
+steps so far (1)
+  apply(id=1)
+  effects made by no step so far (1)
+    ↳ effect rpc.counter.request(value=1) at seq 1
+
+model (default)  (* changed since the last node)
+  applied = Set(1)
+  count = 1
+
+tasks
+  client: waiting until 100ms
+  counter.handle: runnable
+  counter.handle: runnable
+  counter.main: runnable
+
+effective run profile TestMutant#1:
+  mode navigation; chooser navigation; parallel 1
+  mutant noDedupe
+  replay TestMutant#1:seed=1 node=0:1,1:1,2:2,4:1,5:1@6
+── lines 1–26 of 39 (pgup/pgdn scroll)
 
 saved to the corpus: /tmp/gotogether-nav-tape-corpus/TestMutant/0ad08a7ca068.json
 enter take • ←/⌫ back • f fold • g failing step • s save • / filter • ? help • q quit
