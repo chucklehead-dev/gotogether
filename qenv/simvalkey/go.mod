@@ -3,7 +3,7 @@ module github.com/chucklehead-dev/gotogether/qenv/simvalkey
 go 1.27.3
 
 require (
-	github.com/chucklehead-dev/gotogether v0.0.0-20261125113645-d63a136e9a1b
+	github.com/chucklehead-dev/gotogether v0.0.0-20261128054317-534280045028
 	github.com/valkey-io/valkey-go v1.0.79
 	github.com/valkey-io/valkey-go/mock v1.0.79
 	github.com/yuin/gopher-lua v1.1.2
