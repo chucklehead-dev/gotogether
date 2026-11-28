@@ -154,9 +154,7 @@ func (b *Binding) lintEffects(m *Model, add func(code, symbol, fix, message stri
 }
 
 // constructor is the constructor e is recorded as, or "" for an effect
-// the binding does not map.
-func (b *Binding) constructor(e *qtrace.Effect) string { return b.Effects.constructor(e) }
-
+// the mapping does not map.
 func (fx *Effects) constructor(e *qtrace.Effect) string {
 	if fx == nil {
 		return ""
