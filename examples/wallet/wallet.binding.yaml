@@ -28,3 +28,9 @@ eventually: [allPosted, postedApplied]
 # guarantees.
 simulate:
   holds: [noOverdraft]
+  # Veil's proof of noOverdraft for this instance's constants only
+  # (simulate -inductive, qtest.Inductive in wallet_test.go): for every
+  # amount and request, which the instance's graph cannot enumerate, but
+  # not for every JOINT (its fold is outside Veil's fragment)
+  inductive:
+    module: walletInstance
