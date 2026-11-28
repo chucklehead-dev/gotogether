@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/chucklehead-dev/gotogether/binding"
+	"github.com/chucklehead-dev/gotogether/internal/quintcmd"
 	"github.com/chucklehead-dev/gotogether/internal/skip"
 )
 
@@ -32,6 +33,11 @@ var veilFixtures = map[string]struct {
 	"exactlyOnce":                       {"refused.json", "", 1},
 	"xSmall":                            {"lemma.json", "", 1},
 	"xNonNegative and nope":             {"unknown.json", "", 1},
+	// written in the shape verifyVeil.js gives a counterexample Veil
+	// cannot decode (Induction.lean's statesOf and map reader)
+	"xNonNegative and xSmall": {"nopost.json", "", 1},
+	"xSmall and xNonNegative": {"mapdomain.json", "", 1},
+	"bounded":                 {"lemma.json", "", 0},
 }
 
 // fakeVeil is a quint standing in for quint 0.35's Veil backend: its
@@ -62,7 +68,7 @@ func fakeVeil(t *testing.T, version string, ready bool) (string, string) {
 	if ready {
 		status = "echo 'ready /home/u/.quint/veil/workspace-1f711585ad60c8a2'; exit 0"
 	}
-	script := "#!/bin/sh\nif [ \"$1\" = --version ]; then echo " + version + "; exit 0; fi\n" +
+	script := "#!/bin/sh\nif [ \"$1\" = --version ]; then sleep ${FAKE_VERSION_SLEEP:-0}; echo " + version + "; exit 0; fi\n" +
 		"if [ \"$1\" = veil ] && [ \"$2\" = status ]; then " + status + "; fi\n" +
 		"if [ \"$1\" = verify ] && [ \"$2\" = --backend ] && [ \"$3\" = veil ]; then\n echo \"$*\" >> " + log + "\n inv=''; out=''; itf=''\n" +
 		" while [ $# -gt 0 ]; do case \"$1\" in --inductive-invariant) inv=$2; shift;; --out) out=$2; shift;; --out-itf) itf=$2; shift;; esac; shift; done\n" +
@@ -101,7 +107,7 @@ func TestInductiveOutcomes(t *testing.T) {
 	if v.Outcome != InductiveProved || rep.Code != 0 || !slices.Equal(v.Added, []string{"balances.keys() == ACCOUNTS"}) || v.Module != "bank" {
 		t.Errorf("bank: %+v (code %d)\n%s", v, rep.Code, rep.Text)
 	}
-	if !strings.Contains(rep.Text, "proved   nonNegative: inductive, so it holds in every reachable state for every value of the constants") ||
+	if !strings.Contains(rep.Text, "proved   nonNegative: inductive, so it holds in every reachable state (the module has no constants;") ||
 		!strings.Contains(rep.Text, "Veil added balances.keys() == ACCOUNTS from init") {
 		t.Errorf("bank's report:\n%s", rep.Text)
 	}
@@ -151,6 +157,70 @@ func TestInductiveOutcomes(t *testing.T) {
 	d := rep.Doc()
 	if len(d.Checks) != 1 || d.Checks[0].Kind != "inductive" || d.Checks[0].Inductive == nil || d.Checks[0].Inductive.Outcome != InductiveRefused || d.Verdict != "no verdict" {
 		t.Errorf("refused's document: %+v", d)
+	}
+}
+
+// A counterexample to induction Veil cannot decode (no post-state in the
+// solver's model, a map keyed by int) is a counterexample all the same:
+// no verdict, Veil's reason in place of the states, never a run error.
+func TestInductiveCounterexampleUnshown(t *testing.T) {
+	quint, _ := fakeVeil(t, "0.35.0", true)
+	rep := inductive(t, quint, "induct.yaml",
+		InductiveRequest{Name: "xNonNegative", Lemmas: []string{"xSmall"}}, InductiveRequest{Name: "xSmall", Lemmas: []string{"xNonNegative"}})
+	if rep.Code != 2 {
+		t.Errorf("code %d, want 2 (no verdict)", rep.Code)
+	}
+	for i, want := range []string{
+		"the model has no post-state; a complete transition witness could not be decoded",
+		"the model's map domain jobs has non-enumerable keys",
+	} {
+		v := rep.Inductive[i]
+		if v.Outcome != InductiveCounterexample || v.Action != "shift" || v.Broken != "the inductive invariant" || v.Reason != want || len(v.States) != 0 || v.ITF != "" {
+			t.Errorf("%s: %+v", v.Invariant, v)
+		}
+	}
+	for _, want := range []string{
+		"  no verdict xNonNegative with xSmall: not inductive: a counterexample to induction after shift breaks the inductive invariant (xNonNegative may still hold: add a lemma, simulate.inductive.lemmas or qtest.Inductive(...).With)\n" +
+			"    its states: Veil could not show them: the model has no post-state; a complete transition witness could not be decoded (simulate -graph says whether the instance reaches a state that breaks it)\n",
+		"    its states: Veil could not show them: the model's map domain jobs has non-enumerable keys (Veil reads no map keyed by int or a constant's type: keyed by str or an enumeration it shows the states; simulate -graph says whether the instance reaches a state that breaks it)\n",
+	} {
+		if !strings.Contains(rep.Text, want) {
+			t.Errorf("report lacks %q:\n%s", want, rep.Text)
+		}
+	}
+}
+
+// A proof claims what it proved: for every value of the constants only
+// when the module leaves them open; for an instance module, for its
+// constants, named; for one that fixes some, those named and the others
+// open; for a module with none, no constants at all.
+func TestInductiveScope(t *testing.T) {
+	quint, _ := fakeVeil(t, "0.35.0", true)
+	for _, tc := range []struct{ binding, header, proved string }{
+		{"instance-open.yaml", "counter by induction with Veil (quint verify --backend veil), for every value of the constants MAX, ACCOUNTS\n",
+			"proved   bounded: inductive, so it holds in every reachable state for every value of the constants MAX, ACCOUNTS ("},
+		{"instance.yaml", `counterInstance by induction with Veil (quint verify --backend veil), for this instance's constants only (MAX = 3, ACCOUNTS = Set("a", "b"))`,
+			`proved   bounded: inductive, so it holds in every reachable state for this instance's constants only (MAX = 3, ACCOUNTS = Set("a", "b")), not for every value of them (`},
+		{"instance-partial.yaml", `counterLimit by induction with Veil (quint verify --backend veil), for every value of the constants LIMIT, with MAX = LIMIT, ACCOUNTS = Set("a", "b")`,
+			`proved   bounded: inductive, so it holds in every reachable state for every value of the constants LIMIT, with MAX = LIMIT, ACCOUNTS = Set("a", "b") (`},
+		{"bank.yaml", "bank by induction with Veil (quint verify --backend veil), the module has no constants",
+			"proved   nonNegative: inductive, so it holds in every reachable state (the module has no constants; "},
+	} {
+		name := "bounded"
+		if tc.binding == "bank.yaml" {
+			name = "nonNegative"
+		}
+		rep := inductive(t, quint, tc.binding, InductiveRequest{Name: name})
+		if !strings.Contains(rep.Text, tc.header) || !strings.Contains(rep.Text, tc.proved) {
+			t.Errorf("%s: want %q and %q:\n%s", tc.binding, tc.header, tc.proved, rep.Text)
+		}
+	}
+	rep := inductive(t, quint, "instance.yaml", InductiveRequest{Name: "bounded"})
+	if v := rep.Inductive[0]; len(v.Open) != 0 || !slices.Equal(v.Fixed, []string{"MAX = 3", `ACCOUNTS = Set("a", "b")`}) {
+		t.Errorf("instance: open %v, fixed %v", v.Open, v.Fixed)
+	}
+	if d := rep.Doc(); d.Checks[0].Inductive == nil || !slices.Equal(d.Checks[0].Inductive.Fixed, []string{"MAX = 3", `ACCOUNTS = Set("a", "b")`}) {
+		t.Errorf("instance's document: %+v", d.Checks[0].Inductive)
 	}
 }
 
@@ -206,6 +276,29 @@ func TestInductiveNotDone(t *testing.T) {
 		if argv, _ := os.ReadFile(log); len(argv) > 0 {
 			t.Errorf("%s ready=%v: verify ran: %s", tc.version, tc.ready, argv)
 		}
+	}
+}
+
+// A quint that does not answer --version in time is there, on a loaded
+// machine: an error naming the timeout and how to raise it, never "no
+// quint" (not done), which a test would skip. A quint that is not there
+// is not done.
+func TestInductiveProbeTimeout(t *testing.T) {
+	quint, log := fakeVeil(t, "0.35.0", true)
+	t.Setenv("FAKE_VERSION_SLEEP", "3")
+	t.Setenv(quintcmd.ProbeTimeoutEnv, "300ms")
+	_, err := Simulate(t.Context(), "testdata/veil/bank.yaml", SimulateOptions{Quint: quint, Inductive: []InductiveRequest{{Name: "nonNegative"}}})
+	want := "simulate -inductive: cannot ask quint whether Veil is installed: " + quint + " --version did not answer within 300ms (" + quintcmd.ProbeTimeoutEnv + "=300ms): a loaded machine; raise it"
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("a slow quint: %v, want %q", err, want)
+	}
+	if argv, _ := os.ReadFile(log); len(argv) > 0 {
+		t.Errorf("verify ran: %s", argv)
+	}
+	missing := filepath.Join(t.TempDir(), "quint")
+	rep := inductive(t, missing, "bank.yaml", InductiveRequest{Name: "nonNegative"})
+	if v := rep.Inductive[0]; v.Outcome != InductiveNotDone || !strings.HasPrefix(v.Reason, "no quint (") || !strings.Contains(v.Reason, "install quint ≥ 0.35.0") {
+		t.Errorf("no quint: %+v", v)
 	}
 }
 
@@ -295,11 +388,7 @@ func TestInductiveRealVeil(t *testing.T) {
 // A counterexample at the initializer is init's whatever the order of
 // Veil's checks; a keys invariant Veil added is named by its text.
 func TestInductiveCounterexampleWhere(t *testing.T) {
-	type check = struct {
-		Invariant string `json:"invariant"`
-		Check     string `json:"check"`
-		Status    string `json:"status"`
-	}
+	type check = veilCheck
 	res := veilResult{InductionChecks: []check{{"q::inductiveInv", "shift", "disproven"}, {"q::inductiveInv", "initializer", "disproven"}}}
 	if broken, action := ctiWhere(res); action != "" || broken != "the inductive invariant" {
 		t.Errorf("init after shift: %q %q", broken, action)

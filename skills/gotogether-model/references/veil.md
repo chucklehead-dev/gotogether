@@ -69,9 +69,12 @@ qtest.Inductive("p").With("lemma1"))`.
 
 | Line | Means | Next |
 |---|---|---|
-| `proved   p: inductive, so it holds ... for every value of the constants` | a proof for all instances | keep `qtest.Inductive` beside `Proves` |
+| `proved   p: inductive, so it holds ... for every value of the constants N, ...` | a proof for all instances | keep `qtest.Inductive` beside `Proves` |
+| `proved   p: ... for this instance's constants only (N = 3, ...), not for every value of them` | an instance module's proof: these values alone | prove the base module where Veil can, else keep it as the instance's |
 | `warning: vacuous? ...` | the proof may say nothing | make the property eventual, or let step reach its antecedent |
 | `no verdict p: not inductive: a counterexample to induction after a` | a state satisfying the invariant that `a` leaves; p may still hold | read both states, add a lemma excluding the first (unreachable) one |
 | `... at the initializer` | init's state is outside it | `simulate -graph`: p itself may be violated |
+| `its states: Veil could not show them: <reason>` | a counterexample to induction whose states Veil cannot decode (no post-state; a map keyed by int) | as for any counterexample; key such a map by str or an enumeration to see them |
+| `simulate -inductive: cannot ask quint ...: quint --version did not answer within 30s` | quint is there, the machine is loaded: an error, not a skip | `GOTOGETHER_QUINT_PROBE_TIMEOUT=2m`, or fewer proofs at once |
 | `refused  p: not in Veil's fragment: <reason>` | outside Veil's fragment; no failure | `gotogether lint -veil`, rewrite as above |
 | `not done p: ...` | no quint 0.35 or no Veil | install as it says, or rely on `Proves` |

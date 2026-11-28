@@ -99,3 +99,41 @@ func TestVacuousSettle(t *testing.T) {
 		t.Errorf("not an implication: %q %v", a, neg)
 	}
 }
+
+// An antecedent's text is its own, by characters: after a line with § ≥
+// and 😀 (two, three and four bytes), settled is not " settle", and a name
+// it prefixes or suffixes (settle, unsettled) changes nothing.
+func TestAntecedentTextAfterNonASCII(t *testing.T) {
+	p := parse(t, "unicode.qnt")
+	a, neg := p.Antecedent("unicode", "settledCorrectly", []string{"neverSettled"})
+	if a != "settled" || !slices.Equal(neg, []string{"neverSettled"}) {
+		t.Errorf("antecedent %q, negating lemmas %v", a, neg)
+	}
+	fs := p.Vacuous("unicode", []string{"settledCorrectly"})
+	if len(fs) != 1 || !strings.Contains(fs[0].Message, "settledCorrectly is conditioned on settled, which init and step never set true") {
+		t.Errorf("vacuous: %+v", fs)
+	}
+}
+
+// A module's constants as a proof covers them: its own and an import's
+// open, an instance's fixed (by name and value), an instance module none
+// open.
+func TestConstants(t *testing.T) {
+	p := parse(t, "../../../validate/model/testdata/veil/instance.qnt")
+	for _, tc := range []struct {
+		module      string
+		open, fixed []string
+	}{
+		{"counter", []string{"MAX", "ACCOUNTS"}, nil},
+		{"counterInstance", nil, []string{"MAX = 3", `ACCOUNTS = Set("a", "b")`}},
+		{"counterLimit", []string{"LIMIT"}, []string{"MAX = LIMIT", `ACCOUNTS = Set("a", "b")`}},
+	} {
+		open, fixed := p.Constants(tc.module)
+		if !slices.Equal(open, tc.open) || !slices.Equal(fixed, tc.fixed) {
+			t.Errorf("%s: open %v fixed %v, want %v %v", tc.module, open, fixed, tc.open, tc.fixed)
+		}
+	}
+	if open, fixed := parse(t, "settle.qnt").Constants("settle"); open != nil || fixed != nil {
+		t.Errorf("no constants: %v %v", open, fixed)
+	}
+}

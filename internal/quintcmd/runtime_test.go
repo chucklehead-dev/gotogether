@@ -302,3 +302,55 @@ Module._load = function(id, parent, main) {
 		}
 	}
 }
+
+// A probe that does not answer within its timeout is an error naming the
+// timeout and the variable that raises it, never a missing quint: under
+// load (Veil's proofs on every core) node can take seconds to start.
+func TestVersionProbeTimeoutIsNotAbsence(t *testing.T) {
+	runtimePool(t)
+	t.Setenv(ProbeTimeoutEnv, "300ms")
+	bin := versionFixture(t, "0.35.0")
+	slow := filepath.Join(t.TempDir(), "quint")
+	if err := os.WriteFile(slow, []byte("#!/bin/sh\nsleep 3\n"+`exec "`+bin+`" "$@"`+"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Version(t.Context(), slow, "")
+	want := "quint --version did not answer within 300ms (" + ProbeTimeoutEnv + "=300ms): a loaded machine; raise it (" + ProbeTimeoutEnv + "=2m)"
+	if _, ok := errors.AsType[*ProbeTimeoutError](err); !ok || !strings.Contains(err.Error(), want) || NotFound(err) {
+		t.Fatalf("Version: %v, want %q", err, want)
+	}
+	if err := Command(t.Context(), slow, "", "run").Run(); err == nil || !strings.HasPrefix(err.Error(), "quint admission: ") || !strings.Contains(err.Error(), want) {
+		t.Fatalf("admission: %v", err)
+	}
+	if _, err := Version(t.Context(), filepath.Join(t.TempDir(), "quint"), ""); !NotFound(err) {
+		t.Fatalf("a missing quint: %v (NotFound %v)", err, NotFound(err))
+	}
+	t.Setenv(ProbeTimeoutEnv, "soon")
+	if _, err := Version(t.Context(), bin, ""); err == nil || !strings.Contains(err.Error(), ProbeTimeoutEnv+`="soon": not a duration (30s, 2m)`) {
+		t.Fatalf("a bad timeout: %v", err)
+	}
+}
+
+// The probe's timeout starts once it holds an admission slot: waiting
+// for one while two proofs run is no timeout.
+func TestVersionProbeTimeoutStartsAfterAdmission(t *testing.T) {
+	runtimePool(t)
+	t.Setenv(ProbeTimeoutEnv, "300ms")
+	bin := versionFixture(t, "0.35.0")
+	var held []func()
+	for range 2 {
+		release, err := acquire(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		held = append(held, release)
+	}
+	time.AfterFunc(time.Second, func() {
+		for _, r := range held {
+			r()
+		}
+	})
+	if v, err := Version(t.Context(), bin, ""); err != nil || v != "0.35.0" {
+		t.Fatalf("Version after waiting for a slot: %q %v", v, err)
+	}
+}

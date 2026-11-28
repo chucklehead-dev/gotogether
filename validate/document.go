@@ -269,6 +269,11 @@ type DocInductive struct {
 	Reached    string   `json:"reached,omitempty"`
 	Vacuous    []string `json:"vacuous,omitempty"`
 	ElapsedMs  int64    `json:"elapsedMs,omitempty"`
+	// Open are the constants a proof covers every value of, Fixed those
+	// its module (an instance) fixes, "NAME = value": an instance's proof
+	// is of its values only.
+	Open  []string `json:"open,omitempty"`
+	Fixed []string `json:"fixed,omitempty"`
 }
 
 // DocCounterexample is a path in the model's state graph: Steps from the

@@ -275,7 +275,10 @@ type Inductive struct {
 	// go in a module of their own, <model>Proof, that imports the model.
 	Spec string `yaml:"spec"`
 	// Module is the module Veil proves, the binding's module or one that
-	// imports it ("": the binding's module, its constants unset).
+	// imports it ("": the binding's module, its constants unset). A proof
+	// covers every value of the constants Module leaves open; an instance
+	// module (`import M(N = 3).*`) is proved for its values alone, and the
+	// report says which.
 	Module string `yaml:"module"`
 	// Lemmas are, by holds invariant, the vals of Module conjoined with it
 	// as its inductive invariant (none: the invariant alone).

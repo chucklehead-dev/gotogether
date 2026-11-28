@@ -1435,6 +1435,12 @@
               "elapsedMs": {
                 "type": "integer"
               },
+              "fixed": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
               "invariant": {
                 "type": "string"
               },
@@ -1449,6 +1455,13 @@
               },
               "module": {
                 "type": "string"
+              },
+              "open": {
+                "description": "Open are the constants a proof covers every value of, Fixed those its module (an instance) fixes, \"NAME = value\": an instance's proof is of its values only.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
               "outcome": {
                 "type": "string"

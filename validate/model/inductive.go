@@ -83,8 +83,9 @@ type InductiveVerdict struct {
 	// Outcome is one of InductiveProved, InductiveCounterexample,
 	// InductiveRefused, InductiveUndecided, InductiveNotDone.
 	Outcome string
-	// Reason is Veil's for a refusal or an undecided check, and what is
-	// missing (and how to install it) for not done.
+	// Reason is Veil's for a refusal or an undecided check, and for a
+	// counterexample whose states it could not decode (no States then), and
+	// what is missing (and how to install it) for not done.
 	Reason string
 	// Action is the action a counterexample to induction takes ("": the
 	// state is one init reaches), Broken what it breaks (the inductive
@@ -106,20 +107,32 @@ type InductiveVerdict struct {
 	// negates the antecedent, a settle flag step never sets, an antecedent
 	// the instance never reaches.
 	Vacuous []string
+	// Open are the constants the proof covers every value of (the
+	// module's own, and those it imports uninstantiated), Fixed those an
+	// instance of the module fixes, "NAME = value" each: an instance
+	// module's proof is of its values only (DESIGN §116).
+	Open, Fixed []string
 	// Elapsed is Veil's time.
 	Elapsed time.Duration
+	// scoped says Open and Fixed were read (from the model's IR)
+	scoped bool
 	// searchNote says the antecedent's search was not done, and why
 	searchNote string
 }
 
 // VeilStatus says whether quint's Veil backend can run: "" when it can,
 // else why not and how to install it (a not-done reason). An error is a
-// quint that could not be asked.
+// quint that could not be asked: one that is there but did not answer
+// --version in time (a loaded machine: quintcmd.ProbeTimeoutEnv raises
+// the bound) or failed, never a missing one, which is not done.
 func VeilStatus(ctx context.Context, quint, dir string) (string, error) {
 	v, err := quintcmd.Version(ctx, quint, dir)
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
+		}
+		if !quintcmd.NotFound(err) {
+			return "", err
 		}
 		return fmt.Sprintf("no quint (%v): install quint ≥ %s (npm i -g @informalsystems/quint@%s), then Veil: %s", err, VeilVersion, VeilVersion, veilInstall), nil
 	}
@@ -173,12 +186,15 @@ func (s *sim) inductive(ctx context.Context, bpath string, b *binding.Binding, s
 	if _, err := os.Stat(spec); err != nil {
 		return fmt.Errorf("simulate -inductive: %s's proof module file: %w (simulate.inductive.spec is relative to the binding)", bpath, err)
 	}
-	s.printf("simulate %s: %s by induction with Veil (quint verify --backend veil), for every value of the constants\n", bpath, module)
 	missing, err := VeilStatus(ctx, opt.Quint, filepath.Dir(spec))
 	if err != nil {
-		return err
+		if ctx.Err() != nil {
+			return err
+		}
+		return fmt.Errorf("simulate -inductive: cannot ask quint whether Veil is installed: %w", err)
 	}
 	if missing != "" {
+		s.printf("simulate %s: %s by induction with Veil (quint verify --backend veil)\n", bpath, module)
 		s.rep.NotDone = append(s.rep.NotDone, "the proofs by induction: "+missing)
 		for _, r := range reqs {
 			s.rep.Inductive = append(s.rep.Inductive, InductiveVerdict{Name: r.Name, Lemmas: r.Lemmas, Module: module, Invariant: conjunction(r), Outcome: InductiveNotDone, Reason: missing})
@@ -190,12 +206,18 @@ func (s *sim) inductive(ctx context.Context, bpath string, b *binding.Binding, s
 	// the IR, for the vacuity checks: a model quint cannot parse fails
 	// Veil's run anyway, which says why
 	ir, _ := veilfrag.Parse(ctx, opt.Quint, spec)
+	var open, fixed []string
+	if ir != nil {
+		open, fixed = ir.Constants(module)
+	}
+	s.printf("simulate %s: %s by induction with Veil (quint verify --backend veil), %s\n", bpath, module, scope(ir != nil, open, fixed))
 	keep := opt.InductiveOut
 	for _, r := range reqs {
 		v, err := proveInductive(ctx, opt.Quint, spec, module, r, &keep)
 		if err != nil {
 			return err
 		}
+		v.Open, v.Fixed, v.scoped = open, fixed, ir != nil
 		if v.Outcome == InductiveProved && ir != nil {
 			s.vacuity(ctx, bpath, b, ir, module, &v, opt)
 		}
@@ -206,6 +228,23 @@ func (s *sim) inductive(ctx context.Context, bpath string, b *binding.Binding, s
 		}
 	}
 	return nil
+}
+
+// scope is what a proof of a module whose constants are open and fixed
+// covers (known: they were read from its IR): every value of them only
+// when the module leaves them open, an instance module's values alone.
+func scope(known bool, open, fixed []string) string {
+	switch {
+	case !known:
+		return "for every value of the constants the module leaves open"
+	case len(open) > 0 && len(fixed) > 0:
+		return "for every value of the constants " + strings.Join(open, ", ") + ", with " + strings.Join(fixed, ", ")
+	case len(open) > 0:
+		return "for every value of the constants " + strings.Join(open, ", ")
+	case len(fixed) > 0:
+		return "for this instance's constants only (" + strings.Join(fixed, ", ") + "), not for every value of them"
+	}
+	return "the module has no constants"
 }
 
 // conjunction is r's inductive invariant: its invariant and lemmas.
@@ -258,13 +297,17 @@ type veilResult struct {
 	Errors  []struct {
 		Explanation string `json:"explanation"`
 	} `json:"errors"`
-	ElapsedMs       int64 `json:"elapsedMs"`
-	InductionChecks []struct {
-		Invariant string `json:"invariant"`
-		Check     string `json:"check"`
-		Status    string `json:"status"`
-	} `json:"inductionChecks"`
-	AddedInvariants []string `json:"addedInvariants"`
+	ElapsedMs       int64       `json:"elapsedMs"`
+	InductionChecks []veilCheck `json:"inductionChecks"`
+	AddedInvariants []string    `json:"addedInvariants"`
+}
+
+// veilCheck is one of Veil's induction checks: the invariant, the check
+// (initializer or an action) and its status (proven, disproven, unknown).
+type veilCheck struct {
+	Invariant string `json:"invariant"`
+	Check     string `json:"check"`
+	Status    string `json:"status"`
 }
 
 // proveInductive runs Veil on r's inductive invariant in module of spec.
@@ -333,6 +376,11 @@ func proveInductive(ctx context.Context, quint, spec, module string, r Inductive
 				v.ITF = kept
 			}
 		}
+	case ctiUnshown(res) != "":
+		// a counterexample whose states Veil could not decode
+		// (Induction.lean's statesOf, its map reader): one all the same
+		v.Outcome, v.Reason = InductiveCounterexample, ctiUnshown(res)
+		v.Broken, v.Action = ctiWhere(res)
 	case strings.HasPrefix(res.Message, "Veil could not decide"):
 		v.Outcome, v.Reason = InductiveUndecided, strings.TrimSpace(strings.TrimPrefix(res.Message, "Veil could not decide:"))
 	case strings.HasPrefix(res.Message, "Veil could not check the spec"):
@@ -341,6 +389,24 @@ func proveInductive(ctx context.Context, quint, spec, module string, r Inductive
 		return v, fmt.Errorf("quint verify --backend veil (%s): status %q: %s\n%s", r.Name, res.Status, res.Message, out)
 	}
 	return v, nil
+}
+
+// ctiUnshown is Veil's reason a counterexample to induction has no
+// states ("the model has no post-state; ..."), "" if res is none: a
+// disproven check whose failure says "in a state Veil could not show: "
+// (or "that could not be read: "), the reason up to quint's hint on the
+// next line.
+func ctiUnshown(res veilResult) string {
+	if res.Status != "failure" || !slices.ContainsFunc(res.InductionChecks, func(c veilCheck) bool { return c.Status == "disproven" }) {
+		return ""
+	}
+	first := firstLine(res.Message)
+	for _, marker := range []string{", in a state Veil could not show: ", ", in a state that could not be read: "} {
+		if _, why, ok := strings.Cut(first, marker); ok {
+			return strings.TrimSpace(why)
+		}
+	}
+	return ""
 }
 
 // ctiWhere is what a counterexample to induction breaks and the action
@@ -413,7 +479,12 @@ func inductiveText(v InductiveVerdict) string {
 		if len(v.Added) > 0 {
 			added = "; Veil added " + strings.Join(v.Added, " and ") + " from init and proved it too"
 		}
-		fmt.Fprintf(&b, "  proved   %s%s: inductive, so it holds in every reachable state for every value of the constants (%s%s)\n", v.Name, with, v.Elapsed.Round(100*time.Millisecond), added)
+		took := v.Elapsed.Round(100 * time.Millisecond).String()
+		where := " " + scope(v.scoped, v.Open, v.Fixed)
+		if v.scoped && len(v.Open) == 0 && len(v.Fixed) == 0 {
+			where, took = "", "the module has no constants; "+took
+		}
+		fmt.Fprintf(&b, "  proved   %s%s: inductive, so it holds in every reachable state%s (%s%s)\n", v.Name, with, where, took, added)
 		if v.Reached == "reached" {
 			fmt.Fprintf(&b, "    its antecedent %s is reached on the instance: %s\n", v.Antecedent, v.Witness)
 		}
@@ -431,6 +502,13 @@ func inductiveText(v InductiveVerdict) string {
 		fmt.Fprintf(&b, "  no verdict %s%s: not inductive: a counterexample to induction %s breaks %s (%s may still hold: add a lemma, simulate.inductive.lemmas or qtest.Inductive(...).With)\n", v.Name, with, where, v.Broken, v.Name)
 		if v.Action == "" {
 			fmt.Fprintf(&b, "    a state init reaches is outside %s: if %s itself fails there the model violates it (simulate -graph shows it), else a lemma does not hold at init\n", v.Invariant, v.Name)
+		}
+		if len(v.States) == 0 && v.Reason != "" {
+			hint := "simulate -graph says whether the instance reaches a state that breaks it"
+			if strings.Contains(v.Reason, "non-enumerable keys") {
+				hint = "Veil reads no map keyed by int or a constant's type: keyed by str or an enumeration it shows the states; " + hint
+			}
+			fmt.Fprintf(&b, "    its states: Veil could not show them: %s (%s)\n", v.Reason, hint)
 		}
 		for i, st := range v.States {
 			label := "init"

@@ -136,7 +136,10 @@ AGENTS.md has the general requirements.
   `GOTOGETHER_CACHE=off` asks quint every time, `GOTOGETHER_CACHE=<dir>`
   keeps it there. An entry unused for a week is pruned.
   `GOTOGETHER_KEEP=/dir` keeps generated modules and traces from qtest and
-  qhegel. `GOTOGETHER_REPORT_DIR=/dir` makes every `gotogether validate`
+  qhegel. `GOTOGETHER_QUINT_PROBE_TIMEOUT=2m` bounds each `quint --version`
+  probe (30s unset; it starts once the probe holds an admission slot): a
+  probe that times out is an error naming it, never a missing quint.
+  `GOTOGETHER_REPORT_DIR=/dir` makes every `gotogether validate`
   and `simulate` write its report as JSON there (`gotogether.report/2`,
   a file per analysis, in the order run: the Action's job summary).
   `-report-dir DIR` selects that directory explicitly without changing the
